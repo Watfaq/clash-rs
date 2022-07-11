@@ -49,7 +49,7 @@ pub struct Config {
     pub hosts: Option<HashMap<String, String>>,
     pub dns: DNS,
     experimental: Experimental,
-    profile: Profile,
+    pub profile: Profile,
     #[serde(rename = "proxies")]
     proxy: Vec<HashMap<String, Value>>,
     #[serde(rename = "proxy-groups")]
@@ -157,9 +157,9 @@ pub struct Experimental;
 
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
-struct Profile {
-    store_selected: bool,
-    store_fake_ip: bool,
+pub struct Profile {
+    pub store_selected: bool,
+    pub store_fake_ip: bool,
 }
 
 impl Default for Profile {

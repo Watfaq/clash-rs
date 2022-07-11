@@ -3,6 +3,7 @@ use regex::Regex;
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
+    rc::Rc,
 };
 use url::Url;
 
@@ -27,7 +28,7 @@ pub struct DNS {
     listen: String,
     enhance_mode: DNSMode,
     default_nameserver: Vec<NameServer>,
-    fake_ip_range: fakeip::FakeDns,
+    fake_ip_range: Option<fakeip::FakeDns>,
     hosts: Option<trie::DomainTrie>,
     nameserver_policy: HashMap<String, NameServer>,
 }
@@ -123,7 +124,7 @@ impl DNS {
     pub fn parse_hosts(
         hosts_mapping: &HashMap<String, String>,
     ) -> anyhow::Result<trie::DomainTrie> {
-        let mut tree = trie::DomainTrie::new();
+        let mut tree = trie::StringTrie::new();
         Ok(tree)
     }
 
@@ -142,7 +143,9 @@ impl TryFrom<&crate::config::def::Config> for DNS {
     fn try_from(c: &crate::config::def::Config) -> Result<Self, Self::Error> {
         let dc = &c.dns;
         if dc.enable && dc.nameserver.len() == 0 {
-            return Err(anyhow!("dns enabled, no nameserver speficied").into());
+            return Err(Error::InvalidConfig(
+                anyhow!("dns enabled, no nameserver speficied").into(),
+            ));
         }
 
         let nameservers = DNS::parse_nameserver(&dc.nameserver)?;
@@ -150,22 +153,17 @@ impl TryFrom<&crate::config::def::Config> for DNS {
         let nameserver_policy = DNS::parse_nameserver_policy(&dc.nameserver_policy)?;
 
         if dc.default_nameserver.len() == 0 {
-            return Err(anyhow!("default nameserver empty").into());
+            return Err(Error::InvalidConfig(
+                anyhow!("default nameserver empty").into(),
+            ));
         }
 
         for ns in &dc.default_nameserver {
             let _ = ns
                 .parse::<IpAddr>()
-                .map_err(|_| anyhow!("default dns must be ip address"))?;
+                .map_err(|_| Error::InvalidConfig(anyhow!("default dns must be ip address")))?;
         }
         let default_nameserver = DNS::parse_nameserver(&dc.default_nameserver)?;
-
-        match dc.enhanced_mode {
-            DNSMode::FakeIP => {
-                todo!("fakeip");
-            }
-            _ => {}
-        }
 
         Ok(Self {
             enable: dc.enable,
@@ -176,7 +174,30 @@ impl TryFrom<&crate::config::def::Config> for DNS {
             listen: dc.listen.clone(),
             enhance_mode: dc.enhanced_mode.clone(),
             default_nameserver: default_nameserver,
-            fake_ip_range: fakeip::FakeDns::new(),
+            fake_ip_range: match dc.enhanced_mode {
+                DNSMode::FakeIP => {
+                    let ipnet = dc
+                        .fake_ip_range
+                        .parse::<ipnet::IpNet>()
+                        .map_err(|_| Error::InvalidConfig(anyhow!("invalid fake ip range")))?;
+
+                    Some(fakeip::FakeDns::new(fakeip::Opts {
+                        ipnet,
+                        host: if dc.fake_ip_filter.len() != 0 {
+                            let mut host = trie::DomainTrie::new();
+                            for domain in dc.fake_ip_filter.iter() {
+                                host.insert(domain.as_str(), Rc::new(true));
+                            }
+                            Some(host)
+                        } else {
+                            None
+                        },
+                        size: 1000,
+                        persistence: c.profile.store_fake_ip,
+                    })?)
+                }
+                _ => None,
+            },
             hosts: if dc.user_hosts && c.hosts.is_some() {
                 DNS::parse_hosts(&c.hosts.as_ref().unwrap()).ok()
             } else {
