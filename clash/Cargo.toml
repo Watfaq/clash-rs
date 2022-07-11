@@ -17,6 +17,8 @@ ipnet = "2.5.0"
 url = "2.2.2"
 regex = "1"
 lazy_static = "1.4.0"
+byteorder = "1.4.3"
+lru-cache = "0.1.2"
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.8"
