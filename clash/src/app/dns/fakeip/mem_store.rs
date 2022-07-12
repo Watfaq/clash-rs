@@ -1,5 +1,6 @@
 use std::{
     any::Any,
+    cell::RefCell,
     net::{self, IpAddr},
 };
 
@@ -52,10 +53,7 @@ impl Store for InmemStore {
         self.itoh.contains_key(&ip)
     }
 
-    fn copy_to(&self, store: &mut Box<dyn Store>) {
-        if let Some(dst) = (store as &mut dyn Any).downcast_mut::<Self>() {
-            dst.itoh = self.itoh.clone();
-            dst.htoi = self.htoi.clone();
-        }
+    fn copy_to(&self, store: &mut RefCell<Box<dyn Store>>) {
+        todo!("not implemented yet")
     }
 }

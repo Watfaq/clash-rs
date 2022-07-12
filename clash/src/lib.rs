@@ -21,6 +21,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     InvalidConfig(#[from] anyhow::Error),
+    #[error("profile error: {0}")]
+    ProfileError(String),
 }
 
 pub fn start() -> Result<(), Error> {
