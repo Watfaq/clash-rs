@@ -169,11 +169,11 @@ impl TryFrom<&crate::config::def::Config> for DNS {
             enable: dc.enable,
             ipv6: dc.ipv6,
             nameserver: nameservers,
-            fallback: fallback,
+            fallback,
             fallback_filter: dc.fallback_filter.clone().into(),
             listen: dc.listen.clone(),
             enhance_mode: dc.enhanced_mode.clone(),
-            default_nameserver: default_nameserver,
+            default_nameserver,
             fake_ip_range: match dc.enhanced_mode {
                 DNSMode::FakeIP => {
                     let ipnet = dc
@@ -194,6 +194,7 @@ impl TryFrom<&crate::config::def::Config> for DNS {
                         },
                         size: 1000,
                         persistence: c.profile.store_fake_ip,
+                        db_path: None,
                     })?)
                 }
                 _ => None,
