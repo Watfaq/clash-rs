@@ -1,5 +1,5 @@
 use std::{
-    any::{self, Any},
+    any::{Any},
     collections::HashMap,
     hash::Hash,
     rc::Rc,
@@ -161,14 +161,13 @@ pub fn valid_and_splic_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::HashMap,
         net::Ipv4Addr,
-        rc::{self, Rc},
+        rc::{Rc},
     };
 
-    use crate::common::trie::{DomainTrie, Node};
+    use crate::common::trie::{DomainTrie};
 
-    use super::StringTrie;
+    
 
     static LOCAL_IP: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 

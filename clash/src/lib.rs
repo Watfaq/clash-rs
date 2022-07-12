@@ -5,7 +5,6 @@ extern crate anyhow;
 
 use std::{
     io,
-    sync::{Arc, RwLock},
 };
 use thiserror::Error;
 
