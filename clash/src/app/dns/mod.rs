@@ -2,7 +2,7 @@ use ipnet::IpNet;
 use regex::Regex;
 use std::{
     collections::HashMap,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr},
     rc::Rc,
 };
 use url::Url;
@@ -113,7 +113,7 @@ impl DNS {
     pub fn parse_fallback_ip_cidr(ipcidr: &Vec<String>) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
-        for (i, ip) in ipcidr.iter().enumerate() {
+        for (_i, ip) in ipcidr.iter().enumerate() {
             let net: IpNet = ip.parse()?;
             output.push(net);
         }
@@ -122,9 +122,9 @@ impl DNS {
     }
 
     pub fn parse_hosts(
-        hosts_mapping: &HashMap<String, String>,
+        _hosts_mapping: &HashMap<String, String>,
     ) -> anyhow::Result<trie::DomainTrie> {
-        let mut tree = trie::StringTrie::new();
+        let tree = trie::StringTrie::new();
         Ok(tree)
     }
 

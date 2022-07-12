@@ -11,31 +11,31 @@ impl FileStore {
 }
 
 impl Store for FileStore {
-    fn get_by_host(&mut self, host: &str) -> Option<std::net::IpAddr> {
+    fn get_by_host(&mut self, _host: &str) -> Option<std::net::IpAddr> {
         todo!()
     }
 
-    fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {
+    fn pub_by_host(&mut self, _host: &str, _ip: std::net::IpAddr) {
         todo!()
     }
 
-    fn get_by_ip(&mut self, ip: std::net::IpAddr) -> Option<String> {
+    fn get_by_ip(&mut self, _ip: std::net::IpAddr) -> Option<String> {
         todo!()
     }
 
-    fn put_by_ip(&mut self, ip: std::net::IpAddr, host: &str) {
+    fn put_by_ip(&mut self, _ip: std::net::IpAddr, _host: &str) {
         todo!()
     }
 
-    fn del_by_ip(&mut self, ip: std::net::IpAddr) {
+    fn del_by_ip(&mut self, _ip: std::net::IpAddr) {
         todo!()
     }
 
-    fn exist(&mut self, ip: std::net::IpAddr) -> bool {
+    fn exist(&mut self, _ip: std::net::IpAddr) -> bool {
         todo!()
     }
 
-    fn copy_to(&self, store: &mut RefCell<Box<dyn Store>>) {
+    fn copy_to(&self, _store: &mut RefCell<Box<dyn Store>>) {
         todo!()
     }
 }

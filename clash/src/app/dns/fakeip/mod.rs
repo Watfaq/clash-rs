@@ -1,7 +1,7 @@
 use std::{cell::RefCell, net};
 
 use crate::{
-    app::dns::fakeip::{file_store::FileStore, mem_store::InmemStore},
+    app::dns::fakeip::{mem_store::InmemStore},
     common::trie,
     Error,
 };
@@ -193,9 +193,9 @@ impl FakeDnsImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::{net, path::Path, rc::Rc};
+    use std::{net, rc::Rc};
 
-    use crate::{common::trie, Error};
+    use crate::{common::trie};
 
     use super::{FakeDns, Opts};
 
