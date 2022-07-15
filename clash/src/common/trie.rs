@@ -1,9 +1,4 @@
-use std::{
-    any::{Any},
-    collections::HashMap,
-    hash::Hash,
-    rc::Rc,
-};
+use std::{any::Any, collections::HashMap, hash::Hash, rc::Rc, sync::Arc};
 
 static DOMAIN_STEP: &str = ".";
 static COMPLEX_WILDCARD: &str = "+";
@@ -18,8 +13,10 @@ pub struct StringTrie<T> {
 
 pub struct Node<T> {
     children: HashMap<T, Node<T>>,
-    data: Option<Rc<dyn Any>>,
+    data: Option<Arc<NodeData>>,
 }
+
+type NodeData = dyn Any + Sync + Send;
 
 impl<T: Eq + Ord + Clone + Hash> Node<T> {
     pub fn new() -> Self {
@@ -52,7 +49,7 @@ impl StringTrie<String> {
         StringTrie { root: Node::new() }
     }
 
-    pub fn insert(&mut self, domain: &str, data: Rc<dyn Any>) -> bool {
+    pub fn insert(&mut self, domain: &str, data: Arc<NodeData>) -> bool {
         let (parts, valid) = valid_and_splic_domain(domain);
         if !valid {
             return false;
@@ -92,7 +89,7 @@ impl StringTrie<String> {
         None
     }
 
-    fn insert_inner(&mut self, parts: &Vec<&str>, data: Rc<dyn Any>) {
+    fn insert_inner(&mut self, parts: &Vec<&str>, data: Arc<NodeData>) {
         let mut node = &mut self.root;
 
         for i in (0..parts.len()).rev() {
@@ -160,14 +157,9 @@ pub fn valid_and_splic_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        net::Ipv4Addr,
-        rc::{Rc},
-    };
+    use std::{net::Ipv4Addr, rc::Rc, sync::Arc};
 
-    use crate::common::trie::{DomainTrie};
-
-    
+    use crate::common::trie::DomainTrie;
 
     static LOCAL_IP: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 
@@ -178,7 +170,7 @@ mod tests {
         let domains = vec!["example.com", "google.com", "localhost"];
 
         for d in domains {
-            tree.insert(d, Rc::new(LOCAL_IP));
+            tree.insert(d, Arc::new(LOCAL_IP));
         }
 
         let node = tree.search("example.com").expect("should be not nil");
@@ -189,7 +181,7 @@ mod tests {
                 .downcast_ref::<Ipv4Addr>(),
             Some(&LOCAL_IP),
         );
-        assert_eq!(tree.insert("", Rc::new(LOCAL_IP)), false);
+        assert_eq!(tree.insert("", Arc::new(LOCAL_IP)), false);
         assert!(tree.search("").is_none());
         assert!(tree.search("localhost").is_some());
         assert!(tree.search("www.google.com").is_none());
@@ -214,7 +206,7 @@ mod tests {
         ];
 
         for d in domains {
-            tree.insert(d, Rc::new(LOCAL_IP));
+            tree.insert(d, Arc::new(LOCAL_IP));
         }
 
         assert!(tree.search("sub.example.com").is_some());
@@ -237,10 +229,10 @@ mod tests {
         let domains = vec![".dev", "example.dev", "*.example.dev", "test.example.dev"];
 
         for (idx, d) in domains.iter().enumerate() {
-            tree.insert(d, Rc::new(idx));
+            tree.insert(d, Arc::new(idx));
         }
 
-        let assert_fn = |k: &str| -> Rc<usize> {
+        let assert_fn = |k: &str| -> Arc<usize> {
             tree.search(k)
                 .unwrap()
                 .data
@@ -250,28 +242,28 @@ mod tests {
                 .unwrap()
         };
 
-        assert_eq!(assert_fn("test.dev"), Rc::new(0));
-        assert_eq!(assert_fn("foo.bar.dev"), Rc::new(0));
-        assert_eq!(assert_fn("example.dev"), Rc::new(1));
-        assert_eq!(assert_fn("foo.example.dev"), Rc::new(2));
-        assert_eq!(assert_fn("test.example.dev"), Rc::new(3));
+        assert_eq!(assert_fn("test.dev"), Arc::new(0));
+        assert_eq!(assert_fn("foo.bar.dev"), Arc::new(0));
+        assert_eq!(assert_fn("example.dev"), Arc::new(1));
+        assert_eq!(assert_fn("foo.example.dev"), Arc::new(2));
+        assert_eq!(assert_fn("test.example.dev"), Arc::new(3));
     }
 
     #[test]
     fn test_boundtry() {
         let mut tree = DomainTrie::new();
 
-        tree.insert("*.dev", Rc::new(LOCAL_IP));
-        assert!(!tree.insert(".", Rc::new(LOCAL_IP)));
-        assert!(!tree.insert("..dev", Rc::new(LOCAL_IP)));
+        tree.insert("*.dev", Arc::new(LOCAL_IP));
+        assert!(!tree.insert(".", Arc::new(LOCAL_IP)));
+        assert!(!tree.insert("..dev", Arc::new(LOCAL_IP)));
         assert!(tree.search("dev").is_none());
     }
 
     #[test]
     fn test_wildcard_boundry() {
         let mut tree = DomainTrie::new();
-        tree.insert("+.*", Rc::new(LOCAL_IP));
-        tree.insert("stun.*.*.*", Rc::new(LOCAL_IP));
+        tree.insert("+.*", Arc::new(LOCAL_IP));
+        tree.insert("stun.*.*.*", Arc::new(LOCAL_IP));
 
         assert!(tree.search("example.com").is_some());
     }

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="UnattendedHostPersistenceState">
+    <option name="openedFilesInfos">
+      <list>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="433" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/app/dispatcher.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="0" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/app/inbound/network_listener.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="167" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/app/mod.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="317" />
+          <option name="fileUrl" value="file://$USER_HOME$/.cargo/registry/src/github.com-1ecc6299db9ec823/futures-core-0.3.21/src/future.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="8757" />
+          <option name="fileUrl" value="file://$USER_HOME$/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="57894" />
+          <option name="fileUrl" value="file://$USER_HOME$/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="351" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/session.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="31631" />
+          <option name="fileUrl" value="file://$USER_HOME$/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="4417" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/proxy/mod.rs" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="3933" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/clash/src/app/nat_manager.rs" />
+        </OpenedFileInfo>
+      </list>
+    </option>
+  </component>
+</project>

@@ -1,13 +1,21 @@
+use std::collections::HashMap;
+
 use crate::{
     app::dns,
     config::def::{Experimental, LogLevel, RunMode},
 };
+use crate::config::internal::rule::Rule;
+
+use super::proxy::OutboundProtocol;
 
 pub struct Config {
     general: General,
-    dns: dns::DNS,
+    dns: dns::Config,
     experimental: Experimental,
     profile: Profile,
+    rules: Vec<Rule>,
+
+    proxies: HashMap<String, OutboundProtocol>,
 }
 
 struct General {

@@ -1,10 +1,6 @@
 use std::{cell::RefCell, net};
 
-use crate::{
-    app::dns::fakeip::{mem_store::InmemStore},
-    common::trie,
-    Error,
-};
+use crate::{app::dns::fakeip::mem_store::InmemStore, common::trie, Error};
 
 use byteorder::{BigEndian, ByteOrder};
 use tokio::sync::RwLock;
@@ -193,9 +189,9 @@ impl FakeDnsImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::{net, rc::Rc};
+    use std::{net, rc::Rc, sync::Arc};
 
-    use crate::{common::trie};
+    use crate::common::trie;
 
     use super::{FakeDns, Opts};
 
@@ -260,7 +256,7 @@ mod tests {
     async fn test_pool_skip() {
         let ipnet = "192.168.0.0/30".parse::<ipnet::IpNet>().unwrap();
         let mut tree = trie::DomainTrie::new();
-        tree.insert("example.com", Rc::new(0));
+        tree.insert("example.com", Arc::new(0));
 
         let pool = FakeDns::new(Opts {
             ipnet,

@@ -23,5 +23,15 @@ lru-cache = "0.1.2"
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.8"
 
+trust-dns-client = "0.21.2"
+trust-dns-server = "0.21.2"
+trust-dns-resolver = "0.21.2"
+trust-dns-proto = "0.21.2"
+rand = "0.8.5"
+async_singleflight = "0.5.0"
+get_if_addrs = "0.5.3"
+
+socket2 = "0.4.4"
+
 [dev-dependencies]
 tempfile = "3.3.0"
