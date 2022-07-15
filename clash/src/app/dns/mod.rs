@@ -1,16 +1,25 @@
+use async_trait::async_trait;
 use ipnet::IpNet;
 use regex::Regex;
-use std::{
-    collections::HashMap,
-    net::{IpAddr},
-    rc::Rc,
-};
+use std::{collections::HashMap, net::IpAddr, rc::Rc, sync::Arc};
 use url::Url;
 
 use crate::{common::trie, config::def::DNSMode, Error};
 
 mod dns_client;
 mod fakeip;
+mod filters;
+mod resolver;
+
+pub use resolver::ClashResolver;
+
+#[async_trait]
+trait Client: Sync + Send {
+    async fn exchange(
+        &self,
+        msg: trust_dns_client::op::Message,
+    ) -> Result<trust_dns_client::op::Message, Error>;
+}
 
 #[derive(Clone)]
 pub struct NameServer {
@@ -19,7 +28,14 @@ pub struct NameServer {
     interface: Option<String>,
 }
 
-pub struct DNS {
+struct FallbackFilter {
+    geo_ip: bool,
+    geo_ip_code: String,
+    ip_cidr: Option<Vec<ipnet::IpNet>>,
+    domain: Vec<String>,
+}
+
+pub struct Config {
     enable: bool,
     ipv6: bool,
     nameserver: Vec<NameServer>,
@@ -37,7 +53,7 @@ lazy_static! {
     static ref HAS_PORT_SUFFIX: Regex = Regex::new(r":\d+$").unwrap();
 }
 
-impl DNS {
+impl Config {
     pub fn parse_nameserver(servers: &Vec<String>) -> anyhow::Result<Vec<NameServer>> {
         let mut nameservers = vec![];
 
@@ -56,15 +72,15 @@ impl DNS {
 
             match url.scheme() {
                 "udp" => {
-                    addr = DNS::host_with_default_port(&host, "53")?;
+                    addr = Config::host_with_default_port(&host, "53")?;
                     net = "";
                 }
                 "tcp" => {
-                    addr = DNS::host_with_default_port(&host, "53")?;
+                    addr = Config::host_with_default_port(&host, "53")?;
                     net = "tcp";
                 }
                 "tls" => {
-                    addr = DNS::host_with_default_port(&host, "853")?;
+                    addr = Config::host_with_default_port(&host, "853")?;
                     net = "tcp-tls";
                 }
                 "https" => {
@@ -99,7 +115,7 @@ impl DNS {
         let mut policy = HashMap::new();
 
         for (domain, server) in policy_map {
-            let nameservers = DNS::parse_nameserver(&vec![server.to_owned()])?;
+            let nameservers = Config::parse_nameserver(&vec![server.to_owned()])?;
 
             let (_, valid) = trie::valid_and_splic_domain(&domain);
             if !valid {
@@ -137,7 +153,7 @@ impl DNS {
     }
 }
 
-impl TryFrom<&crate::config::def::Config> for DNS {
+impl TryFrom<&crate::config::def::Config> for Config {
     type Error = Error;
 
     fn try_from(c: &crate::config::def::Config) -> Result<Self, Self::Error> {
@@ -148,9 +164,9 @@ impl TryFrom<&crate::config::def::Config> for DNS {
             ));
         }
 
-        let nameservers = DNS::parse_nameserver(&dc.nameserver)?;
-        let fallback = DNS::parse_nameserver(&dc.fallback)?;
-        let nameserver_policy = DNS::parse_nameserver_policy(&dc.nameserver_policy)?;
+        let nameservers = Config::parse_nameserver(&dc.nameserver)?;
+        let fallback = Config::parse_nameserver(&dc.fallback)?;
+        let nameserver_policy = Config::parse_nameserver_policy(&dc.nameserver_policy)?;
 
         if dc.default_nameserver.len() == 0 {
             return Err(Error::InvalidConfig(
@@ -163,7 +179,7 @@ impl TryFrom<&crate::config::def::Config> for DNS {
                 .parse::<IpAddr>()
                 .map_err(|_| Error::InvalidConfig(anyhow!("default dns must be ip address")))?;
         }
-        let default_nameserver = DNS::parse_nameserver(&dc.default_nameserver)?;
+        let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
 
         Ok(Self {
             enable: dc.enable,
@@ -186,7 +202,7 @@ impl TryFrom<&crate::config::def::Config> for DNS {
                         host: if dc.fake_ip_filter.len() != 0 {
                             let mut host = trie::DomainTrie::new();
                             for domain in dc.fake_ip_filter.iter() {
-                                host.insert(domain.as_str(), Rc::new(true));
+                                host.insert(domain.as_str(), Arc::new(true));
                             }
                             Some(host)
                         } else {
@@ -200,7 +216,7 @@ impl TryFrom<&crate::config::def::Config> for DNS {
                 _ => None,
             },
             hosts: if dc.user_hosts && c.hosts.is_some() {
-                DNS::parse_hosts(&c.hosts.as_ref().unwrap()).ok()
+                Config::parse_hosts(&c.hosts.as_ref().unwrap()).ok()
             } else {
                 None
             },
@@ -209,16 +225,9 @@ impl TryFrom<&crate::config::def::Config> for DNS {
     }
 }
 
-struct FallbackFilter {
-    geo_ip: bool,
-    geo_ip_code: String,
-    ip_cidr: Option<Vec<ipnet::IpNet>>,
-    domain: Vec<String>,
-}
-
 impl From<crate::config::def::FallbackFilter> for FallbackFilter {
     fn from(c: crate::config::def::FallbackFilter) -> Self {
-        let ipcidr = DNS::parse_fallback_ip_cidr(&c.ip_cidr);
+        let ipcidr = Config::parse_fallback_ip_cidr(&c.ip_cidr);
         Self {
             geo_ip: c.geo_ip,
             geo_ip_code: c.geo_ip_code,

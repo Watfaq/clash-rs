@@ -1,2 +1,2 @@
 pub mod def;
-mod internal;
+pub mod internal;

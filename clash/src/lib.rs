@@ -3,9 +3,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate anyhow;
 
-use std::{
-    io,
-};
+use std::io;
 use thiserror::Error;
 
 mod app;
@@ -22,6 +20,10 @@ pub enum Error {
     InvalidConfig(#[from] anyhow::Error),
     #[error("profile error: {0}")]
     ProfileError(String),
+    #[error("dns error: {0}")]
+    DNSError(String),
+    #[error("proxy error: {0}")]
+    ProxyError(String),
 }
 
 pub fn start() -> Result<(), Error> {

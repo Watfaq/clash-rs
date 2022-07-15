@@ -20,12 +20,6 @@ pub enum SocksAddr {
     Domain(String, u16),
 }
 
-impl From<SocketAddr> for SocksAddr {
-    fn from(val: SocketAddr) -> Self {
-        Self::Ip(val)
-    }
-}
-
 struct SocksAddrType;
 
 impl SocksAddrType {
@@ -66,6 +60,53 @@ impl SocksAddr {
         }
     }
 
+    pub fn is_domain(&self) -> bool {
+        match self {
+            SocksAddr::Ip(_) => false,
+            SocksAddr::Domain(_, _) => true,
+        }
+    }
+
+    pub fn domain(&self) -> Option<&str> {
+        match self {
+            SocksAddr::Ip(_) => None,
+            SocksAddr::Domain(domain, _) => Some(domain.as_str()),
+        }
+    }
+
+    pub fn ip(&self) -> Option<IpAddr> {
+        if let SocksAddr::Ip(addr) = self {
+            Some(addr.ip())
+        } else {
+            None
+        }
+    }
+
+    pub fn host(&self) -> &str {
+        match self {
+            SocksAddr::Ip(ip) => ip.ip().to_string().as_str(),
+            SocksAddr::Domain(domain, _) => domain,
+        }
+    }
+
+    pub fn port(&self) -> u16 {
+        match self {
+            SocksAddr::Ip(ip) => ip.port(),
+            SocksAddr::Domain(_, port) => port.clone(),
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            // SOCKS5 ATYP
+            SocksAddr::Ip(ip) => match ip {
+                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
+                SocketAddr::V6(_) => 1 + 16 + 2,
+            },
+            SocksAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
+        }
+    }
+
     pub async fn read_from<T: AsyncRead + Unpin>(r: &mut T) -> io::Result<Self> {
         match r.read_u8().await? {
             SocksAddrType::V4 => {
@@ -96,6 +137,116 @@ impl SocksAddr {
         }
     }
 }
+
+impl Clone for SocksAddr {
+    fn clone(&self) -> Self {
+        match self {
+            SocksAddr::Ip(a) => Self::from(a.to_owned()),
+            SocksAddr::Domain(domain, port) => Self::try_from((domain, port)).unwrap(),
+        }
+    }
+}
+
+impl From<(IpAddr, u16)> for SocksAddr {
+    fn from(value: (IpAddr, u16)) -> Self {
+        Self::Ip(value.into())
+    }
+}
+
+impl From<(Ipv4Addr, u16)> for SocksAddr {
+    fn from(value: (Ipv4Addr, u16)) -> Self {
+        Self::Ip(value.into())
+    }
+}
+
+impl From<(Ipv6Addr, u16)> for SocksAddr {
+    fn from(value: (Ipv6Addr, u16)) -> Self {
+        Self::Ip(value.into())
+    }
+}
+
+impl From<SocketAddr> for SocksAddr {
+    fn from(value: SocketAddr) -> Self {
+        Self::Ip(value)
+    }
+}
+
+impl TryFrom<(String, u16)> for SocksAddr {
+    type Error = io::Error;
+
+    fn try_from(value: (String, u16)) -> Result<Self, Self::Error> {
+        if let Ok(ip) = value.0.parse::<IpAddr>() {
+            return Ok(Self::from((ip, value.1)));
+        }
+        if value.0.len() > 0xff {
+            return Err(io::Error::new(io::ErrorKind::Other, "domain too long"));
+        }
+        Ok(Self::Domain(value.0, value.1))
+    }
+}
+
+impl TryFrom<&[u8]> for SocksAddr {
+    type Error = io::Error;
+
+    fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
+        if buf.is_empty() {
+            return Err(insuff_bytes());
+        }
+
+        match buf[0] {
+            SocksAddrType::V4 => {
+                if buf.len() < 1 + 4 + 2 {
+                    // ATYP + DST.ADDR + DST.PORT
+                    return Err(insuff_bytes());
+                }
+
+                let mut ip_bytes = [0u8; 4];
+                ip_bytes.copy_from_slice(&buf[1..5]);
+                let ip = Ipv4Addr::from(ip_bytes);
+                let mut port_bytes = [0u8; 2];
+                port_bytes.copy_from_slice(&buf[5..7]);
+                let port = u16::from_be_bytes(port_bytes);
+                Ok(Self::Ip((ip, port).into()))
+            }
+
+            SocksAddrType::V6 => {
+                if buf.len() < 1 + 16 + 2 {
+                    // ATYP + DST.ADDR + DST.PORT
+                    return Err(insuff_bytes());
+                }
+
+                let mut ip_bytes = [0u8; 16];
+                ip_bytes.copy_from_slice(&buf[1..17]);
+                let ip = Ipv4Addr::from(ip_bytes);
+                let mut port_bytes = [0u8; 2];
+                port_bytes.copy_from_slice(&buf[17..19]);
+                let port = u16::from_be_bytes(port_bytes);
+                Ok(Self::Ip((ip, port).into()))
+            }
+
+            SocksAddrType::DOMAIN => {
+                if buf.is_empty() {
+                    return Err(insuff_bytes());
+                }
+                let domain_len = buf[1] as usize;
+                if buf.len() < 1 + domain_len + 2 {
+                    return Err(insuff_bytes());
+                }
+                let domain =
+                    String::from_utf8((&buf[2..domain_len + 2]).to_vec()).map_err(|e| {
+                        io::Error::new(io::ErrorKind::Other, format!("invalid domain: {}", e))
+                    })?;
+                let mut port_bytes = [0u8; 2];
+                (&mut port_bytes).copy_from_slice(&buf[domain_len + 2..domain_len + 4]);
+                let port = u16::from_be_bytes(port_bytes);
+                Ok(Self::Domain(domain, port))
+            }
+
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid ATYP")),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Network {
     Tcp,
@@ -111,17 +262,26 @@ pub struct Session {
     pub local_addr: SocketAddr,
     /// The proxy target address of a proxy connection.
     pub destination: SocksAddr,
-    /// The tag of the inbound handler this session initiated.
-    pub inbound_tag: String,
-    /// The tag of the first outbound handler this session goes.
-    pub outbound_tag: String,
-    /// Optional stream ID for multiplexing transports.
-    pub stream_id: Option<StreamId>,
-    /// Optional source address which is forwarded via HTTP reverse proxy.
-    pub forwarded_source: Option<IpAddr>,
-    /// Instructs a multiplexed transport should creates a new underlying
-    /// connection for this session, and it will be used only once.
-    pub new_conn_once: bool,
+    /// The outbound target
+    pub outbound_target: String,
+    /// The packet mark SO_MARK
+    pub packet_mark: Option<u32>,
+    /// The bind interface
+    pub iface: Option<SocketAddr>,
+}
+
+impl Clone for Session {
+    fn clone(&self) -> Self {
+        Self {
+            network: self.network,
+            source: self.source,
+            local_addr: self.local_addr,
+            destination: self.destination.clone(),
+            outbound_target: self.outbound_target.clone(),
+            packet_mark: self.packet_mark,
+            iface: self.iface,
+        }
+    }
 }
 
 fn invalid_domain() -> io::Error {
@@ -130,4 +290,8 @@ fn invalid_domain() -> io::Error {
 
 fn invalid_atyp() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "invalid address type")
+}
+
+fn insuff_bytes() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "insufficient bytes")
 }

@@ -1,13 +1,24 @@
-use std::net::SocketAddr;
+// a lot of these are from: https://github.com/eycorsican/leaf/blob/master/leaf/src/proxy/mod.rs
+
+use std::{io, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures_core::Stream;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::session::{DatagramSource, Session, SocksAddr};
+use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
+use crate::{
+    app::ThreadSafeAsyncDnsClient,
+    session::{DatagramSource, Network, Session, SocksAddr},
+};
 
+pub mod direct;
+pub mod outbound;
+pub mod reject;
+pub mod shadowsocks;
 pub mod socks;
+pub mod utils;
 
 pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 pub type AnyStream = Box<dyn ProxyStream>;
@@ -62,13 +73,20 @@ pub type AnyInboundDatagram = Box<dyn InboundDatagram>;
 
 #[async_trait]
 pub trait InboundStreamHandler<S = AnyStream, D = AnyInboundDatagram>: Send + Sync + Unpin {
-    async fn handle<'a>(
-        &'a self,
-        sess: Session,
-        stream: S,
-    ) -> std::io::Result<InboundTransport<S, D>>;
+    async fn handle(&self, sess: Session, stream: S) -> std::io::Result<InboundTransport<S, D>>;
 }
 
+pub type AnyInboundStreamHandler = Arc<dyn InboundStreamHandler>;
+
+/// An inbound handler for incoming UDP connections.
+#[async_trait]
+pub trait InboundDatagramHandler<S = AnyStream, D = AnyInboundDatagram>:
+    Send + Sync + Unpin
+{
+    async fn handle(&self, socket: D) -> io::Result<InboundTransport<S, D>>;
+}
+
+pub type AnyInboundDatagramHandler = Arc<dyn InboundDatagramHandler>;
 pub enum BaseInboundTransport<S, D> {
     /// The reliable transport.
     Stream(S, Session),
@@ -92,3 +110,192 @@ pub enum InboundTransport<S, D> {
 }
 
 pub type AnyInboundTransport = InboundTransport<AnyStream, AnyInboundDatagram>;
+
+pub trait InboundHandler: Send + Sync + Unpin {
+    fn stream(&self) -> io::Result<&AnyInboundStreamHandler>;
+    fn datagram(&self) -> io::Result<&AnyInboundDatagramHandler>;
+}
+pub type AnyInboundHandler = Arc<dyn InboundHandler>;
+
+#[derive(Debug, Clone)]
+pub enum OutboundConnect {
+    Proxy(Network, String, u16),
+    Direct,
+    Next,
+    Unknown,
+}
+
+#[async_trait]
+pub trait OutboundStreamHandler<S = AnyStream>: Send + Sync + Unpin {
+    /// Returns the address which the underlying transport should
+    /// communicate with.
+    fn connect_addr(&self) -> OutboundConnect;
+
+    /// Handles a session with the given stream. On success, returns a
+    /// stream wraps the incoming stream.
+    async fn handle<'a>(&'a self, sess: &'a Session) -> io::Result<S>;
+}
+
+type AnyOutboundStreamHandler = Box<dyn OutboundStreamHandler>;
+
+#[async_trait]
+pub trait OutboundDatagramRecvHalf: Sync + Send + Unpin {
+    /// Receives a message on the socket. On success, returns the number of
+    /// bytes read and the origin of the message.
+    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocksAddr)>;
+}
+
+#[async_trait]
+pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
+    /// Sends a message on the socket to `dst_addr`. On success, returns the
+    /// number of bytes sent.
+    async fn send_to(&mut self, buf: &[u8], dst_addr: &SocksAddr) -> io::Result<usize>;
+
+    /// Close the soccket gracefully.
+    async fn close(&mut self) -> io::Result<()>;
+}
+
+pub trait OutboundDatagram: Send + Unpin {
+    /// Splits the datagram.
+    fn split(
+        self: Box<Self>,
+    ) -> (
+        Box<dyn OutboundDatagramRecvHalf>,
+        Box<dyn OutboundDatagramSendHalf>,
+    );
+}
+
+pub type AnyOutboundDatagram = Box<dyn OutboundDatagram>;
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum DatagramTransportType {
+    Reliable,
+    Unreliable,
+    Unknown,
+}
+
+pub enum OutboundTransport<S, D> {
+    /// The reliable transport.
+    Stream(S),
+    /// The unreliable transport.
+    Datagram(D),
+}
+
+pub type AnyOutboundTransport = OutboundTransport<AnyStream, AnyOutboundDatagram>;
+
+#[async_trait]
+pub trait OutboundDatagramHandler<S = AnyStream, D = AnyOutboundDatagram>:
+    Send + Sync + Unpin
+{
+    /// Returns the address which the underlying transport should
+    /// communicate with.
+    fn connect_addr(&self) -> OutboundConnect;
+
+    /// Returns the transport type of this handler.
+    fn transport_type(&self) -> DatagramTransportType;
+
+    /// Handles a session with the transport. On success, returns an outbound
+    /// datagram wraps the incoming transport.
+    async fn handle<'a>(
+        &'a self,
+        sess: &'a Session,
+        transport: Option<OutboundTransport<S, D>>,
+    ) -> io::Result<D>;
+}
+
+type AnyOutboundDatagramHandler = Box<dyn OutboundDatagramHandler>;
+
+#[async_trait]
+pub trait OutboundHandler {
+    fn stream(&self) -> io::Result<&AnyOutboundStreamHandler>;
+    fn datagram(&self) -> io::Result<&AnyOutboundDatagramHandler>;
+
+    async fn handle_tcp(
+        &self,
+        sess: &Session,
+        dns_resolver: ThreadSafeAsyncDnsClient,
+    ) -> io::Result<AnyStream> {
+        let s = self.connect_stream(&sess, dns_resolver).await?;
+        let h = match sess.network {
+            Network::Tcp => self.stream()?,
+            Network::Udp => self.datagram()?,
+        };
+        h.handle(&sess)
+    }
+
+    async fn handle_udp(
+        &self,
+        sess: &Session,
+        dns_resolver: ThreadSafeAsyncDnsClient,
+        transport: AnyOutboundTransport,
+    ) -> io::Result<AnyOutboundDatagram> {
+        let transport = self.connect_datagram(&sess, dns_resolver);
+    }
+
+    async fn connect_stream(
+        &self,
+        sess: &Session,
+        dns_client: ThreadSafeAsyncDnsClient,
+    ) -> io::Result<AnyStream> {
+        match self.stream()?.connect_addr() {
+            OutboundConnect::Direct => Ok(new_tcp_stream(
+                dns_client,
+                &sess.destination.host(),
+                sess.destination.port(),
+                sess.iface,
+                sess.packet_mark,
+            )
+            .await?),
+            OutboundConnect::Proxy(Network::Tcp, addr, port) => {
+                Ok(new_tcp_stream(dns_client, &addr, port, sess.iface, sess.packet_mark).await?)
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "invalid outbound connect",
+            )),
+        }
+    }
+
+    async fn connect_datagram(
+        &self,
+        sess: &Session,
+        dns_resolver: ThreadSafeAsyncDnsClient,
+    ) -> io::Result<AnyOutboundTransport> {
+        match self.datagram()?.connect_addr() {
+            OutboundConnect::Proxy(network, addr, port) => match network {
+                Network::Udp => {
+                    let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
+                    Ok(OutboundTransport::Datagram(Box::new(
+                        SimpleOutboundDatagram::new(socket, None, dns_resolver.clone()),
+                    )))
+                }
+                Network::Tcp => {
+                    let stream = new_tcp_stream(
+                        dns_resolver.clone(),
+                        addr.as_str(),
+                        port,
+                        sess.iface,
+                        sess.packet_mark,
+                    )
+                    .await?;
+                    Ok(OutboundTransport::Stream(stream))
+                }
+            },
+            OutboundConnect::Direct => {
+                let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
+                let dest = match &sess.destination {
+                    SocksAddr::Domain(host, port) => SocksAddr::Domain(host, port),
+                    _ => None,
+                };
+                Ok(OutboundTransport::Datagram(Box::new(
+                    SimpleOutboundDatagram::new(socket, dest, dns_resolver.clone()),
+                )))
+            }
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "invalid outbound connect",
+            )),
+        }
+    }
+}
+pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;

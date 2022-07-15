@@ -13,8 +13,8 @@ pub struct Handler;
 
 #[async_trait]
 impl InboundStreamHandler for Handler {
-    async fn handle<'a>(
-        &'a self,
+    async fn handle(
+        &self,
         mut sess: Session,
         mut stream: AnyStream,
     ) -> std::io::Result<AnyInboundTransport> {
