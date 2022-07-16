@@ -1,6 +1,6 @@
 use crate::app::dispatcher::Dispatcher;
 use crate::session::{DatagramSource, Network, Session, SocksAddr};
-use futures_core::future::BoxFuture;
+use futures::future::{abortable, BoxFuture};
 use std::collections::HashMap;
 use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
@@ -74,7 +74,7 @@ impl NatManager {
     ) {
         let mut guard = self.sessions.lock().await;
         if guard.contains_key(dgram_src) {
-            self._send(&mut guard, dgram_src, packet);
+            self._send(dgram_src, packet);
             return;
         }
 
@@ -88,7 +88,7 @@ impl NatManager {
         self.add_session(sess, dgram_src.clone(), client_ch_tx.clone())
             .await;
 
-        self._send(dgram_src, packet);
+        self._send(dgram_src, packet).await;
     }
 
     pub async fn add_session<'a>(
@@ -123,7 +123,7 @@ impl NatManager {
 
             let (mut target_socket_recv, mut target_socket_send) = socket.split();
             let downlink_task = async move {
-                let mut buf = vec![0u8; 1500 x 2]; // double MTU
+                let mut buf = vec![0u8; 1500 * 2]; // double MTU
                 loop {
                     match target_socket_recv.recv_from(&mut buf).await {
                         Err(err) => {
@@ -157,7 +157,22 @@ impl NatManager {
             tokio::spawn(async move {
                 downlink_abort_rx.await;
                 downlink_task_handle.abort();
+            });
+
+            tokio::spawn(async move {
+                while let Some(pkt) = target_ch_rx.recv().await {
+                    if let Err(e) = target_socket_send.send_to(&pkt.data, &pkt.dst_addr).await {
+                        break;
+                    }
+                }
+                if let Err(e) = target_socket_send.close().await {}
             })
         });
+    }
+    async fn _send<'a>(&self, key: &DatagramSource, pkt: UdpPacket) {
+        if let Some(sess) = self.sessions.lock().await.get_mut(key) {
+            if let Err(e) = sess.0.try_send(pkt) {}
+            sess.2 = Instant::now();
+        }
     }
 }

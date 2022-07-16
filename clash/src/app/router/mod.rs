@@ -13,13 +13,13 @@ use tokio::sync::RwLock;
 mod rules;
 
 pub struct Router {
-    rules: Vec<dyn RuleMatcher>,
+    rules: Vec<Box<dyn RuleMatcher>>,
     dns_client: ThreadSafeAsyncDnsClient,
 }
 
 pub type ThreadSafeRouter = Arc<RwLock<Router>>;
 
-const MATCH: &str = "match";
+const MATCH: &str = "MATCH";
 
 impl Router {
     pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeAsyncDnsClient) -> Self {
@@ -31,7 +31,10 @@ impl Router {
                     Rule::DomainSuffix {
                         domain_suffix,
                         target,
-                    } => DomainSuffix { suffix, target },
+                    } => DomainSuffix {
+                        suffix: domain_suffix,
+                        target,
+                    },
                     Rule::DomainKeyword {
                         domain_keyword,
                         target,
@@ -65,7 +68,7 @@ impl Router {
                     Rule::DSTPort => {}
                     Rule::ProcessName => {}
                     Rule::ProcessPath => {}
-                    Rule::Match => {}
+                    Rule::Match { .. } => todo!(),
                 })
                 .collect(),
             dns_client,
@@ -78,7 +81,11 @@ impl Router {
 
         for r in self.rules.iter() {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
-                let ip = self.dns_client.read()?.resolve(domain.as_str()).await?;
+                let ip = self
+                    .dns_client
+                    .read()?
+                    .resolve(sess.destination.domain().unwrap().as_str())
+                    .await?;
                 sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
                 sess_resolved = true;
             }

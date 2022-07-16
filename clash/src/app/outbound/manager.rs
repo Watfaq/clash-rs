@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     app::ThreadSafeAsyncDnsClient,
-    config::internal::proxy::{OutboundGroupProtocol, OutboundProtocol},
+    config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{direct, outbound::HandlerBuilder, socks, AnyOutboundHandler},
 };
 
@@ -18,7 +18,7 @@ pub type ThreadSafeOutboundManager = Arc<RwLock<OutboundManager>>;
 
 impl OutboundManager {
     pub fn new(
-        outbounds: Vec<OutboundProtocol>,
+        outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         dns_client: ThreadSafeAsyncDnsClient,
     ) -> Result<Self> {
@@ -34,14 +34,14 @@ impl OutboundManager {
     }
 
     fn load_handlers(
-        outbounds: Vec<OutboundProtocol>,
+        outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         dns_client: ThreadSafeAsyncDnsClient,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
     ) -> Result<()> {
         for outbound in outbounds.iter() {
             match outbound {
-                OutboundProtocol::Direct => {
+                OutboundProxyProtocol::Direct => {
                     handlers.insert(
                         "DIRECT".to_string(),
                         HandlerBuilder::default()
@@ -52,7 +52,7 @@ impl OutboundManager {
                     );
                 }
 
-                OutboundProtocol::Socks5(name, proto) => {
+                OutboundProxyProtocol::Socks5(name, proto) => {
                     let stream = Box::new(socks::outbound::StreamHandler {
                         address: proto.server,
                         port: proto.port,

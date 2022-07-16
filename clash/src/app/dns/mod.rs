@@ -144,7 +144,7 @@ impl Config {
         Ok(tree)
     }
 
-    pub fn host_with_default_port<'a>(host: &'a str, port: &str) -> anyhow::Result<String> {
+    pub fn host_with_default_port(host: &str, port: &str) -> anyhow::Result<String> {
         if HAS_PORT_SUFFIX.is_match(&host) {
             Ok(host.into())
         } else {
@@ -220,7 +220,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             } else {
                 None
             },
-            nameserver_policy: nameserver_policy,
+            nameserver_policy,
         })
     }
 }

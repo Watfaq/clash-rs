@@ -1,5 +1,4 @@
-mod config;
-mod rule;
+pub mod config;
 pub mod proxy;
 pub mod rule;
 

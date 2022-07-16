@@ -1,4 +1,9 @@
+use crate::Error;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
@@ -26,36 +31,58 @@ pub enum LogLevel {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct Config {
-    port: i16,
-    socks_port: i16,
-    redir_port: i16,
-    tproxy_port: i16,
-    mixed_port: i16,
-    authentication: Vec<String>,
-    allow_lan: bool,
-    bind_address: String,
-    mode: RunMode,
-    log_level: LogLevel,
-    ipv6: bool,
-    external_controller: String,
-    external_ui: String,
-    secret: String,
-    #[serde(rename = "interface-name")]
-    interface: String,
-    routing_mask: u32,
+    /// these options are optional to tell whether
+    /// the regarding listeners should be enabled
+    pub port: Option<i16>,
+    pub socks_port: Option<i16>,
+    pub redir_port: Option<i16>,
+    pub tproxy_port: Option<i16>,
+    pub mixed_port: Option<i16>,
 
-    #[serde(rename = "proxy-providers")]
-    proxy_provider: HashMap<String, HashMap<String, Value>>,
-    pub hosts: Option<HashMap<String, String>>,
+    /// these options has Default::default()
+    /// or will be set to their empty/falsy vals
+    pub authentication: Vec<String>,
+    pub allow_lan: bool,
+    pub bind_address: String,
+    pub mode: RunMode,
+    pub log_level: LogLevel,
     pub dns: DNS,
-    experimental: Experimental,
     pub profile: Profile,
     #[serde(rename = "proxies")]
-    proxy: Vec<HashMap<String, Value>>,
+    pub proxy: Vec<HashMap<String, Value>>,
     #[serde(rename = "proxy-groups")]
-    proxy_group: Vec<HashMap<String, Value>>,
+    pub proxy_group: Vec<HashMap<String, Value>>,
     #[serde(rename = "rules")]
-    rule: Vec<String>,
+    pub rule: Vec<String>,
+    pub hosts: HashMap<String, String>,
+
+    /// these options has default vals,
+    /// but we want to process them
+    /// explicitly
+    pub ipv6: Option<bool>,
+    pub external_controller: Option<String>,
+    pub external_ui: Option<String>,
+    pub secret: Option<String>,
+    #[serde(rename = "interface-name")]
+    pub interface: Option<String>,
+    pub routing_mask: Option<u32>,
+    #[serde(rename = "proxy-providers")]
+    pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    pub experimental: Option<Experimental>,
+}
+
+impl FromStr for Config {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(p) = s.parse::<Path>() {
+            let fd = File::open(p)?;
+            let reader = BufReader::new(fd);
+            Ok(serde_yaml::from_reader(reader)?)
+        } else {
+            Ok(serde_yaml::from_str(s)?)
+        }
+    }
 }
 
 impl Default for Config {

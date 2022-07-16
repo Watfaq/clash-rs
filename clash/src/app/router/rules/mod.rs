@@ -1,4 +1,5 @@
 use crate::session::Session;
+use std::sync::Arc;
 
 pub mod domain;
 pub mod domain_keyword;
