@@ -16,5 +16,11 @@ impl OutboundStreamHandler for Handler {
         OutboundConnect::Direct
     }
 
-    async fn handle<'a>(&'a self, _sess: &'a Session) -> io::Result<AnyStream> {}
+    async fn handle<'a>(
+        &'a self,
+        _sess: &'a Session,
+        stream: Option<AnyStream>,
+    ) -> io::Result<AnyStream> {
+        stream.ok()
+    }
 }

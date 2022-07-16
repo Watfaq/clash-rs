@@ -3,17 +3,21 @@
 use std::{io, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
-use futures_core::Stream;
+use futures::Stream;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use crate::proxy::datagram::SimpleOutboundDatagram;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
 use crate::{
     app::ThreadSafeAsyncDnsClient,
     session::{DatagramSource, Network, Session, SocksAddr},
 };
 
+pub mod datagram;
 pub mod direct;
+pub mod http;
+pub mod inbound;
 pub mod outbound;
 pub mod reject;
 pub mod shadowsocks;
@@ -133,7 +137,7 @@ pub trait OutboundStreamHandler<S = AnyStream>: Send + Sync + Unpin {
 
     /// Handles a session with the given stream. On success, returns a
     /// stream wraps the incoming stream.
-    async fn handle<'a>(&'a self, sess: &'a Session) -> io::Result<S>;
+    async fn handle<'a>(&'a self, sess: &'a Session, stream: AnyStream) -> io::Result<S>;
 }
 
 type AnyOutboundStreamHandler = Box<dyn OutboundStreamHandler>;
@@ -206,7 +210,7 @@ pub trait OutboundDatagramHandler<S = AnyStream, D = AnyOutboundDatagram>:
 type AnyOutboundDatagramHandler = Box<dyn OutboundDatagramHandler>;
 
 #[async_trait]
-pub trait OutboundHandler {
+pub trait OutboundHandler: Sync + Send + Unpin {
     fn stream(&self) -> io::Result<&AnyOutboundStreamHandler>;
     fn datagram(&self) -> io::Result<&AnyOutboundDatagramHandler>;
 
@@ -284,11 +288,11 @@ pub trait OutboundHandler {
             OutboundConnect::Direct => {
                 let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
                 let dest = match &sess.destination {
-                    SocksAddr::Domain(host, port) => SocksAddr::Domain(host, port),
+                    SocksAddr::Domain(host, port) => SocksAddr::Domain(host.into(), port.into()),
                     _ => None,
                 };
                 Ok(OutboundTransport::Datagram(Box::new(
-                    SimpleOutboundDatagram::new(socket, dest, dns_resolver.clone()),
+                    SimpleOutboundDatagram::new(socket, dest.into(), dns_resolver.clone()),
                 )))
             }
             _ => Err(io::Error::new(
