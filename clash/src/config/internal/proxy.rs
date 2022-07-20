@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use tower::ServiceExt;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
 pub const PROXY_REJECT: &str = "REJECT";
@@ -41,7 +42,8 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        OutboundProxyProtocol::deserialize(MapDeserializer::new(mapping.into()))
+        OutboundProxyProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
+            .map_err(|x: serde_yaml::Error| Error::InvalidConfig(x.to_string()))
     }
 }
 
@@ -56,9 +58,13 @@ impl Display for OutboundProxyProtocol {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+
 pub struct OutboundShadowsocks {
     pub name: String,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,
@@ -73,6 +79,7 @@ pub struct OutboundSocks5 {
 impl Default for OutboundSocks5 {
     fn default() -> Self {
         Self {
+            name: Default::default(),
             server: Default::default(),
             port: Default::default(),
             username: Default::default(),
@@ -103,7 +110,8 @@ impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
     type Error = Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into()))
+        OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
+            .map_err(|x| Error::InvalidConfig(x.to_string()))
     }
 }
 
@@ -119,10 +127,13 @@ impl Display for OutboundGroupProtocol {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+
 pub struct OutboundGroupRelay {
     pub name: String,
     pub proxies: Vec<String>,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub struct OutboundGroupUrlTest {
     pub name: String,
@@ -133,6 +144,7 @@ pub struct OutboundGroupUrlTest {
     pub tolerance: Option<i32>,
     pub lazy: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub struct OutboundGroupFallback {
     pub name: String,
@@ -141,6 +153,7 @@ pub struct OutboundGroupFallback {
     pub url: String,
     pub interval: i32,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub struct OutboundGroupLoadBalance {
     pub name: String,
@@ -150,11 +163,13 @@ pub struct OutboundGroupLoadBalance {
     pub interval: i32,
     pub strategy: LoadBalanceStrategy,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub enum LoadBalanceStrategy {
     ConsistentHashing,
     RoundRobin,
 }
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub struct OutboundGroupSelect {
     pub name: String,

@@ -1,5 +1,6 @@
 use crate::Error;
 use futures::StreamExt;
+use std::str::FromStr;
 
 pub enum Rule {
     Domain {
@@ -40,7 +41,7 @@ impl Rule {
         payload: &str,
         target: &str,
         params: Option<Vec<&str>>,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, Error> {
         match proto {
             "DOMAIN" => Ok(Rule::Domain {
                 domain: payload.to_string(),
@@ -80,7 +81,10 @@ impl Rule {
             "MATCH" => Ok(Rule::Match {
                 target: target.to_string(),
             }),
-            _ => Err(anyhow!("unsupported rule type: {}", proto)),
+            _ => Err(Error::InvalidConfig(format!(
+                "unsupported rule type: {}",
+                proto
+            ))),
         }
     }
 }
@@ -91,13 +95,21 @@ impl TryFrom<String> for Rule {
     fn try_from(line: String) -> Result<Self, Self::Error> {
         let parts = line.split(",").map(str::trim).collect::<Vec<&str>>();
 
-        match parts[..] {
-            [proto, target] => Rule::new(proto, "", target, None).into(),
-            [proto, payload, target] => Rule::new(proto, payload, target, None).into(),
+        match parts.as_slice() {
+            [proto, target] => Rule::new(proto, "", target, None),
+            [proto, payload, target] => Rule::new(proto, payload, target, None),
             [proto, payload, target, params @ ..] => {
-                Rule::new(proto, payload, target, Some(params)).into()
+                Rule::new(proto, payload, target, Some(params.to_vec()))
             }
             _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", line))),
         }
+    }
+}
+
+impl FromStr for Rule {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.to_string().try_into()
     }
 }

@@ -11,7 +11,8 @@ impl RuleMatcher for DomainSuffix {
         match &sess.destination {
             SocksAddr::Ip(_) => false,
             SocksAddr::Domain(domain, _) => {
-                domain.ends_with("."+&self.suffix) || domain == self.suffix
+                domain.ends_with((String::from(".") + self.suffix.as_str()).as_str())
+                    || domain == &self.suffix
             }
         }
     }

@@ -2,6 +2,7 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate anyhow;
+extern crate core;
 
 use crate::config::def::Config;
 use crate::config::internal::InternalConfig;
@@ -18,6 +19,8 @@ mod session;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error(transparent)]
+    IpNet(#[from] ipnet::AddrParseError),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("invalid config: {0}")]

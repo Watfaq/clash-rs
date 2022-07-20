@@ -11,7 +11,7 @@ impl RuleMatcher for Domain {
     fn apply(&self, sess: &session::Session) -> bool {
         match &sess.destination {
             session::SocksAddr::Ip(_) => false,
-            session::SocksAddr::Domain(domain, _) => self.domain == domain,
+            session::SocksAddr::Domain(domain, _) => &self.domain == domain,
         }
     }
 

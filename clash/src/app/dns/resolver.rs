@@ -1,4 +1,4 @@
-use std::{net, rc::Rc, sync::Arc};
+use std::{io, net, rc::Rc, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -10,11 +10,13 @@ use super::{
     Client, Config, NameServer,
 };
 /// Application Resolver, will consult hosts, etc.
+/// it returns Result<Option, E> as a DNS can have
+/// no A record setup
 #[async_trait]
 pub trait ClashResolver: Sync + Send {
-    async fn resolve(&self, host: &str) -> Result<net::IpAddr, Error>;
-    async fn resolve_v4(&self, host: &str) -> Result<net::Ipv4Addr, Error>;
-    async fn resolve_v6(&self, host: &str) -> Result<net::Ipv6Addr, Error>;
+    async fn resolve(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error>;
+    async fn resolve_v4(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error>;
+    async fn resolve_v6(&self, host: &str) -> Result<Option<net::Ipv6Addr>, io::Error>;
 }
 
 struct Resolver {
@@ -33,13 +35,13 @@ struct Resolver {
 
 #[async_trait]
 impl ClashResolver for Resolver {
-    async fn resolve(&self, host: &str) -> Result<net::IpAddr, Error> {
+    async fn resolve(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error> {
         todo!();
     }
-    async fn resolve_v4(&self, host: &str) -> Result<net::Ipv4Addr, Error> {
+    async fn resolve_v4(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error> {
         todo!();
     }
-    async fn resolve_v6(&self, host: &str) -> Result<net::Ipv6Addr, Error> {
+    async fn resolve_v6(&self, host: &str) -> Result<Option<net::Ipv6Addr>, io::Error> {
         todo!();
     }
 }

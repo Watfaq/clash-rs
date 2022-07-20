@@ -21,16 +21,13 @@ impl OutboundStreamHandler for Handler {
     async fn handle<'a>(
         &'a self,
         sess: &'a Session,
-        stream: Option<AnyStream>,
+        mut stream: AnyStream,
     ) -> io::Result<AnyStream> {
-        let mut stream =
-            stream.ok_or_else(|| io::Error::new(io::ErrorKind::Other, "no input stream"))?;
-
         match &sess.destination {
             SocksAddr::Ip(ip) => {
                 async_socks5::connect(&mut stream, ip.to_owned(), None)
                     .await
-                    .map_err(|x| io::Error::new(io::ErrorKind::Other, x));
+                    .map_err(|x| io::Error::new(io::ErrorKind::Other, x))?;
             }
             SocksAddr::Domain(domain, port) => {
                 async_socks5::connect(&mut stream, (domain.to_owned(), port.to_owned()), None)

@@ -1,6 +1,9 @@
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::fmt::format;
 use std::net::SocketAddr;
+use std::str::FromStr;
+use tower::ServiceExt;
 
 use crate::config::def;
 use crate::config::internal::proxy::{
@@ -55,7 +58,7 @@ impl TryFrom<def::Config> for Config {
                 log_level: c.log_level,
                 ipv6: c.ipv6.unwrap_or(false),
                 interface: c.interface.map(|iface| {
-                    if let Some(addr) = iface.parse::<SocketAddr>() {
+                    if let Ok(addr) = iface.parse::<SocketAddr>() {
                         BindInterface::Addr(addr)
                     } else {
                         BindInterface::Name(iface)
@@ -63,13 +66,21 @@ impl TryFrom<def::Config> for Config {
                 }),
                 routing_mask: c.routing_mask,
             },
-            dns: c.dns.try_into()?,
+            dns: (&c).try_into()?,
             experimental: c.experimental,
             profile: Profile {
                 store_selected: c.profile.store_selected,
                 store_fakeip: c.profile.store_fake_ip,
             },
-            rules: c.rule.into_iter().map(|x| x.parse::<Rule>()?).collect(),
+            rules: c
+                .rule
+                .into_iter()
+                .map(|x| {
+                    x.parse::<Rule>()
+                        .map_err(|x| Error::InvalidConfig(x.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+
             proxies: c.proxy.into_iter().try_fold(
                 HashMap::from([
                     (
@@ -96,13 +107,12 @@ impl TryFrom<def::Config> for Config {
                 },
             )?,
             proxy_groups: c.proxy_group.into_iter().try_fold(
-                HashMap::new(),
+                HashMap::<String, OutboundProxy>::new(),
                 |mut rv, mapping| {
-                    let group =
-                        OutboundProxy::ProxyGroup(OutboundGroupProtocol::try_from(mapping)?);
+                    let group = OutboundProxy::ProxyGroup(mapping.try_into()?);
                     proxy_names.push(group.name().into());
                     rv.insert(group.name().to_string(), group);
-                    Ok(rv)
+                    Ok::<HashMap<String, OutboundProxy>, Error>(rv)
                 },
             )?,
             // https://stackoverflow.com/a/62001313/1109167
@@ -131,9 +141,21 @@ struct Profile {
     store_fakeip: bool,
 }
 
+#[derive(Clone)]
 pub enum BindAddress {
     Any,
     One(SocketAddr),
+}
+
+impl FromStr for BindAddress {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::One(
+            s.parse::<SocketAddr>()
+                .map_err(|x| Error::InvalidConfig(x.to_string()))?,
+        ))
+    }
 }
 
 pub struct Inbound {

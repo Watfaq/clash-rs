@@ -2,10 +2,10 @@ use crate::app::dispatcher::Dispatcher;
 use crate::session::{DatagramSource, Network, Session, SocksAddr};
 use futures::future::{abortable, BoxFuture};
 use std::collections::HashMap;
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, MutexGuard};
 use tokio::time::Instant;
 
 pub struct UdpPacket {
@@ -37,9 +37,9 @@ const UDP_SESSION_CHECK_INTERVAL: u64 = 10;
 
 impl NatManager {
     pub fn new(dispatcher: Arc<Dispatcher>) -> Self {
-        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let sessions: Arc<Mutex<SessionMap>> = Arc::new(Mutex::new(HashMap::new()));
 
-        let timeout_check_task = async move {
+        let timeout_check_task: BoxFuture<'static, ()> = Box::pin(async move {
             let mut sessions = sessions.lock().await;
             let n_total = sessions.len();
             let now = Instant::now();
@@ -56,7 +56,7 @@ impl NatManager {
             }
             drop(to_remove);
             tokio::time::sleep(Duration::from_secs(UDP_SESSION_CHECK_INTERVAL)).await;
-        };
+        });
 
         NatManager {
             sessions,
@@ -85,7 +85,7 @@ impl NatManager {
             ..Default::default()
         });
 
-        self.add_session(sess, dgram_src.clone(), client_ch_tx.clone())
+        self.add_session(sess, dgram_src.clone(), client_ch_tx.clone(), &mut guard)
             .await;
 
         self._send(dgram_src, packet).await;
@@ -96,13 +96,12 @@ impl NatManager {
         sess: Session,
         raddr: DatagramSource,
         client_ch_tx: Sender<UdpPacket>,
+        guard: &mut MutexGuard<'a, SessionMap>,
     ) {
         // the task is taken(), next time it's None
         if let Some(task) = self.timeout_check_task.lock().await.take() {
             tokio::spawn(task);
         }
-
-        let mut guard = self.sessions.lock().await;
 
         let (target_ch_tx, mut target_ch_rx) = mpsc::channel(64);
         let (downlink_abort_tx, downlink_abort_rx) = oneshot::channel();
@@ -116,7 +115,7 @@ impl NatManager {
             let socket = match dispatcher.dispatch_datagram(sess).await {
                 Ok(s) => s,
                 Err(e) => {
-                    guard.remove(&raddr);
+                    sessions.lock().await.remove(&raddr);
                     return;
                 }
             };
@@ -155,7 +154,7 @@ impl NatManager {
             tokio::spawn(downlink_task);
 
             tokio::spawn(async move {
-                downlink_abort_rx.await;
+                let _ = downlink_abort_rx.await;
                 downlink_task_handle.abort();
             });
 
@@ -166,7 +165,7 @@ impl NatManager {
                     }
                 }
                 if let Err(e) = target_socket_send.close().await {}
-            })
+            });
         });
     }
     async fn _send<'a>(&self, key: &DatagramSource, pkt: UdpPacket) {

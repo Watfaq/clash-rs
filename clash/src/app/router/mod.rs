@@ -27,47 +27,49 @@ impl Router {
             rules: rules
                 .into_iter()
                 .map(|r| match r {
-                    Rule::Domain { domain, target } => Domain { domain, target },
+                    Rule::Domain { domain, target } => {
+                        Box::new(Domain { domain, target }) as (Box<dyn RuleMatcher>)
+                    }
                     Rule::DomainSuffix {
                         domain_suffix,
                         target,
-                    } => DomainSuffix {
+                    } => Box::new(DomainSuffix {
                         suffix: domain_suffix,
                         target,
-                    },
+                    }),
                     Rule::DomainKeyword {
                         domain_keyword,
                         target,
-                    } => DomainKeyword {
+                    } => Box::new(DomainKeyword {
                         keyword: domain_keyword,
                         target,
-                    },
+                    }),
                     Rule::IPCIDR {
                         ipnet,
                         target,
                         no_resolve,
-                    } => IPCIDR {
+                    } => Box::new(IPCIDR {
                         ipnet,
                         target,
                         no_resolve,
                         match_src: false,
-                    },
+                    }),
                     Rule::SRCIPCIDR {
                         ipnet,
                         target,
                         no_resolve,
-                    } => IPCIDR {
+                    } => Box::new(IPCIDR {
                         ipnet,
                         target,
                         no_resolve,
                         match_src: true,
-                    },
+                    }),
 
-                    Rule::GeoIP() => {}
-                    Rule::SRCPort => {}
-                    Rule::DSTPort => {}
-                    Rule::ProcessName => {}
-                    Rule::ProcessPath => {}
+                    Rule::GeoIP() => todo!(),
+                    Rule::SRCPort => todo!(),
+                    Rule::DSTPort => todo!(),
+                    Rule::ProcessName => todo!(),
+                    Rule::ProcessPath => todo!(),
                     Rule::Match { .. } => todo!(),
                 })
                 .collect(),
@@ -81,17 +83,22 @@ impl Router {
 
         for r in self.rules.iter() {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
-                let ip = self
+                if let Ok(ip) = self
                     .dns_client
-                    .read()?
-                    .resolve(sess.destination.domain().unwrap().as_str())
-                    .await?;
-                sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
-                sess_resolved = true;
+                    .read()
+                    .await
+                    .resolve(sess.destination.domain().unwrap())
+                    .await
+                {
+                    if let Some(ip) = ip {
+                        sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
+                        sess_resolved = true;
+                    }
+                }
             }
 
             if r.apply(&sess_dup) {
-                r.target()
+                return r.target();
             }
         }
 

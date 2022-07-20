@@ -1,9 +1,10 @@
 use crate::app::ThreadSafeAsyncDnsClient;
 use crate::proxy::AnyStream;
+use crate::Error;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
-use tokio::net::{TcpSocket, UdpSocket};
+use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 use tokio::time::timeout;
 
 pub async fn new_tcp_stream(
@@ -11,46 +12,49 @@ pub async fn new_tcp_stream(
     address: &str,
     port: u16,
     iface: Option<SocketAddr>,
-    packet_mark: Option<u32>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
-    loop {
-        let dial_addr = dns_client.read().await.resolve(address).await?;
-        let socket = match dial_addr {
-            SocketAddr::V4(_) => {
-                socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
-            }
-            SocketAddr::V6(_) => {
-                socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?
-            }
-        };
+    let dial_addr = dns_client
+        .read()
+        .await
+        .resolve(address)
+        .await?
+        .ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            format!("can't resolve dns: {}", address),
+        ))?;
+    let socket = match dial_addr {
+        IpAddr::V4(_) => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?,
+        IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,
+    };
 
-        if iface.is_some() {
-            //TODO: bind iface name
-            socket.bind(&iface.unwrap().into())?;
-        }
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Some(packet_mark) = packet_mark {
-            socket.set_mark(packet_mark)?;
-        }
-
-        let stream = timeout(
-            Duration::from_secs(10),
-            (socket as TcpSocket).connect((dial_addr, port).into()),
-        )
-        .await??;
-
-        socket.set_keepalive(true)?;
-        socket.set_nodelay(true)?;
-        socket.set_nonblocking(true)?;
-
-        Ok(Box::new(stream))
+    if iface.is_some() {
+        //TODO: bind iface name
+        socket.bind(&iface.unwrap().into())?;
     }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(packet_mark) = packet_mark {
+        socket.set_mark(packet_mark)?;
+    }
+
+    socket.set_keepalive(true)?;
+    socket.set_nodelay(true)?;
+    socket.set_nonblocking(true)?;
+
+    let stream = timeout(
+        Duration::from_secs(10),
+        TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),
+    )
+    .await??;
+
+    Ok(Box::new(stream))
 }
 
 pub async fn new_udp_socket(
     src: &SocketAddr,
     iface: Option<SocketAddr>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = if src.is_ipv4() {
@@ -60,7 +64,7 @@ pub async fn new_udp_socket(
     };
 
     if iface.is_some() {
-        socket.bind(iface.unwrap().into())?;
+        socket.bind(&iface.unwrap().into())?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -68,5 +72,5 @@ pub async fn new_udp_socket(
         socket.set_mark(packet_mark)?;
     }
 
-    Ok(socket.into())
+    UdpSocket::from_std(socket.into())
 }

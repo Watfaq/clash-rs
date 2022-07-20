@@ -1,5 +1,6 @@
 use crate::app::dispatcher::Dispatcher;
 use crate::app::nat_manager::{NatManager, UdpPacket};
+use crate::config::internal::config::BindAddress;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ use crate::proxy::{AnyInboundDatagram, AnyInboundHandler, AnyInboundTransport, P
 use crate::session::{Network, Session, SocksAddr};
 
 pub struct NetworkInboundListener {
-    pub bind_addr: SocketAddr,
+    pub bind_addr: BindAddress,
     pub handler: AnyInboundHandler,
     pub dispatcher: Arc<Dispatcher>,
     pub nat_manager: Arc<NatManager>,
@@ -21,8 +22,8 @@ pub type Runner = futures::future::BoxFuture<'static, ()>;
 
 impl NetworkInboundListener {
     pub fn listen(&self) -> anyhow::Result<Vec<Runner>> {
-        let mut runners = Vec::new();
-        let listen_addr = self.bind_addr;
+        let mut runners = Vec::<Runner>::new();
+        let listen_addr = &self.bind_addr;
         if self.handler.stream().is_ok() {
             let listen_addr_cloned = listen_addr.clone();
             let handler_cloned = self.handler.clone();
@@ -67,12 +68,15 @@ impl NetworkInboundListener {
 }
 
 async fn handle_tcp_listen(
-    listen_addr: SocketAddr,
+    listen_addr: BindAddress,
     handler: AnyInboundHandler,
     dispatcher: Arc<Dispatcher>,
     nat_manager: Arc<NatManager>,
 ) -> io::Result<()> {
-    let listener = TcpListener::bind(listen_addr).await?;
+    let listener = match listen_addr {
+        BindAddress::Any => todo!(),
+        BindAddress::One(addr) => TcpListener::bind(addr).await?,
+    };
     loop {
         let (stream, _) = listener.accept().await?;
         let handler_cloned = handler.clone();
@@ -88,7 +92,7 @@ async fn handle_tcp_listen(
             )
             .await
             {}
-        })
+        });
     }
 }
 
@@ -140,11 +144,11 @@ async fn handle_inbound_datagram(
 
     tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
-            let dst_addr = pkt.dst_addr.ip().expect("must be ip addr for UDP");
-            if let Err(e) = ls
-                .send_to(&pkt.data[..], &pkt.src_addr, &dst_addr.into())
-                .await
-            {
+            if let Ok(dst_addr) = pkt.dst_addr.try_into() {
+                if let Err(e) = ls.send_to(&pkt.data[..], &pkt.src_addr, &dst_addr).await {
+                    break;
+                }
+            } else {
                 break;
             }
         }
@@ -170,12 +174,16 @@ async fn handle_inbound_datagram(
 }
 
 async fn handle_udp_listen(
-    listen_addr: SocketAddr,
+    listen_addr: BindAddress,
     handler: AnyInboundHandler,
     dispatcher: Arc<Dispatcher>,
     nat_manager: Arc<NatManager>,
 ) -> io::Result<()> {
-    let socket = UdpSocket::bind(&listen_addr).await?;
+    let socket = match listen_addr {
+        BindAddress::Any => todo!("bind all not implemented"),
+        BindAddress::One(addr) => UdpSocket::bind(&addr).await?,
+    };
+
     let transport = handler
         .datagram()?
         .handle(Box::new(SimpleInboundDatagram(socket)))
