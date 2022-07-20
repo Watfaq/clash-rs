@@ -42,7 +42,7 @@ impl OutboundDatagram for SimpleOutboundDatagram {
         let s = r.clone();
         (
             Box::new(SimpleOutboundDatagramRecvHalf(r, self.destination)),
-            Box::new(SimpleOutboundDatagramSendHalf(s, self.dns_client)),
+            Box::new(SimpleOutboundDatagramSendHalf(s, self.resolver)),
         )
     }
 }
@@ -72,26 +72,27 @@ impl OutboundDatagramSendHalf for SimpleOutboundDatagramSendHalf {
     async fn send_to(&mut self, buf: &[u8], target: &SocksAddr) -> io::Result<usize> {
         let addr = match target {
             SocksAddr::Domain(domain, port) => {
-                let ips = {
-                    self.1
-                        .read()
-                        .await
-                        .lookup(domain)
-                        .map_err(|e| {
-                            io::Error::new(
-                                io::ErrorKind::Other,
-                                format!("lookup {} failed: {}", domain, e),
-                            )
-                        })
-                        .await?
-                };
-                if ips.is_empty() {
+                let ip = self
+                    .1
+                    .read()
+                    .await
+                    .resolve(domain)
+                    .map_err(|e| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("lookup {} failed: {}", domain, e),
+                        )
+                    })
+                    .await?;
+
+                if let Some(ip) = ip {
+                    SocketAddr::new(ip, port.to_owned())
+                } else {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "could not resolve to any address",
                     ));
                 }
-                SocketAddr::new(ips[0], port.to_owned())
             }
             SocksAddr::Ip(a) => a.to_owned(),
         };

@@ -52,15 +52,15 @@ impl OutboundManager {
                     );
                 }
 
-                OutboundProxyProtocol::Socks5(name, proto) => {
+                OutboundProxyProtocol::Socks5(proto) => {
                     let stream = Box::new(socks::outbound::StreamHandler {
-                        address: proto.server,
+                        address: proto.server.clone(),
                         port: proto.port,
                     });
                     handlers.insert(
-                        name.to_string(),
+                        proto.name.clone(),
                         HandlerBuilder::default()
-                            .name(name.as_str())
+                            .name(proto.name.as_str())
                             .stream_handler(stream)
                             .build(),
                     );
@@ -73,11 +73,11 @@ impl OutboundManager {
 
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
-                OutboundGroupProtocol::Relay(name, _) => todo!(),
-                OutboundGroupProtocol::UrlTest(name, _) => todo!(),
-                OutboundGroupProtocol::Fallback(name, _) => todo!(),
-                OutboundGroupProtocol::LoadBalance(name, _) => todo!(),
-                OutboundGroupProtocol::Select(name, _) => todo!(),
+                OutboundGroupProtocol::Relay(proto) => todo!(),
+                OutboundGroupProtocol::UrlTest(proto) => todo!(),
+                OutboundGroupProtocol::Fallback(proto) => todo!(),
+                OutboundGroupProtocol::LoadBalance(proto) => todo!(),
+                OutboundGroupProtocol::Select(proto) => todo!(),
             }
         }
         Ok(())

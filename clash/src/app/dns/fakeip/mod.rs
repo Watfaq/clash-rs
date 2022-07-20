@@ -35,9 +35,9 @@ impl FakeDns {
         if !opt.persistence {
             store = RefCell::new(Box::new(InmemStore::new(opt.size)));
         } else {
-            return Err(Error::InvalidConfig(anyhow!(
-                "do not support fakeip range persistent(yet)"
-            )));
+            return Err(Error::InvalidConfig(
+                "do not support fakeip range persistent(yet)".to_string(),
+            ));
         }
 
         let inner = FakeDnsImpl {

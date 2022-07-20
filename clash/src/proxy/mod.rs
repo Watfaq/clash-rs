@@ -25,6 +25,7 @@ pub mod socks;
 pub mod utils;
 
 pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
+impl<S> ProxyStream for S where S: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 pub type AnyStream = Box<dyn ProxyStream>;
 
 #[derive(Error, Debug)]
@@ -231,9 +232,9 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         &self,
         sess: &Session,
         dns_resolver: ThreadSafeAsyncDnsClient,
-        transport: AnyOutboundTransport,
     ) -> io::Result<AnyOutboundDatagram> {
-        let transport = self.connect_datagram(&sess, dns_resolver);
+        let transport = self.connect_datagram(&sess, dns_resolver).await?;
+        self.datagram()?.handle(&sess, Some(transport))
     }
 
     async fn connect_stream(

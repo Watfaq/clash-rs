@@ -247,6 +247,17 @@ impl TryFrom<&[u8]> for SocksAddr {
     }
 }
 
+impl TryFrom<SocksAddr> for SocketAddr {
+    type Error = io::Error;
+
+    fn try_from(s: SocksAddr) -> Result<Self, Self::Error> {
+        match s {
+            SocksAddr::Ip(ip) => Ok(ip),
+            SocksAddr::Domain(_, _) => Err(io::Error::new(io::ErrorKind::Other, "cannot convert")),
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Network {
     Tcp,
@@ -268,6 +279,20 @@ pub struct Session {
     pub packet_mark: Option<u32>,
     /// The bind interface
     pub iface: Option<SocketAddr>,
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            network: Network::Tcp,
+            source: SocksAddr::any_ipv4(),
+            local_addr: SocksAddr::any_ipv4(),
+            destination: SocksAddr::any_ipv4(),
+            outbound_target: "".to_string(),
+            packet_mark: None,
+            iface: None,
+        }
+    }
 }
 
 impl Clone for Session {

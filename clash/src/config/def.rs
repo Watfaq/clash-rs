@@ -75,12 +75,12 @@ impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some(p) = s.parse::<Path>() {
-            let fd = File::open(p)?;
+        if Path::new(s).exists() {
+            let fd = File::open(Path::new(s))?;
             let reader = BufReader::new(fd);
-            Ok(serde_yaml::from_reader(reader)?)
+            Ok(serde_yaml::from_reader(reader).map_err(|x| Error::InvalidConfig(x.to_string()))?)
         } else {
-            Ok(serde_yaml::from_str(s)?)
+            Ok(serde_yaml::from_str(s).map_err(|x| Error::InvalidConfig(x.to_string()))?)
         }
     }
 }
