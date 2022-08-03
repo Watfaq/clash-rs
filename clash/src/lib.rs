@@ -39,13 +39,18 @@ pub struct Options {
 }
 
 pub fn start(opts: Options) -> Result<(), Error> {
+    /*
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
-    let mut config = Path::join(opts.home.into(), opts.config)
-        .to_str()?
+    let mut config: InternalConfig = Path::join(opts.home.as_str().as_ref(), opts.config)
+        .to_str()
+        .ok_or(Error::InvalidConfig(format!(
+            "invalid config file: home {} file: {}",
+            opts.home, opts.config
+        )))?
         .parse::<Config>()?
-        .into::<InternalConfig>();
+        .try_into()?;*/
     Ok(())
 }
 

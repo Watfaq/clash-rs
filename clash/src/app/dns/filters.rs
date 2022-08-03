@@ -42,7 +42,7 @@ pub struct DomainFilter(trie::DomainTrie);
 
 impl DomainFilter {
     pub fn new(domains: Vec<&str>) -> Self {
-        let f = DomainFilter(trie::DomainTrie::new());
+        let mut f = DomainFilter(trie::DomainTrie::new());
         for d in domains {
             f.0.insert(d, Arc::new(""));
         }

@@ -17,7 +17,7 @@ pub use resolver::ClashResolver;
 #[async_trait]
 trait Client: Sync + Send {
     async fn exchange(
-        &self,
+        &mut self,
         msg: trust_dns_client::op::Message,
     ) -> Result<trust_dns_client::op::Message, Error>;
 }
