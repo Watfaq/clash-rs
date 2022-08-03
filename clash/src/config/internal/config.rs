@@ -43,25 +43,25 @@ impl TryFrom<def::Config> for Config {
                     redir_port: c.redir_port,
                     tproxy_port: c.tproxy_port,
                     mixed_port: c.mixed_port,
-                    authentication: c.authentication,
-                    bind_address: match c.bind_address {
+                    authentication: c.authentication.clone(),
+                    bind_address: match c.bind_address.as_str() {
                         a if a == "*" => BindAddress::Any,
                         a => a.parse()?,
                     },
                 },
                 controller: Controller {
-                    external_controller: c.external_controller,
-                    external_ui: c.external_ui,
-                    secret: c.secret,
+                    external_controller: c.external_controller.clone(),
+                    external_ui: c.external_ui.clone(),
+                    secret: c.secret.clone(),
                 },
                 mode: c.mode,
                 log_level: c.log_level,
                 ipv6: c.ipv6.unwrap_or(false),
-                interface: c.interface.map(|iface| {
+                interface: c.interface.as_ref().map(|iface| {
                     if let Ok(addr) = iface.parse::<SocketAddr>() {
                         BindInterface::Addr(addr)
                     } else {
-                        BindInterface::Name(iface)
+                        BindInterface::Name(iface.to_string())
                     }
                 }),
                 routing_mask: c.routing_mask,
@@ -95,13 +95,13 @@ impl TryFrom<def::Config> for Config {
                 |mut rv, x| {
                     let proxy = OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
                     let name = proxy.name();
-                    if rv.contains_key(name) {
+                    if rv.contains_key(name.as_str()) {
                         return Err(Error::InvalidConfig(format!(
                             "duplicated proxy name: {}",
                             name,
                         )));
                     }
-                    proxy_names.push(name.into());
+                    proxy_names.push(name.clone());
                     rv.insert(String::from(name), proxy);
                     Ok(rv)
                 },

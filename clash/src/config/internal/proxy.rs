@@ -17,10 +17,10 @@ pub enum OutboundProxy {
 }
 
 impl OutboundProxy {
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> String {
         match self {
-            OutboundProxy::ProxyServer(s) => s.to_string().as_str(),
-            OutboundProxy::ProxyGroup(g) => g.to_string().as_str(),
+            OutboundProxy::ProxyServer(s) => s.to_string(),
+            OutboundProxy::ProxyGroup(g) => g.to_string(),
         }
     }
 }
@@ -59,12 +59,11 @@ impl Display for OutboundProxyProtocol {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-
 pub struct OutboundShadowsocks {
     pub name: String,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,

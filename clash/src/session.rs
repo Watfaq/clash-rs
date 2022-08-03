@@ -14,6 +14,12 @@ pub struct DatagramSource {
     pub stream_id: Option<StreamId>,
 }
 
+impl DatagramSource {
+    pub fn new(address: SocketAddr, stream_id: Option<StreamId>) -> Self {
+        DatagramSource { address, stream_id }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum SocksAddr {
     Ip(SocketAddr),
@@ -82,10 +88,10 @@ impl SocksAddr {
         }
     }
 
-    pub fn host(&self) -> &str {
+    pub fn host(&self) -> String {
         match self {
-            SocksAddr::Ip(ip) => ip.ip().to_string().as_str(),
-            SocksAddr::Domain(domain, _) => domain,
+            SocksAddr::Ip(ip) => ip.ip().to_string(),
+            SocksAddr::Domain(domain, _) => domain.to_string(),
         }
     }
 
@@ -142,7 +148,7 @@ impl Clone for SocksAddr {
     fn clone(&self) -> Self {
         match self {
             SocksAddr::Ip(a) => Self::from(a.to_owned()),
-            SocksAddr::Domain(domain, port) => Self::try_from((domain, port)).unwrap(),
+            SocksAddr::Domain(domain, port) => Self::try_from((domain.clone(), *port)).unwrap(),
         }
     }
 }
@@ -217,7 +223,7 @@ impl TryFrom<&[u8]> for SocksAddr {
 
                 let mut ip_bytes = [0u8; 16];
                 ip_bytes.copy_from_slice(&buf[1..17]);
-                let ip = Ipv4Addr::from(ip_bytes);
+                let ip = Ipv6Addr::from(ip_bytes);
                 let mut port_bytes = [0u8; 2];
                 port_bytes.copy_from_slice(&buf[17..19]);
                 let port = u16::from_be_bytes(port_bytes);
@@ -285,8 +291,8 @@ impl Default for Session {
     fn default() -> Self {
         Self {
             network: Network::Tcp,
-            source: SocksAddr::any_ipv4(),
-            local_addr: SocksAddr::any_ipv4(),
+            source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
+            local_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
             outbound_target: "".to_string(),
             packet_mark: None,

@@ -34,7 +34,7 @@ impl InboundDatagram for Datagram {
         let (rh, sh) = self.socket.split();
         (
             Box::new(DatagramRecvHalf(rh)),
-            Box::new(DatagramRecvHalf(sh)),
+            Box::new(DatagramSendHalf(sh)),
         )
     }
 

@@ -8,7 +8,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum RunMode {
     Global,
@@ -17,7 +17,7 @@ pub enum RunMode {
     Direct,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Debug,

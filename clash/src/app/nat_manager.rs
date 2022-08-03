@@ -39,22 +39,22 @@ impl NatManager {
     pub fn new(dispatcher: Arc<Dispatcher>) -> Self {
         let sessions: Arc<Mutex<SessionMap>> = Arc::new(Mutex::new(HashMap::new()));
 
+        let inner_session = sessions.clone();
+
         let timeout_check_task: BoxFuture<'static, ()> = Box::pin(async move {
-            let mut sessions = sessions.lock().await;
-            let n_total = sessions.len();
+            let mut sessions = inner_session.lock().await;
             let now = Instant::now();
             let mut to_remove = vec![];
             for (k, val) in sessions.iter() {
                 if now.duration_since(val.2).as_secs() >= UDP_SESSION_TIMEOUT {
-                    to_remove.push(k);
+                    to_remove.push(k.to_owned());
                 }
             }
             for k in to_remove.iter() {
                 if let Some(sess) = sessions.remove(k) {
-                    sess.1.send(true);
+                    let _ = sess.1.send(true);
                 }
             }
-            drop(to_remove);
             tokio::time::sleep(Duration::from_secs(UDP_SESSION_CHECK_INTERVAL)).await;
         });
 

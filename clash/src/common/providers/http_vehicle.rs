@@ -34,23 +34,31 @@ impl Service<Uri> for LocalConnector {
     }
 
     fn call(&mut self, remote: Uri) -> Self::Future {
-        Box::pin(new_tcp_stream(
-            self.0,
-            remote
-                .host()
-                .expect(format!("invalid url: {}", remote.to_string()).as_str()),
-            remote.port_u16().unwrap_or(match remote.scheme_str() {
-                None => 80,
-                Some(s) => match s {
-                    s if s == "http" => 80,
-                    s if s == "https" => 443,
-                    _ => panic!("invalid url: {}", remote),
-                },
-            }),
-            None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        ))
+        let host = remote
+            .host()
+            .expect(format!("invalid url: {}", remote.to_string()).as_str())
+            .to_owned();
+
+        let dns = self.0.clone();
+
+        Box::pin(async move {
+            new_tcp_stream(
+                dns,
+                host.as_str(),
+                remote.port_u16().unwrap_or(match remote.scheme_str() {
+                    None => 80,
+                    Some(s) => match s {
+                        s if s == "http" => 80,
+                        s if s == "https" => 443,
+                        _ => panic!("invalid url: {}", remote),
+                    },
+                }),
+                None,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await
+        })
     }
 }
 
@@ -94,7 +102,7 @@ impl ProviderVehicle for Vehicle {
     async fn read(&self) -> std::io::Result<Vec<u8>> {
         body::to_bytes(
             self.http_client
-                .get(self.url.into())
+                .get(self.url.clone())
                 .await
                 .map_err(|x| io::Error::new(io::ErrorKind::Other, x.to_string()))?,
         )

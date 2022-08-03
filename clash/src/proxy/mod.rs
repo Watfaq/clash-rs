@@ -221,11 +221,8 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         dns_resolver: ThreadSafeAsyncDnsClient,
     ) -> io::Result<AnyStream> {
         let s = self.connect_stream(&sess, dns_resolver).await?;
-        let h = match sess.network {
-            Network::Tcp => self.stream()?,
-            Network::Udp => self.datagram()?,
-        };
-        h.handle(&sess)
+        let h = self.stream()?;
+        h.handle(&sess, s).await
     }
 
     async fn handle_udp(
@@ -234,7 +231,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         dns_resolver: ThreadSafeAsyncDnsClient,
     ) -> io::Result<AnyOutboundDatagram> {
         let transport = self.connect_datagram(&sess, dns_resolver).await?;
-        self.datagram()?.handle(&sess, Some(transport))
+        self.datagram()?.handle(&sess, Some(transport)).await
     }
 
     async fn connect_stream(
@@ -245,15 +242,22 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         match self.stream()?.connect_addr() {
             OutboundConnect::Direct => Ok(new_tcp_stream(
                 dns_client,
-                &sess.destination.host(),
+                &sess.destination.host().to_string(),
                 sess.destination.port(),
                 sess.iface,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 sess.packet_mark,
             )
             .await?),
-            OutboundConnect::Proxy(Network::Tcp, addr, port) => {
-                Ok(new_tcp_stream(dns_client, &addr, port, sess.iface, sess.packet_mark).await?)
-            }
+            OutboundConnect::Proxy(Network::Tcp, addr, port) => Ok(new_tcp_stream(
+                dns_client,
+                &addr,
+                port,
+                sess.iface,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                sess.packet_mark,
+            )
+            .await?),
             _ => Err(io::Error::new(
                 io::ErrorKind::Other,
                 "invalid outbound connect",
@@ -277,9 +281,10 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                 Network::Tcp => {
                     let stream = new_tcp_stream(
                         dns_resolver.clone(),
-                        addr.as_str(),
+                        &addr,
                         port,
                         sess.iface,
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
                         sess.packet_mark,
                     )
                     .await?;
@@ -289,7 +294,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
             OutboundConnect::Direct => {
                 let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
                 let dest = match &sess.destination {
-                    SocksAddr::Domain(host, port) => SocksAddr::Domain(host.into(), port.into()),
+                    SocksAddr::Domain(host, port) => Some(SocksAddr::Domain(host.into(), *port)),
                     _ => None,
                 };
                 Ok(OutboundTransport::Datagram(Box::new(

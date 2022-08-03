@@ -25,11 +25,11 @@ pub struct DnsClient {
 }
 
 pub struct Opts {
-    r: Option<Arc<dyn ClashResolver>>,
-    host: String,
-    port: u16,
-    net: String,
-    iface: Option<net::SocketAddr>,
+    pub r: Option<Arc<dyn ClashResolver>>,
+    pub host: String,
+    pub port: u16,
+    pub net: String,
+    pub iface: Option<net::SocketAddr>,
 }
 
 impl DnsClient {
@@ -87,7 +87,7 @@ impl DnsClient {
 #[async_trait]
 impl Client for DnsClient {
     async fn exchange(
-        &self,
+        &mut self,
         msg: trust_dns_client::op::Message,
     ) -> Result<trust_dns_client::op::Message, Error> {
         let mut req = DnsRequest::new(msg, DnsRequestOptions::default());
@@ -96,7 +96,7 @@ impl Client for DnsClient {
             .send(req)
             .first_answer()
             .await
-            .map(|x| *x)
+            .map(|x| x.into())
             .map_err(|e| Error::DNSError(e.to_string()))
     }
 }
