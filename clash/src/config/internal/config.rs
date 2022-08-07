@@ -31,7 +31,7 @@ pub struct Config {
 impl TryFrom<def::Config> for Config {
     type Error = crate::Error;
 
-    fn try_from(c: crate::Config) -> Result<Self, Self::Error> {
+    fn try_from(c: def::Config) -> Result<Self, Self::Error> {
         let mut proxy_names = vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
         Ok(Self {
             general: General {
@@ -116,6 +116,25 @@ impl TryFrom<def::Config> for Config {
             // https://stackoverflow.com/a/62001313/1109167
             proxy_names,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::def;
+    use serde_yaml::Value;
+
+    use super::Config;
+
+    #[test]
+    fn from_def_config() {
+        let cfg = r#"
+        port: 9090
+        "#;
+        let c = cfg.parse::<def::Config>().expect("should parse");
+        assert_eq!(c.port, Some(9090));
+        let cc: Config = c.try_into().expect("should into");
+        assert_eq!(cc.general.inbound.port, Some(9090));
     }
 }
 

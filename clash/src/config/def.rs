@@ -205,6 +205,15 @@ mod tests {
     use super::Config;
 
     #[test]
+    fn parse_simple() {
+        let cfg = r#"
+        port: 9090
+        "#;
+        let c = cfg.parse::<Config>().expect("should parse");
+        assert_eq!(c.port, Some(9090));
+    }
+
+    #[test]
     fn parse_example() {
         let example_cfg = r###"
 # Port of HTTP(S) proxy server on the local end
@@ -668,7 +677,7 @@ rules:
   "###;
 
         let des: Config = serde_yaml::from_str(example_cfg).expect("should parse yaml");
-        assert_eq!(des.port, 7890);
+        assert_eq!(des.port.expect("invalid port"), 7890);
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
         assert_eq!(des.proxy.len(), 14);
         assert_eq!(des.proxy[2].get("name").unwrap().as_str(), Some("ss3"));
