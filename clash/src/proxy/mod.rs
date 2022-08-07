@@ -10,7 +10,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::proxy::datagram::SimpleOutboundDatagram;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
 use crate::{
-    app::ThreadSafeAsyncDnsClient,
+    app::ThreadSafeDNSResolver,
     session::{DatagramSource, Network, Session, SocksAddr},
 };
 
@@ -218,7 +218,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     async fn handle_tcp(
         &self,
         sess: &Session,
-        dns_resolver: ThreadSafeAsyncDnsClient,
+        dns_resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         let s = self.connect_stream(&sess, dns_resolver).await?;
         let h = self.stream()?;
@@ -228,7 +228,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     async fn handle_udp(
         &self,
         sess: &Session,
-        dns_resolver: ThreadSafeAsyncDnsClient,
+        dns_resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
         let transport = self.connect_datagram(&sess, dns_resolver).await?;
         self.datagram()?.handle(&sess, Some(transport)).await
@@ -237,7 +237,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     async fn connect_stream(
         &self,
         sess: &Session,
-        dns_client: ThreadSafeAsyncDnsClient,
+        dns_client: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         match self.stream()?.connect_addr() {
             OutboundConnect::Direct => Ok(new_tcp_stream(
@@ -268,7 +268,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     async fn connect_datagram(
         &self,
         sess: &Session,
-        dns_resolver: ThreadSafeAsyncDnsClient,
+        dns_resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundTransport> {
         match self.datagram()?.connect_addr() {
             OutboundConnect::Proxy(network, addr, port) => match network {

@@ -1,5 +1,5 @@
 use crate::proxy::{
-    AnyInboundDatagram, AnyInboundTransport, AnyStream, InboundDatagram, InboundDatagramHandler,
+    AnyInboundDatagram, AnyInboundTransport, InboundDatagram, InboundDatagramHandler,
     InboundDatagramRecvHalf, InboundDatagramSendHalf, InboundTransport, ProxyError, ProxyResult,
 };
 use crate::session::{DatagramSource, SocksAddr};

@@ -9,4 +9,4 @@ pub mod outbound;
 pub mod profile;
 pub mod router;
 
-pub type ThreadSafeAsyncDnsClient = Arc<RwLock<dyn dns::ClashResolver>>;
+pub type ThreadSafeDNSResolver = Arc<RwLock<dyn dns::ClashResolver>>;

@@ -114,7 +114,7 @@ impl NatManager {
         tokio::spawn(async move {
             let socket = match dispatcher.dispatch_datagram(sess).await {
                 Ok(s) => s,
-                Err(e) => {
+                Err(_e) => {
                     sessions.lock().await.remove(&raddr);
                     return;
                 }
@@ -125,7 +125,7 @@ impl NatManager {
                 let mut buf = vec![0u8; 1500 * 2]; // double MTU
                 loop {
                     match target_socket_recv.recv_from(&mut buf).await {
-                        Err(err) => {
+                        Err(_err) => {
                             break;
                         }
                         Ok((n, addr)) => {
@@ -135,7 +135,7 @@ impl NatManager {
                                 SocksAddr::from(raddr.address),
                             );
 
-                            if let Err(err) = client_ch_tx.send(packet).await {
+                            if let Err(_err) = client_ch_tx.send(packet).await {
                                 break;
                             }
                             {
@@ -160,17 +160,17 @@ impl NatManager {
 
             tokio::spawn(async move {
                 while let Some(pkt) = target_ch_rx.recv().await {
-                    if let Err(e) = target_socket_send.send_to(&pkt.data, &pkt.dst_addr).await {
+                    if let Err(_e) = target_socket_send.send_to(&pkt.data, &pkt.dst_addr).await {
                         break;
                     }
                 }
-                if let Err(e) = target_socket_send.close().await {}
+                if let Err(_e) = target_socket_send.close().await {}
             });
         });
     }
     async fn _send<'a>(&self, key: &DatagramSource, pkt: UdpPacket) {
         if let Some(sess) = self.sessions.lock().await.get_mut(key) {
-            if let Err(e) = sess.0.try_send(pkt) {}
+            if let Err(_e) = sess.0.try_send(pkt) {}
             sess.2 = Instant::now();
         }
     }

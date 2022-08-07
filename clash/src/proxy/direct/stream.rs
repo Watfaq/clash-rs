@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use crate::{
     proxy::{AnyStream, OutboundConnect, OutboundStreamHandler},
     session::Session,
-    Error,
 };
 
 pub struct Handler;

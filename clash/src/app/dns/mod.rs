@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ipnet::{AddrParseError, IpNet};
 use regex::Regex;
-use std::{collections::HashMap, net::IpAddr, rc::Rc, sync::Arc};
+use std::{collections::HashMap, net::IpAddr, sync::Arc};
 use tower::ServiceExt;
 use url::Url;
 
@@ -13,6 +13,7 @@ mod filters;
 mod resolver;
 
 pub use resolver::ClashResolver;
+pub use resolver::Resolver;
 
 #[async_trait]
 trait Client: Sync + Send {
@@ -64,7 +65,7 @@ impl Config {
             if !server.contains("://") {
                 server = "udp://".to_owned() + &server;
             }
-            let url = Url::parse(&server).map_err(|x| {
+            let url = Url::parse(&server).map_err(|_x| {
                 Error::InvalidConfig(format!("invalid dns server: {}", server.as_str()))
             })?;
             let host = url.host_str().expect("dns host must be valid");

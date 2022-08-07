@@ -1,7 +1,7 @@
 use std::{io, sync::Arc};
 
 use super::{
-    AnyInboundDatagramHandler, AnyOutboundDatagramHandler, AnyOutboundHandler,
+    AnyOutboundDatagramHandler, AnyOutboundHandler,
     AnyOutboundStreamHandler, OutboundHandler,
 };
 

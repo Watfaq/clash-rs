@@ -1,4 +1,4 @@
-use std::{net, rc::Rc, sync::Arc};
+use std::{net, sync::Arc};
 
 use crate::common::trie;
 
@@ -15,7 +15,7 @@ impl GeoIPFilter {
 }
 
 impl FallbackIPFilter for GeoIPFilter {
-    fn apply(&self, ip: &net::IpAddr) -> bool {
+    fn apply(&self, _ip: &net::IpAddr) -> bool {
         todo!("mmdb not implemented yet")
     }
 }

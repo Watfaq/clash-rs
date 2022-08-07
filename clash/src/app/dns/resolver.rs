@@ -1,4 +1,4 @@
-use std::{io, net, rc::Rc, sync::Arc};
+use std::{io, net, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -19,7 +19,7 @@ pub trait ClashResolver: Sync + Send {
     async fn resolve_v6(&self, host: &str) -> Result<Option<net::Ipv6Addr>, io::Error>;
 }
 
-struct Resolver {
+pub struct Resolver {
     ipv6: bool,
     hosts: Option<trie::DomainTrie>,
     main: Vec<Box<dyn Client>>,
@@ -35,13 +35,13 @@ struct Resolver {
 
 #[async_trait]
 impl ClashResolver for Resolver {
-    async fn resolve(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error> {
+    async fn resolve(&self, _host: &str) -> Result<Option<net::IpAddr>, io::Error> {
         todo!();
     }
-    async fn resolve_v4(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error> {
+    async fn resolve_v4(&self, _host: &str) -> Result<Option<net::IpAddr>, io::Error> {
         todo!();
     }
-    async fn resolve_v6(&self, host: &str) -> Result<Option<net::Ipv6Addr>, io::Error> {
+    async fn resolve_v6(&self, _host: &str) -> Result<Option<net::Ipv6Addr>, io::Error> {
         todo!();
     }
 }

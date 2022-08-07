@@ -1,6 +1,6 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::{Session, SocksAddr};
-use std::net::SocketAddr;
+
 
 pub struct IPCIDR {
     pub ipnet: ipnet::IpNet,

@@ -2,7 +2,7 @@ use crate::app::dispatcher::Dispatcher;
 use crate::app::nat_manager::{NatManager, UdpPacket};
 use crate::config::internal::config::BindAddress;
 use std::io;
-use std::net::SocketAddr;
+
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -10,6 +10,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::proxy::datagram::SimpleInboundDatagram;
 use crate::proxy::{AnyInboundDatagram, AnyInboundHandler, AnyInboundTransport, ProxyError};
 use crate::session::{Network, Session, SocksAddr};
+use crate::{Error, Runner};
 
 pub struct NetworkInboundListener {
     pub bind_addr: BindAddress,
@@ -18,10 +19,8 @@ pub struct NetworkInboundListener {
     pub nat_manager: Arc<NatManager>,
 }
 
-pub type Runner = futures::future::BoxFuture<'static, ()>;
-
 impl NetworkInboundListener {
-    pub fn listen(&self) -> anyhow::Result<Vec<Runner>> {
+    pub fn listen(&self) -> Result<Vec<Runner>, Error> {
         let mut runners = Vec::<Runner>::new();
         let listen_addr = &self.bind_addr;
         if self.handler.stream().is_ok() {
@@ -84,7 +83,7 @@ async fn handle_tcp_listen(
         let nat_manager_cloned = nat_manager.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_inbound_tcp_stream(
+            if let Err(_e) = handle_inbound_tcp_stream(
                 stream,
                 handler_cloned,
                 dispatcher_cloned,
@@ -117,7 +116,7 @@ async fn handle_inbound_tcp_stream(
 
 async fn handle_inbound_transport(
     transport: AnyInboundTransport,
-    handler: AnyInboundHandler,
+    _handler: AnyInboundHandler,
     dispatcher: Arc<Dispatcher>,
     nat_manager: Arc<NatManager>,
 ) {
@@ -145,7 +144,7 @@ async fn handle_inbound_datagram(
     tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
             if let Ok(dst_addr) = pkt.dst_addr.try_into() {
-                if let Err(e) = ls.send_to(&pkt.data[..], &pkt.src_addr, &dst_addr).await {
+                if let Err(_e) = ls.send_to(&pkt.data[..], &pkt.src_addr, &dst_addr).await {
                     break;
                 }
             } else {
@@ -157,8 +156,8 @@ async fn handle_inbound_datagram(
     let mut buf = vec![0u8; 1500 * 2]; // double MTU
     loop {
         match lr.recv_from(&mut buf).await {
-            Err(ProxyError::DatagramFatal(e)) => break,
-            Err(ProxyError::DatagramWarn(e)) => continue,
+            Err(ProxyError::DatagramFatal(_e)) => break,
+            Err(ProxyError::DatagramWarn(_e)) => continue,
             Ok((n, dgram_src, dst_addr)) => {
                 let pkt = UdpPacket::new(
                     buf[..n].to_vec(),

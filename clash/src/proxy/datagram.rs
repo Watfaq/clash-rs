@@ -1,4 +1,4 @@
-use crate::app::ThreadSafeAsyncDnsClient;
+use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::{
     InboundDatagram, InboundDatagramRecvHalf, InboundDatagramSendHalf, OutboundDatagram,
     OutboundDatagramRecvHalf, OutboundDatagramSendHalf, ProxyError, ProxyResult,
@@ -14,14 +14,14 @@ use tokio::net::UdpSocket;
 pub struct SimpleOutboundDatagram {
     inner: UdpSocket,
     destination: Option<SocksAddr>,
-    resolver: ThreadSafeAsyncDnsClient,
+    resolver: ThreadSafeDNSResolver,
 }
 
 impl SimpleOutboundDatagram {
     pub fn new(
         inner: UdpSocket,
         destination: Option<SocksAddr>,
-        resolver: ThreadSafeAsyncDnsClient,
+        resolver: ThreadSafeDNSResolver,
     ) -> Self {
         Self {
             inner,
@@ -65,7 +65,7 @@ impl OutboundDatagramRecvHalf for SimpleOutboundDatagramRecvHalf {
     }
 }
 
-pub struct SimpleOutboundDatagramSendHalf(Arc<UdpSocket>, ThreadSafeAsyncDnsClient);
+pub struct SimpleOutboundDatagramSendHalf(Arc<UdpSocket>, ThreadSafeDNSResolver);
 
 #[async_trait]
 impl OutboundDatagramSendHalf for SimpleOutboundDatagramSendHalf {

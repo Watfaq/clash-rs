@@ -3,10 +3,10 @@ use crate::app::router::rules::domain_keyword::DomainKeyword;
 use crate::app::router::rules::domain_suffix::DomainSuffix;
 use crate::app::router::rules::ipcidr::IPCIDR;
 use crate::app::router::rules::RuleMatcher;
-use crate::app::ThreadSafeAsyncDnsClient;
+use crate::app::ThreadSafeDNSResolver;
 use crate::config::internal::rule::Rule;
 use crate::session::{Session, SocksAddr};
-use std::borrow::BorrowMut;
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,7 +14,7 @@ mod rules;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
-    dns_client: ThreadSafeAsyncDnsClient,
+    dns_client: ThreadSafeDNSResolver,
 }
 
 pub type ThreadSafeRouter = Arc<RwLock<Router>>;
@@ -22,13 +22,13 @@ pub type ThreadSafeRouter = Arc<RwLock<Router>>;
 const MATCH: &str = "MATCH";
 
 impl Router {
-    pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeAsyncDnsClient) -> Self {
+    pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeDNSResolver) -> Self {
         Self {
             rules: rules
                 .into_iter()
                 .map(|r| match r {
                     Rule::Domain { domain, target } => {
-                        Box::new(Domain { domain, target }) as (Box<dyn RuleMatcher>)
+                        Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
                     }
                     Rule::DomainSuffix {
                         domain_suffix,
