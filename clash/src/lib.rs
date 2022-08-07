@@ -4,12 +4,13 @@ extern crate lazy_static;
 extern crate anyhow;
 extern crate core;
 
-use crate::config::def::Config;
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 
+use std::cell::RefCell;
 use std::io;
 use std::path::Path;
-use std::sync::Arc;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::manager::InboundManager;
@@ -17,6 +18,7 @@ use crate::app::nat_manager::NatManager;
 use crate::app::outbound::manager::OutboundManager;
 use crate::app::router::Router;
 use crate::app::{dns, ThreadSafeDNSResolver};
+use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
 use thiserror::Error;
@@ -48,30 +50,69 @@ pub enum Error {
 pub type Runner = futures::future::BoxFuture<'static, ()>;
 
 pub struct Options {
-    pub home: String,
-    pub config: String,
+    pub config: Config,
+}
+
+pub enum Config {
+    Internal(InternalConfig),
+    File(String, String),
+    Str(String),
+}
+
+pub struct RuntimeController {
+    shutdown_tx: mpsc::Sender<()>,
+}
+
+lazy_static! {
+    pub static ref RUNTIME_CONTROLLER: Mutex<Vec<RuntimeController>> = Mutex::new(Vec::new());
 }
 
 pub fn start(opts: Options) -> Result<(), Error> {
-    tokio::runtime::Builder::new_multi_thread()
+    tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap()
         .block_on(async {
-            start_async(opts);
+            match start_async(opts).await {
+                Err(e) => println!("failed: {}", e),
+                Ok(_) => println!("finished"),
+            }
         });
     Ok(())
 }
 
-pub async fn start_async(opts: Options) -> Result<(), Error> {
-    let mut config: InternalConfig = Path::join(opts.home.as_str().as_ref(), &opts.config)
-        .to_str()
-        .ok_or(Error::InvalidConfig(format!(
-            "invalid config file: home {} file: {}",
-            opts.home, opts.config
-        )))?
-        .parse::<Config>()?
-        .try_into()?;
+pub fn shutdown() -> bool {
+    RUNTIME_CONTROLLER
+        .lock()
+        .unwrap()
+        .first()
+        .unwrap()
+        .shutdown_tx
+        .blocking_send(())
+        .is_ok()
+}
+
+async fn start_async(opts: Options) -> Result<(), Error> {
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+
+    // TODO: make sure only 1 running
+    RUNTIME_CONTROLLER
+        .lock()
+        .unwrap()
+        .push(RuntimeController { shutdown_tx });
+
+    let mut config: InternalConfig = match opts.config {
+        Config::Internal(c) => c,
+        Config::File(home, file) => Path::join(home.as_str().as_ref(), &file)
+            .to_str()
+            .ok_or(Error::InvalidConfig(format!(
+                "invalid config file: home {} file: {}",
+                &home, &file,
+            )))?
+            .parse::<def::Config>()?
+            .try_into()?,
+        Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
+    };
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
@@ -117,6 +158,10 @@ pub async fn start_async(opts: Options) -> Result<(), Error> {
     }));
 
     tasks.push(Box::pin(async move {
+        shutdown_rx.recv().await;
+    }));
+
+    tasks.push(Box::pin(async move {
         let _ = tokio::signal::ctrl_c().await;
     }));
 
@@ -126,9 +171,25 @@ pub async fn start_async(opts: Options) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::config::def;
+    use crate::{shutdown, start, Config, InternalConfig, Options};
+    use std::thread;
+    use std::time::Duration;
+
     #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+    fn start_and_stop() {
+        let conf = r#"
+        port: 9090
+        "#;
+
+        thread::spawn(|| {
+            start(Options {
+                config: Config::Str(conf.to_string()),
+            })
+            .unwrap()
+        });
+        thread::sleep(Duration::from_secs(5));
+
+        assert!(shutdown());
     }
 }
