@@ -3,7 +3,7 @@ use std::io;
 use async_trait::async_trait;
 
 use crate::{
-    proxy::{AnyStream, OutboundConnect, OutboundDatagram, OutboundStreamHandler},
+    proxy::{AnyStream, OutboundConnect, OutboundStreamHandler},
     session::{Network, Session, SocksAddr},
 };
 

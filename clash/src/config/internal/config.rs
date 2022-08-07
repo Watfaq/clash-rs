@@ -1,14 +1,12 @@
 use futures::StreamExt;
 use std::collections::HashMap;
-use std::fmt::format;
+
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tower::ServiceExt;
 
 use crate::config::def;
-use crate::config::internal::proxy::{
-    OutboundGroupProtocol, OutboundProxy, PROXY_DIRECT, PROXY_REJECT,
-};
+use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
 use crate::config::internal::rule::Rule;
 use crate::{
     app::dns,
@@ -19,15 +17,15 @@ use crate::{
 use super::proxy::OutboundProxyProtocol;
 
 pub struct Config {
-    general: General,
-    dns: dns::Config,
-    experimental: Option<Experimental>,
-    profile: Profile,
-    rules: Vec<Rule>,
+    pub general: General,
+    pub dns: dns::Config,
+    pub experimental: Option<Experimental>,
+    pub profile: Profile,
+    pub rules: Vec<Rule>,
     /// a list maintaining the order from the config file
     proxy_names: Vec<String>,
-    proxies: HashMap<String, OutboundProxy>,
-    proxy_groups: HashMap<String, OutboundProxy>,
+    pub proxies: HashMap<String, OutboundProxy>,
+    pub proxy_groups: HashMap<String, OutboundProxy>,
 }
 
 impl TryFrom<def::Config> for Config {
@@ -127,7 +125,7 @@ pub enum BindInterface {
 }
 
 pub struct General {
-    inbound: Inbound,
+    pub(crate) inbound: Inbound,
     controller: Controller,
     mode: RunMode,
     log_level: LogLevel,
@@ -136,7 +134,7 @@ pub struct General {
     routing_mask: Option<u32>,
 }
 
-struct Profile {
+pub struct Profile {
     store_selected: bool,
     store_fakeip: bool,
 }

@@ -1,28 +1,25 @@
-use crate::app::ThreadSafeAsyncDnsClient;
+use crate::app::ThreadSafeDNSResolver;
 use crate::common::providers::{ProviderVehicle, ProviderVehicleType};
 use crate::proxy::utils::new_tcp_stream;
 use crate::proxy::AnyStream;
 use async_trait::async_trait;
-use futures::{AsyncRead, AsyncWrite, TryFutureExt};
+use futures::TryFutureExt;
 use hyper::body::HttpBody;
-use hyper::client::connect;
+
 use hyper::client::connect::{Connected, Connection};
-use hyper::http::uri::Scheme;
+
 use hyper::service::Service;
 use hyper::{body, Uri};
-use std::any::Any;
-use std::borrow::Borrow;
+
 use std::future::Future;
 use std::io;
-use std::io::Read;
+
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::net::TcpStream;
-use url::Url;
 
 #[derive(Clone)]
-struct LocalConnector(pub ThreadSafeAsyncDnsClient);
+struct LocalConnector(pub ThreadSafeDNSResolver);
 
 impl Service<Uri> for LocalConnector {
     type Response = AnyStream;
@@ -80,7 +77,7 @@ impl Vehicle {
     pub fn new<T: Into<Uri>, P: AsRef<Path>>(
         url: T,
         path: P,
-        dns_resolver: ThreadSafeAsyncDnsClient,
+        dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
         let connector = LocalConnector(dns_resolver);
 

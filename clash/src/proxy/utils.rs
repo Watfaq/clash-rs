@@ -1,14 +1,14 @@
-use crate::app::ThreadSafeAsyncDnsClient;
+use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::AnyStream;
-use crate::Error;
+
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
-use tokio::net::{TcpSocket, TcpStream, UdpSocket};
+use tokio::net::{TcpSocket, UdpSocket};
 use tokio::time::timeout;
 
 pub async fn new_tcp_stream(
-    dns_client: ThreadSafeAsyncDnsClient,
+    dns_client: ThreadSafeDNSResolver,
     address: &str,
     port: u16,
     iface: Option<SocketAddr>,
@@ -55,7 +55,7 @@ pub async fn new_udp_socket(
     src: &SocketAddr,
     iface: Option<SocketAddr>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-    packet_mark: Option<u32>,
+    _packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = if src.is_ipv4() {
         socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?

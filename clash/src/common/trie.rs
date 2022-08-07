@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, hash::Hash, rc::Rc, sync::Arc};
+use std::{any::Any, collections::HashMap, hash::Hash, sync::Arc};
 
 static DOMAIN_STEP: &str = ".";
 static COMPLEX_WILDCARD: &str = "+";

@@ -1,26 +1,24 @@
-use crate::app::outbound::manager::{OutboundManager, ThreadSafeOutboundManager};
-use crate::app::router::{Router, ThreadSafeRouter};
-use crate::app::ThreadSafeAsyncDnsClient;
+use crate::app::outbound::manager::ThreadSafeOutboundManager;
+use crate::app::router::ThreadSafeRouter;
+use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::{AnyOutboundDatagram, AnyStream};
 use crate::session::Session;
-use std::future::Future;
+
 use std::io;
-use std::io::Error;
-use std::sync::{Arc, RwLock};
-use std::thread::Thread;
+
 use tokio::io::{copy_bidirectional, AsyncWriteExt};
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
-    dns_client: ThreadSafeAsyncDnsClient,
+    dns_client: ThreadSafeDNSResolver,
 }
 
 impl Dispatcher {
     pub fn new(
         outbound_manager: ThreadSafeOutboundManager,
         router: ThreadSafeRouter,
-        dns_client: ThreadSafeAsyncDnsClient,
+        dns_client: ThreadSafeDNSResolver,
     ) -> Self {
         Self {
             outbound_manager,
@@ -50,7 +48,7 @@ impl Dispatcher {
                 Ok(_) => {}
                 Err(_) => {}
             },
-            Err(_) => if let Err(e) = lhs.shutdown().await {},
+            Err(_) => if let Err(_e) = lhs.shutdown().await {},
         }
     }
 

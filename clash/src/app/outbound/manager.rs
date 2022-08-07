@@ -5,9 +5,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::{
-    app::ThreadSafeAsyncDnsClient,
+    app::ThreadSafeDNSResolver,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{direct, outbound::HandlerBuilder, socks, AnyOutboundHandler},
+    Error,
 };
 
 pub struct OutboundManager {
@@ -20,8 +21,8 @@ impl OutboundManager {
     pub fn new(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
-        dns_client: ThreadSafeAsyncDnsClient,
-    ) -> Result<Self> {
+        dns_client: ThreadSafeDNSResolver,
+    ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
 
         OutboundManager::load_handlers(outbounds, outbound_groups, dns_client, &mut handlers)?;
@@ -36,9 +37,9 @@ impl OutboundManager {
     fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
-        dns_client: ThreadSafeAsyncDnsClient,
+        _dns_client: ThreadSafeDNSResolver,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
-    ) -> Result<()> {
+    ) -> Result<(), Error> {
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
@@ -73,11 +74,11 @@ impl OutboundManager {
 
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
-                OutboundGroupProtocol::Relay(proto) => todo!(),
-                OutboundGroupProtocol::UrlTest(proto) => todo!(),
-                OutboundGroupProtocol::Fallback(proto) => todo!(),
-                OutboundGroupProtocol::LoadBalance(proto) => todo!(),
-                OutboundGroupProtocol::Select(proto) => todo!(),
+                OutboundGroupProtocol::Relay(_proto) => todo!(),
+                OutboundGroupProtocol::UrlTest(_proto) => todo!(),
+                OutboundGroupProtocol::Fallback(_proto) => todo!(),
+                OutboundGroupProtocol::LoadBalance(_proto) => todo!(),
+                OutboundGroupProtocol::Select(_proto) => todo!(),
             }
         }
         Ok(())
