@@ -16,7 +16,7 @@ log = "0.4"
 ipnet = "2.5.0"
 url = "2.2.2"
 regex = "1"
-lazy_static = "1.4.0"
+state = "0.5"
 byteorder = "1.4.3"
 lru-cache = "0.1.2"
 hyper = { version = "0.14", features = ["http1","http2","client"] }
@@ -24,7 +24,7 @@ tower = { version = "0.4.13", features = ["util"] }
 
 
 serde = { version = "1.0", features=["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9.4"
 
 trust-dns-client = "0.21.2"
 trust-dns-server = "0.21.2"

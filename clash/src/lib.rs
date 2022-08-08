@@ -1,16 +1,16 @@
-#[macro_use]
-extern crate lazy_static;
+#![feature(is_some_with)]
 #[macro_use]
 extern crate anyhow;
 extern crate core;
 
 use std::borrow::{Borrow, BorrowMut};
 
+use state::Storage;
 use std::cell::RefCell;
 use std::io;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LockResult, Mutex};
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::manager::InboundManager;
@@ -63,9 +63,7 @@ pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
 }
 
-lazy_static! {
-    pub static ref RUNTIME_CONTROLLER: Mutex<Vec<RuntimeController>> = Mutex::new(Vec::new());
-}
+static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Storage::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
     tokio::runtime::Builder::new_current_thread()
@@ -82,24 +80,16 @@ pub fn start(opts: Options) -> Result<(), Error> {
 }
 
 pub fn shutdown() -> bool {
-    RUNTIME_CONTROLLER
-        .lock()
-        .unwrap()
-        .first()
-        .unwrap()
-        .shutdown_tx
-        .blocking_send(())
-        .is_ok()
+    match RUNTIME_CONTROLLER.get().write() {
+        Ok(rt) => rt.shutdown_tx.blocking_send(()).is_ok(),
+        _ => false,
+    }
 }
 
 async fn start_async(opts: Options) -> Result<(), Error> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
-    // TODO: make sure only 1 running
-    RUNTIME_CONTROLLER
-        .lock()
-        .unwrap()
-        .push(RuntimeController { shutdown_tx });
+    RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
 
     let mut config: InternalConfig = match opts.config {
         Config::Internal(c) => c,
@@ -179,17 +169,22 @@ mod tests {
     #[test]
     fn start_and_stop() {
         let conf = r#"
-        port: 9090
+        socks-port: 7891
+        bind-address: 127.0.0.1
         "#;
 
-        thread::spawn(|| {
+        let handle = thread::spawn(|| {
             start(Options {
                 config: Config::Str(conf.to_string()),
             })
             .unwrap()
         });
-        thread::sleep(Duration::from_secs(5));
 
-        assert!(shutdown());
+        thread::spawn(|| {
+            thread::sleep(Duration::from_secs(3));
+            assert!(shutdown());
+        });
+
+        handle.join().unwrap();
     }
 }
