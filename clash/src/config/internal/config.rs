@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use std::collections::HashMap;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tower::ServiceExt;
 
@@ -42,10 +42,7 @@ impl TryFrom<def::Config> for Config {
                     tproxy_port: c.tproxy_port,
                     mixed_port: c.mixed_port,
                     authentication: c.authentication.clone(),
-                    bind_address: match c.bind_address.as_str() {
-                        a if a == "*" => BindAddress::Any,
-                        a => a.parse()?,
-                    },
+                    bind_address: c.bind_address.parse()?,
                 },
                 controller: Controller {
                     external_controller: c.external_controller.clone(),
@@ -161,26 +158,28 @@ pub struct Profile {
 #[derive(Clone)]
 pub enum BindAddress {
     Any,
-    One(SocketAddr),
+    One(IpAddr),
 }
 
 impl FromStr for BindAddress {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::One(
-            s.parse::<SocketAddr>()
-                .map_err(|x| Error::InvalidConfig(x.to_string()))?,
-        ))
+        match s {
+            "*" => Ok(Self::Any),
+            _ => Ok(Self::One(s.parse::<IpAddr>().map_err(|x| {
+                Error::InvalidConfig(format!("invalid bind-address: {}, {}", s, x.to_string()))
+            })?)),
+        }
     }
 }
 
 pub struct Inbound {
-    pub port: Option<i16>,
-    pub socks_port: Option<i16>,
-    pub redir_port: Option<i16>,
-    pub tproxy_port: Option<i16>,
-    pub mixed_port: Option<i16>,
+    pub port: Option<u16>,
+    pub socks_port: Option<u16>,
+    pub redir_port: Option<u16>,
+    pub tproxy_port: Option<u16>,
+    pub mixed_port: Option<u16>,
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
 }

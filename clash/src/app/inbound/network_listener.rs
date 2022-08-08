@@ -2,6 +2,7 @@ use crate::app::dispatcher::Dispatcher;
 use crate::app::nat_manager::{NatManager, UdpPacket};
 use crate::config::internal::config::BindAddress;
 use std::io;
+use std::net::SocketAddr;
 
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
@@ -14,6 +15,7 @@ use crate::{Error, Runner};
 
 pub struct NetworkInboundListener {
     pub bind_addr: BindAddress,
+    pub port: u16,
     pub handler: AnyInboundHandler,
     pub dispatcher: Arc<Dispatcher>,
     pub nat_manager: Arc<NatManager>,
@@ -22,7 +24,10 @@ pub struct NetworkInboundListener {
 impl NetworkInboundListener {
     pub fn listen(&self) -> Result<Vec<Runner>, Error> {
         let mut runners = Vec::<Runner>::new();
-        let listen_addr = &self.bind_addr;
+        let listen_addr = match self.bind_addr {
+            BindAddress::Any => todo!(),
+            BindAddress::One(ip) => SocketAddr::new(ip, self.port),
+        };
         if self.handler.stream().is_ok() {
             let listen_addr_cloned = listen_addr.clone();
             let handler_cloned = self.handler.clone();
@@ -67,15 +72,12 @@ impl NetworkInboundListener {
 }
 
 async fn handle_tcp_listen(
-    listen_addr: BindAddress,
+    listen_addr: SocketAddr,
     handler: AnyInboundHandler,
     dispatcher: Arc<Dispatcher>,
     nat_manager: Arc<NatManager>,
 ) -> io::Result<()> {
-    let listener = match listen_addr {
-        BindAddress::Any => todo!(),
-        BindAddress::One(addr) => TcpListener::bind(addr).await?,
-    };
+    let listener = TcpListener::bind(listen_addr).await?;
     loop {
         let (stream, _) = listener.accept().await?;
         let handler_cloned = handler.clone();
@@ -173,15 +175,12 @@ async fn handle_inbound_datagram(
 }
 
 async fn handle_udp_listen(
-    listen_addr: BindAddress,
+    listen_addr: SocketAddr,
     handler: AnyInboundHandler,
     dispatcher: Arc<Dispatcher>,
     nat_manager: Arc<NatManager>,
 ) -> io::Result<()> {
-    let socket = match listen_addr {
-        BindAddress::Any => todo!("bind all not implemented"),
-        BindAddress::One(addr) => UdpSocket::bind(&addr).await?,
-    };
+    let socket = UdpSocket::bind(&listen_addr).await?;
 
     let transport = handler
         .datagram()?

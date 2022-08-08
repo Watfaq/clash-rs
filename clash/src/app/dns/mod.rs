@@ -51,10 +51,6 @@ pub struct Config {
     nameserver_policy: HashMap<String, NameServer>,
 }
 
-lazy_static! {
-    static ref HAS_PORT_SUFFIX: Regex = Regex::new(r":\d+$").unwrap();
-}
-
 impl Config {
     pub fn parse_nameserver(servers: &Vec<String>) -> Result<Vec<NameServer>, Error> {
         let mut nameservers = vec![];
@@ -154,7 +150,9 @@ impl Config {
     }
 
     pub fn host_with_default_port(host: &str, port: &str) -> Result<String, Error> {
-        if HAS_PORT_SUFFIX.is_match(&host) {
+        let has_port_suffix = Regex::new(r":\d+$").unwrap();
+
+        if has_port_suffix.is_match(&host) {
             Ok(host.into())
         } else {
             Ok(format!("{}:{}", host, port))

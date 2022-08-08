@@ -19,7 +19,7 @@ impl InboundManager {
     ) -> Result<Self, Error> {
         let mut network_listeners = HashMap::new();
 
-        if let Some(_socks_port) = inbound.socks_port {
+        if let Some(socks_port) = inbound.socks_port {
             let stream = Arc::new(socks::inbound::StreamHandler);
             let datagram = Arc::new(socks::inbound::DatagramHandler);
             let handler = Arc::new(proxy::inbound::Handler::new(
@@ -31,6 +31,7 @@ impl InboundManager {
                 "socks".to_string(),
                 NetworkInboundListener {
                     bind_addr: inbound.bind_address,
+                    port: socks_port,
                     handler,
                     dispatcher,
                     nat_manager,

@@ -33,11 +33,11 @@ pub enum LogLevel {
 pub struct Config {
     /// these options are optional to tell whether
     /// the regarding listeners should be enabled
-    pub port: Option<i16>,
-    pub socks_port: Option<i16>,
-    pub redir_port: Option<i16>,
-    pub tproxy_port: Option<i16>,
-    pub mixed_port: Option<i16>,
+    pub port: Option<u16>,
+    pub socks_port: Option<u16>,
+    pub redir_port: Option<u16>,
+    pub tproxy_port: Option<u16>,
+    pub mixed_port: Option<u16>,
 
     /// these options has Default::default()
     /// or will be set to their empty/falsy vals
