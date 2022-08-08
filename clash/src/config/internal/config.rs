@@ -144,7 +144,7 @@ pub struct General {
     pub(crate) inbound: Inbound,
     controller: Controller,
     mode: RunMode,
-    log_level: LogLevel,
+    pub log_level: LogLevel,
     ipv6: bool,
     interface: Option<BindInterface>,
     routing_mask: Option<u32>,

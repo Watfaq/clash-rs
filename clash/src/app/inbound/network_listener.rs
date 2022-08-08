@@ -4,6 +4,7 @@ use crate::config::internal::config::BindAddress;
 use std::io;
 use std::net::SocketAddr;
 
+use log::info;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -14,6 +15,7 @@ use crate::session::{Network, Session, SocksAddr};
 use crate::{Error, Runner};
 
 pub struct NetworkInboundListener {
+    pub name: String,
     pub bind_addr: BindAddress,
     pub port: u16,
     pub handler: AnyInboundHandler,
@@ -29,6 +31,7 @@ impl NetworkInboundListener {
             BindAddress::One(ip) => SocketAddr::new(ip, self.port),
         };
         if self.handler.stream().is_ok() {
+            info!("{} TCP listening at: {}", self.name, &listen_addr);
             let listen_addr_cloned = listen_addr.clone();
             let handler_cloned = self.handler.clone();
             let dispatcher_cloned = self.dispatcher.clone();
@@ -49,6 +52,7 @@ impl NetworkInboundListener {
         }
 
         if self.handler.datagram().is_ok() {
+            info!("{} UDP listening at: {}", self.name, &listen_addr);
             let listen_addr_cloned = listen_addr.clone();
             let handler_cloned = self.handler.clone();
             let dispatcher_cloned = self.dispatcher.clone();

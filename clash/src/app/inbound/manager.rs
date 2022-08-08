@@ -30,6 +30,7 @@ impl InboundManager {
             network_listeners.insert(
                 "socks".to_string(),
                 NetworkInboundListener {
+                    name: "SOCKS5".to_string(),
                     bind_addr: inbound.bind_address,
                     port: socks_port,
                     handler,
