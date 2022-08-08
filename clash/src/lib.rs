@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::io;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::{Arc, LockResult, Mutex};
+use std::sync::{Arc, LockResult, Mutex, Once};
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::manager::InboundManager;
@@ -103,7 +103,10 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             .try_into()?,
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };
-
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        app::logging::setup_logging(config.general.log_level).expect("failed to setup logging");
+    });
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
