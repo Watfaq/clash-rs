@@ -1,9 +1,11 @@
 use std::io;
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
 
+use crate::proxy::OutboundConnect;
 use crate::{
-    proxy::{AnyStream, OutboundConnect, OutboundStreamHandler},
+    proxy::{AnyStream, OutboundStreamHandler},
     session::{Network, Session, SocksAddr},
 };
 

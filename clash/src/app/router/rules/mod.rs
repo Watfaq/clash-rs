@@ -1,6 +1,5 @@
 use crate::session::Session;
 
-
 pub mod domain;
 pub mod domain_keyword;
 pub mod domain_suffix;

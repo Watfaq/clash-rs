@@ -1,11 +1,13 @@
 use std::io;
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
 
+use crate::proxy::OutboundConnect;
 use crate::{
     proxy::{
-        AnyOutboundDatagram, AnyOutboundTransport, DatagramTransportType, OutboundConnect,
-        OutboundDatagramHandler, OutboundTransport,
+        AnyOutboundDatagram, AnyOutboundTransport, DatagramTransportType, OutboundDatagramHandler,
+        OutboundTransport,
     },
     session::Session,
 };
@@ -15,7 +17,7 @@ pub struct Handler;
 #[async_trait]
 impl OutboundDatagramHandler for Handler {
     fn connect_addr(&self) -> OutboundConnect {
-        OutboundConnect::Direct
+        OutboundConnect::None
     }
 
     fn transport_type(&self) -> DatagramTransportType {

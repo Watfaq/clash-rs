@@ -26,7 +26,7 @@ tower = { version = "0.4.13", features = ["util"] }
 
 
 serde = { version = "1.0", features=["derive"] }
-serde_yaml = "0.9.4"
+serde_yaml = "0.9.9"
 
 trust-dns-client = "0.21.2"
 trust-dns-server = "0.21.2"

@@ -1,9 +1,6 @@
-use std::{
-    cell::RefCell,
-    net::{IpAddr},
-};
+use std::{cell::RefCell, net::IpAddr};
 
-use super::{Store};
+use super::Store;
 
 pub struct InmemStore {
     itoh: lru_cache::LruCache<IpAddr, String>,

@@ -1,5 +1,1 @@
-
-
-
-
 pub mod manager;

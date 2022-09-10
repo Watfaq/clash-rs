@@ -1,8 +1,7 @@
 use std::{io, sync::Arc};
 
 use super::{
-    AnyOutboundDatagramHandler, AnyOutboundHandler,
-    AnyOutboundStreamHandler, OutboundHandler,
+    AnyOutboundDatagramHandler, AnyOutboundHandler, AnyOutboundStreamHandler, OutboundHandler,
 };
 
 pub struct CommonOutboundOpt {
