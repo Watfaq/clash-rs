@@ -2,10 +2,8 @@ use std::{net, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use trust_dns_client::{
-    client::{AsyncClient},
-    proto::iocompat::AsyncIoTokioAsStd,
-    tcp::{TcpClientStream},
-    udp::{UdpClientStream},
+    client::AsyncClient, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream,
+    udp::UdpClientStream,
 };
 
 use tokio::net::UdpSocket as TokioUdpSocket;

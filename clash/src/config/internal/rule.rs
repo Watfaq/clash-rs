@@ -74,7 +74,7 @@ impl Rule {
                     false
                 },
             }),
-            "SRC-PORT" => todo!(),
+            "SRC-PORT" => Ok(Rule::SRCPort {}),
             "DST-PORT" => todo!(),
             "PROCESS-NAME" => todo!(),
             "PROCESS-PATH" => todo!(),

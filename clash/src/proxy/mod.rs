@@ -20,6 +20,7 @@ pub mod http;
 pub mod inbound;
 pub mod outbound;
 pub mod reject;
+pub mod relay;
 pub mod shadowsocks;
 pub mod socks;
 pub mod utils;
@@ -50,7 +51,7 @@ pub trait InboundDatagram: Send + Sync + Unpin {
 }
 #[async_trait]
 pub trait InboundDatagramRecvHalf: Sync + Send + Unpin {
-    /// Receives a single datagram message on the socket. On success, returns
+    /// Receives a single datagram.rs message on the socket. On success, returns
     /// the number of bytes read, the source where this message
     /// originated and the destination this message shall be sent to.
     async fn recv_from(
@@ -60,7 +61,7 @@ pub trait InboundDatagramRecvHalf: Sync + Send + Unpin {
 }
 #[async_trait]
 pub trait InboundDatagramSendHalf: Sync + Send + Unpin {
-    /// Sends a datagram message on the socket to `dst_addr`, the `src_addr`
+    /// Sends a datagram.rs message on the socket to `dst_addr`, the `src_addr`
     /// specifies the origin of the message. On success, returns the number
     /// of bytes sent.
     async fn send_to(
@@ -125,9 +126,7 @@ pub type AnyInboundHandler = Arc<dyn InboundHandler>;
 #[derive(Debug, Clone)]
 pub enum OutboundConnect {
     Proxy(Network, String, u16),
-    Direct,
-    Next,
-    Unknown,
+    None,
 }
 
 #[async_trait]
@@ -161,7 +160,7 @@ pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
 }
 
 pub trait OutboundDatagram: Send + Unpin {
-    /// Splits the datagram.
+    /// Splits the datagram.rs.
     fn split(
         self: Box<Self>,
     ) -> (
@@ -200,7 +199,7 @@ pub trait OutboundDatagramHandler<S = AnyStream, D = AnyOutboundDatagram>:
     fn transport_type(&self) -> DatagramTransportType;
 
     /// Handles a session with the transport. On success, returns an outbound
-    /// datagram wraps the incoming transport.
+    /// datagram.rs wraps the incoming transport.
     async fn handle<'a>(
         &'a self,
         sess: &'a Session,
@@ -240,7 +239,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         dns_client: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         match self.stream()?.connect_addr() {
-            OutboundConnect::Direct => Ok(new_tcp_stream(
+            OutboundConnect::None => Ok(new_tcp_stream(
                 dns_client,
                 &sess.destination.host().to_string(),
                 sess.destination.port(),
@@ -258,10 +257,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                 sess.packet_mark,
             )
             .await?),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "invalid outbound connect",
-            )),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid network")),
         }
     }
 
@@ -291,7 +287,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                     Ok(OutboundTransport::Stream(stream))
                 }
             },
-            OutboundConnect::Direct => {
+            OutboundConnect::None => {
                 let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
                 let dest = match &sess.destination {
                     SocksAddr::Domain(host, port) => Some(SocksAddr::Domain(host.into(), *port)),

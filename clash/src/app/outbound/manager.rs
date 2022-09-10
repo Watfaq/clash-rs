@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::proxy::reject;
 use crate::{
     app::ThreadSafeDNSResolver,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
@@ -49,6 +50,17 @@ impl OutboundManager {
                             .name("DIRECT")
                             .stream_handler(Box::new(direct::StreamHandler))
                             .datagram_handler(Box::new(direct::DatagramHandler))
+                            .build(),
+                    );
+                }
+
+                OutboundProxyProtocol::Reject => {
+                    handlers.insert(
+                        "REJECT".to_string(),
+                        HandlerBuilder::default()
+                            .name("REJECT")
+                            .stream_handler(Box::new(reject::StreamHandler))
+                            .datagram_handler(Box::new(reject::DatagramHandler))
                             .build(),
                     );
                 }

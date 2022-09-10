@@ -2,7 +2,6 @@ use crate::common::providers::{ProviderVehicle, ProviderVehicleType};
 use async_trait::async_trait;
 use std::fs;
 
-
 pub struct Vehicle {
     path: String,
 }
