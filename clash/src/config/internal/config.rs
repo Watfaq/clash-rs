@@ -28,6 +28,13 @@ pub struct Config {
     pub proxy_groups: HashMap<String, OutboundProxy>,
 }
 
+impl Config {
+    pub fn validate(&self) -> Result<(), crate::Error> {
+        //TODO: validate proxy group loop
+        Ok(())
+    }
+}
+
 impl TryFrom<def::Config> for Config {
     type Error = crate::Error;
 

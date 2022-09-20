@@ -180,6 +180,7 @@ impl Default for FallbackFilter {
 }
 
 #[derive(Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Experimental;
 
 #[derive(Serialize, Deserialize)]

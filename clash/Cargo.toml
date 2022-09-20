@@ -26,13 +26,13 @@ tower = { version = "0.4.13", features = ["util"] }
 
 
 serde = { version = "1.0", features=["derive"] }
-serde_yaml = "0.9.9"
+serde_yaml = "0.9"
 
-trust-dns-client = "0.21.2"
-trust-dns-server = "0.21.2"
-trust-dns-resolver = "0.21.2"
-trust-dns-proto = "0.21.2"
-rand = "0.8.5"
+trust-dns-client = "0.21"
+trust-dns-server = "0.21"
+trust-dns-resolver = "0.21"
+trust-dns-proto = "0.21"
+rand = "0.8"
 async_singleflight = "0.5.0"
 get_if_addrs = "0.5.3"
 

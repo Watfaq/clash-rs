@@ -1,4 +1,3 @@
-#![feature(is_some_with)]
 #[macro_use]
 extern crate anyhow;
 extern crate core;
@@ -66,7 +65,7 @@ pub struct RuntimeController {
 static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Storage::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
-    tokio::runtime::Builder::new_current_thread()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
