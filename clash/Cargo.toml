@@ -7,22 +7,22 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-thiserror = "1.0.31"
-async-trait = "0.1.56"
-anyhow = "1.0.58"
+thiserror = "1.0"
+async-trait = "0.1"
+anyhow = "1.0"
 futures = "0.3"
-bytes = "1.1.0"
+bytes = "1.1"
 log = "0.4"
 fern = { version="0.6", features = ["colored"] }
 chrono = "0.4"
-ipnet = "2.5.0"
-url = "2.2.2"
+ipnet = "2.5"
+url = "2.2"
 regex = "1"
 state = "0.5"
-byteorder = "1.4.3"
-lru-cache = "0.1.2"
+byteorder = "1.4"
+lru-cache = "0.1"
 hyper = { version = "0.14", features = ["http1","http2","client"] }
-tower = { version = "0.4.13", features = ["util"] }
+tower = { version = "0.4", features = ["util"] }
 
 
 serde = { version = "1.0", features=["derive"] }
@@ -38,8 +38,7 @@ get_if_addrs = "0.5.3"
 
 socket2 = "0.4.4"
 
-# TODO: replace this with own implementation
-async-socks5 = "0.5.1"
+async-socks5 = "0.5"
 
 [dev-dependencies]
-tempfile = "3.3.0"
+tempfile = "3.3"
