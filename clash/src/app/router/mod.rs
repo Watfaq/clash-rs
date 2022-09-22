@@ -2,8 +2,10 @@ use crate::app::router::rules::domain::Domain;
 use crate::app::router::rules::domain_keyword::DomainKeyword;
 use crate::app::router::rules::domain_suffix::DomainSuffix;
 use crate::app::router::rules::ipcidr::IPCIDR;
+use crate::app::router::rules::ruleset::RuleSet;
 use crate::app::router::rules::RuleMatcher;
 use crate::app::ThreadSafeDNSResolver;
+
 use crate::config::internal::rule::Rule;
 use crate::session::{Session, SocksAddr};
 
@@ -70,6 +72,7 @@ impl Router {
                     Rule::DSTPort => todo!(),
                     Rule::ProcessName => todo!(),
                     Rule::ProcessPath => todo!(),
+                    Rule::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),
                     Rule::Match { .. } => todo!(),
                 })
                 .collect(),

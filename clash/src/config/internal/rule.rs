@@ -30,6 +30,10 @@ pub enum Rule {
     DSTPort,
     ProcessName,
     ProcessPath,
+    RuleSet {
+        rule_set: String,
+        target: String,
+    },
     Match {
         target: String,
     },
@@ -78,6 +82,10 @@ impl Rule {
             "DST-PORT" => todo!(),
             "PROCESS-NAME" => todo!(),
             "PROCESS-PATH" => todo!(),
+            "RULE-SET" => Ok(Rule::RuleSet {
+                rule_set: payload.to_string(),
+                target: target.to_string(),
+            }),
             "MATCH" => Ok(Rule::Match {
                 target: target.to_string(),
             }),

@@ -9,9 +9,11 @@ use super::{
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
     Client, Config, NameServer,
 };
-/// Application Resolver, will consult hosts, etc.
-/// it returns Result<Option, E> as a DNS can have
-/// no A record setup
+
+/// A implementation of "anti-poisoning" Resolver
+/// it can hold multiple clients in different protocols
+/// each client can also hold a "default_resolver"
+/// in case they need to resolve DoH in domain names etc.  
 #[async_trait]
 pub trait ClashResolver: Sync + Send {
     async fn resolve(&self, host: &str) -> Result<Option<net::IpAddr>, io::Error>;

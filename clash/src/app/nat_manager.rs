@@ -74,7 +74,7 @@ impl NatManager {
     ) {
         let mut guard = self.sessions.lock().await;
         if guard.contains_key(dgram_src) {
-            self._send(dgram_src, packet);
+            self._send(dgram_src, packet).await;
             return;
         }
 

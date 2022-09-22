@@ -1,3 +1,4 @@
+use crate::config::utils;
 use crate::Error;
 use serde::de::value::MapDeserializer;
 use serde::Deserialize;
@@ -24,6 +25,19 @@ impl OutboundProxy {
     }
 }
 
+fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
+    Error::InvalidConfig(if let Some(loc) = x.location() {
+        format!(
+            "{}, line, {}, column: {}",
+            x.to_string(),
+            loc.line(),
+            loc.column()
+        )
+    } else {
+        x.to_string()
+    })
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum OutboundProxyProtocol {
@@ -35,6 +49,8 @@ pub enum OutboundProxyProtocol {
     Ss(OutboundShadowsocks),
     #[serde(rename = "socks5")]
     Socks5(OutboundSocks5),
+    #[serde(rename = "trojan")]
+    Trojan(OutboundTrojan),
 }
 
 impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
@@ -42,7 +58,7 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
         OutboundProxyProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(|x: serde_yaml::Error| Error::InvalidConfig(x.to_string()))
+            .map_err(map_serde_error)
     }
 }
 
@@ -53,6 +69,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Socks5(s5) => write!(f, "{}", s5.name),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
+            OutboundProxyProtocol::Trojan(trojan) => write!(f, "{}", trojan.name),
         }
     }
 }
@@ -62,7 +79,7 @@ pub struct OutboundShadowsocks {
     pub name: String,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,
@@ -74,19 +91,32 @@ pub struct OutboundSocks5 {
     pub udp: bool,
 }
 
-impl Default for OutboundSocks5 {
-    fn default() -> Self {
-        Self {
-            name: Default::default(),
-            server: Default::default(),
-            port: Default::default(),
-            username: Default::default(),
-            password: Default::default(),
-            tls: Default::default(),
-            skip_cert_verity: Default::default(),
-            udp: Default::default(),
-        }
-    }
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct WsOpt {
+    pub path: Option<String>,
+    pub headers: Option<HashMap<String, String>>,
+    pub max_early_data: Option<i32>,
+    pub early_data_header_name: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct GrpcOpt {
+    pub grpc_service_name: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct OutboundTrojan {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub password: String,
+    pub alpn: Option<Vec<String>>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
+    pub udp: Option<bool>,
+    pub network: Option<String>,
+    pub grpc_opts: Option<GrpcOpt>,
+    pub ws_opts: Option<WsOpt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -109,7 +139,7 @@ impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
         OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(|x| Error::InvalidConfig(x.to_string()))
+            .map_err(map_serde_error)
     }
 }
 
@@ -126,21 +156,26 @@ impl Display for OutboundGroupProtocol {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
-
 pub struct OutboundGroupRelay {
     pub name: String,
-    pub proxies: Vec<String>,
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct OutboundGroupUrlTest {
     pub name: String,
 
-    pub proxies: Vec<String>,
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
     pub url: String,
-    pub interval: i32,
+    #[serde(deserialize_with = "utils::deserialize_u64")]
+    pub interval: u64,
     pub tolerance: Option<i32>,
-    pub lazy: bool,
+    pub lazy: Option<bool>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 
@@ -149,17 +184,22 @@ pub struct OutboundGroupFallback {
 
     pub proxies: Vec<String>,
     pub url: String,
-    pub interval: i32,
+    #[serde(deserialize_with = "utils::deserialize_u64")]
+    pub interval: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub struct OutboundGroupLoadBalance {
     pub name: String,
 
-    pub proxies: Vec<String>,
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
     pub url: String,
-    pub interval: i32,
-    pub strategy: LoadBalanceStrategy,
+    #[serde(deserialize_with = "utils::deserialize_u64")]
+    pub interval: u64,
+    pub strategy: Option<LoadBalanceStrategy>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 
@@ -167,14 +207,12 @@ pub enum LoadBalanceStrategy {
     ConsistentHashing,
     RoundRobin,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct OutboundGroupSelect {
     pub name: String,
 
-    pub proxies: Vec<String>,
-    pub iface: Option<String>,
-    pub routing_mask: Option<i32>,
-    pub proxy_provider: Option<Vec<String>>,
-    pub disable_udp: bool,
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
 }
