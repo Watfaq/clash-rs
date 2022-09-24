@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::{cell::RefCell, net};
 
 use crate::{app::dns::fakeip::mem_store::InmemStore, common::trie, Error};
@@ -10,7 +11,7 @@ mod mem_store;
 
 pub struct Opts {
     pub ipnet: ipnet::IpNet,
-    pub host: Option<trie::DomainTrie>,
+    pub host: Option<trie::StringTrie<bool>>,
     pub size: usize,
     pub persistence: bool,
     pub db_path: Option<String>,
@@ -105,7 +106,7 @@ struct FakeDnsImpl {
     min: u32,
     gateway: u32,
     offset: u32,
-    host: Option<trie::DomainTrie>,
+    host: Option<trie::StringTrie<bool>>,
     ipnet: ipnet::IpNet,
     store: RefCell<Box<dyn Store>>,
 }
@@ -255,7 +256,7 @@ mod tests {
     #[tokio::test]
     async fn test_pool_skip() {
         let ipnet = "192.168.0.0/30".parse::<ipnet::IpNet>().unwrap();
-        let mut tree = trie::DomainTrie::new();
+        let mut tree = trie::StringTrie::new();
         tree.insert("example.com", Arc::new(0));
 
         let pool = FakeDns::new(Opts {

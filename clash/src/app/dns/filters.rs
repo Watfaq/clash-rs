@@ -38,13 +38,13 @@ pub trait FallbackDomainFilter: Sync + Send {
     fn apply(&self, domain: &str) -> bool;
 }
 
-pub struct DomainFilter(trie::DomainTrie);
+pub struct DomainFilter(trie::StringTrie<Option<String>>);
 
 impl DomainFilter {
     pub fn new(domains: Vec<&str>) -> Self {
-        let mut f = DomainFilter(trie::DomainTrie::new());
+        let mut f = DomainFilter(trie::StringTrie::new());
         for d in domains {
-            f.0.insert(d, Arc::new(""));
+            f.0.insert(d, Arc::new(None));
         }
         f
     }

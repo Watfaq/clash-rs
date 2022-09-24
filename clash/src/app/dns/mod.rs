@@ -1,8 +1,11 @@
 use async_trait::async_trait;
 use ipnet::{AddrParseError, IpNet};
 use regex::Regex;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 use std::{collections::HashMap, net::IpAddr, sync::Arc};
 use tower::ServiceExt;
+use trust_dns_proto::op;
 use url::Url;
 
 use crate::{common::trie, config::def::DNSMode, Error};
@@ -17,10 +20,7 @@ pub use resolver::Resolver;
 
 #[async_trait]
 trait Client: Sync + Send {
-    async fn exchange(
-        &mut self,
-        msg: trust_dns_client::op::Message,
-    ) -> Result<trust_dns_client::op::Message, Error>;
+    async fn exchange(&mut self, msg: &op::Message) -> Result<op::Message, Error>;
 }
 
 #[derive(Clone)]
@@ -47,7 +47,7 @@ pub struct Config {
     enhance_mode: DNSMode,
     default_nameserver: Vec<NameServer>,
     fake_ip_range: Option<fakeip::FakeDns>,
-    hosts: Option<trie::DomainTrie>,
+    hosts: Option<trie::HostsTrie>,
     nameserver_policy: HashMap<String, NameServer>,
 }
 
@@ -129,7 +129,7 @@ impl Config {
         Ok(policy)
     }
 
-    pub fn parse_fallback_ip_cidr(ipcidr: &Vec<String>) -> Result<Vec<ipnet::IpNet>, Error> {
+    pub fn parse_fallback_ip_cidr(ipcidr: &Vec<String>) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
         for (_i, ip) in ipcidr.iter().enumerate() {
@@ -142,10 +142,18 @@ impl Config {
         Ok(output)
     }
 
-    pub fn parse_hosts(
-        _hosts_mapping: &HashMap<String, String>,
-    ) -> anyhow::Result<trie::DomainTrie> {
-        let tree = trie::StringTrie::new();
+    pub fn parse_hosts(hosts_mapping: &HashMap<String, String>) -> anyhow::Result<trie::HostsTrie> {
+        let mut tree = trie::StringTrie::new();
+        tree.insert(
+            "localhost",
+            Arc::new("127.0.0.1".parse::<IpAddr>().unwrap()),
+        );
+
+        for (host, ip_str) in hosts_mapping.into_iter() {
+            let ip = ip_str.parse::<IpAddr>()?;
+            tree.insert(host.as_str(), Arc::new(ip));
+        }
+
         Ok(tree)
     }
 
@@ -207,7 +215,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                     Some(fakeip::FakeDns::new(fakeip::Opts {
                         ipnet,
                         host: if dc.fake_ip_filter.len() != 0 {
-                            let mut host = trie::DomainTrie::new();
+                            let mut host = trie::StringTrie::new();
                             for domain in dc.fake_ip_filter.iter() {
                                 host.insert(domain.as_str(), Arc::new(true));
                             }

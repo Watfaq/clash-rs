@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+use std::net::IpAddr;
 use std::{any::Any, collections::HashMap, hash::Hash, sync::Arc};
 
 static DOMAIN_STEP: &str = ".";
@@ -5,20 +7,17 @@ static COMPLEX_WILDCARD: &str = "+";
 static DOT_WILDCARD: &str = "";
 static WILDCARD: &str = "*";
 
-pub type DomainTrie = StringTrie<String>;
-
-pub struct StringTrie<T> {
+pub struct StringTrie<T: Sync + Send> {
     root: Node<T>,
+    __type_holder: PhantomData<T>,
 }
 
-pub struct Node<T> {
-    children: HashMap<T, Node<T>>,
-    data: Option<Arc<NodeData>>,
+pub struct Node<T: Sync + Send> {
+    children: HashMap<String, Node<T>>,
+    data: Option<Arc<T>>,
 }
 
-type NodeData = dyn Any + Sync + Send;
-
-impl<T: Eq + Ord + Clone + Hash> Node<T> {
+impl<T: Sync + Send> Node<T> {
     pub fn new() -> Self {
         Node {
             children: HashMap::new(),
@@ -26,31 +25,38 @@ impl<T: Eq + Ord + Clone + Hash> Node<T> {
         }
     }
 
-    pub fn get_child(&self, s: &T) -> Option<&Self> {
+    pub fn get_data(&self) -> Option<&T> {
+        self.data.as_deref()
+    }
+
+    pub fn get_child(&self, s: &str) -> Option<&Self> {
         self.children.get(s)
     }
 
-    pub fn get_child_mut(&mut self, s: &T) -> Option<&mut Self> {
+    pub fn get_child_mut(&mut self, s: &str) -> Option<&mut Self> {
         self.children.get_mut(s)
     }
 
-    pub fn has_child(&self, s: &T) -> bool {
+    pub fn has_child(&self, s: &str) -> bool {
         self.get_child(s).is_some()
     }
 
-    pub fn add_child(&mut self, s: T, child: Node<T>) {
-        self.children.insert(s, child);
+    pub fn add_child(&mut self, s: &str, child: Node<T>) {
+        self.children.insert(s.to_string(), child);
     }
 }
 
 // TODO: impl Drop
-impl StringTrie<String> {
+impl<T: Sync + Send> StringTrie<T> {
     pub fn new() -> Self {
-        StringTrie { root: Node::new() }
+        StringTrie {
+            root: Node::new(),
+            __type_holder: PhantomData,
+        }
     }
 
-    pub fn insert(&mut self, domain: &str, data: Arc<NodeData>) -> bool {
-        let (parts, valid) = valid_and_splic_domain(domain);
+    pub fn insert(&mut self, domain: &str, data: Arc<T>) -> bool {
+        let (parts, valid) = valid_and_split_domain(domain);
         if !valid {
             return false;
         }
@@ -69,7 +75,7 @@ impl StringTrie<String> {
         return true;
     }
 
-    pub fn search(&self, domain: &str) -> Option<&Node<String>> {
+    pub fn search(&self, domain: &str) -> Option<&Node<T>> {
         let (parts, valid) = valid_and_splic_domain(domain);
         if !valid {
             return None;
@@ -89,13 +95,13 @@ impl StringTrie<String> {
         None
     }
 
-    fn insert_inner(&mut self, parts: &Vec<&str>, data: Arc<NodeData>) {
+    fn insert_inner(&mut self, parts: &Vec<&str>, data: Arc<T>) {
         let mut node = &mut self.root;
 
         for i in (0..parts.len()).rev() {
             let part = parts[i];
-            if !node.has_child(&part.to_owned()) {
-                node.add_child(part.to_owned(), Node::new())
+            if !node.has_child(part) {
+                node.add_child(part, Node::new())
             }
 
             node = node.get_child_mut(&part.to_owned()).unwrap();
@@ -104,11 +110,7 @@ impl StringTrie<String> {
         node.data = Some(data);
     }
 
-    fn search_inner<'a>(
-        &'a self,
-        node: &'a Node<String>,
-        parts: Vec<&str>,
-    ) -> Option<&Node<String>> {
+    fn search_inner<'a>(&'a self, node: &'a Node<T>, parts: Vec<&str>) -> Option<&Node<T>> {
         if parts.len() == 0 {
             return Some(node);
         }
@@ -133,7 +135,7 @@ impl StringTrie<String> {
     }
 }
 
-pub fn valid_and_splic_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
+pub fn valid_and_split_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
     if domain != "" && domain.ends_with(".") {
         return (None, false);
     }
@@ -157,15 +159,16 @@ pub fn valid_and_splic_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
 
 #[cfg(test)]
 mod tests {
+    use std::net::IpAddr;
     use std::{net::Ipv4Addr, rc::Rc, sync::Arc};
 
-    use crate::common::trie::DomainTrie;
+    use crate::common::trie::{DomainTrie, HostsTrie, StringTrie};
 
     static LOCAL_IP: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 
     #[test]
     fn test_basic() {
-        let mut tree = DomainTrie::new();
+        let mut tree = StringTrie::new();
 
         let domains = vec!["example.com", "google.com", "localhost"];
 
@@ -189,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_wildcard() {
-        let mut tree = DomainTrie::new();
+        let mut tree = StringTrie::new();
 
         let domains = vec![
             "*.example.com",
@@ -224,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_priority() {
-        let mut tree = DomainTrie::new();
+        let mut tree = StringTrie::new();
 
         let domains = vec![".dev", "example.dev", "*.example.dev", "test.example.dev"];
 
@@ -250,8 +253,8 @@ mod tests {
     }
 
     #[test]
-    fn test_boundtry() {
-        let mut tree = DomainTrie::new();
+    fn test_boundary() {
+        let mut tree = StringTrie::new();
 
         tree.insert("*.dev", Arc::new(LOCAL_IP));
         assert!(!tree.insert(".", Arc::new(LOCAL_IP)));
@@ -260,8 +263,8 @@ mod tests {
     }
 
     #[test]
-    fn test_wildcard_boundry() {
-        let mut tree = DomainTrie::new();
+    fn test_wildcard_boundary() {
+        let mut tree = StringTrie::new();
         tree.insert("+.*", Arc::new(LOCAL_IP));
         tree.insert("stun.*.*.*", Arc::new(LOCAL_IP));
 
