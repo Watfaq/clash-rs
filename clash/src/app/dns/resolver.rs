@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use futures::lock::{Mutex, MutexGuard};
 use futures::FutureExt;
 use hyper::body::HttpBody;
+use log::error;
 use rand::prelude::SliceRandom;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefCell};
@@ -292,8 +293,6 @@ impl ClashResolver for Resolver {
 
 impl Resolver {
     pub async fn new(cfg: Config) -> Self {
-        let system_resolver =
-            Arc::new(TokioAsyncResolver::tokio_from_system_conf().expect("system DNS error"));
         let default_resolver = Arc::new(Resolver {
             ipv6: false,
             hosts: None,
@@ -378,9 +377,12 @@ impl Resolver {
                 "dhcp" => todo!(),
                 _ => {
                     let port = s.address.split(":").last().unwrap();
-                    let host = s.address.strip_suffix(port).unwrap();
+                    let host = s
+                        .address
+                        .strip_suffix(format!(":{}", port).as_str())
+                        .unwrap();
 
-                    if let Ok(c) = DnsClient::new(Opts {
+                    match DnsClient::new(Opts {
                         r: resolver.as_ref().map(|x| x.clone()),
                         host: host.to_string(),
                         port: port.parse::<u16>().unwrap(),
@@ -400,12 +402,48 @@ impl Resolver {
                     })
                     .await
                     {
-                        rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient)
+                        Ok(c) => {
+                            rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient)
+                        }
+                        Err(e) => error!("initializing DNS client: {}", e),
                     }
                 }
             }
         }
 
         rv
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dns::{ClashResolver, Resolver};
+    use crate::{def, dns};
+    use std::net;
+    use std::path::PathBuf;
+    use trust_dns_proto::rr;
+
+    #[tokio::test]
+    async fn test_resolve() {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/config.yaml");
+
+        let c = d
+            .into_os_string()
+            .into_string()
+            .unwrap()
+            .as_str()
+            .parse::<def::Config>()
+            .unwrap();
+        let r = Resolver::new(c.try_into().unwrap()).await;
+
+        assert!(
+            !r.resolve("google.com")
+                .await
+                .unwrap()
+                .unwrap()
+                .is_unspecified(),
+            "DNS resolution failure"
+        );
     }
 }

@@ -1,228 +1,3 @@
-use crate::Error;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
-use std::str::FromStr;
-
-use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
-
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum RunMode {
-    Global,
-    #[default]
-    Rule,
-    Direct,
-}
-
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum LogLevel {
-    Debug,
-    #[default]
-    Info,
-    Warning,
-    Error,
-    Silent,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", default)]
-pub struct Config {
-    /// these options are optional to tell whether
-    /// the regarding listeners should be enabled
-    pub port: Option<u16>,
-    pub socks_port: Option<u16>,
-    pub redir_port: Option<u16>,
-    pub tproxy_port: Option<u16>,
-    pub mixed_port: Option<u16>,
-
-    /// these options has Default::default()
-    /// or will be set to their empty/falsy vals
-    pub authentication: Vec<String>,
-    pub allow_lan: bool,
-    pub bind_address: String,
-    pub mode: RunMode,
-    pub log_level: LogLevel,
-    pub dns: DNS,
-    pub profile: Profile,
-    #[serde(rename = "proxies")]
-    pub proxy: Vec<HashMap<String, Value>>,
-    #[serde(rename = "proxy-groups")]
-    pub proxy_group: Vec<HashMap<String, Value>>,
-    #[serde(rename = "rules")]
-    pub rule: Vec<String>,
-    pub hosts: HashMap<String, String>,
-
-    /// these options has default vals,
-    /// but we want to process them
-    /// explicitly
-    pub ipv6: Option<bool>,
-    pub external_controller: Option<String>,
-    pub external_ui: Option<String>,
-    pub secret: Option<String>,
-    #[serde(rename = "interface-name")]
-    pub interface: Option<String>,
-    pub routing_mask: Option<u32>,
-    #[serde(rename = "proxy-providers")]
-    pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
-    pub experimental: Option<Experimental>,
-}
-
-impl FromStr for Config {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let path = Path::new(s);
-        match path.try_exists() {
-            Ok(exists) => {
-                if exists {
-                    let fd = File::open(path)?;
-                    let reader = BufReader::new(fd);
-                    Ok(serde_yaml::from_reader(reader)
-                        .map_err(|x| Error::InvalidConfig(x.to_string()))?)
-                } else {
-                    Ok(serde_yaml::from_str(s).map_err(|x| Error::InvalidConfig(x.to_string()))?)
-                }
-            }
-            Err(err) => Err(err.into()),
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            port: Default::default(),
-            socks_port: Default::default(),
-            redir_port: Default::default(),
-            tproxy_port: Default::default(),
-            mixed_port: Default::default(),
-            authentication: Default::default(),
-            allow_lan: Default::default(),
-            bind_address: String::from("*"),
-            mode: Default::default(),
-            log_level: Default::default(),
-            ipv6: Default::default(),
-            external_controller: Default::default(),
-            external_ui: Default::default(),
-            secret: Default::default(),
-            interface: Default::default(),
-            routing_mask: Default::default(),
-            proxy_provider: Default::default(),
-            hosts: Default::default(),
-            dns: Default::default(),
-            experimental: Default::default(),
-            profile: Default::default(),
-            proxy: Default::default(),
-            proxy_group: Default::default(),
-            rule: Default::default(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(default)]
-pub struct DNS {
-    pub enable: bool,
-    pub ipv6: bool,
-    pub user_hosts: bool,
-    pub nameserver: Vec<String>,
-    pub fallback: Vec<String>,
-    pub fallback_filter: FallbackFilter,
-    pub listen: String,
-    pub enhanced_mode: DNSMode,
-    pub fake_ip_range: String,
-    pub fake_ip_filter: Vec<String>,
-    pub default_nameserver: Vec<String>,
-    pub nameserver_policy: HashMap<String, String>,
-}
-
-impl Default for DNS {
-    fn default() -> Self {
-        Self {
-            enable: Default::default(),
-            ipv6: Default::default(),
-            user_hosts: true,
-            nameserver: Default::default(),
-            fallback: Default::default(),
-            fallback_filter: Default::default(),
-            listen: Default::default(),
-            enhanced_mode: Default::default(),
-            fake_ip_range: String::from("198.18.0.1/16"),
-            fake_ip_filter: Default::default(),
-            default_nameserver: vec![String::from("114.114.114.114"), String::from("8.8.8.8")],
-            nameserver_policy: Default::default(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Default, Clone)]
-pub enum DNSMode {
-    #[default]
-    Normal,
-    FakeIP,
-    Mapping,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct FallbackFilter {
-    pub geo_ip: bool,
-    pub geo_ip_code: String,
-    pub ip_cidr: Vec<String>,
-    pub domain: Vec<String>,
-}
-
-impl Default for FallbackFilter {
-    fn default() -> Self {
-        Self {
-            geo_ip: true,
-            geo_ip_code: String::from("CN"),
-            ip_cidr: Default::default(),
-            domain: Default::default(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Default)]
-pub struct Experimental {}
-
-#[derive(Serialize, Deserialize)]
-#[serde(default)]
-pub struct Profile {
-    pub store_selected: bool,
-    pub store_fake_ip: bool,
-}
-
-impl Default for Profile {
-    fn default() -> Self {
-        Self {
-            store_selected: true,
-            store_fake_ip: Default::default(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_yaml::Value;
-
-    use super::Config;
-
-    #[test]
-    fn parse_simple() {
-        let cfg = r#"
-        port: 9090
-        "#;
-        let c = cfg.parse::<Config>().expect("should parse");
-        assert_eq!(c.port, Some(9090));
-    }
-
-    #[test]
-    fn parse_example() {
-        let example_cfg = r###"
 # Port of HTTP(S) proxy server on the local end
 port: 7890
 
@@ -292,9 +67,9 @@ routing-mark: 6666
 # e.g. foo.example.com > *.example.com > .example.com
 # P.S. +.foo.com equals to .foo.com and foo.com
 hosts:
-  # '*.clash.dev': 127.0.0.1
-  # '.dev': 127.0.0.1
-  # 'alpha.clash.dev': '::1'
+# '*.clash.dev': 127.0.0.1
+# '.dev': 127.0.0.1
+# 'alpha.clash.dev': '::1'
 
 profile:
   # Store the `select` results in $HOME/.config/clash/.cache
@@ -310,7 +85,7 @@ profile:
 dns:
   enable: false
   listen: 0.0.0.0:53
-  # ipv6: false # when the false, response to AAAA questions will be empty
+  ipv6: true # when the false, response to AAAA questions will be empty
 
   # These nameservers are used to resolve the DNS nameserver hostnames below.
   # Specify IP addresses only
@@ -320,23 +95,23 @@ dns:
   enhanced-mode: fake-ip # or redir-host (not recommended)
   fake-ip-range: 198.18.0.1/16 # Fake IP addresses pool CIDR
   # use-hosts: true # lookup hosts and return IP record
-  
+
   # Hostnames in this list will not be resolved with fake IPs
   # i.e. questions to these domain names will always be answered with their
   # real IP addresses
   # fake-ip-filter:
   #   - '*.lan'
   #   - localhost.ptlogin2.qq.com
-  
+
   # Supports UDP, TCP, DoT, DoH. You can specify the port to connect to.
   # All DNS questions are sent directly to the nameserver, without proxies
   # involved. Clash answers the DNS question with the first result gathered.
   nameserver:
     - 114.114.114.114 # default value
     - 8.8.8.8 # default value
-    - tls://dns.rubyfish.cn:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
-    - dhcp://en0 # dns from dhcp
+    #- tls://dns.rubyfish.cn:853 # DNS over TLS
+    #- https://1.1.1.1/dns-query # DNS over HTTPS
+    #- dhcp://en0 # dns from dhcp
     # - '8.8.8.8#en0'
 
   # When `fallback` is present, the DNS server will send concurrent requests
@@ -452,7 +227,7 @@ proxies:
         - http.example.com
         - http-alt.example.com
       path: /
-  
+
   - name: "vmess-http"
     type: vmess
     server: server
@@ -514,10 +289,10 @@ proxies:
     server: server
     port: 44046
     psk: yourpsk
-    # version: 2
-    # obfs-opts:
+      # version: 2
+      # obfs-opts:
       # mode: http # or tls
-      # host: bing.com
+    # host: bing.com
 
   # Trojan
   - name: "trojan"
@@ -553,10 +328,10 @@ proxies:
     sni: example.com
     # skip-cert-verify: true
     udp: true
-    # ws-opts:
+      # ws-opts:
       # path: /path
       # headers:
-      #   Host: example.com
+    #   Host: example.com
 
   # ShadowsocksR
   # The supported ciphers (encryption methods): all stream ciphers in ss
@@ -632,14 +407,14 @@ proxy-groups:
       - ss2
       - vmess1
       - auto
- 
+
   # direct to another infacename or fwmark, also supported on proxy
   - name: en1
     type: select
     interface-name: en1
     routing-mark: 6667
     proxies:
-      - DIRECT 
+      - DIRECT
 
   - name: UseProvider
     type: select
@@ -681,23 +456,3 @@ rules:
   - SRC-PORT,7777,DIRECT
   - RULE-SET,apple,REJECT # Premium only
   - MATCH,auto
-  "###;
-
-        let des: Config = serde_yaml::from_str(example_cfg).expect("should parse yaml");
-        assert_eq!(des.port.expect("invalid port"), 7890);
-        assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
-        assert_eq!(des.proxy.len(), 14);
-        assert_eq!(des.proxy[2].get("name").unwrap().as_str(), Some("ss3"));
-        assert_eq!(
-            des.proxy[2]
-                .get("plugin-opts")
-                .unwrap()
-                .as_mapping()
-                .unwrap()
-                .get(&Value::String("mode".into()))
-                .unwrap()
-                .as_str(),
-            Some("websocket")
-        );
-    }
-}

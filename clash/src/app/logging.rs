@@ -10,7 +10,9 @@ pub fn setup_logging(level: LogLevel) -> Result<(), Error> {
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{} [{}] {}",
+                "{}:{} {} [{}] {}",
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
                 chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
                 colors.color(record.level()),
                 message

@@ -257,7 +257,7 @@ mod tests {
     async fn test_pool_skip() {
         let ipnet = "192.168.0.0/30".parse::<ipnet::IpNet>().unwrap();
         let mut tree = trie::StringTrie::new();
-        tree.insert("example.com", Arc::new(0));
+        tree.insert("example.com", Arc::new(false));
 
         let pool = FakeDns::new(Opts {
             ipnet,

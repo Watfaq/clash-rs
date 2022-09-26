@@ -162,7 +162,7 @@ mod tests {
     use std::net::IpAddr;
     use std::{net::Ipv4Addr, rc::Rc, sync::Arc};
 
-    use crate::common::trie::{DomainTrie, HostsTrie, StringTrie};
+    use crate::common::trie::StringTrie;
 
     static LOCAL_IP: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 
@@ -177,13 +177,7 @@ mod tests {
         }
 
         let node = tree.search("example.com").expect("should be not nil");
-        assert_eq!(
-            node.data
-                .as_ref()
-                .expect("data nil")
-                .downcast_ref::<Ipv4Addr>(),
-            Some(&LOCAL_IP),
-        );
+        assert_eq!(node.data.as_ref().expect("data nil").as_ref(), &LOCAL_IP);
         assert_eq!(tree.insert("", Arc::new(LOCAL_IP)), false);
         assert!(tree.search("").is_none());
         assert!(tree.search("localhost").is_some());
@@ -235,15 +229,7 @@ mod tests {
             tree.insert(d, Arc::new(idx));
         }
 
-        let assert_fn = |k: &str| -> Arc<usize> {
-            tree.search(k)
-                .unwrap()
-                .data
-                .clone()
-                .unwrap()
-                .downcast::<usize>()
-                .unwrap()
-        };
+        let assert_fn = |k: &str| -> Arc<usize> { tree.search(k).unwrap().data.clone().unwrap() };
 
         assert_eq!(assert_fn("test.dev"), Arc::new(0));
         assert_eq!(assert_fn("foo.bar.dev"), Arc::new(0));

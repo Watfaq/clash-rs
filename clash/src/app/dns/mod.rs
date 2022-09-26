@@ -172,6 +172,14 @@ impl Config {
     }
 }
 
+impl TryFrom<crate::config::def::Config> for Config {
+    type Error = Error;
+
+    fn try_from(value: crate::def::Config) -> Result<Self, Self::Error> {
+        (&value).try_into()
+    }
+}
+
 impl TryFrom<&crate::config::def::Config> for Config {
     type Error = Error;
 
