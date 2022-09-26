@@ -23,6 +23,8 @@ trait Client: Sync + Send {
     async fn exchange(&mut self, msg: &op::Message) -> Result<op::Message, Error>;
 }
 
+type ThreadSafeDNSClient = Arc<futures::lock::Mutex<dyn Client>>;
+
 #[derive(Clone)]
 pub struct NameServer {
     net: String,
@@ -47,7 +49,7 @@ pub struct Config {
     enhance_mode: DNSMode,
     default_nameserver: Vec<NameServer>,
     fake_ip_range: Option<fakeip::FakeDns>,
-    hosts: Option<trie::HostsTrie>,
+    hosts: Option<trie::StringTrie<IpAddr>>,
     nameserver_policy: HashMap<String, NameServer>,
 }
 
@@ -117,7 +119,7 @@ impl Config {
         for (domain, server) in policy_map {
             let nameservers = Config::parse_nameserver(&vec![server.to_owned()])?;
 
-            let (_, valid) = trie::valid_and_splic_domain(&domain);
+            let (_, valid) = trie::valid_and_split_domain(&domain);
             if !valid {
                 return Err(Error::InvalidConfig(format!(
                     "DNS ResolverRule invalid domain: {}",
@@ -142,7 +144,9 @@ impl Config {
         Ok(output)
     }
 
-    pub fn parse_hosts(hosts_mapping: &HashMap<String, String>) -> anyhow::Result<trie::HostsTrie> {
+    pub fn parse_hosts(
+        hosts_mapping: &HashMap<String, String>,
+    ) -> anyhow::Result<trie::StringTrie<IpAddr>> {
         let mut tree = trie::StringTrie::new();
         tree.insert(
             "localhost",

@@ -76,7 +76,7 @@ impl<T: Sync + Send> StringTrie<T> {
     }
 
     pub fn search(&self, domain: &str) -> Option<&Node<T>> {
-        let (parts, valid) = valid_and_splic_domain(domain);
+        let (parts, valid) = valid_and_split_domain(domain);
         if !valid {
             return None;
         }

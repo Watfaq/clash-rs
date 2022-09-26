@@ -3,15 +3,15 @@ use std::{cell::RefCell, net::IpAddr};
 use super::Store;
 
 pub struct InmemStore {
-    itoh: lru_cache::LruCache<IpAddr, String>,
-    htoi: lru_cache::LruCache<String, IpAddr>,
+    itoh: lru_time_cache::LruCache<IpAddr, String>,
+    htoi: lru_time_cache::LruCache<String, IpAddr>,
 }
 
 impl InmemStore {
     pub fn new(size: usize) -> Self {
         Self {
-            itoh: lru_cache::LruCache::new(size),
-            htoi: lru_cache::LruCache::new(size),
+            itoh: lru_time_cache::LruCache::with_capacity(size),
+            htoi: lru_time_cache::LruCache::with_capacity(size),
         }
     }
 }

@@ -1,14 +1,17 @@
-use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
-use std::{io, net, sync::Arc};
-
 use async_trait::async_trait;
+use futures::lock::{Mutex, MutexGuard};
+use futures::FutureExt;
 use hyper::body::HttpBody;
 use rand::prelude::SliceRandom;
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::{Ref, RefCell};
+use std::time::Duration;
+use std::{io, net, sync::Arc};
 use tokio::time::timeout;
 use trust_dns_proto::{op, rr};
 use trust_dns_resolver::TokioAsyncResolver;
 
+use crate::dns::ThreadSafeDNSClient;
 use crate::{common::trie, dns, Error};
 
 use super::{
@@ -32,16 +35,15 @@ pub trait ClashResolver: Sync + Send {
 
 pub struct Resolver {
     ipv6: bool,
-    hosts: Option<trie::HostsTrie>,
-    main: Vec<Box<dyn Client>>,
-    system: Arc<dyn Client>, // we shouldn't need this but Rust doesn't provide a default libc implementation
+    hosts: Option<trie::StringTrie<net::IpAddr>>,
+    main: Vec<ThreadSafeDNSClient>,
 
-    fallback: Option<Vec<Box<dyn Client>>>,
+    fallback: Option<Vec<ThreadSafeDNSClient>>,
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
     lru_cache: Option<lru_time_cache::LruCache<String, op::Message>>,
-    policy: Option<trie::StringTrie<Vec<Box<dyn Client>>>>,
+    policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 }
 
 impl Resolver {
@@ -50,10 +52,13 @@ impl Resolver {
         &self,
         host: &str,
         record_type: rr::record_type::RecordType,
-    ) -> anyhow::Result<Vec<IpAddr>> {
+    ) -> anyhow::Result<Vec<net::IpAddr>> {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
-        q.set_name(rr::Name::from(host));
+        q.set_name(
+            rr::Name::from_utf8(host)
+                .map_err(|x| Error::DNSError(format!("invalid domain: {}", host)))?,
+        );
         q.set_query_type(record_type);
         m.add_query(q);
 
@@ -77,31 +82,31 @@ impl Resolver {
                     return Ok(cached.clone());
                 }
             }
-            self.exchange_no_cache(message).await
+            self.exchange_no_cache(&message).await
         } else {
             Err(Error::DNSError("invalid query".to_string()).into())
         }
     }
 
-    async fn exchange_no_cache(&self, &message: op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange_no_cache(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let q = message.query().unwrap();
 
         if Resolver::is_ip_request(q) {
-            return self.ip_exchange(m).await;
+            return self.ip_exchange(message).await;
         }
 
-        if let Some(matched) = self.match_policy(&m) {
-            return self.batch_exchange(&matched, m).await;
+        if let Some(matched) = self.match_policy(&message) {
+            return self.batch_exchange(&matched, message).await;
         }
-        return self.batch_exchange(&self.main, m).await;
+        return self.batch_exchange(&self.main, message).await;
     }
 
-    fn match_policy(&self, m: &op::Message) -> Option<Vec<Box<dyn Client>>> {
+    fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
         if let (Some(fallback), Some(fallback_domain_filters), Some(policy)) =
             (&self.fallback, &self.fallback_domain_filters, &self.policy)
         {
             if let Some(domain) = Resolver::domain_name_of_message(m) {
-                return policy.search(domain).map(|n| *n.get_data().unwrap());
+                return policy.search(&domain).map(|n| n.get_data().unwrap());
             }
         }
         None
@@ -109,31 +114,38 @@ impl Resolver {
 
     async fn batch_exchange(
         &self,
-        clients: &Vec<Box<dyn Client>>,
+        clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
         // TODO: make this an option
 
-        let queries = clients.iter().map(|mut c| c.exchange(message).boxed());
+        let mut queries = Vec::new();
+        for c in clients {
+            // TODO: how to use .map()
+            queries.push(async move { c.lock().await.exchange(message).await }.boxed())
+        }
 
-        let timeout = tokio::spawn(tokio::time::delay_for(Duration::from_secs(10)));
-
-        let rr = futures::future::select_ok(queries);
+        let timeout = tokio::time::sleep(Duration::from_secs(10));
 
         tokio::select! {
-            r = futures::future::select_ok(queries.into_iter()) => r,
-            _ = timeout => Err(Error::DNSError("DNS query timeout").into())
+            result = futures::future::select_ok(queries) => match result {
+                Ok(r) => Ok(r.0),
+                Err(e) => Err(e.into()),
+            },
+            _ = timeout => Err(Error::DNSError("DNS query timeout".into()).into())
         }
     }
 
     async fn ip_exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        if let Some(matched) = self.match_policy(message) {
-            return self.batch_exchange(&matched, message).await;
+        if let Some(mut matched) = self.match_policy(message) {
+            return self.batch_exchange(&mut matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return self.batch_exchange(&self.fallback.unwrap(), message).await;
+            return self
+                .batch_exchange(&self.fallback.as_ref().unwrap(), message)
+                .await;
         }
 
         let main_query = self.batch_exchange(&self.main, message);
@@ -142,7 +154,7 @@ impl Resolver {
             return main_query.await;
         }
 
-        let fallback_query = self.batch_exchange(&self.fallback.unwrap(), message);
+        let fallback_query = self.batch_exchange(&self.fallback.as_ref().unwrap(), message);
 
         if let Ok(main_result) = main_query.await {
             let ip_list = Resolver::ip_list_of_message(&main_result);
@@ -164,7 +176,7 @@ impl Resolver {
             if let Some(domain) = Resolver::domain_name_of_message(message) {
                 if let Some(filters) = &self.fallback_domain_filters {
                     for f in filters.into_iter() {
-                        if f.apply(domain) {
+                        if f.apply(domain.as_str()) {
                             return true;
                         }
                     }
@@ -174,7 +186,7 @@ impl Resolver {
         false
     }
 
-    fn should_ip_fallback(&self, ip: &IpAddr) -> bool {
+    fn should_ip_fallback(&self, ip: &net::IpAddr) -> bool {
         if let Some(filers) = &self.fallback_ip_filters {
             for f in filers.iter() {
                 if f.apply(ip) {
@@ -191,20 +203,22 @@ impl Resolver {
             && (q.query_type() == rr::RecordType::A || q.query_type() == rr::RecordType::AAAA)
     }
 
-    fn domain_name_of_message(m: &op::Message) -> Option<&str> {
-        m.query().map(|x| x.name().to_ascii().trim_matches('.'))
+    fn domain_name_of_message(m: &op::Message) -> Option<String> {
+        m.query()
+            .map(|x| x.name().to_ascii().trim_matches('.').to_owned())
     }
 
-    fn ip_list_of_message(m: &op::Message) -> Vec<IpAddr> {
+    fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
         m.answers()
             .into_iter()
             .filter(|r| {
                 r.record_type() == rr::RecordType::A || r.record_type() == rr::RecordType::AAAA
             })
-            .map(|r| match r.into_data() {
+            .map(|r| match r.data() {
                 Some(data) => match data {
-                    rr::RData::A(v4) => IpAddr::from(v4),
-                    rr::RData::AAAA(v6) => IpAddr::V6(v6),
+                    rr::RData::A(v4) => net::IpAddr::V4(*v4),
+                    rr::RData::AAAA(v6) => net::IpAddr::V6(*v6),
+                    _ => unreachable!("should be only A/AAAA"),
                 },
                 None => unreachable!("should only be A/AAAA"),
             })
@@ -219,17 +233,20 @@ impl ClashResolver for Resolver {
             true => self
                 .resolve_v6(host)
                 .await
-                .map(|ip| ip.map(|v6| IpAddr(v6))),
+                .map(|ip| ip.map(|v6| net::IpAddr::from(v6))),
             false => self
                 .resolve_v4(host)
                 .await
-                .map(|ip| ip.map(|v4| IpAddr(v4))),
+                .map(|ip| ip.map(|v4| net::IpAddr::from(v4))),
         }
     }
     async fn resolve_v4(&self, host: &str) -> anyhow::Result<Option<net::Ipv4Addr>> {
-        if let Some(hosts) = self.hosts {
+        if let Some(hosts) = &self.hosts {
             if let Some(v) = hosts.search(host) {
-                return Ok(Some(v));
+                return Ok(v.get_data().map(|v| match v {
+                    net::IpAddr::V4(v4) => *v4,
+                    _ => unreachable!("invalid IP family"),
+                }));
             }
         }
 
@@ -238,7 +255,10 @@ impl ClashResolver for Resolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::A).await {
-            Ok(result) => Ok(Ipv4Addr(result.choose(&mut rand::thread_rng()))),
+            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+                net::IpAddr::V4(v4) => Ok(Some(*v4)),
+                _ => unreachable!("invalid IP family"),
+            },
             Err(e) => Err(e.into()),
         }
     }
@@ -246,9 +266,12 @@ impl ClashResolver for Resolver {
         if !self.ipv6 {
             return Err(Error::DNSError("ipv6 disabled".into()).into());
         }
-        if let Some(hosts) = self.hosts {
+        if let Some(hosts) = &self.hosts {
             if let Some(v) = hosts.search(host) {
-                return Ok(Some(v));
+                return Ok(v.get_data().map(|v| match v {
+                    net::IpAddr::V6(v6) => *v6,
+                    _ => unreachable!("invalid IP family"),
+                }));
             }
         }
 
@@ -257,7 +280,11 @@ impl ClashResolver for Resolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::AAAA).await {
-            Ok(result) => Ok(Ipv4Addr(result.choose(&mut rand::thread_rng()))),
+            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+                net::IpAddr::V6(v6) => Ok(Some(*v6)),
+                _ => unreachable!("invalid IP family"),
+            },
+
             Err(e) => Err(e.into()),
         }
     }
@@ -268,7 +295,6 @@ impl Resolver {
         let system_resolver =
             Arc::new(TokioAsyncResolver::tokio_from_system_conf().expect("system DNS error"));
         let default_resolver = Arc::new(Resolver {
-            system: system_resolver.clone(),
             ipv6: false,
             hosts: None,
             main: Resolver::make_clients(cfg.default_nameserver, None).await,
@@ -280,7 +306,6 @@ impl Resolver {
         });
 
         let r = Resolver {
-            system: system_resolver.clone(),
             ipv6: cfg.ipv6,
             main: Resolver::make_clients(cfg.nameserver, Some(default_resolver.clone())).await,
             hosts: cfg.hosts,
@@ -344,7 +369,7 @@ impl Resolver {
     async fn make_clients(
         servers: Vec<NameServer>,
         resolver: Option<Arc<dyn ClashResolver>>,
-    ) -> Vec<Box<dyn Client>> {
+    ) -> Vec<ThreadSafeDNSClient> {
         let mut rv = Vec::new();
 
         for s in servers {
@@ -375,7 +400,7 @@ impl Resolver {
                     })
                     .await
                     {
-                        rv.push(Box::new(c) as Box<dyn Client>);
+                        rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient)
                     }
                 }
             }

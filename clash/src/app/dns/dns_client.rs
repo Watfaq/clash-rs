@@ -30,7 +30,7 @@ pub struct Opts {
 }
 
 impl DnsClient {
-    pub async fn new(opts: Opts) -> Result<Self, Error> {
+    pub async fn new(opts: Opts) -> anyhow::Result<Self> {
         let ip = if let Some(r) = opts.r {
             if let Some(ip) = r.resolve(&opts.host).await? {
                 ip
@@ -38,7 +38,8 @@ impl DnsClient {
                 return Err(Error::InvalidConfig(format!(
                     "can't resolve default DNS: {}",
                     opts.host
-                )));
+                ))
+                .into());
             }
         } else {
             opts.host

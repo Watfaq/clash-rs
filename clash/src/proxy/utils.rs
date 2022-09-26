@@ -1,6 +1,7 @@
 use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::AnyStream;
 
+use hyper::body::HttpBody;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
@@ -18,7 +19,8 @@ pub async fn new_tcp_stream(
         .read()
         .await
         .resolve(address)
-        .await?
+        .await
+        .map_err(|v| io::Error::new(io::ErrorKind::Other, "dns failure"))?
         .ok_or(io::Error::new(
             io::ErrorKind::Other,
             format!("can't resolve dns: {}", address),
