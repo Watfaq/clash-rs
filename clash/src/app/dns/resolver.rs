@@ -2,15 +2,15 @@ use async_trait::async_trait;
 use futures::lock::{Mutex, MutexGuard};
 use futures::FutureExt;
 use hyper::body::HttpBody;
-use log::error;
+use log::{debug, error};
 use rand::prelude::SliceRandom;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefCell};
+use std::str::FromStr;
 use std::time::Duration;
 use std::{io, net, sync::Arc};
 use tokio::time::timeout;
 use trust_dns_proto::{op, rr};
-use trust_dns_resolver::TokioAsyncResolver;
 
 use crate::dns::ThreadSafeDNSClient;
 use crate::{common::trie, dns, Error};
@@ -56,12 +56,13 @@ impl Resolver {
     ) -> anyhow::Result<Vec<net::IpAddr>> {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
-        q.set_name(
-            rr::Name::from_utf8(host)
-                .map_err(|x| Error::DNSError(format!("invalid domain: {}", host)))?,
-        );
+        let name = rr::Name::from_str(host)
+            .map_err(|x| anyhow!("invalid domain: {}", host))?
+            .append_domain(&rr::Name::root())?; // makes it FQDN
+        q.set_name(name);
         q.set_query_type(record_type);
         m.add_query(q);
+        m.set_recursion_desired(true);
 
         match self.exchange(m).await {
             Ok(result) => {
@@ -69,7 +70,7 @@ impl Resolver {
                 if !ip_list.is_empty() {
                     Ok(ip_list)
                 } else {
-                    Err(Error::DNSError("no record".into()).into())
+                    Err(anyhow!("no record for hostname: {}", host))
                 }
             }
             Err(e) => Err(e),
@@ -85,7 +86,7 @@ impl Resolver {
             }
             self.exchange_no_cache(&message).await
         } else {
-            Err(Error::DNSError("invalid query".to_string()).into())
+            Err(anyhow!("invalid query"))
         }
     }
 
@@ -97,9 +98,9 @@ impl Resolver {
         }
 
         if let Some(matched) = self.match_policy(&message) {
-            return self.batch_exchange(&matched, message).await;
+            return Resolver::batch_exchange(&matched, message).await;
         }
-        return self.batch_exchange(&self.main, message).await;
+        return Resolver::batch_exchange(&self.main, message).await;
     }
 
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
@@ -113,49 +114,23 @@ impl Resolver {
         None
     }
 
-    async fn batch_exchange(
-        &self,
-        clients: &Vec<ThreadSafeDNSClient>,
-        message: &op::Message,
-    ) -> anyhow::Result<op::Message> {
-        // TODO: make this an option
-
-        let mut queries = Vec::new();
-        for c in clients {
-            // TODO: how to use .map()
-            queries.push(async move { c.lock().await.exchange(message).await }.boxed())
-        }
-
-        let timeout = tokio::time::sleep(Duration::from_secs(10));
-
-        tokio::select! {
-            result = futures::future::select_ok(queries) => match result {
-                Ok(r) => Ok(r.0),
-                Err(e) => Err(e.into()),
-            },
-            _ = timeout => Err(Error::DNSError("DNS query timeout".into()).into())
-        }
-    }
-
     async fn ip_exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(mut matched) = self.match_policy(message) {
-            return self.batch_exchange(&mut matched, message).await;
+            return Resolver::batch_exchange(&mut matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return self
-                .batch_exchange(&self.fallback.as_ref().unwrap(), message)
-                .await;
+            return Resolver::batch_exchange(&self.fallback.as_ref().unwrap(), message).await;
         }
 
-        let main_query = self.batch_exchange(&self.main, message);
+        let main_query = Resolver::batch_exchange(&self.main, message);
 
         if self.fallback.is_none() {
             return main_query.await;
         }
 
-        let fallback_query = self.batch_exchange(&self.fallback.as_ref().unwrap(), message);
+        let fallback_query = Resolver::batch_exchange(&self.fallback.as_ref().unwrap(), message);
 
         if let Ok(main_result) = main_query.await {
             let ip_list = Resolver::ip_list_of_message(&main_result);
@@ -372,78 +347,198 @@ impl Resolver {
         let mut rv = Vec::new();
 
         for s in servers {
-            match s.net.as_str() {
-                "https" => todo!(),
-                "dhcp" => todo!(),
-                _ => {
-                    let port = s.address.split(":").last().unwrap();
-                    let host = s
-                        .address
-                        .strip_suffix(format!(":{}", port).as_str())
-                        .unwrap();
+            debug!("building nameserver: {:?}", s);
 
-                    match DnsClient::new(Opts {
-                        r: resolver.as_ref().map(|x| x.clone()),
-                        host: host.to_string(),
-                        port: port.parse::<u16>().unwrap(),
-                        net: s.net,
-                        iface: s.interface.map(|iface| {
-                            net::SocketAddr::new(
-                                get_if_addrs::get_if_addrs()
-                                    .ok()
-                                    .expect("failed to lookup local ip")
-                                    .into_iter()
-                                    .find(|x| x.name == iface)
-                                    .map(|x| x.addr.ip())
-                                    .expect("no ip address on interface"),
-                                0,
-                            )
-                        }),
-                    })
-                    .await
-                    {
-                        Ok(c) => {
-                            rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient)
-                        }
-                        Err(e) => error!("initializing DNS client: {}", e),
-                    }
-                }
+            let port = s.address.split(":").last().unwrap();
+            let host = s
+                .address
+                .strip_suffix(format!(":{}", port).as_str())
+                .unwrap();
+
+            match DnsClient::new(Opts {
+                r: resolver.as_ref().map(|x| x.clone()),
+                host: host.to_string(),
+                port: port.parse::<u16>().unwrap_or(443), // DoH default port
+                net: s.net,
+                iface: s.interface.map(|iface| {
+                    net::SocketAddr::new(
+                        get_if_addrs::get_if_addrs()
+                            .ok()
+                            .expect("failed to lookup local ip")
+                            .into_iter()
+                            .find(|x| x.name == iface)
+                            .map(|x| x.addr.ip())
+                            .expect("no ip address on interface"),
+                        0,
+                    )
+                }),
+            })
+            .await
+            {
+                Ok(c) => rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient),
+                Err(e) => error!("initializing DNS client: {}", e),
             }
         }
 
         rv
     }
+
+    pub async fn batch_exchange(
+        clients: &Vec<ThreadSafeDNSClient>,
+        message: &op::Message,
+    ) -> anyhow::Result<op::Message> {
+        let mut queries = Vec::new();
+        for c in clients {
+            // TODO: how to use .map()
+            queries.push(async move { c.lock().await.exchange(message).await }.boxed())
+        }
+
+        let timeout = tokio::time::sleep(Duration::from_secs(10));
+
+        tokio::select! {
+            result = futures::future::select_ok(queries) => match result {
+                Ok(r) => Ok(r.0),
+                Err(e) => Err(e.into()),
+            },
+            _ = timeout => Err(Error::DNSError("DNS query timeout".into()).into())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::{ClashResolver, Resolver};
+    use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
+    use crate::dns::{ClashResolver, Client, NameServer, Resolver};
     use crate::{def, dns};
+    use futures::lock::Mutex;
     use std::net;
     use std::path::PathBuf;
+    use std::sync::Arc;
+    use trust_dns_client::op;
     use trust_dns_proto::rr;
 
     #[tokio::test]
-    async fn test_resolve() {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/config.yaml");
+    async fn test_udp_resolve() {
+        let c = Arc::new(Mutex::new(
+            DnsClient::new(Opts {
+                r: None,
+                host: "1.1.1.1".to_string(),
+                port: 53,
+                net: DNSNetMode::UDP,
+                iface: None,
+            })
+            .await
+            .expect("build client"),
+        ));
 
-        let c = d
-            .into_os_string()
-            .into_string()
-            .unwrap()
-            .as_str()
-            .parse::<def::Config>()
-            .unwrap();
-        let r = Resolver::new(c.try_into().unwrap()).await;
+        test_client(c).await;
+    }
 
-        assert!(
-            !r.resolve("google.com")
-                .await
-                .unwrap()
-                .unwrap()
-                .is_unspecified(),
-            "DNS resolution failure"
-        );
+    #[tokio::test]
+    async fn test_tcp_resolve() {
+        let c = Arc::new(Mutex::new(
+            DnsClient::new(Opts {
+                r: None,
+                host: "1.1.1.1".to_string(),
+                port: 53,
+                net: DNSNetMode::TCP,
+                iface: None,
+            })
+            .await
+            .expect("build client"),
+        ));
+
+        test_client(c).await;
+    }
+
+    #[tokio::test]
+    async fn test_dot_resolve() {
+        let c = Arc::new(Mutex::new(
+            DnsClient::new(Opts {
+                r: Some(Arc::new(make_default_resolver().await)),
+                host: "dns.google".to_string(),
+                port: 853,
+                net: DNSNetMode::DoT,
+                iface: None,
+            })
+            .await
+            .expect("build client"),
+        ));
+
+        test_client(c).await;
+    }
+
+    #[tokio::test]
+    async fn test_doh_resolve() {
+        let default_resolver = Arc::new(make_default_resolver().await);
+
+        let c = Arc::new(Mutex::new(
+            DnsClient::new(Opts {
+                r: Some(default_resolver.clone()),
+                host: "cloudflare-dns.com".to_string(),
+                port: 443,
+                net: DNSNetMode::DoH,
+                iface: None,
+            })
+            .await
+            .expect("build client"),
+        ));
+
+        test_client(c).await;
+    }
+
+    async fn make_default_resolver() -> Resolver {
+        Resolver {
+            ipv6: false,
+            hosts: None,
+            main: Resolver::make_clients(
+                vec![NameServer {
+                    net: DNSNetMode::UDP,
+                    address: "8.8.8.8:53".to_string(),
+                    interface: None,
+                }],
+                None,
+            )
+            .await,
+            fallback: None,
+            fallback_domain_filters: None,
+            fallback_ip_filters: None,
+            lru_cache: None,
+            policy: None,
+        }
+    }
+
+    async fn test_client(c: Arc<Mutex<DnsClient>>) -> () {
+        let mut m = op::Message::new();
+        let mut q = op::Query::new();
+        q.set_name(rr::Name::from_utf8("www.google.com").unwrap());
+        q.set_query_type(rr::RecordType::A);
+        m.add_query(q);
+
+        let r = Resolver::batch_exchange(&vec![c.clone()], &m)
+            .await
+            .expect("should exchange");
+
+        let ips = Resolver::ip_list_of_message(&r);
+
+        assert!(ips.len() > 0);
+        assert!(!ips[0].is_unspecified());
+        assert!(ips[0].is_ipv4());
+
+        let mut m = op::Message::new();
+        let mut q = op::Query::new();
+        q.set_name(rr::Name::from_utf8("www.google.com").unwrap());
+        q.set_query_type(rr::RecordType::AAAA);
+        m.add_query(q);
+
+        let r = Resolver::batch_exchange(&vec![c.clone()], &m)
+            .await
+            .expect("should exchange");
+
+        let ips = Resolver::ip_list_of_message(&r);
+
+        assert!(ips.len() > 0);
+        assert!(!ips[0].is_unspecified());
+        assert!(ips[0].is_ipv6());
     }
 }

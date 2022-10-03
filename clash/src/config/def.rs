@@ -17,7 +17,7 @@ pub enum RunMode {
     Direct,
 }
 
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Debug,

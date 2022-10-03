@@ -29,9 +29,11 @@ serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 
 trust-dns-client = "0.22"
-trust-dns-server = "0.22"
-trust-dns-resolver = "0.22"
-trust-dns-proto = "0.22"
+trust-dns-proto = { version = "0.22", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+# DoH
+rustls = "0.20"
+webpki-roots = "0.22.5"
+
 rand = "0.8"
 get_if_addrs = "0.5.3"
 

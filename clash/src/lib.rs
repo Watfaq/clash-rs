@@ -22,7 +22,6 @@ use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
 use thiserror::Error;
 use tokio::sync::{mpsc, RwLock};
-use trust_dns_resolver::Resolver;
 
 mod app;
 mod common;

@@ -1,9 +1,10 @@
 use async_trait::async_trait;
-use ipnet::{AddrParseError, IpNet};
+use ipnet::AddrParseError;
 use regex::Regex;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{collections::HashMap, net::IpAddr, sync::Arc};
+use std::{fmt, net};
 use tower::ServiceExt;
 use trust_dns_proto::op;
 use url::Url;
@@ -15,19 +16,20 @@ mod fakeip;
 mod filters;
 mod resolver;
 
+use crate::dns::dns_client::DNSNetMode;
 pub use resolver::ClashResolver;
 pub use resolver::Resolver;
 
 #[async_trait]
-trait Client: Sync + Send {
+pub trait Client: Sync + Send {
     async fn exchange(&mut self, msg: &op::Message) -> Result<op::Message, Error>;
 }
 
 type ThreadSafeDNSClient = Arc<futures::lock::Mutex<dyn Client>>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NameServer {
-    net: String,
+    net: DNSNetMode,
     address: String,
     interface: Option<String>,
 }
@@ -66,6 +68,7 @@ impl Config {
             let url = Url::parse(&server).map_err(|_x| {
                 Error::InvalidConfig(format!("invalid dns server: {}", server.as_str()))
             })?;
+
             let host = url.host_str().expect("dns host must be valid");
 
             let iface = url.fragment();
@@ -75,23 +78,22 @@ impl Config {
             match url.scheme() {
                 "udp" => {
                     addr = Config::host_with_default_port(&host, "53")?;
-                    net = "";
+                    net = "UDP";
                 }
                 "tcp" => {
                     addr = Config::host_with_default_port(&host, "53")?;
-                    net = "tcp";
+                    net = "TCP";
                 }
                 "tls" => {
                     addr = Config::host_with_default_port(&host, "853")?;
-                    net = "tcp-tls";
+                    net = "DoT";
                 }
                 "https" => {
                     addr = format!("https://{}{}", &host, url.path());
-                    net = "https";
+                    net = "DoH";
                 }
                 "dhcp" => {
-                    addr = host.into();
-                    net = "dhcp";
+                    unimplemented!();
                 }
                 _ => {
                     return Err(Error::InvalidConfig(String::from(format!(
@@ -101,9 +103,10 @@ impl Config {
                     ))));
                 }
             }
+
             nameservers.push(NameServer {
-                address: addr.into(),
-                net: net.into(),
+                address: addr,
+                net: net.parse()?,
                 interface: iface.map(String::from),
             });
         }
@@ -135,7 +138,7 @@ impl Config {
         let mut output = vec![];
 
         for (_i, ip) in ipcidr.iter().enumerate() {
-            let net: IpNet = ip
+            let net: ipnet::IpNet = ip
                 .parse()
                 .map_err(|x: AddrParseError| Error::InvalidConfig(x.to_string()))?;
             output.push(net);

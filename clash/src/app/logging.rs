@@ -6,16 +6,13 @@ use crate::Error;
 
 pub fn setup_logging(level: LogLevel) -> Result<(), Error> {
     let colors = ColoredLevelConfig::new();
-
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{}:{} {} [{}] {}",
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
+                "{} [{}] {}",
                 chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
                 colors.color(record.level()),
-                message
+                message,
             ))
         })
         .level(match level {
