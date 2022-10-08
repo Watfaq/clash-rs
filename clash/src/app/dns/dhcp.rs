@@ -9,13 +9,15 @@ use ipnet::IpBitAnd;
 use libc::{getifaddrs, malloc};
 use log::debug;
 use network_interface::{Addr, NetworkInterfaceConfig};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::ops::Add;
 use std::rc::Rc;
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{env, io, mem};
 use tokio::net::UdpSocket;
+use tokio::task::yield_now;
 use trust_dns_proto::op::Message;
 
 const IFACE_TTL: Duration = Duration::from_secs(20);
@@ -83,10 +85,7 @@ impl DhcpClient {
         let iface = network_interface::NetworkInterface::show()
             .map_err(|x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", x)))?
             .into_iter()
-            .find(|x| {
-                debug!("iface: {}, {:?}", x.name, x.addr);
-                x.name == self.iface && x.addr.map(|x| x.ip().is_ipv4()).unwrap_or(false)
-            })
+            .find(|x| x.name == self.iface && x.addr.map(|x| x.ip().is_ipv4()).unwrap_or(false))
             .ok_or(io::Error::new(
                 io::ErrorKind::Other,
                 format!("can not find interface: {}", self.iface),
@@ -137,8 +136,8 @@ impl DhcpClient {
 
 async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     let listen_addr = match env::consts::OS {
-        "linux" | "android" => "0.0.0.0:68",
-        _ => "255.255.255.255:68",
+        "linux" | "android" => "255.255.255.255:68",
+        _ => "0.0.0.0:68",
     };
 
     new_udp_socket(
@@ -151,7 +150,7 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
 async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
     let socket = listen_dhcp_client(iface).await?;
 
-    let mac_address = network_interface::NetworkInterface::show()
+    let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
         .map_err(|x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", iface)))?
         .into_iter()
         .find(|x| x.name == iface)
@@ -163,11 +162,17 @@ async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         .ok_or(io::Error::new(
             io::ErrorKind::Other,
             format!("no MAC address on interface: {}", iface),
-        ))?;
+        ))?
+        .split(":")
+        .map(|x| {
+            u8::from_str_radix(x, 16)
+                .map_err(|x| io::Error::new(io::ErrorKind::Other, "malformed MAC addr"))
+        })
+        .collect::<io::Result<Vec<u8>>>()?;
 
     let mut msg = dhcproto::v4::Message::default();
     msg.set_flags(dhcproto::v4::Flags::default().set_broadcast())
-        .set_chaddr(&mac_address.as_str().as_bytes())
+        .set_chaddr(mac_address.as_slice())
         .opts_mut()
         .insert(dhcproto::v4::DhcpOption::MessageType(
             dhcproto::v4::MessageType::Discover,
@@ -181,15 +186,21 @@ async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
             dhcproto::v4::OptionCode::DomainName,
         ]));
 
-    socket
-        .send_to(&msg.to_vec().expect("must encode"), "255.255.255.255:67")
-        .await?;
+    let (tx, mut rx) = tokio::sync::oneshot::channel::<Vec<Ipv4Addr>>();
+    let r = Arc::new(socket);
+    let s = r.clone();
 
-    async fn receive_offer(socket: UdpSocket, xid: u32) -> io::Result<Vec<Ipv4Addr>> {
+    let xid = msg.xid();
+    tokio::spawn(async move {
         let mut buf = vec![0u8; 576];
+        let mut maybe_sender = Some(tx);
         loop {
-            let (n_read, _) = socket.recv_from(&mut buf).await?;
+            let (n_read, _) = r
+                .recv_from(&mut buf)
+                .await
+                .expect("failed to receive DHCP offer");
 
+            // fucking deep if-else hell
             if let Ok(reply) = dhcproto::v4::Message::from_bytes(&buf[..n_read]) {
                 if let Some(op) = reply.opts().get(dhcproto::v4::OptionCode::MessageType) {
                     match op {
@@ -201,28 +212,30 @@ async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
                                     {
                                         match op {
                                             dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
-                                                return Ok(dns.to_owned());
+                                                if let Some(tx) = maybe_sender.take() {
+                                                    tx.send(dns.clone()).expect("must send");
+                                                    return;
+                                                }
                                             }
-                                            _ => {}
+                                            _ => yield_now().await,
                                         }
                                     }
                                 }
+                                yield_now().await
                             }
                         }
-                        _ => {}
+                        _ => yield_now().await,
                     }
                 }
             }
         }
-    }
+    });
+
+    s.send_to(&msg.to_vec().expect("must encode"), "255.255.255.255:67")
+        .await?;
 
     tokio::select! {
-        result = receive_offer(socket, msg.xid()) => {
-            match result {
-                Ok(dns) => Ok(dns),
-                Err(err) => Err(err),
-            }
-        },
-        _ = tokio::time::sleep(Duration::from_secs(10)) => Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout")),
+        result = &mut rx  => result.map_err(|x| io::Error::new(io::ErrorKind::Other, "channel error")),
+        _ = tokio::time::sleep(Duration::from_secs(10)) => Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
     }
 }

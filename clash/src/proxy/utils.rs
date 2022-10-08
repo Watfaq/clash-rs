@@ -14,8 +14,9 @@ pub enum Interface {
     Name(String),
 }
 
-fn maybe_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
+fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
     match iface {
+        // TODO: should this be ever used vs. calling .bind(2) from the caller side?
         Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(ip.clone(), 0).into()),
         Interface::Name(name) => unsafe {
             #[cfg(target_vendor = "apple")]
@@ -59,7 +60,7 @@ pub async fn new_tcp_stream(
     };
 
     if let Some(iface) = iface {
-        maybe_bind_socket_on_interface(&socket, iface)?;
+        must_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -91,14 +92,18 @@ pub async fn new_udp_socket(
         socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?
     };
 
+    socket.bind(&src.clone().into())?;
+
     if let Some(iface) = iface {
-        maybe_bind_socket_on_interface(&socket, iface)?;
+        must_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if let Some(packet_mark) = packet_mark {
         socket.set_mark(packet_mark)?;
     }
+
+    socket.set_broadcast(true)?;
 
     UdpSocket::from_std(socket.into())
 }

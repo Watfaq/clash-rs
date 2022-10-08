@@ -4,7 +4,7 @@ use log::LevelFilter;
 
 use crate::Error;
 
-pub fn setup_logging(level: LogLevel) -> Result<(), Error> {
+pub fn setup_logging(level: LogLevel) -> anyhow::Result<()> {
     let colors = ColoredLevelConfig::new();
     fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -24,5 +24,5 @@ pub fn setup_logging(level: LogLevel) -> Result<(), Error> {
         })
         .chain(std::io::stdout())
         .apply()
-        .map_err(|x| Error::InvalidConfig(format!("setup logging: {}", x)))
+        .map_err(|x| anyhow!(x))
 }
