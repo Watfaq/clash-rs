@@ -13,6 +13,7 @@ use tokio::time::timeout;
 use trust_dns_proto::{op, rr};
 
 use crate::dns::ThreadSafeDNSClient;
+use crate::proxy::utils::Interface;
 use crate::{common::trie, dns, Error};
 
 use super::{
@@ -184,7 +185,7 @@ impl Resolver {
             .map(|x| x.name().to_ascii().trim_matches('.').to_owned())
     }
 
-    fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
+    pub(crate) fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
         m.answers()
             .into_iter()
             .filter(|r| {
@@ -340,7 +341,7 @@ impl Resolver {
         r
     }
 
-    async fn make_clients(
+    pub async fn make_clients(
         servers: Vec<NameServer>,
         resolver: Option<Arc<dyn ClashResolver>>,
     ) -> Vec<ThreadSafeDNSClient> {
@@ -360,22 +361,11 @@ impl Resolver {
                 host: host.to_string(),
                 port: port.parse::<u16>().unwrap_or(443), // DoH default port
                 net: s.net,
-                iface: s.interface.map(|iface| {
-                    net::SocketAddr::new(
-                        get_if_addrs::get_if_addrs()
-                            .ok()
-                            .expect("failed to lookup local ip")
-                            .into_iter()
-                            .find(|x| x.name == iface)
-                            .map(|x| x.addr.ip())
-                            .expect("no ip address on interface"),
-                        0,
-                    )
-                }),
+                iface: s.interface.map(|x| Interface::Name(x)),
             })
             .await
             {
-                Ok(c) => rv.push(Arc::new(futures::lock::Mutex::new(c)) as ThreadSafeDNSClient),
+                Ok(c) => rv.push(c),
                 Err(e) => error!("initializing DNS client: {}", e),
             }
         }
@@ -408,7 +398,7 @@ impl Resolver {
 #[cfg(test)]
 mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
-    use crate::dns::{ClashResolver, Client, NameServer, Resolver};
+    use crate::dns::{ClashResolver, Client, NameServer, Resolver, ThreadSafeDNSClient};
     use crate::{def, dns};
     use futures::lock::Mutex;
     use std::net;
@@ -419,51 +409,45 @@ mod tests {
 
     #[tokio::test]
     async fn test_udp_resolve() {
-        let c = Arc::new(Mutex::new(
-            DnsClient::new(Opts {
-                r: None,
-                host: "1.1.1.1".to_string(),
-                port: 53,
-                net: DNSNetMode::UDP,
-                iface: None,
-            })
-            .await
-            .expect("build client"),
-        ));
+        let c = DnsClient::new(Opts {
+            r: None,
+            host: "1.1.1.1".to_string(),
+            port: 53,
+            net: DNSNetMode::UDP,
+            iface: None,
+        })
+        .await
+        .expect("build client");
 
         test_client(c).await;
     }
 
     #[tokio::test]
     async fn test_tcp_resolve() {
-        let c = Arc::new(Mutex::new(
-            DnsClient::new(Opts {
-                r: None,
-                host: "1.1.1.1".to_string(),
-                port: 53,
-                net: DNSNetMode::TCP,
-                iface: None,
-            })
-            .await
-            .expect("build client"),
-        ));
+        let c = DnsClient::new(Opts {
+            r: None,
+            host: "1.1.1.1".to_string(),
+            port: 53,
+            net: DNSNetMode::TCP,
+            iface: None,
+        })
+        .await
+        .expect("build client");
 
         test_client(c).await;
     }
 
     #[tokio::test]
     async fn test_dot_resolve() {
-        let c = Arc::new(Mutex::new(
-            DnsClient::new(Opts {
-                r: Some(Arc::new(make_default_resolver().await)),
-                host: "dns.google".to_string(),
-                port: 853,
-                net: DNSNetMode::DoT,
-                iface: None,
-            })
-            .await
-            .expect("build client"),
-        ));
+        let c = DnsClient::new(Opts {
+            r: Some(Arc::new(make_default_resolver().await)),
+            host: "dns.google".to_string(),
+            port: 853,
+            net: DNSNetMode::DoT,
+            iface: None,
+        })
+        .await
+        .expect("build client");
 
         test_client(c).await;
     }
@@ -472,17 +456,31 @@ mod tests {
     async fn test_doh_resolve() {
         let default_resolver = Arc::new(make_default_resolver().await);
 
-        let c = Arc::new(Mutex::new(
-            DnsClient::new(Opts {
-                r: Some(default_resolver.clone()),
-                host: "cloudflare-dns.com".to_string(),
-                port: 443,
-                net: DNSNetMode::DoH,
-                iface: None,
-            })
-            .await
-            .expect("build client"),
-        ));
+        let c = DnsClient::new(Opts {
+            r: Some(default_resolver.clone()),
+            host: "cloudflare-dns.com".to_string(),
+            port: 443,
+            net: DNSNetMode::DoH,
+            iface: None,
+        })
+        .await
+        .expect("build client");
+
+        test_client(c).await;
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_dhcp_client() {
+        let c = DnsClient::new(Opts {
+            r: None,
+            host: "en0".to_string(),
+            port: 0,
+            net: DNSNetMode::DHCP,
+            iface: None,
+        })
+        .await
+        .expect("build client");
 
         test_client(c).await;
     }
@@ -508,7 +506,7 @@ mod tests {
         }
     }
 
-    async fn test_client(c: Arc<Mutex<DnsClient>>) -> () {
+    async fn test_client(c: ThreadSafeDNSClient) -> () {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
         q.set_name(rr::Name::from_utf8("www.google.com").unwrap());

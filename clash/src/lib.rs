@@ -4,6 +4,7 @@ extern crate core;
 
 use std::borrow::{Borrow, BorrowMut};
 
+use log::Level::{Debug, Info};
 use state::Storage;
 use std::cell::RefCell;
 use std::io;
@@ -158,6 +159,14 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     futures::future::select_all(tasks).await;
     Ok(())
+}
+
+#[cfg(test)]
+#[ctor::ctor]
+fn setup_tests() {
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+    );
 }
 
 #[cfg(test)]

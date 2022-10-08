@@ -23,6 +23,8 @@ byteorder = "1.4"
 lru_time_cache = "0.11"
 hyper = { version = "0.14", features = ["http1","http2","client"] }
 tower = { version = "0.4", features = ["util"] }
+libc = "0.2"
+network-interface = "0.1"
 
 
 serde = { version = "1.0", features=["derive"] }
@@ -32,14 +34,16 @@ trust-dns-client = "0.22"
 trust-dns-proto = { version = "0.22", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 # DoH
 rustls = "0.20"
-webpki-roots = "0.22.5"
+webpki-roots = "0.22"
+dhcproto = "0.8"
 
 rand = "0.8"
-get_if_addrs = "0.5.3"
 
-socket2 = "0.4.4"
+socket2 = "0.4"
 
 async-socks5 = "0.5"
 
 [dev-dependencies]
 tempfile = "3.3"
+ctor = "0.1"
+env_logger = "0.9"

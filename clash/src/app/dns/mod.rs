@@ -3,7 +3,7 @@ use ipnet::AddrParseError;
 use regex::Regex;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::{collections::HashMap, net::IpAddr, sync::Arc};
+use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 use std::{fmt, net};
 use tower::ServiceExt;
 use trust_dns_proto::op;
@@ -11,6 +11,7 @@ use url::Url;
 
 use crate::{common::trie, config::def::DNSMode, Error};
 
+mod dhcp;
 mod dns_client;
 mod fakeip;
 mod filters;
@@ -22,7 +23,7 @@ pub use resolver::Resolver;
 
 #[async_trait]
 pub trait Client: Sync + Send {
-    async fn exchange(&mut self, msg: &op::Message) -> Result<op::Message, Error>;
+    async fn exchange(&mut self, msg: &op::Message) -> anyhow::Result<op::Message>;
 }
 
 type ThreadSafeDNSClient = Arc<futures::lock::Mutex<dyn Client>>;
@@ -93,7 +94,8 @@ impl Config {
                     net = "DoH";
                 }
                 "dhcp" => {
-                    unimplemented!();
+                    addr = host.to_string();
+                    net = "DHCP";
                 }
                 _ => {
                     return Err(Error::InvalidConfig(String::from(format!(

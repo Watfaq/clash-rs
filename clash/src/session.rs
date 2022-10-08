@@ -3,6 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
+use crate::proxy::utils::Interface;
 use bytes::BufMut;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -284,7 +285,7 @@ pub struct Session {
     /// The packet mark SO_MARK
     pub packet_mark: Option<u32>,
     /// The bind interface
-    pub iface: Option<SocketAddr>,
+    pub iface: Option<Interface>,
 }
 
 impl Default for Session {
@@ -310,7 +311,7 @@ impl Clone for Session {
             destination: self.destination.clone(),
             outbound_target: self.outbound_target.clone(),
             packet_mark: self.packet_mark,
-            iface: self.iface,
+            iface: self.iface.as_ref().map(|x| x.clone()),
         }
     }
 }

@@ -8,11 +8,39 @@ use std::time::Duration;
 use tokio::net::{TcpSocket, UdpSocket};
 use tokio::time::timeout;
 
+#[derive(Clone)]
+pub enum Interface {
+    IpAddr(IpAddr),
+    Name(String),
+}
+
+fn maybe_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
+    match iface {
+        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(ip.clone(), 0).into()),
+        Interface::Name(name) => unsafe {
+            #[cfg(target_vendor = "apple")]
+            {
+                socket.bind_device_by_index(std::num::NonZeroU32::new(unsafe {
+                    libc::if_nametoindex(name.as_str().as_ptr() as *const _)
+                }))
+            }
+            #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+            {
+                socket.bind_device(&name)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                // TODO maybe fallback to IpAddr
+            }
+        },
+    }
+}
+
 pub async fn new_tcp_stream(
     dns_client: ThreadSafeDNSResolver,
     address: &str,
     port: u16,
-    iface: Option<SocketAddr>,
+    iface: Option<&Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = dns_client
@@ -30,9 +58,8 @@ pub async fn new_tcp_stream(
         IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,
     };
 
-    if iface.is_some() {
-        //TODO: bind iface name
-        socket.bind(&iface.unwrap().into())?;
+    if let Some(iface) = iface {
+        maybe_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -55,9 +82,8 @@ pub async fn new_tcp_stream(
 
 pub async fn new_udp_socket(
     src: &SocketAddr,
-    iface: Option<SocketAddr>,
+    iface: Option<&Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-    _packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = if src.is_ipv4() {
         socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
@@ -65,8 +91,8 @@ pub async fn new_udp_socket(
         socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?
     };
 
-    if iface.is_some() {
-        socket.bind(&iface.unwrap().into())?;
+    if let Some(iface) = iface {
+        maybe_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

@@ -243,7 +243,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                 dns_client,
                 &sess.destination.host().to_string(),
                 sess.destination.port(),
-                sess.iface,
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 sess.packet_mark,
             )
@@ -252,7 +252,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                 dns_client,
                 &addr,
                 port,
-                sess.iface,
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 sess.packet_mark,
             )
@@ -269,7 +269,13 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         match self.datagram()?.connect_addr() {
             OutboundConnect::Proxy(network, addr, port) => match network {
                 Network::Udp => {
-                    let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
+                    let socket = new_udp_socket(
+                        &sess.source,
+                        sess.iface.as_ref(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        sess.packet_mark,
+                    )
+                    .await?;
                     Ok(OutboundTransport::Datagram(Box::new(
                         SimpleOutboundDatagram::new(socket, None, dns_resolver.clone()),
                     )))
@@ -279,7 +285,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                         dns_resolver.clone(),
                         &addr,
                         port,
-                        sess.iface,
+                        sess.iface.as_ref(),
                         #[cfg(any(target_os = "linux", target_os = "android"))]
                         sess.packet_mark,
                     )
@@ -288,7 +294,13 @@ pub trait OutboundHandler: Sync + Send + Unpin {
                 }
             },
             OutboundConnect::None => {
-                let socket = new_udp_socket(&sess.source, sess.iface, sess.packet_mark).await?;
+                let socket = new_udp_socket(
+                    &sess.source,
+                    sess.iface.as_ref(),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    sess.packet_mark,
+                )
+                .await?;
                 let dest = match &sess.destination {
                     SocksAddr::Domain(host, port) => Some(SocksAddr::Domain(host.into(), *port)),
                     _ => None,
