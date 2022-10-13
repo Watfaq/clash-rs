@@ -1,8 +1,9 @@
 use crate::proxy::utils::Interface;
 use crate::session::Session;
-use crate::ThreadSafeDNSResolver;
+use crate::{Dispatcher, NatManager, ThreadSafeDNSResolver};
 use async_trait::async_trait;
 use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -13,6 +14,14 @@ pub mod reject;
 pub mod http;
 //pub mod shadowsocks;
 pub mod utils;
+
+#[derive(thiserror::Error, Debug)]
+pub enum ProxyError {
+    #[error("proxy error: {0}")]
+    General(String),
+    #[error("invalid url: {0}")]
+    InvalidUrl(String),
+}
 
 pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}

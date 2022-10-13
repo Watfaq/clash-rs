@@ -276,8 +276,6 @@ pub struct Session {
     pub network: Network,
     /// The socket address of the remote peer of an inbound connection.
     pub source: SocketAddr,
-    /// The socket address of the local socket of an inbound connection.
-    pub local_addr: SocketAddr,
     /// The proxy target address of a proxy connection.
     pub destination: SocksAddr,
     /// The outbound target
@@ -293,7 +291,6 @@ impl Default for Session {
         Self {
             network: Network::Tcp,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
-            local_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
             outbound_target: "".to_string(),
             packet_mark: None,
@@ -307,7 +304,6 @@ impl Clone for Session {
         Self {
             network: self.network,
             source: self.source,
-            local_addr: self.local_addr,
             destination: self.destination.clone(),
             outbound_target: self.outbound_target.clone(),
             packet_mark: self.packet_mark,

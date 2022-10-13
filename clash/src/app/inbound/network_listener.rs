@@ -2,7 +2,7 @@ use crate::app::nat_manager::UdpPacket;
 use crate::config::internal::config::BindAddress;
 use crate::proxy::AnyInboundListener;
 use crate::session::{Network, Session, SocksAddr};
-use crate::Error::ProxyError;
+
 use crate::{Dispatcher, Error, NatManager, Runner};
 use log::info;
 use std::io;
@@ -30,9 +30,7 @@ impl NetworkInboundListener {
 
         {
             info!("{} TCP listening at: {}", self.name, &listen_addr);
-            let listen_addr_cloned = listen_addr.clone();
             let dispatcher_cloned = self.dispatcher.clone();
-            let nat_manager_cloned = self.nat_manager.clone();
             let listener = self.listener.clone();
 
             runners.push(Box::pin(async move {
@@ -44,7 +42,6 @@ impl NetworkInboundListener {
 
         {
             info!("{} UDP listening at: {}", self.name, &listen_addr);
-            let listen_addr_cloned = listen_addr.clone();
             let dispatcher_cloned = self.dispatcher.clone();
             let nat_manager_cloned = self.nat_manager.clone();
             let listener = self.listener.clone();

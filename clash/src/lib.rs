@@ -42,8 +42,6 @@ pub enum Error {
     ProfileError(String),
     #[error("dns error: {0}")]
     DNSError(String),
-    #[error("proxy error: {0}")]
-    ProxyError(String),
 }
 
 pub type Runner = futures::future::BoxFuture<'static, ()>;

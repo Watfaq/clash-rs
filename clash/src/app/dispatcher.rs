@@ -6,7 +6,7 @@ use crate::session::Session;
 
 use std::io;
 
-use tokio::io::{copy_bidirectional, AsyncWriteExt};
+use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
@@ -27,7 +27,10 @@ impl Dispatcher {
         }
     }
 
-    pub async fn dispatch_stream(&self, mut sess: Session, mut lhs: AnyStream) {
+    pub async fn dispatch_stream<S>(&self, mut sess: Session, mut lhs: Box<S>)
+    where
+        S: AsyncRead + AsyncWrite + Unpin + ?Sized,
+    {
         let outbound_name = self
             .router
             .read()

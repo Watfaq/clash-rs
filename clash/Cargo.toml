@@ -3,7 +3,7 @@ name = "clash"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -21,9 +21,10 @@ regex = "1"
 state = "0.5"
 byteorder = "1.4"
 lru_time_cache = "0.11"
-hyper = { version = "0.14", features = ["http1","http2","client"] }
+hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp"] }
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
+tokio-pipe = "0.2.12"
 network-interface = { path = "../../network-interface"}
 
 serde = { version = "1.0", features=["derive"] }
@@ -39,10 +40,6 @@ dhcproto = "0.8"
 rand = "0.8"
 
 socket2 = "0.4"
-
-async-socks5 = "0.5"
-
-shadowsocks = "1.14"
 
 [dev-dependencies]
 tempfile = "3.3"
