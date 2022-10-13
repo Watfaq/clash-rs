@@ -9,6 +9,7 @@ use trust_dns_client::{
     client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
 };
 
+use crate::common::tls;
 use crate::dns::dhcp::DhcpClient;
 use crate::dns::ThreadSafeDNSClient;
 use tokio::net::UdpSocket as TokioUdpSocket;
@@ -32,7 +33,7 @@ pub struct DnsClient {
     c: client::AsyncClient,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
     UDP,
     TCP,
@@ -189,6 +190,12 @@ impl DnsClient {
                             .with_root_certificates(root_store)
                             .with_no_client_auth();
                         tls_config.alpn_protocols = vec!["h2".into()];
+
+                        if opts.host == ip.to_string() {
+                            tls_config
+                                .dangerous()
+                                .set_certificate_verifier(Arc::new(tls::NoHostnameTlsVerifier));
+                        }
 
                         let mut stream_builder =
                             HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));

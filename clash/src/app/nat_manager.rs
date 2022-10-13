@@ -98,75 +98,7 @@ impl NatManager {
         client_ch_tx: Sender<UdpPacket>,
         guard: &mut MutexGuard<'a, SessionMap>,
     ) {
-        // the task is taken(), next time it's None
-        if let Some(task) = self.timeout_check_task.lock().await.take() {
-            tokio::spawn(task);
-        }
-
-        let (target_ch_tx, mut target_ch_rx) = mpsc::channel(64);
-        let (downlink_abort_tx, downlink_abort_rx) = oneshot::channel();
-
-        guard.insert(raddr, (target_ch_tx, downlink_abort_tx, Instant::now()));
-
-        let dispatcher = self.dispatcher.clone();
-        let sessions = self.sessions.clone();
-
-        tokio::spawn(async move {
-            let socket = match dispatcher.dispatch_datagram(sess).await {
-                Ok(s) => s,
-                Err(_e) => {
-                    sessions.lock().await.remove(&raddr);
-                    return;
-                }
-            };
-
-            let (mut target_socket_recv, mut target_socket_send) = socket.split();
-            let downlink_task = async move {
-                let mut buf = vec![0u8; 1500 * 2]; // double MTU
-                loop {
-                    match target_socket_recv.recv_from(&mut buf).await {
-                        Err(_err) => {
-                            break;
-                        }
-                        Ok((n, addr)) => {
-                            let packet = UdpPacket::new(
-                                (&buf[..n]).to_vec(),
-                                addr.clone(),
-                                SocksAddr::from(raddr.address),
-                            );
-
-                            if let Err(_err) = client_ch_tx.send(packet).await {
-                                break;
-                            }
-                            {
-                                let mut sessions = sessions.lock().await;
-                                if let Some(sess) = sessions.get_mut(&raddr) {
-                                    sess.2 = Instant::now();
-                                }
-                            }
-                        }
-                    }
-                }
-                sessions.lock().await.remove(&raddr);
-            };
-
-            let (downlink_task, downlink_task_handle) = abortable(downlink_task);
-            tokio::spawn(downlink_task);
-
-            tokio::spawn(async move {
-                let _ = downlink_abort_rx.await;
-                downlink_task_handle.abort();
-            });
-
-            tokio::spawn(async move {
-                while let Some(pkt) = target_ch_rx.recv().await {
-                    if let Err(_e) = target_socket_send.send_to(&pkt.data, &pkt.dst_addr).await {
-                        break;
-                    }
-                }
-                if let Err(_e) = target_socket_send.close().await {}
-            });
-        });
+        todo!()
     }
     async fn _send<'a>(&self, key: &DatagramSource, pkt: UdpPacket) {
         if let Some(sess) = self.sessions.lock().await.get_mut(key) {

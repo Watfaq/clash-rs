@@ -19,8 +19,8 @@ pub enum OutboundProxy {
 impl OutboundProxy {
     pub(crate) fn name(&self) -> String {
         match self {
-            OutboundProxy::ProxyServer(s) => s.to_string(),
-            OutboundProxy::ProxyGroup(g) => g.to_string(),
+            OutboundProxy::ProxyServer(s) => s.name().to_string(),
+            OutboundProxy::ProxyGroup(g) => g.name().to_string(),
         }
     }
 }
@@ -53,6 +53,18 @@ pub enum OutboundProxyProtocol {
     Trojan(OutboundTrojan),
 }
 
+impl OutboundProxyProtocol {
+    fn name(&self) -> &str {
+        match &self {
+            OutboundProxyProtocol::Direct => PROXY_DIRECT,
+            OutboundProxyProtocol::Reject => PROXY_REJECT,
+            OutboundProxyProtocol::Ss(ss) => &ss.name,
+            OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
+            OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
+        }
+    }
+}
+
 impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
     type Error = crate::Error;
 
@@ -65,11 +77,11 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
 impl Display for OutboundProxyProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OutboundProxyProtocol::Ss(ss) => write!(f, "{}", ss.name),
-            OutboundProxyProtocol::Socks5(s5) => write!(f, "{}", s5.name),
+            OutboundProxyProtocol::Ss(ss) => write!(f, "Shadowsocks"),
+            OutboundProxyProtocol::Socks5(s5) => write!(f, "Socks5"),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
-            OutboundProxyProtocol::Trojan(trojan) => write!(f, "{}", trojan.name),
+            OutboundProxyProtocol::Trojan(trojan) => write!(f, "{}", "Trojan"),
         }
     }
 }
@@ -132,6 +144,18 @@ pub enum OutboundGroupProtocol {
     LoadBalance(OutboundGroupLoadBalance),
     #[serde(rename = "select")]
     Select(OutboundGroupSelect),
+}
+
+impl OutboundGroupProtocol {
+    fn name(&self) -> &str {
+        match &self {
+            OutboundGroupProtocol::Relay(g) => &g.name,
+            OutboundGroupProtocol::UrlTest(g) => &g.name,
+            OutboundGroupProtocol::Fallback(g) => &g.name,
+            OutboundGroupProtocol::LoadBalance(g) => &g.name,
+            OutboundGroupProtocol::Select(g) => &g.name,
+        }
+    }
 }
 
 impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ipnet::AddrParseError;
+use log::debug;
 use regex::Regex;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -90,7 +91,7 @@ impl Config {
                     net = "DoT";
                 }
                 "https" => {
-                    addr = format!("https://{}{}", &host, url.path());
+                    addr = Config::host_with_default_port(&host, "443")?;
                     net = "DoH";
                 }
                 "dhcp" => {

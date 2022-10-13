@@ -141,7 +141,7 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     };
 
     new_udp_socket(
-        &listen_addr.parse().expect("must parse"),
+        Some(&listen_addr.parse().expect("must parse")),
         Some(&Interface::Name(iface.to_string())),
     )
     .await

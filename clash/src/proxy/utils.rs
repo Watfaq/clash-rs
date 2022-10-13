@@ -1,5 +1,5 @@
 use crate::app::ThreadSafeDNSResolver;
-use crate::proxy::AnyStream;
+use crate::proxy::{AnyStream, ProxyStream};
 
 use hyper::body::HttpBody;
 use std::io;
@@ -12,6 +12,29 @@ use tokio::time::timeout;
 pub enum Interface {
     IpAddr(IpAddr),
     Name(String),
+}
+
+impl Interface {
+    pub fn into_ip_addr(self) -> Option<IpAddr> {
+        match self {
+            Interface::IpAddr(ip) => Some(ip),
+            Interface::Name(_) => None,
+        }
+    }
+
+    pub fn into_socket_addr(self) -> Option<SocketAddr> {
+        match self {
+            Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
+            Interface::Name(_) => None,
+        }
+    }
+
+    pub fn into_iface_name(self) -> Option<String> {
+        match self {
+            Interface::IpAddr(_) => None,
+            Interface::Name(iface) => Some(iface),
+        }
+    }
 }
 
 fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
@@ -82,17 +105,24 @@ pub async fn new_tcp_stream(
 }
 
 pub async fn new_udp_socket(
-    src: &SocketAddr,
+    src: Option<&SocketAddr>,
     iface: Option<&Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
-    let socket = if src.is_ipv4() {
-        socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
-    } else {
-        socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?
+    let socket = match src {
+        Some(src) => {
+            if src.is_ipv4() {
+                socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
+            } else {
+                socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?
+            }
+        }
+        None => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
     };
 
-    socket.bind(&src.clone().into())?;
+    if let Some(src) = src {
+        socket.bind(&src.clone().into())?;
+    }
 
     if let Some(iface) = iface {
         must_bind_socket_on_interface(&socket, iface)?;

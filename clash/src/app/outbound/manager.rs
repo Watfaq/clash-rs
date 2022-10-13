@@ -4,11 +4,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::config::internal::proxy::{PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::reject;
 use crate::{
     app::ThreadSafeDNSResolver,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
-    proxy::{direct, outbound::HandlerBuilder, socks, AnyOutboundHandler},
+    proxy::{direct, AnyOutboundHandler},
     Error,
 };
 
@@ -44,40 +45,13 @@ impl OutboundManager {
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
-                    handlers.insert(
-                        "DIRECT".to_string(),
-                        HandlerBuilder::default()
-                            .name("DIRECT")
-                            .stream_handler(Box::new(direct::StreamHandler))
-                            .datagram_handler(Box::new(direct::DatagramHandler))
-                            .build(),
-                    );
+                    handlers.insert(PROXY_DIRECT.to_string(), direct::Handler::new());
                 }
 
                 OutboundProxyProtocol::Reject => {
-                    handlers.insert(
-                        "REJECT".to_string(),
-                        HandlerBuilder::default()
-                            .name("REJECT")
-                            .stream_handler(Box::new(reject::StreamHandler))
-                            .datagram_handler(Box::new(reject::DatagramHandler))
-                            .build(),
-                    );
+                    handlers.insert(PROXY_REJECT.to_string(), reject::Handler::new());
                 }
 
-                OutboundProxyProtocol::Socks5(proto) => {
-                    let stream = Box::new(socks::outbound::StreamHandler {
-                        address: proto.server.clone(),
-                        port: proto.port,
-                    });
-                    handlers.insert(
-                        proto.name.clone(),
-                        HandlerBuilder::default()
-                            .name(proto.name.as_str())
-                            .stream_handler(stream)
-                            .build(),
-                    );
-                }
                 p => {
                     debug!("proto {} not supported yet", p);
                 }
