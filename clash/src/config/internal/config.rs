@@ -8,6 +8,7 @@ use tower::ServiceExt;
 use crate::config::def;
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
 use crate::config::internal::rule::Rule;
+use crate::proxy::utils::Interface;
 use crate::{
     app::dns,
     config::def::{Experimental, LogLevel, RunMode},
@@ -60,10 +61,10 @@ impl TryFrom<def::Config> for Config {
                 log_level: c.log_level,
                 ipv6: c.ipv6.unwrap_or(false),
                 interface: c.interface.as_ref().map(|iface| {
-                    if let Ok(addr) = iface.parse::<SocketAddr>() {
-                        BindInterface::Addr(addr)
+                    if let Ok(addr) = iface.parse::<IpAddr>() {
+                        Interface::IpAddr(addr)
                     } else {
-                        BindInterface::Name(iface.to_string())
+                        Interface::Name(iface.to_string())
                     }
                 }),
                 routing_mask: c.routing_mask,
@@ -155,18 +156,13 @@ mod tests {
     }
 }
 
-pub enum BindInterface {
-    Name(String),
-    Addr(SocketAddr),
-}
-
 pub struct General {
     pub(crate) inbound: Inbound,
     controller: Controller,
     mode: RunMode,
     pub log_level: LogLevel,
     ipv6: bool,
-    interface: Option<BindInterface>,
+    interface: Option<Interface>,
     routing_mask: Option<u32>,
 }
 
@@ -178,7 +174,7 @@ pub struct Profile {
 #[derive(Clone)]
 pub enum BindAddress {
     Any,
-    One(IpAddr),
+    One(Interface),
 }
 
 impl FromStr for BindAddress {
@@ -187,9 +183,13 @@ impl FromStr for BindAddress {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "*" => Ok(Self::Any),
-            _ => Ok(Self::One(s.parse::<IpAddr>().map_err(|x| {
-                Error::InvalidConfig(format!("invalid bind-address: {}, {}", s, x.to_string()))
-            })?)),
+            _ => {
+                if let Ok(ip) = s.parse::<IpAddr>() {
+                    Ok(BindAddress::One(Interface::IpAddr(ip)))
+                } else {
+                    Ok(BindAddress::One(Interface::Name(s.to_string())))
+                }
+            }
         }
     }
 }

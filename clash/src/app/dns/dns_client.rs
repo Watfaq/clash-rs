@@ -167,9 +167,14 @@ impl DnsClient {
                                 Arc::new(tls_config),
                             );
 
-                        let (client, bg) = client::AsyncClient::new(stream, sender, None)
-                            .await
-                            .map_err(|x| Error::DNSError(x.to_string()))?;
+                        let (client, bg) = client::AsyncClient::with_timeout(
+                            stream,
+                            sender,
+                            Duration::from_secs(5),
+                            None,
+                        )
+                        .await
+                        .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
                         Ok(Arc::new(Mutex::new(Self { c: client })))
@@ -211,6 +216,7 @@ impl DnsClient {
                             net::SocketAddr::new(ip, opts.port),
                             opts.host,
                         );
+
                         let (client, bg) = client::AsyncClient::connect(stream)
                             .await
                             .map_err(|x| Error::DNSError(x.to_string()))?;

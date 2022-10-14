@@ -1,16 +1,20 @@
 mod connector;
 
+use crate::config::internal::config::BindAddress;
 use crate::proxy::http::inbound::connector::Connector;
+use crate::proxy::utils::Interface;
 use crate::proxy::{InboundListener, ProxyError};
 use crate::session::{Network, Session, SocksAddr};
 use crate::{Dispatcher, NatManager};
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
+use hyper::body::HttpBody;
 use hyper::http::uri::Scheme;
 use hyper::server::conn::{AddrStream, Http};
 use hyper::service::make_service_fn;
 use hyper::{http, Body, Client, Method, Request, Response, Server, Uri};
 use log::error;
+use network_interface::NetworkInterfaceConfig;
 use std::convert::Infallible;
 use std::io;
 use std::net::{IpAddr, SocketAddr, TcpListener};
@@ -44,10 +48,12 @@ fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
-    nat_manager: Arc<NatManager>,
 }
 
 impl Listener {
+    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> Self {
+        Self { addr, dispatcher }
+    }
     async fn proxy(
         req: Request<Body>,
         client: Client<Connector>,
@@ -95,9 +101,15 @@ impl Listener {
 
 #[async_trait]
 impl InboundListener for Listener {
-    async fn listen_tcp(&self) -> std::io::Result<()> {
-        let listener = TcpListener::bind(self.addr)?;
+    fn handle_tcp(&self) -> bool {
+        true
+    }
 
+    fn handle_udp(&self) -> bool {
+        false
+    }
+
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         let make_service = make_service_fn(move |socket: &AddrStream| {
             let remote_addr = socket.remote_addr();
 
@@ -113,6 +125,8 @@ impl InboundListener for Listener {
                 }))
             }
         });
+
+        let listener = TcpListener::bind(self.addr)?;
 
         let server = Server::from_tcp(listener.into())
             .map_err(map_error)?

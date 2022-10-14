@@ -9,6 +9,7 @@ use crate::app::ThreadSafeDNSResolver;
 use crate::config::internal::rule::Rule;
 use crate::session::{Session, SocksAddr};
 
+use crate::app::router::rules::final_::Final;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -73,7 +74,7 @@ impl Router {
                     Rule::ProcessName => todo!(),
                     Rule::ProcessPath => todo!(),
                     Rule::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),
-                    Rule::Match { .. } => todo!(),
+                    Rule::Match { target } => Box::new(Final { target }),
                 })
                 .collect(),
             dns_client,

@@ -34,6 +34,8 @@ pub struct CommonOption {
 
 #[async_trait]
 pub trait InboundListener: Send + Sync + Unpin {
+    fn handle_tcp(&self) -> bool;
+    fn handle_udp(&self) -> bool;
     async fn listen_tcp(&self) -> io::Result<()>;
     async fn listen_udp(&self) -> io::Result<()>;
 }

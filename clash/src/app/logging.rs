@@ -15,13 +15,17 @@ pub fn setup_logging(level: LogLevel) -> anyhow::Result<()> {
                 message,
             ))
         })
-        .level(match level {
-            LogLevel::Debug => LevelFilter::Debug,
-            LogLevel::Info => LevelFilter::Info,
-            LogLevel::Warning => LevelFilter::Warn,
-            LogLevel::Error => LevelFilter::Error,
-            LogLevel::Silent => LevelFilter::Off,
-        })
+        .level(LevelFilter::Off)
+        .level_for(
+            "clash",
+            match level {
+                LogLevel::Debug => LevelFilter::Debug,
+                LogLevel::Info => LevelFilter::Info,
+                LogLevel::Warning => LevelFilter::Warn,
+                LogLevel::Error => LevelFilter::Error,
+                LogLevel::Silent => LevelFilter::Off,
+            },
+        )
         .chain(std::io::stdout())
         .apply()
         .map_err(|x| anyhow!(x))
