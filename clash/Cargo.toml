@@ -24,7 +24,6 @@ lru_time_cache = "0.11"
 hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp"] }
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
-tokio-pipe = "0.2.12"
 network-interface = { path = "../../network-interface"}
 
 serde = { version = "1.0", features=["derive"] }

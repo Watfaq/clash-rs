@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use futures::lock::{Mutex, MutexGuard};
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use hyper::body::HttpBody;
-use log::{debug, error};
+use log::{debug, error, warn};
 use rand::prelude::SliceRandom;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefCell};
@@ -14,6 +14,7 @@ use trust_dns_proto::{op, rr};
 
 use crate::def::DNSMode;
 use crate::dns::dns_client::DNSNetMode;
+use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
 use crate::proxy::utils::Interface;
 use crate::{common::trie, dns, Error};
@@ -274,7 +275,7 @@ impl Resolver {
         let default_resolver = Arc::new(Resolver {
             ipv6: false,
             hosts: None,
-            main: Resolver::make_clients(cfg.default_nameserver, None).await,
+            main: make_clients(cfg.default_nameserver, None).await,
             fallback: None,
             fallback_domain_filters: None,
             fallback_ip_filters: None,
@@ -284,10 +285,10 @@ impl Resolver {
 
         let r = Resolver {
             ipv6: cfg.ipv6,
-            main: Resolver::make_clients(cfg.nameserver, Some(default_resolver.clone())).await,
+            main: make_clients(cfg.nameserver, Some(default_resolver.clone())).await,
             hosts: cfg.hosts,
             fallback: if cfg.fallback.len() > 0 {
-                Some(Resolver::make_clients(cfg.fallback, Some(default_resolver.clone())).await)
+                Some(make_clients(cfg.fallback, Some(default_resolver.clone())).await)
             } else {
                 None
             },
@@ -329,9 +330,7 @@ impl Resolver {
                 for (domain, ns) in cfg.nameserver_policy {
                     p.insert(
                         domain.as_str(),
-                        Arc::new(
-                            Resolver::make_clients(vec![ns], Some(default_resolver.clone())).await,
-                        ),
+                        Arc::new(make_clients(vec![ns], Some(default_resolver.clone())).await),
                     );
                 }
                 Some(p)
@@ -343,45 +342,6 @@ impl Resolver {
         r
     }
 
-    pub async fn make_clients(
-        servers: Vec<NameServer>,
-        resolver: Option<Arc<dyn ClashResolver>>,
-    ) -> Vec<ThreadSafeDNSClient> {
-        let mut rv = Vec::new();
-
-        for s in servers {
-            debug!("building nameserver: {:?}", s);
-
-            let (host, port) = if s.net == DNSNetMode::DHCP {
-                (s.address.as_str(), "0")
-            } else {
-                let port = s.address.split(":").last().unwrap();
-                let host = s
-                    .address
-                    .strip_suffix(format!(":{}", port).as_str())
-                    .expect(format!("invalid address: {}", s.address).as_str());
-                (host, port)
-            };
-
-            match DnsClient::new(Opts {
-                r: resolver.as_ref().map(|x| x.clone()),
-                host: host.to_string(),
-                port: port
-                    .parse::<u16>()
-                    .expect(format!("no port for DNS server: {}", s.address).as_str()),
-                net: s.net,
-                iface: s.interface.map(|x| Interface::Name(x)),
-            })
-            .await
-            {
-                Ok(c) => rv.push(c),
-                Err(e) => error!("initializing DNS client: {}", e),
-            }
-        }
-
-        rv
-    }
-
     pub async fn batch_exchange(
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
@@ -389,7 +349,16 @@ impl Resolver {
         let mut queries = Vec::new();
         for c in clients {
             // TODO: how to use .map()
-            queries.push(async move { c.lock().await.exchange(message).await }.boxed())
+            queries.push(
+                async move {
+                    c.lock()
+                        .await
+                        .exchange(message)
+                        .inspect_err(|x| warn!("DNS resolve error: {}", x.to_string()))
+                        .await
+                }
+                .boxed(),
+            )
         }
 
         let timeout = tokio::time::sleep(Duration::from_secs(10));
@@ -407,6 +376,7 @@ impl Resolver {
 #[cfg(test)]
 mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
+    use crate::dns::helper::make_clients;
     use crate::dns::{ClashResolver, Client, NameServer, Resolver, ThreadSafeDNSClient};
     use crate::{def, dns};
     use futures::lock::Mutex;
@@ -498,7 +468,7 @@ mod tests {
         Resolver {
             ipv6: false,
             hosts: None,
-            main: Resolver::make_clients(
+            main: make_clients(
                 vec![NameServer {
                     net: DNSNetMode::UDP,
                     address: "8.8.8.8:53".to_string(),

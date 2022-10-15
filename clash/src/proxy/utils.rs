@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::net::{TcpSocket, UdpSocket};
 use tokio::time::timeout;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Interface {
     IpAddr(IpAddr),
     Name(String),
@@ -77,6 +77,7 @@ pub async fn new_tcp_stream(
             io::ErrorKind::Other,
             format!("can't resolve dns: {}", address),
         ))?;
+
     let socket = match dial_addr {
         IpAddr::V4(_) => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?,
         IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,

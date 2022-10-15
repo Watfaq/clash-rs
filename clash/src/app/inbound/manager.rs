@@ -23,11 +23,25 @@ impl InboundManager {
                 "HTTP".to_string(),
                 NetworkInboundListener {
                     name: "HTTP".to_string(),
-                    bind_addr: inbound.bind_address,
+                    bind_addr: inbound.bind_address.clone(),
                     port: http_port,
                     listener_type: ListenerType::HTTP,
-                    dispatcher,
-                    nat_manager,
+                    dispatcher: dispatcher.clone(),
+                    nat_manager: nat_manager.clone(),
+                },
+            );
+        }
+
+        if let Some(socks_port) = inbound.socks_port {
+            network_listeners.insert(
+                "SOCKS5".to_string(),
+                NetworkInboundListener {
+                    name: "SOCKS5".to_string(),
+                    bind_addr: inbound.bind_address,
+                    port: socks_port,
+                    listener_type: ListenerType::SOCKS5,
+                    dispatcher: dispatcher.clone(),
+                    nat_manager: nat_manager.clone(),
                 },
             );
         }

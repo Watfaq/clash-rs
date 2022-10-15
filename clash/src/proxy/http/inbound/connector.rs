@@ -46,13 +46,15 @@ impl tower::Service<Uri> for Connector {
             let (left, right) = duplex(1024 * 1024);
 
             let sess = Session {
-                network: Network::Tcp,
+                network: Network::HTTP,
                 source: src,
                 destination: destination.ok_or(ProxyError::InvalidUrl(url.to_string()))?,
                 ..Default::default()
             };
 
-            dispatcher.dispatch_stream(sess, Box::new(right) as _).await;
+            tokio::spawn(async move {
+                dispatcher.dispatch_stream(sess, Box::new(right) as _).await;
+            });
 
             Ok(Box::new(left) as _)
         }

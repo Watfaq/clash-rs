@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::{net, sync::Arc, time::Duration};
@@ -29,10 +30,6 @@ use crate::Error;
 
 use super::{resolver::ClashResolver, Client};
 
-pub struct DnsClient {
-    c: client::AsyncClient,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
     UDP,
@@ -57,6 +54,7 @@ impl FromStr for DNSNetMode {
     }
 }
 
+#[derive(Clone)]
 pub struct Opts {
     pub r: Option<Arc<dyn ClashResolver>>,
     pub host: String,
@@ -65,11 +63,22 @@ pub struct Opts {
     pub iface: Option<Interface>,
 }
 
+/// DnsClient
+pub struct DnsClient {
+    c: client::AsyncClient,
+
+    // debug purpose
+    host: String,
+    port: u16,
+    net: DNSNetMode,
+    iface: Option<Interface>,
+}
+
 impl DnsClient {
     pub async fn new(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
-        match opts.net {
-            DNSNetMode::DHCP => Ok(Arc::new(Mutex::new(DhcpClient::new(&opts.host)))),
+        match &opts.net {
+            DNSNetMode::DHCP => Ok(Arc::new(Mutex::new(DhcpClient::new(&opts.host).await))),
 
             other => {
                 let ip = if let Some(r) = opts.r {
@@ -101,9 +110,9 @@ impl DnsClient {
                         let stream = UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
                             net::SocketAddr::new(ip, opts.port),
                             // TODO: simplify this match
-                            match opts.iface {
+                            match &opts.iface {
                                 Some(iface) => match iface {
-                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
+                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
                                     _ => None,
                                 },
                                 _ => None,
@@ -115,14 +124,21 @@ impl DnsClient {
                             .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self { c: client })))
+                        Ok(Arc::new(Mutex::new(Self {
+                            c: client,
+
+                            host: opts.host,
+                            port: opts.port,
+                            net: opts.net,
+                            iface: opts.iface,
+                        })))
                     }
                     DNSNetMode::TCP => {
                         let (stream, sender) = TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
                             net::SocketAddr::new(ip, opts.port),
-                            match opts.iface {
+                            match &opts.iface {
                                 Some(iface) => match iface {
-                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
+                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
                                     _ => None,
                                 },
                                 _ => None,
@@ -134,7 +150,13 @@ impl DnsClient {
                             .await
                             .map_err(|x| Error::DNSError(x.to_string()))?;
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self { c: client })))
+                        Ok(Arc::new(Mutex::new(Self {
+                            c: client,
+                            host: opts.host,
+                            port: opts.port,
+                            net: opts.net,
+                            iface: opts.iface,
+                        })))
                     }
                     DNSNetMode::DoT => {
                         let mut root_store = RootCertStore::empty();
@@ -153,19 +175,20 @@ impl DnsClient {
                             .with_no_client_auth();
                         tls_config.alpn_protocols = vec!["dot".into()];
 
-                        let (stream, sender) =
-                            tls_client_connect_with_bind_addr::<AsyncIoTokioAsStd<TokioTcpStream>>(
-                                net::SocketAddr::new(ip, opts.port),
-                                match opts.iface {
-                                    Some(iface) => match iface {
-                                        Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
-                                        _ => None,
-                                    },
+                        let (stream, sender) = tls_client_connect_with_bind_addr::<
+                            AsyncIoTokioAsStd<TokioTcpStream>,
+                        >(
+                            net::SocketAddr::new(ip, opts.port),
+                            match &opts.iface {
+                                Some(iface) => match iface {
+                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
                                     _ => None,
                                 },
-                                opts.host,
-                                Arc::new(tls_config),
-                            );
+                                _ => None,
+                            },
+                            opts.host.clone(),
+                            Arc::new(tls_config),
+                        );
 
                         let (client, bg) = client::AsyncClient::with_timeout(
                             stream,
@@ -177,7 +200,14 @@ impl DnsClient {
                         .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self { c: client })))
+                        Ok(Arc::new(Mutex::new(Self {
+                            c: client,
+
+                            host: opts.host,
+                            port: opts.port,
+                            net: opts.net,
+                            iface: opts.iface,
+                        })))
                     }
                     DNSNetMode::DoH => {
                         let mut root_store = RootCertStore::empty();
@@ -204,17 +234,17 @@ impl DnsClient {
 
                         let mut stream_builder =
                             HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));
-                        if let Some(iface) = opts.iface {
+                        if let Some(iface) = &opts.iface {
                             match iface {
                                 Interface::IpAddr(ip) => {
-                                    stream_builder.bind_addr(net::SocketAddr::new(ip, 0))
+                                    stream_builder.bind_addr(net::SocketAddr::new(ip.clone(), 0))
                                 }
                                 _ => {}
                             }
                         }
                         let stream = stream_builder.build::<AsyncIoTokioAsStd<TokioTcpStream>>(
                             net::SocketAddr::new(ip, opts.port),
-                            opts.host,
+                            opts.host.clone(),
                         );
 
                         let (client, bg) = client::AsyncClient::connect(stream)
@@ -222,12 +252,29 @@ impl DnsClient {
                             .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self { c: client })))
+                        Ok(Arc::new(Mutex::new(Self {
+                            c: client,
+                            host: opts.host,
+                            port: opts.port,
+                            net: opts.net,
+                            iface: opts.iface,
+                        })))
                     }
                     _ => unreachable!("."),
                 }
             }
         }
+    }
+}
+
+impl Debug for DnsClient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DnsClient")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("net", &self.net)
+            .field("iface", &self.iface)
+            .finish()
     }
 }
 

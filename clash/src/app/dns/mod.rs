@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use ipnet::AddrParseError;
 use log::debug;
 use regex::Regex;
+use std::fmt::Debug;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
@@ -16,6 +17,7 @@ mod dhcp;
 mod dns_client;
 mod fakeip;
 mod filters;
+mod helper;
 mod resolver;
 
 use crate::dns::dns_client::DNSNetMode;
@@ -23,7 +25,7 @@ pub use resolver::ClashResolver;
 pub use resolver::Resolver;
 
 #[async_trait]
-pub trait Client: Sync + Send {
+pub trait Client: Sync + Send + Debug {
     async fn exchange(&mut self, msg: &op::Message) -> anyhow::Result<op::Message>;
 }
 

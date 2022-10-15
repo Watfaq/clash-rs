@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Display, Formatter, Write};
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -25,6 +26,19 @@ impl DatagramSource {
 pub enum SocksAddr {
     Ip(SocketAddr),
     Domain(String, u16),
+}
+
+impl Display for SocksAddr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SocksAddr::Ip(ip) => ip.to_string(),
+                SocksAddr::Domain(host, port) => format!("{}:{}", host, port),
+            }
+        )
+    }
 }
 
 struct SocksAddrType;
@@ -267,8 +281,21 @@ impl TryFrom<SocksAddr> for SocketAddr {
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Network {
-    Tcp,
-    Udp,
+    TCP,
+    UDP,
+    HTTP,
+    HTTPS,
+}
+
+impl Display for Network {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Network::TCP => "TCP",
+            Network::UDP => "UDP",
+            Network::HTTP => "HTTP",
+            Network::HTTPS => "HTTPS",
+        })
+    }
 }
 
 pub struct Session {
@@ -289,13 +316,42 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
-            network: Network::Tcp,
+            network: Network::TCP,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
             outbound_target: "".to_string(),
             packet_mark: None,
             iface: None,
         }
+    }
+}
+
+impl Display for Session {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}] {} -> {}",
+            self.network,
+            self.source,
+            match self.network {
+                Network::HTTP => format!("http://{}", self.destination),
+                Network::HTTPS => format!("https://{}", self.destination),
+                _ => self.destination.to_string(),
+            }
+        )
+    }
+}
+
+impl Debug for Session {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("network", &self.network)
+            .field("source", &self.source)
+            .field("destination", &self.destination)
+            .field("outbound_target", &self.outbound_target)
+            .field("packet_mark", &self.packet_mark)
+            .field("iface", &self.iface)
+            .finish()
     }
 }
 

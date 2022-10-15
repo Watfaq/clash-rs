@@ -1,6 +1,6 @@
 use crate::app::nat_manager::UdpPacket;
 use crate::config::internal::config::BindAddress;
-use crate::proxy::{http, AnyInboundListener, InboundListener};
+use crate::proxy::{http, socks, AnyInboundListener, InboundListener};
 use crate::session::{Network, Session, SocksAddr};
 
 use crate::proxy::utils::Interface;
@@ -16,6 +16,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 
 pub enum ListenerType {
     HTTP,
+    SOCKS5,
 }
 
 pub struct NetworkInboundListener {
@@ -95,12 +96,18 @@ impl NetworkInboundListener {
     }
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
-        let listener = match self.listener_type {
+        let listener: AnyInboundListener = match self.listener_type {
             ListenerType::HTTP => {
                 http::Listener::new((ip, self.port).into(), self.dispatcher.clone())
             }
+            ListenerType::SOCKS5 => socks::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+                self.nat_manager.clone(),
+            ),
         };
 
+        // TODO: remove the clone here
         if listener.handle_tcp() {
             info!("{} TCP listening at: {}:{}", self.name, ip, self.port);
 

@@ -1,14 +1,17 @@
 use crate::dns::dns_client::DNSNetMode;
+use crate::dns::helper::make_clients;
 use crate::dns::{Client, NameServer, Resolver, ThreadSafeDNSClient};
 use crate::proxy::utils::{new_udp_socket, Interface};
 use crate::Error;
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::lock::Mutex;
+use futures::FutureExt;
 use ipnet::IpBitAnd;
 use libc::{getifaddrs, malloc};
-use log::debug;
+use log::{debug, error};
 use network_interface::{Addr, NetworkInterfaceConfig};
+use std::fmt::{Debug, Formatter};
 use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::ops::Add;
 use std::rc::Rc;
@@ -18,6 +21,7 @@ use std::time::{Duration, Instant};
 use std::{env, io, mem};
 use tokio::net::UdpSocket;
 use tokio::task::yield_now;
+use tokio::time::interval;
 use trust_dns_proto::op::Message;
 
 const IFACE_TTL: Duration = Duration::from_secs(20);
@@ -34,16 +38,29 @@ pub struct DhcpClient {
     dns_expires_at: std::time::Instant,
 }
 
+impl Debug for DhcpClient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DhcpClient")
+            .field("iface", &self.iface)
+            .field("iface_addr", &self.iface_addr)
+            .field("iface_expires_at", &self.iface_expires_at)
+            .field("clients", &self.clients)
+            .field("dns_expires_at", &self.dns_expires_at)
+            .finish()
+    }
+}
+
 #[async_trait]
 impl Client for DhcpClient {
     async fn exchange(&mut self, msg: &Message) -> anyhow::Result<Message> {
         let clients = self.resolve().await?;
+        debug!("using clients: {:?}", clients);
         tokio::time::timeout(DHCP_TIMEOUT, Resolver::batch_exchange(clients, msg)).await?
     }
 }
 
 impl DhcpClient {
-    pub fn new(iface: &str) -> Self {
+    pub async fn new(iface: &str) -> Self {
         Self {
             iface: iface.to_owned(),
             iface_addr: ipnet::IpNet::default(),
@@ -54,10 +71,10 @@ impl DhcpClient {
     }
 
     async fn resolve(&mut self) -> io::Result<&Vec<ThreadSafeDNSClient>> {
-        let expired = self.lease_expired()?;
+        let expired = self.update_if_lease_expired()?;
         if expired {
-            let dns = unsafe { probe_dns_server(&self.iface).await? };
-            self.clients = Resolver::make_clients(
+            let dns = probe_dns_server(&self.iface).await?;
+            self.clients = make_clients(
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::UDP,
@@ -75,7 +92,11 @@ impl DhcpClient {
 
     /// Check if interface updated or DHCP changed
     /// and update if necessary
-    fn lease_expired(&mut self) -> io::Result<bool> {
+    fn update_if_lease_expired(&mut self) -> io::Result<bool> {
+        if self.clients.is_empty() {
+            return Ok(true);
+        }
+
         if Instant::now() < self.iface_expires_at {
             return Ok(false);
         }
@@ -136,7 +157,7 @@ impl DhcpClient {
 
 async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     let listen_addr = match env::consts::OS {
-        "linux" | "android" => "255.255.255.255:68",
+        "linux" => "255.255.255.255:68",
         _ => "0.0.0.0:68",
     };
 
@@ -147,7 +168,8 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     .await
 }
 
-async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
+async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
+    debug!("probing NS servers from DHCP");
     let socket = listen_dhcp_client(iface).await?;
 
     let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
@@ -186,48 +208,57 @@ async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
             dhcproto::v4::OptionCode::DomainName,
         ]));
 
-    let (tx, mut rx) = tokio::sync::oneshot::channel::<Vec<Ipv4Addr>>();
+    let (mut tx, rx) = tokio::sync::oneshot::channel::<Vec<Ipv4Addr>>();
+
+    let mut rx = rx.fuse();
+
     let r = Arc::new(socket);
     let s = r.clone();
 
     let xid = msg.xid();
     tokio::spawn(async move {
         let mut buf = vec![0u8; 576];
-        let mut maybe_sender = Some(tx);
-        loop {
-            let (n_read, _) = r
-                .recv_from(&mut buf)
-                .await
-                .expect("failed to receive DHCP offer");
 
-            // fucking deep if-else hell
-            if let Ok(reply) = dhcproto::v4::Message::from_bytes(&buf[..n_read]) {
-                if let Some(op) = reply.opts().get(dhcproto::v4::OptionCode::MessageType) {
-                    match op {
-                        dhcproto::v4::DhcpOption::MessageType(msg_type) => {
-                            if msg_type == &dhcproto::v4::MessageType::Offer {
-                                if reply.xid() == xid {
-                                    if let Some(op) =
-                                        reply.opts().get(dhcproto::v4::OptionCode::DomainNameServer)
-                                    {
-                                        match op {
-                                            dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
-                                                if let Some(tx) = maybe_sender.take() {
-                                                    tx.send(dns.clone()).expect("must send");
-                                                    return;
+        let get_response = async move {
+            loop {
+                let (n_read, _) = r
+                    .recv_from(&mut buf)
+                    .await
+                    .expect("failed to receive DHCP offer");
+
+                // fucking deep if-else hell
+                if let Ok(reply) = dhcproto::v4::Message::from_bytes(&buf[..n_read]) {
+                    if let Some(op) = reply.opts().get(dhcproto::v4::OptionCode::MessageType) {
+                        match op {
+                            dhcproto::v4::DhcpOption::MessageType(msg_type) => {
+                                if msg_type == &dhcproto::v4::MessageType::Offer {
+                                    if reply.xid() == xid {
+                                        if let Some(op) = reply
+                                            .opts()
+                                            .get(dhcproto::v4::OptionCode::DomainNameServer)
+                                        {
+                                            match op {
+                                                dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
+                                                    debug!("got NS servers {:?} from DHCP", dns);
+                                                    return dns.clone();
                                                 }
+                                                _ => yield_now().await,
                                             }
-                                            _ => yield_now().await,
                                         }
                                     }
+                                    yield_now().await
                                 }
-                                yield_now().await
                             }
+                            _ => yield_now().await,
                         }
-                        _ => yield_now().await,
                     }
                 }
             }
+        };
+
+        tokio::select! {
+            _ = tx.closed() => {debug!("future cancelled, likely other clients won")},
+            value = get_response => tx.send(value).expect("must send")
         }
     });
 
@@ -235,7 +266,25 @@ async unsafe fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         .await?;
 
     tokio::select! {
-        result = &mut rx  => result.map_err(|x| io::Error::new(io::ErrorKind::Other, "channel error")),
-        _ = tokio::time::sleep(Duration::from_secs(10)) => Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
+        result = &mut rx => {
+            result.map_err(|x| io::Error::new(io::ErrorKind::Other, "channel error"))
+        },
+
+        _ = tokio::time::sleep(Duration::from_secs(10)) => {
+            debug!("DHCP timeout after 10 secs");
+            return Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::dns::dhcp::probe_dns_server;
+    use std::net::Ipv4Addr;
+
+    #[tokio::test]
+    async fn test_probe_ns() {
+        let ns = probe_dns_server("en0").await.expect("must prob");
+        assert!(!ns.is_empty());
     }
 }

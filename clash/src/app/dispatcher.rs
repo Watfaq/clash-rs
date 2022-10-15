@@ -4,6 +4,7 @@ use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::AnyStream;
 use crate::session::Session;
 
+use log::{debug, info, warn};
 use std::io;
 
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -46,12 +47,32 @@ impl Dispatcher {
             .get(outbound_name.as_str())
             .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
 
+        info!("{} matched rule {}", sess, handler.name());
+
         match handler.connect_stream(&sess, self.dns_client.clone()).await {
-            Ok(mut rhs) => match copy_bidirectional(&mut lhs, &mut rhs).await {
-                Ok(_) => {}
-                Err(_) => {}
-            },
-            Err(_) => if let Err(_e) = lhs.shutdown().await {},
+            Ok(mut rhs) => {
+                info!("remote connection established {}", sess);
+                match copy_bidirectional(&mut lhs, &mut rhs).await {
+                    Ok((up, down)) => {
+                        info!(
+                            "connection {} closed with {} bytes up, {} bytes down",
+                            sess, up, down
+                        );
+                    }
+                    Err(err) => {
+                        warn!("connection {} closed with error {}", sess, err)
+                    }
+                }
+            }
+            Err(err) => {
+                warn!(
+                    "failed to establish remote connection {}, error: {}",
+                    sess, err
+                );
+                if let Err(e) = lhs.shutdown().await {
+                    warn!("error closing local connection {}: {}", sess, err)
+                }
+            }
         }
     }
 }

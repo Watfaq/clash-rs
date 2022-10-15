@@ -13,6 +13,7 @@ pub mod reject;
 
 pub mod http;
 //pub mod shadowsocks;
+pub mod socks;
 pub mod utils;
 
 #[derive(thiserror::Error, Debug)]

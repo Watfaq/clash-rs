@@ -3,7 +3,7 @@ mod connector;
 use crate::config::internal::config::BindAddress;
 use crate::proxy::http::inbound::connector::Connector;
 use crate::proxy::utils::Interface;
-use crate::proxy::{InboundListener, ProxyError};
+use crate::proxy::{AnyInboundListener, InboundListener, ProxyError};
 use crate::session::{Network, Session, SocksAddr};
 use crate::{Dispatcher, NatManager};
 use async_trait::async_trait;
@@ -51,8 +51,8 @@ pub struct Listener {
 }
 
 impl Listener {
-    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> Self {
-        Self { addr, dispatcher }
+    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
+        Arc::new(Self { addr, dispatcher }) as _
     }
     async fn proxy(
         req: Request<Body>,
@@ -66,7 +66,7 @@ impl Listener {
                     match hyper::upgrade::on(req).await {
                         Ok(upgraded) => {
                             let sess = Session {
-                                network: Network::Tcp,
+                                network: Network::HTTPS,
                                 source: src,
                                 destination: addr,
 

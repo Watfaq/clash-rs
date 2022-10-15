@@ -79,7 +79,7 @@ impl NatManager {
         }
 
         let sess = sess.cloned().unwrap_or(Session {
-            network: Network::Udp,
+            network: Network::UDP,
             source: dgram_src.address,
             destination: packet.dst_addr.clone(),
             ..Default::default()

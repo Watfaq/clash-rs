@@ -9,10 +9,12 @@ pub fn setup_logging(level: LogLevel) -> anyhow::Result<()> {
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{} [{}] {}",
+                "{} [{}] - {} - {} [L{}]",
                 chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
                 colors.color(record.level()),
                 message,
+                record.file().unwrap_or_default(),
+                record.line().unwrap_or_default(),
             ))
         })
         .level(LevelFilter::Off)
