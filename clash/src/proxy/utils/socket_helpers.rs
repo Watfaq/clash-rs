@@ -1,41 +1,17 @@
-use crate::app::ThreadSafeDNSResolver;
-use crate::proxy::{AnyStream, ProxyStream};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
-use hyper::body::HttpBody;
-use std::io;
-use std::net::{IpAddr, SocketAddr};
-use std::time::Duration;
-use tokio::net::{TcpSocket, UdpSocket};
-use tokio::time::timeout;
+use tokio::{
+    net::{TcpSocket, UdpSocket},
+    time::timeout,
+};
 
-#[derive(Debug, Clone)]
-pub enum Interface {
-    IpAddr(IpAddr),
-    Name(String),
-}
+use crate::{app::ThreadSafeDNSResolver, proxy::AnyStream};
 
-impl Interface {
-    pub fn into_ip_addr(self) -> Option<IpAddr> {
-        match self {
-            Interface::IpAddr(ip) => Some(ip),
-            Interface::Name(_) => None,
-        }
-    }
-
-    pub fn into_socket_addr(self) -> Option<SocketAddr> {
-        match self {
-            Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
-            Interface::Name(_) => None,
-        }
-    }
-
-    pub fn into_iface_name(self) -> Option<String> {
-        match self {
-            Interface::IpAddr(_) => None,
-            Interface::Name(iface) => Some(iface),
-        }
-    }
-}
+use super::Interface;
 
 fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
     match iface {
@@ -61,13 +37,13 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
 }
 
 pub async fn new_tcp_stream(
-    dns_client: ThreadSafeDNSResolver,
+    resolver: ThreadSafeDNSResolver,
     address: &str,
     port: u16,
     iface: Option<&Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
-    let dial_addr = dns_client
+    let dial_addr = resolver
         .read()
         .await
         .resolve(address)

@@ -1,20 +1,30 @@
+use crate::proxy::datagram::{InboundUdp, UdpPacket};
+use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
 use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS_VERSION};
-use crate::session::{Session, SocksAddr};
-use crate::Dispatcher;
+use crate::proxy::{AnyOutboundDatagram, ProxyError};
+use crate::session::{Network, Session, SocksAddr};
+use crate::{Dispatcher, NatManager};
 use bytes::{BufMut, BytesMut};
+use futures::{SinkExt, StreamExt};
+use log::{debug, info};
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::io::Read;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UdpSocket};
+use tokio_util::codec::{Decoder, Framed};
+use tokio_util::udp::UdpFramed;
 
 pub(crate) async fn handle_tcp(
     sess: &mut Session,
     s: &mut TcpStream,
     dispatcher: Arc<Dispatcher>,
     users: &HashMap<String, String>,
+    nat_manager: Arc<NatManager>,
+    listen_addr: &SocketAddr,
 ) -> io::Result<()> {
     // handshake
     let mut buf = BytesMut::new();
@@ -100,9 +110,46 @@ pub(crate) async fn handle_tcp(
             bnd.write_buf(&mut buf);
             s.write_all(&buf[..]).await?;
             sess.destination = addr;
+
+            let mut close_handle = None;
+
+            if buf[1] == socks_command::UDP_ASSOCIATE {
+                let udp_addr = SocketAddr::new(listen_addr.ip(), 0);
+                let (tx, mut rx) = tokio::sync::oneshot::channel();
+                close_handle = Some(tx);
+
+                let udp_inbound = UdpSocket::bind(udp_addr).await?;
+                let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
+
+                let sess = Session {
+                    network: Network::UDP,
+                    packet_mark: None,
+                    iface: None,
+                    ..Default::default()
+                };
+
+                let dispatcher_cloned = dispatcher.clone();
+
+                let handle = tokio::spawn(async move {
+                    tokio::select! {
+                        _ = dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed))) => {
+                            debug!("UDP dispatch finished, maybe with error")
+                        },
+                        _ = &mut rx => {
+                            debug!("UDP association finished, dropping handle")
+                        }
+                    }
+                });
+            }
+
             dispatcher
                 .dispatch_stream(sess.to_owned(), Box::new(s) as _)
                 .await;
+
+            if let Some(mut close_handle) = close_handle {
+                let _ = close_handle.send(1);
+            }
+
             Ok(())
         }
         _ => {

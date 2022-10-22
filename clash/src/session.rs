@@ -1,3 +1,4 @@
+use byteorder::ReadBytesExt;
 use std::fmt::{Debug, Display, Formatter, Write};
 use std::{
     io,
@@ -5,7 +6,7 @@ use std::{
 };
 
 use crate::proxy::utils::Interface;
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 pub type StreamId = u64;
@@ -125,6 +126,50 @@ impl SocksAddr {
                 SocketAddr::V6(_) => 1 + 16 + 2,
             },
             SocksAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
+        }
+    }
+
+    pub fn peek_read(buf: &[u8]) -> io::Result<Self> {
+        let mut cur = io::Cursor::new(buf);
+        Self::peek_cursor(&mut cur)
+    }
+
+    #[inline]
+    fn peek_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> io::Result<Self> {
+        if cur.remaining() < 2 {
+            return Err(io::Error::new(io::ErrorKind::Other, "invalid buf"));
+        }
+
+        let atyp = cur.get_u8();
+        match atyp {
+            SocksAddrType::V4 => {
+                if cur.remaining() < 4 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf"));
+                }
+                let addr = Ipv4Addr::from(cur.get_u32());
+                let port = cur.get_u16();
+                Ok(Self::Ip((addr, port).into()))
+            }
+            SocksAddrType::V6 => {
+                if cur.remaining() < 16 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf"));
+                }
+                let addr = Ipv6Addr::from(cur.get_u128());
+                let port = cur.get_u16();
+                Ok(Self::Ip((addr, port).into()))
+            }
+            SocksAddrType::DOMAIN => {
+                let domain_len = cur.get_u8() as usize;
+                if cur.remaining() < domain_len {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf"));
+                }
+                let mut buf = vec![0u8; domain_len];
+                cur.copy_to_slice(&mut buf);
+                let port = cur.get_u16();
+                let domain_name = String::from_utf8(buf).map_err(|x| invalid_domain())?;
+                Ok(Self::Domain(domain_name, port))
+            }
+            _ => Err(invalid_atyp()),
         }
     }
 

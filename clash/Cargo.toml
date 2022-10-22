@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["net", "codec"] }
 thiserror = "1.0"
 async-trait = "0.1"
 anyhow = "1.0"
@@ -25,6 +26,7 @@ hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 network-interface = { path = "../../network-interface"}
+pin-project = "1.0"
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"

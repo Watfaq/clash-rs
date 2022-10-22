@@ -1,5 +1,5 @@
-use crate::app::nat_manager::UdpPacket;
 use crate::config::internal::config::BindAddress;
+use crate::proxy::datagram::UdpPacket;
 use crate::proxy::{http, socks, AnyInboundListener, InboundListener};
 use crate::session::{Network, Session, SocksAddr};
 

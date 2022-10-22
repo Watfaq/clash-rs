@@ -1,14 +1,20 @@
+mod datagram;
 mod stream;
 
-use crate::proxy::socks::inbound::stream::handle_tcp;
 use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::session::{Network, Session};
+use crate::session::{Network, Session, SocksAddr};
 use crate::{Dispatcher, NatManager};
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures::{SinkExt, StreamExt};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
+use stream::handle_tcp;
+use tokio::net::{TcpListener, UdpSocket};
+use tokio_util::udp::UdpFramed;
+
+pub use datagram::Socks5UDPCodec;
 
 pub const SOCKS_VERSION: u8 = 0x05;
 
@@ -80,14 +86,24 @@ impl InboundListener for Listener {
             };
 
             let dispatcher = self.dispatcher.clone();
+            let nat_manager = self.nat_manager.clone();
+            let addr = self.addr.clone();
 
             tokio::spawn(async move {
-                handle_tcp(&mut sess, &mut socket, dispatcher, &HashMap::new() as _).await
+                handle_tcp(
+                    &mut sess,
+                    &mut socket,
+                    dispatcher,
+                    &HashMap::new() as _,
+                    nat_manager,
+                    &addr,
+                )
+                .await
             });
         }
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        todo!()
+        unreachable!("don't listen to me :)")
     }
 }

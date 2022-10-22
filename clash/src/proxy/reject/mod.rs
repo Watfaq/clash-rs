@@ -1,5 +1,7 @@
 use crate::config::internal::proxy::PROXY_DIRECT;
-use crate::proxy::{AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain};
+use crate::proxy::{
+    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain,
+};
 use crate::session::Session;
 use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
@@ -25,6 +27,14 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
+        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    }
+
+    async fn connect_datagram(
+        &self,
+        #[allow(unused_variables)] sess: &Session,
+        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<AnyOutboundDatagram> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 }
