@@ -2,22 +2,23 @@ use crate::app::outbound::manager::ThreadSafeOutboundManager;
 use crate::app::router::ThreadSafeRouter;
 use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
-use crate::proxy::{utils, AnyOutboundDatagram, ProxyError};
+use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
-
-use futures::Stream;
 use futures::{Sink, StreamExt};
-use log::{error, info, warn};
+use futures::{SinkExt, Stream};
+use log::{debug, error, info, warn};
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
+use std::io;
 use std::sync::Arc;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    outbound_mapping: Arc<Mutex<HashMap<String, bool>>>,
 }
 
 impl Dispatcher {
@@ -30,7 +31,6 @@ impl Dispatcher {
             outbound_manager,
             router,
             resolver,
-            outbound_mapping: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -76,64 +76,167 @@ impl Dispatcher {
                     sess, err
                 );
                 if let Err(e) = lhs.shutdown().await {
-                    warn!("error closing local connection {}: {}", sess, err)
+                    warn!("error closing local connection {}: {}", sess, e)
                 }
             }
         }
     }
 
-    pub async fn dispatch_datagram<U>(&self, sess: Session, mut udp_inbound: U)
-    where
-        U: Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Unpin + Send,
-    {
-        let orig_src = sess.source;
+    pub async fn dispatch_datagram(&self, sess: Session, udp_inbound: AnyInboundDatagram) {
+        let outbound_handle_guard = Arc::new(Mutex::new(OutboundHandleMap::new()));
+
         let router = self.router.clone();
         let outbound_manager = self.outbound_manager.clone();
-        let outbound_handlers_map = self.outbound_mapping.clone();
         let resolver = self.resolver.clone();
 
-        while let Some(packet) = udp_inbound.next().await {
-            let mut sess = sess.clone();
-            sess.destination = packet.dst_addr.clone();
-            let outbound_name = router.read().await.match_route(&sess).await.to_string();
+        let (mut local_w, mut local_r) = udp_inbound.split();
+        let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
 
-            let handler = outbound_manager
-                .read()
-                .await
-                .get(outbound_name.as_str())
-                .expect(format!("unknown rule: {}", outbound_name).as_str());
+        let t1 = tokio::spawn(async move {
+            while let Some(packet) = local_r.next().await {
+                let mut sess = sess.clone();
+                sess.source = packet.src_addr.clone().must_into_socks();
+                sess.destination = packet.dst_addr.clone();
+                let outbound_name = router.read().await.match_route(&sess).await.to_string();
 
-            info!("{} matched rule {}", sess, handler.name());
+                let handler = outbound_manager
+                    .read()
+                    .await
+                    .get(outbound_name.as_str())
+                    .expect(format!("unknown rule: {}", outbound_name).as_str());
 
-            let mut outbound_handle_guard = outbound_handlers_map.lock().await;
+                info!("{} matched rule {}", sess, handler.name());
 
-            match outbound_handle_guard.get(&outbound_name) {
-                None => {
-                    let mut outbound_datagram =
-                        match handler.connect_datagram(&sess, resolver.clone()).await {
-                            Ok(v) => v,
+                let mut outbound_handle_guard = outbound_handle_guard.lock().await;
+
+                match outbound_handle_guard.get_outbound_sender_mut(&outbound_name) {
+                    None => {
+                        let outbound_datagram =
+                            match handler.connect_datagram(&sess, resolver.clone()).await {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    error!("failed to connect outbound: {}", err);
+                                    return;
+                                }
+                            };
+
+                        debug!("{} outbound datagram connected", sess);
+
+                        let (mut remote_w, mut remote_r) = outbound_datagram.split();
+                        let (remote_sender, mut remote_forwarder) =
+                            tokio::sync::mpsc::channel::<UdpPacket>(32);
+
+                        let remote_receiver_w = remote_receiver_w.clone();
+
+                        // remote -> local
+                        let r_handle = tokio::spawn(async move {
+                            while let Some(packet) = remote_r.next().await {
+                                match remote_receiver_w.send(packet.clone()).await {
+                                    Ok(_) => {
+                                        debug!("{} received from remote", packet);
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to send packet to local: {}", err);
+                                    }
+                                }
+                            }
+                        });
+                        // local -> remote
+                        let w_handle = tokio::spawn(async move {
+                            while let Some(packet) = remote_forwarder.recv().await {
+                                match remote_w.send(packet.clone()).await {
+                                    Ok(_) => {
+                                        debug!("{} forwarded to remote", packet);
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to send packet to remote: {}", err);
+                                    }
+                                }
+                            }
+                        });
+
+                        match remote_sender.send(packet.clone()).await {
+                            Ok(_) => {
+                                debug!("{} packet sent to remote forwarder", packet);
+                            }
                             Err(err) => {
-                                error!("failed to connect outbound: {}", err);
+                                error!("failed to send packet to remote: {}", err);
                                 return;
                             }
-                        };
+                        }
 
-                    outbound_handle_guard.insert(outbound_name, true);
-                    match utils::copy_bidirectional(&mut udp_inbound, &mut outbound_datagram).await
-                    {
-                        Ok(val) => {
-                            info!(
-                                "connection {} closed with {} packets up, {} packets down",
-                                sess, val.0, val.1
-                            );
-                        }
+                        outbound_handle_guard.insert(
+                            &outbound_name,
+                            r_handle,
+                            w_handle,
+                            remote_sender,
+                        );
+                    }
+                    Some(handle) => match handle.send(packet).await {
+                        Ok(_) => {}
                         Err(err) => {
-                            error!("connection {} closed with error {}", sess, err);
+                            error!("failed to send packet to remote: {}", err);
+                            return;
                         }
+                    },
+                };
+            }
+        });
+
+        let t2 = tokio::spawn(async move {
+            while let Some(packet) = remote_receiver_r.recv().await {
+                debug!("write {} to local", packet);
+                match local_w.send(packet.clone()).await {
+                    Ok(_) => {
+                        debug!("{} packet sent to local", packet);
+                    }
+                    Err(err) => {
+                        error!("failed to send packet to local: {}", err);
+                        return;
                     }
                 }
-                Some(outbound_datagram) => {}
-            };
+            }
+        });
+
+        let _ = tokio::join!(t1, t2);
+    }
+}
+
+type OutBoundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>; // outbound packet sender
+struct OutboundHandleMap(HashMap<String, (JoinHandle<()>, JoinHandle<()>, OutBoundPacketSender)>);
+
+impl OutboundHandleMap {
+    fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    fn insert(
+        &mut self,
+        outbound_name: &str,
+        recv_handle: JoinHandle<()>,
+        send_handle: JoinHandle<()>,
+        sender: OutBoundPacketSender,
+    ) {
+        self.0.insert(
+            outbound_name.to_string(),
+            (recv_handle, send_handle, sender),
+        );
+    }
+
+    fn get_outbound_sender_mut(
+        &mut self,
+        outbound_name: &str,
+    ) -> Option<&mut OutBoundPacketSender> {
+        self.0.get_mut(outbound_name).map(|(_, _, sender)| sender)
+    }
+}
+
+impl Drop for OutboundHandleMap {
+    fn drop(&mut self) {
+        debug!("dropping outbound handle map");
+        for (_, (recv_handle, send_handle, _)) in self.0.drain() {
+            recv_handle.abort();
+            send_handle.abort();
         }
     }
 }

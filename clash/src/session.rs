@@ -96,6 +96,13 @@ impl SocksAddr {
         }
     }
 
+    pub fn must_into_socks(self) -> SocketAddr {
+        match self {
+            SocksAddr::Ip(addr) => addr,
+            SocksAddr::Domain(_, _) => panic!("not a socks address"),
+        }
+    }
+
     pub fn ip(&self) -> Option<IpAddr> {
         if let SocksAddr::Ip(addr) = self {
             Some(addr.ip())

@@ -35,18 +35,25 @@ pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
 pub type AnyStream = Box<dyn ProxyStream>;
 
-pub trait InboundDatagram<Item>: Stream<Item = Item> + Sink<Item> + Send + Sized {}
-pub type AnyInboundDatagram<Item> = Box<dyn InboundDatagram<Item, Error = io::Error, Item = Item>>;
+pub trait InboundDatagram<Item>:
+    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin
+{
+}
+pub type AnyInboundDatagram =
+    Box<dyn InboundDatagram<UdpPacket, Error = io::Error, Item = UdpPacket>>;
 
-pub trait OutboundDatagram:
-    Sink<UdpPacket, Error = io::Error> + Stream<Item = UdpPacket> + Send + Sync + Unpin
+pub trait OutboundDatagram<Item>:
+    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin
 {
 }
-impl<T> OutboundDatagram for T where
-    T: Sink<UdpPacket, Error = io::Error> + Stream<Item = UdpPacket> + Send + Sync + Unpin
+
+impl<T, U> OutboundDatagram<U> for T where
+    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin
 {
 }
-pub type AnyOutboundDatagram = Box<dyn OutboundDatagram>;
+
+pub type AnyOutboundDatagram =
+    Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
 #[async_trait]
 pub trait OutboundDatagramRecvHalf: Sync + Send + Unpin {

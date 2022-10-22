@@ -14,5 +14,8 @@ Cargo.lock
 *.pdb
 
 .idea/
+.vscode/
 
 .config/
+
+venv/

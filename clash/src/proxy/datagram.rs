@@ -1,11 +1,12 @@
 use crate::proxy::socks::Socks5UDPCodec;
-use crate::proxy::{AnyOutboundDatagram, InboundDatagram, ProxyError};
+use crate::proxy::{AnyOutboundDatagram, InboundDatagram};
 use crate::session::SocksAddr;
 use crate::ThreadSafeDNSResolver;
 use bytes::Bytes;
 use futures::{ready, Sink, Stream};
+use log::debug;
 use pin_project::pin_project;
-use std::borrow::Borrow;
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -14,10 +15,35 @@ use tokio::io::ReadBuf;
 use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
 
+use super::OutboundDatagram;
+
+#[derive(Clone)]
 pub struct UdpPacket {
     pub data: Vec<u8>,
     pub src_addr: SocksAddr,
     pub dst_addr: SocksAddr,
+}
+
+impl Debug for UdpPacket {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UdpPacket")
+            .field("data", &self.data)
+            .field("src_addr", &self.src_addr)
+            .field("dst_addr", &self.dst_addr)
+            .finish()
+    }
+}
+
+impl Display for UdpPacket {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "UDP Packet from {} to {} with {} bytes",
+            self.src_addr,
+            self.dst_addr,
+            self.data.len()
+        )
+    }
 }
 
 impl UdpPacket {
@@ -31,6 +57,7 @@ impl UdpPacket {
 }
 
 #[pin_project]
+#[derive(Clone)]
 pub struct InboundUdp<I> {
     #[pin]
     inner: I,
@@ -135,6 +162,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         let pin = self.get_mut();
         pin.pkt = Some(item);
+        pin.flushed = false;
         Ok(())
     }
 
@@ -190,12 +218,16 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             };
             Poll::Ready(res)
         } else {
-            Poll::Ready(Ok(()))
+            Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "no packet to send",
+            )))
         }
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        todo!()
+        ready!(self.poll_flush(cx))?;
+        Poll::Ready(Ok(()))
     }
 }
 impl Stream for OutboundDatagramImpl {

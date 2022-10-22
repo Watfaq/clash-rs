@@ -1,21 +1,18 @@
-use crate::proxy::datagram::{InboundUdp, UdpPacket};
+use crate::proxy::datagram::InboundUdp;
 use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
 use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS_VERSION};
-use crate::proxy::{AnyOutboundDatagram, ProxyError};
 use crate::session::{Network, Session, SocksAddr};
-use crate::{Dispatcher, NatManager};
+use crate::Dispatcher;
 use bytes::{BufMut, BytesMut};
-use futures::{SinkExt, StreamExt};
-use log::{debug, info};
-use std::borrow::{Borrow, BorrowMut};
+use log::{debug, info, warn};
 use std::collections::HashMap;
-use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
-use tokio_util::codec::{Decoder, Framed};
+use tokio::time::{sleep_until, Instant};
 use tokio_util::udp::UdpFramed;
 
 pub(crate) async fn handle_tcp(
@@ -23,8 +20,6 @@ pub(crate) async fn handle_tcp(
     s: &mut TcpStream,
     dispatcher: Arc<Dispatcher>,
     users: &HashMap<String, String>,
-    nat_manager: Arc<NatManager>,
-    listen_addr: &SocketAddr,
 ) -> io::Result<()> {
     // handshake
     let mut buf = BytesMut::new();
@@ -98,10 +93,12 @@ pub(crate) async fn handle_tcp(
         ));
     }
 
-    let addr = SocksAddr::read_from(s).await?;
+    let dst = SocksAddr::read_from(s).await?;
 
     match buf[1] {
-        socks_command::CONNECT | socks_command::UDP_ASSOCIATE => {
+        socks_command::CONNECT => {
+            debug!("Got a CONNECT request from {}", s.peer_addr()?);
+
             buf.clear();
             buf.put_u8(SOCKS_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
@@ -109,46 +106,71 @@ pub(crate) async fn handle_tcp(
             let bnd = SocksAddr::from(s.local_addr()?);
             bnd.write_buf(&mut buf);
             s.write_all(&buf[..]).await?;
-            sess.destination = addr;
-
-            let mut close_handle = None;
-
-            if buf[1] == socks_command::UDP_ASSOCIATE {
-                let udp_addr = SocketAddr::new(listen_addr.ip(), 0);
-                let (tx, mut rx) = tokio::sync::oneshot::channel();
-                close_handle = Some(tx);
-
-                let udp_inbound = UdpSocket::bind(udp_addr).await?;
-                let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
-
-                let sess = Session {
-                    network: Network::UDP,
-                    packet_mark: None,
-                    iface: None,
-                    ..Default::default()
-                };
-
-                let dispatcher_cloned = dispatcher.clone();
-
-                let handle = tokio::spawn(async move {
-                    tokio::select! {
-                        _ = dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed))) => {
-                            debug!("UDP dispatch finished, maybe with error")
-                        },
-                        _ = &mut rx => {
-                            debug!("UDP association finished, dropping handle")
-                        }
-                    }
-                });
-            }
+            sess.destination = dst;
 
             dispatcher
                 .dispatch_stream(sess.to_owned(), Box::new(s) as _)
                 .await;
 
-            if let Some(mut close_handle) = close_handle {
-                let _ = close_handle.send(1);
+            Ok(())
+        }
+        socks_command::UDP_ASSOCIATE => {
+            let udp_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
+            let udp_inbound = UdpSocket::bind(&udp_addr).await?;
+
+            debug!(
+                "Got a UDP_ASSOCIATE request from {}, UDP assigned at {}",
+                s.peer_addr()?,
+                udp_inbound.local_addr()?
+            );
+
+            buf.clear();
+            buf.put_u8(SOCKS_VERSION);
+            buf.put_u8(response_code::SUCCEEDED);
+            buf.put_u8(0x0);
+            let bnd = SocksAddr::from(udp_inbound.local_addr()?);
+            bnd.write_buf(&mut buf);
+
+            let (close_handle, mut close_listener) = tokio::sync::oneshot::channel();
+
+            let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
+
+            let sess = Session {
+                network: Network::UDP,
+                packet_mark: None,
+                iface: None,
+                ..Default::default()
+            };
+
+            let dispatcher_cloned = dispatcher.clone();
+
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed))) => {
+                        debug!("UDP dispatch finished, maybe with error")
+                    },
+                    _ = &mut close_listener => {
+                        debug!("UDP association finished, dropping handle")
+                    }
+                }
+            });
+
+            s.write_all(&buf[..]).await?;
+
+            buf.resize(1, 0);
+            match s.read(&mut buf[..]).await {
+                Ok(_) => {
+                    warn!("Unexpected data from SOCKS client, dropping connection");
+                }
+                Err(e) => {
+                    debug!(
+                        "socket became error after UDP ASSOCIATE, maybe closed: {}",
+                        e
+                    );
+                }
             }
+
+            let _ = close_handle.send(1);
 
             Ok(())
         }

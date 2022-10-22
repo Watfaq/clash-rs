@@ -7,11 +7,13 @@ use crate::{Dispatcher, NatManager};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
+use socket2::TcpKeepalive;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use stream::handle_tcp;
-use tokio::net::{TcpListener, UdpSocket};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio_util::udp::UdpFramed;
 
 pub use datagram::Socks5UDPCodec;
@@ -45,6 +47,7 @@ pub(crate) mod socks_command {
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    #[allow(unused_variables)]
     nat_manager: Arc<NatManager>,
 }
 
@@ -59,6 +62,17 @@ impl Listener {
             dispatcher,
             nat_manager,
         }) as _
+    }
+
+    async fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
+        let s = socket2::Socket::from(s.into_std()?);
+        s.set_tcp_keepalive(
+            &TcpKeepalive::new()
+                .with_time(Duration::from_secs(10))
+                .with_interval(Duration::from_secs(1))
+                .with_retries(3),
+        )?;
+        Ok(TcpStream::from_std(s.into())?)
     }
 }
 
@@ -76,7 +90,9 @@ impl InboundListener for Listener {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
-            let (mut socket, _) = listener.accept().await?;
+            let (socket, _) = listener.accept().await?;
+
+            let mut socket = Listener::apply_tcp_options(socket).await?;
 
             let mut sess = Session {
                 network: Network::TCP,
@@ -86,19 +102,9 @@ impl InboundListener for Listener {
             };
 
             let dispatcher = self.dispatcher.clone();
-            let nat_manager = self.nat_manager.clone();
-            let addr = self.addr.clone();
 
             tokio::spawn(async move {
-                handle_tcp(
-                    &mut sess,
-                    &mut socket,
-                    dispatcher,
-                    &HashMap::new() as _,
-                    nat_manager,
-                    &addr,
-                )
-                .await
+                handle_tcp(&mut sess, &mut socket, dispatcher, &HashMap::new() as _).await
             });
         }
     }
