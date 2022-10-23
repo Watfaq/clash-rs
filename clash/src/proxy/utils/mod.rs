@@ -1,9 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 
-mod io_helpers;
 mod socket_helpers;
 
-pub use io_helpers::*;
 pub use socket_helpers::*;
 
 #[derive(Debug, Clone)]

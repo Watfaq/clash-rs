@@ -111,6 +111,7 @@ pub async fn new_udp_socket(
     }
 
     socket.set_broadcast(true)?;
+    socket.set_nonblocking(true)?;
 
     UdpSocket::from_std(socket.into())
 }

@@ -2,19 +2,14 @@
 extern crate anyhow;
 extern crate core;
 
-use std::borrow::{Borrow, BorrowMut};
-
-use log::Level::{Debug, Info};
 use state::Storage;
-use std::cell::RefCell;
 use std::io;
 use std::path::Path;
-use std::rc::Rc;
-use std::sync::{Arc, LockResult, Mutex, Once};
+
+use std::sync::{Arc, Once};
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::manager::InboundManager;
-use crate::app::nat_manager::NatManager;
 use crate::app::outbound::manager::OutboundManager;
 use crate::app::router::Router;
 use crate::app::{dns, ThreadSafeDNSResolver};
@@ -88,7 +83,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
 
-    let mut config: InternalConfig = match opts.config {
+    let config: InternalConfig = match opts.config {
         Config::Internal(c) => c,
         Config::File(home, file) => Path::join(home.as_str().as_ref(), &file)
             .to_str()
@@ -140,9 +135,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         router,
         default_dns_resolver,
     ));
-    let nat_manager = Arc::new(NatManager::new(dispatcher.clone()));
 
-    let inbound_manager = InboundManager::new(config.general.inbound, dispatcher, nat_manager)?;
+    let inbound_manager = InboundManager::new(config.general.inbound, dispatcher)?;
 
     let mut inbound_runners = inbound_manager.get_runners()?;
     runners.append(&mut inbound_runners);
@@ -173,8 +167,7 @@ fn setup_tests() {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::def;
-    use crate::{shutdown, start, Config, InternalConfig, Options};
+    use crate::{shutdown, start, Config, Options};
     use std::thread;
     use std::time::Duration;
 

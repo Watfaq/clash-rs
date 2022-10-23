@@ -1,20 +1,21 @@
 use crate::proxy::datagram::InboundUdp;
 use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
 use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS_VERSION};
+use crate::proxy::utils::new_udp_socket;
 use crate::session::{Network, Session, SocksAddr};
 use crate::Dispatcher;
 use bytes::{BufMut, BytesMut};
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpStream, UdpSocket};
-use tokio::time::{sleep_until, Instant};
+use tokio::net::TcpStream;
 use tokio_util::udp::UdpFramed;
+use tracing::{event, instrument};
 
+#[instrument]
 pub(crate) async fn handle_tcp(
     sess: &mut Session,
     s: &mut TcpStream,
@@ -116,7 +117,7 @@ pub(crate) async fn handle_tcp(
         }
         socks_command::UDP_ASSOCIATE => {
             let udp_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
-            let udp_inbound = UdpSocket::bind(&udp_addr).await?;
+            let udp_inbound = new_udp_socket(Some(&udp_addr), None).await?;
 
             debug!(
                 "Got a UDP_ASSOCIATE request from {}, UDP assigned at {}",
@@ -131,7 +132,7 @@ pub(crate) async fn handle_tcp(
             let bnd = SocksAddr::from(udp_inbound.local_addr()?);
             bnd.write_buf(&mut buf);
 
-            let (close_handle, mut close_listener) = tokio::sync::oneshot::channel();
+            let (close_handle, close_listener) = tokio::sync::oneshot::channel();
 
             let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
 
@@ -145,14 +146,10 @@ pub(crate) async fn handle_tcp(
             let dispatcher_cloned = dispatcher.clone();
 
             tokio::spawn(async move {
-                tokio::select! {
-                    _ = dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed))) => {
-                        debug!("UDP dispatch finished, maybe with error")
-                    },
-                    _ = &mut close_listener => {
-                        debug!("UDP association finished, dropping handle")
-                    }
-                }
+                let handle =
+                    dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed)));
+                close_listener.await.ok();
+                handle.send(0).ok();
             });
 
             s.write_all(&buf[..]).await?;
@@ -160,11 +157,12 @@ pub(crate) async fn handle_tcp(
             buf.resize(1, 0);
             match s.read(&mut buf[..]).await {
                 Ok(_) => {
-                    warn!("Unexpected data from SOCKS client, dropping connection");
+                    info!("UDP association finished, closing");
                 }
                 Err(e) => {
-                    debug!(
-                        "socket became error after UDP ASSOCIATE, maybe closed: {}",
+                    event!(
+                        tracing::Level::DEBUG,
+                        "SOCKS client closed connection: {}",
                         e
                     );
                 }

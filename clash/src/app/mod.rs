@@ -5,7 +5,6 @@ pub mod dispatcher;
 pub mod dns;
 pub mod inbound;
 pub mod logging;
-pub mod nat_manager;
 pub mod outbound;
 pub mod profile;
 pub mod router;

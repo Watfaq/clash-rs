@@ -4,21 +4,27 @@ use crate::app::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
-use futures::{Sink, StreamExt};
-use futures::{SinkExt, Stream};
+use futures::SinkExt;
+use futures::StreamExt;
 use log::{debug, error, info, warn};
-use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
-use std::io;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tracing::{event, instrument};
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
+}
+
+impl Debug for Dispatcher {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Dispatcher").finish()
+    }
 }
 
 impl Dispatcher {
@@ -82,7 +88,14 @@ impl Dispatcher {
         }
     }
 
-    pub async fn dispatch_datagram(&self, sess: Session, udp_inbound: AnyInboundDatagram) {
+    /// Dispatch a UDP packet to outbound handler
+    /// returns the close sender
+    #[instrument]
+    pub fn dispatch_datagram(
+        &self,
+        sess: Session,
+        udp_inbound: AnyInboundDatagram,
+    ) -> tokio::sync::oneshot::Sender<u8> {
         let outbound_handle_guard = Arc::new(Mutex::new(OutboundHandleMap::new()));
 
         let router = self.router.clone();
@@ -97,7 +110,10 @@ impl Dispatcher {
                 let mut sess = sess.clone();
                 sess.source = packet.src_addr.clone().must_into_socks();
                 sess.destination = packet.dst_addr.clone();
+
                 let outbound_name = router.read().await.match_route(&sess).await.to_string();
+
+                let remote_receiver_w = remote_receiver_w.clone();
 
                 let handler = outbound_manager
                     .read()
@@ -126,15 +142,20 @@ impl Dispatcher {
                         let (remote_sender, mut remote_forwarder) =
                             tokio::sync::mpsc::channel::<UdpPacket>(32);
 
-                        let remote_receiver_w = remote_receiver_w.clone();
-
                         // remote -> local
                         let r_handle = tokio::spawn(async move {
                             while let Some(packet) = remote_r.next().await {
-                                match remote_receiver_w.send(packet.clone()).await {
-                                    Ok(_) => {
-                                        debug!("{} received from remote", packet);
-                                    }
+                                // NAT
+                                let mut packet = packet;
+                                packet.dst_addr = sess.source.into();
+                                event!(
+                                    tracing::Level::DEBUG,
+                                    "UDP NAT for packet: {:?}, session: {}",
+                                    packet,
+                                    sess
+                                );
+                                match remote_receiver_w.send(packet).await {
+                                    Ok(_) => {}
                                     Err(err) => {
                                         warn!("failed to send packet to local: {}", err);
                                     }
@@ -146,7 +167,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_forwarder.recv().await {
                                 match remote_w.send(packet.clone()).await {
                                     Ok(_) => {
-                                        debug!("{} forwarded to remote", packet);
+                                        debug!("{} sent to remote", packet);
                                     }
                                     Err(err) => {
                                         warn!("failed to send packet to remote: {}", err);
@@ -155,28 +176,28 @@ impl Dispatcher {
                             }
                         });
 
-                        match remote_sender.send(packet.clone()).await {
-                            Ok(_) => {
-                                debug!("{} packet sent to remote forwarder", packet);
-                            }
-                            Err(err) => {
-                                error!("failed to send packet to remote: {}", err);
-                                return;
-                            }
-                        }
-
                         outbound_handle_guard.insert(
                             &outbound_name,
                             r_handle,
                             w_handle,
-                            remote_sender,
+                            remote_sender.clone(),
                         );
+
+                        drop(outbound_handle_guard);
+
+                        match remote_sender.send(packet.clone()).await {
+                            Ok(_) => {
+                                event!(tracing::Level::DEBUG, "local -> remote: packet sent");
+                            }
+                            Err(err) => {
+                                error!("failed to send packet to remote: {}", err);
+                            }
+                        };
                     }
                     Some(handle) => match handle.send(packet).await {
                         Ok(_) => {}
                         Err(err) => {
                             error!("failed to send packet to remote: {}", err);
-                            return;
                         }
                     },
                 };
@@ -185,20 +206,35 @@ impl Dispatcher {
 
         let t2 = tokio::spawn(async move {
             while let Some(packet) = remote_receiver_r.recv().await {
-                debug!("write {} to local", packet);
+                event!(
+                    tracing::Level::DEBUG,
+                    "remote -> local: packet received: {:?}",
+                    packet
+                );
                 match local_w.send(packet.clone()).await {
                     Ok(_) => {
-                        debug!("{} packet sent to local", packet);
+                        event!(tracing::Level::DEBUG, "outer remote -> local: packet sent");
                     }
                     Err(err) => {
-                        error!("failed to send packet to local: {}", err);
-                        return;
+                        error!(
+                            "failed to send packet to local: {}, packet: {}",
+                            err, packet
+                        );
                     }
                 }
             }
         });
 
-        let _ = tokio::join!(t1, t2);
+        let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
+
+        tokio::spawn(async move {
+            let _ = close_receiver.await;
+            event!(tracing::Level::DEBUG, "UDP close signal received");
+            t1.abort();
+            t2.abort();
+        });
+
+        return close_sender;
     }
 }
 

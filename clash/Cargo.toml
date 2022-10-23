@@ -26,7 +26,6 @@ hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 network-interface = { path = "../../network-interface"}
-pin-project = "1.0"
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
@@ -41,6 +40,8 @@ dhcproto = "0.8"
 rand = "0.8"
 
 socket2 = "0.4"
+
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3.3"

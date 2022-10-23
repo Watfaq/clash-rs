@@ -1,11 +1,11 @@
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
 use crate::session::{Session, SocksAddr};
-use crate::{Dispatcher, NatManager, ThreadSafeDNSResolver};
+use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
-use futures::{Sink, SinkExt, Stream, StreamExt};
+use futures::{Sink, Stream};
+use std::fmt::Debug;
 use std::io;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -36,7 +36,7 @@ impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin 
 pub type AnyStream = Box<dyn ProxyStream>;
 
 pub trait InboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin
+    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
 {
 }
 pub type AnyInboundDatagram =

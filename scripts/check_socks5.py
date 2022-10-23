@@ -11,20 +11,24 @@ def check_socks5_udp(ip, port, rdns):
     req = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x05\x62\x61\x69\x64\x75\x03\x63\x6f\x6d\x00\x00\x01\x00\x01"
     s.sendto(req, ("8.8.8.8", 53))
 
-    (rsp, address) = s.recvfrom(4096)
-    if rsp[0] == req[0] and rsp[1] == req[1]:
-        print("got response from %s:%d for request to %s" % address, "8.8.8.8:53")
+    (res, address) = s.recvfrom(4096)
+    if res[0] == req[0] and res[1] == req[1]:
+        print(
+            "got response %s from %s for request to %s" % (res, address, "1.1.1.1:53")
+        )
     else:
-        print("got invalid response from %s:%d" % address)
+        print("got invalid response %s from %s" % (res, address))
         return False
 
     s.sendto(req, ("1.1.1.1", 53))
-    (rsp, address) = s.recvfrom(4096)
-    if rsp[0] == req[0] and rsp[1] == req[1]:
-        print("got response from %s:%d for request to %s" % address, "1.1.1.1:53")
+    (res, address) = s.recvfrom(4096)
+    if res[0] == req[0] and res[1] == req[1]:
+        print(
+            "got response %s from %s for request to %s" % (res, address, "1.1.1.1:53")
+        )
         return True
     else:
-        print("got invalid response from %s:%d" % address)
+        print("got invalid response %s from %s" % (res, address))
         return False
 
 

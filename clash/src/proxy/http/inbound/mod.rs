@@ -1,26 +1,21 @@
 mod connector;
 
-use crate::config::internal::config::BindAddress;
 use crate::proxy::http::inbound::connector::Connector;
-use crate::proxy::utils::Interface;
 use crate::proxy::{AnyInboundListener, InboundListener, ProxyError};
 use crate::session::{Network, Session, SocksAddr};
-use crate::{Dispatcher, NatManager};
+use crate::Dispatcher;
 use async_trait::async_trait;
-use futures::{FutureExt, TryFutureExt};
-use hyper::body::HttpBody;
+use futures::TryFutureExt;
 use hyper::http::uri::Scheme;
-use hyper::server::conn::{AddrStream, Http};
+use hyper::server::conn::AddrStream;
 use hyper::service::make_service_fn;
 use hyper::{http, Body, Client, Method, Request, Response, Server, Uri};
 use log::error;
-use network_interface::NetworkInterfaceConfig;
 use std::convert::Infallible;
 use std::io;
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::sync::Arc;
 use tower::service_fn;
-use url::Url;
 
 fn map_error(x: hyper::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, x.to_string())

@@ -1,5 +1,6 @@
 use crate::session::SocksAddr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use log::debug;
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -28,10 +29,11 @@ impl Encoder<(Bytes, SocksAddr)> for Socks5UDPCodec {
     type Error = std::io::Error;
 
     fn encode(&mut self, item: (Bytes, SocksAddr), dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.resize(3 + item.1.size() + item.0.len(), 0);
+        dst.reserve(3 + item.1.size() + item.0.len());
         dst.put_slice(&[0x0, 0x0, 0x0]);
         item.1.write_buf(dst);
         dst.put_slice(item.0.as_ref());
+
         Ok(())
     }
 }

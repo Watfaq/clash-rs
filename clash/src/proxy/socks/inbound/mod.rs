@@ -2,19 +2,16 @@ mod datagram;
 mod stream;
 
 use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::session::{Network, Session, SocksAddr};
-use crate::{Dispatcher, NatManager};
+use crate::session::{Network, Session};
+use crate::Dispatcher;
 use async_trait::async_trait;
-use bytes::Bytes;
-use futures::{SinkExt, StreamExt};
 use socket2::TcpKeepalive;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use stream::handle_tcp;
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio_util::udp::UdpFramed;
+use tokio::net::{TcpListener, TcpStream};
 
 pub use datagram::Socks5UDPCodec;
 
@@ -47,21 +44,11 @@ pub(crate) mod socks_command {
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
-    #[allow(unused_variables)]
-    nat_manager: Arc<NatManager>,
 }
 
 impl Listener {
-    pub fn new(
-        addr: SocketAddr,
-        dispatcher: Arc<Dispatcher>,
-        nat_manager: Arc<NatManager>,
-    ) -> AnyInboundListener {
-        Arc::new(Self {
-            addr,
-            dispatcher,
-            nat_manager,
-        }) as _
+    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
+        Arc::new(Self { addr, dispatcher }) as _
     }
 
     async fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {

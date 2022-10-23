@@ -1,9 +1,7 @@
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::network_listener::{ListenerType, NetworkInboundListener};
-use crate::app::nat_manager::NatManager;
 use crate::config::internal::config::Inbound;
-use crate::proxy::http;
-use crate::{proxy, Error, Runner};
+use crate::{Error, Runner};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,11 +10,7 @@ pub struct InboundManager {
 }
 
 impl InboundManager {
-    pub fn new(
-        inbound: Inbound,
-        dispatcher: Arc<Dispatcher>,
-        nat_manager: Arc<NatManager>,
-    ) -> Result<Self, Error> {
+    pub fn new(inbound: Inbound, dispatcher: Arc<Dispatcher>) -> Result<Self, Error> {
         let mut network_listeners = HashMap::new();
         if let Some(http_port) = inbound.port {
             network_listeners.insert(
@@ -27,7 +21,6 @@ impl InboundManager {
                     port: http_port,
                     listener_type: ListenerType::HTTP,
                     dispatcher: dispatcher.clone(),
-                    nat_manager: nat_manager.clone(),
                 },
             );
         }
@@ -41,7 +34,6 @@ impl InboundManager {
                     port: socks_port,
                     listener_type: ListenerType::SOCKS5,
                     dispatcher: dispatcher.clone(),
-                    nat_manager: nat_manager.clone(),
                 },
             );
         }

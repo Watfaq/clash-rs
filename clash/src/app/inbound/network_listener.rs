@@ -1,18 +1,15 @@
 use crate::config::internal::config::BindAddress;
-use crate::proxy::datagram::UdpPacket;
+
 use crate::proxy::{http, socks, AnyInboundListener, InboundListener};
-use crate::session::{Network, Session, SocksAddr};
 
 use crate::proxy::utils::Interface;
-use crate::{Dispatcher, Error, NatManager, Runner};
+use crate::{Dispatcher, Error, Runner};
 use futures::FutureExt;
 use log::info;
 use network_interface::{Addr, NetworkInterfaceConfig};
-use std::io;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::sync::mpsc::{Receiver, Sender};
 
 pub enum ListenerType {
     HTTP,
@@ -25,7 +22,6 @@ pub struct NetworkInboundListener {
     pub port: u16,
     pub listener_type: ListenerType,
     pub dispatcher: Arc<Dispatcher>,
-    pub nat_manager: Arc<NatManager>,
 }
 
 impl NetworkInboundListener {
@@ -100,11 +96,9 @@ impl NetworkInboundListener {
             ListenerType::HTTP => {
                 http::Listener::new((ip, self.port).into(), self.dispatcher.clone())
             }
-            ListenerType::SOCKS5 => socks::Listener::new(
-                (ip, self.port).into(),
-                self.dispatcher.clone(),
-                self.nat_manager.clone(),
-            ),
+            ListenerType::SOCKS5 => {
+                socks::Listener::new((ip, self.port).into(), self.dispatcher.clone())
+            }
         };
 
         // TODO: remove the clone here
