@@ -5,8 +5,8 @@ use crate::proxy::{http, socks, AnyInboundListener, InboundListener};
 use crate::proxy::utils::Interface;
 use crate::{Dispatcher, Error, Runner};
 use futures::FutureExt;
-use log::info;
 use network_interface::{Addr, NetworkInterfaceConfig};
+use tracing::{info, warn};
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
@@ -109,7 +109,7 @@ impl NetworkInboundListener {
             runners.push(
                 async move {
                     if let Err(e) = tcp_listener.listen_tcp().await {
-                        log::warn!("handler tcp listen failed: {}", e);
+                        warn!("handler tcp listen failed: {}", e);
                     }
                 }
                 .boxed(),
@@ -122,7 +122,7 @@ impl NetworkInboundListener {
             runners.push(
                 async move {
                     if let Err(e) = udp_listener.listen_udp().await {
-                        log::warn!("handler udp listen failed: {}", e);
+                        warn!("handler udp listen failed: {}", e);
                     }
                 }
                 .boxed(),

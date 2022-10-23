@@ -1,34 +1,36 @@
 use crate::def::LogLevel;
-use fern::colors::ColoredLevelConfig;
-use log::LevelFilter;
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{filter, EnvFilter};
 
-use crate::Error;
+impl From<LogLevel> for filter::LevelFilter {
+    fn from(level: LogLevel) -> Self {
+        match level {
+            LogLevel::Error => filter::LevelFilter::ERROR,
+            LogLevel::Warning => filter::LevelFilter::WARN,
+            LogLevel::Info => filter::LevelFilter::INFO,
+            LogLevel::Debug => filter::LevelFilter::DEBUG,
+            LogLevel::Silent => filter::LevelFilter::OFF,
+        }
+    }
+}
 
 pub fn setup_logging(level: LogLevel) -> anyhow::Result<()> {
-    let colors = ColoredLevelConfig::new();
-    fern::Dispatch::new()
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{} [{}] - {} - {} [L{}]",
-                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                colors.color(record.level()),
-                message,
-                record.file().unwrap_or_default(),
-                record.line().unwrap_or_default(),
-            ))
-        })
-        .level(LevelFilter::Off)
-        .level_for(
-            "clash",
-            match level {
-                LogLevel::Debug => LevelFilter::Debug,
-                LogLevel::Info => LevelFilter::Info,
-                LogLevel::Warning => LevelFilter::Warn,
-                LogLevel::Error => LevelFilter::Error,
-                LogLevel::Silent => LevelFilter::Off,
-            },
-        )
-        .chain(std::io::stdout())
-        .apply()
-        .map_err(|x| anyhow!(x))
+    let filter =
+        EnvFilter::from_default_env().add_directive(filter::LevelFilter::from(level).into());
+
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(Targets::new().with_target("clash", level))
+        .with(
+            tracing_subscriber::fmt::Layer::new()
+                .with_ansi(atty::is(atty::Stream::Stdout))
+                .pretty()
+                .with_file(true)
+                .with_line_number(true)
+                .with_writer(std::io::stdout),
+        );
+
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|x| anyhow!("setup logging error: {}", x))
 }

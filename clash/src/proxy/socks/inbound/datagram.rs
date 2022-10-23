@@ -1,6 +1,5 @@
 use crate::session::SocksAddr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use log::debug;
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 

@@ -4,7 +4,6 @@ use crate::session::SocksAddr;
 use crate::ThreadSafeDNSResolver;
 use bytes::Bytes;
 use futures::{ready, Sink, SinkExt, Stream, StreamExt};
-use log::debug;
 use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::net::SocketAddr;

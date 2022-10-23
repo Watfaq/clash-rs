@@ -1,5 +1,5 @@
-use log::{error, warn};
 use rustls::client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier};
+use tracing::{error, warn};
 
 use rustls::{Certificate, ServerName};
 use std::time::SystemTime;

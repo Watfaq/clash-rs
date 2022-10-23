@@ -5,7 +5,6 @@ use crate::proxy::utils::new_udp_socket;
 use crate::session::{Network, Session, SocksAddr};
 use crate::Dispatcher;
 use bytes::{BufMut, BytesMut};
-use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -13,6 +12,7 @@ use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_util::udp::UdpFramed;
+use tracing::{debug, info};
 use tracing::{event, instrument};
 
 #[instrument]

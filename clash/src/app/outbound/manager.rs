@@ -1,8 +1,8 @@
 use anyhow::Result;
-use log::debug;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 use crate::config::internal::proxy::{PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::reject;

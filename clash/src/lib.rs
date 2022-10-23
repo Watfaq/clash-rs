@@ -2,12 +2,6 @@
 extern crate anyhow;
 extern crate core;
 
-use state::Storage;
-use std::io;
-use std::path::Path;
-
-use std::sync::{Arc, Once};
-
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::manager::InboundManager;
 use crate::app::outbound::manager::OutboundManager;
@@ -16,6 +10,10 @@ use crate::app::{dns, ThreadSafeDNSResolver};
 use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
+use state::Storage;
+use std::io;
+use std::path::Path;
+use std::sync::{Arc, Once};
 use thiserror::Error;
 use tokio::sync::{mpsc, RwLock};
 
@@ -96,13 +94,11 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };
 
-    #[cfg(not(test))]
-    {
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            app::logging::setup_logging(config.general.log_level).expect("failed to setup logging");
-        });
-    }
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        app::logging::setup_logging(config.general.log_level).expect("failed to setup logging");
+    });
+
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
@@ -160,9 +156,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 #[cfg(test)]
 #[ctor::ctor]
 fn setup_tests() {
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-    );
+    println!("setup tests");
 }
 
 #[cfg(test)]

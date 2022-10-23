@@ -1,28 +1,20 @@
 use async_trait::async_trait;
-use futures::lock::{Mutex, MutexGuard};
 use futures::{FutureExt, TryFutureExt};
-use hyper::body::HttpBody;
-use log::{debug, error, warn};
 use rand::prelude::SliceRandom;
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Ref, RefCell};
 use std::str::FromStr;
 use std::time::Duration;
-use std::{io, net, sync::Arc};
-use tokio::time::timeout;
+use std::{net, sync::Arc};
+use tracing::warn;
+
 use trust_dns_proto::{op, rr};
 
-use crate::def::DNSMode;
-use crate::dns::dns_client::DNSNetMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
-use crate::proxy::utils::Interface;
-use crate::{common::trie, dns, Error};
+use crate::{common::trie, Error};
 
 use super::{
-    dns_client::{DnsClient, Opts},
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
-    Client, Config, NameServer,
+    Config,
 };
 
 static TTL: Duration = Duration::from_secs(60);

@@ -6,13 +6,13 @@ use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
 use futures::SinkExt;
 use futures::StreamExt;
-use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tracing::{debug, error, info, warn};
 use tracing::{event, instrument};
 
 pub struct Dispatcher {

@@ -1,6 +1,5 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::Session;
-use log::warn;
 
 pub struct RuleSet {
     pub rule_set: String,
@@ -9,7 +8,6 @@ pub struct RuleSet {
 
 impl RuleMatcher for RuleSet {
     fn apply(&self, sess: &Session) -> bool {
-        warn!("RULE-SET not implemented yet");
         false
     }
 

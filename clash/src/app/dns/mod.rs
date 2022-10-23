@@ -1,13 +1,8 @@
 use async_trait::async_trait;
 use ipnet::AddrParseError;
-use log::debug;
 use regex::Regex;
 use std::fmt::Debug;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
-use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
-use std::{fmt, net};
-use tower::ServiceExt;
+use std::{collections::HashMap, net::IpAddr, sync::Arc};
 use trust_dns_proto::op;
 use url::Url;
 

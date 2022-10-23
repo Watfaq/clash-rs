@@ -10,12 +10,12 @@ use hyper::http::uri::Scheme;
 use hyper::server::conn::AddrStream;
 use hyper::service::make_service_fn;
 use hyper::{http, Body, Client, Method, Request, Response, Server, Uri};
-use log::error;
 use std::convert::Infallible;
 use std::io;
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::sync::Arc;
 use tower::service_fn;
+use tracing::error;
 
 fn map_error(x: hyper::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, x.to_string())
