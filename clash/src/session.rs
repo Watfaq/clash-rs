@@ -96,10 +96,10 @@ impl SocksAddr {
         }
     }
 
-    pub fn must_into_socks(self) -> SocketAddr {
+    pub fn must_into_socket_addr(self) -> SocketAddr {
         match self {
             SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(_, _) => panic!("not a socks address"),
+            SocksAddr::Domain(_, _) => panic!("not a socket address"),
         }
     }
 

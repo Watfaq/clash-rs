@@ -115,7 +115,7 @@ impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
         let pin = self.get_mut();
         pin.inner.lock().expect("lock error").start_send_unpin((
             (item.data.into(), item.src_addr),
-            item.dst_addr.must_into_socks(),
+            item.dst_addr.must_into_socket_addr(),
         ))
     }
 

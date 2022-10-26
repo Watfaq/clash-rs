@@ -13,9 +13,10 @@ use tokio::io::AsyncWrite;
 pub mod direct;
 pub mod reject;
 
-pub mod http;
-//pub mod shadowsocks;
 pub(crate) mod datagram;
+pub mod http;
+#[cfg(feature = "shadowsocks")]
+pub mod shadowsocks;
 pub mod socks;
 pub mod utils;
 

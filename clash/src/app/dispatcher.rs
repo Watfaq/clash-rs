@@ -108,7 +108,7 @@ impl Dispatcher {
         let t1 = tokio::spawn(async move {
             while let Some(packet) = local_r.next().await {
                 let mut sess = sess.clone();
-                sess.source = packet.src_addr.clone().must_into_socks();
+                sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = packet.dst_addr.clone();
 
                 let outbound_name = router.read().await.match_route(&sess).await.to_string();
