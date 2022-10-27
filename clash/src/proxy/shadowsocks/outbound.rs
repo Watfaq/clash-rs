@@ -19,6 +19,7 @@ pub struct OutboundDatagramShadowsocks {
     remote_addr: (String, u16),
     flushed: bool,
     pkt: Option<UdpPacket>,
+    buf: Vec<u8>,
 }
 
 impl OutboundDatagramShadowsocks {
@@ -28,6 +29,7 @@ impl OutboundDatagramShadowsocks {
             flushed: true,
             pkt: None,
             remote_addr,
+            buf: Vec::with_capacity(65535),
         };
         Box::new(s) as _
     }
@@ -110,14 +112,23 @@ impl Stream for OutboundDatagramShadowsocks {
     type Item = UdpPacket;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let Self { ref mut inner, .. } = *self;
-        let guard = inner.read().expect("read lock");
+        let Self {
+            ref mut buf,
+            ref inner,
+            ..
+        } = *self;
 
-        let mut buf = [0u8; 65535];
-        let mut fut = guard.recv_from(&mut buf).boxed();
-        match ready!(fut.as_mut().poll(cx)) {
+        let guard = inner.read().expect("read lock");
+        let mut fut = guard.recv_from(buf).boxed();
+        let rv = ready!(fut.as_mut().poll(cx).map_err(|_| {
+            io::Error::new(io::ErrorKind::Other, "recv UDP data from remote ss server")
+        }));
+
+        drop(fut); // drop the future to bypass the borrow checker
+
+        match rv {
             Ok((n, src, _, _)) => Poll::Ready(Some(UdpPacket {
-                data: buf[..n].to_vec(),
+                data: (buf[..n]).to_vec(),
                 src_addr: src.into(),
                 dst_addr: SocksAddr::any_ipv4(),
             })),

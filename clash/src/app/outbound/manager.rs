@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 use crate::config::internal::proxy::{PROXY_DIRECT, PROXY_REJECT};
-use crate::proxy::reject;
+use crate::proxy::{reject, shadowsocks, CommonOption};
 use crate::{
     app::ThreadSafeDNSResolver,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
@@ -50,6 +50,49 @@ impl OutboundManager {
 
                 OutboundProxyProtocol::Reject => {
                     handlers.insert(PROXY_REJECT.to_string(), reject::Handler::new());
+                }
+
+                OutboundProxyProtocol::Ss(s) => {
+                    handlers.insert(
+                        s.name.clone(),
+                        shadowsocks::Handler::new(shadowsocks::HandlerOptions {
+                            name: s.name.to_owned(),
+                            common_opts: CommonOption::default(),
+                            server: s.server.to_owned(),
+                            port: s.port,
+                            password: s.password.to_owned(),
+                            cipher: s.cipher.to_owned(),
+                            plugin_opts: match &s.plugin {
+                                Some(plugin) => match plugin.as_str() {
+                                    "obfs" => s
+                                        .plugin_opts
+                                        .clone()
+                                        .ok_or(Error::InvalidConfig(
+                                            "plugin_opts is required for plugin obfs".to_owned(),
+                                        ))?
+                                        .try_into()
+                                        .map(|x| shadowsocks::OBFSOption::Simple(x))
+                                        .ok(),
+                                    "v2ray-plugin" => s
+                                        .plugin_opts
+                                        .clone()
+                                        .ok_or(Error::InvalidConfig(
+                                            "plugin_opts is required for plugin obfs".to_owned(),
+                                        ))?
+                                        .try_into()
+                                        .map(|x| shadowsocks::OBFSOption::V2Ray(x))
+                                        .ok(),
+                                    _ => {
+                                        return Err(Error::InvalidConfig(format!(
+                                            "unsupported plugin: {}",
+                                            plugin
+                                        )));
+                                    }
+                                },
+                                None => None,
+                            },
+                        }),
+                    );
                 }
 
                 p => {

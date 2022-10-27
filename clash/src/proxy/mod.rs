@@ -76,6 +76,15 @@ pub struct CommonOption {
     iface: Option<Interface>,
 }
 
+impl Default for CommonOption {
+    fn default() -> Self {
+        Self {
+            so_mark: None,
+            iface: None,
+        }
+    }
+}
+
 #[async_trait]
 pub trait InboundListener: Send + Sync + Unpin {
     fn handle_tcp(&self) -> bool;

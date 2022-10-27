@@ -248,7 +248,12 @@ impl TryFrom<&crate::config::def::Config> for Config {
             hosts: if dc.user_hosts && c.hosts.len() > 0 {
                 Config::parse_hosts(&c.hosts).ok()
             } else {
-                None
+                let mut tree = trie::StringTrie::new();
+                tree.insert(
+                    "localhost",
+                    Arc::new("127.0.0.1".parse::<IpAddr>().unwrap()),
+                );
+                Some(tree)
             },
             nameserver_policy,
         })

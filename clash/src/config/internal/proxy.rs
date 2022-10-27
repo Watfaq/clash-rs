@@ -5,7 +5,6 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use tower::ServiceExt;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
 pub const PROXY_REJECT: &str = "REJECT";
@@ -77,11 +76,11 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
 impl Display for OutboundProxyProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OutboundProxyProtocol::Ss(ss) => write!(f, "Shadowsocks"),
-            OutboundProxyProtocol::Socks5(s5) => write!(f, "Socks5"),
+            OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
+            OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
-            OutboundProxyProtocol::Trojan(trojan) => write!(f, "{}", "Trojan"),
+            OutboundProxyProtocol::Trojan(_) => write!(f, "{}", "Trojan"),
         }
     }
 }
@@ -89,6 +88,13 @@ impl Display for OutboundProxyProtocol {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct OutboundShadowsocks {
     pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub cipher: String,
+    pub password: String,
+    pub udp: bool,
+    pub plugin: Option<String>,
+    pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]

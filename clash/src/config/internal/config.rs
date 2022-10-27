@@ -98,7 +98,6 @@ impl TryFrom<def::Config> for Config {
                 |mut rv, x| {
                     let proxy = OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
                     let name = proxy.name();
-                    if name == "Unknown" {}
                     if rv.contains_key(name.as_str()) {
                         return Err(Error::InvalidConfig(format!(
                             "duplicated proxy name: {}",
@@ -140,7 +139,6 @@ impl TryFrom<def::Config> for Config {
 #[cfg(test)]
 mod tests {
     use crate::def;
-    use serde_yaml::Value;
 
     use super::Config;
 

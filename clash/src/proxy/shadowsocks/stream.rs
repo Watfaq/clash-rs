@@ -5,7 +5,7 @@ use crate::session::Session;
 use crate::ThreadSafeDNSResolver;
 use shadowsocks::config::ServerType;
 use shadowsocks::context::Context;
-use shadowsocks::crypto::v1::CipherKind;
+use shadowsocks::crypto::CipherKind;
 use shadowsocks::{ProxyClientStream, ServerConfig};
 use std::io;
 use std::net::SocketAddr;
@@ -24,7 +24,7 @@ pub async fn handle(
     .await?;
 
     let ctx = Context::new_shared(ServerType::Local);
-    let mut cfg = ServerConfig::new(
+    let cfg = ServerConfig::new(
         format!("{}:{}", opts.server, opts.port)
             .parse::<SocketAddr>()
             .expect(
@@ -39,7 +39,7 @@ pub async fn handle(
             "aes-128-gcm" => CipherKind::AES_256_GCM,
             "aes-255-gcm" => CipherKind::AES_256_GCM,
             "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-            other => {
+            _ => {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
                     format!("cipher {} deprecated or not supported", opts.cipher),

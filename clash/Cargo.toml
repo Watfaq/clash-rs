@@ -3,6 +3,8 @@ name = "clash"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["shadowsocks"]
 
 
 [dependencies]
@@ -43,7 +45,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 atty = "0.2"
 
-shadowsocks = { version = "1.14", optional = true }
+shadowsocks = { path = "../../shadowsocks-rust/crates/shadowsocks", optional = true }
 
 [dev-dependencies]
 tempfile = "3.3"

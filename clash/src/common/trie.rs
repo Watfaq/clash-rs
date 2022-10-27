@@ -159,8 +159,7 @@ pub fn valid_and_split_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
 
 #[cfg(test)]
 mod tests {
-    use std::net::IpAddr;
-    use std::{net::Ipv4Addr, rc::Rc, sync::Arc};
+    use std::{net::Ipv4Addr, sync::Arc};
 
     use crate::common::trie::StringTrie;
 

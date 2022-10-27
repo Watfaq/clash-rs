@@ -38,14 +38,15 @@ impl AsyncWrite for HTTPObfs {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        if !self.first_packet_sent {
+        let mut pin = self.get_mut();
+        if !pin.first_packet_sent {
             let rand_bytes = rand::random::<[u8; 16]>();
-            let req = Request::builder()
+            let mut req = Request::builder()
                 .method("GET")
-                .uri(if self.port == 80 {
-                    format!("http://{}/", self.host)
+                .uri(if pin.port == 80 {
+                    format!("http://{}/", pin.host)
                 } else {
-                    format!("http://{}:{}", self.host, self.port)
+                    format!("http://{}:{}", pin.host, pin.port)
                 })
                 .body(buf)
                 .unwrap();
@@ -67,10 +68,10 @@ impl AsyncWrite for HTTPObfs {
             );
 
             let req = dump_request(req);
-            self.first_packet_sent = true;
-            Pin::new(&mut self.inner).poll_write(cx, &req)
+            pin.first_packet_sent = true;
+            Pin::new(&mut pin.inner).poll_write(cx, &req)
         } else {
-            Pin::new(&mut self.inner).poll_write(cx, buf)
+            Pin::new(&mut pin.inner).poll_write(cx, buf)
         }
     }
 
@@ -78,14 +79,16 @@ impl AsyncWrite for HTTPObfs {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        todo!()
+        let pin = self.get_mut();
+        Pin::new(&mut pin.inner).poll_flush(cx)
     }
 
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
-        todo!()
+        let pin = self.get_mut();
+        Pin::new(&mut pin.inner).poll_shutdown(cx)
     }
 }
 
@@ -95,8 +98,9 @@ impl AsyncRead for HTTPObfs {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        if !self.first_packet_recv {
-            match Pin::new(&mut self.inner).poll_read(cx, buf) {
+        let mut pin = self.get_mut();
+        if !pin.first_packet_recv {
+            match Pin::new(&mut pin.inner).poll_read(cx, buf) {
                 std::task::Poll::Ready(rv) => match rv {
                     Ok(_) => {
                         let needle = b"\r\n\r\n";
@@ -110,7 +114,7 @@ impl AsyncRead for HTTPObfs {
                                 "EOF",
                             )))
                         } else {
-                            self.first_packet_recv = true;
+                            pin.first_packet_recv = true;
                             std::task::Poll::Ready(Ok(()))
                         }
                     }
@@ -119,7 +123,7 @@ impl AsyncRead for HTTPObfs {
                 std::task::Poll::Pending => std::task::Poll::Pending,
             }
         } else {
-            Pin::new(&mut self.inner).poll_read(cx, buf)
+            Pin::new(&mut pin.inner).poll_read(cx, buf)
         }
     }
 }
