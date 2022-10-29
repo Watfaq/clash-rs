@@ -1,0 +1,18 @@
+version: "3"
+
+services:
+  shadowsocks:
+    build: .
+    ports:
+      - "8388:8388/tcp"
+      - "8388:8388/udp"
+    command: ["-s", "ss://AEAD_AES_256_GCM:password@:8388", "-udp", "-verbose"]
+    restart: unless-stopped
+
+  shadowsocks-obfs-http:
+    build: .
+    ports:
+      - "8389:8388/tcp"
+      - "8389:8388/udp"
+    command: ["-s", "ss://AEAD_AES_256_GCM:password@:8388", "-udp", "-verbose", "-plugin", "obfs-local", "-plugin-opts", "obfs=http"]
+    restart: unless-stopped

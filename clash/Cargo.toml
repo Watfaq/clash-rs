@@ -45,7 +45,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 atty = "0.2"
 
-shadowsocks = { path = "../../shadowsocks-rust/crates/shadowsocks", optional = true }
+shadowsocks = { path = "../../shadowsocks-rust/crates/shadowsocks", optional = true, features=["aead-cipher-2022"] }
 
 [dev-dependencies]
 tempfile = "3.3"

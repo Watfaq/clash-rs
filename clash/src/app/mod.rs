@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 pub mod dispatcher;
 pub mod dns;
@@ -9,4 +8,4 @@ pub mod outbound;
 pub mod profile;
 pub mod router;
 
-pub type ThreadSafeDNSResolver = Arc<RwLock<dyn dns::ClashResolver>>;
+pub type ThreadSafeDNSResolver = Arc<dyn dns::ClashResolver>;

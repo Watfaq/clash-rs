@@ -1,5 +1,4 @@
-use byteorder::ReadBytesExt;
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::fmt::{Debug, Display, Formatter};
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -8,20 +7,6 @@ use std::{
 use crate::proxy::utils::Interface;
 use bytes::{Buf, BufMut};
 use tokio::io::{AsyncRead, AsyncReadExt};
-
-pub type StreamId = u64;
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub struct DatagramSource {
-    pub address: SocketAddr,
-    pub stream_id: Option<StreamId>,
-}
-
-impl DatagramSource {
-    pub fn new(address: SocketAddr, stream_id: Option<StreamId>) -> Self {
-        DatagramSource { address, stream_id }
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SocksAddr {

@@ -102,7 +102,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
-    let default_dns_resolver = Arc::new(RwLock::new(dns::Resolver::new(config.dns).await));
+    let default_dns_resolver = Arc::new(dns::Resolver::new(config.dns).await);
     let outbound_manager = Arc::new(RwLock::new(OutboundManager::new(
         config
             .proxies

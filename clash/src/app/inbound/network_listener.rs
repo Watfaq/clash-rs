@@ -1,6 +1,6 @@
 use crate::config::internal::config::BindAddress;
 
-use crate::proxy::{http, socks, AnyInboundListener, InboundListener};
+use crate::proxy::{http, socks, AnyInboundListener};
 
 use crate::proxy::utils::Interface;
 use crate::{Dispatcher, Error, Runner};

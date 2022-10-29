@@ -17,7 +17,7 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
     match iface {
         // TODO: should this be ever used vs. calling .bind(2) from the caller side?
         Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(ip.clone(), 0).into()),
-        Interface::Name(name) => unsafe {
+        Interface::Name(name) => {
             #[cfg(target_vendor = "apple")]
             {
                 socket.bind_device_by_index(std::num::NonZeroU32::new(unsafe {
@@ -32,23 +32,21 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
             {
                 // TODO maybe fallback to IpAddr
             }
-        },
+        }
     }
 }
 
-pub async fn new_tcp_stream(
+pub async fn new_tcp_stream<'a>(
     resolver: ThreadSafeDNSResolver,
-    address: &str,
+    address: &'a str,
     port: u16,
-    iface: Option<&Interface>,
+    iface: Option<&'a Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
-        .read()
-        .await
         .resolve(address)
         .await
-        .map_err(|v| io::Error::new(io::ErrorKind::Other, "dns failure"))?
+        .map_err(|v| io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v)))?
         .ok_or(io::Error::new(
             io::ErrorKind::Other,
             format!("can't resolve dns: {}", address),

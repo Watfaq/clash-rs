@@ -1,6 +1,5 @@
+mod datagram;
 mod obfs;
-mod outbound;
-mod stream;
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -17,7 +16,7 @@ use crate::{
 };
 use std::{collections::HashMap, io, sync::Arc};
 
-use self::outbound::OutboundDatagramShadowsocks;
+use self::datagram::OutboundDatagramShadowsocks;
 
 use super::{
     utils::{new_tcp_stream, new_udp_socket},
@@ -158,10 +157,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        if self.opts.plugin_opts.is_some() {
-            unimplemented!("plugin is not supported yet");
-        }
-
         let stream = new_tcp_stream(
             resolver,
             self.opts.server.as_str(),
@@ -178,6 +173,22 @@ impl OutboundHandler for Handler {
             )
         })
         .await?;
+
+        if let Some(plugin) = &self.opts.plugin_opts {
+            match plugin {
+                OBFSOption::Simple(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "simple-obfs is deprecated, please use v2ray-plugin instead",
+                    ))
+                }
+                OBFSOption::V2Ray(opt) => {
+                    let mut stream = v2ray::V2RayStream::new(stream, opt.clone());
+                    stream.connect().await?;
+                    Ok(Box::new(stream))
+                }
+            }
+        }
 
         let ctx = Context::new_shared(ServerType::Local);
         let cfg = ServerConfig::new(
@@ -204,7 +215,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram(
         &self,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
         let ctx = Context::new_shared(ServerType::Local);
         let cfg = ServerConfig::new(
@@ -219,9 +230,11 @@ impl OutboundHandler for Handler {
         );
         let socket = new_udp_socket(None, self.opts.common_opts.iface.as_ref()).await?;
         let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
-        Ok(
-            OutboundDatagramShadowsocks::new(socket, (self.opts.server.to_owned(), self.opts.port))
-                .into(),
+        Ok(OutboundDatagramShadowsocks::new(
+            socket,
+            (self.opts.server.to_owned(), self.opts.port),
+            resolver,
         )
+        .into())
     }
 }

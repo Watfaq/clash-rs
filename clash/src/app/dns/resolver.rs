@@ -142,15 +142,13 @@ impl Resolver {
     }
 
     fn should_only_query_fallback(&self, message: &op::Message) -> bool {
-        if let (Some(fallback), Some(fallback_domain_filters)) =
+        if let (Some(_), Some(fallback_domain_filters)) =
             (&self.fallback, &self.fallback_domain_filters)
         {
             if let Some(domain) = Resolver::domain_name_of_message(message) {
-                if let Some(filters) = &self.fallback_domain_filters {
-                    for f in filters.into_iter() {
-                        if f.apply(domain.as_str()) {
-                            return true;
-                        }
+                for f in fallback_domain_filters.into_iter() {
+                    if f.apply(domain.as_str()) {
+                        return true;
                     }
                 }
             }
@@ -369,11 +367,7 @@ impl Resolver {
 mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
     use crate::dns::helper::make_clients;
-    use crate::dns::{ClashResolver, Client, NameServer, Resolver, ThreadSafeDNSClient};
-    use crate::{def, dns};
-    use futures::lock::Mutex;
-    use std::net;
-    use std::path::PathBuf;
+    use crate::dns::{NameServer, Resolver, ThreadSafeDNSClient};
     use std::sync::Arc;
     use trust_dns_client::op;
     use trust_dns_proto::rr;

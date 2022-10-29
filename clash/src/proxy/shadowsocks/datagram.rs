@@ -1,35 +1,43 @@
 use std::{
     io,
     pin::Pin,
-    sync::RwLock,
     task::{Context, Poll},
 };
 
-use futures::{ready, FutureExt, Sink, Stream};
+use futures::{ready, Sink, Stream};
 use shadowsocks::ProxySocket;
+use tokio::io::ReadBuf;
+use tracing::{debug, instrument};
 
 use crate::{
+    app::ThreadSafeDNSResolver,
     proxy::{datagram::UdpPacket, AnyOutboundDatagram},
     session::SocksAddr,
 };
 
 #[must_use = "sinks do nothing unless polled"]
 pub struct OutboundDatagramShadowsocks {
-    inner: RwLock<ProxySocket>,
-    remote_addr: (String, u16),
+    inner: ProxySocket,
+    remote_addr: SocksAddr,
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
+    resolver: ThreadSafeDNSResolver,
 }
 
 impl OutboundDatagramShadowsocks {
-    pub fn new(inner: ProxySocket, remote_addr: (String, u16)) -> AnyOutboundDatagram {
+    pub fn new(
+        inner: ProxySocket,
+        remote_addr: (String, u16),
+        resolver: ThreadSafeDNSResolver,
+    ) -> AnyOutboundDatagram {
         let s = Self {
-            inner: RwLock::new(inner),
+            inner,
             flushed: true,
             pkt: None,
-            remote_addr,
-            buf: Vec::with_capacity(65535),
+            remote_addr: remote_addr.try_into().expect("must into socks addr"),
+            buf: vec![0u8; 65535],
+            resolver,
         };
         Box::new(s) as _
     }
@@ -56,34 +64,59 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
         Ok(())
     }
 
+    #[instrument(skip(self, cx))]
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let Self {
-            ref mut inner,
-            ref mut pkt,
-            ref mut flushed,
-            ref remote_addr,
-            ..
-        } = *self;
-
-        let pkg_container = pkt;
-
-        let guard = inner.write().expect("write lock");
-
-        if *flushed {
+        if self.flushed {
             return Poll::Ready(Ok(()));
         }
 
-        if let Some(pkt) = pkg_container.take() {
+        let Self {
+            ref mut inner,
+            ref mut pkt,
+            ref remote_addr,
+            ref mut flushed,
+            ref mut resolver,
+            ..
+        } = *self;
+
+        let dst = match remote_addr.to_owned() {
+            SocksAddr::Domain(domain, port) => {
+                let domain = domain.to_string();
+                let port = port.to_owned();
+
+                let mut fut = resolver.resolve(domain.as_str());
+                let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
+                    io::Error::new(io::ErrorKind::Other, "resolve domain failed")
+                }))?;
+
+                if let Some(ip) = ip {
+                    (ip, port).into()
+                } else {
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("resolve domain failed: {}", domain),
+                    )));
+                }
+            }
+            SocksAddr::Ip(addr) => addr,
+        };
+
+        let pkt_container = pkt;
+
+        if let Some(pkt) = pkt_container.take() {
             let data = pkt.data;
             let addr: shadowsocks::relay::Address =
                 (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
-            let mut fut = guard.send_to(remote_addr.to_owned(), &addr, &data).boxed();
-            let n = ready!(fut.as_mut().poll(cx).map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "send UDP data to remote ss server")
-            }))?;
+
+            let n = ready!(inner.poll_send_to(dst, &addr, data.as_ref(), cx))?;
+
+            debug!(
+                "send udp packet to remote ss server, len: {}, remote_addr: {}, dst_addr: {}",
+                n, dst, addr
+            );
 
             let wrote_all = n == data.len();
-            *pkg_container = None;
+            *pkt_container = None;
             *flushed = true;
 
             let res = if wrote_all {
@@ -96,6 +129,7 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
             };
             Poll::Ready(res)
         } else {
+            debug!("no udp packet to send");
             Poll::Ready(Err(io::Error::new(
                 io::ErrorKind::Other,
                 "no packet to send",
@@ -111,6 +145,7 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
 impl Stream for OutboundDatagramShadowsocks {
     type Item = UdpPacket;
 
+    #[instrument(skip(self, cx))]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let Self {
             ref mut buf,
@@ -118,17 +153,14 @@ impl Stream for OutboundDatagramShadowsocks {
             ..
         } = *self;
 
-        let guard = inner.read().expect("read lock");
-        let mut fut = guard.recv_from(buf).boxed();
-        let rv = ready!(fut.as_mut().poll(cx).map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "recv UDP data from remote ss server")
-        }));
+        let mut buf = ReadBuf::new(buf);
 
-        drop(fut); // drop the future to bypass the borrow checker
+        let rv = ready!(inner.poll_recv_from(cx, &mut buf));
+        debug!("recv udp packet from remote ss server: {:?}", rv);
 
         match rv {
             Ok((n, src, _, _)) => Poll::Ready(Some(UdpPacket {
-                data: (buf[..n]).to_vec(),
+                data: buf.filled()[..n].to_vec(),
                 src_addr: src.into(),
                 dst_addr: SocksAddr::any_ipv4(),
             })),

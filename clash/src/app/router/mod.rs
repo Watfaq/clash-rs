@@ -89,8 +89,6 @@ impl Router {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
                 if let Ok(ip) = self
                     .dns_client
-                    .read()
-                    .await
                     .resolve(sess.destination.domain().unwrap())
                     .await
                 {
