@@ -1,5 +1,6 @@
 mod datagram;
 mod obfs;
+mod v2ray;
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -182,11 +183,7 @@ impl OutboundHandler for Handler {
                         "simple-obfs is deprecated, please use v2ray-plugin instead",
                     ))
                 }
-                OBFSOption::V2Ray(opt) => {
-                    let mut stream = v2ray::V2RayStream::new(stream, opt.clone());
-                    stream.connect().await?;
-                    Ok(Box::new(stream))
-                }
+                OBFSOption::V2Ray(opt) => {}
             }
         }
 

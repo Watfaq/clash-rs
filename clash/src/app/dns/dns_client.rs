@@ -13,14 +13,12 @@ use trust_dns_client::{
 use crate::common::tls;
 use crate::dns::dhcp::DhcpClient;
 use crate::dns::ThreadSafeDNSClient;
+use tokio::net::TcpStream as TokioTcpStream;
 use tokio::net::UdpSocket as TokioUdpSocket;
-use tokio::net::{TcpStream as TokioTcpStream, TcpStream};
-use trust_dns_proto::https::{HttpsClientStream, HttpsClientStreamBuilder};
+use trust_dns_proto::https::HttpsClientStreamBuilder;
 use trust_dns_proto::op::Message;
 use trust_dns_proto::rustls::tls_client_connect_with_bind_addr;
-use trust_dns_proto::tcp::TcpClientConnect;
 use trust_dns_proto::{
-    op,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
     DnsHandle,
 };

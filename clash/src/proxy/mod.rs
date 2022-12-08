@@ -18,7 +18,9 @@ pub mod http;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+pub mod trojan;
 pub mod utils;
+pub mod vmess;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {

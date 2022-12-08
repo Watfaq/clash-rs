@@ -1,0 +1,5 @@
+[build]
+target-dir = "target" 
+
+[env]
+BORING_BSSL_PATH = { value = "third_party/boringssl", force = true, relative = true }
