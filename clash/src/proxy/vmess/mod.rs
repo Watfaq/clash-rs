@@ -8,10 +8,14 @@ use self::{
 
 mod aead;
 mod chunk;
+pub mod h2;
 mod header;
 mod kdf;
 mod stream;
+mod tls;
 mod user;
+pub mod websocket;
+pub mod websocket_early_data;
 
 pub(crate) const VERSION: u8 = 1;
 
