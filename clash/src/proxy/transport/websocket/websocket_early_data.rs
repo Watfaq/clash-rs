@@ -13,14 +13,17 @@ use tokio_tungstenite::{client_async_with_config, tungstenite::protocol::WebSock
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
-    proxy::{vmess::websocket::WebsocketConn, AnyStream},
+    proxy::AnyStream,
 };
 
-pub(super) struct WebsocketEarlyDataConn {
+use super::websocket::WebsocketConn;
+
+pub struct WebsocketEarlyDataConn {
     stream: Option<AnyStream>,
     req: Option<Request<()>>,
-    stream_future:
-        Option<Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send>>>,
+    stream_future: Option<
+        Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send + Sync>>,
+    >,
     early_waker: Option<Waker>,
     flush_waker: Option<Waker>,
     ws_config: Option<WebSocketConfig>,
@@ -54,7 +57,7 @@ impl WebsocketEarlyDataConn {
         stream: AnyStream,
         req: Request<()>,
         config: Option<WebSocketConfig>,
-    ) -> Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send + Sync>> {
         async fn run(
             stream: AnyStream,
             req: Request<()>,

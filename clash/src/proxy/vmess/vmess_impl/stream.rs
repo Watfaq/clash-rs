@@ -6,32 +6,44 @@ use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::{
-    common::{
-        crypto::{self, AeadCipherHelper},
-        errors::map_io_error,
-        utils,
-    },
-    proxy::vmess::kdf::{
-        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
-    },
-};
+use crate::{common::{
+    crypto::{self, AeadCipherHelper},
+    errors::map_io_error,
+    utils,
+}, session::SocksAddr};
 
 use super::{
     aead::{AeadReader, AeadWriter, VmessSecurity},
     chunk::{ChunkReader, ChunkWriter},
     header,
-    kdf::{self, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY},
+    kdf::{
+        self, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
+        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
+    },
     user::{ID, ID_BYTES_LEN},
-    DstAddr, Security, VmessReader, VmessWriter, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM,
-    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
+    Security, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
+    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
+
+pub(crate) enum VmessReader {
+    None(ChunkReader),
+    Aes128Gcm(AeadReader),
+    ChaCha20Poly1305(AeadReader),
+}
+
+pub(crate) enum VmessWriter {
+    None(ChunkWriter),
+    Aes128Gcm(AeadWriter),
+    ChaCha20Poly1305(AeadWriter),
+}
+
+
 
 pub struct VmessStream<S> {
     stream: S,
     reader: VmessReader,
     writer: VmessWriter,
-    dst: DstAddr,
+    dst: SocksAddr,
     id: ID,
     req_body_iv: Vec<u8>,
     req_body_key: Vec<u8>,
@@ -40,18 +52,20 @@ pub struct VmessStream<S> {
     resp_v: u8,
     security: u8,
     is_aead: bool,
+    is_udp: bool,
 }
 
 impl<S> VmessStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    async fn new(
+    pub(crate) async fn new(
         stream: S,
         id: &ID,
-        dst: &DstAddr,
+        dst: &SocksAddr,
         security: &Security,
         is_aead: bool,
+        is_udp: bool,
     ) -> std::io::Result<VmessStream<S>> {
         let mut rand_bytes = [0u8; 33];
         utils::rand_fill(&mut rand_bytes[..]);
@@ -132,6 +146,7 @@ where
             resp_v,
             security: *security,
             is_aead,
+            is_udp,
         };
 
         stream.handshake().await?;
@@ -150,6 +165,7 @@ where
                 self.security,
                 &self.dst,
                 self.is_aead,
+                self.is_udp,
                 &self.id,
             )
         })
@@ -175,8 +191,9 @@ where
         req_body_iv: &[u8],
         resp_v: u8,
         security: u8,
-        dst: &DstAddr,
+        dst: &SocksAddr,
         is_aead: bool,
+        is_udp: bool,
         id: &ID,
     ) -> std::task::Poll<std::io::Result<()>> {
         let mut pin = Pin::new(writer);
@@ -215,15 +232,13 @@ where
         let p = utils::rand_range(0..16);
         buf.put_u8(p << 4 | security);
         buf.put_u8(0);
-        if dst.udp {
+        if is_udp {
             buf.put_u8(COMMAND_UDP);
         } else {
             buf.put_u8(COMMAND_TCP);
         }
 
-        buf.put_slice(dst.port.to_be_bytes().as_ref());
-        buf.put_u8(dst.atyp);
-        buf.put_slice(&dst.addr);
+        dst.write_to_buf_vmess(&mut buf);
 
         if p > 0 {
             let padding = vec![0u8; p as usize];

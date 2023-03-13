@@ -1,8 +1,8 @@
 use std::pin::Pin;
 
 use bytes::{Buf, Bytes};
-use futures::{ready, Sink, SinkExt, Stream};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use futures::{ready, Sink, Stream};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     proxy::AnyStream,
 };
 
-pub(crate) struct WebsocketConn {
+pub struct WebsocketConn {
     inner: WebSocketStream<AnyStream>,
     read_buffer: Option<Bytes>,
 }

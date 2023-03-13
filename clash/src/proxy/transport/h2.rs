@@ -18,39 +18,22 @@ pub struct Http2Config {
     pub path: http::uri::PathAndQuery,
 }
 
-pub struct Http2Stream {
-    recv: RecvStream,
-    send: SendStream<Bytes>,
-    buffer: BytesMut,
-
-    cfg: Http2Config,
-}
-
-impl Http2Stream {
-    pub fn new(recv: RecvStream, send: SendStream<Bytes>, cfg: Http2Config) -> Self {
-        Self {
-            recv,
-            send,
-            buffer: BytesMut::with_capacity(1024 * 4),
-            cfg,
-        }
-    }
-
+impl Http2Config {
     fn req(&self) -> std::io::Result<Request<()>> {
-        let uri_idx = random::<usize>() % self.cfg.hosts.len();
+        let uri_idx = random::<usize>() % self.hosts.len();
         let uri = {
             http::Uri::builder()
                 .scheme("https")
-                .authority(self.cfg.hosts[uri_idx].as_str())
-                .path_and_query(self.cfg.path.clone())
+                .authority(self.hosts[uri_idx].as_str())
+                .path_and_query(self.path.clone())
                 .build()
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
         };
         let mut request = Request::builder()
             .uri(uri)
-            .method(self.cfg.method.clone())
+            .method(self.method.clone())
             .version(http::Version::HTTP_2);
-        for (k, v) in self.cfg.headers.iter() {
+        for (k, v) in self.headers.iter() {
             if k != "Host" {
                 request = request.header(k, v);
             }
@@ -71,11 +54,23 @@ impl Http2Stream {
 
         let recv_stream = resp.await.map_err(map_io_error)?.into_body();
 
-        Ok(Box::new(Http2Stream::new(
-            recv_stream,
-            send_stream,
-            self.cfg.clone(),
-        )))
+        Ok(Box::new(Http2Stream::new(recv_stream, send_stream)))
+    }
+}
+
+pub struct Http2Stream {
+    recv: RecvStream,
+    send: SendStream<Bytes>,
+    buffer: BytesMut,
+}
+
+impl Http2Stream {
+    pub fn new(recv: RecvStream, send: SendStream<Bytes>) -> Self {
+        Self {
+            recv,
+            send,
+            buffer: BytesMut::with_capacity(1024 * 4),
+        }
     }
 }
 

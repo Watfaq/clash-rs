@@ -22,6 +22,8 @@ pub mod trojan;
 pub mod utils;
 pub mod vmess;
 
+mod transport;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
     #[error(transparent)]

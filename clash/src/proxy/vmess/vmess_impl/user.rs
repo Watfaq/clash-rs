@@ -8,7 +8,7 @@ pub struct ID {
     pub cmd_key: [u8; MD5_DIGEST_LENGTH as _],
 }
 
-pub(crate) fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
+pub fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
     let mut alter_id_list = Vec::with_capacity(alter_id_count as usize);
     let mut prev_id = primary.uuid;
 
@@ -25,7 +25,7 @@ pub(crate) fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
     alter_id_list
 }
 
-pub(crate) fn new_id(uuid: &uuid::Uuid) -> ID {
+pub fn new_id(uuid: &uuid::Uuid) -> ID {
     let uuid = uuid.to_owned();
     let mut cmd_key = [0u8; MD5_DIGEST_LENGTH as _];
 

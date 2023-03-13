@@ -6,7 +6,9 @@ use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::{common::crypto::AeadCipherHelper, proxy::vmess::MAX_CHUNK_SIZE};
+use super::MAX_CHUNK_SIZE;
+
+use crate::common::crypto::AeadCipherHelper;
 
 use super::CHUNK_SIZE;
 
