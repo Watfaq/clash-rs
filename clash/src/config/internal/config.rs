@@ -68,6 +68,7 @@ impl TryFrom<def::Config> for Config {
                     }
                 }),
                 routing_mask: c.routing_mask,
+                mmdb: c.mmdb.to_owned(),
             },
             dns: (&c).try_into()?,
             experimental: c.experimental,
@@ -162,6 +163,7 @@ pub struct General {
     ipv6: bool,
     interface: Option<Interface>,
     routing_mask: Option<u32>,
+    pub mmdb: String,
 }
 
 pub struct Profile {

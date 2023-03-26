@@ -64,7 +64,7 @@ pub fn start(opts: Options) -> Result<(), Error> {
         .unwrap()
         .block_on(async {
             match start_async(opts).await {
-                Err(e) => println!("failed: {}", e),
+                Err(e) => println!("failed to start: {}", e),
                 Ok(_) => println!("finished"),
             }
         });
@@ -85,14 +85,15 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let config: InternalConfig = match opts.config {
         Config::Internal(c) => c,
-        Config::File(home, file) => Path::join(home.as_str().as_ref(), &file)
-            .to_str()
-            .ok_or(Error::InvalidConfig(format!(
-                "invalid config file: home {} file: {}",
-                &home, &file,
-            )))?
-            .parse::<def::Config>()?
-            .try_into()?,
+        Config::File(home, file) => {
+            if home != "" {
+                std::env::set_current_dir(std::path::Path::new(&home))
+                    .expect(format!("invalid home: {}", &home).as_str());
+            }
+
+            let c = file.parse::<def::Config>()?.try_into()?;
+            c
+        }
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };
 
@@ -124,9 +125,11 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             .collect(),
         default_dns_resolver.clone(),
     )?));
+
     let router = Arc::new(RwLock::new(Router::new(
         config.rules,
         default_dns_resolver.clone(),
+        config.general.mmdb,
     )));
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager,

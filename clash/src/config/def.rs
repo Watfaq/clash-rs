@@ -39,8 +39,7 @@ pub struct Config {
     pub tproxy_port: Option<u16>,
     pub mixed_port: Option<u16>,
 
-    /// these options has Default::default()
-    /// or will be set to their empty/falsy vals
+    /// these options have Default::default()
     pub authentication: Vec<String>,
     pub allow_lan: bool,
     pub bind_address: String,
@@ -55,10 +54,10 @@ pub struct Config {
     #[serde(rename = "rules")]
     pub rule: Vec<String>,
     pub hosts: HashMap<String, String>,
+    pub mmdb: String,
 
     /// these options has default vals,
-    /// but we want to process them
-    /// explicitly
+    /// and needs extra processing
     pub ipv6: Option<bool>,
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,
@@ -81,10 +80,21 @@ impl FromStr for Config {
                 if exists {
                     let fd = File::open(path)?;
                     let reader = BufReader::new(fd);
-                    Ok(serde_yaml::from_reader(reader)
-                        .map_err(|x| Error::InvalidConfig(x.to_string()))?)
+                    Ok(serde_yaml::from_reader(reader).map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "cound not parse config content {}: {}",
+                            s,
+                            x.to_string()
+                        ))
+                    })?)
                 } else {
-                    Ok(serde_yaml::from_str(s).map_err(|x| Error::InvalidConfig(x.to_string()))?)
+                    Ok(serde_yaml::from_str(s).map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "cound not parse config content {}: {}",
+                            s,
+                            x.to_string()
+                        ))
+                    })?)
                 }
             }
             Err(err) => Err(err.into()),
@@ -119,6 +129,7 @@ impl Default for Config {
             proxy: Default::default(),
             proxy_group: Default::default(),
             rule: Default::default(),
+            mmdb: "Country.mmdb".to_string(),
         }
     }
 }

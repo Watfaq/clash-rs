@@ -1,6 +1,5 @@
 use crate::Error;
-use futures::StreamExt;
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 pub enum Rule {
     Domain {
@@ -15,7 +14,11 @@ pub enum Rule {
         domain_keyword: String,
         target: String,
     },
-    GeoIP(),
+    GeoIP {
+        target: String,
+        country_code: String,
+        no_resolve: bool,
+    },
     IPCIDR {
         ipnet: ipnet::IpNet,
         target: String,
@@ -26,8 +29,14 @@ pub enum Rule {
         target: String,
         no_resolve: bool,
     },
-    SRCPort,
-    DSTPort,
+    SRCPort {
+        target: String,
+        port: u16,
+    },
+    DSTPort {
+        target: String,
+        port: u16,
+    },
     ProcessName,
     ProcessPath,
     RuleSet {
@@ -59,7 +68,15 @@ impl Rule {
                 domain_keyword: payload.to_string(),
                 target: target.to_string(),
             }),
-            "GEOIP" => Ok(Rule::GeoIP()),
+            "GEOIP" => Ok(Rule::GeoIP {
+                target: target.to_string(),
+                country_code: payload.to_string(),
+                no_resolve: if let Some(params) = params {
+                    params.contains(&"no-resolve")
+                } else {
+                    false
+                },
+            }),
             "IP-CIDR" | "IP-CIDR6" => Ok(Rule::IPCIDR {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
@@ -78,8 +95,18 @@ impl Rule {
                     false
                 },
             }),
-            "SRC-PORT" => Ok(Rule::SRCPort {}),
-            "DST-PORT" => todo!(),
+            "SRC-PORT" => Ok(Rule::SRCPort {
+                target: target.to_string(),
+                port: payload
+                    .parse()
+                    .expect(format!("invalid port: {}", payload).as_str()),
+            }),
+            "DST-PORT" => Ok(Rule::DSTPort {
+                target: target.to_string(),
+                port: payload
+                    .parse()
+                    .expect(format!("invalid port: {}", payload).as_str()),
+            }),
             "PROCESS-NAME" => todo!(),
             "PROCESS-PATH" => todo!(),
             "RULE-SET" => Ok(Rule::RuleSet {

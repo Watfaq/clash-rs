@@ -13,6 +13,7 @@ use crate::app::router::rules::final_::Final;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+mod mmdb;
 mod rules;
 
 pub struct Router {
@@ -25,7 +26,9 @@ pub type ThreadSafeRouter = Arc<RwLock<Router>>;
 const MATCH: &str = "MATCH";
 
 impl Router {
-    pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeDNSResolver) -> Self {
+    pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeDNSResolver, mmdb_path: String) -> Self {
+        let mmdb = Arc::new(mmdb::MMDB::new(mmdb_path).expect("failed to load mmdb"));
+
         Self {
             rules: rules
                 .into_iter()
@@ -68,9 +71,26 @@ impl Router {
                         match_src: true,
                     }),
 
-                    Rule::GeoIP() => todo!(),
-                    Rule::SRCPort => todo!(),
-                    Rule::DSTPort => todo!(),
+                    Rule::GeoIP {
+                        target,
+                        country_code,
+                        no_resolve,
+                    } => Box::new(rules::geoip::GeoIP {
+                        target,
+                        country_code,
+                        no_resolve,
+                        mmdb: mmdb.clone(),
+                    }),
+                    Rule::SRCPort { target, port } => Box::new(rules::port::Port {
+                        port,
+                        target,
+                        is_src: true,
+                    }),
+                    Rule::DSTPort { target, port } => Box::new(rules::port::Port {
+                        port,
+                        target,
+                        is_src: false,
+                    }),
                     Rule::ProcessName => todo!(),
                     Rule::ProcessPath => todo!(),
                     Rule::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),

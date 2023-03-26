@@ -1,0 +1,7 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "clash",
+    srcs = ["src/main.rs"],
+    deps = ["//clash:lib"],
+)
