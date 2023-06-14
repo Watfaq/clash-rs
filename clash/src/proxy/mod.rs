@@ -1,3 +1,4 @@
+use crate::config::internal::proxy::{OutboundProxy, OutboundProxyProtocol};
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
 use crate::session::{Session, SocksAddr};
@@ -21,6 +22,9 @@ pub mod socks;
 //pub mod trojan;
 pub mod utils;
 //pub mod vmess;
+
+// proxy groups
+mod relay;
 
 mod transport;
 
@@ -91,7 +95,9 @@ impl Default for CommonOption {
 
 #[async_trait]
 pub trait InboundListener: Send + Sync + Unpin {
+    /// support tcp or not
     fn handle_tcp(&self) -> bool;
+    /// support udp or not
     fn handle_udp(&self) -> bool;
     async fn listen_tcp(&self) -> io::Result<()>;
     async fn listen_udp(&self) -> io::Result<()>;
@@ -101,14 +107,32 @@ pub type AnyInboundListener = Arc<dyn InboundListener>;
 
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin {
+    /// The name of the outbound handler
     fn name(&self) -> &str;
 
+    /// The protocol of the outbound handler
+    /// only contains Type information, do not rely on the underlying value
+    fn proto(&self) -> OutboundProxy;
+
+    /// The proxy remote address
+    fn remote_addr(&self) -> Option<SocksAddr>;
+
+    /// connect to remote target via TCP
     async fn connect_stream(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream>;
 
+    /// wraps a stream with outbound handler
+    async fn proxy_stream(
+        &self,
+        s: AnyStream,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<AnyStream>;
+
+    /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
         sess: &Session,

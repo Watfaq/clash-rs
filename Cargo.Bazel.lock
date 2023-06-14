@@ -1,5 +1,5 @@
 {
-  "checksum": "925dcab96141bcf345a512d01787c0f736c8cea791f0b217bc4933bf50588cc9",
+  "checksum": "691adb21254e7674b99e0d0b8f10c696d3903526df1ca205518090eb7250c2c4",
   "crates": {
     "aead 0.4.3": {
       "name": "aead",
@@ -2337,6 +2337,10 @@
             {
               "id": "lru_time_cache 0.11.11",
               "target": "lru_time_cache"
+            },
+            {
+              "id": "maxminddb 0.23.0",
+              "target": "maxminddb"
             },
             {
               "id": "md-5 0.10.5",
@@ -6082,6 +6086,52 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "ipnetwork 0.18.0": {
+      "name": "ipnetwork",
+      "version": "0.18.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ipnetwork/0.18.0/download",
+          "sha256": "4088d739b183546b239688ddbc79891831df421773df95e236daf7867866d355"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ipnetwork",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ipnetwork",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.145",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.18.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "itertools 0.10.5": {
       "name": "itertools",
       "version": "0.10.5",
@@ -6845,6 +6895,63 @@
         "version": "0.1.9"
       },
       "license": "MIT"
+    },
+    "maxminddb 0.23.0": {
+      "name": "maxminddb",
+      "version": "0.23.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/maxminddb/0.23.0/download",
+          "sha256": "fe2ba61113f9f7a9f0e87c519682d39c43a6f3f79c2cc42c3ba3dda83b1fa334"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "maxminddb",
+            "crate_root": "src/maxminddb/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "maxminddb",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ipnetwork 0.18.0",
+              "target": "ipnetwork"
+            },
+            {
+              "id": "log 0.4.17",
+              "target": "log"
+            },
+            {
+              "id": "memchr 2.5.0",
+              "target": "memchr"
+            },
+            {
+              "id": "serde 1.0.145",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.23.0"
+      },
+      "license": "ISC"
     },
     "md-5 0.10.5": {
       "name": "md-5",

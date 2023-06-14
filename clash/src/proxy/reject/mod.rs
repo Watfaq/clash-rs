@@ -1,8 +1,10 @@
-use crate::config::internal::proxy::PROXY_DIRECT;
+use crate::config::internal::proxy::{
+    OutboundProxy, OutboundProxyProtocol, PROXY_DIRECT, PROXY_REJECT,
+};
 use crate::proxy::{
     AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain,
 };
-use crate::session::Session;
+use crate::session::{Session, SocksAddr};
 use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
 use std::io;
@@ -19,7 +21,15 @@ impl Handler {
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
-        PROXY_DIRECT
+        PROXY_REJECT
+    }
+
+    fn proto(&self) -> OutboundProxy {
+        OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject)
+    }
+
+    fn remote_addr(&self) -> Option<SocksAddr> {
+        None
     }
 
     async fn connect_stream(
@@ -27,6 +37,15 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
+        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    }
+
+    async fn proxy_stream(
+        &self,
+        s: AnyStream,
+        #[allow(unused_variables)] sess: &Session,
+        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+    ) -> std::io::Result<AnyStream> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 

@@ -11,8 +11,9 @@ use shadowsocks::{
 
 use crate::{
     app::ThreadSafeDNSResolver,
+    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     proxy::{CommonOption, OutboundHandler},
-    session::Session,
+    session::{Session, SocksAddr},
     Error,
 };
 use std::{collections::HashMap, io, sync::Arc};
@@ -153,13 +154,21 @@ impl OutboundHandler for Handler {
         self.opts.name.as_str()
     }
 
+    fn proto(&self) -> OutboundProxy {
+        OutboundProxy::ProxyServer(OutboundProxyProtocol::Ss(Default::default()))
+    }
+
+    fn remote_addr(&self) -> Option<SocksAddr> {
+        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
+    }
+
     async fn connect_stream(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         let stream = new_tcp_stream(
-            resolver,
+            resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
@@ -175,6 +184,15 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
+        self.proxy_stream(stream, sess, resolver).await
+    }
+
+    async fn proxy_stream(
+        &self,
+        s: AnyStream,
+        sess: &Session,
+        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+    ) -> std::io::Result<AnyStream> {
         if let Some(plugin) = &self.opts.plugin_opts {
             match plugin {
                 OBFSOption::Simple(_) => {
@@ -183,7 +201,9 @@ impl OutboundHandler for Handler {
                         "simple-obfs is deprecated, please use v2ray-plugin instead",
                     ))
                 }
-                OBFSOption::V2Ray(opt) => {}
+                OBFSOption::V2Ray(opt) => {
+                    todo!("v2ray-plugin is not implemented yet")
+                }
             }
         }
 
@@ -201,7 +221,7 @@ impl OutboundHandler for Handler {
 
         let stream = ProxyClientStream::from_stream(
             ctx,
-            stream,
+            s,
             &cfg,
             (sess.destination.host(), sess.destination.port()),
         );

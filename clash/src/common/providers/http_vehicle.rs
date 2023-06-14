@@ -1,4 +1,5 @@
 use crate::app::ThreadSafeDNSResolver;
+use crate::common::errors::map_io_error;
 use crate::common::providers::{ProviderVehicle, ProviderVehicleType};
 use crate::proxy::utils::new_tcp_stream;
 use crate::proxy::AnyStream;
@@ -90,10 +91,6 @@ impl Vehicle {
     }
 }
 
-fn map_hyper_error(x: hyper::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, x.to_string())
-}
-
 #[async_trait]
 impl ProviderVehicle for Vehicle {
     async fn read(&self) -> std::io::Result<Vec<u8>> {
@@ -104,15 +101,15 @@ impl ProviderVehicle for Vehicle {
                 .map_err(|x| io::Error::new(io::ErrorKind::Other, x.to_string()))?,
         )
         .await
-        .map_err(map_hyper_error)
+        .map_err(map_io_error)
         .map(|x| x.into_iter().collect::<Vec<u8>>())
     }
 
     fn path(&self) -> &str {
-        todo!()
+        self.path.to_str().unwrap()
     }
 
     fn typ(&self) -> ProviderVehicleType {
-        todo!()
+        ProviderVehicleType::HTTP
     }
 }

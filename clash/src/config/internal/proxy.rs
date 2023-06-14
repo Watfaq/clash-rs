@@ -85,7 +85,7 @@ impl Display for OutboundProxyProtocol {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundShadowsocks {
     pub name: String,
     pub server: String,
@@ -185,7 +185,7 @@ impl Display for OutboundGroupProtocol {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundGroupRelay {
     pub name: String,
     pub proxies: Option<Vec<String>>,
@@ -234,7 +234,9 @@ pub struct OutboundGroupLoadBalance {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 
 pub enum LoadBalanceStrategy {
+    #[serde(rename = "consistent-hashing")]
     ConsistentHashing,
+    #[serde(rename = "round-robin")]
     RoundRobin,
 }
 

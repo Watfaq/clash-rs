@@ -1,12 +1,19 @@
 use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
 use std::io;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
+mod fether;
 mod file_vehicle;
 mod http_vehicle;
 pub mod proxy_provider;
 pub mod rule_provider;
 
+#[cfg(test)]
+use mockall::automock;
+
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ProviderVehicleType {
     File,
     HTTP,
@@ -23,6 +30,9 @@ impl Display for ProviderVehicleType {
     }
 }
 
+type ThreadSafeProviderVehicle = Arc<Mutex<dyn ProviderVehicle + Send + Sync>>;
+
+#[cfg_attr(test, automock)]
 #[async_trait]
 trait ProviderVehicle {
     async fn read(&self) -> io::Result<Vec<u8>>;

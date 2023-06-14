@@ -42,6 +42,8 @@ sha2 = "0.10.6"
 md-5 = "0.10.5"
 chacha20poly1305 = "0.10"
 aes-gcm = "0.10"
+filetime = "0.2"
+
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
@@ -68,6 +70,7 @@ maxminddb = "0.23.0"
 [dev-dependencies]
 tempfile = "3.3"
 ctor = "0.1"
+mockall = "0.11.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2.8.0"
