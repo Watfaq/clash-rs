@@ -100,7 +100,9 @@ impl DhcpClient {
         let iface = network_interface::NetworkInterface::show()
             .map_err(|x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", x)))?
             .into_iter()
-            .find(|x| x.name == self.iface && x.addr.first().map(|x| x.ip().is_ipv4()).unwrap_or(false))
+            .find(|x| {
+                x.name == self.iface && x.addr.first().map(|x| x.ip().is_ipv4()).unwrap_or(false)
+            })
             .ok_or(io::Error::new(
                 io::ErrorKind::Other,
                 format!("can not find interface: {}", self.iface),

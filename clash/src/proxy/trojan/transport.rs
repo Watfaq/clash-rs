@@ -1,21 +1,14 @@
-
-
-
-
+use bytes::Buf;
 use bytes::BufMut;
+use bytes::BytesMut;
+use futures_util::ready;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
-use bytes::Buf;
-use bytes::BytesMut;
-use futures_util::ready;
 
 use crate::common::errors::new_io_error;
 use crate::session::SocksAddr;
-
-
-
 
 const CMD_TCP_CONNECT: u8 = 0x01;
 const CMD_UDP_ASSOCIATE: u8 = 0x03;
@@ -73,10 +66,13 @@ impl RequestHeader {
 
         if valid_hash != hash_buf {
             first_packet.extend_from_slice(&hash_buf);
-            return Err(new_io_error(format!(
-                "invalid password hash: {}",
-                String::from_utf8_lossy(&hash_buf)
-            ).as_str()));
+            return Err(new_io_error(
+                format!(
+                    "invalid password hash: {}",
+                    String::from_utf8_lossy(&hash_buf)
+                )
+                .as_str(),
+            ));
         }
 
         let mut crlf_buf = [0u8; 2];

@@ -6,11 +6,14 @@ use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::{common::{
-    crypto::{self, AeadCipherHelper},
-    errors::map_io_error,
-    utils,
-}, session::SocksAddr};
+use crate::{
+    common::{
+        crypto::{self, AeadCipherHelper},
+        errors::map_io_error,
+        utils,
+    },
+    session::SocksAddr,
+};
 
 use super::{
     aead::{AeadReader, AeadWriter, VmessSecurity},
@@ -36,8 +39,6 @@ pub(crate) enum VmessWriter {
     Aes128Gcm(AeadWriter),
     ChaCha20Poly1305(AeadWriter),
 }
-
-
 
 pub struct VmessStream<S> {
     stream: S,

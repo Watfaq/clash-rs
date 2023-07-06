@@ -23,7 +23,5 @@ pub(crate) fn wrap_stream(s: AnyStream, opt: Option) -> io::Result<AnyStream> {
         );
     }
 
-    
-
     Ok(s)
 }

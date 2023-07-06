@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io, pin::Pin};
 
-use bytes::{BytesMut, BufMut};
+use bytes::{BufMut, BytesMut};
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream, ReadBuf};
 

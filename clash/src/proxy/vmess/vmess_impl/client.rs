@@ -1,4 +1,4 @@
-use std::{io};
+use std::io;
 
 use crate::{common::utils, proxy::AnyStream, session::SocksAddr};
 

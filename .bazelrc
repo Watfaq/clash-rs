@@ -5,3 +5,5 @@ build --output_groups=+clippy_checks
 # rust fmt
 build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build --output_groups=+rustfmt_checks
+
+build --incompatible_enable_cc_toolchain_resolution

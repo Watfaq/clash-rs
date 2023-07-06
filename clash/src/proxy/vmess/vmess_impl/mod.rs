@@ -29,8 +29,8 @@ pub(crate) const ATYP_IPV6: u8 = 3;
 const CHUNK_SIZE: usize = 1 << 14;
 const MAX_CHUNK_SIZE: usize = 17 * 1024;
 
+pub use client::Builder;
+pub use client::VmessOption;
 pub use stream::VmessStream;
 pub use user::new_alter_id_list;
 pub use user::new_id;
-pub use client::Builder;
-pub use client::VmessOption;

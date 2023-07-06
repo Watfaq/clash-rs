@@ -1,5 +1,5 @@
 {
-  "checksum": "691adb21254e7674b99e0d0b8f10c696d3903526df1ca205518090eb7250c2c4",
+  "checksum": "f037a3444f8496b5220e84123ef39322abe1e42db690703057f2a07d6a43946d",
   "crates": {
     "aead 0.4.3": {
       "name": "aead",
@@ -1138,7 +1138,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "decrepit"
+            "Branch": "bazel"
           },
           "strip_prefix": "boring"
         }
@@ -1196,7 +1196,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "decrepit"
+            "Branch": "bazel"
           },
           "strip_prefix": "boring-sys"
         }
@@ -1226,6 +1226,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@//deps/boringssl:lib"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -1239,6 +1245,12 @@
         "version": "2.1.0"
       },
       "build_script_attrs": {
+        "data": {
+          "common": [
+            "@//deps/boringssl:include"
+          ],
+          "selects": {}
+        },
         "data_glob": [
           "**"
         ],
@@ -1253,6 +1265,14 @@
               "target": "cmake"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "BORING_BAZEL_BUILD": "1",
+            "BORING_BSSL_INCLUDE_PATH": "$(location @//deps/boringssl:include)",
+            "BORING_BSSL_PATH": "$(GENDIR)/deps/boringssl"
+          },
           "selects": {}
         },
         "links": "boringssl"
@@ -2299,6 +2319,10 @@
               "target": "dhcproto"
             },
             {
+              "id": "filetime 0.2.18",
+              "target": "filetime"
+            },
+            {
               "id": "foreign-types-shared 0.3.1",
               "target": "foreign_types_shared"
             },
@@ -2458,6 +2482,10 @@
         },
         "deps_dev": {
           "common": [
+            {
+              "id": "mockall 0.11.4",
+              "target": "mockall"
+            },
             {
               "id": "tempfile 3.3.0",
               "target": "tempfile"
@@ -3318,6 +3346,36 @@
       },
       "license": "MIT"
     },
+    "difflib 0.4.0": {
+      "name": "difflib",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/difflib/0.4.0/download",
+          "sha256": "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "difflib",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "difflib",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.4.0"
+      },
+      "license": "MIT"
+    },
     "digest 0.10.5": {
       "name": "digest",
       "version": "0.10.5",
@@ -3415,6 +3473,43 @@
         "version": "0.9.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "downcast 0.11.0": {
+      "name": "downcast",
+      "version": "0.11.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/downcast/0.11.0/download",
+          "sha256": "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "downcast",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "downcast",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.0"
+      },
+      "license": "MIT"
     },
     "ecdsa 0.13.4": {
       "name": "ecdsa",
@@ -3533,6 +3628,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "use_std"
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "1.8.1"
       },
@@ -3843,6 +3944,53 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "float-cmp 0.9.0": {
+      "name": "float-cmp",
+      "version": "0.9.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/float-cmp/0.9.0/download",
+          "sha256": "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "float_cmp",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "float_cmp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "num-traits",
+            "ratio"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.9.0"
+      },
+      "license": "MIT"
+    },
     "fnv 1.0.7": {
       "name": "fnv",
       "version": "1.0.7",
@@ -4056,6 +4204,36 @@
         "version": "1.1.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "fragile 2.0.0": {
+      "name": "fragile",
+      "version": "2.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/fragile/2.0.0/download",
+          "sha256": "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fragile",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "fragile",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.0.0"
+      },
+      "license": "Apache-2.0"
     },
     "fsevent-sys 4.1.0": {
       "name": "fsevent-sys",
@@ -6159,7 +6337,9 @@
         ],
         "crate_features": {
           "common": [
-            "use_alloc"
+            "default",
+            "use_alloc",
+            "use_std"
           ],
           "selects": {}
         },
@@ -7166,6 +7346,125 @@
       },
       "license": "MIT"
     },
+    "mockall 0.11.4": {
+      "name": "mockall",
+      "version": "0.11.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/mockall/0.11.4/download",
+          "sha256": "4c84490118f2ee2d74570d114f3d0493cbf02790df303d2707606c3e14e07c96"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "mockall",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "mockall",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "downcast 0.11.0",
+              "target": "downcast"
+            },
+            {
+              "id": "fragile 2.0.0",
+              "target": "fragile"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "predicates 2.1.5",
+              "target": "predicates"
+            },
+            {
+              "id": "predicates-tree 1.0.9",
+              "target": "predicates_tree"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "mockall_derive 0.11.4",
+              "target": "mockall_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.11.4"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "mockall_derive 0.11.4": {
+      "name": "mockall_derive",
+      "version": "0.11.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/mockall_derive/0.11.4/download",
+          "sha256": "22ce75669015c4f47b289fd4d4f56e894e4c96003ffdf3ac51313126f94c6cbb"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "mockall_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "mockall_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "proc-macro2 1.0.46",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.21",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.102",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.4"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "network-interface 1.0.0": {
       "name": "network-interface",
       "version": "1.0.0",
@@ -7346,6 +7645,36 @@
       },
       "license": "MIT"
     },
+    "normalize-line-endings 0.3.0": {
+      "name": "normalize-line-endings",
+      "version": "0.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/normalize-line-endings/0.3.0/download",
+          "sha256": "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "normalize_line_endings",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "normalize_line_endings",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.3.0"
+      },
+      "license": "Apache-2.0"
+    },
     "notify 5.0.0": {
       "name": "notify",
       "version": "5.0.0",
@@ -7404,10 +7733,24 @@
             }
           ],
           "selects": {
+            "cfg(any(target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonflybsd\"))": [
+              {
+                "id": "kqueue 1.0.7",
+                "target": "kqueue"
+              },
+              {
+                "id": "mio 0.8.4",
+                "target": "mio"
+              }
+            ],
             "cfg(target_os = \"linux\")": [
               {
                 "id": "inotify 0.9.6",
                 "target": "inotify"
+              },
+              {
+                "id": "mio 0.8.4",
+                "target": "mio"
               }
             ],
             "cfg(target_os = \"macos\")": [
@@ -7474,6 +7817,68 @@
         "version": "0.46.0"
       },
       "license": "MIT"
+    },
+    "num-traits 0.2.15": {
+      "name": "num-traits",
+      "version": "0.2.15",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/num-traits/0.2.15/download",
+          "sha256": "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_traits",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "num_traits",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.15",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.2.15"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.1.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "num_cpus 1.13.1": {
       "name": "num_cpus",
@@ -8391,6 +8796,148 @@
         "version": "0.2.16"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "predicates 2.1.5": {
+      "name": "predicates",
+      "version": "2.1.5",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/predicates/2.1.5/download",
+          "sha256": "59230a63c37f3e18569bdb90e4a89cbf5bf8b06fea0b84e65ea10cc4df47addd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "predicates",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "predicates",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "diff",
+            "float-cmp",
+            "normalize-line-endings",
+            "regex"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "difflib 0.4.0",
+              "target": "difflib"
+            },
+            {
+              "id": "float-cmp 0.9.0",
+              "target": "float_cmp"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "normalize-line-endings 0.3.0",
+              "target": "normalize_line_endings"
+            },
+            {
+              "id": "predicates-core 1.0.6",
+              "target": "predicates_core"
+            },
+            {
+              "id": "regex 1.6.0",
+              "target": "regex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.1.5"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "predicates-core 1.0.6": {
+      "name": "predicates-core",
+      "version": "1.0.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/predicates-core/1.0.6/download",
+          "sha256": "b794032607612e7abeb4db69adb4e33590fa6cf1149e95fd7cb00e634b92f174"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "predicates_core",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "predicates_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "1.0.6"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "predicates-tree 1.0.9": {
+      "name": "predicates-tree",
+      "version": "1.0.9",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/predicates-tree/1.0.9/download",
+          "sha256": "368ba315fb8c5052ab692e68a0eefec6ec57b23a36959c14496f0b0df2c0cecf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "predicates_tree",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "predicates_tree",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "predicates-core 1.0.6",
+              "target": "predicates_core"
+            },
+            {
+              "id": "termtree 0.4.1",
+              "target": "termtree"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.9"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "proc-macro-error 1.0.4": {
       "name": "proc-macro-error",
@@ -11519,6 +12066,36 @@
       },
       "license": "Unlicense OR MIT"
     },
+    "termtree 0.4.1": {
+      "name": "termtree",
+      "version": "0.4.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/termtree/0.4.1/download",
+          "sha256": "3369f5ac52d5eb6ab48c6b4ffdc8efbcad6b89c765749064ba298f2c68a16a76"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "termtree",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "termtree",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.4.1"
+      },
+      "license": "MIT"
+    },
     "textwrap 0.15.1": {
       "name": "textwrap",
       "version": "0.15.1",
@@ -11980,7 +12557,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "decrepit"
+            "Branch": "bazel"
           },
           "strip_prefix": "tokio-boring"
         }
@@ -16156,7 +16733,8 @@
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(any(target_arch = \"aarch64\", target_arch = \"x86_64\", target_arch = \"x86\"))": [
       "aarch64-apple-darwin",
@@ -16177,7 +16755,8 @@
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(any(target_arch = \"x86\", target_arch = \"x86_64\", all(any(target_arch = \"aarch64\", target_arch = \"arm\"), any(target_os = \"android\", target_os = \"fuchsia\", target_os = \"linux\"))))": [
       "aarch64-fuchsia",
@@ -16197,7 +16776,8 @@
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(any(target_arch = \"x86_64\", target_arch = \"aarch64\"))": [
       "aarch64-apple-darwin",
@@ -16213,7 +16793,8 @@
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(any(target_arch = \"x86_64\", target_arch = \"x86\"))": [
       "i686-apple-darwin",
@@ -16227,7 +16808,8 @@
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(any(target_os = \"android\", target_os = \"linux\"))": [
       "aarch64-linux-android",
@@ -16243,6 +16825,10 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"illumos\", target_os = \"netbsd\", target_os = \"openbsd\", target_os = \"solaris\"))": [
+      "i686-unknown-freebsd",
+      "x86_64-unknown-freebsd"
+    ],
+    "cfg(any(target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\", target_os = \"dragonflybsd\"))": [
       "i686-unknown-freebsd",
       "x86_64-unknown-freebsd"
     ],
@@ -16324,13 +16910,16 @@
       "riscv32imc-unknown-none-elf",
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
+      "thumbv7em-none-eabi",
+      "thumbv8m.main-none-eabi",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
       "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(not(any(target_arch = \"x86_64\", target_arch = \"aarch64\")))": [
       "arm-unknown-linux-gnueabi",
@@ -16345,6 +16934,8 @@
       "riscv32imc-unknown-none-elf",
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
+      "thumbv7em-none-eabi",
+      "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
       "wasm32-wasi"
     ],
@@ -16366,6 +16957,8 @@
       "riscv32imc-unknown-none-elf",
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
+      "thumbv7em-none-eabi",
+      "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
       "wasm32-wasi",
       "x86_64-apple-darwin",
@@ -16373,7 +16966,8 @@
       "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
-      "x86_64-unknown-linux-gnu"
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(target_arch = \"wasm32\")": [
       "wasm32-unknown-unknown",

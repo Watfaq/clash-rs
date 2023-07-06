@@ -1,0 +1,3 @@
+[submodule "deps/boringssl/src"]
+	path = deps/boringssl/src
+	url = https://boringssl.googlesource.com/boringssl
