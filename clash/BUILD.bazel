@@ -5,6 +5,9 @@ rust_library(
     name = "lib",
     srcs = glob(["src/**/*.rs"]),
     aliases = aliases(),
+    crate_features = [
+        "shadowsocks",
+    ],
     proc_macro_deps = all_crate_deps(
         proc_macro = True,
     ),

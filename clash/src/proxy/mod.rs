@@ -1,4 +1,4 @@
-use crate::config::internal::proxy::{OutboundProxy, OutboundProxyProtocol};
+use crate::config::internal::proxy::{OutboundProxy};
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
 use crate::session::{Session, SocksAddr};

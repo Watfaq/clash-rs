@@ -53,7 +53,7 @@ impl Resolver {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
         let name = rr::Name::from_str(host)
-            .map_err(|x| anyhow!("invalid domain: {}", host))?
+            .map_err(|_x| anyhow!("invalid domain: {}", host))?
             .append_domain(&rr::Name::root())?; // makes it FQDN
         q.set_name(name);
         q.set_query_type(record_type);
@@ -100,7 +100,7 @@ impl Resolver {
     }
 
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
-        if let (Some(fallback), Some(fallback_domain_filters), Some(policy)) =
+        if let (Some(_fallback), Some(_fallback_domain_filters), Some(policy)) =
             (&self.fallback, &self.fallback_domain_filters, &self.policy)
         {
             if let Some(domain) = Resolver::domain_name_of_message(m) {

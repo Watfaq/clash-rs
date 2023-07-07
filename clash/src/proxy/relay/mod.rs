@@ -1,15 +1,15 @@
-use std::{default, io, net::SocketAddr, sync::Arc};
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 
 use crate::{
     app::{
-        proxy_manager::{ProxyManager, ThreadSafeProxy},
+        proxy_manager::{ThreadSafeProxy},
         ThreadSafeDNSResolver,
     },
     common::{
         errors::new_io_error,
-        providers::proxy_provider::{ProxyProvider, ThreadSafeProxyProvider},
+        providers::proxy_provider::{ThreadSafeProxyProvider},
     },
     config::internal::proxy::{OutboundGroupRelay, OutboundProxy},
     session::{Session, SocksAddr},
@@ -95,17 +95,17 @@ impl OutboundHandler for Handler {
 
     async fn proxy_stream(
         &self,
-        #[allow(unused_variables)] s: AnyStream,
+        #[allow(unused_variables)] _s: AnyStream,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         Err(new_io_error("not implemented for Relay"))
     }
 
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
         todo!()
     }

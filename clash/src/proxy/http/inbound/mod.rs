@@ -72,7 +72,7 @@ impl Listener {
                                 .dispatch_stream(sess, Box::new(upgraded) as _)
                                 .await
                         }
-                        Err(e) => error!("socks5 handshake failure"),
+                        Err(_e) => error!("socks5 handshake failure"),
                     }
                 });
 

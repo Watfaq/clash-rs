@@ -12,7 +12,7 @@ use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
 use state::Storage;
 use std::io;
-use std::path::Path;
+
 use std::sync::{Arc, Once};
 use thiserror::Error;
 use tokio::sync::{mpsc, RwLock};

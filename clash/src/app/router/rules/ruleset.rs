@@ -7,7 +7,7 @@ pub struct RuleSet {
 }
 
 impl RuleMatcher for RuleSet {
-    fn apply(&self, sess: &Session) -> bool {
+    fn apply(&self, _sess: &Session) -> bool {
         false
     }
 

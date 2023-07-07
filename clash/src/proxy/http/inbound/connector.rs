@@ -1,12 +1,12 @@
 use crate::proxy::http::inbound::maybe_socks_addr;
 use crate::proxy::{AnyStream, ProxyError};
-use crate::session::{Network, Session, SocksAddr};
-use crate::{Dispatcher, Error};
+use crate::session::{Network, Session};
+use crate::{Dispatcher};
 use futures::FutureExt;
-use hyper::http::uri::Scheme;
+
 use hyper::Uri;
 use std::future::Future;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};

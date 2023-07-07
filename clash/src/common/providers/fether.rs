@@ -234,10 +234,8 @@ where
 #[cfg(test)]
 mod tests {
     use std::{
-        borrow::BorrowMut,
-        cell::{Cell, RefCell},
         sync::{
-            atomic::{AtomicI32, AtomicU16},
+            atomic::{AtomicU16},
             Arc, Barrier,
         },
         time::Duration,

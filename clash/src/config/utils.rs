@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::fmt;
+
 use std::fmt::Display;
 use std::str::FromStr;
 

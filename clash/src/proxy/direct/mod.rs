@@ -49,7 +49,7 @@ impl OutboundHandler for Handler {
         &self,
         s: AnyStream,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         Ok(s)
     }

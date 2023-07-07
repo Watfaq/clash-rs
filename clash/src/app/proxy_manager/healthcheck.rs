@@ -31,7 +31,7 @@ impl HealthCheck {
         lazy: bool,
         latency_manager: Arc<Mutex<ProxyManager>>,
     ) -> anyhow::Result<Self> {
-        let mut health_check = Self {
+        let health_check = Self {
             proxies,
             url,
             interval,

@@ -135,7 +135,7 @@ impl DhcpClient {
                         )
                         .count_ones() as _,
                     )
-                    .map_err(|x| {
+                    .map_err(|_x| {
                         io::Error::new(
                             io::ErrorKind::Other,
                             format!(
@@ -170,7 +170,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
     let socket = listen_dhcp_client(iface).await?;
 
     let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
-        .map_err(|x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", iface)))?
+        .map_err(|_x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", iface)))?
         .into_iter()
         .find(|x| x.name == iface)
         .ok_or(io::Error::new(
@@ -185,7 +185,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         .split(":")
         .map(|x| {
             u8::from_str_radix(x, 16)
-                .map_err(|x| io::Error::new(io::ErrorKind::Other, "malformed MAC addr"))
+                .map_err(|_x| io::Error::new(io::ErrorKind::Other, "malformed MAC addr"))
         })
         .collect::<io::Result<Vec<u8>>>()?;
 
@@ -264,7 +264,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 
     tokio::select! {
         result = &mut rx => {
-            result.map_err(|x| io::Error::new(io::ErrorKind::Other, "channel error"))
+            result.map_err(|_x| io::Error::new(io::ErrorKind::Other, "channel error"))
         },
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
@@ -277,7 +277,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 #[cfg(test)]
 mod test {
     use crate::dns::dhcp::probe_dns_server;
-    use std::net::Ipv4Addr;
+    
 
     #[tokio::test]
     async fn test_probe_ns() {

@@ -181,7 +181,7 @@ impl SocksAddr {
                 let mut buf = vec![0u8; domain_len];
                 cur.copy_to_slice(&mut buf);
                 let port = cur.get_u16();
-                let domain_name = String::from_utf8(buf).map_err(|x| invalid_domain())?;
+                let domain_name = String::from_utf8(buf).map_err(|_x| invalid_domain())?;
                 Ok(Self::Domain(domain_name, port))
             }
             _ => Err(invalid_atyp()),

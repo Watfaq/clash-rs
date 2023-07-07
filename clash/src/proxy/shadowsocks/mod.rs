@@ -191,7 +191,7 @@ impl OutboundHandler for Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         if let Some(plugin) = &self.opts.plugin_opts {
             match plugin {
@@ -201,7 +201,7 @@ impl OutboundHandler for Handler {
                         "simple-obfs is deprecated, please use v2ray-plugin instead",
                     ))
                 }
-                OBFSOption::V2Ray(opt) => {
+                OBFSOption::V2Ray(_opt) => {
                     todo!("v2ray-plugin is not implemented yet")
                 }
             }

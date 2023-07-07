@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
-use std::net::IpAddr;
-use std::{any::Any, collections::HashMap, hash::Hash, sync::Arc};
+
+use std::{collections::HashMap, sync::Arc};
 
 static DOMAIN_STEP: &str = ".";
 static COMPLEX_WILDCARD: &str = "+";

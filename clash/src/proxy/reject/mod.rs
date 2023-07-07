@@ -1,5 +1,5 @@
 use crate::config::internal::proxy::{
-    OutboundProxy, OutboundProxyProtocol, PROXY_DIRECT, PROXY_REJECT,
+    OutboundProxy, OutboundProxyProtocol, PROXY_REJECT,
 };
 use crate::proxy::{
     AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain,
@@ -35,16 +35,16 @@ impl OutboundHandler for Handler {
     async fn connect_stream(
         &self,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 
     async fn proxy_stream(
         &self,
-        s: AnyStream,
+        _s: AnyStream,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
@@ -52,7 +52,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram(
         &self,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] resolver: ThreadSafeDNSResolver,
+        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
@@ -60,7 +60,7 @@ impl OutboundHandler for Handler {
 
 #[async_trait]
 impl ProxyChain for Handler {
-    async fn chain(&self, s: AnyStream, sess: &Session) -> io::Result<AnyStream> {
+    async fn chain(&self, _s: AnyStream, _sess: &Session) -> io::Result<AnyStream> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 }

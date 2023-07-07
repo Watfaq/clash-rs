@@ -26,7 +26,7 @@ impl ProxyManager {
         }
     }
 
-    pub async fn check(&mut self, proxy: &Vec<ThreadSafeProxy>) {
+    pub async fn check(&mut self, _proxy: &Vec<ThreadSafeProxy>) {
         todo!("check latency for proxies")
     }
 }

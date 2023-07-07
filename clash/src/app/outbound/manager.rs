@@ -103,7 +103,7 @@ impl OutboundManager {
 
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
-                OutboundGroupProtocol::Relay(proto) => {}
+                OutboundGroupProtocol::Relay(_proto) => {}
                 OutboundGroupProtocol::UrlTest(_proto) => todo!(),
                 OutboundGroupProtocol::Fallback(_proto) => todo!(),
                 OutboundGroupProtocol::LoadBalance(_proto) => todo!(),

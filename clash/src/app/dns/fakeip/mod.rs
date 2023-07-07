@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+
 use std::{cell::RefCell, net};
 
 use crate::{app::dns::fakeip::mem_store::InmemStore, common::trie, Error};
@@ -190,7 +190,7 @@ impl FakeDnsImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::{net, rc::Rc, sync::Arc};
+    use std::{net, sync::Arc};
 
     use crate::common::trie;
 
