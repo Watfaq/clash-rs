@@ -1,5 +1,5 @@
 use crate::Error;
-use std::{str::FromStr};
+use std::str::FromStr;
 
 pub enum Rule {
     Domain {

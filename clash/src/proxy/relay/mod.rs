@@ -3,14 +3,8 @@ use std::{io, sync::Arc};
 use async_trait::async_trait;
 
 use crate::{
-    app::{
-        proxy_manager::{ThreadSafeProxy},
-        ThreadSafeDNSResolver,
-    },
-    common::{
-        errors::new_io_error,
-        providers::proxy_provider::{ThreadSafeProxyProvider},
-    },
+    app::{proxy_manager::ThreadSafeProxy, ThreadSafeDNSResolver},
+    common::{errors::new_io_error, providers::proxy_provider::ThreadSafeProxyProvider},
     config::internal::proxy::{OutboundGroupRelay, OutboundProxy},
     session::{Session, SocksAddr},
 };

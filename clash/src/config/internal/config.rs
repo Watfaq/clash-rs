@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use std::collections::HashMap;
 
-use std::net::{IpAddr};
+use std::net::IpAddr;
 use std::str::FromStr;
 use tower::ServiceExt;
 

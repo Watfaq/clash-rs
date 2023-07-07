@@ -1,6 +1,4 @@
-use crate::config::internal::proxy::{
-    OutboundProxy, OutboundProxyProtocol, PROXY_REJECT,
-};
+use crate::config::internal::proxy::{OutboundProxy, OutboundProxyProtocol, PROXY_REJECT};
 use crate::proxy::{
     AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain,
 };

@@ -234,10 +234,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::{
-        sync::{
-            atomic::{AtomicU16},
-            Arc, Barrier,
-        },
+        sync::{atomic::AtomicU16, Arc, Barrier},
         time::Duration,
     };
 

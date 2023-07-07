@@ -277,7 +277,6 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 #[cfg(test)]
 mod test {
     use crate::dns::dhcp::probe_dns_server;
-    
 
     #[tokio::test]
     async fn test_probe_ns() {
