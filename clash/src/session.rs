@@ -129,7 +129,7 @@ impl SocksAddr {
     pub fn port(&self) -> u16 {
         match self {
             SocksAddr::Ip(ip) => ip.port(),
-            SocksAddr::Domain(_, port) => port.clone(),
+            SocksAddr::Domain(_, port) => *port,
         }
     }
 
@@ -313,12 +313,11 @@ impl TryFrom<&[u8]> for SocksAddr {
                 if buf.len() < 1 + domain_len + 2 {
                     return Err(insuff_bytes());
                 }
-                let domain =
-                    String::from_utf8((&buf[2..domain_len + 2]).to_vec()).map_err(|e| {
-                        io::Error::new(io::ErrorKind::Other, format!("invalid domain: {}", e))
-                    })?;
+                let domain = String::from_utf8((buf[2..domain_len + 2]).to_vec()).map_err(|e| {
+                    io::Error::new(io::ErrorKind::Other, format!("invalid domain: {}", e))
+                })?;
                 let mut port_bytes = [0u8; 2];
-                (&mut port_bytes).copy_from_slice(&buf[domain_len + 2..domain_len + 4]);
+                (port_bytes).copy_from_slice(&buf[domain_len + 2..domain_len + 4]);
                 let port = u16::from_be_bytes(port_bytes);
                 Ok(Self::Domain(domain, port))
             }
@@ -341,19 +340,19 @@ impl TryFrom<SocksAddr> for SocketAddr {
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Network {
-    TCP,
-    UDP,
-    HTTP,
-    HTTPS,
+    Tcp,
+    Udp,
+    Http,
+    Https,
 }
 
 impl Display for Network {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Network::TCP => "TCP",
-            Network::UDP => "UDP",
-            Network::HTTP => "HTTP",
-            Network::HTTPS => "HTTPS",
+            Network::Tcp => "TCP",
+            Network::Udp => "UDP",
+            Network::Http => "HTTP",
+            Network::Https => "HTTPS",
         })
     }
 }
@@ -376,7 +375,7 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
-            network: Network::TCP,
+            network: Network::Tcp,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
             outbound_target: "".to_string(),
@@ -394,8 +393,8 @@ impl Display for Session {
             self.network,
             self.source,
             match self.network {
-                Network::HTTP => format!("http://{}", self.destination),
-                Network::HTTPS => format!("https://{}", self.destination),
+                Network::Http => format!("http://{}", self.destination),
+                Network::Https => format!("https://{}", self.destination),
                 _ => self.destination.to_string(),
             }
         )
@@ -423,7 +422,7 @@ impl Clone for Session {
             destination: self.destination.clone(),
             outbound_target: self.outbound_target.clone(),
             packet_mark: self.packet_mark,
-            iface: self.iface.as_ref().map(|x| x.clone()),
+            iface: self.iface.as_ref().cloned(),
         }
     }
 }

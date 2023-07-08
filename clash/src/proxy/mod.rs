@@ -79,18 +79,10 @@ pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
     async fn send_to(&mut self, buf: &[u8], dst_addr: &SocksAddr) -> io::Result<usize>;
 }
 
+#[derive(Default)]
 pub struct CommonOption {
     so_mark: Option<u32>,
     iface: Option<Interface>,
-}
-
-impl Default for CommonOption {
-    fn default() -> Self {
-        Self {
-            so_mark: None,
-            iface: None,
-        }
-    }
 }
 
 #[async_trait]

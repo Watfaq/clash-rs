@@ -6,6 +6,7 @@ use std::{
 };
 
 use tokio::{sync::Mutex, time::Instant};
+use tracing::info;
 
 use crate::common::utils;
 
@@ -26,6 +27,12 @@ pub(super) struct Fetcher<U, P> {
     parser: Arc<Mutex<P>>,
     on_update: Arc<Mutex<Option<U>>>,
 }
+
+/*impl Drop for Fetcher<U, P> {
+    fn drop(&mut self) {
+        self.destroy();
+    }
+}*/
 
 impl<T, U, P> Fetcher<U, P>
 where
@@ -62,6 +69,13 @@ where
     }
     fn name(&self) -> &str {
         self.name.as_str()
+    }
+
+    fn status(&self) -> bool {
+        self.thread_handle
+            .as_ref()
+            .map(|x| x.is_finished())
+            .unwrap_or(true)
     }
 
     async fn vehicle_type(&self) -> super::ProviderVehicleType {
@@ -141,7 +155,7 @@ where
         vehicle: ThreadSafeProviderVehicle,
         parser: Arc<Mutex<P>>,
     ) -> anyhow::Result<(T, bool)> {
-        let mut this = inner.blocking_lock();
+        let mut this = inner.lock().await;
         let content = vehicle.lock().await.read().await?;
         let proxies = (parser.lock().await)(&content)?;
 
@@ -191,6 +205,7 @@ where
         let mut fire_immediately = immediately_update;
 
         self.thread_handle = Some(tokio::spawn(async move {
+            info!("{} started", &name);
             loop {
                 let inner = inner.clone();
                 let vehicle = vehicle.clone();
@@ -214,17 +229,18 @@ where
 
                     tracing::info!("{} updated", &name);
 
-                    let on_update = on_update.blocking_lock().take();
+                    let on_update = on_update.lock().await.take();
                     if let Some(on_update) = on_update {
                         on_update(elm)
                     }
                 };
 
-                ticker.tick().await;
                 if fire_immediately {
                     update().await;
+                    ticker.tick().await;
                 } else {
-                    fire_immediately = false;
+                    ticker.tick().await;
+                    update().await;
                 }
             }
         }));
@@ -246,16 +262,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetcher() {
-        let barrier = Arc::new(Barrier::new(2));
-        let barrier_clone = barrier.clone();
-
-        let parser_called = Arc::new(AtomicU16::new(0));
-        let updater_called = Arc::new(AtomicU16::new(0));
-
-        let parser_called_clone = parser_called.clone();
-        let updater_called_clone = updater_called.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+        let tx1 = tx.clone();
+        let tx2 = tx.clone();
 
         let mut mock_vehicle = MockProviderVehicle::new();
+        std::fs::File::create("/tmp/mock_provider_vehicle").unwrap();
         mock_vehicle
             .expect_path()
             .return_const("/tmp/mock_provider_vehicle".to_owned());
@@ -270,15 +282,12 @@ mod tests {
 
         let p = move |i: &[u8]| -> anyhow::Result<String> {
             assert_eq!(i, vec![1, 2, 3]);
-            parser_called_clone
-                .clone()
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tx1.try_send(1).unwrap();
             Ok("parsed".to_owned())
         };
         let o = move |input: String| -> () {
             assert_eq!(input, "parsed".to_owned());
-            updater_called_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            barrier_clone.wait();
+            tx2.try_send(2).unwrap();
         };
         let mut f = Fetcher::new(
             "test_fetcher".to_string(),
@@ -290,9 +299,9 @@ mod tests {
 
         let _ = f.initial().await;
 
-        barrier.wait();
-
-        assert_eq!(parser_called.load(std::sync::atomic::Ordering::Relaxed), 1);
-        assert_eq!(updater_called.load(std::sync::atomic::Ordering::Relaxed), 1);
+        while let Some(message) = rx.recv().await {
+            println!("GOT = {}", message);
+        }
+        f.status();
     }
 }

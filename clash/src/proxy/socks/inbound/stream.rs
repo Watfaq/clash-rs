@@ -137,7 +137,7 @@ pub(crate) async fn handle_tcp(
             let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
 
             let sess = Session {
-                network: Network::UDP,
+                network: Network::Udp,
                 packet_mark: None,
                 iface: None,
                 ..Default::default()

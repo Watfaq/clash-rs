@@ -61,7 +61,7 @@ impl Listener {
                     match hyper::upgrade::on(req).await {
                         Ok(upgraded) => {
                             let sess = Session {
-                                network: Network::HTTPS,
+                                network: Network::Https,
                                 source: src,
                                 destination: addr,
 

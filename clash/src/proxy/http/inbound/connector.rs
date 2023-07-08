@@ -46,7 +46,7 @@ impl tower::Service<Uri> for Connector {
             let (left, right) = duplex(1024 * 1024);
 
             let sess = Session {
-                network: Network::HTTP,
+                network: Network::Http,
                 source: src,
                 destination: destination.ok_or(ProxyError::InvalidUrl(url.to_string()))?,
                 ..Default::default()

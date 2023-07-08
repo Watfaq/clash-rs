@@ -86,13 +86,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let config: InternalConfig = match opts.config {
         Config::Internal(c) => c,
         Config::File(home, file) => {
-            if home != "" {
+            if !home.is_empty() {
                 std::env::set_current_dir(std::path::Path::new(&home))
-                    .expect(format!("invalid home: {}", &home).as_str());
+                    .unwrap_or_else(|_| panic!("invalid home: {}", &home));
             }
 
-            let c = file.parse::<def::Config>()?.try_into()?;
-            c
+            file.parse::<def::Config>()?.try_into()?
         }
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };

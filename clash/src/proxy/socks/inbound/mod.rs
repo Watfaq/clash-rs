@@ -82,7 +82,7 @@ impl InboundListener for Listener {
             let mut socket = Listener::apply_tcp_options(socket).await?;
 
             let mut sess = Session {
-                network: Network::TCP,
+                network: Network::Tcp,
                 source: socket.peer_addr()?,
 
                 ..Default::default()

@@ -70,7 +70,7 @@ impl WebsocketStreamBuilder {
             let early_data_conn = WebsocketEarlyDataConn::new(
                 stream,
                 req,
-                self.ws_config.clone(),
+                self.ws_config,
                 self.early_data_header_name.clone(),
                 self.max_early_data,
             );
