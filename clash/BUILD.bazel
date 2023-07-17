@@ -21,6 +21,9 @@ rust_test(
     crate_features = [
         "shadowsocks",
     ],
+    data = [
+        "tests/data/Country.mmdb",
+    ],
     proc_macro_deps = all_crate_deps(
         proc_macro_dev = True,
     ),

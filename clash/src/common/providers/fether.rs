@@ -250,11 +250,12 @@ where
 #[cfg(test)]
 mod tests {
     use std::{
+        path::Path,
         sync::{atomic::AtomicU16, Arc, Barrier},
         time::Duration,
     };
 
-    use tokio::sync::Mutex;
+    use tokio::{sync::Mutex, time::sleep};
 
     use crate::common::providers::{MockProviderVehicle, ProviderVehicleType};
 
@@ -264,44 +265,56 @@ mod tests {
     async fn test_fetcher() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(32);
         let tx1 = tx.clone();
-        let tx2 = tx.clone();
 
         let mut mock_vehicle = MockProviderVehicle::new();
-        std::fs::File::create("/tmp/mock_provider_vehicle").unwrap();
+        let mock_file = "/tmp/mock_provider_vehicle";
+        if Path::new(mock_file).exists() {
+            std::fs::remove_file(mock_file).unwrap();
+        }
+        std::fs::write(mock_file, vec![1, 2, 3]).unwrap();
+
         mock_vehicle
             .expect_path()
-            .return_const("/tmp/mock_provider_vehicle".to_owned());
-        mock_vehicle.expect_read().returning(|| {
-            let mut v = Vec::new();
-            v.extend_from_slice(&[1, 2, 3]);
-            Ok(v)
-        });
+            .return_const(mock_file.to_owned());
+        mock_vehicle.expect_read().returning(|| Ok(vec![4, 5, 6]));
         mock_vehicle
             .expect_typ()
             .return_const(ProviderVehicleType::File);
 
-        let p = move |i: &[u8]| -> anyhow::Result<String> {
-            assert_eq!(i, vec![1, 2, 3]);
-            tx1.try_send(1).unwrap();
+        let parser = move |i: &[u8]| -> anyhow::Result<String> {
+            let copy = i.to_owned();
+            tx1.try_send(copy).unwrap();
             Ok("parsed".to_owned())
         };
-        let o = move |input: String| -> () {
+
+        let updater = move |input: String| -> () {
             assert_eq!(input, "parsed".to_owned());
-            tx2.try_send(2).unwrap();
         };
+
         let mut f = Fetcher::new(
             "test_fetcher".to_string(),
             Duration::from_secs(1),
             Arc::new(Mutex::new(mock_vehicle)),
-            p,
-            Some(o),
+            parser,
+            Some(updater),
         );
 
         let _ = f.initial().await;
 
+        sleep(Duration::from_secs_f64(5.5)).await;
+        f.destroy();
+
+        drop(tx);
+        drop(f);
+
+        let mut parsed = vec![];
+
         while let Some(message) = rx.recv().await {
-            println!("GOT = {}", message);
+            parsed.push(message);
         }
-        f.status();
+
+        assert!(parsed.len() > 5);
+        assert_eq!(parsed[0], vec![1, 2, 3]);
+        assert_eq!(parsed[1], vec![4, 5, 6]);
     }
 }
