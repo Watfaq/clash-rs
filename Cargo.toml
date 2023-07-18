@@ -2,5 +2,5 @@
 
 members = [
     "clash",
-    "clash-bin"
+    "clash_lib"
 ]

@@ -1,5 +1,6 @@
+extern crate clash_lib as clash;
+
 use clap::Parser;
-use clash;
 use std::env;
 use std::path::PathBuf;
 

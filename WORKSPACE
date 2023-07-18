@@ -81,7 +81,7 @@ crates_repository(
     manifests = [
         "//:Cargo.toml",
         "//clash:Cargo.toml",
-        "//clash-bin:Cargo.toml",
+        "//clash_lib:Cargo.toml",
     ],
 )
 
