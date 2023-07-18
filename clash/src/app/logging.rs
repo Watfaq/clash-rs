@@ -16,8 +16,9 @@ impl From<LogLevel> for filter::LevelFilter {
 }
 
 pub fn setup_logging(level: LogLevel) -> anyhow::Result<()> {
-    let filter =
-        EnvFilter::from_default_env().add_directive(filter::LevelFilter::from(level).into());
+    let filter = EnvFilter::builder()
+        .with_default_directive(filter::LevelFilter::from(level).into())
+        .from_env_lossy();
 
     let subscriber = tracing_subscriber::registry()
         .with(filter)

@@ -64,8 +64,8 @@ pub fn start(opts: Options) -> Result<(), Error> {
         .unwrap()
         .block_on(async {
             match start_async(opts).await {
-                Err(e) => println!("failed to start: {}", e),
-                Ok(_) => println!("finished"),
+                Err(e) => tracing::error!("failed to start: {}", e),
+                Ok(_) => tracing::info!("main program finished"),
             }
         });
     Ok(())
@@ -174,7 +174,7 @@ mod tests {
         let conf = r#"
         socks-port: 7891
         bind-address: 127.0.0.1
-        mmdb: "tests/data/Country.mmdb"
+        mmdb: "clash/tests/data/Country.mmdb"
         "#;
 
         let handle = thread::spawn(|| {
