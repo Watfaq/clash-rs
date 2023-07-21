@@ -4,7 +4,7 @@ use std::io;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-mod fether;
+pub mod fether;
 mod file_vehicle;
 mod http_vehicle;
 pub mod proxy_provider;
@@ -30,11 +30,11 @@ impl Display for ProviderVehicleType {
     }
 }
 
-type ThreadSafeProviderVehicle = Arc<Mutex<dyn ProviderVehicle + Send + Sync>>;
+pub type ThreadSafeProviderVehicle = Arc<Mutex<dyn ProviderVehicle + Send + Sync>>;
 
 #[cfg_attr(test, automock)]
 #[async_trait]
-trait ProviderVehicle {
+pub trait ProviderVehicle {
     async fn read(&self) -> io::Result<Vec<u8>>;
     fn path(&self) -> &str;
     fn typ(&self) -> ProviderVehicleType;

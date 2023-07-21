@@ -17,7 +17,7 @@ struct FetcherInner {
     hash: [u8; 16],
 }
 
-pub(super) struct Fetcher<U, P> {
+pub struct Fetcher<U, P> {
     name: String,
     interval: Duration,
     vehicle: ThreadSafeProviderVehicle,
@@ -40,7 +40,7 @@ where
     U: Fn(T) + Send + Sync + 'static,
     P: Fn(&[u8]) -> anyhow::Result<T> + Send + Sync + 'static,
 {
-    pub(super) fn new(
+    pub fn new(
         name: String,
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,

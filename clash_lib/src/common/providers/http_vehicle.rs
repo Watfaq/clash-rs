@@ -4,8 +4,6 @@ use crate::common::providers::{ProviderVehicle, ProviderVehicleType};
 use crate::proxy::utils::new_tcp_stream;
 use crate::proxy::AnyStream;
 use async_trait::async_trait;
-use futures::TryFutureExt;
-use hyper::body::HttpBody;
 
 use hyper::client::connect::{Connected, Connection};
 

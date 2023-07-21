@@ -5,7 +5,6 @@ use std::{
 
 mod file_provider;
 mod healthcheck;
-mod provider;
 
 use crate::proxy::OutboundHandler;
 

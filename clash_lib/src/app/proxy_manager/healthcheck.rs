@@ -45,7 +45,7 @@ impl HealthCheck {
         Ok(health_check)
     }
 
-    fn kick_off(&mut self) {
+    pub fn kick_off(&mut self) {
         let latency_manager = self.latency_manager.clone();
         let interval = self.interval;
         let lazy = self.lazy;
@@ -90,7 +90,7 @@ impl HealthCheck {
         self.proxies = proxies;
     }
 
-    fn auto(&self) -> bool {
+    pub fn auto(&self) -> bool {
         self.interval != 0
     }
 }
