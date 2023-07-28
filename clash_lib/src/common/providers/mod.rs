@@ -54,10 +54,11 @@ impl Display for ProviderType {
 }
 
 /// either Proxy or Rule provider
+#[async_trait]
 pub trait Provider {
-    fn name(&self) -> &str;
-    fn vehicle_type(&self) -> ProviderVehicleType;
-    fn typ(&self) -> ProviderType;
-    fn initialize(&self) -> io::Error;
-    fn update(&self) -> io::Error;
+    async fn name(&self) -> &str;
+    async fn vehicle_type(&self) -> ProviderVehicleType;
+    async fn typ(&self) -> ProviderType;
+    async fn initialize(&mut self) -> io::Result<()>;
+    async fn update(&self) -> io::Result<()>;
 }

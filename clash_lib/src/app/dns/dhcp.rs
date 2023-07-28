@@ -279,6 +279,7 @@ mod test {
     use crate::dns::dhcp::probe_dns_server;
 
     #[tokio::test]
+    #[ignore]
     async fn test_probe_ns() {
         let ns = probe_dns_server("en0").await.expect("must prob");
         assert!(!ns.is_empty());

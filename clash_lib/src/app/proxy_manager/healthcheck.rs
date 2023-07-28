@@ -76,8 +76,8 @@ impl HealthCheck {
         self.task_handle = Some(task_handle);
     }
 
-    fn touch(&mut self) {
-        self.inner.blocking_lock().last_check = tokio::time::Instant::now();
+    pub async fn touch(&mut self) {
+        self.inner.lock().await.last_check = tokio::time::Instant::now();
     }
 
     fn stop(&mut self) {

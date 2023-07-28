@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
-use crate::config::internal::proxy::OutboundProxy;
+use async_trait::async_trait;
+
+use crate::app::proxy_manager::ThreadSafeProxy;
+
+use super::Provider;
 
 pub type ThreadSafeProxyProvider = Arc<dyn ProxyProvider + Send + Sync>;
 
-pub trait ProxyProvider {
-    fn proxies(&self) -> Vec<OutboundProxy>;
-    fn touch(&self);
-    fn healthcheck(&self);
+#[async_trait]
+pub trait ProxyProvider: Provider {
+    async fn proxies(&self) -> Vec<ThreadSafeProxy>;
+    async fn touch(&mut self);
+    async fn healthcheck(&self);
 }

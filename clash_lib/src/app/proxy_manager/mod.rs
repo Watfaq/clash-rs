@@ -3,8 +3,8 @@ use std::{
     sync::Arc,
 };
 
-mod file_provider;
 mod healthcheck;
+mod proxy_set_provider;
 
 use crate::proxy::OutboundHandler;
 

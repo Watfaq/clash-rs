@@ -25,7 +25,7 @@ pub struct Fetcher<U, P> {
     ticker: Option<tokio::time::Interval>,
     inner: std::sync::Arc<tokio::sync::Mutex<FetcherInner>>,
     parser: Arc<Mutex<P>>,
-    on_update: Arc<Mutex<Option<U>>>,
+    pub on_update: Arc<Mutex<Option<U>>>,
 }
 
 /*impl Drop for Fetcher<U, P> {
@@ -67,7 +67,7 @@ where
             on_update: Arc::new(Mutex::new(on_update)),
         }
     }
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
@@ -78,11 +78,11 @@ where
             .unwrap_or(true)
     }
 
-    async fn vehicle_type(&self) -> super::ProviderVehicleType {
+    pub async fn vehicle_type(&self) -> super::ProviderVehicleType {
         self.vehicle.lock().await.typ()
     }
 
-    async fn initial(&mut self) -> anyhow::Result<T> {
+    pub async fn initial(&mut self) -> anyhow::Result<T> {
         let mut is_local = false;
         let mut immediately_update = false;
 
@@ -141,7 +141,7 @@ where
         Ok(proxies)
     }
 
-    async fn update(&self) -> anyhow::Result<(T, bool)> {
+    pub async fn update(&self) -> anyhow::Result<(T, bool)> {
         Fetcher::<U, P>::update_inner(
             self.inner.clone(),
             self.vehicle.clone(),
@@ -190,7 +190,7 @@ where
         Ok((proxies, false))
     }
 
-    fn destroy(&mut self) {
+    pub fn destroy(&mut self) {
         if let Some(handle) = self.thread_handle.take() {
             handle.abort();
         }
@@ -202,7 +202,7 @@ where
         let parser = self.parser.clone();
         let on_update = self.on_update.clone();
         let name = self.name.clone();
-        let mut fire_immediately = immediately_update;
+        let fire_immediately = immediately_update;
 
         self.thread_handle = Some(tokio::spawn(async move {
             info!("{} started", &name);
