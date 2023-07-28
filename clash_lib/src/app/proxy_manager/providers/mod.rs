@@ -7,7 +7,9 @@ use tokio::sync::Mutex;
 pub mod fether;
 mod file_vehicle;
 mod http_vehicle;
+mod plain_provider;
 pub mod proxy_provider;
+mod proxy_set_provider;
 pub mod rule_provider;
 
 #[cfg(test)]

@@ -249,15 +249,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        path::Path,
-        sync::{atomic::AtomicU16, Arc, Barrier},
-        time::Duration,
-    };
+    use std::{path::Path, sync::Arc, time::Duration};
 
     use tokio::{sync::Mutex, time::sleep};
 
-    use crate::common::providers::{MockProviderVehicle, ProviderVehicleType};
+    use crate::app::proxy_manager::providers::{MockProviderVehicle, ProviderVehicleType};
 
     use super::Fetcher;
 

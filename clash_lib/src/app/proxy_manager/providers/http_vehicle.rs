@@ -1,6 +1,6 @@
+use super::{ProviderVehicle, ProviderVehicleType};
 use crate::app::ThreadSafeDNSResolver;
 use crate::common::errors::map_io_error;
-use crate::common::providers::{ProviderVehicle, ProviderVehicleType};
 use crate::proxy::utils::new_tcp_stream;
 use crate::proxy::AnyStream;
 use async_trait::async_trait;

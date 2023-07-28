@@ -4,7 +4,7 @@ use std::{
 };
 
 mod healthcheck;
-mod proxy_set_provider;
+pub mod providers;
 
 use crate::proxy::OutboundHandler;
 

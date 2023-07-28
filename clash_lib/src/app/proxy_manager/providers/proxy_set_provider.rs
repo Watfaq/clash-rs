@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use futures::{future, TryFutureExt};
 use tokio::sync::Mutex;
 
-use crate::common::{
-    errors::map_io_error,
-    providers::{
-        fether::Fetcher, proxy_provider::ProxyProvider, Provider, ThreadSafeProviderVehicle,
-    },
+use super::{
+    fether::Fetcher, proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
+    ThreadSafeProviderVehicle,
 };
-
-use super::{healthcheck::HealthCheck, ProxyManager, ThreadSafeProxy};
+use crate::{
+    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager, ThreadSafeProxy},
+    common::errors::map_io_error,
+};
 
 struct FileProviderInner {
     proxies: Vec<ThreadSafeProxy>,
@@ -74,12 +74,12 @@ impl Provider for ProxySetProvider {
         self.fetcher.name()
     }
 
-    async fn vehicle_type(&self) -> crate::common::providers::ProviderVehicleType {
+    async fn vehicle_type(&self) -> ProviderVehicleType {
         self.fetcher.vehicle_type().await
     }
 
-    async fn typ(&self) -> crate::common::providers::ProviderType {
-        crate::common::providers::ProviderType::Proxy
+    async fn typ(&self) -> ProviderType {
+        ProviderType::Proxy
     }
 
     async fn initialize(&mut self) -> std::io::Result<()> {
