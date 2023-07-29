@@ -1,0 +1,22 @@
+name: Run Build and Test
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: bazelbuild/setup-bazelisk@v2
+    - name: Mount bazel cache  # Optional
+      uses: actions/cache@v3
+      with:
+        path: "~/.cache/bazel"
+        key: bazel
+    - run: bazel test //...
