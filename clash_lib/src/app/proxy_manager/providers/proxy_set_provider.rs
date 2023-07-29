@@ -59,10 +59,10 @@ impl ProxySetProvider {
         let updater: Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static> =
             Box::new(move |input: Vec<AnyOutboundHandler>| -> () {
                 let inner = inner_clone.clone();
-                tokio::spawn(future::lazy(|_| async move {
+                tokio::spawn(async move {
                     let mut inner = inner.lock().await;
                     inner.proxies = input;
-                }));
+                });
             });
 
         let n = name.clone();
@@ -156,5 +156,75 @@ impl ProxyProvider for ProxySetProvider {
             .await
             .check(&self.proxies().await)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use tokio::{sync::Mutex, time::sleep};
+
+    use crate::app::proxy_manager::{
+        healthcheck::HealthCheck,
+        providers::{
+            proxy_provider::ProxyProvider, proxy_set_provider::ProxySetProvider,
+            MockProviderVehicle, Provider, ProviderVehicleType,
+        },
+        ProxyManager,
+    };
+
+    #[tokio::test]
+    async fn test_proxy_set_provider() {
+        let mut mock_vehicle = MockProviderVehicle::new();
+
+        mock_vehicle.expect_read().returning(|| {
+            Ok(r#"
+proxies:
+  - name: "ss"
+    type: ss
+    server: localhost
+    port: 8388
+    cipher: aes-256-gcm
+    password: "password"
+    udp: true
+"#
+            .as_bytes()
+            .to_vec())
+        });
+        mock_vehicle
+            .expect_path()
+            .return_const("/tmp/test_proxy_set_provider".to_owned());
+        mock_vehicle
+            .expect_typ()
+            .return_const(ProviderVehicleType::File);
+
+        let vehicle = Arc::new(Mutex::new(mock_vehicle));
+        let latency_manager = Arc::new(Mutex::new(ProxyManager::new()));
+        let hc = HealthCheck::new(
+            vec![],
+            "http://www.google.com".to_owned(),
+            0,
+            true,
+            latency_manager.clone(),
+        )
+        .unwrap();
+
+        let mut provider = ProxySetProvider::new(
+            "test".to_owned(),
+            Duration::from_secs(1),
+            vehicle,
+            hc,
+            latency_manager.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(provider.proxies().await.len(), 0);
+
+        provider.initialize().await.unwrap();
+
+        sleep(Duration::from_secs_f64(1.5)).await;
+
+        assert_eq!(provider.proxies().await.len(), 1);
     }
 }

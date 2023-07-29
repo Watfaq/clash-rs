@@ -71,13 +71,6 @@ where
         self.name.as_str()
     }
 
-    fn status(&self) -> bool {
-        self.thread_handle
-            .as_ref()
-            .map(|x| x.is_finished())
-            .unwrap_or(true)
-    }
-
     pub async fn vehicle_type(&self) -> super::ProviderVehicleType {
         self.vehicle.lock().await.typ()
     }
