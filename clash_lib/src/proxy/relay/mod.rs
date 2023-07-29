@@ -31,8 +31,8 @@ impl Handler {
         Arc::new(Self { opts, providers })
     }
 
-    fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
-        todo!()
+    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
+        todo!("get proxies from providers")
     }
 }
 
@@ -61,6 +61,7 @@ impl OutboundHandler for Handler {
     ) -> io::Result<AnyStream> {
         let proxies: Vec<AnyOutboundHandler> = self
             .get_proxies()
+            .await
             .into_iter()
             .filter(|x| match x.remote_addr() {
                 Some(_) => true,
