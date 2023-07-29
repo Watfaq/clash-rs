@@ -1,14 +1,9 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::Arc,
-};
+use std::collections::{HashMap, VecDeque};
+
+use crate::proxy::AnyOutboundHandler;
 
 mod healthcheck;
 pub mod providers;
-
-use crate::proxy::OutboundHandler;
-
-pub type ThreadSafeProxy = Arc<dyn OutboundHandler>;
 
 type Latency = VecDeque<u64>;
 
@@ -25,7 +20,7 @@ impl ProxyManager {
         }
     }
 
-    pub async fn check(&mut self, _proxy: &Vec<ThreadSafeProxy>) {
+    pub async fn check(&mut self, _proxy: &Vec<AnyOutboundHandler>) {
         todo!("check latency for proxies")
     }
 }

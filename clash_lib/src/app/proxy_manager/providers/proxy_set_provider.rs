@@ -1,7 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::{future, TryFutureExt};
+use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use tokio::sync::Mutex;
 
 use super::{
@@ -9,18 +11,27 @@ use super::{
     ThreadSafeProviderVehicle,
 };
 use crate::{
-    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager, ThreadSafeProxy},
+    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
     common::errors::map_io_error,
+    config::internal::proxy::OutboundProxyProtocol,
+    proxy::{direct, reject, AnyOutboundHandler},
+    Error,
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ProviderScheme {
+    #[serde(rename = "proxies")]
+    proxies: Option<Vec<HashMap<String, Value>>>,
+}
+
 struct FileProviderInner {
-    proxies: Vec<ThreadSafeProxy>,
+    proxies: Vec<AnyOutboundHandler>,
 }
 
 struct ProxySetProvider {
     fetcher: Fetcher<
-        Box<dyn Fn(Vec<ThreadSafeProxy>) + Send + Sync + 'static>,
-        Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<ThreadSafeProxy>> + Send + Sync + 'static>,
+        Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
+        Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
     healthcheck: HealthCheck,
     inner: std::sync::Arc<tokio::sync::Mutex<FileProviderInner>>,
@@ -45,8 +56,8 @@ impl ProxySetProvider {
 
         let inner_clone = inner.clone();
 
-        let updater: Box<dyn Fn(Vec<ThreadSafeProxy>) + Send + Sync + 'static> =
-            Box::new(move |input: Vec<ThreadSafeProxy>| -> () {
+        let updater: Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static> =
+            Box::new(move |input: Vec<AnyOutboundHandler>| -> () {
                 let inner = inner_clone.clone();
                 tokio::spawn(future::lazy(|_| async move {
                     let mut inner = inner.lock().await;
@@ -54,9 +65,31 @@ impl ProxySetProvider {
                 }));
             });
 
+        let n = name.clone();
         let parser: Box<
-            dyn Fn(&[u8]) -> anyhow::Result<Vec<ThreadSafeProxy>> + Send + Sync + 'static,
-        > = Box::new(|i: &[u8]| -> anyhow::Result<Vec<ThreadSafeProxy>> { Ok(vec![]) });
+            dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
+        > = Box::new(
+            move |input: &[u8]| -> anyhow::Result<Vec<AnyOutboundHandler>> {
+                let scheme: ProviderScheme = serde_yaml::from_slice(input)?;
+                let proxies = scheme.proxies;
+                if let Some(proxies) = proxies {
+                    let proxies = proxies
+                        .into_iter()
+                        .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
+                        .map(|x| match x {
+                            OutboundProxyProtocol::Direct => Ok(direct::Handler::new()),
+                            OutboundProxyProtocol::Reject => Ok(reject::Handler::new()),
+                            OutboundProxyProtocol::Ss(s) => s.try_into(),
+                            OutboundProxyProtocol::Socks5(_) => todo!(),
+                            OutboundProxyProtocol::Trojan(_) => todo!(),
+                        })
+                        .collect::<Result<Vec<_>, _>>();
+                    Ok(proxies?)
+                } else {
+                    return Err(Error::InvalidConfig(format!("{}: proxies is empty", n)).into());
+                }
+            },
+        );
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater.into()));
         Ok(Self {
@@ -103,7 +136,7 @@ impl Provider for ProxySetProvider {
 
 #[async_trait]
 impl ProxyProvider for ProxySetProvider {
-    async fn proxies(&self) -> Vec<ThreadSafeProxy> {
+    async fn proxies(&self) -> Vec<AnyOutboundHandler> {
         self.inner
             .lock()
             .await

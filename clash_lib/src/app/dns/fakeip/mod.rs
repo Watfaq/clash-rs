@@ -15,6 +15,7 @@ pub struct Opts {
     pub persistence: bool,
     pub db_path: Option<String>,
 }
+
 pub struct FakeDns(RwLock<FakeDnsImpl>);
 
 impl FakeDns {

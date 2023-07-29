@@ -170,7 +170,7 @@ impl Default for DNS {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub enum DNSMode {
     #[default]
     Normal,

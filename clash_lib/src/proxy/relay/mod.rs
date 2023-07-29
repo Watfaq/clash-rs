@@ -4,8 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     app::{
-        proxy_manager::{providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeProxy},
-        ThreadSafeDNSResolver,
+        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
     config::internal::proxy::{OutboundGroupRelay, OutboundProxy},
@@ -32,7 +31,7 @@ impl Handler {
         Arc::new(Self { opts, providers })
     }
 
-    fn get_proxies(&self) -> Vec<ThreadSafeProxy> {
+    fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
         todo!()
     }
 }
@@ -60,7 +59,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        let proxies: Vec<ThreadSafeProxy> = self
+        let proxies: Vec<AnyOutboundHandler> = self
             .get_proxies()
             .into_iter()
             .filter(|x| match x.remote_addr() {

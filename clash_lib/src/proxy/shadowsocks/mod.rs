@@ -11,7 +11,7 @@ use shadowsocks::{
 
 use crate::{
     app::ThreadSafeDNSResolver,
-    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
+    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol, OutboundShadowsocks},
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
     Error,
@@ -145,6 +145,59 @@ pub struct Handler {
 impl Handler {
     pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self { opts })
+    }
+}
+
+impl TryFrom<OutboundShadowsocks> for AnyOutboundHandler {
+    type Error = crate::Error;
+
+    fn try_from(value: OutboundShadowsocks) -> Result<Self, Self::Error> {
+        (&value).try_into()
+    }
+}
+
+impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
+    type Error = crate::Error;
+
+    fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
+        let h = Handler::new(HandlerOptions {
+            name: s.name.to_owned(),
+            common_opts: CommonOption::default(),
+            server: s.server.to_owned(),
+            port: s.port,
+            password: s.password.to_owned(),
+            cipher: s.cipher.to_owned(),
+            plugin_opts: match &s.plugin {
+                Some(plugin) => match plugin.as_str() {
+                    "obfs" => s
+                        .plugin_opts
+                        .clone()
+                        .ok_or(Error::InvalidConfig(
+                            "plugin_opts is required for plugin obfs".to_owned(),
+                        ))?
+                        .try_into()
+                        .map(|x| OBFSOption::Simple(x))
+                        .ok(),
+                    "v2ray-plugin" => s
+                        .plugin_opts
+                        .clone()
+                        .ok_or(Error::InvalidConfig(
+                            "plugin_opts is required for plugin obfs".to_owned(),
+                        ))?
+                        .try_into()
+                        .map(|x| OBFSOption::V2Ray(x))
+                        .ok(),
+                    _ => {
+                        return Err(Error::InvalidConfig(format!(
+                            "unsupported plugin: {}",
+                            plugin
+                        )));
+                    }
+                },
+                None => None,
+            },
+        });
+        Ok(h)
     }
 }
 

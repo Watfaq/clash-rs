@@ -28,18 +28,20 @@ type ThreadSafeDNSClient = Arc<futures::lock::Mutex<dyn Client>>;
 
 #[derive(Clone, Debug)]
 pub struct NameServer {
-    net: DNSNetMode,
-    address: String,
-    interface: Option<String>,
+    pub net: DNSNetMode,
+    pub address: String,
+    pub interface: Option<String>,
 }
 
-struct FallbackFilter {
+#[derive(Clone, Debug, Default)]
+pub struct FallbackFilter {
     geo_ip: bool,
     geo_ip_code: String,
     ip_cidr: Option<Vec<ipnet::IpNet>>,
     domain: Vec<String>,
 }
 
+#[derive(Default)]
 pub struct Config {
     enable: bool,
     ipv6: bool,

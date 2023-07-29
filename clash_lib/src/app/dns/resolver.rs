@@ -16,6 +16,7 @@ use super::{
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
     Config,
 };
+use super::{DNSNetMode, NameServer};
 
 static TTL: Duration = Duration::from_secs(60);
 
@@ -261,6 +262,28 @@ impl ClashResolver for Resolver {
 }
 
 impl Resolver {
+    /// For testing purpose
+    pub async fn new_default() -> Self {
+        Resolver {
+            ipv6: false,
+            hosts: None,
+            main: make_clients(
+                vec![NameServer {
+                    net: DNSNetMode::UDP,
+                    address: "8.8.8.8:53".to_string(),
+                    interface: None,
+                }],
+                None,
+            )
+            .await,
+            fallback: None,
+            fallback_domain_filters: None,
+            fallback_ip_filters: None,
+            lru_cache: None,
+            policy: None,
+        }
+    }
+
     pub async fn new(cfg: Config) -> Self {
         let default_resolver = Arc::new(Resolver {
             ipv6: false,
@@ -405,7 +428,7 @@ mod tests {
     #[tokio::test]
     async fn test_dot_resolve() {
         let c = DnsClient::new(Opts {
-            r: Some(Arc::new(make_default_resolver().await)),
+            r: Some(Arc::new(Resolver::new_default().await)),
             host: "dns.google".to_string(),
             port: 853,
             net: DNSNetMode::DoT,
@@ -419,7 +442,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_doh_resolve() {
-        let default_resolver = Arc::new(make_default_resolver().await);
+        let default_resolver = Arc::new(Resolver::new_default().await);
 
         let c = DnsClient::new(Opts {
             r: Some(default_resolver.clone()),
@@ -448,27 +471,6 @@ mod tests {
         .expect("build client");
 
         test_client(c).await;
-    }
-
-    async fn make_default_resolver() -> Resolver {
-        Resolver {
-            ipv6: false,
-            hosts: None,
-            main: make_clients(
-                vec![NameServer {
-                    net: DNSNetMode::UDP,
-                    address: "8.8.8.8:53".to_string(),
-                    interface: None,
-                }],
-                None,
-            )
-            .await,
-            fallback: None,
-            fallback_domain_filters: None,
-            fallback_ip_filters: None,
-            lru_cache: None,
-            policy: None,
-        }
     }
 
     async fn test_client(c: ThreadSafeDNSClient) -> () {

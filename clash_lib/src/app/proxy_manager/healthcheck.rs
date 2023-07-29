@@ -5,7 +5,9 @@ use tokio::{
     time::Instant,
 };
 
-use super::{ProxyManager, ThreadSafeProxy};
+use crate::proxy::AnyOutboundHandler;
+
+use super::ProxyManager;
 
 pub type ThreadSafeHealthCheck = Arc<RwLock<HealthCheck>>;
 
@@ -14,7 +16,7 @@ struct HealCheckInner {
 }
 
 pub struct HealthCheck {
-    proxies: Vec<ThreadSafeProxy>,
+    proxies: Vec<AnyOutboundHandler>,
     url: String,
     interval: u64,
     lazy: bool,
@@ -25,7 +27,7 @@ pub struct HealthCheck {
 
 impl HealthCheck {
     pub fn new(
-        proxies: Vec<ThreadSafeProxy>,
+        proxies: Vec<AnyOutboundHandler>,
         url: String,
         interval: u64,
         lazy: bool,
@@ -86,7 +88,7 @@ impl HealthCheck {
         }
     }
 
-    fn update(&mut self, proxies: Vec<ThreadSafeProxy>) {
+    fn update(&mut self, proxies: Vec<AnyOutboundHandler>) {
         self.proxies = proxies;
     }
 

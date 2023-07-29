@@ -111,3 +111,30 @@ impl ProviderVehicle for Vehicle {
         ProviderVehicleType::HTTP
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ProviderVehicle;
+    use std::str;
+    use std::sync::Arc;
+
+    use http::Uri;
+
+    use crate::app::{dns::Resolver, ThreadSafeDNSResolver};
+
+    #[tokio::test]
+    async fn test_http_vehicle() {
+        let u = "http://mockbin.org/bin/db6924ba-6b95-4766-b926-e609e1ce49d2"
+            .parse::<Uri>()
+            .unwrap();
+        let r = Arc::new(Resolver::new_default().await);
+        let v = super::Vehicle::new(
+            u,
+            "/tmp/test_http_vehicle",
+            r.clone() as ThreadSafeDNSResolver,
+        );
+
+        let data = v.read().await.unwrap();
+        assert_eq!(str::from_utf8(&data).unwrap(), "ok");
+    }
+}

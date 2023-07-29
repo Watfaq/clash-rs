@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use tokio::sync::Mutex;
 
 use crate::{
-    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager, ThreadSafeProxy},
+    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
+    proxy::AnyOutboundHandler,
     Error,
 };
 
@@ -12,7 +13,7 @@ use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehic
 
 struct PlainProvider {
     name: String,
-    proxies: Vec<ThreadSafeProxy>,
+    proxies: Vec<AnyOutboundHandler>,
     healthcheck: HealthCheck,
     proxy_registry: Arc<Mutex<ProxyManager>>,
 }
@@ -20,7 +21,7 @@ struct PlainProvider {
 impl PlainProvider {
     pub fn new(
         name: String,
-        proxies: Vec<ThreadSafeProxy>,
+        proxies: Vec<AnyOutboundHandler>,
         mut healthcheck: HealthCheck,
         proxy_registry: Arc<Mutex<ProxyManager>>,
     ) -> anyhow::Result<Self> {
@@ -62,7 +63,7 @@ impl Provider for PlainProvider {
 
 #[async_trait]
 impl ProxyProvider for PlainProvider {
-    async fn proxies(&self) -> Vec<ThreadSafeProxy> {
+    async fn proxies(&self) -> Vec<AnyOutboundHandler> {
         self.proxies.clone()
     }
     async fn touch(&mut self) {
