@@ -51,7 +51,7 @@ serde_yaml = "0.9"
 trust-dns-client = "0.22"
 trust-dns-proto = { version = "0.22", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 # DoH
-rustls = { version  = "0.20", features=["dangerous_configuration"] }
+rustls = { version  = "0.21", features=["dangerous_configuration"] }
 webpki-roots = "0.22"
 dhcproto = "0.8"
 
