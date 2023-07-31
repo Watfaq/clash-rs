@@ -14,30 +14,26 @@ use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehic
 pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
-    healthcheck: HealthCheck,
     proxy_registry: Arc<Mutex<ProxyManager>>,
+    latency_test_url: String,
 }
 
 impl PlainProvider {
     pub fn new(
         name: String,
         proxies: Vec<AnyOutboundHandler>,
-        mut healthcheck: HealthCheck,
         proxy_registry: Arc<Mutex<ProxyManager>>,
+        latency_test_url: String,
     ) -> anyhow::Result<Self> {
         if proxies.is_empty() {
             return Err(Error::InvalidConfig(format!("{}: proxies is empty", name)).into());
         }
 
-        if healthcheck.auto() {
-            healthcheck.kick_off();
-        }
-
         Ok(Self {
             name,
             proxies,
-            healthcheck,
             proxy_registry,
+            latency_test_url,
         })
     }
 }
@@ -67,9 +63,13 @@ impl ProxyProvider for PlainProvider {
         self.proxies.clone()
     }
     async fn touch(&mut self) {
-        self.healthcheck.touch().await;
+        todo!("PlainProvider::touch");
     }
     async fn healthcheck(&self) {
-        self.proxy_registry.lock().await.check(&self.proxies).await;
+        self.proxy_registry
+            .lock()
+            .await
+            .check(&self.proxies, &self.latency_test_url)
+            .await;
     }
 }

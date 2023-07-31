@@ -64,8 +64,10 @@ pub fn start(opts: Options) -> Result<(), Error> {
         .unwrap()
         .block_on(async {
             match start_async(opts).await {
-                Err(e) => tracing::error!("failed to start: {}", e),
-                Ok(_) => tracing::info!("main program finished"),
+                Err(e) => {
+                    eprintln!("start error: {}", e);
+                }
+                Ok(_) => {}
             }
         });
     Ok(())

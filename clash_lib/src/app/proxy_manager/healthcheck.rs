@@ -1,15 +1,12 @@
 use std::sync::Arc;
 
-use tokio::{
-    sync::{Mutex, RwLock},
-    time::Instant,
-};
+use tokio::{sync::Mutex, time::Instant};
 
 use crate::proxy::AnyOutboundHandler;
 
 use super::ProxyManager;
 
-pub type ThreadSafeHealthCheck = Arc<RwLock<HealthCheck>>;
+pub type ThreadSafeHealthCheck = Arc<Mutex<HealthCheck>>;
 
 struct HealCheckInner {
     last_check: Instant,
@@ -53,13 +50,15 @@ impl HealthCheck {
         let lazy = self.lazy;
         let proxies = self.proxies.clone();
 
+        let url = self.url.clone();
         tokio::spawn(async move {
-            latency_manager.blocking_lock().check(&proxies).await;
+            latency_manager.blocking_lock().check(&proxies, &url).await;
         });
 
         let inner = self.inner.clone();
         let proxies = self.proxies.clone();
         let latency_manager = self.latency_manager.clone();
+        let url = self.url.clone();
         let task_handle = tokio::spawn(async move {
             let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(interval));
             loop {
@@ -67,7 +66,7 @@ impl HealthCheck {
                     _ = ticker.tick() => {
                         let now = tokio::time::Instant::now();
                         if !lazy || now.duration_since(inner.blocking_lock().last_check).as_secs() >= interval {
-                            latency_manager.blocking_lock().check(&proxies).await;
+                            latency_manager.lock().await.check(&proxies, &url).await;
                             inner.blocking_lock().last_check = now;
                         }
                     },
@@ -94,5 +93,9 @@ impl HealthCheck {
 
     pub fn auto(&self) -> bool {
         self.interval != 0
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
     }
 }

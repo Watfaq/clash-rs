@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::app::proxy_manager::healthcheck::HealthCheck;
 use crate::app::proxy_manager::providers::file_vehicle;
-use crate::app::proxy_manager::providers::http_vehicle::{self, Vehicle};
+use crate::app::proxy_manager::providers::http_vehicle;
 use crate::app::proxy_manager::providers::plain_provider::PlainProvider;
 use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider;
 use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
@@ -26,6 +26,8 @@ pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_manager: Arc<Mutex<ProxyManager>>,
 }
+
+static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
 
 pub type ThreadSafeOutboundManager = Arc<RwLock<OutboundManager>>;
 
@@ -108,19 +110,12 @@ impl OutboundManager {
                                     .clone()
                             })
                             .collect::<Vec<_>>();
-                        let hc = HealthCheck::new(
-                            proxies.clone(),
-                            proto.url.clone(),
-                            proto.interval,
-                            true,
-                            proxy_manager.clone(),
-                        )
-                        .map_err(|x| Error::InvalidConfig(format!("invalid hc config: {}", x)))?;
+
                         let provider = PlainProvider::new(
                             proto.name.clone(),
                             proxies,
-                            hc,
                             proxy_manager.clone(),
+                            DEFAULT_LATENCY_TEST_URL.to_owned(),
                         )
                         .map_err(|x| {
                             Error::InvalidConfig(format!("invalid provider config: {}", x))

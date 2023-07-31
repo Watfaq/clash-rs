@@ -22,7 +22,7 @@ impl ProxyManager {
         Self::default()
     }
 
-    pub async fn check(&mut self, _proxy: &Vec<AnyOutboundHandler>) {
+    pub async fn check(&mut self, _proxy: &Vec<AnyOutboundHandler>, url: &str) {
         todo!("check latency for proxies")
     }
 }

@@ -33,7 +33,7 @@ pub struct ProxySetProvider {
         Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
-    healthcheck: HealthCheck,
+    hc: HealthCheck,
     inner: std::sync::Arc<tokio::sync::Mutex<FileProviderInner>>,
     proxy_registry: Arc<Mutex<ProxyManager>>,
 }
@@ -94,7 +94,7 @@ impl ProxySetProvider {
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater.into()));
         Ok(Self {
             fetcher,
-            healthcheck: hc,
+            hc,
             inner,
             proxy_registry,
         })
@@ -147,14 +147,14 @@ impl ProxyProvider for ProxySetProvider {
     }
 
     async fn touch(&mut self) {
-        self.healthcheck.touch().await;
+        self.hc.touch().await;
     }
 
     async fn healthcheck(&self) {
         self.proxy_registry
             .lock()
             .await
-            .check(&self.proxies().await)
+            .check(&self.proxies().await, self.hc.url())
             .await;
     }
 }

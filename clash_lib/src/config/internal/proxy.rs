@@ -191,13 +191,6 @@ pub struct OutboundGroupRelay {
     pub proxies: Option<Vec<String>>,
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
-
-    // hc
-    pub url: String,
-    #[serde(deserialize_with = "utils::deserialize_u64")]
-    pub interval: u64,
-    pub tolerance: Option<i32>,
-    pub lazy: Option<bool>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
