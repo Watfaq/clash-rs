@@ -6,19 +6,21 @@ use crate::app::router::rules::ruleset::RuleSet;
 use crate::app::router::rules::RuleMatcher;
 use crate::app::ThreadSafeDNSResolver;
 
+use crate::common::http::new_http_client;
 use crate::config::internal::rule::Rule;
 use crate::session::{Session, SocksAddr};
 
 use crate::app::router::rules::final_::Final;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 
 mod mmdb;
 mod rules;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
-    dns_client: ThreadSafeDNSResolver,
+    dns_resolver: ThreadSafeDNSResolver,
 }
 
 pub type ThreadSafeRouter = Arc<RwLock<Router>>;
@@ -26,8 +28,18 @@ pub type ThreadSafeRouter = Arc<RwLock<Router>>;
 const MATCH: &str = "MATCH";
 
 impl Router {
-    pub fn new(rules: Vec<Rule>, dns_client: ThreadSafeDNSResolver, mmdb_path: String) -> Self {
-        let mmdb = Arc::new(mmdb::MMDB::new(mmdb_path).expect("failed to load mmdb"));
+    pub async fn new(
+        rules: Vec<Rule>,
+        dns_resolver: ThreadSafeDNSResolver,
+        mmdb_path: String,
+        mmdb_download_url: Option<String>,
+    ) -> Self {
+        let client = new_http_client(dns_resolver.clone()).expect("failed to create http client");
+        let mmdb = Arc::new(
+            mmdb::MMDB::new(mmdb_path, mmdb_download_url, client)
+                .await
+                .expect("failed to load mmdb"),
+        );
 
         Self {
             rules: rules
@@ -97,7 +109,7 @@ impl Router {
                     Rule::Match { target } => Box::new(Final { target }),
                 })
                 .collect(),
-            dns_client,
+            dns_resolver,
         }
     }
 
@@ -108,7 +120,7 @@ impl Router {
         for r in self.rules.iter() {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
                 if let Ok(ip) = self
-                    .dns_client
+                    .dns_resolver
                     .resolve(sess.destination.domain().unwrap())
                     .await
                 {
@@ -120,6 +132,7 @@ impl Router {
             }
 
             if r.apply(&sess_dup) {
+                info!("matched {} to target {}", &sess_dup, r.target());
                 return r.target();
             }
         }

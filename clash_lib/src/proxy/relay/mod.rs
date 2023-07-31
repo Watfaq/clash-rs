@@ -32,7 +32,11 @@ impl Handler {
     }
 
     async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
-        todo!("get proxies from providers")
+        futures::future::join_all(self.providers.iter().map(|x| x.proxies()))
+            .await
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
     }
 }
 

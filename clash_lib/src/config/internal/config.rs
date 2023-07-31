@@ -69,6 +69,7 @@ impl TryFrom<def::Config> for Config {
                 }),
                 routing_mask: c.routing_mask,
                 mmdb: c.mmdb.to_owned(),
+                mmdb_download_url: c.mmdb_download_url.to_owned(),
             },
             dns: (&c).try_into()?,
             experimental: c.experimental,
@@ -164,6 +165,7 @@ pub struct General {
     interface: Option<Interface>,
     routing_mask: Option<u32>,
     pub mmdb: String,
+    pub mmdb_download_url: Option<String>,
 }
 
 pub struct Profile {

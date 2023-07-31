@@ -64,7 +64,9 @@ impl OutboundManager {
 
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
-                OutboundGroupProtocol::Relay(_proto) => {}
+                OutboundGroupProtocol::Relay(proto) => {
+                    handlers.insert(proto.name.clone(), proto.try_into()?);
+                }
                 OutboundGroupProtocol::UrlTest(_proto) => todo!(),
                 OutboundGroupProtocol::Fallback(_proto) => todo!(),
                 OutboundGroupProtocol::LoadBalance(_proto) => todo!(),

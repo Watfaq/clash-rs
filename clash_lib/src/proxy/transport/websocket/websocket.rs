@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{fmt::Debug, pin::Pin};
 
 use bytes::{Buf, Bytes};
 use futures::{ready, Sink, Stream};
@@ -13,6 +13,15 @@ use crate::{
 pub struct WebsocketConn {
     inner: WebSocketStream<AnyStream>,
     read_buffer: Option<Bytes>,
+}
+
+impl Debug for WebsocketConn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebsocketConn")
+            .field("inner", &self.inner)
+            .field("read_buffer", &self.read_buffer)
+            .finish()
+    }
 }
 
 impl WebsocketConn {

@@ -66,7 +66,7 @@ impl Dispatcher {
                 info!("remote connection established {}", sess);
                 match copy_bidirectional(&mut lhs, &mut rhs).await {
                     Ok((up, down)) => {
-                        info!(
+                        debug!(
                             "connection {} closed with {} bytes up, {} bytes down",
                             sess, up, down
                         );

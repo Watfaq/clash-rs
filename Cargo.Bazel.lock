@@ -1,5 +1,5 @@
 {
-  "checksum": "84b5c3544819a9bb25474d15a2a6a184931793feebe911fce0c60665e0053ffb",
+  "checksum": "8cbed76fd51e27aadaf5837fea83402a02fc001c7c4a9d9817f07e77087dcaae",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -532,6 +532,36 @@
       },
       "license": "BSD-3-Clause"
     },
+    "antidote 1.0.0": {
+      "name": "antidote",
+      "version": "1.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/antidote/1.0.0/download",
+          "sha256": "34fde25430d87a9388dadbe6e34d7f72a462c8b43ac8d309b42b0a8505d7e2a5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "antidote",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "antidote",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "1.0.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "anyhow 1.0.72": {
       "name": "anyhow",
       "version": "1.0.72",
@@ -679,6 +709,53 @@
         ],
         "edition": "2018",
         "version": "0.7.4"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "async-recursion 1.0.4": {
+      "name": "async-recursion",
+      "version": "1.0.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/async-recursion/1.0.4/download",
+          "sha256": "0e97ce7de6cf12de5d7226c73f5ba9811622f4db3a5b91b55c53e987e5f91cba"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "async_recursion",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "async_recursion",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.32",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.27",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -1127,7 +1204,20 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "prettyplease 0.2.12",
+              "target": "prettyplease"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "BSD-3-Clause"
     },
@@ -2576,6 +2666,10 @@
               "target": "hyper"
             },
             {
+              "id": "hyper-boring 2.1.2",
+              "target": "hyper_boring"
+            },
+            {
               "id": "ipnet 2.8.0",
               "target": "ipnet"
             },
@@ -2721,6 +2815,10 @@
         "edition": "2021",
         "proc_macro_deps": {
           "common": [
+            {
+              "id": "async-recursion 1.0.4",
+              "target": "async_recursion"
+            },
             {
               "id": "async-trait 0.1.72",
               "target": "async_trait"
@@ -6266,6 +6364,7 @@
             "h2",
             "http1",
             "http2",
+            "runtime",
             "server",
             "socket2",
             "tcp"
@@ -6345,6 +6444,87 @@
         "version": "0.14.27"
       },
       "license": "MIT"
+    },
+    "hyper-boring 2.1.2": {
+      "name": "hyper-boring",
+      "version": "2.1.2",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/Watfaq/boring.git",
+          "commitish": {
+            "Branch": "bazel"
+          },
+          "strip_prefix": "hyper-boring"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_boring",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "hyper_boring",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "antidote 1.0.0",
+              "target": "antidote"
+            },
+            {
+              "id": "boring 2.1.0",
+              "target": "boring"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "linked_hash_set 0.1.4",
+              "target": "linked_hash_set"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "tokio 1.29.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-boring 2.1.5",
+              "target": "tokio_boring"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.1.2"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "idna 0.2.3": {
       "name": "idna",
@@ -7253,6 +7433,45 @@
         "version": "0.5.6"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "linked_hash_set 0.1.4": {
+      "name": "linked_hash_set",
+      "version": "0.1.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/linked_hash_set/0.1.4/download",
+          "sha256": "47186c6da4d81ca383c7c47c1bfc80f4b95f4720514d860a5407aaf4233f9588"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "linked_hash_set",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "linked_hash_set",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "linked-hash-map 0.5.6",
+              "target": "linked_hash_map"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.4"
+      },
+      "license": "Apache-2.0"
     },
     "linux-raw-sys 0.4.3": {
       "name": "linux-raw-sys",
@@ -11069,7 +11288,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "Apache-2.0/ISC/MIT"
     },

@@ -1,70 +1,15 @@
 use super::{ProviderVehicle, ProviderVehicleType};
 use crate::app::ThreadSafeDNSResolver;
 use crate::common::errors::map_io_error;
-use crate::proxy::utils::new_tcp_stream;
-use crate::proxy::AnyStream;
+use crate::common::http::{new_http_client, HttpClient, LocalConnector};
+
 use async_trait::async_trait;
 
-use hyper::client::connect::{Connected, Connection};
-
-use hyper::service::Service;
 use hyper::{body, Uri};
 
-use std::future::Future;
 use std::io;
 
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-#[derive(Clone)]
-struct LocalConnector(pub ThreadSafeDNSResolver);
-
-impl Service<Uri> for LocalConnector {
-    type Response = AnyStream;
-    type Error = io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, remote: Uri) -> Self::Future {
-        let host = remote
-            .host()
-            .expect(format!("invalid url: {}", remote.to_string()).as_str())
-            .to_owned();
-
-        let dns = self.0.clone();
-
-        Box::pin(async move {
-            new_tcp_stream(
-                dns,
-                host.as_str(),
-                remote.port_u16().unwrap_or(match remote.scheme_str() {
-                    None => 80,
-                    Some(s) => match s {
-                        s if s == "http" => 80,
-                        s if s == "https" => 443,
-                        _ => panic!("invalid url: {}", remote),
-                    },
-                }),
-                None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
-            )
-            .await
-        })
-    }
-}
-
-impl Connection for AnyStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
-    }
-}
-
-type HttpClient = hyper::Client<LocalConnector>;
 
 pub struct Vehicle {
     pub url: Uri,
@@ -78,9 +23,7 @@ impl Vehicle {
         path: P,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
-        let connector = LocalConnector(dns_resolver);
-
-        let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
+        let client = new_http_client(dns_resolver).expect("failed to create http client");
         Self {
             url: url.into(),
             path: path.as_ref().to_path_buf(),

@@ -55,6 +55,7 @@ pub struct Config {
     pub rule: Vec<String>,
     pub hosts: HashMap<String, String>,
     pub mmdb: String,
+    pub mmdb_download_url: Option<String>,
 
     /// these options has default vals,
     /// and needs extra processing
@@ -130,6 +131,10 @@ impl Default for Config {
             proxy_group: Default::default(),
             rule: Default::default(),
             mmdb: "Country.mmdb".to_string(),
+            mmdb_download_url: Some(
+                "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb"
+                    .to_owned(),
+            ),
         }
     }
 }

@@ -23,6 +23,8 @@ pub mod socks;
 pub mod utils;
 //pub mod vmess;
 
+pub mod converters;
+
 // proxy groups
 mod relay;
 
@@ -40,8 +42,8 @@ pub enum ProxyError {
     Socks5(String),
 }
 
-pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
-impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
+pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin + Debug {}
+impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin + Debug {}
 pub type AnyStream = Box<dyn ProxyStream>;
 
 pub trait InboundDatagram<Item>:

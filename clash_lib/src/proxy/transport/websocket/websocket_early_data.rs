@@ -1,5 +1,6 @@
 use std::{
     cmp,
+    fmt::Debug,
     pin::Pin,
     task::{Poll, Waker},
 };
@@ -30,6 +31,21 @@ pub struct WebsocketEarlyDataConn {
     early_data_header_name: String,
     early_data_len: usize,
     early_data_flushed: bool,
+}
+
+impl Debug for WebsocketEarlyDataConn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebsocketEarlyDataConn")
+            .field("stream", &self.stream)
+            .field("req", &self.req)
+            .field("early_waker", &self.early_waker)
+            .field("flush_waker", &self.flush_waker)
+            .field("ws_config", &self.ws_config)
+            .field("early_data_header_name", &self.early_data_header_name)
+            .field("early_data_len", &self.early_data_len)
+            .field("early_data_flushed", &self.early_data_flushed)
+            .finish()
+    }
 }
 
 impl WebsocketEarlyDataConn {

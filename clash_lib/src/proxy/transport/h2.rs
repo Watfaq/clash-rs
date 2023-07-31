@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use bytes::{Bytes, BytesMut};
 use futures::ready;
@@ -62,6 +62,16 @@ pub struct Http2Stream {
     recv: RecvStream,
     send: SendStream<Bytes>,
     buffer: BytesMut,
+}
+
+impl Debug for Http2Stream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Http2Stream")
+            .field("recv", &self.recv)
+            .field("send", &self.send)
+            .field("buffer", &self.buffer)
+            .finish()
+    }
 }
 
 impl Http2Stream {

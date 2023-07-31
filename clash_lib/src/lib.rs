@@ -105,6 +105,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut runners = Vec::new();
 
     let default_dns_resolver = Arc::new(dns::Resolver::new(config.dns).await);
+
     let outbound_manager = Arc::new(RwLock::new(OutboundManager::new(
         config
             .proxies
@@ -125,11 +126,16 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         default_dns_resolver.clone(),
     )?));
 
-    let router = Arc::new(RwLock::new(Router::new(
-        config.rules,
-        default_dns_resolver.clone(),
-        config.general.mmdb,
-    )));
+    let router = Arc::new(RwLock::new(
+        Router::new(
+            config.rules,
+            default_dns_resolver.clone(),
+            config.general.mmdb,
+            config.general.mmdb_download_url,
+        )
+        .await,
+    ));
+
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager,
         router,

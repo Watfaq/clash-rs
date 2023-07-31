@@ -10,6 +10,7 @@ use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
 use tracing::log;
 
+use std::fmt::Debug;
 use std::future::Future;
 use std::io;
 use std::io::{Error, ErrorKind};
@@ -64,6 +65,18 @@ pub struct GrpcStream {
     send: SendStream<Bytes>,
     buffer: BytesMut,
     payload_len: u64,
+}
+
+impl Debug for GrpcStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GrpcStream")
+            .field("resp_fut", &self.resp_fut)
+            .field("recv", &self.recv)
+            .field("send", &self.send)
+            .field("buffer", &self.buffer)
+            .field("payload_len", &self.payload_len)
+            .finish()
+    }
 }
 
 impl GrpcStream {
