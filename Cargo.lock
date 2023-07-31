@@ -515,7 +515,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-boring",
- "tokio-rustls",
+ "tokio-rustls 0.24.1",
  "tokio-tungstenite",
  "tokio-util",
  "tower",
@@ -2618,6 +2618,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-rustls"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
+dependencies = [
+ "rustls 0.21.5",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-tfo"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2820,7 +2830,7 @@ dependencies = [
  "thiserror",
  "tinyvec",
  "tokio",
- "tokio-rustls",
+ "tokio-rustls 0.23.4",
  "tracing",
  "url",
  "webpki",
