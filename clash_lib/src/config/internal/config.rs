@@ -1,9 +1,7 @@
-use futures::StreamExt;
 use std::collections::HashMap;
 
 use std::net::IpAddr;
 use std::str::FromStr;
-use tower::ServiceExt;
 
 use crate::config::def;
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
@@ -15,7 +13,7 @@ use crate::{
     Error,
 };
 
-use super::proxy::OutboundProxyProtocol;
+use super::proxy::{OutboundProxyProtocol, OutboundProxyProvider};
 
 pub struct Config {
     pub general: General,
@@ -27,6 +25,7 @@ pub struct Config {
     proxy_names: Vec<String>,
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
+    pub proxy_providers: HashMap<String, OutboundProxyProvider>,
 }
 
 impl Config {
@@ -134,6 +133,23 @@ impl TryFrom<def::Config> for Config {
             )?,
             // https://stackoverflow.com/a/62001313/1109167
             proxy_names,
+            proxy_providers: c
+                .proxy_provider
+                .map(|m| {
+                    m.into_iter()
+                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                            let provider = OutboundProxyProvider::try_from(body).map_err(|x| {
+                                Error::InvalidConfig(format!(
+                                    "invalid proxy provider {}: {}",
+                                    name, x
+                                ))
+                            })?;
+                            rv.insert(name, provider);
+                            Ok::<HashMap<std::string::String, OutboundProxyProvider>, Error>(rv)
+                        })
+                        .expect("proxy provider parse error")
+                })
+                .unwrap_or_default(),
         })
     }
 }

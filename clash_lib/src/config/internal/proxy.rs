@@ -231,8 +231,8 @@ pub struct OutboundGroupLoadBalance {
     pub interval: u64,
     pub strategy: Option<LoadBalanceStrategy>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum LoadBalanceStrategy {
     #[serde(rename = "consistent-hashing")]
     ConsistentHashing,
@@ -247,4 +247,45 @@ pub struct OutboundGroupSelect {
     pub proxies: Option<Vec<String>>,
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+pub enum OutboundProxyProvider {
+    Http(OutboundHttpProvider),
+    File(OutboundFileProvider),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct OutboundHttpProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub url: String,
+    pub interval: u64,
+    pub path: String,
+    pub health_check: HealthCheck,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct OutboundFileProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub path: String,
+    pub health_check: HealthCheck,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct HealthCheck {
+    pub enable: bool,
+    pub url: String,
+    pub interval: u64,
+}
+
+impl TryFrom<HashMap<String, Value>> for OutboundProxyProvider {
+    type Error = crate::Error;
+
+    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        OutboundProxyProvider::deserialize(MapDeserializer::new(mapping.into_iter()))
+            .map_err(map_serde_error)
+    }
 }
