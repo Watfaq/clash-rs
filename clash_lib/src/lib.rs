@@ -106,25 +106,29 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let default_dns_resolver = Arc::new(dns::Resolver::new(config.dns).await);
 
-    let outbound_manager = Arc::new(RwLock::new(OutboundManager::new(
-        config
-            .proxies
-            .into_values()
-            .filter_map(|x| match x {
-                OutboundProxy::ProxyServer(s) => Some(s),
-                _ => None,
-            })
-            .collect(),
-        config
-            .proxy_groups
-            .into_values()
-            .filter_map(|x| match x {
-                OutboundProxy::ProxyGroup(g) => Some(g),
-                _ => None,
-            })
-            .collect(),
-        default_dns_resolver.clone(),
-    )?));
+    let outbound_manager = Arc::new(RwLock::new(
+        OutboundManager::new(
+            config
+                .proxies
+                .into_values()
+                .filter_map(|x| match x {
+                    OutboundProxy::ProxyServer(s) => Some(s),
+                    _ => None,
+                })
+                .collect(),
+            config
+                .proxy_groups
+                .into_values()
+                .filter_map(|x| match x {
+                    OutboundProxy::ProxyGroup(g) => Some(g),
+                    _ => None,
+                })
+                .collect(),
+            config.proxy_providers,
+            default_dns_resolver.clone(),
+        )
+        .await?,
+    ));
 
     let router = Arc::new(RwLock::new(
         Router::new(

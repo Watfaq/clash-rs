@@ -26,7 +26,7 @@ pub mod utils;
 pub mod converters;
 
 // proxy groups
-mod relay;
+pub mod relay;
 
 mod transport;
 

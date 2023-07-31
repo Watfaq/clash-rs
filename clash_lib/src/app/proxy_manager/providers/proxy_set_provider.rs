@@ -28,7 +28,7 @@ struct FileProviderInner {
     proxies: Vec<AnyOutboundHandler>,
 }
 
-struct ProxySetProvider {
+pub struct ProxySetProvider {
     fetcher: Fetcher<
         Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,

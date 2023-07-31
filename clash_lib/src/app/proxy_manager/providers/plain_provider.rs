@@ -11,7 +11,7 @@ use crate::{
 
 use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
 
-struct PlainProvider {
+pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
     healthcheck: HealthCheck,

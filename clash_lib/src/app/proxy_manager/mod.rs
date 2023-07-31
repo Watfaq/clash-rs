@@ -2,22 +2,24 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::proxy::AnyOutboundHandler;
 
-mod healthcheck;
+use self::providers::proxy_provider::ThreadSafeProxyProvider;
+
+pub mod healthcheck;
 pub mod providers;
 
 type Latency = VecDeque<u64>;
 
 /// ProxyManager is only the latency registry.
 /// TODO: move all proxies here, too, maybe.
+#[derive(Default)]
 pub struct ProxyManager {
     latency_map: HashMap<String, Latency>,
+    proxy_provider: HashMap<String, ThreadSafeProxyProvider>,
 }
 
 impl ProxyManager {
     pub fn new() -> Self {
-        Self {
-            latency_map: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub async fn check(&mut self, _proxy: &Vec<AnyOutboundHandler>) {

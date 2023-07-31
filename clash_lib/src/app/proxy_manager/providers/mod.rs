@@ -5,11 +5,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub mod fether;
-mod file_vehicle;
-mod http_vehicle;
-mod plain_provider;
+pub mod file_vehicle;
+pub mod http_vehicle;
+pub mod plain_provider;
 pub mod proxy_provider;
-mod proxy_set_provider;
+pub mod proxy_set_provider;
 pub mod rule_provider;
 
 #[cfg(test)]

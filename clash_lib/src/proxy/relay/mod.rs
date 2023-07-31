@@ -13,6 +13,7 @@ use crate::{
 
 use super::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler};
 
+#[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
     pub common_opts: CommonOption,

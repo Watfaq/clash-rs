@@ -1,7 +1,7 @@
 use super::{ProviderVehicle, ProviderVehicleType};
 use crate::app::ThreadSafeDNSResolver;
 use crate::common::errors::map_io_error;
-use crate::common::http::{new_http_client, HttpClient, LocalConnector};
+use crate::common::http::{new_http_client, HttpClient};
 
 use async_trait::async_trait;
 
