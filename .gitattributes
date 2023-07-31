@@ -1,3 +1,0 @@
-third_party/boringssl/build/libcrypto.a filter=lfs diff=lfs merge=lfs -text
-third_party/boringssl/build/libdecrepit.a filter=lfs diff=lfs merge=lfs -text
-third_party/boringssl/build/libssl.a filter=lfs diff=lfs merge=lfs -text
