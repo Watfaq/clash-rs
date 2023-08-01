@@ -595,7 +595,7 @@ dependencies = [
  "trust-dns-proto 0.22.0",
  "url",
  "uuid",
- "webpki-roots",
+ "webpki-roots 0.25.1",
 ]
 
 [[package]]
@@ -2869,7 +2869,7 @@ dependencies = [
  "tracing",
  "url",
  "webpki",
- "webpki-roots",
+ "webpki-roots 0.22.6",
 ]
 
 [[package]]
@@ -3140,6 +3140,12 @@ checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9c6eda1c830a36f361e7721c87fd79ea84293b54f8c48c959f85ec636f0f196"
 
 [[package]]
 name = "widestring"
