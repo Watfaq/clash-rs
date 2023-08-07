@@ -69,7 +69,7 @@ impl ProxyProvider for PlainProvider {
         self.proxy_registry
             .lock()
             .await
-            .check(&self.proxies, &self.latency_test_url)
+            .check(&self.proxies, &self.latency_test_url, None)
             .await;
     }
 }

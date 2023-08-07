@@ -52,7 +52,11 @@ impl HealthCheck {
 
         let url = self.url.clone();
         tokio::spawn(async move {
-            latency_manager.lock().await.check(&proxies, &url).await;
+            latency_manager
+                .lock()
+                .await
+                .check(&proxies, &url, None)
+                .await;
         });
 
         let inner = self.inner.clone();
@@ -66,7 +70,7 @@ impl HealthCheck {
                     _ = ticker.tick() => {
                         let now = tokio::time::Instant::now();
                         if !lazy || now.duration_since(inner.lock().await.last_check).as_secs() >= interval {
-                            latency_manager.lock().await.check(&proxies, &url).await;
+                            latency_manager.lock().await.check(&proxies, &url, None).await;
                             inner.lock().await.last_check = now;
                         }
                     },

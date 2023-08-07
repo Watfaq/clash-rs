@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
 
@@ -7,6 +8,8 @@ use boring::ssl::{SslConnector, SslMethod};
 
 use http::Request;
 use hyper_boring::HttpsConnector;
+use tokio::sync::Mutex;
+use tracing::error;
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -36,8 +39,9 @@ struct ProxyState {
 
 /// ProxyManager is only the latency registry.
 /// TODO: move all proxies here, too, maybe.
+#[derive(Clone)]
 pub struct ProxyManager {
-    proxy_state: HashMap<String, ProxyState>,
+    proxy_state: Arc<Mutex<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 }
 
@@ -47,36 +51,63 @@ impl ProxyManager {
     pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
         Self {
             dns_resolver,
-            proxy_state: HashMap::new(),
+            proxy_state: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub async fn check(&mut self, _proxy: &Vec<AnyOutboundHandler>, url: &str) {
-        todo!("check latency for proxies")
+    pub async fn check(
+        &mut self,
+        proxies: &Vec<AnyOutboundHandler>,
+        url: &str,
+        timeout: Option<Duration>,
+    ) {
+        let mut futures = vec![];
+        for proxy in proxies {
+            let proxy = proxy.clone();
+            let url = url.to_owned();
+            let timeout = timeout.clone();
+            let mut manager = self.clone();
+            futures.push(async move {
+                manager
+                    .url_test(proxy, url.as_str(), timeout)
+                    .await
+                    .map_err(|e| error!("healthcheck failed: {}", e))
+            });
+        }
+        futures::future::join_all(futures).await;
     }
 
-    pub fn alive(&self, name: &str) -> bool {
-        self.proxy_state.get(name).map(|x| x.alive).unwrap_or(false)
+    pub async fn alive(&self, name: &str) -> bool {
+        self.proxy_state
+            .lock()
+            .await
+            .get(name)
+            .map(|x| x.alive)
+            .unwrap_or(false)
     }
 
-    pub fn report_alive(&mut self, name: &str, alive: bool) {
-        let state = self.proxy_state.entry(name.to_owned()).or_default();
+    pub async fn report_alive(&mut self, name: &str, alive: bool) {
+        let mut state = self.proxy_state.lock().await;
+        let mut state = state.entry(name.to_owned()).or_default();
         state.alive = alive;
     }
 
-    pub fn delay_history(&self, name: &str) -> Vec<DelayHistory> {
+    pub async fn delay_history(&self, name: &str) -> Vec<DelayHistory> {
         self.proxy_state
+            .lock()
+            .await
             .get(name)
             .map(|x| x.delay_history.clone())
             .unwrap_or_default()
             .into()
     }
-    pub fn last_delay(&self, name: &str) -> u16 {
+    pub async fn last_delay(&self, name: &str) -> u16 {
         let max = u16::MAX;
-        if !self.alive(name) {
+        if !self.alive(name).await {
             return max;
         }
         self.delay_history(name)
+            .await
             .last()
             .map(|x| x.delay)
             .unwrap_or(max)
@@ -137,7 +168,9 @@ impl ProxyManager {
             delay: result.as_ref().map(|x| x.0).unwrap_or(0),
             mean_delay: result.as_ref().map(|x| x.1).unwrap_or(0),
         };
-        let state = self.proxy_state.entry(name.to_owned()).or_default();
+        let mut state = self.proxy_state.lock().await;
+        let state = state.entry(name.to_owned()).or_default();
+
         state.delay_history.push_back(ins);
         if state.delay_history.len() > 10 {
             state.delay_history.pop_front();
@@ -190,12 +223,12 @@ mod tests {
             .await
             .expect("test failed");
 
-        assert!(manager.alive(PROXY_DIRECT));
-        assert!(manager.last_delay(PROXY_DIRECT) > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).len() > 0);
+        assert!(manager.alive(PROXY_DIRECT).await);
+        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
+        assert!(manager.delay_history(PROXY_DIRECT).await.len() > 0);
 
         manager.report_alive(PROXY_DIRECT, false);
-        assert!(!manager.alive(PROXY_DIRECT));
+        assert!(!manager.alive(PROXY_DIRECT).await);
 
         for _ in 0..10 {
             manager
@@ -208,9 +241,9 @@ mod tests {
                 .expect("test failed");
         }
 
-        assert!(manager.alive(PROXY_DIRECT));
-        assert!(manager.last_delay(PROXY_DIRECT) > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).len() == 10);
+        assert!(manager.alive(PROXY_DIRECT).await);
+        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
+        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 10);
     }
 
     #[tokio::test]
@@ -246,8 +279,8 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(!manager.alive(PROXY_DIRECT));
-        assert!(manager.last_delay(PROXY_DIRECT) == u16::MAX);
-        assert!(manager.delay_history(PROXY_DIRECT).len() == 1);
+        assert!(!manager.alive(PROXY_DIRECT).await);
+        assert!(manager.last_delay(PROXY_DIRECT).await == u16::MAX);
+        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 1);
     }
 }

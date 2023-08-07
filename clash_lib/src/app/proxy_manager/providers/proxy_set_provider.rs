@@ -154,7 +154,7 @@ impl ProxyProvider for ProxySetProvider {
         self.proxy_registry
             .lock()
             .await
-            .check(&self.proxies().await, self.hc.url())
+            .check(&self.proxies().await, self.hc.url(), None)
             .await;
     }
 }
