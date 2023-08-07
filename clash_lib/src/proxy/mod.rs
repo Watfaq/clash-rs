@@ -30,6 +30,9 @@ pub mod relay;
 
 mod transport;
 
+#[cfg(test)]
+use mockall::automock;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
     #[error(transparent)]
@@ -99,6 +102,7 @@ pub trait InboundListener: Send + Sync + Unpin {
 
 pub type AnyInboundListener = Arc<dyn InboundListener>;
 
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin {
     /// The name of the outbound handler
@@ -110,6 +114,9 @@ pub trait OutboundHandler: Sync + Send + Unpin {
 
     /// The proxy remote address
     fn remote_addr(&self) -> Option<SocksAddr>;
+
+    /// whether the outbound handler support UDP
+    fn support_udp(&self) -> bool;
 
     /// connect to remote target via TCP
     async fn connect_stream(
@@ -134,8 +141,3 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     ) -> io::Result<AnyOutboundDatagram>;
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;
-
-#[async_trait]
-pub trait ProxyChain: Sync + Send + Unpin {
-    async fn chain(&self, s: AnyStream, sess: &Session) -> io::Result<AnyStream>;
-}

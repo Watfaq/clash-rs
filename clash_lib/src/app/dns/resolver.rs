@@ -8,6 +8,9 @@ use tracing::warn;
 
 use trust_dns_proto::{op, rr};
 
+#[cfg(test)]
+use mockall::automock;
+
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
 use crate::{common::trie, Error};
@@ -24,6 +27,7 @@ static TTL: Duration = Duration::from_secs(60);
 /// it can hold multiple clients in different protocols
 /// each client can also hold a "default_resolver"
 /// in case they need to resolve DoH in domain names etc.  
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait ClashResolver: Sync + Send {
     async fn resolve(&self, host: &str) -> anyhow::Result<Option<net::IpAddr>>;

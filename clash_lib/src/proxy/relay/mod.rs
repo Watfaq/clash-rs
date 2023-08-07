@@ -59,6 +59,10 @@ impl OutboundHandler for Handler {
         None
     }
 
+    fn support_udp(&self) -> bool {
+        todo!("support_udp is not implemented yet")
+    }
+
     async fn connect_stream(
         &self,
         sess: &Session,

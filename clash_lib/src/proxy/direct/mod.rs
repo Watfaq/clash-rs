@@ -1,9 +1,7 @@
 use crate::config::internal::proxy::{OutboundProxy, OutboundProxyProtocol, PROXY_DIRECT};
 use crate::proxy::datagram::OutboundDatagramImpl;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
-use crate::proxy::{
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, ProxyChain,
-};
+use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
 use crate::session::{Session, SocksAddr};
 use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
@@ -29,6 +27,10 @@ impl OutboundHandler for Handler {
 
     fn remote_addr(&self) -> Option<SocksAddr> {
         None
+    }
+
+    fn support_udp(&self) -> bool {
+        true
     }
 
     async fn connect_stream(
@@ -62,16 +64,5 @@ impl OutboundHandler for Handler {
         new_udp_socket(None, sess.iface.as_ref())
             .await
             .map(|x| OutboundDatagramImpl::new(x, resolver))
-    }
-}
-
-#[async_trait]
-impl ProxyChain for Handler {
-    async fn chain(
-        &self,
-        s: AnyStream,
-        #[allow(unused_variables)] sess: &Session,
-    ) -> std::io::Result<AnyStream> {
-        Ok(s)
     }
 }

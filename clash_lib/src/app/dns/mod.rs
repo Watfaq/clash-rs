@@ -13,9 +13,10 @@ mod dns_client;
 mod fakeip;
 mod filters;
 mod helper;
-mod resolver;
+pub mod resolver;
 
 use crate::dns::dns_client::DNSNetMode;
+
 pub use resolver::ClashResolver;
 pub use resolver::Resolver;
 

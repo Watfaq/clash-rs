@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -8,6 +9,7 @@ use futures::Future;
 use http::Uri;
 use hyper::client::connect::{Connected, Connection};
 use hyper_boring::HttpsConnector;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tower::Service;
 
 use crate::{

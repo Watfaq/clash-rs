@@ -165,13 +165,16 @@ mod tests {
 
     use tokio::{sync::Mutex, time::sleep};
 
-    use crate::app::proxy_manager::{
-        healthcheck::HealthCheck,
-        providers::{
-            proxy_provider::ProxyProvider, proxy_set_provider::ProxySetProvider,
-            MockProviderVehicle, Provider, ProviderVehicleType,
+    use crate::app::{
+        dns::resolver::MockClashResolver,
+        proxy_manager::{
+            healthcheck::HealthCheck,
+            providers::{
+                proxy_provider::ProxyProvider, proxy_set_provider::ProxySetProvider,
+                MockProviderVehicle, Provider, ProviderVehicleType,
+            },
+            ProxyManager,
         },
-        ProxyManager,
     };
 
     #[tokio::test]
@@ -200,7 +203,10 @@ proxies:
             .return_const(ProviderVehicleType::File);
 
         let vehicle = Arc::new(Mutex::new(mock_vehicle));
-        let latency_manager = Arc::new(Mutex::new(ProxyManager::new()));
+
+        let mock_resolver = MockClashResolver::new();
+
+        let latency_manager = Arc::new(Mutex::new(ProxyManager::new(Arc::new(mock_resolver))));
         let hc = HealthCheck::new(
             vec![],
             "http://www.google.com".to_owned(),

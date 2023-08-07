@@ -12,7 +12,7 @@ use shadowsocks::{
 
 use crate::{
     app::ThreadSafeDNSResolver,
-    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol, OutboundShadowsocks},
+    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
     Error,
@@ -161,6 +161,10 @@ impl OutboundHandler for Handler {
 
     fn remote_addr(&self) -> Option<SocksAddr> {
         Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
+    }
+
+    fn support_udp(&self) -> bool {
+        true
     }
 
     async fn connect_stream(

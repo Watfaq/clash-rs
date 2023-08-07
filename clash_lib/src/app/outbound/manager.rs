@@ -13,6 +13,7 @@ use crate::app::proxy_manager::providers::plain_provider::PlainProvider;
 use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider;
 use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
 use crate::app::proxy_manager::ProxyManager;
+use crate::app::proxy_manager::ThreadSafeProxyManager;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::{reject, relay};
 use crate::{
@@ -24,7 +25,7 @@ use crate::{
 
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
-    proxy_manager: Arc<Mutex<ProxyManager>>,
+    proxy_manager: ThreadSafeProxyManager,
 }
 
 static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
@@ -40,7 +41,7 @@ impl OutboundManager {
     ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
-        let proxy_manager = Arc::new(Mutex::new(ProxyManager::new()));
+        let proxy_manager = Arc::new(Mutex::new(ProxyManager::new(dns_resolver.clone())));
 
         Self::load_proxy_providers(
             proxy_providers,
