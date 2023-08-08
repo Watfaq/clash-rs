@@ -103,15 +103,15 @@ impl ProxySetProvider {
 
 #[async_trait]
 impl Provider for ProxySetProvider {
-    async fn name(&self) -> &str {
+    fn name(&self) -> &str {
         self.fetcher.name()
     }
 
-    async fn vehicle_type(&self) -> ProviderVehicleType {
-        self.fetcher.vehicle_type().await
+    fn vehicle_type(&self) -> ProviderVehicleType {
+        self.fetcher.vehicle_type()
     }
 
-    async fn typ(&self) -> ProviderType {
+    fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
 
@@ -202,7 +202,7 @@ proxies:
             .expect_typ()
             .return_const(ProviderVehicleType::File);
 
-        let vehicle = Arc::new(Mutex::new(mock_vehicle));
+        let vehicle = Arc::new(mock_vehicle);
 
         let mock_resolver = MockClashResolver::new();
 

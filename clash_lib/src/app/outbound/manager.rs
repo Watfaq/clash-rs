@@ -122,7 +122,7 @@ impl OutboundManager {
                             Error::InvalidConfig(format!("invalid provider config: {}", x))
                         })?;
 
-                        providers.push(Arc::new(provider));
+                        providers.push(Arc::new(Mutex::new(provider)));
                     }
 
                     if let Some(provider_names) = &proto.use_provider {
@@ -181,13 +181,13 @@ impl OutboundManager {
                     let provider = ProxySetProvider::new(
                         name.clone(),
                         Duration::from_secs(http.interval),
-                        Arc::new(Mutex::new(vehicle)),
+                        Arc::new(vehicle),
                         hc,
                         proxy_manager.clone(),
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 
-                    provider_registry.insert(name, Arc::new(provider));
+                    provider_registry.insert(name, Arc::new(Mutex::new(provider)));
                 }
                 OutboundProxyProvider::File(file) => {
                     let vehicle = file_vehicle::Vehicle::new(&file.path);
@@ -203,13 +203,13 @@ impl OutboundManager {
                     let provider = ProxySetProvider::new(
                         name.clone(),
                         Duration::from_secs(file.interval.unwrap_or_default()),
-                        Arc::new(Mutex::new(vehicle)),
+                        Arc::new(vehicle),
                         hc,
                         proxy_manager.clone(),
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 
-                    provider_registry.insert(name, Arc::new(provider));
+                    provider_registry.insert(name, Arc::new(Mutex::new(provider)));
                 }
             }
         }

@@ -3,11 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use crate::{
-    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
-    proxy::AnyOutboundHandler,
-    Error,
-};
+use crate::{app::proxy_manager::ProxyManager, proxy::AnyOutboundHandler, Error};
 
 use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
 
@@ -40,13 +36,13 @@ impl PlainProvider {
 
 #[async_trait]
 impl Provider for PlainProvider {
-    async fn name(&self) -> &str {
+    fn name(&self) -> &str {
         &self.name
     }
-    async fn vehicle_type(&self) -> ProviderVehicleType {
+    fn vehicle_type(&self) -> ProviderVehicleType {
         ProviderVehicleType::Compatible
     }
-    async fn typ(&self) -> ProviderType {
+    fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
     async fn initialize(&mut self) -> std::io::Result<()> {

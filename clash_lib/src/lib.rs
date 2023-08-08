@@ -37,6 +37,8 @@ pub enum Error {
     DNSError(String),
     #[error("crypto error: {0}")]
     Crypto(String),
+    #[error("operation error: {0}")]
+    Operation(String),
 }
 
 pub type Runner = futures::future::BoxFuture<'static, ()>;

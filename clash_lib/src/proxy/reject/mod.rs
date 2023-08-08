@@ -24,11 +24,11 @@ impl OutboundHandler for Handler {
         OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject)
     }
 
-    fn remote_addr(&self) -> Option<SocksAddr> {
+    async fn remote_addr(&self) -> Option<SocksAddr> {
         None
     }
 
-    fn support_udp(&self) -> bool {
+    async fn support_udp(&self) -> bool {
         false
     }
 

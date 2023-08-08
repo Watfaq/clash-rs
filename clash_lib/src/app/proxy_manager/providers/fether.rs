@@ -71,18 +71,15 @@ where
         self.name.as_str()
     }
 
-    pub async fn vehicle_type(&self) -> super::ProviderVehicleType {
-        self.vehicle.lock().await.typ()
+    pub fn vehicle_type(&self) -> super::ProviderVehicleType {
+        self.vehicle.typ()
     }
 
     pub async fn initial(&mut self) -> anyhow::Result<T> {
         let mut is_local = false;
         let mut immediately_update = false;
 
-        let vehicle_path = {
-            let l = self.vehicle.lock().await;
-            l.path().to_owned()
-        };
+        let vehicle_path = self.vehicle.path().to_owned();
 
         let mut inner = self.inner.lock().await;
 
@@ -97,7 +94,7 @@ where
                     > self.interval;
                 content
             }
-            Err(_) => self.vehicle.lock().await.read().await?,
+            Err(_) => self.vehicle.read().await?,
         };
 
         let proxies = match (self.parser.lock().await)(&content) {
@@ -106,19 +103,19 @@ where
                 if !is_local {
                     return Err(e);
                 }
-                let content = self.vehicle.lock().await.read().await?;
+                let content = self.vehicle.read().await?;
                 (self.parser.lock().await)(&content)?
             }
         };
 
-        if self.vehicle_type().await != ProviderVehicleType::File && !is_local {
-            let p = self.vehicle.lock().await.path().to_owned();
+        if self.vehicle_type() != ProviderVehicleType::File && !is_local {
+            let p = self.vehicle.path().to_owned();
             let path = Path::new(p.as_str());
             let prefix = path.parent().unwrap();
             if !prefix.exists() {
                 fs::create_dir_all(prefix)?;
             }
-            fs::write(self.vehicle.lock().await.path(), &content)?;
+            fs::write(self.vehicle.path(), &content)?;
         }
 
         inner.hash = utils::md5(&content)[..16]
@@ -149,7 +146,7 @@ where
         parser: Arc<Mutex<P>>,
     ) -> anyhow::Result<(T, bool)> {
         let mut this = inner.lock().await;
-        let content = vehicle.lock().await.read().await?;
+        let content = vehicle.read().await?;
         let proxies = (parser.lock().await)(&content)?;
 
         let now = SystemTime::now();
@@ -159,21 +156,21 @@ where
 
         if hash == this.hash {
             this.updated_at = now;
-            filetime::set_file_times(vehicle.lock().await.path(), now.into(), now.into())?;
+            filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
             return Ok((proxies, false));
         }
 
         let proxies = (parser.lock().await)(&content)?;
 
-        if vehicle.lock().await.typ() != ProviderVehicleType::File {
-            let p = vehicle.lock().await.path().to_owned();
+        if vehicle.typ() != ProviderVehicleType::File {
+            let p = vehicle.path().to_owned();
             let path = Path::new(p.as_str());
             let prefix = path.parent().unwrap();
             if !prefix.exists() {
                 fs::create_dir_all(prefix)?;
             }
 
-            fs::write(vehicle.lock().await.path(), &content)?;
+            fs::write(vehicle.path(), &content)?;
             return Ok((proxies, false));
         }
 
@@ -244,7 +241,7 @@ where
 mod tests {
     use std::{path::Path, sync::Arc, time::Duration};
 
-    use tokio::{sync::Mutex, time::sleep};
+    use tokio::time::sleep;
 
     use crate::app::proxy_manager::providers::{MockProviderVehicle, ProviderVehicleType};
 
@@ -283,7 +280,7 @@ mod tests {
         let mut f = Fetcher::new(
             "test_fetcher".to_string(),
             Duration::from_secs(1),
-            Arc::new(Mutex::new(mock_vehicle)),
+            Arc::new(mock_vehicle),
             parser,
             Some(updater),
         );

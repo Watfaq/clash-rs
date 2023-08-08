@@ -240,7 +240,7 @@ pub enum LoadBalanceStrategy {
     RoundRobin,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundGroupSelect {
     pub name: String,
 

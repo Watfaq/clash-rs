@@ -1,6 +1,7 @@
 use std::{io, sync::Arc};
 
 use async_trait::async_trait;
+use futures::stream::{self, StreamExt};
 
 use crate::{
     app::{
@@ -11,7 +12,10 @@ use crate::{
     session::{Session, SocksAddr},
 };
 
-use super::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler};
+use super::{
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
+    AnyStream, CommonOption, OutboundHandler,
+};
 
 #[derive(Default)]
 pub struct HandlerOptions {
@@ -32,12 +36,8 @@ impl Handler {
         Arc::new(Self { opts, providers })
     }
 
-    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
-        futures::future::join_all(self.providers.iter().map(|x| x.proxies()))
-            .await
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
+    async fn get_proxies(&self, touch: bool) -> Vec<AnyOutboundHandler> {
+        get_proxies_from_providers(&self.providers, touch).await
     }
 }
 
@@ -55,12 +55,12 @@ impl OutboundHandler for Handler {
         )
     }
 
-    fn remote_addr(&self) -> Option<SocksAddr> {
+    async fn remote_addr(&self) -> Option<SocksAddr> {
         None
     }
 
-    fn support_udp(&self) -> bool {
-        todo!("support_udp is not implemented yet")
+    async fn support_udp(&self) -> bool {
+        false
     }
 
     async fn connect_stream(
@@ -68,15 +68,15 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        let proxies: Vec<AnyOutboundHandler> = self
-            .get_proxies()
-            .await
-            .into_iter()
-            .filter(|x| match x.remote_addr() {
-                Some(_) => true,
-                None => false,
+        let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
+            .filter_map(|x| async {
+                match x.remote_addr().await {
+                    Some(_) => Some(x),
+                    None => None,
+                }
             })
-            .collect();
+            .collect()
+            .await;
 
         match proxies.len() {
             0 => Err(new_io_error("no proxy available")),
@@ -91,7 +91,7 @@ impl OutboundHandler for Handler {
                 let mut sess = sess.clone();
                 for i in 1..proxies.len() - 1 {
                     let proxy = proxies[i].clone();
-                    sess.destination = proxy.remote_addr().expect("must have remote addr");
+                    sess.destination = proxy.remote_addr().await.expect("must have remote addr");
                     s = proxy.proxy_stream(s, &sess, resolver.clone()).await?;
                 }
                 Ok(s)

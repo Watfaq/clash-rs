@@ -159,11 +159,11 @@ impl OutboundHandler for Handler {
         OutboundProxy::ProxyServer(OutboundProxyProtocol::Ss(Default::default()))
     }
 
-    fn remote_addr(&self) -> Option<SocksAddr> {
+    async fn remote_addr(&self) -> Option<SocksAddr> {
         Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
     }
 
-    fn support_udp(&self) -> bool {
+    async fn support_udp(&self) -> bool {
         true
     }
 

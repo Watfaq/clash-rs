@@ -27,6 +27,7 @@ pub mod converters;
 
 // proxy groups
 pub mod relay;
+pub mod selector;
 
 mod transport;
 
@@ -113,10 +114,10 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     fn proto(&self) -> OutboundProxy;
 
     /// The proxy remote address
-    fn remote_addr(&self) -> Option<SocksAddr>;
+    async fn remote_addr(&self) -> Option<SocksAddr>;
 
     /// whether the outbound handler support UDP
-    fn support_udp(&self) -> bool;
+    async fn support_udp(&self) -> bool;
 
     /// connect to remote target via TCP
     async fn connect_stream(

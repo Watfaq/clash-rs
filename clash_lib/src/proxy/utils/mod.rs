@@ -1,5 +1,6 @@
 use std::net::{IpAddr, SocketAddr};
 
+pub mod provider_helper;
 mod socket_helpers;
 
 pub use socket_helpers::*;

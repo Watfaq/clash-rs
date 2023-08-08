@@ -162,7 +162,7 @@ impl ProxyManager {
         };
 
         let result = tester.await;
-        self.report_alive(&name, result.is_ok());
+        self.report_alive(&name, result.is_ok()).await;
         let ins = DelayHistory {
             time: SystemTime::now(),
             delay: result.as_ref().map(|x| x.0).unwrap_or(0),
@@ -192,7 +192,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_proxy_manager() {
+    async fn test_proxy_manager_alive() {
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver
             .expect_resolve()
@@ -227,7 +227,7 @@ mod tests {
         assert!(manager.last_delay(PROXY_DIRECT).await > 0);
         assert!(manager.delay_history(PROXY_DIRECT).await.len() > 0);
 
-        manager.report_alive(PROXY_DIRECT, false);
+        manager.report_alive(PROXY_DIRECT, false).await;
         assert!(!manager.alive(PROXY_DIRECT).await);
 
         for _ in 0..10 {

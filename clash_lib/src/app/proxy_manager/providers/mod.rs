@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub mod fether;
 pub mod file_vehicle;
@@ -32,7 +31,7 @@ impl Display for ProviderVehicleType {
     }
 }
 
-pub type ThreadSafeProviderVehicle = Arc<Mutex<dyn ProviderVehicle + Send + Sync>>;
+pub type ThreadSafeProviderVehicle = Arc<dyn ProviderVehicle + Send + Sync>;
 
 #[cfg_attr(test, automock)]
 #[async_trait]
@@ -58,9 +57,9 @@ impl Display for ProviderType {
 /// either Proxy or Rule provider
 #[async_trait]
 pub trait Provider {
-    async fn name(&self) -> &str;
-    async fn vehicle_type(&self) -> ProviderVehicleType;
-    async fn typ(&self) -> ProviderType;
+    fn name(&self) -> &str;
+    fn vehicle_type(&self) -> ProviderVehicleType;
+    fn typ(&self) -> ProviderType;
     async fn initialize(&mut self) -> io::Result<()>;
     async fn update(&self) -> io::Result<()>;
 }

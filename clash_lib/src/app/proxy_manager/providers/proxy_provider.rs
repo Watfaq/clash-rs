@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 
 use crate::proxy::AnyOutboundHandler;
 
 use super::Provider;
 
-pub type ThreadSafeProxyProvider = Arc<dyn ProxyProvider + Send + Sync>;
+pub type ThreadSafeProxyProvider = Arc<Mutex<dyn ProxyProvider + Send + Sync>>;
 
 #[async_trait]
 pub trait ProxyProvider: Provider {
