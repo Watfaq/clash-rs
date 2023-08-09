@@ -1,23 +1,23 @@
 workspace(name = "clash-rs")
 
-#load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 # To find additional information on this release or newer ones visit:
 # https://github.com/bazelbuild/rules_rust/releases
 
-# http_archive(
-#     name = "rules_rust",
-#     sha256 = "9d04e658878d23f4b00163a72da3db03ddb451273eb347df7d7c50838d698f49",
-#     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.26.0/rules_rust-v0.26.0.tar.gz"],
-# )
-
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
-
-git_repository(
+http_archive(
     name = "rules_rust",
-    branch = "pass-to-bindgen",
-    remote = "https://github.com/ibigbug/rules_rust.git",
+    sha256 = "9d04e658878d23f4b00163a72da3db03ddb451273eb347df7d7c50838d698f49",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.26.0/rules_rust-v0.26.0.tar.gz"],
 )
+
+# load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+# git_repository(
+#     name = "rules_rust",
+#     branch = "pass-to-bindgen",
+#     remote = "https://github.com/ibigbug/rules_rust.git",
+# )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 
@@ -32,9 +32,13 @@ rust_register_toolchains(
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
 
-crate_universe_dependencies(bootstrap = True)
+crate_universe_dependencies()
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository")
+
+MACOS_BINDGEN_FLAGS = "-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
+
+LINUX_BINDGEN_FLAGS = "-I/usr/include/"
 
 crates_repository(
     name = "crate_index",
@@ -47,6 +51,10 @@ crates_repository(
                 "BORING_BAZEL_BUILD": "1",
                 "BORING_BSSL_PATH": "$(GENDIR)/deps/boringssl",
                 "BORING_BSSL_INCLUDE_PATH": "$(location @//deps/boringssl:include)",
+                "BINDGEN_EXTRA_CLANG_ARGS_aarch64-apple-darwin": MACOS_BINDGEN_FLAGS,
+                "BINDGEN_EXTRA_CLANG_ARGS_x86_64-apple-darwin": MACOS_BINDGEN_FLAGS,
+                "BINDGEN_EXTRA_CLANG_ARGS_aarch64-unknown-linux-gnu": LINUX_BINDGEN_FLAGS,
+                "BINDGEN_EXTRA_CLANG_ARGS_x86_64-unknown-linux-gnu": LINUX_BINDGEN_FLAGS,
             },
             data = [
                 "@//deps/boringssl:lib",
@@ -54,7 +62,6 @@ crates_repository(
         )],
     },
     cargo_lockfile = "//:Cargo.lock",
-    generator = "@cargo_bazel_bootstrap//:cargo-bazel",
     lockfile = "//:Cargo.Bazel.lock",
     manifests = [
         "//:Cargo.toml",

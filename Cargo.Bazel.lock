@@ -1,5 +1,5 @@
 {
-  "checksum": "744dd569fafa47a201b84ee3f99e9a01c645444fd61e34b7a6d248ec49816531",
+  "checksum": "01e7fd8b186277f5d802bd5104ee8a45ccdbe7a557bf91264a3553888cf151c2",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -1903,6 +1903,10 @@
         },
         "build_script_env": {
           "common": {
+            "BINDGEN_EXTRA_CLANG_ARGS_aarch64-apple-darwin": "-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/",
+            "BINDGEN_EXTRA_CLANG_ARGS_aarch64-unknown-linux-gnu": "-I/usr/include/",
+            "BINDGEN_EXTRA_CLANG_ARGS_x86_64-apple-darwin": "-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/",
+            "BINDGEN_EXTRA_CLANG_ARGS_x86_64-unknown-linux-gnu": "-I/usr/include/",
             "BORING_BAZEL_BUILD": "1",
             "BORING_BSSL_INCLUDE_PATH": "$(location @//deps/boringssl:include)",
             "BORING_BSSL_PATH": "$(GENDIR)/deps/boringssl"
