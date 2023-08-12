@@ -15,6 +15,9 @@ use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
 use crate::app::proxy_manager::ProxyManager;
 use crate::app::proxy_manager::ThreadSafeProxyManager;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
+use crate::proxy::selector;
+
+use crate::proxy::selector::ThreadSafeSelectorControl;
 use crate::proxy::{reject, relay};
 use crate::{
     app::ThreadSafeDNSResolver,
@@ -26,6 +29,7 @@ use crate::{
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_manager: ThreadSafeProxyManager,
+    selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
 
 static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
@@ -41,6 +45,7 @@ impl OutboundManager {
     ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
+        let mut selector_control = HashMap::new();
         let proxy_manager = Arc::new(Mutex::new(ProxyManager::new(dns_resolver.clone())));
 
         Self::load_proxy_providers(
@@ -57,11 +62,14 @@ impl OutboundManager {
             proxy_manager.clone(),
             provider_registry,
             &mut handlers,
-        )?;
+            &mut selector_control,
+        )
+        .await?;
 
         Ok(Self {
             handlers,
             proxy_manager,
+            selector_control,
         })
     }
 
@@ -69,12 +77,13 @@ impl OutboundManager {
         self.handlers.get(name).map(Clone::clone)
     }
 
-    fn load_handlers(
+    async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_manager: Arc<Mutex<ProxyManager>>,
         provider_registry: HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
+        selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
     ) -> Result<(), Error> {
         for outbound in outbounds.iter() {
             match outbound {
@@ -97,32 +106,43 @@ impl OutboundManager {
         }
 
         for outbound_group in outbound_groups.iter() {
+            fn make_provider_from_proxies(
+                name: &str,
+                proxies: &Vec<String>,
+                handlers: &HashMap<String, AnyOutboundHandler>,
+                proxy_manager: Arc<Mutex<ProxyManager>>,
+            ) -> Result<ThreadSafeProxyProvider, Error> {
+                let proxies = proxies
+                    .into_iter()
+                    .map(|x| {
+                        handlers
+                            .get(x)
+                            .expect(format!("proxy {} not found", x).as_str())
+                            .clone()
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(Arc::new(Mutex::new(
+                    PlainProvider::new(
+                        name.to_owned(),
+                        proxies,
+                        proxy_manager,
+                        DEFAULT_LATENCY_TEST_URL.to_owned(),
+                    )
+                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
+                )))
+            }
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
-                        let proxies = proxies
-                            .into_iter()
-                            .map(|x| {
-                                handlers
-                                    .get(x)
-                                    .expect(format!("proxy {} not found", x).as_str())
-                                    .clone()
-                            })
-                            .collect::<Vec<_>>();
-
-                        let provider = PlainProvider::new(
-                            proto.name.clone(),
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
                             proxies,
+                            handlers,
                             proxy_manager.clone(),
-                            DEFAULT_LATENCY_TEST_URL.to_owned(),
-                        )
-                        .map_err(|x| {
-                            Error::InvalidConfig(format!("invalid provider config: {}", x))
-                        })?;
-
-                        providers.push(Arc::new(Mutex::new(provider)));
+                        )?);
                     }
 
                     if let Some(provider_names) = &proto.use_provider {
@@ -148,7 +168,41 @@ impl OutboundManager {
                 OutboundGroupProtocol::UrlTest(_proto) => todo!(),
                 OutboundGroupProtocol::Fallback(_proto) => todo!(),
                 OutboundGroupProtocol::LoadBalance(_proto) => todo!(),
-                OutboundGroupProtocol::Select(_proto) => todo!(),
+                OutboundGroupProtocol::Select(proto) => {
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            handlers,
+                            proxy_manager.clone(),
+                        )?);
+                    }
+
+                    if let Some(provider_names) = &proto.use_provider {
+                        for provider_name in provider_names {
+                            let provider = provider_registry
+                                .get(provider_name)
+                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .clone();
+                            providers.push(provider);
+                        }
+                    }
+
+                    let selector = selector::Handler::new(
+                        selector::HandlerOptions {
+                            name: proto.name.clone(),
+                            udp: proto.udp.unwrap_or_default(),
+                            ..Default::default()
+                        },
+                        providers,
+                    )
+                    .await;
+
+                    handlers.insert(proto.name.clone(), Arc::new(selector.clone()));
+                    selector_control.insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
+                }
             }
         }
         Ok(())

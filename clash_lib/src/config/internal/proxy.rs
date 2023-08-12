@@ -247,6 +247,7 @@ pub struct OutboundGroupSelect {
     pub proxies: Option<Vec<String>>,
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
+    pub udp: Option<bool>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

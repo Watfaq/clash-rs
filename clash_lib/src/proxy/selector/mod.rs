@@ -1,6 +1,7 @@
-use std::io;
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 
 use crate::{
     app::{
@@ -19,9 +20,16 @@ use super::{
 #[async_trait]
 pub trait SelectorControl {
     async fn select(&mut self, name: &str) -> Result<(), Error>;
-    fn current(&self) -> &str;
+    async fn current(&self) -> String;
 }
 
+pub type ThreadSafeSelectorControl = Arc<Mutex<dyn SelectorControl + Send + Sync>>;
+
+struct HandlerInner {
+    current: String,
+}
+
+#[derive(Default, Clone)]
 pub struct HandlerOptions {
     pub name: String,
     pub udp: bool,
@@ -29,10 +37,11 @@ pub struct HandlerOptions {
     pub common_option: CommonOption,
 }
 
+#[derive(Clone)]
 pub struct Handler {
     opts: HandlerOptions,
-    current: String,
     providers: Vec<ThreadSafeProxyProvider>,
+    inner: Arc<Mutex<HandlerInner>>,
 }
 
 impl Handler {
@@ -40,34 +49,37 @@ impl Handler {
         let current = providers.first().unwrap().lock().await.name().to_owned();
         Self {
             opts,
-            current,
             providers,
+            inner: Arc::new(Mutex::new(HandlerInner { current })),
         }
     }
 
     async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
-        proxies
-            .into_iter()
-            .find(|x| x.name() == self.current)
-            .unwrap()
+        for proxy in proxies {
+            if proxy.name() == self.inner.lock().await.current {
+                return proxy;
+            }
+        }
+        unreachable!("selected proxy not found")
     }
 }
 
 #[async_trait]
 impl SelectorControl for Handler {
     async fn select(&mut self, name: &str) -> Result<(), Error> {
-        let proxies = get_proxies_from_providers(&self.providers, true).await;
+        let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
-            self.current = name.to_owned();
+            self.inner.lock().await.current = name.to_owned();
             Ok(())
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
         }
     }
 
-    fn current(&self) -> &str {
-        &self.current
+    async fn current(&self) -> String {
+        let inner = self.inner.lock().await.current.to_owned();
+        inner
     }
 }
 
@@ -122,5 +134,73 @@ impl OutboundHandler for Handler {
             .await
             .connect_datagram(sess, resolver)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tokio::sync::Mutex;
+
+    use crate::proxy::{
+        mocks::MockDummyProxyProvider, selector::ThreadSafeSelectorControl, MockOutboundHandler,
+    };
+
+    #[tokio::test]
+    async fn test_selector_control() {
+        let mut mock_provider = MockDummyProxyProvider::new();
+        mock_provider
+            .expect_name()
+            .return_const("provider1".to_owned());
+
+        mock_provider.expect_proxies().returning(|| {
+            let mut proxy1 = MockOutboundHandler::new();
+            proxy1.expect_name().return_const("provider1".to_owned());
+            let mut proxy2 = MockOutboundHandler::new();
+            proxy2.expect_name().return_const("provider2".to_owned());
+            vec![Arc::new(proxy1), Arc::new(proxy2)]
+        });
+
+        let handler = super::Handler::new(
+            super::HandlerOptions {
+                name: "test".to_owned(),
+                udp: false,
+                common_option: super::CommonOption::default(),
+            },
+            vec![Arc::new(Mutex::new(mock_provider))],
+        )
+        .await;
+
+        let selector_control = Arc::new(Mutex::new(handler.clone())) as ThreadSafeSelectorControl;
+        let outbound_handler = Arc::new(handler);
+
+        assert_eq!(
+            selector_control.lock().await.current().await,
+            "provider1".to_owned()
+        );
+        assert_eq!(
+            outbound_handler.selected_proxy(false).await.name(),
+            "provider1".to_owned()
+        );
+
+        selector_control
+            .lock()
+            .await
+            .select("provider2")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            selector_control.lock().await.current().await,
+            "provider2".to_owned()
+        );
+        assert_eq!(
+            outbound_handler.selected_proxy(false).await.name(),
+            "provider2".to_owned()
+        );
+
+        let fail = selector_control.lock().await.select("provider3").await;
+        assert!(fail.is_err());
     }
 }

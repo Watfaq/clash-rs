@@ -32,6 +32,9 @@ pub mod selector;
 mod transport;
 
 #[cfg(test)]
+mod mocks;
+
+#[cfg(test)]
 use mockall::automock;
 
 #[derive(thiserror::Error, Debug)]
@@ -85,7 +88,7 @@ pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
     async fn send_to(&mut self, buf: &[u8], dst_addr: &SocksAddr) -> io::Result<usize>;
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct CommonOption {
     so_mark: Option<u32>,
     iface: Option<Interface>,
