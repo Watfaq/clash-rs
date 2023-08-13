@@ -4,7 +4,6 @@ use serde::de::value::MapDeserializer;
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
-use std::default;
 use std::fmt::{Display, Formatter};
 
 pub const PROXY_DIRECT: &str = "DIRECT";
@@ -138,7 +137,7 @@ pub struct OutboundTrojan {
     pub ws_opts: Option<WsOpt>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutboundGroupProtocol {
     #[serde(rename = "relay")]
@@ -154,13 +153,23 @@ pub enum OutboundGroupProtocol {
 }
 
 impl OutboundGroupProtocol {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match &self {
             OutboundGroupProtocol::Relay(g) => &g.name,
             OutboundGroupProtocol::UrlTest(g) => &g.name,
             OutboundGroupProtocol::Fallback(g) => &g.name,
             OutboundGroupProtocol::LoadBalance(g) => &g.name,
             OutboundGroupProtocol::Select(g) => &g.name,
+        }
+    }
+
+    pub fn proxies(&self) -> Option<&Vec<String>> {
+        match &self {
+            OutboundGroupProtocol::Relay(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::UrlTest(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::Fallback(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::Select(g) => g.proxies.as_ref(),
         }
     }
 }
@@ -186,7 +195,7 @@ impl Display for OutboundGroupProtocol {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupRelay {
     pub name: String,
     pub proxies: Option<Vec<String>>,
@@ -194,7 +203,7 @@ pub struct OutboundGroupRelay {
     pub use_provider: Option<Vec<String>>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupUrlTest {
     pub name: String,
 
@@ -208,7 +217,7 @@ pub struct OutboundGroupUrlTest {
     pub tolerance: Option<u16>,
     pub lazy: Option<bool>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupFallback {
     pub name: String,
 
@@ -221,7 +230,7 @@ pub struct OutboundGroupFallback {
     pub interval: u64,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupLoadBalance {
     pub name: String,
 
@@ -244,7 +253,7 @@ pub enum LoadBalanceStrategy {
     RoundRobin,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupSelect {
     pub name: String,
 

@@ -29,6 +29,8 @@ use crate::{
     Error,
 };
 
+use super::utils::proxy_groups_dag_sort;
+
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_manager: ThreadSafeProxyManager,
@@ -111,6 +113,9 @@ impl OutboundManager {
                 }
             }
         }
+
+        let mut outbound_groups = outbound_groups;
+        proxy_groups_dag_sort(&mut outbound_groups)?;
 
         for outbound_group in outbound_groups.iter() {
             fn make_provider_from_proxies(

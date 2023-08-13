@@ -47,39 +47,43 @@ proxy-groups:
     type: relay
     proxies:
       - "ss"
+      - "auto"
+      - "fallback-auto"
+      - "load-balance"
+      - "select"
       - DIRECT
 
-  # - name: "auto"
-  #   type: url-test
-  #   proxies:
-  #     - "ss"
-  #     - DIRECT
-  #   url: "http://www.gstatic.com/generate_204"
-  #   interval: 300
+  - name: "auto"
+    type: url-test
+    proxies:
+      - "ss"
+      - DIRECT
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
 
-  # - name: "fallback-auto"
-  #   type: fallback
-  #   proxies:
-  #     - "ss"
-  #     - DIRECT
-  #   url: "http://www.gstatic.com/generate_204"
-  #   interval: 300
+  - name: "fallback-auto"
+    type: fallback
+    proxies:
+      - "ss"
+      - DIRECT
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
 
-  # - name: "load-balance"
-  #   type: load-balance
-  #   proxies:
-  #     - "ss"
-  #     - DIRECT
-  #   strategy: round-robin
-  #   url: "http://www.gstatic.com/generate_204"
-  #   interval: 300
+  - name: "load-balance"
+    type: load-balance
+    proxies:
+      - "ss"
+      - DIRECT
+    strategy: round-robin
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
 
-  # - name: select
-  #   type: select
-  #   proxies:
-  #     - "ss"
-  #     - DIRECT
-  #     - REJECT
+  - name: select
+    type: select
+    proxies:
+      - "ss"
+      - DIRECT
+      - REJECT
 
 
 proxies:
