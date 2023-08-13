@@ -1,5 +1,5 @@
 {
-  "checksum": "01e7fd8b186277f5d802bd5104ee8a45ccdbe7a557bf91264a3553888cf151c2",
+  "checksum": "e9c8db4d1f800c97652cb2585aee7c32864ccb589cc12cb79df16839193428c0",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -992,7 +992,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -1091,7 +1091,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -1151,7 +1151,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -1535,7 +1535,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -2861,7 +2861,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -3060,12 +3060,20 @@
               "target": "md5"
             },
             {
+              "id": "murmur3 0.5.2",
+              "target": "murmur3"
+            },
+            {
               "id": "network-interface 1.0.1",
               "target": "network_interface"
             },
             {
               "id": "prost 0.11.9",
               "target": "prost"
+            },
+            {
+              "id": "public-suffix 0.1.0",
+              "target": "public_suffix"
             },
             {
               "id": "rand 0.8.5",
@@ -3080,7 +3088,7 @@
               "target": "rustls"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             },
             {
@@ -5039,7 +5047,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -5527,7 +5535,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -7427,7 +7435,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             }
           ],
@@ -8118,7 +8126,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             },
             {
@@ -8362,7 +8370,7 @@
               "target": "memchr"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             }
           ],
@@ -8742,6 +8750,36 @@
         },
         "edition": "2018",
         "version": "0.11.4"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "murmur3 0.5.2": {
+      "name": "murmur3",
+      "version": "0.5.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/murmur3/0.5.2/download",
+          "sha256": "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "murmur3",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "murmur3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.5.2"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -9724,7 +9762,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -10227,7 +10265,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -10419,6 +10457,43 @@
         "version": "0.11.9"
       },
       "license": "Apache-2.0"
+    },
+    "public-suffix 0.1.0": {
+      "name": "public-suffix",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/public-suffix/0.1.0/download",
+          "sha256": "78d9b181eb5a605445d04200022ead096987ea51978485b7280b79c6a3945343"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "public_suffix",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "public_suffix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "default_provider"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "quick-error 1.2.3": {
       "name": "quick-error",
@@ -12046,13 +12121,13 @@
       },
       "license": "Apache-2.0 OR BSD-3-Clause"
     },
-    "serde 1.0.178": {
+    "serde 1.0.183": {
       "name": "serde",
-      "version": "1.0.178",
+      "version": "1.0.183",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde/1.0.178/download",
-          "sha256": "60363bdd39a7be0266a520dab25fdc9241d2f987b08a01e01f0ec6d06a981348"
+          "url": "https://crates.io/api/v1/crates/serde/1.0.183/download",
+          "sha256": "32ac8da02677876d532745a130fc9d8e6edfa81a269b107c5b00829b91d8eb3c"
         }
       },
       "targets": [
@@ -12092,23 +12167,23 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2018",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.178",
+              "id": "serde_derive 1.0.183",
               "target": "serde_derive"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.178"
+        "version": "1.0.183"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -12117,13 +12192,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_derive 1.0.178": {
+    "serde_derive 1.0.183": {
       "name": "serde_derive",
-      "version": "1.0.178",
+      "version": "1.0.183",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_derive/1.0.178/download",
-          "sha256": "f28482318d6641454cb273da158647922d1be6b5a2fcc6165cd89ebdd7ed576b"
+          "url": "https://crates.io/api/v1/crates/serde_derive/1.0.183/download",
+          "sha256": "aafe972d60b0b9bee71a91b92fee2d4fb3c9d7e8f6b179aa99f27203d99a4816"
         }
       },
       "targets": [
@@ -12161,14 +12236,14 @@
                 "target": "quote"
               },
               {
-                "id": "syn 2.0.27",
+                "id": "syn 2.0.28",
                 "target": "syn"
               }
             ]
           }
         },
         "edition": "2015",
-        "version": "1.0.178"
+        "version": "1.0.183"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -12224,7 +12299,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             },
             {
@@ -12284,7 +12359,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             }
           ],
@@ -12335,7 +12410,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             },
             {
@@ -12573,7 +12648,7 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.178",
+              "id": "serde 1.0.183",
               "target": "serde"
             },
             {
@@ -13376,13 +13451,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "syn 2.0.27": {
+    "syn 2.0.28": {
       "name": "syn",
-      "version": "2.0.27",
+      "version": "2.0.28",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/2.0.27/download",
-          "sha256": "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
+          "url": "https://crates.io/api/v1/crates/syn/2.0.28/download",
+          "sha256": "04361975b3f5e348b2189d8dc55bc942f278b2d482a6a0365de5bdd62d351567"
         }
       },
       "targets": [
@@ -13435,7 +13510,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.27"
+        "version": "2.0.28"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -13629,7 +13704,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -14075,7 +14150,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -14696,7 +14771,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -16010,7 +16085,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             }
           ],
@@ -16354,7 +16429,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             },
             {
@@ -16460,7 +16535,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.27",
+              "id": "syn 2.0.28",
               "target": "syn"
             },
             {
