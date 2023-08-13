@@ -4,6 +4,7 @@ use serde::de::value::MapDeserializer;
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
+use std::default;
 use std::fmt::{Display, Formatter};
 
 pub const PROXY_DIRECT: &str = "DIRECT";
@@ -193,7 +194,7 @@ pub struct OutboundGroupRelay {
     pub use_provider: Option<Vec<String>>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundGroupUrlTest {
     pub name: String,
 
@@ -204,21 +205,23 @@ pub struct OutboundGroupUrlTest {
     pub url: String,
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
-    pub tolerance: Option<i32>,
+    pub tolerance: Option<u16>,
     pub lazy: Option<bool>,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
-
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundGroupFallback {
     pub name: String,
 
-    pub proxies: Vec<String>,
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
     pub url: String,
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundGroupLoadBalance {
     pub name: String,
 
@@ -232,8 +235,9 @@ pub struct OutboundGroupLoadBalance {
     pub strategy: Option<LoadBalanceStrategy>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
 pub enum LoadBalanceStrategy {
+    #[default]
     #[serde(rename = "consistent-hashing")]
     ConsistentHashing,
     #[serde(rename = "round-robin")]

@@ -15,9 +15,12 @@ use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
 use crate::app::proxy_manager::ProxyManager;
 use crate::app::proxy_manager::ThreadSafeProxyManager;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
+use crate::proxy::fallback;
+use crate::proxy::loadbalance;
 use crate::proxy::selector;
 
 use crate::proxy::selector::ThreadSafeSelectorControl;
+use crate::proxy::urltest;
 use crate::proxy::{reject, relay};
 use crate::{
     app::ThreadSafeDNSResolver,
@@ -75,6 +78,10 @@ impl OutboundManager {
 
     pub fn get(&self, name: &str) -> Option<AnyOutboundHandler> {
         self.handlers.get(name).map(Clone::clone)
+    }
+
+    pub fn get_selector_control(&self, name: &str) -> Option<ThreadSafeSelectorControl> {
+        self.selector_control.get(name).map(Clone::clone)
     }
 
     async fn load_handlers(
@@ -165,9 +172,106 @@ impl OutboundManager {
 
                     handlers.insert(proto.name.clone(), relay);
                 }
-                OutboundGroupProtocol::UrlTest(_proto) => todo!(),
-                OutboundGroupProtocol::Fallback(_proto) => todo!(),
-                OutboundGroupProtocol::LoadBalance(_proto) => todo!(),
+                OutboundGroupProtocol::UrlTest(proto) => {
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            handlers,
+                            proxy_manager.clone(),
+                        )?);
+                    }
+
+                    if let Some(provider_names) = &proto.use_provider {
+                        for provider_name in provider_names {
+                            let provider = provider_registry
+                                .get(provider_name)
+                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .clone();
+                            providers.push(provider);
+                        }
+                    }
+
+                    let url_test = urltest::Handler::new(
+                        urltest::HandlerOptions {
+                            name: proto.name.clone(),
+                            ..Default::default()
+                        },
+                        proto.tolerance.unwrap_or_default(),
+                        providers,
+                        proxy_manager.clone(),
+                    );
+
+                    handlers.insert(proto.name.clone(), Arc::new(url_test));
+                }
+                OutboundGroupProtocol::Fallback(proto) => {
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            handlers,
+                            proxy_manager.clone(),
+                        )?);
+                    }
+
+                    if let Some(provider_names) = &proto.use_provider {
+                        for provider_name in provider_names {
+                            let provider = provider_registry
+                                .get(provider_name)
+                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .clone();
+                            providers.push(provider);
+                        }
+                    }
+
+                    let fallback = fallback::Handler::new(
+                        fallback::HandlerOptions {
+                            name: proto.name.clone(),
+                            ..Default::default()
+                        },
+                        providers,
+                        proxy_manager.clone(),
+                    );
+
+                    handlers.insert(proto.name.clone(), Arc::new(fallback));
+                }
+                OutboundGroupProtocol::LoadBalance(proto) => {
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            handlers,
+                            proxy_manager.clone(),
+                        )?);
+                    }
+
+                    if let Some(provider_names) = &proto.use_provider {
+                        for provider_name in provider_names {
+                            let provider = provider_registry
+                                .get(provider_name)
+                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .clone();
+                            providers.push(provider);
+                        }
+                    }
+
+                    let load_balance = loadbalance::Handler::new(
+                        loadbalance::HandlerOptions {
+                            name: proto.name.clone(),
+                            ..Default::default()
+                        },
+                        providers,
+                        proxy_manager.clone(),
+                    );
+
+                    handlers.insert(proto.name.clone(), Arc::new(load_balance));
+                }
                 OutboundGroupProtocol::Select(proto) => {
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 

@@ -25,9 +25,11 @@ pub mod utils;
 
 pub mod converters;
 
-// proxy groups
+pub mod fallback;
+pub mod loadbalance;
 pub mod relay;
 pub mod selector;
+pub mod urltest;
 
 mod transport;
 
