@@ -155,6 +155,11 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut inbound_runners = inbound_manager.get_runners()?;
     runners.append(&mut inbound_runners);
 
+    let api_runner = app::api::get_api_runner(config.general.controller);
+    if let Some(r) = api_runner {
+        runners.push(r);
+    }
+
     tasks.push(Box::pin(async move {
         futures::future::join_all(runners).await;
     }));

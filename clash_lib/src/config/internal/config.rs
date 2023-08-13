@@ -174,7 +174,7 @@ mod tests {
 
 pub struct General {
     pub(crate) inbound: Inbound,
-    controller: Controller,
+    pub(crate) controller: Controller,
     mode: RunMode,
     pub log_level: LogLevel,
     ipv6: bool,
@@ -222,8 +222,8 @@ pub struct Inbound {
     pub bind_address: BindAddress,
 }
 
-struct Controller {
-    external_controller: Option<String>,
-    external_ui: Option<String>,
-    secret: Option<String>,
+pub struct Controller {
+    pub external_controller: Option<String>,
+    pub external_ui: Option<String>,
+    pub secret: Option<String>,
 }
