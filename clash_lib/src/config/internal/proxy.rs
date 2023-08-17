@@ -50,6 +50,8 @@ pub enum OutboundProxyProtocol {
     Socks5(OutboundSocks5),
     #[serde(rename = "trojan")]
     Trojan(OutboundTrojan),
+    #[serde(rename = "vmess")]
+    Vmess(OutboundVmess),
 }
 
 impl OutboundProxyProtocol {
@@ -60,6 +62,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Ss(ss) => &ss.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
+            OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
         }
     }
 }
@@ -81,6 +84,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
             OutboundProxyProtocol::Trojan(_) => write!(f, "{}", "Trojan"),
+            OutboundProxyProtocol::Vmess(_) => write!(f, "{}", "Vmess"),
         }
     }
 }
@@ -134,6 +138,22 @@ pub struct OutboundTrojan {
     pub udp: Option<bool>,
     pub network: Option<String>,
     pub grpc_opts: Option<GrpcOpt>,
+    pub ws_opts: Option<WsOpt>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct OutboundVmess {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub uuid: String,
+    pub alter_id: u16,
+    pub cipher: String,
+    pub udp: bool,
+    pub tls: bool,
+    pub skip_cert_verify: bool,
+    pub server_name: Option<String>,
+    pub network: Option<String>,
     pub ws_opts: Option<WsOpt>,
 }
 

@@ -1,4 +1,4 @@
-use std::{pin::Pin, task::Poll, time::SystemTime};
+use std::{fmt::Debug, pin::Pin, task::Poll, time::SystemTime};
 
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
@@ -54,6 +54,16 @@ pub struct VmessStream<S> {
     security: u8,
     is_aead: bool,
     is_udp: bool,
+}
+
+impl<S> Debug for VmessStream<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VmessStream")
+            .field("dst", &self.dst)
+            .field("is_aead", &self.is_aead)
+            .field("is_udp", &self.is_udp)
+            .finish()
+    }
 }
 
 impl<S> VmessStream<S>

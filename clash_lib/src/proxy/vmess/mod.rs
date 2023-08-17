@@ -6,7 +6,11 @@ use http::Uri;
 
 mod vmess_impl;
 
-use crate::{app::ThreadSafeDNSResolver, session::Session};
+use crate::{
+    app::ThreadSafeDNSResolver,
+    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
+    session::{Session, SocksAddr},
+};
 
 use super::{
     transport::{self, Http2Config},
@@ -77,13 +81,29 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    /// The protocol of the outbound handler
+    /// only contains Type information, do not rely on the underlying value
+    fn proto(&self) -> OutboundProxy {
+        OutboundProxy::ProxyServer(OutboundProxyProtocol::Vmess(Default::default()))
+    }
+
+    /// The proxy remote address
+    async fn remote_addr(&self) -> Option<SocksAddr> {
+        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
+    }
+
+    /// whether the outbound handler support UDP
+    async fn support_udp(&self) -> bool {
+        self.opts.udp
+    }
+
     async fn connect_stream(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        let mut stream = new_tcp_stream(
-            resolver,
+        let stream = new_tcp_stream(
+            resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
@@ -98,6 +118,18 @@ impl OutboundHandler for Handler {
             )
         })
         .await?;
+
+        self.proxy_stream(stream, sess, resolver).await
+    }
+
+    /// wraps a stream with outbound handler
+    async fn proxy_stream(
+        &self,
+        s: AnyStream,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<AnyStream> {
+        let mut stream = s;
 
         let underlying = match self.opts.transport {
             Some(VmessTransport::Ws(ref opt)) => {
@@ -169,7 +201,6 @@ impl OutboundHandler for Handler {
 
         vmess_builder.proxy_stream(underlying).await
     }
-
     async fn connect_datagram(
         &self,
         sess: &Session,

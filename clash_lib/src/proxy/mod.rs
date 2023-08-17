@@ -21,7 +21,7 @@ pub mod shadowsocks;
 pub mod socks;
 //pub mod trojan;
 pub mod utils;
-//pub mod vmess;
+pub mod vmess;
 
 pub mod converters;
 

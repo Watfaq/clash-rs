@@ -142,6 +142,7 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
         Poll::Ready(Ok(()))
     }
 }
+
 impl Stream for OutboundDatagramShadowsocks {
     type Item = UdpPacket;
 

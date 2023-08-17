@@ -3,6 +3,7 @@ mod chunk;
 mod client;
 mod header;
 //pub mod http;
+mod datagram;
 mod kdf;
 mod stream;
 mod tls;

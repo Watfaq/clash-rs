@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use futures::{future, TryFutureExt};
+use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tokio::sync::Mutex;
@@ -82,6 +82,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
                             OutboundProxyProtocol::Socks5(_) => todo!(),
                             OutboundProxyProtocol::Trojan(_) => todo!(),
+                            OutboundProxyProtocol::Vmess(_) => todo!(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)

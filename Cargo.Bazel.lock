@@ -1,5 +1,5 @@
 {
-  "checksum": "f267c28d6e0cbe45608f60b117a704c18e3155b38981d0866edb7f1ea5e9fa9b",
+  "checksum": "3e9cefe14ba34202af1b06aa8dc813b02fe4ac0fa0a3022682061695eb3ec7e8",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -2044,7 +2044,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "bazel"
+            "Rev": "a5c2442"
           },
           "strip_prefix": "boring"
         }
@@ -2102,7 +2102,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "bazel"
+            "Rev": "a5c2442"
           },
           "strip_prefix": "boring-sys"
         }
@@ -7141,7 +7141,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "bazel"
+            "Rev": "a5c2442"
           },
           "strip_prefix": "hyper-boring"
         }
@@ -14488,7 +14488,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Branch": "bazel"
+            "Rev": "a5c2442"
           },
           "strip_prefix": "tokio-boring"
         }

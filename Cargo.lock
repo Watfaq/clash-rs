@@ -393,7 +393,7 @@ dependencies = [
 [[package]]
 name = "boring"
 version = "2.1.0"
-source = "git+https://github.com/Watfaq/boring.git?branch=bazel#d58d4367cb21a44d301d295b9259f755eb302041"
+source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
 dependencies = [
  "bitflags 1.3.2",
  "boring-sys",
@@ -405,7 +405,7 @@ dependencies = [
 [[package]]
 name = "boring-sys"
 version = "2.1.0"
-source = "git+https://github.com/Watfaq/boring.git?branch=bazel#d58d4367cb21a44d301d295b9259f755eb302041"
+source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
 dependencies = [
  "bindgen",
  "cmake",
@@ -1365,7 +1365,7 @@ dependencies = [
 [[package]]
 name = "hyper-boring"
 version = "2.1.2"
-source = "git+https://github.com/Watfaq/boring.git?branch=bazel#d58d4367cb21a44d301d295b9259f755eb302041"
+source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
 dependencies = [
  "antidote",
  "boring",
@@ -2748,7 +2748,7 @@ dependencies = [
 [[package]]
 name = "tokio-boring"
 version = "2.1.5"
-source = "git+https://github.com/Watfaq/boring.git?branch=bazel#d58d4367cb21a44d301d295b9259f755eb302041"
+source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
 dependencies = [
  "boring",
  "boring-sys",
