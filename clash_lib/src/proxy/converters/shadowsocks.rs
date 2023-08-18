@@ -1,5 +1,5 @@
 use crate::{
-    config::internal::proxy::OutboundShadowsocks,
+    config::internal::proxy::{OutboundShadowsocks, OutboundVmess},
     proxy::{
         shadowsocks::{Handler, HandlerOptions, OBFSOption},
         AnyOutboundHandler, CommonOption,

@@ -82,7 +82,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
                             OutboundProxyProtocol::Socks5(_) => todo!(),
                             OutboundProxyProtocol::Trojan(_) => todo!(),
-                            OutboundProxyProtocol::Vmess(_) => todo!(),
+                            OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
