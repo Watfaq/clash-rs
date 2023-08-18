@@ -12,6 +12,6 @@ pub type ThreadSafeProxyProvider = Arc<Mutex<dyn ProxyProvider + Send + Sync>>;
 #[async_trait]
 pub trait ProxyProvider: Provider {
     async fn proxies(&self) -> Vec<AnyOutboundHandler>;
-    async fn touch(&mut self);
+    async fn touch(&self);
     async fn healthcheck(&self);
 }

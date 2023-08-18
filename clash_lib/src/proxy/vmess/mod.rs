@@ -185,8 +185,9 @@ impl OutboundHandler for Handler {
                 unimplemented!("HTTP transport is not implemented yet")
             }
             None => {
-                let tls_opt = self.opts.tls.as_ref().expect("tcp conn must have tls opt");
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                if let Some(tls_opt) = self.opts.tls.as_ref() {
+                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                }
                 stream
             }
         };

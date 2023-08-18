@@ -85,6 +85,14 @@ impl HealthCheck {
         self.inner.lock().await.last_check = tokio::time::Instant::now();
     }
 
+    pub async fn check(&mut self) {
+        self.latency_manager
+            .lock()
+            .await
+            .check(&self.proxies, &self.url, None)
+            .await;
+    }
+
     fn stop(&mut self) {
         if let Some(task_handle) = self.task_handle.take() {
             task_handle.abort();

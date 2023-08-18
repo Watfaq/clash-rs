@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
+use tracing::info;
 
 use crate::app::proxy_manager::healthcheck::HealthCheck;
 use crate::app::proxy_manager::providers::file_vehicle;
@@ -14,6 +15,7 @@ use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvide
 use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
 use crate::app::proxy_manager::ProxyManager;
 use crate::app::proxy_manager::ThreadSafeProxyManager;
+use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::fallback;
 use crate::proxy::loadbalance;
@@ -94,6 +96,8 @@ impl OutboundManager {
         handlers: &mut HashMap<String, AnyOutboundHandler>,
         selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
     ) -> Result<(), Error> {
+        let mut proxy_providers = vec![];
+
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
@@ -108,8 +112,12 @@ impl OutboundManager {
                     handlers.insert(s.name.clone(), s.try_into()?);
                 }
 
+                OutboundProxyProtocol::Vmess(v) => {
+                    handlers.insert(v.name.clone(), v.try_into()?);
+                }
+
                 p => {
-                    debug!("proto {} not supported yet", p);
+                    unimplemented!("proto {} not supported yet", p);
                 }
             }
         }
@@ -123,6 +131,7 @@ impl OutboundManager {
                 proxies: &Vec<String>,
                 handlers: &HashMap<String, AnyOutboundHandler>,
                 proxy_manager: Arc<Mutex<ProxyManager>>,
+                proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
             ) -> Result<ThreadSafeProxyProvider, Error> {
                 let proxies = proxies
                     .into_iter()
@@ -134,15 +143,29 @@ impl OutboundManager {
                     })
                     .collect::<Vec<_>>();
 
-                Ok(Arc::new(Mutex::new(
+                let hc = HealthCheck::new(
+                    proxies.clone(),
+                    DEFAULT_LATENCY_TEST_URL.to_owned(),
+                    0, // this is a manual HC
+                    true,
+                    proxy_manager.clone(),
+                )
+                .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+
+                let pd = Arc::new(Mutex::new(
                     PlainProvider::new(
                         name.to_owned(),
                         proxies,
                         proxy_manager,
                         DEFAULT_LATENCY_TEST_URL.to_owned(),
+                        hc,
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
-                )))
+                ));
+
+                proxy_providers.push(pd.clone());
+
+                Ok(pd)
             }
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
@@ -154,6 +177,7 @@ impl OutboundManager {
                             proxies,
                             handlers,
                             proxy_manager.clone(),
+                            &mut proxy_providers,
                         )?);
                     }
 
@@ -186,6 +210,7 @@ impl OutboundManager {
                             proxies,
                             handlers,
                             proxy_manager.clone(),
+                            &mut proxy_providers,
                         )?);
                     }
 
@@ -220,6 +245,7 @@ impl OutboundManager {
                             proxies,
                             handlers,
                             proxy_manager.clone(),
+                            &mut proxy_providers,
                         )?);
                     }
 
@@ -253,6 +279,7 @@ impl OutboundManager {
                             proxies,
                             handlers,
                             proxy_manager.clone(),
+                            &mut proxy_providers,
                         )?);
                     }
 
@@ -286,6 +313,7 @@ impl OutboundManager {
                             proxies,
                             handlers,
                             proxy_manager.clone(),
+                            &mut proxy_providers,
                         )?);
                     }
 
@@ -314,6 +342,48 @@ impl OutboundManager {
                 }
             }
         }
+
+        let mut g = vec![];
+        for handler in handlers.values() {
+            g.push(handler.clone());
+        }
+        let hc = HealthCheck::new(
+            g.clone(),
+            DEFAULT_LATENCY_TEST_URL.to_owned(),
+            0, // this is a manual HC
+            true,
+            proxy_manager.clone(),
+        )
+        .unwrap();
+        let pd = PlainProvider::new(
+            PROXY_GLOBAL.to_owned(),
+            g,
+            proxy_manager.clone(),
+            DEFAULT_LATENCY_TEST_URL.to_owned(),
+            hc,
+        )
+        .unwrap();
+
+        handlers.insert(
+            PROXY_GLOBAL.to_owned(),
+            Arc::new(
+                selector::Handler::new(
+                    selector::HandlerOptions {
+                        name: PROXY_GLOBAL.to_owned(),
+                        udp: true,
+                        ..Default::default()
+                    },
+                    vec![Arc::new(Mutex::new(pd))],
+                )
+                .await,
+            ),
+        );
+
+        for provider in proxy_providers {
+            info!("initializing provider {}", provider.lock().await.name());
+            provider.lock().await.initialize().await?;
+        }
+
         Ok(())
     }
 

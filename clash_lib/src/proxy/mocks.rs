@@ -21,7 +21,7 @@ mock! {
     #[async_trait::async_trait]
     impl ProxyProvider for DummyProxyProvider {
         async fn proxies(&self) -> Vec<AnyOutboundHandler>;
-        async fn touch(&mut self);
+        async fn touch(&self);
         async fn healthcheck(&self);
     }
 }

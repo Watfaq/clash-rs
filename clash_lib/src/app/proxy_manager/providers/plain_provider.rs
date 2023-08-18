@@ -3,15 +3,24 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
-use crate::{app::proxy_manager::ProxyManager, proxy::AnyOutboundHandler, Error};
+use crate::{
+    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
+    proxy::AnyOutboundHandler,
+    Error,
+};
 
 use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
+
+struct Inner {
+    hc: HealthCheck,
+}
 
 pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
     proxy_registry: Arc<Mutex<ProxyManager>>,
     latency_test_url: String,
+    inner: Arc<Mutex<Inner>>,
 }
 
 impl PlainProvider {
@@ -20,9 +29,14 @@ impl PlainProvider {
         proxies: Vec<AnyOutboundHandler>,
         proxy_registry: Arc<Mutex<ProxyManager>>,
         latency_test_url: String,
+        mut hc: HealthCheck,
     ) -> anyhow::Result<Self> {
         if proxies.is_empty() {
             return Err(Error::InvalidConfig(format!("{}: proxies is empty", name)).into());
+        }
+
+        if hc.auto() {
+            hc.kick_off();
         }
 
         Ok(Self {
@@ -30,6 +44,7 @@ impl PlainProvider {
             proxies,
             proxy_registry,
             latency_test_url,
+            inner: Arc::new(Mutex::new(Inner { hc })),
         })
     }
 }
@@ -58,14 +73,12 @@ impl ProxyProvider for PlainProvider {
     async fn proxies(&self) -> Vec<AnyOutboundHandler> {
         self.proxies.clone()
     }
-    async fn touch(&mut self) {
-        todo!("PlainProvider::touch");
+
+    async fn touch(&self) {
+        self.inner.lock().await.hc.touch().await;
     }
+
     async fn healthcheck(&self) {
-        self.proxy_registry
-            .lock()
-            .await
-            .check(&self.proxies, &self.latency_test_url, None)
-            .await;
+        self.inner.lock().await.hc.check().await;
     }
 }

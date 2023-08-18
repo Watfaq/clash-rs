@@ -9,7 +9,7 @@ use boring::ssl::{SslConnector, SslMethod};
 use http::Request;
 use hyper_boring::HttpsConnector;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -83,7 +83,7 @@ impl ProxyManager {
             .await
             .get(name)
             .map(|x| x.alive)
-            .unwrap_or(false)
+            .unwrap_or(true) // if not found, assume it's alive
     }
 
     pub async fn report_alive(&mut self, name: &str, alive: bool) {
@@ -101,6 +101,7 @@ impl ProxyManager {
             .unwrap_or_default()
             .into()
     }
+
     pub async fn last_delay(&self, name: &str) -> u16 {
         let max = u16::MAX;
         if !self.alive(name).await {
@@ -112,6 +113,7 @@ impl ProxyManager {
             .map(|x| x.delay)
             .unwrap_or(max)
     }
+
     pub async fn url_test(
         &mut self,
         proxy: AnyOutboundHandler,
@@ -175,6 +177,8 @@ impl ProxyManager {
         if state.delay_history.len() > 10 {
             state.delay_history.pop_front();
         }
+
+        debug!("{} alive: {}, delay: {:?}", name, result.is_ok(), result);
 
         result
     }

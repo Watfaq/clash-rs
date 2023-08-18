@@ -46,7 +46,17 @@ pub struct Handler {
 
 impl Handler {
     pub async fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
-        let current = providers.first().unwrap().lock().await.name().to_owned();
+        let current = providers
+            .first()
+            .unwrap()
+            .lock()
+            .await
+            .proxies()
+            .await
+            .first()
+            .unwrap()
+            .name()
+            .to_owned();
         Self {
             opts,
             providers,

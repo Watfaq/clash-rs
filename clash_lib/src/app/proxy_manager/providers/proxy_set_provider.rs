@@ -26,6 +26,7 @@ struct ProviderScheme {
 
 struct FileProviderInner {
     proxies: Vec<AnyOutboundHandler>,
+    hc: HealthCheck,
 }
 
 pub struct ProxySetProvider {
@@ -33,7 +34,6 @@ pub struct ProxySetProvider {
         Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
-    hc: HealthCheck,
     inner: std::sync::Arc<tokio::sync::Mutex<FileProviderInner>>,
     proxy_registry: Arc<Mutex<ProxyManager>>,
 }
@@ -52,6 +52,7 @@ impl ProxySetProvider {
 
         let inner = Arc::new(tokio::sync::Mutex::new(FileProviderInner {
             proxies: vec![],
+            hc,
         }));
 
         let inner_clone = inner.clone();
@@ -95,7 +96,6 @@ impl ProxySetProvider {
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater.into()));
         Ok(Self {
             fetcher,
-            hc,
             inner,
             proxy_registry,
         })
@@ -147,16 +147,12 @@ impl ProxyProvider for ProxySetProvider {
             .collect()
     }
 
-    async fn touch(&mut self) {
-        self.hc.touch().await;
+    async fn touch(&self) {
+        self.inner.lock().await.hc.touch().await;
     }
 
     async fn healthcheck(&self) {
-        self.proxy_registry
-            .lock()
-            .await
-            .check(&self.proxies().await, self.hc.url(), None)
-            .await;
+        self.inner.lock().await.hc.check().await;
     }
 }
 

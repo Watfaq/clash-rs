@@ -82,7 +82,7 @@ where
         utils::rand_fill(&mut rand_bytes[..]);
         let req_body_iv = rand_bytes[0..16].to_vec();
         let req_body_key = rand_bytes[16..32].to_vec();
-        let resp_v = rand_bytes[33];
+        let resp_v = rand_bytes[32];
 
         let (resp_body_key, resp_body_iv) = if is_aead {
             (

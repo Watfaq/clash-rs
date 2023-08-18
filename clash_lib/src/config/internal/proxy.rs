@@ -147,11 +147,13 @@ pub struct OutboundVmess {
     pub server: String,
     pub port: u16,
     pub uuid: String,
+    #[serde(alias = "alterId")]
     pub alter_id: u16,
-    pub cipher: String,
-    pub udp: bool,
-    pub tls: bool,
-    pub skip_cert_verify: bool,
+    pub cipher: Option<String>,
+    pub udp: Option<bool>,
+    pub tls: Option<bool>,
+    #[serde(alias = "skip-cert-verify")]
+    pub skip_cert_verify: Option<bool>,
     pub server_name: Option<String>,
     pub network: Option<String>,
     pub ws_opts: Option<WsOpt>,
