@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::CStr;
 
 use crate::Error;
 
@@ -23,10 +23,12 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         if rv != 1 {
             return Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into());
         }
@@ -42,10 +44,12 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         if rv != 1 {
             return Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into());
         }
@@ -59,10 +63,12 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         return if rv != 1 {
             Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into())
         } else {
@@ -89,10 +95,12 @@ pub fn aes_cfg_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         if rv != 1 {
             return Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into());
         }
@@ -108,10 +116,12 @@ pub fn aes_cfg_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         if rv != 1 {
             return Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into());
         }
@@ -125,10 +135,12 @@ pub fn aes_cfg_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
 
         return if rv != 1 {
             Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into())
         } else {
@@ -183,10 +195,12 @@ pub fn aes_gcm_seal(
 
         return if rv != 1 {
             Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into())
         } else {
@@ -242,10 +256,12 @@ pub fn aes_gcm_open(
 
         return if rv != 1 {
             Err(Error::Crypto(
-                CString::from_raw(boring_sys::ERR_reason_error_string(rv as _) as _)
-                    .to_str()
-                    .expect("openssl error string is not utf8")
-                    .to_owned(),
+                CStr::from_ptr(
+                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
+                )
+                .to_str()
+                .expect("openssl error string is not utf8")
+                .to_owned(),
             )
             .into())
         } else {
@@ -303,9 +319,9 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
 #[cfg(test)]
 mod tests {
 
-    use crate::common::utils;
+    use crate::common::{crypto::aes_gcm_open, utils};
 
-    use super::aes_cfb_encrypt;
+    use super::{aes_cfb_encrypt, aes_gcm_seal};
 
     #[test]
     fn test_aes_cfb_256() {
@@ -326,5 +342,35 @@ mod tests {
         .expect("encryption");
 
         assert_eq!(data, &mut utils::decode_hex(expect).expect("ciphered"));
+    }
+
+    #[test]
+    fn test_aes_gcm_seal_ok() {
+        let key = "1234567890123456".as_bytes();
+        let nonce = "456".as_bytes();
+        let data = "789".as_bytes();
+        let ad = "abc".as_bytes();
+        let encrypted = aes_gcm_seal(key, nonce, data, Some(ad)).expect("sealed");
+
+        let decrypted = aes_gcm_open(key, nonce, &encrypted, Some(ad)).expect("opened");
+        assert_eq!(decrypted, data);
+    }
+
+    #[test]
+    fn test_aes_gcm_seal_fail() {
+        let key = "1234567890123456".as_bytes();
+        let nonce = "456".as_bytes();
+        let data = "789".as_bytes();
+        let ad = "abc".as_bytes();
+        let encrypted = aes_gcm_seal(key, nonce, data, Some(ad)).expect("sealed");
+
+        let key2 = "1234567890123457".as_bytes();
+        let decrypted = aes_gcm_open(key2, nonce, &encrypted, Some(ad));
+
+        assert!(decrypted.is_err());
+        assert_eq!(
+            decrypted.unwrap_err().to_string(),
+            "crypto error: BAD_DECRYPT"
+        );
     }
 }

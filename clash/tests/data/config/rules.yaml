@@ -90,24 +90,24 @@ proxy-groups:
 proxies:
   - name: "ss"
     type: ss
-    server: localhost
+    server: 10.0.0.13
     port: 8388
     cipher: aes-256-gcm
     password: "password"
     udp: true
   - name: plain-vmess
     type: vmess
-    server: localhost
+    server: 10.0.0.13
     port: 16823
     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
-    alterId: 64
+    alterId: 0
     cipher: auto
     udp: true
     skip-cert-verify: true
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - DOMAIN-SUFFIX,google.com,ss
+  - DOMAIN-SUFFIX,google.com,plain-vmess
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,ss
   - DOMAIN,google.com,ss

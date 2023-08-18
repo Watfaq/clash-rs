@@ -164,3 +164,41 @@ pub fn vmess_kdf_3_one_shot(id: &[u8], key1: &[u8], key2: &[u8], key3: &[u8]) ->
     h.update(id);
     h.finalize()
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::proxy::vmess::vmess_impl::kdf::{
+        vmess_kdf_1_one_shot, vmess_kdf_3_one_shot, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
+        KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
+        KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+    };
+
+    #[test]
+    fn test_kdf_1_one_shot() {
+        assert_eq!(
+            vmess_kdf_1_one_shot("test".as_bytes(), KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY),
+            vec![
+                149, 109, 253, 20, 158, 39, 112, 199, 28, 74, 3, 106, 99, 8, 234, 59, 64, 172, 126,
+                5, 155, 28, 59, 21, 220, 196, 241, 54, 138, 5, 71, 107
+            ]
+            .as_slice()
+        );
+    }
+
+    #[test]
+    fn test_kdf_3_one_shot() {
+        assert_eq!(
+            vmess_kdf_3_one_shot(
+                "test".as_bytes(),
+                KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
+                KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
+                KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY
+            ),
+            vec![
+                243, 80, 193, 249, 151, 10, 93, 168, 117, 239, 214, 89, 161, 130, 122, 81, 238,
+                177, 51, 113, 21, 74, 73, 212, 199, 41, 75, 155, 49, 55, 217, 226
+            ]
+            .as_slice()
+        );
+    }
+}

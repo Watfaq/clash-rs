@@ -16,8 +16,8 @@ pub(crate) const OPTION_CHUNK_MASK: u8 = 2;
 
 type Security = u8;
 
-pub(crate) const SECURITY_CHACHA20_POLY1305: Security = 3;
-pub(crate) const SECURITY_AES_128_GCM: Security = 4;
+pub(crate) const SECURITY_AES_128_GCM: Security = 3;
+pub(crate) const SECURITY_CHACHA20_POLY1305: Security = 4;
 pub(crate) const SECURITY_NONE: Security = 5;
 
 pub(crate) const COMMAND_TCP: u8 = 1;

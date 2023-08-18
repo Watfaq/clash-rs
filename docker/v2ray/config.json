@@ -1,4 +1,7 @@
 {
+  "log": {
+    "loglevel": "debug" // Level of log
+  },
   "inbounds": [
     {
       "port": 16823, // 服务器监听端口

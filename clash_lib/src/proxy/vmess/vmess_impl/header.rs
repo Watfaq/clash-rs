@@ -11,7 +11,7 @@ use super::kdf::{
 
 fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
     let mut buf = BytesMut::new();
-    buf.put_slice(timestamp.to_be_bytes().as_ref());
+    buf.put_u64_ne(timestamp);
 
     let mut random = [0u8; 4];
     utils::rand_fill(&mut random);
@@ -21,7 +21,7 @@ fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
     buf.put_u32(zero);
 
     let mut aes_key = boring_sys::AES_KEY::default();
-    let mut pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+    let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
     unsafe {
         boring_sys::AES_set_encrypt_key(pk.as_ptr() as _, 128, &mut aes_key);
         boring_sys::AES_encrypt(buf.as_mut_ptr() as _, buf.as_mut_ptr() as _, &aes_key);
@@ -52,7 +52,7 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let heahder_encrypted = crypto::aes_gcm_seal(
+    let header_encrypted = crypto::aes_gcm_seal(
         payload_header_length_aead_key,
         payload_header_length_aead_nonce,
         (data.len() as u16).to_be_bytes().as_ref(),
@@ -83,9 +83,43 @@ pub(crate) fn seal_vmess_aead_header(
 
     let mut out = BytesMut::new();
     out.put_slice(&auth_id[..]);
-    out.put_slice(&heahder_encrypted[..]);
+    out.put_slice(&header_encrypted[..]);
     out.put_slice(connection_nonce.as_ref());
     out.put_slice(&payload_encrypted[..]);
 
     Ok(out.freeze().to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::{BufMut, BytesMut};
+
+    use crate::proxy::vmess::vmess_impl::kdf::{self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY};
+
+    #[test]
+    fn test_create_auth_id() {
+        let mut buf = BytesMut::new();
+        buf.put_u64_ne(0);
+
+        for _ in 0..4 {
+            buf.put_u64_ne(0);
+        }
+
+        let zero = crc32fast::hash(buf.as_ref());
+        assert_eq!(zero, 3924573617);
+        buf.put_u32(zero);
+
+        let cmd_key = "1234567890123456".as_bytes();
+        let mut aes_key = boring_sys::AES_KEY::default();
+        let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+        unsafe {
+            boring_sys::AES_set_encrypt_key(pk.as_ptr() as _, 128, &mut aes_key);
+            boring_sys::AES_encrypt(buf.as_mut_ptr() as _, buf.as_mut_ptr() as _, &aes_key);
+        }
+
+        assert_eq!(
+            buf.freeze()[..16],
+            vec![55, 189, 144, 149, 192, 213, 241, 57, 37, 21, 179, 197, 135, 54, 86, 79]
+        );
+    }
 }
