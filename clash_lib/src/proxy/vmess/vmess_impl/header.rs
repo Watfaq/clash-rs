@@ -11,7 +11,7 @@ use super::kdf::{
 
 fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
     let mut buf = BytesMut::new();
-    buf.put_u64_ne(timestamp);
+    buf.put_u64(timestamp);
 
     let mut random = [0u8; 4];
     utils::rand_fill(&mut random);
@@ -52,7 +52,7 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let header_encrypted = crypto::aes_gcm_seal(
+    let header_len_encrypted = crypto::aes_gcm_seal(
         payload_header_length_aead_key,
         payload_header_length_aead_nonce,
         (data.len() as u16).to_be_bytes().as_ref(),
@@ -83,7 +83,7 @@ pub(crate) fn seal_vmess_aead_header(
 
     let mut out = BytesMut::new();
     out.put_slice(&auth_id[..]);
-    out.put_slice(&header_encrypted[..]);
+    out.put_slice(&header_len_encrypted[..]);
     out.put_slice(connection_nonce.as_ref());
     out.put_slice(&payload_encrypted[..]);
 
@@ -94,7 +94,16 @@ pub(crate) fn seal_vmess_aead_header(
 mod tests {
     use bytes::{BufMut, BytesMut};
 
-    use crate::proxy::vmess::vmess_impl::kdf::{self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY};
+    use crate::{
+        common::crypto,
+        proxy::vmess::vmess_impl::kdf::{
+            self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_KEY,
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_IV,
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
+        },
+    };
 
     #[test]
     fn test_create_auth_id() {
@@ -120,6 +129,72 @@ mod tests {
         assert_eq!(
             buf.freeze()[..16],
             vec![55, 189, 144, 149, 192, 213, 241, 57, 37, 21, 179, 197, 135, 54, 86, 79]
+        );
+    }
+
+    #[test]
+    fn test_seal_vmess_header() {
+        let key = "1234567890123456".as_bytes();
+        let auth_id = [0u8; 16];
+        let connection_nonce = [0u8; 8];
+        let data = vec![0u8; 16];
+
+        let payload_header_length_aead_key = &kdf::vmess_kdf_3_one_shot(
+            &key[..],
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
+            &auth_id[..],
+            &connection_nonce[..],
+        )[..16];
+        let payload_header_length_aead_nonce = &kdf::vmess_kdf_3_one_shot(
+            &key[..],
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_IV,
+            &auth_id[..],
+            &connection_nonce[..],
+        )[..12];
+
+        let header_len_encrypted = crypto::aes_gcm_seal(
+            payload_header_length_aead_key,
+            payload_header_length_aead_nonce,
+            (data.len() as u16).to_be_bytes().as_ref(),
+            Some(auth_id.as_ref()),
+        )
+        .unwrap();
+
+        let payload_header_aead_key = &kdf::vmess_kdf_3_one_shot(
+            &key[..],
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_KEY,
+            &auth_id[..],
+            &connection_nonce[..],
+        )[..16];
+        let payload_header_aead_nonce = &kdf::vmess_kdf_3_one_shot(
+            &key[..],
+            KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
+            &auth_id[..],
+            &connection_nonce[..],
+        )[..12];
+
+        let payload_encrypted = crypto::aes_gcm_seal(
+            payload_header_aead_key,
+            payload_header_aead_nonce,
+            &data,
+            Some(auth_id.as_ref()),
+        )
+        .unwrap();
+
+        let mut out = BytesMut::new();
+        out.put_slice(&auth_id[..]);
+        out.put_slice(&header_len_encrypted[..]);
+        out.put_slice(connection_nonce.as_ref());
+        out.put_slice(&payload_encrypted[..]);
+
+        assert_eq!(
+            out.freeze().to_vec(),
+            [
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 137, 101, 25, 33, 23, 247, 66, 8,
+                94, 171, 181, 162, 176, 21, 19, 111, 34, 161, 0, 0, 0, 0, 0, 0, 0, 0, 199, 22, 13,
+                123, 209, 206, 78, 166, 69, 198, 7, 29, 224, 54, 214, 146, 73, 34, 66, 61, 10, 203,
+                144, 160, 81, 17, 17, 191, 39, 197, 163, 246
+            ]
         );
     }
 }

@@ -4,6 +4,7 @@ use crate::Error;
 
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadInPlace, KeyInit};
+use bytes::BytesMut;
 
 pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
     unsafe {
@@ -77,7 +78,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
     }
 }
 
-pub fn aes_cfg_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
+pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
     unsafe {
         let ctx = boring_sys::EVP_CIPHER_CTX_new();
         let rv = boring_sys::EVP_DecryptInit_ex(
@@ -273,13 +274,15 @@ pub fn aes_gcm_open(
 
 pub trait AeadCipherHelper: AeadInPlace {
     fn new_with_slice(key: &[u8]) -> Self;
+    /// it's up to the caller to ensure that the buffer is large enough
+    /// i.e. buffer.len() >= plaintext.len() + Self::TagSize::to_usize()
     fn encrypt_in_place_with_slice(&self, nonce: &[u8], aad: &[u8], buffer: &mut [u8]) {
         let tag_pos = buffer.len() - Self::TagSize::to_usize();
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
             .encrypt_in_place_detached(nonce.into(), aad, msg)
             .expect("encryption failure!");
-        tag.copy_from_slice(&x);
+        tag.copy_from_slice(x.as_slice());
     }
 
     fn decrypt_in_place_with_slice(

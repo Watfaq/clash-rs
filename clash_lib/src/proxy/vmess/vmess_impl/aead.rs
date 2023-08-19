@@ -5,6 +5,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite};
+use tracing::debug;
 
 use super::MAX_CHUNK_SIZE;
 
@@ -218,6 +219,7 @@ impl AeadWriter {
             inner_buf.reserve(2 + payload_size + security.tag_len());
             inner_buf.put_u16((payload_size + security.tag_len()) as u16);
             inner_buf.put_slice(&buf[sent..sent + payload_size]);
+            inner_buf.extend_from_slice(vec![0u8; security.tag_len()].as_ref());
 
             nonce[..2].copy_from_slice(&count.to_be_bytes());
             nonce[2..12].copy_from_slice(&iv[2..12]);
@@ -230,14 +232,14 @@ impl AeadWriter {
                     cipher.encrypt_in_place_with_slice(
                         nonce[..nonce_len].into(),
                         &[],
-                        inner_buf.as_mut(),
+                        &mut inner_buf[2..],
                     );
                 }
                 VmessSecurity::ChaCha20Poly1305(cipher) => {
                     cipher.encrypt_in_place_with_slice(
                         nonce[..nonce_len].into(),
                         &[],
-                        inner_buf.as_mut(),
+                        &mut inner_buf[2..],
                     );
                 }
             }

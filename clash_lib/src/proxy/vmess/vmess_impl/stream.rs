@@ -1,10 +1,11 @@
-use std::{fmt::Debug, net::SocketAddrV4, pin::Pin, task::Poll, time::SystemTime};
+use std::{fmt::Debug, pin::Pin, task::Poll, time::SystemTime};
 
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
-use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use futures::{pin_mut, ready, Future};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tracing::debug;
 
 use crate::{
     common::{
@@ -54,6 +55,7 @@ pub struct VmessStream<S> {
     security: u8,
     is_aead: bool,
     is_udp: bool,
+    handshake_done: bool,
 }
 
 impl<S> Debug for VmessStream<S> {
@@ -158,56 +160,140 @@ where
             security: *security,
             is_aead,
             is_udp,
+            handshake_done: false,
         };
 
-        stream.handshake().await?;
+        stream.send_handshake_request().await?;
 
         Ok(stream)
     }
+}
 
-    async fn handshake(&mut self) -> std::io::Result<()> {
-        futures::future::poll_fn(|cx| {
-            VmessStream::poll_send_request(
-                cx,
-                &mut self.stream,
-                &self.req_body_key,
-                &self.req_body_iv,
-                self.resp_v,
-                self.security,
-                &self.dst,
-                self.is_aead,
-                self.is_udp,
-                &self.id,
-            )
-        })
-        .await?;
+impl<S> VmessStream<S>
+where
+    S: AsyncRead + Unpin,
+{
+    async fn recv_handshake_response(&mut self) -> std::io::Result<()> {
+        let Self {
+            ref mut stream,
+            ref is_aead,
+            ref resp_body_key,
+            ref resp_body_iv,
+            ref resp_v,
+            ..
+        } = self;
 
-        futures::future::poll_fn(|cx| {
-            VmessStream::poll_recv_response(
-                cx,
-                &mut self.stream,
-                self.is_aead,
-                &self.resp_body_key,
-                &self.resp_body_iv,
-                self.resp_v,
+        debug!("recv handshake response");
+        let mut buf = Vec::new();
+
+        if !is_aead {
+            buf.resize(4, 0);
+            stream.read_exact(buf.as_mut()).await?;
+            crypto::aes_cfb_decrypt(resp_body_key, resp_body_iv, &mut buf).map_err(map_io_error)?;
+        } else {
+            let aead_response_header_length_encryption_key =
+                &kdf::vmess_kdf_1_one_shot(resp_body_key, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY)
+                    [..16];
+            let aead_response_header_length_encryption_iv =
+                &kdf::vmess_kdf_1_one_shot(resp_body_iv, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV)
+                    [..12];
+
+            debug!("recv handshake response header length");
+            let mut hdr_len_buf = [0u8; 18];
+            stream.read_exact(&mut hdr_len_buf).await?;
+            debug!(
+                "recv handshake response header length: {:?}",
+                hdr_len_buf.as_slice()
+            );
+
+            let decrypted_response_header_len = crypto::aes_gcm_open(
+                aead_response_header_length_encryption_key,
+                aead_response_header_length_encryption_iv,
+                hdr_len_buf.as_slice(),
+                None,
             )
-        })
-        .await
+            .map_err(map_io_error)?;
+
+            if decrypted_response_header_len.len() < 2 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid response header length",
+                ))
+                .into();
+            }
+
+            debug!(
+                "recv handshake response header length: {:?}",
+                decrypted_response_header_len
+            );
+
+            let decrypted_header_len =
+                u16::from_be_bytes(decrypted_response_header_len[..2].try_into().unwrap());
+            let aead_response_header_payload_encryption_key = &kdf::vmess_kdf_1_one_shot(
+                resp_body_key,
+                KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
+            )[..16];
+            let aead_response_header_payload_encryption_iv = &kdf::vmess_kdf_1_one_shot(
+                resp_body_iv,
+                KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
+            )[..12];
+
+            debug!("recv handshake response header");
+            let mut hdr_buff = vec![0; decrypted_header_len as usize + 16];
+            stream.read_exact(&mut hdr_buff).await?;
+
+            buf = crypto::aes_gcm_open(
+                &aead_response_header_payload_encryption_key,
+                &aead_response_header_payload_encryption_iv,
+                hdr_buff.as_slice(),
+                None,
+            )
+            .map_err(map_io_error)?;
+
+            if buf.len() < 4 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid response",
+                ));
+            }
+        }
+
+        if buf[0] != *resp_v {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid response",
+            ));
+        }
+
+        if buf[2] != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid response",
+            ));
+        }
+
+        Ok(())
     }
+}
 
-    fn poll_send_request(
-        cx: &mut std::task::Context<'_>,
-        writer: &mut S,
-        req_body_key: &[u8],
-        req_body_iv: &[u8],
-        resp_v: u8,
-        security: u8,
-        dst: &SocksAddr,
-        is_aead: bool,
-        is_udp: bool,
-        id: &ID,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let mut pin = Pin::new(writer);
+impl<S> VmessStream<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    async fn send_handshake_request(&mut self) -> std::io::Result<()> {
+        let Self {
+            ref mut stream,
+            ref req_body_key,
+            ref req_body_iv,
+            ref resp_v,
+            ref security,
+            ref dst,
+            ref is_aead,
+            ref is_udp,
+            ref id,
+            ..
+        } = self;
+
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("check your system clock")
@@ -237,13 +323,15 @@ where
         buf.put_u8(VERSION);
         buf.put_slice(req_body_iv);
         buf.put_slice(req_body_key);
-        buf.put_u8(resp_v);
+        buf.put_u8(*resp_v);
         buf.put_u8(OPTION_CHUNK_STREAM);
 
         let p = utils::rand_range(0..16);
-        buf.put_u8(p << 4 | security);
+        buf.put_u8((p << 4) as u8 | security);
+
         buf.put_u8(0);
-        if is_udp {
+
+        if *is_udp {
             buf.put_u8(COMMAND_UDP);
         } else {
             buf.put_u8(COMMAND_TCP);
@@ -252,14 +340,14 @@ where
         dst.write_to_buf_vmess(&mut buf);
 
         if p > 0 {
-            let padding = vec![0u8; p as usize];
-            utils::rand_fill(buf.as_mut());
+            let mut padding = vec![0u8; p as usize];
+            utils::rand_fill(&mut padding[..]);
             buf.put_slice(&padding);
         }
 
         unsafe {
             let sum = boring_sys::OPENSSL_hash32(buf.as_mut_ptr() as _, buf.len());
-            buf.put_u32(sum);
+            buf.put_slice(sum.to_be_bytes().as_ref());
         }
 
         if !is_aead {
@@ -268,120 +356,20 @@ where
                 .map_err(map_io_error)?;
 
             mbuf.put_slice(data.as_slice());
-            pin.as_mut()
-                .poll_write(cx, mbuf.freeze().as_ref())
-                .map(|x| x.map(|_| ()))
+            let out = mbuf.freeze();
+            debug!("send non aead handshake request for user{}", id.uuid);
+            stream.write_all(&out).await?;
         } else {
-            // TODO: in place encryption
             let out = header::seal_vmess_aead_header(id.cmd_key, buf.freeze().to_vec(), now)
                 .map_err(map_io_error)?;
-            pin.as_mut()
-                .poll_write(cx, out.as_ref())
-                .map(|x| x.map(|_| ()))
-        }
-    }
+            debug!("send aead handshake request for user {}", id.uuid);
 
-    fn poll_recv_response(
-        cx: &mut std::task::Context<'_>,
-        reader: &mut S,
-        is_aead: bool,
-        resp_body_key: &[u8],
-        resp_body_iv: &[u8],
-        resp_v: u8,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let mut buf = Vec::new();
-
-        let mut pin = Pin::new(reader);
-
-        if !is_aead {
-            buf.resize(4, 0);
-            let mut read_buf = ReadBuf::new(buf.as_mut());
-            ready!(pin
-                .as_mut()
-                .poll_read(cx, &mut read_buf)
-                .map(|x| x.map(|_| ()))?);
-            buf = read_buf.filled().into();
-            crypto::aes_cfg_decrypt(resp_body_key, resp_body_iv, &mut buf).map_err(map_io_error)?;
-        } else {
-            let aead_response_header_length_encryption_key =
-                &kdf::vmess_kdf_1_one_shot(resp_body_key, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY)
-                    [..16];
-            let aead_response_header_length_encryption_iv =
-                &kdf::vmess_kdf_1_one_shot(resp_body_iv, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV)
-                    [..12];
-
-            buf.resize(18, 0);
-            let mut read_buf = ReadBuf::new(buf.as_mut());
-            ready!(pin
-                .as_mut()
-                .poll_read(cx, &mut read_buf)
-                .map(|x| x.map(|_| ()))?);
-
-            let decrypted_response_header_len = crypto::aes_gcm_open(
-                aead_response_header_length_encryption_key,
-                aead_response_header_length_encryption_iv,
-                read_buf.filled(),
-                None,
-            )
-            .map_err(map_io_error)?;
-
-            if decrypted_response_header_len.len() < 2 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "invalid response header length",
-                ))
-                .into();
-            }
-
-            let decrypted_header_len =
-                u16::from_be_bytes(decrypted_response_header_len[..2].try_into().unwrap());
-            let aead_response_header_payload_encryption_key = &kdf::vmess_kdf_1_one_shot(
-                resp_body_key,
-                KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
-            )[..16];
-            let aead_response_header_payload_encryption_iv = &kdf::vmess_kdf_1_one_shot(
-                resp_body_iv,
-                KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
-            )[..12];
-
-            buf.resize(decrypted_header_len as usize + 16, 0);
-            read_buf = ReadBuf::new(buf.as_mut());
-            ready!(pin
-                .as_mut()
-                .poll_read(cx, &mut read_buf)
-                .map(|x| x.map(|_| ()))?);
-
-            buf = crypto::aes_gcm_open(
-                &aead_response_header_payload_encryption_key,
-                &aead_response_header_payload_encryption_iv,
-                read_buf.filled(),
-                None,
-            )
-            .map_err(map_io_error)?;
-
-            if buf.len() < 4 {
-                return Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "invalid response",
-                )));
-            }
+            stream.write_all(&out).await?;
         }
 
-        if buf[0] != resp_v {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid response",
-            )));
-        }
+        stream.flush().await?;
 
-        if buf[2] != 0 {
-            return Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid response",
-            )));
-        }
-
-        return Poll::Ready(Ok(()));
+        Ok(())
     }
 }
 
@@ -394,11 +382,22 @@ where
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        let Self {
-            ref mut stream,
-            ref mut reader,
-            ..
-        } = self.get_mut();
+        debug!("poll read with aead");
+
+        let this = self.get_mut();
+
+        if !this.handshake_done {
+            debug!("doing handshake");
+            let fut = this.recv_handshake_response();
+            pin_mut!(fut);
+            ready!(fut.poll(cx))?;
+        }
+
+        this.handshake_done = true;
+        debug!("handshake done");
+
+        let stream = &mut this.stream;
+        let reader = &mut this.reader;
 
         return match reader {
             VmessReader::None(r) => Pin::new(r).poll_read(stream, cx, buf),
@@ -422,6 +421,8 @@ where
             ref mut writer,
             ..
         } = self.get_mut();
+
+        debug!("poll write with aead");
 
         return match writer {
             VmessWriter::None(w) => Pin::new(w).poll_write(stream, cx, buf),
@@ -451,6 +452,8 @@ fn hash_timestamp(timestamp: u64) -> [u8; 16] {
     unsafe {
         let mut ctx = boring_sys::MD5_CTX::default();
         boring_sys::MD5_Init(&mut ctx);
+
+        boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
         boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
         boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
         boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
