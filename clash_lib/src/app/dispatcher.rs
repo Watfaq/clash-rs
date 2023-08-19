@@ -59,8 +59,6 @@ impl Dispatcher {
             .get(outbound_name.as_str())
             .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
 
-        info!("{} matched rule {}", sess, handler.name());
-
         match handler.connect_stream(&sess, self.resolver.clone()).await {
             Ok(mut rhs) => {
                 info!("remote connection established {}", sess);
@@ -72,7 +70,11 @@ impl Dispatcher {
                         );
                     }
                     Err(err) => {
-                        warn!("connection {} closed with error {}", sess, err)
+                        warn!("connection {} closed with error {}", sess, err);
+                        lhs.shutdown()
+                            .await
+                            .map(|x| debug!("local shutdown: {:?}", x))
+                            .ok();
                     }
                 }
             }
