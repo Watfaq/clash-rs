@@ -7,9 +7,11 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-13-xl]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
