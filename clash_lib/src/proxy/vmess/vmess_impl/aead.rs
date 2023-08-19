@@ -3,9 +3,8 @@ use std::pin::Pin;
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, Bytes, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
-use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite};
-use tracing::debug;
+use futures::{pin_mut, ready, Future};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 
 use super::MAX_CHUNK_SIZE;
 
@@ -26,10 +25,6 @@ impl VmessSecurity {
     #[inline(always)]
     pub fn nonce_len(&self) -> usize {
         12
-    }
-    #[inline(always)]
-    pub fn tag_len(&self) -> usize {
-        16
     }
 }
 
@@ -90,35 +85,25 @@ impl AeadReader {
         } else {
             assert!(*pos == 0, "chunk reader bad state");
 
-            let mut pin = Pin::new(inner);
-            let mut size_buf = tokio::io::ReadBuf::new(size_holder);
-            ready!(pin.as_mut().poll_read(cx, &mut size_buf))?;
+            let fut = inner.read_exact(&mut size_holder[..]);
+            pin_mut!(fut);
+            ready!(fut.poll(cx))?;
 
-            if size_buf.filled().len() != 2 {
-                return std::task::Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "unexpected EOF",
-                )));
-            }
-
-            let size = u16::from_be_bytes(size_buf.filled().try_into().unwrap()) as usize;
+            let size = u16::from_be_bytes(*size_holder) as usize;
             if size > MAX_CHUNK_SIZE {
                 return std::task::Poll::Ready(Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    "chunk size too large",
+                    format!(
+                        "chunk size too large. max: {}, got: {}",
+                        MAX_CHUNK_SIZE, size
+                    ),
                 )));
             }
 
-            inner_buf.reserve(size);
-
-            let mut chunk_buf = tokio::io::ReadBuf::new(inner_buf);
-            ready!(pin.as_mut().poll_read(cx, &mut chunk_buf))?;
-            if chunk_buf.filled().len() != size {
-                return std::task::Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "unexpected EOF",
-                )));
-            }
+            inner_buf.resize(size, 0);
+            let fut = inner.read_exact(&mut inner_buf[..]);
+            pin_mut!(fut);
+            ready!(fut.poll(cx))?;
 
             nonce[..2].copy_from_slice(&count.to_be_bytes());
             nonce[2..12].copy_from_slice(&iv[2..12]);
@@ -127,11 +112,8 @@ impl AeadReader {
             let nonce = &nonce[..security.nonce_len()];
             match security {
                 VmessSecurity::Aes128Gcm(cipher) => {
-                    let dec = cipher.decrypt_in_place_with_slice(
-                        nonce.into(),
-                        &[],
-                        chunk_buf.filled_mut(),
-                    );
+                    let dec =
+                        cipher.decrypt_in_place_with_slice(nonce.into(), &[], &mut inner_buf[..]);
                     if dec.is_err() {
                         return std::task::Poll::Ready(Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
@@ -140,11 +122,8 @@ impl AeadReader {
                     }
                 }
                 VmessSecurity::ChaCha20Poly1305(cipher) => {
-                    let dec = cipher.decrypt_in_place_with_slice(
-                        nonce.into(),
-                        &[],
-                        chunk_buf.filled_mut(),
-                    );
+                    let dec =
+                        cipher.decrypt_in_place_with_slice(nonce.into(), &[], &mut inner_buf[..]);
                     if dec.is_err() {
                         return std::task::Poll::Ready(Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
@@ -157,7 +136,7 @@ impl AeadReader {
             let real_len = size - security.overhead_len();
             inner_buf.truncate(real_len);
 
-            let n = buf.remaining();
+            let n: usize = std::cmp::min(buf.remaining(), inner_buf.len());
             buf.put_slice(&inner_buf[..n]);
             *pos += n;
 
@@ -216,10 +195,10 @@ impl AeadWriter {
         while remaining > 0 {
             let payload_size = std::cmp::min(remaining, CHUNK_SIZE - security.overhead_len());
 
-            inner_buf.reserve(2 + payload_size + security.tag_len());
-            inner_buf.put_u16((payload_size + security.tag_len()) as u16);
+            inner_buf.reserve(2 + payload_size + security.overhead_len());
+            inner_buf.put_u16((payload_size + security.overhead_len()) as u16);
             inner_buf.put_slice(&buf[sent..sent + payload_size]);
-            inner_buf.extend_from_slice(vec![0u8; security.tag_len()].as_ref());
+            inner_buf.extend_from_slice(vec![0u8; security.overhead_len()].as_ref());
 
             nonce[..2].copy_from_slice(&count.to_be_bytes());
             nonce[2..12].copy_from_slice(&iv[2..12]);
@@ -246,7 +225,7 @@ impl AeadWriter {
 
             ready!(pin
                 .as_mut()
-                .poll_write(cx, &inner_buf[..2 + payload_size + security.tag_len()]))?;
+                .poll_write(cx, &inner_buf[..2 + payload_size + security.overhead_len()]))?;
             inner_buf.clear();
 
             sent += payload_size;
