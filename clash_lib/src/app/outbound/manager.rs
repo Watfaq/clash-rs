@@ -299,7 +299,6 @@ impl OutboundManager {
                             ..Default::default()
                         },
                         providers,
-                        proxy_manager.clone(),
                     );
 
                     handlers.insert(proto.name.clone(), Arc::new(load_balance));

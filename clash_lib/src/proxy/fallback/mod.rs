@@ -103,7 +103,8 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        unimplemented!("fallback proxy_stream")
+        let proxy = self.find_alive_proxy(true).await;
+        proxy.proxy_stream(s, sess, resolver).await
     }
 
     /// connect to remote target via UDP

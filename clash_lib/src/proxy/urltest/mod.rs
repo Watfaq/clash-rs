@@ -153,7 +153,10 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        unimplemented!("urltest proxy_stream")
+        self.fastest(false)
+            .await
+            .proxy_stream(s, sess, resolver)
+            .await
     }
 
     /// connect to remote target via UDP

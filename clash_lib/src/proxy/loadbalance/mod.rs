@@ -40,17 +40,12 @@ pub struct Handler {
     opts: HandlerOptions,
 
     providers: Vec<ThreadSafeProxyProvider>,
-    proxy_manager: ThreadSafeProxyManager,
 
     inner: Arc<Mutex<HandlerInner>>,
 }
 
 impl Handler {
-    pub fn new(
-        opts: HandlerOptions,
-        providers: Vec<ThreadSafeProxyProvider>,
-        proxy_manager: ThreadSafeProxyManager,
-    ) -> Self {
+    pub fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
         let strategy_fn = match opts.strategy {
             LoadBalanceStrategy::ConsistentHashing => strategy_consistent_hashring(),
             LoadBalanceStrategy::RoundRobin => strategy_rr(),
@@ -59,7 +54,6 @@ impl Handler {
         Self {
             opts,
             providers,
-            proxy_manager,
             inner: Arc::new(Mutex::new(HandlerInner { strategy_fn })),
         }
     }
@@ -114,7 +108,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        unimplemented!("proxy_stream is not implemented for loadbalance")
+        let proxies = self.get_proxies(false).await;
+        let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        proxy.proxy_stream(s, sess, resolver).await
     }
 
     /// connect to remote target via UDP

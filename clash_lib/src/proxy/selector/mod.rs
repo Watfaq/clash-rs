@@ -132,7 +132,10 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        unimplemented!("proxy_stream not implemented")
+        self.selected_proxy(true)
+            .await
+            .proxy_stream(s, sess, resolver)
+            .await
     }
 
     async fn connect_datagram(
