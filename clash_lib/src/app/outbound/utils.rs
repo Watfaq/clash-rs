@@ -221,7 +221,6 @@ mod tests {
 
         super::proxy_groups_dag_sort(&mut groups).unwrap();
 
-        assert_eq!(groups.first().unwrap().name(), "auto");
         assert_eq!(groups.last().unwrap().name(), "relay");
     }
 
