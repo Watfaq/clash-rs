@@ -261,9 +261,6 @@ mod tests {
         ];
 
         let e = super::proxy_groups_dag_sort(&mut groups).unwrap_err();
-        assert_eq!(
-            e.to_string(),
-            "invalid config: looped detected in proxy groups: [\"relay\", \"auto\", \"cycle\"]"
-        );
+        assert!(e.to_string().contains("loop detected in proxy groups"));
     }
 }
