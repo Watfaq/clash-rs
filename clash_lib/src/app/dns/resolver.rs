@@ -393,8 +393,7 @@ impl Resolver {
 #[cfg(test)]
 mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
-    use crate::dns::helper::make_clients;
-    use crate::dns::{NameServer, Resolver, ThreadSafeDNSClient};
+    use crate::dns::{Resolver, ThreadSafeDNSClient};
     use std::sync::Arc;
     use trust_dns_client::op;
     use trust_dns_proto::rr;
