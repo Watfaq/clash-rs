@@ -18,10 +18,13 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
-    - uses: bazelbuild/setup-bazelisk@v2
     - name: Mount bazel cache  # Optional
       uses: actions/cache@v3
       with:
-        path: "/home/runner/.cache/bazel"
-        key: bazel
-    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazel test --test_output=all //clash_lib/... //clash/...
+        path: |
+          ~/.cache/bazel
+          /private/var/tmp/_bazel_runner/
+        key: ${{ runner.os }}-bazel-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE', 'WORKSPACE.bazel', 'MODULE.bazel') }}
+        restore-keys: |
+          ${{ runner.os }}-bazel-
+    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
