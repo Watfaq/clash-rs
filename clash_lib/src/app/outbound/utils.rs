@@ -160,7 +160,7 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
     let looped_groups: Vec<String> = graph.keys().map(|s| s.to_owned()).collect();
 
     return Err(Error::InvalidConfig(format!(
-        "looped detected in proxy groups: {:?}",
+        "loop detected in proxy groups: {:?}",
         looped_groups
     )));
 }
