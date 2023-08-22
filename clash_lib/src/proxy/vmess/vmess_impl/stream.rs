@@ -3,8 +3,8 @@ use std::{fmt::Debug, mem::MaybeUninit, pin::Pin, task::Poll, time::SystemTime};
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
-use futures::{pin_mut, ready, Future};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use futures::ready;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tracing::debug;
 
 use crate::{
@@ -25,7 +25,7 @@ use super::{
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
     user::{ID, ID_BYTES_LEN},
-    Security, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
+    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
     SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
 
@@ -520,7 +520,7 @@ where
                         overhead_len = cipher.security.overhead_len();
                     }
 
-                    let max_payload_size = MAX_CHUNK_SIZE - overhead_len;
+                    let max_payload_size = CHUNK_SIZE - overhead_len;
                     let consume_len = std::cmp::min(buf.len(), max_payload_size);
                     let payload_len = consume_len + overhead_len;
 

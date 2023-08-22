@@ -1,6 +1,5 @@
 import socks
 import socket
-import time
 
 
 def check_socks5_udp(ip, port, rdns):
@@ -14,7 +13,8 @@ def check_socks5_udp(ip, port, rdns):
     (res, address) = s.recvfrom(4096)
     if res[0] == req[0] and res[1] == req[1]:
         print(
-            "got response %s from %s for request to %s" % (res, address, "1.1.1.1:53")
+            "got response %s from %s for request to %s" % (
+                res, address, "1.1.1.1:53")
         )
     else:
         print("got invalid response %s from %s" % (res, address))
@@ -24,7 +24,8 @@ def check_socks5_udp(ip, port, rdns):
     (res, address) = s.recvfrom(4096)
     if res[0] == req[0] and res[1] == req[1]:
         print(
-            "got response %s from %s for request to %s" % (res, address, "1.1.1.1:53")
+            "got response %s from %s for request to %s" % (
+                res, address, "1.1.1.1:53")
         )
         return True
     else:

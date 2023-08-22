@@ -126,8 +126,6 @@ impl Dispatcher {
                     .get(outbound_name.as_str())
                     .expect(format!("unknown rule: {}", outbound_name).as_str());
 
-                info!("{} matched rule {}", sess, handler.name());
-
                 let mut outbound_handle_guard = outbound_handle_guard.lock().await;
 
                 match outbound_handle_guard.get_outbound_sender_mut(&outbound_name) {

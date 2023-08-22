@@ -93,7 +93,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             let n = ready!(inner.as_mut().poll_write(cx, data.as_ref()))?;
 
             debug!(
-                "send udp packet to remote ss server, len: {}, remote_addr: {}, dst_addr: {}",
+                "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
                 n, remote_addr, addr
             );
 

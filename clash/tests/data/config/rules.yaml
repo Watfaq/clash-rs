@@ -113,7 +113,7 @@ rules:
   - DOMAIN,google.com,ss
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
-  - DST-PORT,80,DIRECT
+  - DST-PORT,53,plain-vmess
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
 ...

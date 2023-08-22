@@ -1,4 +1,3 @@
-mod chunk;
 mod cipher;
 mod client;
 mod header;
@@ -27,6 +26,7 @@ const MAX_CHUNK_SIZE: usize = 17 * 1024;
 
 pub use client::Builder;
 pub use client::VmessOption;
+pub use datagram::OutboundDatagramVmess;
 pub use stream::VmessStream;
 pub use user::new_alter_id_list;
 pub use user::new_id;

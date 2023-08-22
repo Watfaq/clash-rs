@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, sync::Arc};
+use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -8,9 +8,12 @@ mod vmess_impl;
 
 use crate::{
     app::ThreadSafeDNSResolver,
+    common::errors::{map_io_error, new_io_error},
     config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     session::{Session, SocksAddr},
 };
+
+use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
     transport::{self, Http2Config},
@@ -73,61 +76,13 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
-}
 
-#[async_trait]
-impl OutboundHandler for Handler {
-    fn name(&self) -> &str {
-        &self.opts.name
-    }
-
-    /// The protocol of the outbound handler
-    /// only contains Type information, do not rely on the underlying value
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyServer(OutboundProxyProtocol::Vmess(Default::default()))
-    }
-
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
-    /// whether the outbound handler support UDP
-    async fn support_udp(&self) -> bool {
-        self.opts.udp
-    }
-
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
-        )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
-
-        self.proxy_stream(stream, sess, resolver).await
-    }
-
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
+    async fn inner_proxy_stream<'a>(
+        &'a self,
         s: AnyStream,
-        sess: &Session,
+        sess: &'a Session,
         resolver: ThreadSafeDNSResolver,
+        udp: bool,
     ) -> io::Result<AnyStream> {
         let mut stream = s;
 
@@ -196,17 +151,112 @@ impl OutboundHandler for Handler {
             uuid: self.opts.uuid.to_owned(),
             alter_id: self.opts.alter_id,
             security: self.opts.security.to_owned(),
-            udp: false,
+            udp,
             dst: sess.destination.clone(),
         })?;
 
         vmess_builder.proxy_stream(underlying).await
     }
+}
+
+#[async_trait]
+impl OutboundHandler for Handler {
+    fn name(&self) -> &str {
+        &self.opts.name
+    }
+
+    /// The protocol of the outbound handler
+    /// only contains Type information, do not rely on the underlying value
+    fn proto(&self) -> OutboundProxy {
+        OutboundProxy::ProxyServer(OutboundProxyProtocol::Vmess(Default::default()))
+    }
+
+    /// The proxy remote address
+    async fn remote_addr(&self) -> Option<SocksAddr> {
+        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
+    }
+
+    /// whether the outbound handler support UDP
+    async fn support_udp(&self) -> bool {
+        self.opts.udp
+    }
+
+    async fn connect_stream(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<AnyStream> {
+        let stream = new_tcp_stream(
+            resolver.clone(),
+            self.opts.server.as_str(),
+            self.opts.port,
+            self.opts.common_opts.iface.as_ref(),
+        )
+        .map_err(|x| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "dial outbound {}:{}: {}",
+                    self.opts.server, self.opts.port, x
+                ),
+            )
+        })
+        .await?;
+
+        self.inner_proxy_stream(stream, sess, resolver, false).await
+    }
+
+    /// wraps a stream with outbound handler
+    async fn proxy_stream(
+        &self,
+        s: AnyStream,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<AnyStream> {
+        self.inner_proxy_stream(s, sess, resolver, false).await
+    }
+
     async fn connect_datagram(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
-        todo!()
+        let stream = new_tcp_stream(
+            resolver.clone(),
+            self.opts.server.as_str(),
+            self.opts.port,
+            self.opts.common_opts.iface.as_ref(),
+        )
+        .map_err(|x| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "dial outbound {}:{}: {}",
+                    self.opts.server, self.opts.port, x
+                ),
+            )
+        })
+        .await?;
+
+        let remote_addr = resolver
+            .resolve_v4(sess.destination.host().as_str())
+            .map_err(map_io_error)
+            .await?
+            .ok_or(new_io_error(
+                format!("failed to resolve {}", sess.destination.host()).as_str(),
+            ))?;
+
+        let stream = self
+            .inner_proxy_stream(stream, sess, resolver, true)
+            .await?;
+
+        Ok(Box::new(OutboundDatagramVmess::new(
+            stream,
+            SocksAddr::Ip(std::net::SocketAddr::new(
+                IpAddr::V4(remote_addr),
+                sess.destination.port(),
+            )),
+        )) as AnyOutboundDatagram)
+        .into()
     }
 }
