@@ -1,12 +1,11 @@
-mod aead;
 mod chunk;
+mod cipher;
 mod client;
 mod header;
 //pub mod http;
 mod datagram;
 mod kdf;
 mod stream;
-mod tls;
 mod user;
 
 pub(crate) const VERSION: u8 = 1;

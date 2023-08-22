@@ -1,5 +1,5 @@
 {
-  "checksum": "c276c2878d903a25eb90b45923963b54d7fb82e6a7001b774fcbda205a49198a",
+  "checksum": "4c7d42924b2314ce069523e5915170a57d8303ede8bae1fcc0f5cbcfcb256e1a",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -14904,6 +14904,7 @@
           "common": [
             "codec",
             "default",
+            "io",
             "net",
             "tracing"
           ],

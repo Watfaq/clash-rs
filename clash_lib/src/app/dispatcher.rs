@@ -69,13 +69,16 @@ impl Dispatcher {
                             sess, up, down
                         );
                     }
-                    Err(err) => {
-                        warn!("connection {} closed with error {}", sess, err);
-                        lhs.shutdown()
-                            .await
-                            .map(|x| debug!("local shutdown: {:?}", x))
-                            .ok();
-                    }
+                    Err(err) => match err.kind() {
+                        std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::BrokenPipe => {
+                            debug!("connection {} closed with error {}", sess, err);
+                        }
+                        _ => {
+                            warn!("connection {} closed with error {}", sess, err);
+                        }
+                    },
                 }
             }
             Err(err) => {
