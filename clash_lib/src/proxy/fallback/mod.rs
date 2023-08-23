@@ -1,5 +1,7 @@
 use std::io;
 
+use tracing::debug;
+
 use crate::{
     app::{
         proxy_manager::{
@@ -52,6 +54,7 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         for proxy in proxies.iter() {
             if self.proxy_manager.lock().await.alive(proxy.name()).await {
+                debug!("{} fastest {} is alive", self.name(), proxy.name());
                 return proxy.clone();
             }
         }

@@ -3,6 +3,7 @@ mod helpers;
 use std::{io, sync::Arc};
 
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{
     app::{
@@ -98,6 +99,7 @@ impl OutboundHandler for Handler {
     ) -> io::Result<AnyStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.connect_stream(sess, resolver).await
     }
 
@@ -110,6 +112,7 @@ impl OutboundHandler for Handler {
     ) -> io::Result<AnyStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.proxy_stream(s, sess, resolver).await
     }
 
@@ -121,6 +124,7 @@ impl OutboundHandler for Handler {
     ) -> io::Result<AnyOutboundDatagram> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.connect_datagram(sess, resolver).await
     }
 }

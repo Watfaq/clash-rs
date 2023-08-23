@@ -53,6 +53,11 @@ proxy-groups:
       - "load-balance"
       - "select"
       - DIRECT
+  
+  - name: "relay-one"
+    type: relay
+    proxies:
+      - "ss"
 
   - name: "auto"
     type: url-test
@@ -84,7 +89,6 @@ proxy-groups:
     proxies:
       - "ss"
       - DIRECT
-      - REJECT
 
 
 proxies:
@@ -107,7 +111,7 @@ proxies:
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - DOMAIN-SUFFIX,google.com,plain-vmess
+  - DOMAIN-KEYWORD,httpbin,relay-one
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,ss
   - DOMAIN,google.com,ss

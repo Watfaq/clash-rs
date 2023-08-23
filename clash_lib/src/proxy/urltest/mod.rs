@@ -1,6 +1,7 @@
 use std::{io, sync::Arc};
 
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{
     app::{
@@ -103,6 +104,13 @@ impl Handler {
             }
         }
 
+        debug!(
+            "{} fastest {} is {}",
+            self.name(),
+            fastest.name(),
+            fastest_delay
+        );
+
         return inner.fastest_proxy.as_ref().unwrap().clone();
     }
 }
@@ -153,7 +161,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        self.fastest(false)
+        self.fastest(true)
             .await
             .proxy_stream(s, sess, resolver)
             .await

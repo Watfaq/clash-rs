@@ -2,6 +2,7 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{
     app::{
@@ -68,6 +69,7 @@ impl Handler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         for proxy in proxies {
             if proxy.name() == self.inner.lock().await.current {
+                debug!("{} selected {}", self.name(), proxy.name());
                 return proxy;
             }
         }

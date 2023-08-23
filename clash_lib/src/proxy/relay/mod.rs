@@ -2,6 +2,7 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use futures::stream::{self, StreamExt};
+use tracing::{debug, error};
 
 use crate::{
     app::{
@@ -9,6 +10,7 @@ use crate::{
     },
     common::errors::new_io_error,
     config::internal::proxy::{OutboundGroupRelay, OutboundProxy},
+    proxy::utils::new_tcp_stream,
     session::{Session, SocksAddr},
 };
 
@@ -85,15 +87,37 @@ impl OutboundHandler for Handler {
                 proxy.connect_stream(sess, resolver).await
             }
             _ => {
-                let first = proxies[0].clone();
+                let mut first = proxies[0].clone();
+                let last = proxies[proxies.len() - 1].clone();
 
-                let mut s = first.connect_stream(sess, resolver.clone()).await?;
-                let mut sess = sess.clone();
-                for i in 1..proxies.len() - 1 {
+                let remote_addr = first.remote_addr().await.unwrap();
+
+                let mut s = new_tcp_stream(
+                    resolver.clone(),
+                    remote_addr.host().as_str(),
+                    remote_addr.port(),
+                    None,
+                )
+                .await?;
+
+                let mut next_sess = sess.clone();
+                for i in 1..proxies.len() {
                     let proxy = proxies[i].clone();
-                    sess.destination = proxy.remote_addr().await.expect("must have remote addr");
-                    s = proxy.proxy_stream(s, &sess, resolver.clone()).await?;
+                    error!(
+                        "relay {} -> {} -> {} -> {}",
+                        first.name(),
+                        proxy.name(),
+                        proxy.remote_addr().await.unwrap(),
+                        proxies.len()
+                    );
+                    next_sess.destination =
+                        proxy.remote_addr().await.expect("must have remote addr");
+                    s = first.proxy_stream(s, &next_sess, resolver.clone()).await?;
+
+                    first = proxy;
                 }
+
+                s = last.proxy_stream(s, &sess, resolver).await?;
                 Ok(s)
             }
         }
@@ -113,6 +137,6 @@ impl OutboundHandler for Handler {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
-        todo!()
+        Err(new_io_error("not implemented for Relay"))
     }
 }
