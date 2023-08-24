@@ -8,6 +8,10 @@ on:
 
 jobs:
   test:
+    name: test on ${{ matrix.os }}
+    concurrency:
+      group: ${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     strategy:
       matrix:
         # os: [ubuntu-22.04, macos-13] linux not supported yet
