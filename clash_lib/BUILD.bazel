@@ -10,6 +10,7 @@ rust_library(
     proc_macro_deps = all_crate_deps(
         proc_macro = True,
     ),
+    version = "0.1.0",
     visibility = ["//visibility:public"],
     deps = all_crate_deps(
         normal = True,

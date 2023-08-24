@@ -24,6 +24,7 @@ pub fn get_api_runner(controller_cfg: Controller, log_source: Sender<String>) ->
             let app = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
+                .route("/version", get(handlers::version::handle))
                 .with_state(Arc::new(app_state));
             axum::Server::bind(&addr)
                 .serve(app.into_make_service_with_connect_info::<SocketAddr>())
