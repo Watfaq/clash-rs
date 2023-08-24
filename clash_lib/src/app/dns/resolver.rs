@@ -11,15 +11,16 @@ use trust_dns_proto::{op, rr};
 #[cfg(test)]
 use mockall::automock;
 
+use crate::app::ThreadSafeDNSResolver;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
 use crate::{common::trie, Error};
 
+use super::system::SystemResolver;
 use super::{
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
     Config,
 };
-use super::{DNSNetMode, NameServer};
 
 static TTL: Duration = Duration::from_secs(60);
 
@@ -267,7 +268,10 @@ impl ClashResolver for Resolver {
 
 impl Resolver {
     /// For testing purpose
+    #[cfg(test)]
     pub async fn new_default() -> Self {
+        use super::{DNSNetMode, NameServer};
+
         Resolver {
             ipv6: false,
             hosts: None,
@@ -288,7 +292,11 @@ impl Resolver {
         }
     }
 
-    pub async fn new(cfg: Config) -> Self {
+    pub async fn new(cfg: Config) -> ThreadSafeDNSResolver {
+        if !cfg.enable {
+            return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
+        }
+
         let default_resolver = Arc::new(Resolver {
             ipv6: false,
             hosts: None,
@@ -356,7 +364,7 @@ impl Resolver {
             },
         };
 
-        r
+        Arc::new(r)
     }
 
     pub async fn batch_exchange(
@@ -365,7 +373,6 @@ impl Resolver {
     ) -> anyhow::Result<op::Message> {
         let mut queries = Vec::new();
         for c in clients {
-            // TODO: how to use .map()
             queries.push(
                 async move {
                     c.lock()

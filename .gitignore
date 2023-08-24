@@ -25,3 +25,6 @@ venv/
 /bazel-*
 # Ignore outputs generated during Bazel bootstrapping.
 /output/
+
+# don't check in this real config
+ignore.yaml

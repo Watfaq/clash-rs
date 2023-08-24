@@ -156,6 +156,7 @@ pub struct OutboundVmess {
     pub skip_cert_verify: Option<bool>,
     pub server_name: Option<String>,
     pub network: Option<String>,
+    #[serde(alias = "ws-opts")]
     pub ws_opts: Option<WsOpt>,
 }
 

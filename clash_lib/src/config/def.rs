@@ -11,9 +11,12 @@ use serde_yaml::Value;
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum RunMode {
+    #[serde(alias = "Global")]
     Global,
     #[default]
+    #[serde(alias = "Rule")]
     Rule,
+    #[serde(alias = "Direct")]
     Direct,
 }
 

@@ -15,7 +15,7 @@ use std::io;
 
 use std::sync::{Arc, Once};
 use thiserror::Error;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 mod app;
 mod common;
@@ -100,15 +100,20 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };
 
+    let (log_tx, _) = broadcast::channel(100);
+
+    let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
+
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        app::logging::setup_logging(config.general.log_level).expect("failed to setup logging");
+        app::logging::setup_logging(config.general.log_level, log_collector)
+            .expect("failed to setup logging");
     });
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
-    let default_dns_resolver = Arc::new(dns::Resolver::new(config.dns).await);
+    let default_dns_resolver = dns::Resolver::new(config.dns).await;
 
     let outbound_manager = Arc::new(RwLock::new(
         OutboundManager::new(
@@ -155,7 +160,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut inbound_runners = inbound_manager.get_runners()?;
     runners.append(&mut inbound_runners);
 
-    let api_runner = app::api::get_api_runner(config.general.controller);
+    let api_runner = app::api::get_api_runner(config.general.controller, log_tx);
     if let Some(r) = api_runner {
         runners.push(r);
     }

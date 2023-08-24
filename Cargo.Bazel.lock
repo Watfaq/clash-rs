@@ -1,5 +1,5 @@
 {
-  "checksum": "4c7d42924b2314ce069523e5915170a57d8303ede8bae1fcc0f5cbcfcb256e1a",
+  "checksum": "eb54538b6c466464ff68b5bebe68dc857d719e9b327fcc10cc20a4e90d556649",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -1294,7 +1294,8 @@
             "original-uri",
             "query",
             "tokio",
-            "tower-log"
+            "tower-log",
+            "ws"
           ],
           "selects": {}
         },
@@ -1307,6 +1308,10 @@
             {
               "id": "axum-core 0.3.4",
               "target": "axum_core"
+            },
+            {
+              "id": "base64 0.21.2",
+              "target": "base64"
             },
             {
               "id": "bitflags 1.3.2",
@@ -1373,12 +1378,20 @@
               "target": "serde_urlencoded"
             },
             {
+              "id": "sha1 0.10.5",
+              "target": "sha1"
+            },
+            {
               "id": "sync_wrapper 0.1.2",
               "target": "sync_wrapper"
             },
             {
               "id": "tokio 1.29.1",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-tungstenite 0.20.0",
+              "target": "tokio_tungstenite"
             },
             {
               "id": "tower 0.4.13",
@@ -3430,6 +3443,10 @@
             {
               "id": "trust-dns-proto 0.22.0",
               "target": "trust_dns_proto"
+            },
+            {
+              "id": "trust-dns-resolver 0.22.0",
+              "target": "trust_dns_resolver"
             },
             {
               "id": "url 2.4.0",

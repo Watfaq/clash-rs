@@ -2,7 +2,6 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use futures::stream::{self, StreamExt};
-use tracing::{debug, error};
 
 use crate::{
     app::{
@@ -103,13 +102,6 @@ impl OutboundHandler for Handler {
                 let mut next_sess = sess.clone();
                 for i in 1..proxies.len() {
                     let proxy = proxies[i].clone();
-                    error!(
-                        "relay {} -> {} -> {} -> {}",
-                        first.name(),
-                        proxy.name(),
-                        proxy.remote_addr().await.unwrap(),
-                        proxies.len()
-                    );
                     next_sess.destination =
                         proxy.remote_addr().await.expect("must have remote addr");
                     s = first.proxy_stream(s, &next_sess, resolver.clone()).await?;
