@@ -1,6 +1,6 @@
 use crate::def::LogLevel;
 use tokio::sync::broadcast::Sender;
-use tracing::debug;
+
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;

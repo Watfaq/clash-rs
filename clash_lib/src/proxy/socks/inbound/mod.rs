@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use stream::handle_tcp;
 use tokio::net::{TcpListener, TcpStream};
+use tracing::warn;
 
 pub use datagram::Socks5UDPCodec;
 
@@ -44,6 +45,12 @@ pub(crate) mod socks_command {
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+}
+
+impl Drop for Listener {
+    fn drop(&mut self) {
+        warn!("SOCKS5 inbound listener on {} stopped", self.addr);
+    }
 }
 
 impl Listener {

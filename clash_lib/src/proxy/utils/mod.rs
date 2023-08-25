@@ -3,9 +3,10 @@ use std::net::{IpAddr, SocketAddr};
 pub mod provider_helper;
 mod socket_helpers;
 
+use serde::{Deserialize, Serialize};
 pub use socket_helpers::*;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Interface {
     IpAddr(IpAddr),
     Name(String),

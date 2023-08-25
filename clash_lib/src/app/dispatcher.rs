@@ -1,6 +1,9 @@
 use crate::app::outbound::manager::ThreadSafeOutboundManager;
 use crate::app::router::ThreadSafeRouter;
 use crate::app::ThreadSafeDNSResolver;
+use crate::config::def::RunMode;
+use crate::config::internal::proxy::PROXY_DIRECT;
+use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
@@ -19,6 +22,7 @@ pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
+    mode: Arc<Mutex<RunMode>>,
 }
 
 impl Debug for Dispatcher {
@@ -32,26 +36,45 @@ impl Dispatcher {
         outbound_manager: ThreadSafeOutboundManager,
         router: ThreadSafeRouter,
         resolver: ThreadSafeDNSResolver,
+        mode: RunMode,
     ) -> Self {
         Self {
             outbound_manager,
             router,
             resolver,
+            mode: Arc::new(Mutex::new(mode)),
         }
     }
 
-    pub async fn dispatch_stream<S>(&self, mut sess: Session, mut lhs: Box<S>)
+    pub async fn set_mode(&self, mode: RunMode) {
+        info!("run mode switched to {}", mode);
+        let mut m = self.mode.lock().await;
+        *m = mode;
+    }
+
+    pub async fn get_mode(&self) -> RunMode {
+        let mode = self.mode.lock().await;
+        mode.clone()
+    }
+
+    pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: Box<S>)
     where
         S: AsyncRead + AsyncWrite + Unpin + ?Sized,
     {
-        let outbound_name = self
-            .router
-            .read()
-            .await
-            .match_route(&sess)
-            .await
-            .to_string();
-        sess.outbound_target = outbound_name.to_string();
+        let mode = self.mode.lock().await;
+        info!("dispatching {} with mode {}", sess, mode);
+        let outbound_name = match *mode {
+            RunMode::Global => PROXY_GLOBAL.to_string(),
+            RunMode::Rule => self
+                .router
+                .read()
+                .await
+                .match_route(&sess)
+                .await
+                .to_string(),
+            RunMode::Direct => PROXY_DIRECT.to_string(),
+        };
+
         let handler = self
             .outbound_manager
             .read()

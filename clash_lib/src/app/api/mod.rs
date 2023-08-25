@@ -2,12 +2,12 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum::{routing::get, Router};
 
-use tokio::sync::broadcast::Sender;
+use tokio::sync::{broadcast::Sender, Mutex};
 use tracing::info;
 
-use crate::{config::internal::config::Controller, Runner};
+use crate::{config::internal::config::Controller, GlobalState, Runner};
 
-use super::inbound::manager::ThreadSafeInboundManager;
+use super::{dispatcher, inbound::manager::ThreadSafeInboundManager, ThreadSafeDNSResolver};
 
 mod handlers;
 mod middlewares;
@@ -20,6 +20,9 @@ pub fn get_api_runner(
     controller_cfg: Controller,
     log_source: Sender<String>,
     inbound_manager: ThreadSafeInboundManager,
+    dispatcher: Arc<dispatcher::Dispatcher>,
+    global_state: Arc<Mutex<GlobalState>>,
+    dns_resolver: ThreadSafeDNSResolver,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
         let app_state = Arc::new(AppState {
@@ -27,7 +30,8 @@ pub fn get_api_runner(
         });
         let addr = bind_addr.parse().unwrap();
 
-        let configs_router = handlers::config::routes(inbound_manager);
+        let configs_router =
+            handlers::config::routes(inbound_manager, dispatcher, global_state, dns_resolver);
 
         let runner = async move {
             info!("Starting API server at {}", addr);

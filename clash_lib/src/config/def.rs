@@ -1,9 +1,9 @@
 use crate::Error;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::str::FromStr;
+use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
@@ -18,6 +18,16 @@ pub enum RunMode {
     Rule,
     #[serde(alias = "Direct")]
     Direct,
+}
+
+impl Display for RunMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RunMode::Global => write!(f, "global"),
+            RunMode::Rule => write!(f, "rule"),
+            RunMode::Direct => write!(f, "direct"),
+        }
+    }
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Default, Copy, Clone, Debug)]
@@ -62,6 +72,7 @@ pub struct Config {
 
     /// these options has default vals,
     /// and needs extra processing
+    #[deprecated = "this is essentially just dns.ipv6 in original clash"]
     pub ipv6: Option<bool>,
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,

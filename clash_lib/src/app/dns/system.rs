@@ -21,6 +21,7 @@ impl ClashResolver for SystemResolver {
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response.iter().choose(&mut rand::thread_rng()))
     }
+
     async fn resolve_v4(&self, host: &str) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response
@@ -40,5 +41,13 @@ impl ClashResolver for SystemResolver {
                 _ => None,
             })
             .choose(&mut rand::thread_rng()))
+    }
+
+    fn ipv6(&self) -> bool {
+        true
+    }
+
+    fn set_ipv6(&self, enabled: bool) {
+        // NOOP
     }
 }

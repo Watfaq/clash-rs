@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 use crate::config::def;
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
 use crate::config::internal::rule::Rule;
@@ -172,15 +174,22 @@ mod tests {
     }
 }
 
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct General {
     pub(crate) inbound: Inbound,
+    #[serde(skip)]
     pub(crate) controller: Controller,
-    mode: RunMode,
+    pub mode: RunMode,
     pub log_level: LogLevel,
-    ipv6: bool,
-    interface: Option<Interface>,
-    routing_mask: Option<u32>,
+    pub ipv6: bool,
+    #[serde(skip)]
+    pub interface: Option<Interface>,
+    #[serde(skip)]
+    pub routing_mask: Option<u32>,
+    #[serde(skip)]
     pub mmdb: String,
+    #[serde(skip)]
     pub mmdb_download_url: Option<String>,
 }
 
@@ -189,8 +198,10 @@ pub struct Profile {
     store_fakeip: bool,
 }
 
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub enum BindAddress {
+    #[default]
+    #[serde(rename = "*")]
     Any,
     One(Interface),
 }
@@ -201,6 +212,7 @@ impl FromStr for BindAddress {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "*" => Ok(Self::Any),
+            "localhost" => Ok(Self::One(Interface::IpAddr(IpAddr::from([127, 0, 0, 1])))),
             _ => {
                 if let Ok(ip) = s.parse::<IpAddr>() {
                     Ok(BindAddress::One(Interface::IpAddr(ip)))
@@ -212,16 +224,20 @@ impl FromStr for BindAddress {
     }
 }
 
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Inbound {
     pub port: Option<u16>,
     pub socks_port: Option<u16>,
     pub redir_port: Option<u16>,
     pub tproxy_port: Option<u16>,
     pub mixed_port: Option<u16>,
+    #[serde(skip)]
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
 }
 
+#[derive(Serialize, Deserialize, Default)]
 pub struct Controller {
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,

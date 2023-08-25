@@ -10,10 +10,12 @@ use crate::app::{dns, ThreadSafeDNSResolver};
 use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
+use config::def::LogLevel;
 use state::Storage;
 use std::io;
+use tokio::task::JoinHandle;
 
-use std::sync::{Arc, Once};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 
@@ -51,6 +53,11 @@ pub enum Config {
     Internal(InternalConfig),
     File(String, String),
     Str(String),
+}
+
+pub struct GlobalState {
+    log_level: LogLevel,
+    inbound_listener_handle: Option<JoinHandle<()>>,
 }
 
 pub struct RuntimeController {
@@ -104,16 +111,13 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        app::logging::setup_logging(config.general.log_level, log_collector)
-            .expect("failed to setup logging");
-    });
+    app::logging::setup_logging(config.general.log_level, log_collector)
+        .expect("failed to setup logging");
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
-    let default_dns_resolver = dns::Resolver::new(config.dns).await;
+    let dns_resolver = dns::Resolver::new(config.dns).await;
 
     let outbound_manager = Arc::new(RwLock::new(
         OutboundManager::new(
@@ -134,7 +138,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 })
                 .collect(),
             config.proxy_providers,
-            default_dns_resolver.clone(),
+            dns_resolver.clone(),
         )
         .await?,
     ));
@@ -142,7 +146,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let router = Arc::new(RwLock::new(
         Router::new(
             config.rules,
-            default_dns_resolver.clone(),
+            dns_resolver.clone(),
             config.general.mmdb,
             config.general.mmdb_download_url,
         )
@@ -152,18 +156,32 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager,
         router,
-        default_dns_resolver,
+        dns_resolver.clone(),
+        config.general.mode,
     ));
 
     let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
         config.general.inbound,
-        dispatcher,
+        dispatcher.clone(),
     )?));
 
-    let mut inbound_runners = inbound_manager.lock().await.get_runners()?;
-    runners.append(&mut inbound_runners);
+    let inbound_runner = inbound_manager.lock().await.get_runner()?;
 
-    let api_runner = app::api::get_api_runner(config.general.controller, log_tx, inbound_manager);
+    let runner_handle = tokio::spawn(inbound_runner);
+
+    let global_state = Arc::new(Mutex::new(GlobalState {
+        log_level: config.general.log_level,
+        inbound_listener_handle: Some(runner_handle),
+    }));
+
+    let api_runner = app::api::get_api_runner(
+        config.general.controller,
+        log_tx,
+        inbound_manager,
+        dispatcher,
+        global_state,
+        dns_resolver,
+    );
     if let Some(r) = api_runner {
         runners.push(r);
     }

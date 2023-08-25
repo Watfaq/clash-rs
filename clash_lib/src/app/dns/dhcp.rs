@@ -15,7 +15,7 @@ use std::{env, io};
 use tokio::net::UdpSocket;
 use tokio::task::yield_now;
 
-use tracing::debug;
+use tracing::{debug, warn};
 use trust_dns_proto::op::Message;
 
 const IFACE_TTL: Duration = Duration::from_secs(20);
@@ -255,7 +255,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 
         tokio::select! {
             _ = tx.closed() => {debug!("future cancelled, likely other clients won")},
-            value = get_response => tx.send(value).expect("must send")
+            value = get_response => tx.send(value).map_err(|x| warn!("send error: {:?}", x)).unwrap_or_default(),
         }
     });
 

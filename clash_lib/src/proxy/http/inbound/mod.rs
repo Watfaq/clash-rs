@@ -15,7 +15,7 @@ use std::io;
 use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::sync::Arc;
 use tower::service_fn;
-use tracing::error;
+use tracing::{error, warn};
 
 fn map_error(x: hyper::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, x.to_string())
@@ -45,10 +45,17 @@ pub struct Listener {
     dispatcher: Arc<Dispatcher>,
 }
 
+impl Drop for Listener {
+    fn drop(&mut self) {
+        warn!("HTTP inbound listener on {} stopped", self.addr);
+    }
+}
+
 impl Listener {
     pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
         Arc::new(Self { addr, dispatcher }) as _
     }
+
     async fn proxy(
         req: Request<Body>,
         client: Client<Connector>,

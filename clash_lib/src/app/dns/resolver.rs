@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
 use rand::prelude::SliceRandom;
 use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use std::{net, sync::Arc};
 use tracing::warn;
@@ -34,10 +36,13 @@ pub trait ClashResolver: Sync + Send {
     async fn resolve(&self, host: &str) -> anyhow::Result<Option<net::IpAddr>>;
     async fn resolve_v4(&self, host: &str) -> anyhow::Result<Option<net::Ipv4Addr>>;
     async fn resolve_v6(&self, host: &str) -> anyhow::Result<Option<net::Ipv6Addr>>;
+
+    fn ipv6(&self) -> bool;
+    fn set_ipv6(&self, enable: bool);
 }
 
 pub struct Resolver {
-    ipv6: bool,
+    ipv6: AtomicBool,
     hosts: Option<trie::StringTrie<net::IpAddr>>,
     main: Vec<ThreadSafeDNSClient>,
 
@@ -205,7 +210,7 @@ impl Resolver {
 #[async_trait]
 impl ClashResolver for Resolver {
     async fn resolve(&self, host: &str) -> anyhow::Result<Option<net::IpAddr>> {
-        match self.ipv6 {
+        match self.ipv6.load(Relaxed) {
             true => self
                 .resolve_v6(host)
                 .await
@@ -239,7 +244,7 @@ impl ClashResolver for Resolver {
         }
     }
     async fn resolve_v6(&self, host: &str) -> anyhow::Result<Option<net::Ipv6Addr>> {
-        if !self.ipv6 {
+        if !self.ipv6.load(Relaxed) {
             return Err(Error::DNSError("ipv6 disabled".into()).into());
         }
         if let Some(hosts) = &self.hosts {
@@ -264,6 +269,14 @@ impl ClashResolver for Resolver {
             Err(e) => Err(e.into()),
         }
     }
+
+    fn ipv6(&self) -> bool {
+        self.ipv6.load(Relaxed)
+    }
+
+    fn set_ipv6(&self, enable: bool) {
+        self.ipv6.store(enable, Relaxed);
+    }
 }
 
 impl Resolver {
@@ -273,7 +286,7 @@ impl Resolver {
         use super::{DNSNetMode, NameServer};
 
         Resolver {
-            ipv6: false,
+            ipv6: AtomicBool::new(false),
             hosts: None,
             main: make_clients(
                 vec![NameServer {
@@ -298,7 +311,7 @@ impl Resolver {
         }
 
         let default_resolver = Arc::new(Resolver {
-            ipv6: false,
+            ipv6: AtomicBool::new(false),
             hosts: None,
             main: make_clients(cfg.default_nameserver, None).await,
             fallback: None,
@@ -309,7 +322,7 @@ impl Resolver {
         });
 
         let r = Resolver {
-            ipv6: cfg.ipv6,
+            ipv6: AtomicBool::new(cfg.ipv6),
             main: make_clients(cfg.nameserver, Some(default_resolver.clone())).await,
             hosts: cfg.hosts,
             fallback: if cfg.fallback.len() > 0 {

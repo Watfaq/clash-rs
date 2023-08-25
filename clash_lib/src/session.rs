@@ -364,8 +364,6 @@ pub struct Session {
     pub source: SocketAddr,
     /// The proxy target address of a proxy connection.
     pub destination: SocksAddr,
-    /// The outbound target
-    pub outbound_target: String,
     /// The packet mark SO_MARK
     pub packet_mark: Option<u32>,
     /// The bind interface
@@ -378,7 +376,6 @@ impl Default for Session {
             network: Network::Tcp,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            outbound_target: "".to_string(),
             packet_mark: None,
             iface: None,
         }
@@ -407,7 +404,6 @@ impl Debug for Session {
             .field("network", &self.network)
             .field("source", &self.source)
             .field("destination", &self.destination)
-            .field("outbound_target", &self.outbound_target)
             .field("packet_mark", &self.packet_mark)
             .field("iface", &self.iface)
             .finish()
@@ -420,7 +416,6 @@ impl Clone for Session {
             network: self.network,
             source: self.source,
             destination: self.destination.clone(),
-            outbound_target: self.outbound_target.clone(),
             packet_mark: self.packet_mark,
             iface: self.iface.as_ref().cloned(),
         }
