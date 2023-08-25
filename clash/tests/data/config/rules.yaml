@@ -39,6 +39,7 @@ allow-lan: true
 mode: rule
 log-level: debug
 external-controller: 127.0.0.1:6170
+secret: "clash-rs"
 experimental:
   ignore-resolve-fail: true
 

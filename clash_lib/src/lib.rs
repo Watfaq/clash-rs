@@ -15,7 +15,7 @@ use std::io;
 
 use std::sync::{Arc, Once};
 use thiserror::Error;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 
 mod app;
 mod common;
@@ -155,12 +155,15 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         default_dns_resolver,
     ));
 
-    let inbound_manager = InboundManager::new(config.general.inbound, dispatcher)?;
+    let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
+        config.general.inbound,
+        dispatcher,
+    )?));
 
-    let mut inbound_runners = inbound_manager.get_runners()?;
+    let mut inbound_runners = inbound_manager.lock().await.get_runners()?;
     runners.append(&mut inbound_runners);
 
-    let api_runner = app::api::get_api_runner(config.general.controller, log_tx);
+    let api_runner = app::api::get_api_runner(config.general.controller, log_tx, inbound_manager);
     if let Some(r) = api_runner {
         runners.push(r);
     }
