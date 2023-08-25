@@ -1,10 +1,12 @@
-use crate::config::internal::proxy::OutboundProxy;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
 use crate::session::{Session, SocksAddr};
 use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
+use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::sync::Arc;
@@ -34,10 +36,7 @@ pub mod urltest;
 mod transport;
 
 #[cfg(test)]
-mod mocks;
-
-#[cfg(test)]
-use mockall::automock;
+pub mod mocks;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
@@ -108,7 +107,21 @@ pub trait InboundListener: Send + Sync + Unpin {
 
 pub type AnyInboundListener = Arc<dyn InboundListener>;
 
-#[cfg_attr(test, automock)]
+#[derive(Serialize, Deserialize)]
+pub enum OutboundType {
+    Shadowsocks,
+    Vmess,
+
+    UrlTest,
+    Select,
+    Relay,
+    LoadBalance,
+    Fallback,
+
+    Direct,
+    Reject,
+}
+
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin {
     /// The name of the outbound handler
@@ -116,7 +129,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
 
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
-    fn proto(&self) -> OutboundProxy;
+    fn proto(&self) -> OutboundType;
 
     /// The proxy remote address
     async fn remote_addr(&self) -> Option<SocksAddr>;
@@ -145,5 +158,13 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram>;
+
+    /// for API
+    fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("type".to_string(), Box::new(self.proto()) as _);
+
+        m
+    }
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;

@@ -8,14 +8,13 @@ use crate::{
         proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
-    config::internal::proxy::{OutboundGroupRelay, OutboundProxy},
     proxy::utils::new_tcp_stream,
     session::{Session, SocksAddr},
 };
 
 use super::{
     utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler,
+    AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -48,12 +47,8 @@ impl OutboundHandler for Handler {
         self.opts.name.as_str()
     }
 
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyGroup(
-            crate::config::internal::proxy::OutboundGroupProtocol::Relay(
-                OutboundGroupRelay::default(),
-            ),
-        )
+    fn proto(&self) -> OutboundType {
+        OutboundType::Relay
     }
 
     async fn remote_addr(&self) -> Option<SocksAddr> {

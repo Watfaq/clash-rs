@@ -15,7 +15,7 @@ use crate::{
 
 use super::{
     utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler,
+    AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[async_trait]
@@ -101,12 +101,8 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyGroup(
-            crate::config::internal::proxy::OutboundGroupProtocol::Select(
-                OutboundGroupSelect::default(),
-            ),
-        )
+    fn proto(&self) -> OutboundType {
+        OutboundType::Select
     }
 
     async fn remote_addr(&self) -> Option<SocksAddr> {
@@ -159,7 +155,8 @@ mod tests {
     use tokio::sync::Mutex;
 
     use crate::proxy::{
-        mocks::MockDummyProxyProvider, selector::ThreadSafeSelectorControl, MockOutboundHandler,
+        mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
+        selector::ThreadSafeSelectorControl,
     };
 
     #[tokio::test]
@@ -170,9 +167,9 @@ mod tests {
             .return_const("provider1".to_owned());
 
         mock_provider.expect_proxies().returning(|| {
-            let mut proxy1 = MockOutboundHandler::new();
+            let mut proxy1 = MockDummyOutboundHandler::new();
             proxy1.expect_name().return_const("provider1".to_owned());
-            let mut proxy2 = MockOutboundHandler::new();
+            let mut proxy2 = MockDummyOutboundHandler::new();
             proxy2.expect_name().return_const("provider2".to_owned());
             vec![Arc::new(proxy1), Arc::new(proxy2)]
         });

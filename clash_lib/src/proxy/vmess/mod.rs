@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
+use erased_serde::Serialize;
 use futures::TryFutureExt;
 use http::Uri;
 
@@ -9,7 +10,6 @@ mod vmess_impl;
 use crate::{
     app::ThreadSafeDNSResolver,
     common::errors::{map_io_error, new_io_error},
-    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     session::{Session, SocksAddr},
 };
 
@@ -19,27 +19,24 @@ use super::{
     transport::{self, Http2Config},
     utils::new_tcp_stream,
     AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler,
+    OutboundType,
 };
 
-#[derive(Clone)]
 pub struct HttpOption {
     pub method: String,
     pub path: Vec<String>,
     pub headers: HashMap<String, String>,
 }
 
-#[derive(Clone)]
 pub struct Http2Option {
     pub host: Vec<String>,
     pub path: String,
 }
 
-#[derive(Clone)]
 pub struct GrpcOption {
     pub service_name: String,
 }
 
-#[derive(Clone)]
 pub struct WsOption {
     pub path: String,
     pub headers: HashMap<String, String>,
@@ -47,7 +44,6 @@ pub struct WsOption {
     pub early_data_header_name: String,
 }
 
-#[derive(Clone)]
 pub enum VmessTransport {
     Ws(WsOption),
     H2(Http2Option),
@@ -166,9 +162,8 @@ impl OutboundHandler for Handler {
     }
 
     /// The protocol of the outbound handler
-    /// only contains Type information, do not rely on the underlying value
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyServer(OutboundProxyProtocol::Vmess(Default::default()))
+    fn proto(&self) -> OutboundType {
+        OutboundType::Vmess
     }
 
     /// The proxy remote address

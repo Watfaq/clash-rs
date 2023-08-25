@@ -1,5 +1,5 @@
 {
-  "checksum": "eb54538b6c466464ff68b5bebe68dc857d719e9b327fcc10cc20a4e90d556649",
+  "checksum": "e7f157dde804ab7c3348c9c420dbcdd3b5eaddd4114e7f192cf81d76dceb5956",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -1532,6 +1532,63 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT"
+    },
+    "axum-macros 0.3.8": {
+      "name": "axum-macros",
+      "version": "0.3.8",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/axum-macros/0.3.8/download",
+          "sha256": "cdca6a10ecad987bda04e95606ef85a5417dcaac1a78455242d72e031e2b6b62"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "axum_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "axum_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.32",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.28",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.8"
       },
       "license": "MIT"
     },
@@ -3293,6 +3350,10 @@
               "target": "dhcproto"
             },
             {
+              "id": "erased-serde 0.3.30",
+              "target": "erased_serde"
+            },
+            {
               "id": "filetime 0.2.21",
               "target": "filetime"
             },
@@ -3503,6 +3564,10 @@
         },
         "proc_macro_deps_dev": {
           "common": [
+            {
+              "id": "axum-macros 0.3.8",
+              "target": "axum_macros"
+            },
             {
               "id": "ctor 0.2.4",
               "target": "ctor"
@@ -4931,6 +4996,70 @@
         "version": "1.0.1"
       },
       "license": "Apache-2.0 OR MIT"
+    },
+    "erased-serde 0.3.30": {
+      "name": "erased-serde",
+      "version": "0.3.30",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/erased-serde/0.3.30/download",
+          "sha256": "837c0466252947ada828b975e12daf82e18bb5444e4df87be6038d4469e2a3d2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "erased_serde",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "erased_serde",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "erased-serde 0.3.30",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.30"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "errno 0.3.2": {
       "name": "errno",

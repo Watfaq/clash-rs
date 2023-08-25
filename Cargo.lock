@@ -305,6 +305,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-macros"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdca6a10ecad987bda04e95606ef85a5417dcaac1a78455242d72e031e2b6b62"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.28",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -619,6 +631,7 @@ dependencies = [
  "async-trait",
  "atty",
  "axum",
+ "axum-macros",
  "base64 0.21.2",
  "boring",
  "boring-sys",
@@ -629,6 +642,7 @@ dependencies = [
  "crc32fast",
  "ctor",
  "dhcproto",
+ "erased-serde",
  "filetime",
  "foreign-types-shared",
  "futures",
@@ -960,6 +974,15 @@ name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
+
+[[package]]
+name = "erased-serde"
+version = "0.3.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "837c0466252947ada828b975e12daf82e18bb5444e4df87be6038d4469e2a3d2"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "errno"

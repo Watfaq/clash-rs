@@ -7,7 +7,10 @@ use tracing::info;
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
-use super::{dispatcher, inbound::manager::ThreadSafeInboundManager, ThreadSafeDNSResolver};
+use super::{
+    dispatcher, inbound::manager::ThreadSafeInboundManager,
+    outbound::manager::ThreadSafeOutboundManager, ThreadSafeDNSResolver,
+};
 
 mod handlers;
 mod middlewares;
@@ -23,6 +26,7 @@ pub fn get_api_runner(
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
+    outbound_manager: ThreadSafeOutboundManager,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
         let app_state = Arc::new(AppState {
@@ -30,16 +34,22 @@ pub fn get_api_runner(
         });
         let addr = bind_addr.parse().unwrap();
 
-        let configs_router =
-            handlers::config::routes(inbound_manager, dispatcher, global_state, dns_resolver);
-
         let runner = async move {
             info!("Starting API server at {}", addr);
             let app = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
                 .route("/version", get(handlers::version::handle))
-                .nest("/configs", configs_router)
+                .nest(
+                    "/configs",
+                    handlers::config::routes(
+                        inbound_manager,
+                        dispatcher,
+                        global_state,
+                        dns_resolver,
+                    ),
+                )
+                .nest("/proxies", handlers::proxy::routes(outbound_manager))
                 .layer(middlewares::auth::AuthMiddlewareLayer::new(
                     controller_cfg.secret.unwrap_or_default(),
                 ))

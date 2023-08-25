@@ -8,6 +8,7 @@ use boring::ssl::{SslConnector, SslMethod};
 
 use http::Request;
 use hyper_boring::HttpsConnector;
+use serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::{debug, error};
 
@@ -24,7 +25,8 @@ pub mod healthcheck;
 mod http_client;
 pub mod providers;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct DelayHistory {
     time: SystemTime,
     delay: u16,
@@ -56,7 +58,7 @@ impl ProxyManager {
     }
 
     pub async fn check(
-        &mut self,
+        &self,
         proxies: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Option<Duration>,
@@ -192,7 +194,7 @@ mod tests {
 
     use crate::{
         app::dns::resolver::MockClashResolver, config::internal::proxy::PROXY_DIRECT,
-        proxy::MockOutboundHandler,
+        proxy::mocks::MockDummyOutboundHandler,
     };
 
     #[tokio::test]
@@ -204,7 +206,7 @@ mod tests {
 
         let mut manager = super::ProxyManager::new(Arc::new(mock_resolver));
 
-        let mut mock_handler = MockOutboundHandler::new();
+        let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());
@@ -259,7 +261,7 @@ mod tests {
 
         let mut manager = super::ProxyManager::new(Arc::new(mock_resolver));
 
-        let mut mock_handler = MockOutboundHandler::new();
+        let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());

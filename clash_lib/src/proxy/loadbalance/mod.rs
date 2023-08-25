@@ -7,12 +7,9 @@ use tracing::debug;
 
 use crate::{
     app::{
-        proxy_manager::{
-            providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeProxyManager,
-        },
-        ThreadSafeDNSResolver,
+        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
     },
-    config::internal::proxy::{LoadBalanceStrategy, OutboundGroupLoadBalance, OutboundProxy},
+    config::internal::proxy::LoadBalanceStrategy,
     session::{Session, SocksAddr},
 };
 
@@ -20,7 +17,7 @@ use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
     utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler,
+    AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -36,7 +33,6 @@ struct HandlerInner {
     strategy_fn: StrategyFn,
 }
 
-#[derive(Clone)]
 pub struct Handler {
     opts: HandlerOptions,
 
@@ -73,12 +69,8 @@ impl OutboundHandler for Handler {
 
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyGroup(
-            crate::config::internal::proxy::OutboundGroupProtocol::LoadBalance(
-                OutboundGroupLoadBalance::default(),
-            ),
-        )
+    fn proto(&self) -> OutboundType {
+        OutboundType::LoadBalance
     }
 
     /// The proxy remote address

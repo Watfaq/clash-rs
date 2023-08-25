@@ -1,10 +1,10 @@
 use anyhow::Result;
+use erased_serde::Serialize;
 use http::Uri;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
 use tracing::info;
 
 use crate::app::proxy_manager::healthcheck::HealthCheck;
@@ -84,9 +84,35 @@ impl OutboundManager {
         self.handlers.get(name).map(Clone::clone)
     }
 
+    // API handles start
     pub fn get_selector_control(&self, name: &str) -> Option<ThreadSafeSelectorControl> {
         self.selector_control.get(name).map(Clone::clone)
     }
+
+    pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
+        let mut r = HashMap::new();
+
+        let proxy_manager = self.proxy_manager.lock().await;
+
+        for (k, v) in self.handlers.iter() {
+            let mut m = v.as_map();
+
+            let alive = proxy_manager.alive(k).await;
+            let history = proxy_manager.delay_history(k).await;
+            let support_udp = v.support_udp().await;
+
+            m.insert("history".to_string(), Box::new(history));
+            m.insert("alive".to_string(), Box::new(alive));
+            m.insert("name".to_string(), Box::new(k.to_owned()));
+            m.insert("udp".to_string(), Box::new(support_udp));
+
+            r.insert(k.clone(), Box::new(m) as _);
+        }
+
+        r
+    }
+
+    // API handlers end
 
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,

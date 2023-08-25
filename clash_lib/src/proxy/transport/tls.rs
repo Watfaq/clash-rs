@@ -1,13 +1,14 @@
 use std::{io, sync::Arc};
 
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
+use serde::Serialize;
 use tokio_rustls::TlsConnector;
 
 use crate::{common::tls, proxy::AnyStream};
 
 const DEFAULT_ALPN: [&'static str; 2] = ["h2", "http/1.1"];
 
-#[derive(Clone)]
+#[derive(Serialize, Clone)]
 pub struct TLSOptions {
     pub skip_cert_verify: bool,
     pub sni: String,

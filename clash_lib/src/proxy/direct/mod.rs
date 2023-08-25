@@ -1,12 +1,16 @@
-use crate::config::internal::proxy::{OutboundProxy, OutboundProxyProtocol, PROXY_DIRECT};
+use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::proxy::datagram::OutboundDatagramImpl;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
 use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
 use crate::session::{Session, SocksAddr};
 use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
+use serde::Serialize;
 use std::sync::Arc;
 
+use super::OutboundType;
+
+#[derive(Serialize)]
 pub struct Handler;
 
 impl Handler {
@@ -21,8 +25,8 @@ impl OutboundHandler for Handler {
         PROXY_DIRECT
     }
 
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyServer(OutboundProxyProtocol::Direct)
+    fn proto(&self) -> OutboundType {
+        OutboundType::Direct
     }
 
     async fn remote_addr(&self) -> Option<SocksAddr> {

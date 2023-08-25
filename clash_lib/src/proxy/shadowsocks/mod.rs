@@ -23,7 +23,7 @@ use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 
 use super::{
     utils::{new_tcp_stream, new_udp_socket},
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
+    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundType,
 };
 
 pub enum SimpleOBFSMode {
@@ -155,8 +155,8 @@ impl OutboundHandler for Handler {
         self.opts.name.as_str()
     }
 
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyServer(OutboundProxyProtocol::Ss(Default::default()))
+    fn proto(&self) -> OutboundType {
+        OutboundType::Shadowsocks
     }
 
     async fn remote_addr(&self) -> Option<SocksAddr> {

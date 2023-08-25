@@ -9,13 +9,12 @@ use crate::{
         },
         ThreadSafeDNSResolver,
     },
-    config::internal::proxy::{OutboundGroupFallback, OutboundProxy},
     session::{Session, SocksAddr},
 };
 
 use super::{
     utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler,
+    AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -26,7 +25,6 @@ pub struct HandlerOptions {
     pub common_option: CommonOption,
 }
 
-#[derive(Clone)]
 pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
@@ -71,12 +69,8 @@ impl OutboundHandler for Handler {
 
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
-    fn proto(&self) -> OutboundProxy {
-        OutboundProxy::ProxyGroup(
-            crate::config::internal::proxy::OutboundGroupProtocol::Fallback(
-                OutboundGroupFallback::default(),
-            ),
-        )
+    fn proto(&self) -> OutboundType {
+        OutboundType::Fallback
     }
 
     /// The proxy remote address

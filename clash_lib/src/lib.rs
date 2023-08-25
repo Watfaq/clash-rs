@@ -154,7 +154,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     ));
 
     let dispatcher = Arc::new(Dispatcher::new(
-        outbound_manager,
+        outbound_manager.clone(),
         router,
         dns_resolver.clone(),
         config.general.mode,
@@ -181,6 +181,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         dispatcher,
         global_state,
         dns_resolver,
+        outbound_manager,
     );
     if let Some(r) = api_runner {
         runners.push(r);
