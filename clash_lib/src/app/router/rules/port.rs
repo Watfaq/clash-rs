@@ -19,4 +19,12 @@ impl RuleMatcher for Port {
     fn target(&self) -> &str {
         self.target.as_str()
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.port.to_string().clone())
+    }
+
+    fn type_name(&self) -> &str {
+        "Port"
+    }
 }

@@ -9,7 +9,7 @@ use crate::{config::internal::config::Controller, GlobalState, Runner};
 
 use super::{
     dispatcher, inbound::manager::ThreadSafeInboundManager,
-    outbound::manager::ThreadSafeOutboundManager, ThreadSafeDNSResolver,
+    outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter, ThreadSafeDNSResolver,
 };
 
 mod handlers;
@@ -27,6 +27,7 @@ pub fn get_api_runner(
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
     outbound_manager: ThreadSafeOutboundManager,
+    router: ThreadSafeRouter,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
         let app_state = Arc::new(AppState {
@@ -49,7 +50,9 @@ pub fn get_api_runner(
                         dns_resolver,
                     ),
                 )
+                .nest("/rules", handlers::rule::routes(router))
                 .nest("/proxies", handlers::proxy::routes(outbound_manager))
+                .nest("/connections", handlers::connection::routes())
                 .layer(middlewares::auth::AuthMiddlewareLayer::new(
                     controller_cfg.secret.unwrap_or_default(),
                 ))

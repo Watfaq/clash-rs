@@ -90,21 +90,11 @@ impl HealthCheck {
             .await;
     }
 
-    pub fn stop(&mut self) {
-        if let Some(task_handle) = self.task_handle.take() {
-            task_handle.abort();
-        }
-    }
-
     pub fn update(&mut self, proxies: Vec<AnyOutboundHandler>) {
         self.proxies = proxies;
     }
 
     pub fn auto(&self) -> bool {
         self.interval != 0
-    }
-
-    pub fn url(&self) -> &str {
-        &self.url
     }
 }

@@ -14,4 +14,12 @@ impl RuleMatcher for RuleSet {
     fn target(&self) -> &str {
         self.target.as_str()
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.rule_set.clone())
+    }
+
+    fn type_name(&self) -> &str {
+        "RuleSet"
+    }
 }

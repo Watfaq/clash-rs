@@ -18,4 +18,12 @@ impl RuleMatcher for Domain {
     fn target(&self) -> &str {
         &self.target
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.domain.clone())
+    }
+
+    fn type_name(&self) -> &str {
+        "Domain"
+    }
 }

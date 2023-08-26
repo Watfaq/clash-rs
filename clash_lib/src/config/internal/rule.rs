@@ -1,7 +1,7 @@
 use crate::Error;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
-pub enum Rule {
+pub enum RuleType {
     Domain {
         domain: String,
         target: String,
@@ -48,7 +48,44 @@ pub enum Rule {
     },
 }
 
-impl Rule {
+impl Display for RuleType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuleType::Domain { domain, target } => write!(f, "DOMAIN,{},{}", domain, target),
+            RuleType::DomainSuffix {
+                domain_suffix,
+                target,
+            } => write!(f, "DOMAIN-SUFFIX"),
+            RuleType::DomainKeyword {
+                domain_keyword,
+                target,
+            } => write!(f, "DOMAIN-KEYWORD"),
+            RuleType::GeoIP {
+                target,
+                country_code,
+                no_resolve,
+            } => write!(f, "GEOIP"),
+            RuleType::IPCIDR {
+                ipnet,
+                target,
+                no_resolve,
+            } => write!(f, "IP-CIDR"),
+            RuleType::SRCIPCIDR {
+                ipnet,
+                target,
+                no_resolve,
+            } => write!(f, "SRC-IP-CIDR"),
+            RuleType::SRCPort { target, port } => write!(f, "SRC-PORT"),
+            RuleType::DSTPort { target, port } => write!(f, "DST-PORT"),
+            RuleType::ProcessName => write!(f, "PROCESS-NAME"),
+            RuleType::ProcessPath => write!(f, "PROCESS-PATH"),
+            RuleType::RuleSet { rule_set, target } => write!(f, "RULE-SET"),
+            RuleType::Match { target } => write!(f, "MATCH"),
+        }
+    }
+}
+
+impl RuleType {
     pub fn new(
         proto: &str,
         payload: &str,
@@ -56,19 +93,19 @@ impl Rule {
         params: Option<Vec<&str>>,
     ) -> Result<Self, Error> {
         match proto {
-            "DOMAIN" => Ok(Rule::Domain {
+            "DOMAIN" => Ok(RuleType::Domain {
                 domain: payload.to_string(),
                 target: target.to_string(),
             }),
-            "DOMAIN-SUFFIX" => Ok(Rule::DomainSuffix {
+            "DOMAIN-SUFFIX" => Ok(RuleType::DomainSuffix {
                 domain_suffix: payload.to_string(),
                 target: target.to_string(),
             }),
-            "DOMAIN-KEYWORD" => Ok(Rule::DomainKeyword {
+            "DOMAIN-KEYWORD" => Ok(RuleType::DomainKeyword {
                 domain_keyword: payload.to_string(),
                 target: target.to_string(),
             }),
-            "GEOIP" => Ok(Rule::GeoIP {
+            "GEOIP" => Ok(RuleType::GeoIP {
                 target: target.to_string(),
                 country_code: payload.to_string(),
                 no_resolve: if let Some(params) = params {
@@ -77,7 +114,7 @@ impl Rule {
                     false
                 },
             }),
-            "IP-CIDR" | "IP-CIDR6" => Ok(Rule::IPCIDR {
+            "IP-CIDR" | "IP-CIDR6" => Ok(RuleType::IPCIDR {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
                 no_resolve: if let Some(params) = params {
@@ -86,7 +123,7 @@ impl Rule {
                     false
                 },
             }),
-            "SRC-IP-CIDR" => Ok(Rule::SRCIPCIDR {
+            "SRC-IP-CIDR" => Ok(RuleType::SRCIPCIDR {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
                 no_resolve: if let Some(params) = params {
@@ -95,13 +132,13 @@ impl Rule {
                     false
                 },
             }),
-            "SRC-PORT" => Ok(Rule::SRCPort {
+            "SRC-PORT" => Ok(RuleType::SRCPort {
                 target: target.to_string(),
                 port: payload
                     .parse()
                     .expect(format!("invalid port: {}", payload).as_str()),
             }),
-            "DST-PORT" => Ok(Rule::DSTPort {
+            "DST-PORT" => Ok(RuleType::DSTPort {
                 target: target.to_string(),
                 port: payload
                     .parse()
@@ -109,11 +146,11 @@ impl Rule {
             }),
             "PROCESS-NAME" => todo!(),
             "PROCESS-PATH" => todo!(),
-            "RULE-SET" => Ok(Rule::RuleSet {
+            "RULE-SET" => Ok(RuleType::RuleSet {
                 rule_set: payload.to_string(),
                 target: target.to_string(),
             }),
-            "MATCH" => Ok(Rule::Match {
+            "MATCH" => Ok(RuleType::Match {
                 target: target.to_string(),
             }),
             _ => Err(Error::InvalidConfig(format!(
@@ -124,24 +161,24 @@ impl Rule {
     }
 }
 
-impl TryFrom<String> for Rule {
+impl TryFrom<String> for RuleType {
     type Error = crate::Error;
 
     fn try_from(line: String) -> Result<Self, Self::Error> {
         let parts = line.split(",").map(str::trim).collect::<Vec<&str>>();
 
         match parts.as_slice() {
-            [proto, target] => Rule::new(proto, "", target, None),
-            [proto, payload, target] => Rule::new(proto, payload, target, None),
+            [proto, target] => RuleType::new(proto, "", target, None),
+            [proto, payload, target] => RuleType::new(proto, payload, target, None),
             [proto, payload, target, params @ ..] => {
-                Rule::new(proto, payload, target, Some(params.to_vec()))
+                RuleType::new(proto, payload, target, Some(params.to_vec()))
             }
             _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", line))),
         }
     }
 }
 
-impl FromStr for Rule {
+impl FromStr for RuleType {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

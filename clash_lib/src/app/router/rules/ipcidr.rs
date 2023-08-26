@@ -25,4 +25,12 @@ impl RuleMatcher for IPCIDR {
     fn should_resolve_ip(&self) -> bool {
         !self.no_resolve
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.ipnet.to_string())
+    }
+
+    fn type_name(&self) -> &str {
+        "IPCIDR"
+    }
 }

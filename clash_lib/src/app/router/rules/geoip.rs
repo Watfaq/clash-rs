@@ -35,4 +35,12 @@ impl RuleMatcher for GeoIP {
     fn should_resolve_ip(&self) -> bool {
         !self.no_resolve
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.country_code.clone())
+    }
+
+    fn type_name(&self) -> &str {
+        "GeoIP"
+    }
 }

@@ -7,12 +7,12 @@ use crate::app::router::rules::RuleMatcher;
 use crate::app::ThreadSafeDNSResolver;
 
 use crate::common::http::new_http_client;
-use crate::config::internal::rule::Rule;
+use crate::config::internal::rule::RuleType;
 use crate::session::{Session, SocksAddr};
 
 use crate::app::router::rules::final_::Final;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+
 use tracing::info;
 
 mod mmdb;
@@ -23,13 +23,13 @@ pub struct Router {
     dns_resolver: ThreadSafeDNSResolver,
 }
 
-pub type ThreadSafeRouter = Arc<RwLock<Router>>;
+pub type ThreadSafeRouter = Arc<Router>;
 
 const MATCH: &str = "MATCH";
 
 impl Router {
     pub async fn new(
-        rules: Vec<Rule>,
+        rules: Vec<RuleType>,
         dns_resolver: ThreadSafeDNSResolver,
         mmdb_path: String,
         mmdb_download_url: Option<String>,
@@ -45,24 +45,24 @@ impl Router {
             rules: rules
                 .into_iter()
                 .map(|r| match r {
-                    Rule::Domain { domain, target } => {
+                    RuleType::Domain { domain, target } => {
                         Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
                     }
-                    Rule::DomainSuffix {
+                    RuleType::DomainSuffix {
                         domain_suffix,
                         target,
                     } => Box::new(DomainSuffix {
                         suffix: domain_suffix,
                         target,
                     }),
-                    Rule::DomainKeyword {
+                    RuleType::DomainKeyword {
                         domain_keyword,
                         target,
                     } => Box::new(DomainKeyword {
                         keyword: domain_keyword,
                         target,
                     }),
-                    Rule::IPCIDR {
+                    RuleType::IPCIDR {
                         ipnet,
                         target,
                         no_resolve,
@@ -72,7 +72,7 @@ impl Router {
                         no_resolve,
                         match_src: false,
                     }),
-                    Rule::SRCIPCIDR {
+                    RuleType::SRCIPCIDR {
                         ipnet,
                         target,
                         no_resolve,
@@ -83,7 +83,7 @@ impl Router {
                         match_src: true,
                     }),
 
-                    Rule::GeoIP {
+                    RuleType::GeoIP {
                         target,
                         country_code,
                         no_resolve,
@@ -93,20 +93,22 @@ impl Router {
                         no_resolve,
                         mmdb: mmdb.clone(),
                     }),
-                    Rule::SRCPort { target, port } => Box::new(rules::port::Port {
+                    RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
                         port,
                         target,
                         is_src: true,
                     }),
-                    Rule::DSTPort { target, port } => Box::new(rules::port::Port {
+                    RuleType::DSTPort { target, port } => Box::new(rules::port::Port {
                         port,
                         target,
                         is_src: false,
                     }),
-                    Rule::ProcessName => todo!(),
-                    Rule::ProcessPath => todo!(),
-                    Rule::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),
-                    Rule::Match { target } => Box::new(Final { target }),
+                    RuleType::ProcessName => todo!(),
+                    RuleType::ProcessPath => todo!(),
+                    RuleType::RuleSet { rule_set, target } => {
+                        Box::new(RuleSet { rule_set, target })
+                    }
+                    RuleType::Match { target } => Box::new(Final { target }),
                 })
                 .collect(),
             dns_resolver,
@@ -138,5 +140,10 @@ impl Router {
         }
 
         MATCH
+    }
+
+    /// API handlers
+    pub fn get_all_rules(&self) -> &Vec<Box<dyn RuleMatcher>> {
+        &self.rules
     }
 }

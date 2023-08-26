@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::def;
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
-use crate::config::internal::rule::Rule;
+use crate::config::internal::rule::RuleType;
 use crate::proxy::utils::Interface;
 use crate::{
     app::dns,
@@ -22,7 +22,7 @@ pub struct Config {
     pub dns: dns::Config,
     pub experimental: Option<Experimental>,
     pub profile: Profile,
-    pub rules: Vec<Rule>,
+    pub rules: Vec<RuleType>,
     /// a list maintaining the order from the config file
     proxy_names: Vec<String>,
     pub proxies: HashMap<String, OutboundProxy>,
@@ -82,7 +82,7 @@ impl TryFrom<def::Config> for Config {
                 .rule
                 .into_iter()
                 .map(|x| {
-                    x.parse::<Rule>()
+                    x.parse::<RuleType>()
                         .map_err(|x| Error::InvalidConfig(x.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?,

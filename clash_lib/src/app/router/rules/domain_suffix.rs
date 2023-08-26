@@ -20,4 +20,12 @@ impl RuleMatcher for DomainSuffix {
     fn target(&self) -> &str {
         self.target.as_str()
     }
+
+    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
+        Box::new(self.suffix.clone())
+    }
+
+    fn type_name(&self) -> &str {
+        "DomainSuffix"
+    }
 }

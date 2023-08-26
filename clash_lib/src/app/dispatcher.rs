@@ -65,13 +65,7 @@ impl Dispatcher {
         info!("dispatching {} with mode {}", sess, mode);
         let outbound_name = match *mode {
             RunMode::Global => PROXY_GLOBAL.to_string(),
-            RunMode::Rule => self
-                .router
-                .read()
-                .await
-                .match_route(&sess)
-                .await
-                .to_string(),
+            RunMode::Rule => self.router.match_route(&sess).await.to_string(),
             RunMode::Direct => PROXY_DIRECT.to_string(),
         };
 
@@ -139,7 +133,7 @@ impl Dispatcher {
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = packet.dst_addr.clone();
 
-                let outbound_name = router.read().await.match_route(&sess).await.to_string();
+                let outbound_name = router.match_route(&sess).await.to_string();
 
                 let remote_receiver_w = remote_receiver_w.clone();
 

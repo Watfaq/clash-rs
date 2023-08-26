@@ -143,7 +143,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         .await?,
     ));
 
-    let router = Arc::new(RwLock::new(
+    let router = Arc::new(
         Router::new(
             config.rules,
             dns_resolver.clone(),
@@ -151,11 +151,11 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.general.mmdb_download_url,
         )
         .await,
-    ));
+    );
 
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager.clone(),
-        router,
+        router.clone(),
         dns_resolver.clone(),
         config.general.mode,
     ));
@@ -182,6 +182,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         global_state,
         dns_resolver,
         outbound_manager,
+        router,
     );
     if let Some(r) = api_runner {
         runners.push(r);
