@@ -76,6 +76,6 @@ mock! {
         ) -> io::Result<AnyOutboundDatagram>;
 
         /// for API
-        fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
+        async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
     }
 }

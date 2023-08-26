@@ -39,7 +39,7 @@ fn jump_hash(key: u64, buckets: i32) -> i32 {
 
 pub fn strategy_rr() -> StrategyFn {
     let mut index = 0;
-    Box::new(move |proxies: Vec<AnyOutboundHandler>, sess: &Session| {
+    Box::new(move |proxies: Vec<AnyOutboundHandler>, _: &Session| {
         let len = proxies.len();
         index = (index + 1) % len;
         Box::pin(futures::future::ok(proxies[index].clone()))

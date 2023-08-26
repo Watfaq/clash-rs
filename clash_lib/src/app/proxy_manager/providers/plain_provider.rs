@@ -2,12 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;
+use tracing::debug;
 
-use crate::{
-    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
-    proxy::AnyOutboundHandler,
-    Error,
-};
+use crate::{app::proxy_manager::healthcheck::HealthCheck, proxy::AnyOutboundHandler, Error};
 
 use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
 
@@ -18,8 +15,6 @@ struct Inner {
 pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
-    proxy_registry: Arc<Mutex<ProxyManager>>,
-    latency_test_url: String,
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -27,8 +22,6 @@ impl PlainProvider {
     pub fn new(
         name: String,
         proxies: Vec<AnyOutboundHandler>,
-        proxy_registry: Arc<Mutex<ProxyManager>>,
-        latency_test_url: String,
         mut hc: HealthCheck,
     ) -> anyhow::Result<Self> {
         if proxies.is_empty() {
@@ -36,14 +29,13 @@ impl PlainProvider {
         }
 
         if hc.auto() {
+            debug!("kicking off healthcheck: {}", name);
             hc.kick_off();
         }
 
         Ok(Self {
             name,
             proxies,
-            proxy_registry,
-            latency_test_url,
             inner: Arc::new(Mutex::new(Inner { hc })),
         })
     }

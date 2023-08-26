@@ -49,3 +49,7 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
     hasher.update(bytes);
     hasher.finalize().to_vec()
 }
+
+pub fn default_bool_true() -> bool {
+    true
+}

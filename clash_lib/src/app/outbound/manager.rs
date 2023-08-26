@@ -53,7 +53,7 @@ impl OutboundManager {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
         let mut selector_control = HashMap::new();
-        let proxy_manager = Arc::new(Mutex::new(ProxyManager::new(dns_resolver.clone())));
+        let proxy_manager = Arc::new(ProxyManager::new(dns_resolver.clone()));
 
         Self::load_proxy_providers(
             proxy_providers,
@@ -92,10 +92,10 @@ impl OutboundManager {
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
-        let proxy_manager = self.proxy_manager.lock().await;
+        let proxy_manager = self.proxy_manager.clone();
 
         for (k, v) in self.handlers.iter() {
-            let mut m = v.as_map();
+            let mut m = v.as_map().await;
 
             let alive = proxy_manager.alive(k).await;
             let history = proxy_manager.delay_history(k).await;
@@ -112,12 +112,44 @@ impl OutboundManager {
         r
     }
 
+    pub async fn get_proxy(
+        &self,
+        proxy: &AnyOutboundHandler,
+    ) -> HashMap<String, Box<dyn Serialize + Send>> {
+        let mut r = proxy.as_map().await;
+
+        let proxy_manager = self.proxy_manager.clone();
+
+        let alive = proxy_manager.alive(proxy.name()).await;
+        let history = proxy_manager.delay_history(proxy.name()).await;
+        let support_udp = proxy.support_udp().await;
+
+        r.insert("history".to_string(), Box::new(history));
+        r.insert("alive".to_string(), Box::new(alive));
+        r.insert("name".to_string(), Box::new(proxy.name().to_owned()));
+        r.insert("udp".to_string(), Box::new(support_udp));
+
+        r
+    }
+
+    /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
+    pub async fn url_test(
+        &self,
+        proxy: AnyOutboundHandler,
+        url: &str,
+        timeout: Duration,
+    ) -> std::io::Result<(u16, u16)> {
+        let proxy_manager = self.proxy_manager.clone();
+
+        proxy_manager.url_test(proxy, url, Some(timeout)).await
+    }
+
     // API handlers end
 
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
-        proxy_manager: Arc<Mutex<ProxyManager>>,
+        proxy_manager: ThreadSafeProxyManager,
         provider_registry: HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
         selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
@@ -155,8 +187,10 @@ impl OutboundManager {
             fn make_provider_from_proxies(
                 name: &str,
                 proxies: &Vec<String>,
+                interval: u64,
+                lazy: bool,
                 handlers: &HashMap<String, AnyOutboundHandler>,
-                proxy_manager: Arc<Mutex<ProxyManager>>,
+                proxy_manager: ThreadSafeProxyManager,
                 proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
             ) -> Result<ThreadSafeProxyProvider, Error> {
                 let proxies = proxies
@@ -172,21 +206,16 @@ impl OutboundManager {
                 let hc = HealthCheck::new(
                     proxies.clone(),
                     DEFAULT_LATENCY_TEST_URL.to_owned(),
-                    0, // this is a manual HC
-                    true,
+                    interval,
+                    lazy,
                     proxy_manager.clone(),
                 )
                 .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
 
                 let pd = Arc::new(Mutex::new(
-                    PlainProvider::new(
-                        name.to_owned(),
-                        proxies,
-                        proxy_manager,
-                        DEFAULT_LATENCY_TEST_URL.to_owned(),
-                        hc,
-                    )
-                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
+                    PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
+                        Error::InvalidConfig(format!("invalid provider config: {}", x))
+                    })?,
                 ));
 
                 proxy_providers.push(pd.clone());
@@ -201,6 +230,8 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
+                            0,
+                            true,
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
@@ -234,6 +265,8 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
+                            proto.interval,
+                            proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
@@ -269,6 +302,8 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
+                            proto.interval,
+                            proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
@@ -303,6 +338,8 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
+                            proto.interval,
+                            proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
@@ -336,6 +373,8 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
+                            0,
+                            true,
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
@@ -355,7 +394,7 @@ impl OutboundManager {
                     let selector = selector::Handler::new(
                         selector::HandlerOptions {
                             name: proto.name.clone(),
-                            udp: proto.udp.unwrap_or_default(),
+                            udp: proto.udp.unwrap_or(true),
                             ..Default::default()
                         },
                         providers,
@@ -380,14 +419,7 @@ impl OutboundManager {
             proxy_manager.clone(),
         )
         .unwrap();
-        let pd = PlainProvider::new(
-            PROXY_GLOBAL.to_owned(),
-            g,
-            proxy_manager.clone(),
-            DEFAULT_LATENCY_TEST_URL.to_owned(),
-            hc,
-        )
-        .unwrap();
+        let pd = PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap();
 
         handlers.insert(
             PROXY_GLOBAL.to_owned(),
@@ -414,7 +446,7 @@ impl OutboundManager {
 
     async fn load_proxy_providers(
         proxy_providers: HashMap<String, OutboundProxyProvider>,
-        proxy_manager: Arc<Mutex<ProxyManager>>,
+        proxy_manager: ThreadSafeProxyManager,
         resolver: ThreadSafeDNSResolver,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
     ) -> Result<(), Error> {
@@ -441,7 +473,6 @@ impl OutboundManager {
                         Duration::from_secs(http.interval),
                         Arc::new(vehicle),
                         hc,
-                        proxy_manager.clone(),
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 
@@ -463,7 +494,6 @@ impl OutboundManager {
                         Duration::from_secs(file.interval.unwrap_or_default()),
                         Arc::new(vehicle),
                         hc,
-                        proxy_manager.clone(),
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 

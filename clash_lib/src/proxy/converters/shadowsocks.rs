@@ -1,5 +1,5 @@
 use crate::{
-    config::internal::proxy::{OutboundShadowsocks, OutboundVmess},
+    config::internal::proxy::OutboundShadowsocks,
     proxy::{
         shadowsocks::{Handler, HandlerOptions, OBFSOption},
         AnyOutboundHandler, CommonOption,
@@ -55,6 +55,7 @@ impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
                 },
                 None => None,
             },
+            udp: s.udp,
         });
         Ok(h)
     }

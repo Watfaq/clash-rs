@@ -160,7 +160,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     ) -> io::Result<AnyOutboundDatagram>;
 
     /// for API
-    fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
         let mut m = HashMap::new();
         m.insert("type".to_string(), Box::new(self.proto()) as _);
 

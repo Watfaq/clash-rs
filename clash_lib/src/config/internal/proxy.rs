@@ -1,3 +1,4 @@
+use crate::common::utils::default_bool_true;
 use crate::config::utils;
 use crate::Error;
 use serde::de::value::MapDeserializer;
@@ -96,6 +97,7 @@ pub struct OutboundShadowsocks {
     pub port: u16,
     pub cipher: String,
     pub password: String,
+    #[serde(default = "default_bool_true")]
     pub udp: bool,
     pub plugin: Option<String>,
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
@@ -237,8 +239,8 @@ pub struct OutboundGroupUrlTest {
     pub url: String,
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
-    pub tolerance: Option<u16>,
     pub lazy: Option<bool>,
+    pub tolerance: Option<u16>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupFallback {
@@ -251,6 +253,7 @@ pub struct OutboundGroupFallback {
     pub url: String,
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
+    pub lazy: Option<bool>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
@@ -264,6 +267,7 @@ pub struct OutboundGroupLoadBalance {
     pub url: String,
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
+    pub lazy: Option<bool>,
     pub strategy: Option<LoadBalanceStrategy>,
 }
 

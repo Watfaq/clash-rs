@@ -1,7 +1,14 @@
+use axum::extract::Query;
 use axum::http::Request;
 use axum::{body::Body, response::Response};
 use futures::future::BoxFuture;
+use serde::Deserialize;
 use tower::{Layer, Service};
+
+#[derive(Debug, Clone, Deserialize)]
+struct AuthQuery {
+    token: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct AuthMiddlewareLayer {
@@ -69,32 +76,15 @@ where
             .body(axum::body::boxed("unauthorized".to_string()))
             .unwrap();
 
-        // uri doesn't contain scheme and host
-        let ur =
-            url::Url::parse(format!("http://localhost{}", req.uri().to_string()).as_str()).unwrap();
-
-        if self.is_websocket(&req)
-            && req
-                .uri()
-                .query()
-                .map(|q| q.contains("token"))
-                .unwrap_or(false)
-        {
-            let token = ur
-                .query_pairs()
-                .find_map(|(k, v)| {
-                    if k == "token" {
-                        Some(v.to_string())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_default();
-            if token == self.token {
-                return Box::pin(self.inner.call(req));
-            } else {
-                return Box::pin(async move { Ok(unauthorised) });
+        if self.is_websocket(&req) {
+            let q = Query::<AuthQuery>::try_from_uri(req.uri()).ok();
+            if let Some(q) = q {
+                if q.token == self.token {
+                    return Box::pin(self.inner.call(req));
+                }
             }
+
+            return Box::pin(async move { Ok(unauthorised) });
         }
 
         let header = req

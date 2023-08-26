@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
-use tokio::sync::Mutex;
+use tracing::debug;
 
 use super::{
     fether::Fetcher, proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
     ThreadSafeProviderVehicle,
 };
 use crate::{
-    app::proxy_manager::{healthcheck::HealthCheck, ProxyManager},
+    app::proxy_manager::healthcheck::HealthCheck,
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{direct, reject, AnyOutboundHandler},
@@ -35,7 +35,6 @@ pub struct ProxySetProvider {
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
     inner: std::sync::Arc<tokio::sync::Mutex<FileProviderInner>>,
-    proxy_registry: Arc<Mutex<ProxyManager>>,
 }
 
 impl ProxySetProvider {
@@ -44,21 +43,23 @@ impl ProxySetProvider {
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
         mut hc: HealthCheck,
-        proxy_registry: Arc<Mutex<ProxyManager>>,
     ) -> anyhow::Result<Self> {
         if hc.auto() {
+            debug!("kicking off healthcheck: {}", name);
             hc.kick_off();
         }
 
         let inner = Arc::new(tokio::sync::Mutex::new(FileProviderInner {
             proxies: vec![],
-            hc,
+            hc: hc.clone(),
         }));
 
         let inner_clone = inner.clone();
 
         let updater: Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static> =
             Box::new(move |input: Vec<AnyOutboundHandler>| -> () {
+                let mut hc = hc.clone();
+                hc.update(input.clone());
                 let inner = inner_clone.clone();
                 tokio::spawn(async move {
                     let mut inner = inner.lock().await;
@@ -94,11 +95,7 @@ impl ProxySetProvider {
         );
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater.into()));
-        Ok(Self {
-            fetcher,
-            inner,
-            proxy_registry,
-        })
+        Ok(Self { fetcher, inner })
     }
 }
 
@@ -160,7 +157,7 @@ impl ProxyProvider for ProxySetProvider {
 mod tests {
     use std::{sync::Arc, time::Duration};
 
-    use tokio::{sync::Mutex, time::sleep};
+    use tokio::time::sleep;
 
     use crate::app::{
         dns::resolver::MockClashResolver,
@@ -203,7 +200,7 @@ proxies:
 
         let mock_resolver = MockClashResolver::new();
 
-        let latency_manager = Arc::new(Mutex::new(ProxyManager::new(Arc::new(mock_resolver))));
+        let latency_manager = Arc::new(ProxyManager::new(Arc::new(mock_resolver)));
         let hc = HealthCheck::new(
             vec![],
             "http://www.google.com".to_owned(),
@@ -213,14 +210,8 @@ proxies:
         )
         .unwrap();
 
-        let mut provider = ProxySetProvider::new(
-            "test".to_owned(),
-            Duration::from_secs(1),
-            vehicle,
-            hc,
-            latency_manager.clone(),
-        )
-        .unwrap();
+        let mut provider =
+            ProxySetProvider::new("test".to_owned(), Duration::from_secs(1), vehicle, hc).unwrap();
 
         assert_eq!(provider.proxies().await.len(), 0);
 

@@ -83,13 +83,20 @@ proxy-groups:
       - DIRECT
     strategy: round-robin
     url: "http://www.gstatic.com/generate_204"
-    interval: 300
+    interval: 10
 
   - name: select
     type: select
     proxies:
       - "ss"
       - DIRECT
+
+  - name: test 🌏
+    type: select
+    proxies:
+      - "ss"
+      - DIRECT
+
 
 
 proxies:

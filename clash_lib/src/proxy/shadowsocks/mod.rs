@@ -12,7 +12,6 @@ use shadowsocks::{
 
 use crate::{
     app::ThreadSafeDNSResolver,
-    config::internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
     Error,
@@ -137,6 +136,7 @@ pub struct HandlerOptions {
     pub password: String,
     pub cipher: String,
     pub plugin_opts: Option<OBFSOption>,
+    pub udp: bool,
 }
 
 pub struct Handler {
@@ -164,7 +164,7 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        true
+        self.opts.udp
     }
 
     async fn connect_stream(

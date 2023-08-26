@@ -1,6 +1,6 @@
-use std::{io, sync::Arc};
+use std::{collections::HashMap, io, sync::Arc};
 
-use serde::Serialize;
+use erased_serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -11,7 +11,6 @@ use crate::{
         },
         ThreadSafeDNSResolver,
     },
-    config::internal::proxy::OutboundProxy,
     session::{Session, SocksAddr},
 };
 
@@ -65,7 +64,7 @@ impl Handler {
     }
 
     async fn fastest(&self, touch: bool) -> AnyOutboundHandler {
-        let proxy_manager = self.proxy_manager.lock().await;
+        let proxy_manager = self.proxy_manager.clone();
         let mut inner = self.inner.lock().await;
 
         let proxies = self.get_proxies(touch).await;
@@ -173,5 +172,21 @@ impl OutboundHandler for Handler {
             .await
             .connect_datagram(sess, resolver)
             .await
+    }
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
+        let all = get_proxies_from_providers(&self.providers, false).await;
+
+        let mut m = HashMap::new();
+        m.insert("type".to_string(), Box::new(self.proto()) as _);
+        m.insert(
+            "now".to_string(),
+            Box::new(self.fastest(false).await.name().to_owned()) as _,
+        );
+        m.insert(
+            "all".to_string(),
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+        );
+        m
     }
 }

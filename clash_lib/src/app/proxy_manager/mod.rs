@@ -1,15 +1,19 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
 };
 
 use boring::ssl::{SslConnector, SslMethod};
 
+use chrono::{DateTime, Utc};
 use http::Request;
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 use crate::{
@@ -28,14 +32,14 @@ pub mod providers;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct DelayHistory {
-    time: SystemTime,
+    time: DateTime<Utc>,
     delay: u16,
     mean_delay: u16,
 }
 
 #[derive(Default)]
 struct ProxyState {
-    alive: bool,
+    alive: AtomicBool,
     delay_history: VecDeque<DelayHistory>,
 }
 
@@ -43,17 +47,17 @@ struct ProxyState {
 /// TODO: move all proxies here, too, maybe.
 #[derive(Clone)]
 pub struct ProxyManager {
-    proxy_state: Arc<Mutex<HashMap<String, ProxyState>>>,
+    proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 }
 
-pub type ThreadSafeProxyManager = std::sync::Arc<tokio::sync::Mutex<ProxyManager>>;
+pub type ThreadSafeProxyManager = std::sync::Arc<ProxyManager>;
 
 impl ProxyManager {
     pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
         Self {
             dns_resolver,
-            proxy_state: Arc::new(Mutex::new(HashMap::new())),
+            proxy_state: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -68,7 +72,7 @@ impl ProxyManager {
             let proxy = proxy.clone();
             let url = url.to_owned();
             let timeout = timeout.clone();
-            let mut manager = self.clone();
+            let manager = self.clone();
             futures.push(async move {
                 manager
                     .url_test(proxy, url.as_str(), timeout)
@@ -81,22 +85,22 @@ impl ProxyManager {
 
     pub async fn alive(&self, name: &str) -> bool {
         self.proxy_state
-            .lock()
+            .read()
             .await
             .get(name)
-            .map(|x| x.alive)
+            .map(|x| x.alive.load(Ordering::Relaxed))
             .unwrap_or(true) // if not found, assume it's alive
     }
 
-    pub async fn report_alive(&mut self, name: &str, alive: bool) {
-        let mut state = self.proxy_state.lock().await;
-        let mut state = state.entry(name.to_owned()).or_default();
-        state.alive = alive;
+    pub async fn report_alive(&self, name: &str, alive: bool) {
+        let mut state = self.proxy_state.write().await;
+        let state = state.entry(name.to_owned()).or_default();
+        state.alive.store(alive, Ordering::Relaxed)
     }
 
     pub async fn delay_history(&self, name: &str) -> Vec<DelayHistory> {
         self.proxy_state
-            .lock()
+            .read()
             .await
             .get(name)
             .map(|x| x.delay_history.clone())
@@ -117,11 +121,17 @@ impl ProxyManager {
     }
 
     pub async fn url_test(
-        &mut self,
+        &self,
         proxy: AnyOutboundHandler,
         url: &str,
         timeout: Option<Duration>,
     ) -> std::io::Result<(u16, u16)> {
+        debug!(
+            "testing {} with url {}, timeout {:?}",
+            proxy.name(),
+            url,
+            timeout
+        );
         let name = proxy.name().to_owned();
         let default_timeout = Duration::from_secs(30);
 
@@ -168,11 +178,11 @@ impl ProxyManager {
         let result = tester.await;
         self.report_alive(&name, result.is_ok()).await;
         let ins = DelayHistory {
-            time: SystemTime::now(),
+            time: Utc::now(),
             delay: result.as_ref().map(|x| x.0).unwrap_or(0),
             mean_delay: result.as_ref().map(|x| x.1).unwrap_or(0),
         };
-        let mut state = self.proxy_state.lock().await;
+        let mut state = self.proxy_state.write().await;
         let state = state.entry(name.to_owned()).or_default();
 
         state.delay_history.push_back(ins);
@@ -204,7 +214,7 @@ mod tests {
             .expect_resolve()
             .returning(|_| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
-        let mut manager = super::ProxyManager::new(Arc::new(mock_resolver));
+        let manager = super::ProxyManager::new(Arc::new(mock_resolver));
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler
@@ -259,7 +269,7 @@ mod tests {
             .expect_resolve()
             .returning(|_| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
-        let mut manager = super::ProxyManager::new(Arc::new(mock_resolver));
+        let manager = super::ProxyManager::new(Arc::new(mock_resolver));
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler

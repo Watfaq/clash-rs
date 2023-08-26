@@ -1,6 +1,7 @@
-use std::{io, sync::Arc};
+use std::{collections::HashMap, io, sync::Arc};
 
 use async_trait::async_trait;
+use erased_serde::Serialize;
 use futures::stream::{self, StreamExt};
 
 use crate::{
@@ -125,5 +126,18 @@ impl OutboundHandler for Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyOutboundDatagram> {
         Err(new_io_error("not implemented for Relay"))
+    }
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
+        let all = get_proxies_from_providers(&self.providers, false).await;
+
+        let mut m = HashMap::new();
+        m.insert("type".to_string(), Box::new(self.proto()) as _);
+        m.insert(
+            "all".to_string(),
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+        );
+
+        m
     }
 }
