@@ -73,7 +73,7 @@ impl Dispatcher {
             .outbound_manager
             .read()
             .await
-            .get(outbound_name.as_str())
+            .get_outbound(outbound_name.as_str())
             .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
 
         match handler.connect_stream(&sess, self.resolver.clone()).await {
@@ -140,7 +140,7 @@ impl Dispatcher {
                 let handler = outbound_manager
                     .read()
                     .await
-                    .get(outbound_name.as_str())
+                    .get_outbound(outbound_name.as_str())
                     .expect(format!("unknown rule: {}", outbound_name).as_str());
 
                 let mut outbound_handle_guard = outbound_handle_guard.lock().await;

@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use chrono::{DateTime, Utc};
 use tokio::{sync::Mutex, time::Instant};
 use tracing::info;
 
@@ -12,7 +13,7 @@ use crate::common::utils;
 
 use super::{ProviderVehicleType, ThreadSafeProviderVehicle};
 
-struct FetcherInner {
+struct Inner {
     updated_at: SystemTime,
     hash: [u8; 16],
 }
@@ -23,7 +24,7 @@ pub struct Fetcher<U, P> {
     vehicle: ThreadSafeProviderVehicle,
     thread_handle: Option<tokio::task::JoinHandle<()>>,
     ticker: Option<tokio::time::Interval>,
-    inner: std::sync::Arc<tokio::sync::Mutex<FetcherInner>>,
+    inner: std::sync::Arc<tokio::sync::Mutex<Inner>>,
     parser: Arc<Mutex<P>>,
     pub on_update: Arc<Mutex<Option<U>>>,
 }
@@ -59,7 +60,7 @@ where
                     interval,
                 )),
             },
-            inner: Arc::new(tokio::sync::Mutex::new(FetcherInner {
+            inner: Arc::new(tokio::sync::Mutex::new(Inner {
                 updated_at: SystemTime::UNIX_EPOCH,
                 hash: [0; 16],
             })),
@@ -73,6 +74,10 @@ where
 
     pub fn vehicle_type(&self) -> super::ProviderVehicleType {
         self.vehicle.typ()
+    }
+
+    pub async fn updated_at(&self) -> DateTime<Utc> {
+        self.inner.lock().await.updated_at.into()
     }
 
     pub async fn initial(&mut self) -> anyhow::Result<T> {
@@ -141,7 +146,7 @@ where
     }
 
     async fn update_inner(
-        inner: Arc<Mutex<FetcherInner>>,
+        inner: Arc<Mutex<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
         parser: Arc<Mutex<P>>,
     ) -> anyhow::Result<(T, bool)> {

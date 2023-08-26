@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
+use erased_serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -57,6 +58,28 @@ impl Provider for PlainProvider {
     }
     async fn update(&self) -> std::io::Result<()> {
         Ok(())
+    }
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
+        let mut m: HashMap<String, Box<dyn Serialize + Send>> = HashMap::new();
+
+        m.insert("name".to_owned(), Box::new(self.name().to_string()));
+        m.insert("type".to_owned(), Box::new(self.typ().to_string()));
+        m.insert(
+            "vehicle_type".to_owned(),
+            Box::new(self.vehicle_type().to_string()),
+        );
+        m.insert(
+            "proxies".to_owned(),
+            Box::new(
+                self.proxies
+                    .iter()
+                    .map(|p| p.name().to_owned())
+                    .collect::<Vec<_>>(),
+            ),
+        );
+
+        m
     }
 }
 

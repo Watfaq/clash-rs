@@ -47,12 +47,20 @@ pub fn get_api_runner(
                         inbound_manager,
                         dispatcher,
                         global_state,
-                        dns_resolver,
+                        dns_resolver.clone(),
                     ),
                 )
                 .nest("/rules", handlers::rule::routes(router))
-                .nest("/proxies", handlers::proxy::routes(outbound_manager))
+                .nest(
+                    "/proxies",
+                    handlers::proxy::routes(outbound_manager.clone()),
+                )
                 .nest("/connections", handlers::connection::routes())
+                .nest(
+                    "/providers/proxies",
+                    handlers::provider::routes(outbound_manager),
+                )
+                .nest("/dns", handlers::dns::routes(dns_resolver))
                 .layer(middlewares::auth::AuthMiddlewareLayer::new(
                     controller_cfg.secret.unwrap_or_default(),
                 ))

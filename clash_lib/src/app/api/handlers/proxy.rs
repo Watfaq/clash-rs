@@ -57,7 +57,7 @@ async fn find_proxy_by_name<B>(
     next: Next<B>,
 ) -> Response {
     let outbound_manager = state.outbound_manager.read().await;
-    if let Some(proxy) = outbound_manager.get(&name) {
+    if let Some(proxy) = outbound_manager.get_outbound(&name) {
         req.extensions_mut().insert(proxy);
         next.run(req).await
     } else {

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use trust_dns_resolver::TokioAsyncResolver;
 
-use super::ClashResolver;
+use super::{resolver::ResolverKind, ClashResolver};
 
 pub(crate) struct SystemResolver {
     resolver: TokioAsyncResolver,
@@ -47,7 +47,11 @@ impl ClashResolver for SystemResolver {
         true
     }
 
-    fn set_ipv6(&self, enabled: bool) {
+    fn set_ipv6(&self, _: bool) {
         // NOOP
+    }
+
+    fn kind(&self) -> ResolverKind {
+        ResolverKind::System
     }
 }

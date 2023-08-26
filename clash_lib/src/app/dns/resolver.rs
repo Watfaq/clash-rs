@@ -26,6 +26,11 @@ use super::{
 
 static TTL: Duration = Duration::from_secs(60);
 
+pub enum ResolverKind {
+    Clash,
+    System,
+}
+
 /// A implementation of "anti-poisoning" Resolver
 /// it can hold multiple clients in different protocols
 /// each client can also hold a "default_resolver"
@@ -39,6 +44,8 @@ pub trait ClashResolver: Sync + Send {
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);
+
+    fn kind(&self) -> ResolverKind;
 }
 
 pub struct Resolver {
@@ -276,6 +283,10 @@ impl ClashResolver for Resolver {
 
     fn set_ipv6(&self, enable: bool) {
         self.ipv6.store(enable, Relaxed);
+    }
+
+    fn kind(&self) -> ResolverKind {
+        ResolverKind::Clash
     }
 }
 

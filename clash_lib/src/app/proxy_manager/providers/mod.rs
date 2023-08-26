@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use erased_serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::sync::Arc;
@@ -62,4 +64,6 @@ pub trait Provider {
     fn typ(&self) -> ProviderType;
     async fn initialize(&mut self) -> io::Result<()>;
     async fn update(&self) -> io::Result<()>;
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
 }

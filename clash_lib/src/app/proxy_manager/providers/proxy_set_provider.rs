@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use erased_serde::Serialize as ESerialize;
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
@@ -24,7 +25,7 @@ struct ProviderScheme {
     proxies: Option<Vec<HashMap<String, Value>>>,
 }
 
-struct FileProviderInner {
+struct Inner {
     proxies: Vec<AnyOutboundHandler>,
     hc: HealthCheck,
 }
@@ -34,7 +35,7 @@ pub struct ProxySetProvider {
         Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
-    inner: std::sync::Arc<tokio::sync::Mutex<FileProviderInner>>,
+    inner: std::sync::Arc<tokio::sync::Mutex<Inner>>,
 }
 
 impl ProxySetProvider {
@@ -49,7 +50,7 @@ impl ProxySetProvider {
             hc.kick_off();
         }
 
-        let inner = Arc::new(tokio::sync::Mutex::new(FileProviderInner {
+        let inner = Arc::new(tokio::sync::Mutex::new(Inner {
             proxies: vec![],
             hc: hc.clone(),
         }));
@@ -129,6 +130,36 @@ impl Provider for ProxySetProvider {
             }
         }
         Ok(())
+    }
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
+        let mut m: HashMap<String, Box<dyn ESerialize + Send>> = HashMap::new();
+
+        m.insert("name".to_owned(), Box::new(self.name().to_string()));
+        m.insert("type".to_owned(), Box::new(self.typ().to_string()));
+        m.insert(
+            "vehicleType".to_owned(),
+            Box::new(self.vehicle_type().to_string()),
+        );
+
+        let proxies = futures::future::join_all(
+            self.inner
+                .lock()
+                .await
+                .proxies
+                .clone()
+                .iter()
+                .map(|p| p.as_map()),
+        )
+        .await;
+        m.insert("proxies".to_owned(), Box::new(proxies));
+
+        m.insert(
+            "updatedAt".to_owned(),
+            Box::new(self.fetcher.updated_at().await),
+        );
+
+        m
     }
 }
 

@@ -35,6 +35,7 @@ use super::utils::proxy_groups_dag_sort;
 
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
+    proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
     proxy_manager: ThreadSafeProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
@@ -67,7 +68,7 @@ impl OutboundManager {
             outbounds,
             outbound_groups,
             proxy_manager.clone(),
-            provider_registry,
+            &mut provider_registry,
             &mut handlers,
             &mut selector_control,
         )
@@ -77,11 +78,16 @@ impl OutboundManager {
             handlers,
             proxy_manager,
             selector_control,
+            proxy_providers: provider_registry,
         })
     }
 
-    pub fn get(&self, name: &str) -> Option<AnyOutboundHandler> {
+    pub fn get_outbound(&self, name: &str) -> Option<AnyOutboundHandler> {
         self.handlers.get(name).map(Clone::clone)
+    }
+
+    pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
+        self.proxy_providers.get(name).map(Clone::clone)
     }
 
     // API handles start
@@ -144,13 +150,17 @@ impl OutboundManager {
         proxy_manager.url_test(proxy, url, Some(timeout)).await
     }
 
+    pub fn get_proxy_providers(&self) -> HashMap<String, ThreadSafeProxyProvider> {
+        self.proxy_providers.clone()
+    }
+
     // API handlers end
 
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_manager: ThreadSafeProxyManager,
-        provider_registry: HashMap<String, ThreadSafeProxyProvider>,
+        provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
         selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
     ) -> Result<(), Error> {

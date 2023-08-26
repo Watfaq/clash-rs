@@ -25,6 +25,9 @@ mock! {
         fn typ(&self) -> ProviderType;
         async fn initialize(&mut self) -> std::io::Result<()>;
         async fn update(&self) -> std::io::Result<()>;
+
+        async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
+
     }
 
     #[async_trait::async_trait]
