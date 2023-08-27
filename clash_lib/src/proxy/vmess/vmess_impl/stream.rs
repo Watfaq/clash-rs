@@ -309,7 +309,7 @@ where
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
-            vmess_debug!("send non aead handshake request for user{}", id.uuid);
+            vmess_debug!("send non aead handshake request for user {}", id.uuid);
             stream.write_all(&out).await?;
         } else {
             let out = header::seal_vmess_aead_header(id.cmd_key, buf.freeze().to_vec(), now)

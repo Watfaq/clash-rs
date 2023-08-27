@@ -134,13 +134,17 @@ proxies:
         Host: www.amazon.com
   - name: vmess-altid
     type: vmess
-    server: 10.0.0.13
-    port: 16823
-    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    server: tw-1.ac.laowanxiang.com
+    port: 153
+    uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687
     alterId: 64
     cipher: auto
     udp: true
-    skip-cert-verify: true
+    network: ws
+    ws-opts:
+      path: /api/v3/download.getFile
+      headers:
+        Host: 5607b9d187e655736f563fee87d7283994721.laowanxiang.com
 
 rules:
   - DOMAIN,ipinfo.io,relay

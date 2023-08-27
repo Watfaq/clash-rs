@@ -22,7 +22,9 @@ macro_rules! ws_debug {
 }
 
 pub struct WebsocketStreamBuilder {
-    uri: Uri,
+    server: String,
+    port: u16,
+    path: String,
     headers: HashMap<String, String>,
     ws_config: Option<WebSocketConfig>,
     max_early_data: usize,
@@ -31,14 +33,18 @@ pub struct WebsocketStreamBuilder {
 
 impl WebsocketStreamBuilder {
     pub fn new(
-        uri: Uri,
+        server: String,
+        port: u16,
+        path: String,
         headers: HashMap<String, String>,
         ws_config: Option<WebSocketConfig>,
         max_early_data: usize,
         early_data_header_name: String,
     ) -> Self {
         Self {
-            uri,
+            server,
+            port,
+            path,
             headers,
             ws_config,
             max_early_data,
@@ -47,27 +53,19 @@ impl WebsocketStreamBuilder {
     }
 
     fn req(&self) -> Request<()> {
-        let authority = self.uri.authority().unwrap().as_str();
-        let host = authority
-            .find('@')
-            .map(|idx| authority.split_at(idx + 1).1)
-            .unwrap_or_else(|| authority);
         let mut request = Request::builder()
             .method("GET")
-            .header("Host", host)
             .header("Connection", "Upgrade")
             .header("Upgrade", "websocket")
             .header("Sec-WebSocket-Version", "13")
             .header("Sec-WebSocket-Key", generate_key())
-            .uri(self.uri.clone());
+            .uri(format!("ws://{}:{}{}", self.server, self.port, self.path));
         for (k, v) in self.headers.iter() {
-            if k != "Host" {
-                request = request.header(k.as_str(), v.as_str());
-            }
+            request = request.header(k.as_str(), v.as_str());
         }
         if self.max_early_data > 0 {
             // we will replace this field later
-            request = request.header(self.early_data_header_name.as_str(), "s");
+            request = request.header(self.early_data_header_name.as_str(), "xxoo");
         }
         request.body(()).unwrap()
     }

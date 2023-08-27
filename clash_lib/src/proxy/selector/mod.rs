@@ -9,6 +9,7 @@ use crate::{
     app::{
         proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
     },
+    p_debug,
     session::{Session, SocksAddr},
     Error,
 };
@@ -69,7 +70,7 @@ impl Handler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         for proxy in proxies {
             if proxy.name() == self.inner.lock().await.current {
-                debug!("{} selected {}", self.name(), proxy.name());
+                p_debug!("{} selected {}", self.name(), proxy.name());
                 return proxy;
             }
         }

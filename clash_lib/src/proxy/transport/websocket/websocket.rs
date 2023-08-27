@@ -1,6 +1,6 @@
 use std::{fmt::Debug, pin::Pin, task::Poll};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::BytesMut;
 use futures::{ready, Sink, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};

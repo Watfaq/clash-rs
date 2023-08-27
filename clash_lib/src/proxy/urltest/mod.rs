@@ -11,6 +11,7 @@ use crate::{
         },
         ThreadSafeDNSResolver,
     },
+    p_debug,
     session::{Session, SocksAddr},
 };
 
@@ -104,14 +105,18 @@ impl Handler {
             }
         }
 
-        debug!(
+        p_debug!(
             "{} fastest {} is {}",
             self.name(),
             fastest.name(),
             fastest_delay
         );
 
-        return inner.fastest_proxy.as_ref().unwrap().clone();
+        return inner
+            .fastest_proxy
+            .as_ref()
+            .unwrap_or(proxies.first().unwrap())
+            .clone();
     }
 }
 

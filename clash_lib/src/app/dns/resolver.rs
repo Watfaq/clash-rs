@@ -70,7 +70,7 @@ impl Resolver {
     ) -> anyhow::Result<Vec<net::IpAddr>> {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
-        let name = rr::Name::from_str(host)
+        let name = rr::Name::from_str_relaxed(host)
             .map_err(|_x| anyhow!("invalid domain: {}", host))?
             .append_domain(&rr::Name::root())?; // makes it FQDN
         q.set_name(name);
@@ -428,6 +428,15 @@ mod tests {
     use std::sync::Arc;
     use trust_dns_client::op;
     use trust_dns_proto::rr;
+
+    #[test]
+    fn test_bad_labels() {
+        let name = rr::Name::from_str_relaxed("some_domain.understore")
+            .unwrap()
+            .append_domain(&rr::Name::root())
+            .unwrap();
+        assert_eq!(name.to_string(), "some_domain.understore");
+    }
 
     #[tokio::test]
     async fn test_udp_resolve() {

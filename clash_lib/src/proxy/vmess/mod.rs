@@ -89,11 +89,10 @@ impl Handler {
 
         let underlying = match self.opts.transport {
             Some(VmessTransport::Ws(ref opt)) => {
-                let uri = format!("ws://{}:{}{}", self.opts.server, self.opts.port, opt.path)
-                    .parse::<Uri>()
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                 let ws_builder = transport::WebsocketStreamBuilder::new(
-                    uri,
+                    self.opts.server.clone(),
+                    self.opts.port,
+                    opt.path.clone(),
                     opt.headers.clone(),
                     None,
                     opt.max_early_data,
