@@ -21,8 +21,30 @@ use crate::dns::dns_client::DNSNetMode;
 pub use resolver::ClashResolver;
 pub use resolver::Resolver;
 
+#[macro_export]
+macro_rules! dns_debug {
+    ($($arg:tt)*) => {
+        debug!(target: "dns", $($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! dns_info {
+    ($($arg:tt)*) => {
+        info!(target: "dns", $($arg)*)
+    };
+}
+
+#[macro_export]
+macro_rules! dns_warn {
+    ($($arg:tt)*) => {
+        warn!(target: "dns", $($arg)*)
+    };
+}
+
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
+    // TODO: make this non mutable
     async fn exchange(&mut self, msg: &op::Message) -> anyhow::Result<op::Message>;
 }
 

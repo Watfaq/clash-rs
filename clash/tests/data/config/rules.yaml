@@ -85,7 +85,7 @@ proxy-groups:
       - DIRECT
     strategy: round-robin
     url: "http://www.gstatic.com/generate_204"
-    interval: 10
+    interval: 300
 
   - name: select
     type: select
@@ -132,10 +132,19 @@ proxies:
       path: /api/v3/download.getFile
       headers:
         Host: www.amazon.com
+  - name: vmess-altid
+    type: vmess
+    server: 10.0.0.13
+    port: 16823
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 64
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - DOMAIN-KEYWORD,httpbin,ws-vmess
+  - DOMAIN-KEYWORD,httpbin,vmess-altid
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,ss
   - DOMAIN,google.com,ss

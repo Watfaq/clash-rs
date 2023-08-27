@@ -1,7 +1,6 @@
 use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
-use erased_serde::Serialize;
 use futures::TryFutureExt;
 use http::Uri;
 
@@ -21,6 +20,13 @@ use super::{
     AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler,
     OutboundType,
 };
+
+#[macro_export]
+macro_rules! vmess_debug {
+    ($($arg:tt)*) => {
+        debug!(target: "vmess", $($arg)*)
+    };
+}
 
 pub struct HttpOption {
     pub method: String,

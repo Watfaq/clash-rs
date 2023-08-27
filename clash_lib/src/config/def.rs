@@ -41,6 +41,18 @@ pub enum LogLevel {
     Silent,
 }
 
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::Debug => write!(f, "debug"),
+            LogLevel::Info => write!(f, "info"),
+            LogLevel::Warning => write!(f, "warning"),
+            LogLevel::Error => write!(f, "error"),
+            LogLevel::Silent => write!(f, "off"),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct Config {

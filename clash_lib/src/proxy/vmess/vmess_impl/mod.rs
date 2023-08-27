@@ -10,6 +10,7 @@ mod user;
 pub(crate) const VERSION: u8 = 1;
 
 pub(crate) const OPTION_CHUNK_STREAM: u8 = 1;
+#[allow(unused)]
 pub(crate) const OPTION_CHUNK_MASK: u8 = 2;
 
 type Security = u8;

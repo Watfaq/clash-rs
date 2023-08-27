@@ -1,8 +1,9 @@
 use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
 use crate::dns::{ClashResolver, NameServer, ThreadSafeDNSClient};
+use crate::dns_debug;
 use crate::proxy::utils::Interface;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, warn};
 
 pub async fn make_clients(
     servers: Vec<NameServer>,
@@ -11,7 +12,7 @@ pub async fn make_clients(
     let mut rv = Vec::new();
 
     for s in servers {
-        debug!("building nameserver: {:?}", s);
+        dns_debug!("building nameserver: {:?}", s);
 
         let (host, port) = if s.net == DNSNetMode::DHCP {
             (s.address.as_str(), "0")
@@ -36,7 +37,7 @@ pub async fn make_clients(
         .await
         {
             Ok(c) => rv.push(c),
-            Err(e) => error!("initializing DNS client: {}", e),
+            Err(e) => warn!("initializing DNS client: {}", e),
         }
     }
 

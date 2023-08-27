@@ -1,8 +1,7 @@
 use crate::def::LogLevel;
 use tokio::sync::broadcast::Sender;
 
-use tracing::Event;
-use tracing_subscriber::filter::Targets;
+use tracing_subscriber::filter::Directive;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{filter, EnvFilter};
@@ -62,12 +61,16 @@ where
 
 pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Result<()> {
     let filter = EnvFilter::builder()
-        .with_default_directive(filter::LevelFilter::from(level).into())
+        .with_default_directive(
+            format!("clash={}", level)
+                .parse::<Directive>()
+                .unwrap()
+                .into(),
+        )
         .from_env_lossy();
 
     let subscriber = tracing_subscriber::registry()
         .with(filter)
-        .with(Targets::new().with_target("clash", level))
         .with(collector)
         .with(
             tracing_subscriber::fmt::Layer::new()

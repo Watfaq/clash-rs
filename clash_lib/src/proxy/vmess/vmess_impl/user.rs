@@ -59,10 +59,11 @@ fn next_id(i: &uuid::Uuid) -> uuid::Uuid {
         );
         boring_sys::MD5_Update(
             &mut ctx as _,
-            b"b48619fe-8f02-49e0-b9e9-edf763e17e21".as_ptr() as _,
+            b"16167dc8-16b6-4e6d-b8bb-65dd68113a81".as_ptr() as _,
             36,
         );
         let mut buf = [0u8; MD5_DIGEST_LENGTH as _];
+        /*
         loop {
             boring_sys::MD5_Final(buf.as_mut_ptr() as _, &mut ctx as _);
             if i.as_bytes() != buf.as_slice() {
@@ -75,6 +76,9 @@ fn next_id(i: &uuid::Uuid) -> uuid::Uuid {
                 36,
             );
         }
+        */
+        boring_sys::MD5_Final(buf.as_mut_ptr() as _, &mut ctx as _);
+        uuid::Uuid::from_bytes(buf)
     }
 }
 
@@ -89,5 +93,13 @@ mod tests {
             id.cmd_key,
             [181, 13, 145, 106, 192, 206, 192, 103, 152, 26, 248, 229, 243, 138, 117, 143]
         );
+    }
+
+    #[test]
+    fn test_next_id() {
+        let id =
+            super::new_id(&uuid::Uuid::parse_str("b831381d-6324-4d53-ad4f-8cda48b30811").unwrap());
+        let next_id = super::next_id(&id.uuid);
+        assert_eq!(next_id.to_string(), "5a071834-12d5-980a-72ac-845d5568d17d");
     }
 }

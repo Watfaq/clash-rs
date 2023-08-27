@@ -1,6 +1,6 @@
-use std::{fmt::Debug, pin::Pin};
+use std::{fmt::Debug, pin::Pin, task::Poll};
 
-use bytes::{Buf, Bytes};
+use bytes::{Buf, Bytes, BytesMut};
 use futures::{ready, Sink, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
@@ -12,7 +12,7 @@ use crate::{
 
 pub struct WebsocketConn {
     inner: WebSocketStream<AnyStream>,
-    read_buffer: Option<Bytes>,
+    read_buffer: BytesMut,
 }
 
 impl Debug for WebsocketConn {
@@ -28,7 +28,7 @@ impl WebsocketConn {
     pub fn from_websocket(stream: WebSocketStream<AnyStream>) -> Self {
         Self {
             inner: stream,
-            read_buffer: None,
+            read_buffer: BytesMut::new(),
         }
     }
 }
@@ -39,47 +39,38 @@ impl AsyncRead for WebsocketConn {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        loop {
-            if let Some(read_buffer) = &mut self.read_buffer {
-                if read_buffer.len() <= buf.remaining() {
-                    buf.put_slice(read_buffer);
-                    self.read_buffer = None;
-                } else {
-                    buf.put_slice(&read_buffer[..buf.remaining()]);
-                    read_buffer.advance(buf.remaining());
-                }
-                return std::task::Poll::Ready(Ok(()));
-            }
-
-            let message = ready!(Pin::new(&mut self.inner).poll_next(cx));
-
-            if message.is_none() {
-                return std::task::Poll::Ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "unexpected EOF",
-                )));
-            }
-
-            let message = message.unwrap().map_err(map_io_error)?;
-
-            match message {
-                tokio_tungstenite::tungstenite::Message::Binary(binary) => {
-                    if binary.len() < buf.remaining() {
-                        buf.put_slice(&binary);
-                    } else {
-                        buf.put_slice(&binary[..buf.remaining()]);
-                        self.read_buffer = Some(Bytes::from(binary[buf.remaining()..].to_vec()));
-                    }
-                    return std::task::Poll::Ready(Ok(()));
-                }
-                tokio_tungstenite::tungstenite::Message::Close(_) => {
-                    return std::task::Poll::Ready(Ok(()))
-                }
-                _ => {
-                    return std::task::Poll::Ready(Err(new_io_error("unexpected message type")));
-                }
-            }
+        if !self.read_buffer.is_empty() {
+            let to_read = std::cmp::min(buf.remaining(), self.read_buffer.len());
+            let for_read = self.read_buffer.split_to(to_read);
+            buf.put_slice(&for_read[..to_read]);
+            return std::task::Poll::Ready(Ok(()));
         }
+        Poll::Ready(ready!(Pin::new(&mut self.inner).poll_next(cx)).map_or(
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "ws broken pipe",
+            )),
+            |item| {
+                item.map_or(
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "ws broken pipe",
+                    )),
+                    |msg| match msg {
+                        Message::Binary(data) => {
+                            let to_read = std::cmp::min(buf.remaining(), data.len());
+                            buf.put_slice(&data[..to_read]);
+                            if to_read < data.len() {
+                                self.read_buffer.extend_from_slice(&data[to_read..]);
+                            }
+                            Ok(())
+                        }
+                        Message::Close(_) => Ok(()),
+                        _ => Err(new_io_error("ws invalid message type")),
+                    },
+                )
+            },
+        ))
     }
 }
 

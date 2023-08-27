@@ -14,7 +14,7 @@ use http::Request;
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -28,6 +28,20 @@ use super::ThreadSafeDNSResolver;
 pub mod healthcheck;
 mod http_client;
 pub mod providers;
+
+#[macro_export]
+macro_rules! pm_debug {
+    ($($arg:tt)*) => ({
+        debug!(target: "proxy_manager", $($arg)*);
+    });
+}
+
+#[macro_export]
+macro_rules! pm_warn {
+    ($($arg:tt)*) => ({
+        warn!(target: "proxy_manager", $($arg)*);
+    });
+}
 
 #[derive(Clone, Serialize)]
 pub struct DelayHistory {
@@ -125,7 +139,7 @@ impl ProxyManager {
         url: &str,
         timeout: Option<Duration>,
     ) -> std::io::Result<(u16, u16)> {
-        debug!(
+        pm_debug!(
             "testing {} with url {}, timeout {:?}",
             proxy.name(),
             url,
@@ -160,7 +174,7 @@ impl ProxyManager {
                                 .as_millis()
                                 .try_into()
                                 .expect("delay is too large");
-                            debug!(
+                            pm_debug!(
                                 "urltest for proxy {} with url {} returned response {} in {}ms",
                                 &name,
                                 url,
@@ -207,7 +221,7 @@ impl ProxyManager {
             state.delay_history.pop_front();
         }
 
-        debug!("{} alive: {}, delay: {:?}", name, result.is_ok(), result);
+        pm_debug!("{} alive: {}, delay: {:?}", name, result.is_ok(), result);
 
         result
     }

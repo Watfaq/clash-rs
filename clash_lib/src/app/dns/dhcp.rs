@@ -2,6 +2,7 @@ use crate::dns::dns_client::DNSNetMode;
 use crate::dns::helper::make_clients;
 use crate::dns::{Client, NameServer, Resolver, ThreadSafeDNSClient};
 use crate::proxy::utils::{new_udp_socket, Interface};
+use crate::{dns_debug, dns_warn};
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
@@ -48,7 +49,12 @@ impl Debug for DhcpClient {
 impl Client for DhcpClient {
     async fn exchange(&mut self, msg: &Message) -> anyhow::Result<Message> {
         let clients = self.resolve().await?;
-        debug!("using clients: {:?}", clients);
+        let mut dbg_str = vec![];
+        for c in clients {
+            let l = c.lock().await;
+            dbg_str.push(format!("{:?}", l));
+        }
+        debug!("using clients: {:?}", dbg_str);
         tokio::time::timeout(DHCP_TIMEOUT, Resolver::batch_exchange(clients, msg)).await?
     }
 }
@@ -166,7 +172,7 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
 }
 
 async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
-    debug!("probing NS servers from DHCP");
+    dns_debug!("probing NS servers from DHCP");
     let socket = listen_dhcp_client(iface).await?;
 
     let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
@@ -236,7 +242,10 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
                                         {
                                             match op {
                                                 dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
-                                                    debug!("got NS servers {:?} from DHCP", dns);
+                                                    dns_debug!(
+                                                        "got NS servers {:?} from DHCP",
+                                                        dns
+                                                    );
                                                     return dns.clone();
                                                 }
                                                 _ => yield_now().await,
@@ -254,8 +263,8 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         };
 
         tokio::select! {
-            _ = tx.closed() => {debug!("future cancelled, likely other clients won")},
-            value = get_response => tx.send(value).map_err(|x| warn!("send error: {:?}", x)).unwrap_or_default(),
+            _ = tx.closed() => {dns_debug!("future cancelled, likely other clients won")},
+            value = get_response => tx.send(value).map_err(|x| dns_warn!("send error: {:?}", x)).unwrap_or_default(),
         }
     });
 
@@ -268,7 +277,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         },
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
-            debug!("DHCP timeout after 10 secs");
+            dns_debug!("DHCP timeout after 10 secs");
             return Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"));
         }
     }

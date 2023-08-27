@@ -4,10 +4,10 @@ use crate::Error;
 
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadInPlace, KeyInit};
-use bytes::BytesMut;
 
 pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
     unsafe {
+        data.reserve(boring_sys::EVP_MAX_BLOCK_LENGTH as _);
         let ctx = boring_sys::EVP_CIPHER_CTX_new();
         let rv = boring_sys::EVP_EncryptInit_ex(
             ctx,
@@ -23,6 +23,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
         );
 
         if rv != 1 {
+            boring_sys::EVP_CIPHER_CTX_free(ctx);
             return Err(Error::Crypto(
                 CStr::from_ptr(
                     boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
@@ -44,6 +45,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
         );
 
         if rv != 1 {
+            boring_sys::EVP_CIPHER_CTX_free(ctx);
             return Err(Error::Crypto(
                 CStr::from_ptr(
                     boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
