@@ -127,6 +127,7 @@ proxies:
     cipher: auto
     udp: true
     skip-cert-verify: true
+    network: ws
     ws-opts:
       path: /api/v3/download.getFile
       headers:

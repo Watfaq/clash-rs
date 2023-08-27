@@ -77,7 +77,6 @@ impl Handler {
         &'a self,
         s: AnyStream,
         sess: &'a Session,
-        resolver: ThreadSafeDNSResolver,
         udp: bool,
     ) -> io::Result<AnyStream> {
         let mut stream = s;
@@ -182,7 +181,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         let stream = new_tcp_stream(
-            resolver.clone(),
+            resolver,
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
@@ -198,7 +197,7 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        self.inner_proxy_stream(stream, sess, resolver, false).await
+        self.inner_proxy_stream(stream, sess, false).await
     }
 
     /// wraps a stream with outbound handler
@@ -206,9 +205,9 @@ impl OutboundHandler for Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
+        _: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, resolver, false).await
+        self.inner_proxy_stream(s, sess, false).await
     }
 
     async fn connect_datagram(
@@ -241,9 +240,7 @@ impl OutboundHandler for Handler {
                 format!("failed to resolve {}", sess.destination.host()).as_str(),
             ))?;
 
-        let stream = self
-            .inner_proxy_stream(stream, sess, resolver, true)
-            .await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         Ok(Box::new(OutboundDatagramVmess::new(
             stream,
