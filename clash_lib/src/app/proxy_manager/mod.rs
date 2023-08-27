@@ -76,7 +76,7 @@ impl ProxyManager {
                 manager
                     .url_test(proxy, url.as_str(), timeout)
                     .await
-                    .map_err(|e| error!("healthcheck failed: {}", e))
+                    .map_err(|e| warn!("healthcheck failed: {}", e))
             });
         }
         futures::future::join_all(futures).await;

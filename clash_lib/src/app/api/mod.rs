@@ -1,15 +1,17 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
-use axum::http::Request;
-use axum::{middleware, response::Redirect, routing::get, Router};
+use axum::{response::Redirect, routing::get, Router};
 
-use futures::future::BoxFuture;
+use http::header;
+use http::Method;
 use tokio::sync::{broadcast::Sender, Mutex};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tracing::info;
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
+use super::logging::LogEvent;
 use super::{
     dispatcher, inbound::manager::ThreadSafeInboundManager,
     outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter, ThreadSafeDNSResolver,
@@ -19,12 +21,12 @@ mod handlers;
 mod middlewares;
 
 pub struct AppState {
-    log_source_tx: Sender<String>,
+    log_source_tx: Sender<LogEvent>,
 }
 
 pub fn get_api_runner(
     controller_cfg: Controller,
-    log_source: Sender<String>,
+    log_source: Sender<LogEvent>,
     inbound_manager: ThreadSafeInboundManager,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
@@ -38,6 +40,11 @@ pub fn get_api_runner(
         });
 
         let addr = bind_addr.parse().unwrap();
+
+        let cors = CorsLayer::new()
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH])
+            .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+            .allow_origin(Any);
 
         let runner = async move {
             info!("Starting API server at {}", addr);
@@ -68,6 +75,7 @@ pub fn get_api_runner(
                 .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
                     controller_cfg.secret.unwrap_or_default(),
                 ))
+                .route_layer(cors)
                 .with_state(app_state);
 
             if let Some(external_ui) = controller_cfg.external_ui {

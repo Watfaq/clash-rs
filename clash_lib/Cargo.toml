@@ -46,7 +46,7 @@ chacha20poly1305 = "0.10"
 aes-gcm = "0.10"
 filetime = "0.2"
 axum = { version = "0.6.20", features = ["ws"] }
-tower-http = { version = "0.4.0", features = ["fs", "trace"] }
+tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4.26", features = ["serde"] }
 
 

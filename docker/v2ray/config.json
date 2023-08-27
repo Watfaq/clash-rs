@@ -51,7 +51,13 @@
         ]
       },
       "streamSettings": {
-        "network": "ws"
+        "network": "ws",
+        "wsSettings": {
+          "path": "/api/v3/download.getFile",
+          "headers": {
+            "Host": "www.amazon.com"
+          }
+        }
       }
     },
     {

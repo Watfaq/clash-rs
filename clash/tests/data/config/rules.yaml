@@ -50,6 +50,7 @@ proxy-groups:
     proxies:
       - "ss"
       - "plain-vmess"
+      - "ws-vmess"
       - "auto"
       - "fallback-auto"
       - "load-balance"
@@ -117,10 +118,23 @@ proxies:
     cipher: auto
     udp: true
     skip-cert-verify: true
+  - name: ws-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 16824
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
+    ws-opts:
+      path: /api/v3/download.getFile
+      headers:
+        Host: www.amazon.com
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - DOMAIN-KEYWORD,httpbin,relay-one
+  - DOMAIN-KEYWORD,httpbin,ws-vmess
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,ss
   - DOMAIN,google.com,ss

@@ -1,6 +1,7 @@
 use crate::def::LogLevel;
 use tokio::sync::broadcast::Sender;
 
+use tracing::Event;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
@@ -18,10 +19,16 @@ impl From<LogLevel> for filter::LevelFilter {
     }
 }
 
-pub struct EventCollector(Vec<Sender<String>>);
+#[derive(Clone)]
+pub struct LogEvent {
+    pub level: LogLevel,
+    pub msg: String,
+}
+
+pub struct EventCollector(Vec<Sender<LogEvent>>);
 
 impl EventCollector {
-    pub fn new(recivers: Vec<Sender<String>>) -> Self {
+    pub fn new(recivers: Vec<Sender<LogEvent>>) -> Self {
         Self(recivers)
     }
 }
@@ -35,16 +42,20 @@ where
         event: &tracing::Event<'_>,
         _ctx: tracing_subscriber::layer::Context<'_, S>,
     ) {
-        let mut msg = vec![];
-        msg.push(format!("{}", event.metadata().level()));
-        msg.push(format!("{}", event.metadata().target()));
-        msg.push(format!("{}", event.metadata().name()));
-        for field in event.fields() {
-            msg.push(format!("{}", field.name()));
-        }
-
+        // TODO: format log here
+        let msg = format!("{}", event.metadata().name());
+        let event = LogEvent {
+            level: match event.metadata().level() {
+                &tracing::Level::ERROR => LogLevel::Error,
+                &tracing::Level::WARN => LogLevel::Warning,
+                &tracing::Level::INFO => LogLevel::Info,
+                &tracing::Level::DEBUG => LogLevel::Debug,
+                &tracing::Level::TRACE => LogLevel::Debug,
+            },
+            msg,
+        };
         for tx in &self.0 {
-            _ = tx.send(msg.join(""));
+            _ = tx.send(event.clone());
         }
     }
 }

@@ -20,8 +20,22 @@ pub async fn handle(
     })
     .on_upgrade(move |mut socket| async move {
         let mut rx = state.log_source_tx.subscribe();
-        while let Ok(msg) = rx.recv().await {
-            if let Err(e) = socket.send(Message::Text(msg)).await {
+        while let Ok(evt) = rx.recv().await {
+            // TODO: if I'd need to do 1 more of this I'd def pull serde-json |
+            let res = vec![
+                "{\"type\": \"",
+                match evt.level {
+                    crate::config::def::LogLevel::Debug => "debug",
+                    crate::config::def::LogLevel::Info => "info",
+                    crate::config::def::LogLevel::Warning => "warning",
+                    crate::config::def::LogLevel::Error => "error",
+                    crate::config::def::LogLevel::Silent => "slient",
+                },
+                "\", \"payload\": \"",
+                evt.msg.as_str(),
+                "\"}",
+            ];
+            if let Err(e) = socket.send(Message::Text(res.concat())).await {
                 warn!("ws send error: {}", e);
                 break;
             }
