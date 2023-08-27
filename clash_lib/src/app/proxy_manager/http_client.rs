@@ -15,6 +15,7 @@ use crate::{
 };
 
 #[derive(Clone)]
+/// A LocalConnector that has a enclosed AnyOutboundHandler for url test
 pub struct LocalConnector(pub AnyOutboundHandler, pub ThreadSafeDNSResolver);
 
 impl Service<Uri> for LocalConnector {
@@ -27,6 +28,11 @@ impl Service<Uri> for LocalConnector {
     }
 
     fn call(&mut self, remote: Uri) -> Self::Future {
+        let host = remote
+            .host()
+            .expect(format!("invalid url: {}", remote.to_string()).as_str())
+            .to_owned();
+
         let port = remote.port_u16().unwrap_or(match remote.scheme_str() {
             None => 80,
             Some(s) => match s {
@@ -37,7 +43,7 @@ impl Service<Uri> for LocalConnector {
         });
 
         let sess = Session {
-            destination: (remote.to_string(), port)
+            destination: (host, port)
                 .try_into()
                 .expect(format!("invalid url: {}", remote.to_string()).as_str()),
             ..Default::default()

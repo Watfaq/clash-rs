@@ -1,8 +1,11 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use axum::{routing::get, Router};
+use axum::http::Request;
+use axum::{middleware, response::Redirect, routing::get, Router};
 
+use futures::future::BoxFuture;
 use tokio::sync::{broadcast::Sender, Mutex};
+use tower_http::services::ServeDir;
 use tracing::info;
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
@@ -33,11 +36,12 @@ pub fn get_api_runner(
         let app_state = Arc::new(AppState {
             log_source_tx: log_source,
         });
+
         let addr = bind_addr.parse().unwrap();
 
         let runner = async move {
             info!("Starting API server at {}", addr);
-            let app = Router::new()
+            let mut app = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
                 .route("/version", get(handlers::version::handle))
@@ -61,10 +65,17 @@ pub fn get_api_runner(
                     handlers::provider::routes(outbound_manager),
                 )
                 .nest("/dns", handlers::dns::routes(dns_resolver))
-                .layer(middlewares::auth::AuthMiddlewareLayer::new(
+                .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
                     controller_cfg.secret.unwrap_or_default(),
                 ))
                 .with_state(app_state);
+
+            if let Some(external_ui) = controller_cfg.external_ui {
+                app = app
+                    .route("/ui", get(|| async { Redirect::to("/ui/") }))
+                    .nest_service("/ui/", ServeDir::new(external_ui));
+            }
+
             axum::Server::bind(&addr)
                 .serve(app.into_make_service_with_connect_info::<SocketAddr>())
                 .await

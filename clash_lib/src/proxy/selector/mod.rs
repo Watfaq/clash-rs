@@ -102,7 +102,7 @@ impl OutboundHandler for Handler {
     }
 
     fn proto(&self) -> OutboundType {
-        OutboundType::Select
+        OutboundType::Selector
     }
 
     async fn remote_addr(&self) -> Option<SocksAddr> {

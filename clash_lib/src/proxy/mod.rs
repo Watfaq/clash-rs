@@ -112,8 +112,9 @@ pub enum OutboundType {
     Shadowsocks,
     Vmess,
 
+    #[serde(rename = "URLTest")]
     UrlTest,
-    Select,
+    Selector,
     Relay,
     LoadBalance,
     Fallback,
@@ -160,6 +161,8 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     ) -> io::Result<AnyOutboundDatagram>;
 
     /// for API
+    /// the map only contains basic information
+    /// to populate history/liveness information, use the proxy_manager
     async fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
         let mut m = HashMap::new();
         m.insert("type".to_string(), Box::new(self.proto()) as _);

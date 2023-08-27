@@ -2,8 +2,14 @@
 Just a toy for fun, don't use please :+|
 
 TODOs
-- [x] proxy rules (relay, select, ...)
+- [ ] inbounds
+    - [x] http
+    - [x] socks5
     - [ ] authentication
+    - [ ] other...
+- [x] proxy rules (relay, select, ...)
+    - [x] ss
+    - [x] plain vmess
     - [ ] other protos and exts
         - [ ] trojan
         - [ ] socks5 + tls

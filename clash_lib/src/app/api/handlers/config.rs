@@ -55,20 +55,24 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
 
     let ports = inbound_manager.get_ports();
 
-    axum::response::Json(config::General {
-        inbound: config::Inbound {
-            port: ports.port,
-            socks_port: ports.socks_port,
-            redir_port: ports.redir_port,
-            tproxy_port: ports.tproxy_port,
-            mixed_port: ports.mixed_port,
-            bind_address: inbound_manager.get_bind_address().clone(),
-            ..Default::default()
-        },
-        mode: run_mode,
-        log_level: global_state.log_level,
-        ipv6: dns_resolver.ipv6(),
-        ..Default::default()
+    axum::response::Json(ConfigRequest {
+        port: ports.port,
+        socks_port: ports.socks_port,
+        redir_port: ports.redir_port,
+        tproxy_port: ports.tproxy_port,
+        mixed_port: ports.mixed_port,
+        bind_address: Some(inbound_manager.get_bind_address().to_string()),
+
+        mode: Some(run_mode),
+        log_level: Some(global_state.log_level),
+        ipv6: Some(dns_resolver.ipv6()),
+        allow_lan: Some(match inbound_manager.get_bind_address() {
+            BindAddress::Any => true,
+            BindAddress::One(one) => match one {
+                crate::proxy::utils::Interface::IpAddr(ip) => !ip.is_loopback(),
+                crate::proxy::utils::Interface::Name(iface) => iface != "lo",
+            },
+        }),
     })
 }
 
@@ -81,7 +85,7 @@ async fn update_configs() -> impl IntoResponse {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct PatchConfigRequest {
+struct ConfigRequest {
     port: Option<u16>,
     socks_port: Option<u16>,
     redir_port: Option<u16>,
@@ -94,9 +98,20 @@ struct PatchConfigRequest {
     allow_lan: Option<bool>,
 }
 
+impl ConfigRequest {
+    fn rebuild_listeners(&self) -> bool {
+        self.port.is_some()
+            || self.socks_port.is_some()
+            || self.redir_port.is_some()
+            || self.tproxy_port.is_some()
+            || self.mixed_port.is_some()
+            || self.bind_address.is_some()
+    }
+}
+
 async fn patch_configs(
     State(state): State<ConfigState>,
-    Json(payload): Json<PatchConfigRequest>,
+    Json(payload): Json<ConfigRequest>,
 ) -> impl IntoResponse {
     if payload.allow_lan.is_some() {
         warn!("setting allow_lan doesn't do anything. please set bind_address to a LAN address instead.");
@@ -104,7 +119,7 @@ async fn patch_configs(
 
     let mut inbound_manager = state.inbound_manager.lock().await;
 
-    if let Some(bind_address) = payload.bind_address {
+    if let Some(bind_address) = payload.bind_address.clone() {
         match bind_address.parse::<BindAddress>() {
             Ok(bind_address) => {
                 inbound_manager.set_bind_address(bind_address);
@@ -119,27 +134,31 @@ async fn patch_configs(
         }
     }
 
-    let current_ports = inbound_manager.get_ports();
-
-    let ports = Ports {
-        port: payload.port.or(current_ports.port),
-        socks_port: payload.socks_port.or(current_ports.socks_port),
-        redir_port: payload.redir_port.or(current_ports.redir_port),
-        tproxy_port: payload.tproxy_port.or(current_ports.tproxy_port),
-        mixed_port: payload.mixed_port.or(current_ports.mixed_port),
-    };
-
-    inbound_manager.rebuild_listeners(ports);
-
     let mut global_state = state.global_state.lock().await;
-    global_state
-        .inbound_listener_handle
-        .take()
-        .map(|h| h.abort());
 
-    let r = inbound_manager.get_runner().unwrap();
+    if payload.rebuild_listeners() {
+        // TODO: maybe buggy
+        let current_ports = inbound_manager.get_ports();
 
-    global_state.inbound_listener_handle = Some(tokio::spawn(r));
+        let ports = Ports {
+            port: payload.port.or(current_ports.port),
+            socks_port: payload.socks_port.or(current_ports.socks_port),
+            redir_port: payload.redir_port.or(current_ports.redir_port),
+            tproxy_port: payload.tproxy_port.or(current_ports.tproxy_port),
+            mixed_port: payload.mixed_port.or(current_ports.mixed_port),
+        };
+
+        inbound_manager.rebuild_listeners(ports);
+
+        global_state
+            .inbound_listener_handle
+            .take()
+            .map(|h| h.abort());
+
+        let r = inbound_manager.get_runner().unwrap();
+
+        global_state.inbound_listener_handle = Some(tokio::spawn(r));
+    }
 
     if let Some(mode) = payload.mode {
         state.dispatcher.set_mode(mode).await;

@@ -138,6 +138,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 })
                 .collect(),
             config.proxy_providers,
+            config.proxy_names,
             dns_resolver.clone(),
         )
         .await?,

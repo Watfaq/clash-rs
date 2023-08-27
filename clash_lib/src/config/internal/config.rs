@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use std::fmt::Display;
 use std::net::IpAddr;
 use std::str::FromStr;
 
@@ -24,17 +25,10 @@ pub struct Config {
     pub profile: Profile,
     pub rules: Vec<RuleType>,
     /// a list maintaining the order from the config file
-    proxy_names: Vec<String>,
+    pub proxy_names: Vec<String>,
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProvider>,
-}
-
-impl Config {
-    pub fn validate(&self) -> Result<(), crate::Error> {
-        //TODO: validate proxy group loop
-        Ok(())
-    }
 }
 
 impl TryFrom<def::Config> for Config {
@@ -134,7 +128,7 @@ impl TryFrom<def::Config> for Config {
                 },
             )?,
             // https://stackoverflow.com/a/62001313/1109167
-            proxy_names,
+            proxy_names: proxy_names,
             proxy_providers: c
                 .proxy_provider
                 .map(|m| {
@@ -174,22 +168,15 @@ mod tests {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
 pub struct General {
     pub(crate) inbound: Inbound,
-    #[serde(skip)]
     pub(crate) controller: Controller,
     pub mode: RunMode,
     pub log_level: LogLevel,
     pub ipv6: bool,
-    #[serde(skip)]
     pub interface: Option<Interface>,
-    #[serde(skip)]
     pub routing_mask: Option<u32>,
-    #[serde(skip)]
     pub mmdb: String,
-    #[serde(skip)]
     pub mmdb_download_url: Option<String>,
 }
 
@@ -197,13 +184,23 @@ pub struct Profile {
     store_selected: bool,
     store_fakeip: bool,
 }
-
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Clone, Default)]
 pub enum BindAddress {
     #[default]
-    #[serde(rename = "*")]
     Any,
     One(Interface),
+}
+
+impl Display for BindAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BindAddress::Any => write!(f, "*"),
+            BindAddress::One(one) => match one {
+                Interface::IpAddr(ip) => write!(f, "{}", ip),
+                Interface::Name(name) => write!(f, "{}", name),
+            },
+        }
+    }
 }
 
 impl FromStr for BindAddress {
@@ -224,15 +221,12 @@ impl FromStr for BindAddress {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
 pub struct Inbound {
     pub port: Option<u16>,
     pub socks_port: Option<u16>,
     pub redir_port: Option<u16>,
     pub tproxy_port: Option<u16>,
     pub mixed_port: Option<u16>,
-    #[serde(skip)]
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
 }

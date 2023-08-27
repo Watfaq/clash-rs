@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -9,7 +8,6 @@ use futures::Future;
 use http::Uri;
 use hyper::client::connect::{Connected, Connection};
 use hyper_boring::HttpsConnector;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tower::Service;
 
 use crate::{
@@ -20,6 +18,7 @@ use crate::{
 use super::errors::map_io_error;
 
 #[derive(Clone)]
+/// A LocalConnector that is generalised to connect to any url
 pub struct LocalConnector(pub ThreadSafeDNSResolver);
 
 impl Service<Uri> for LocalConnector {

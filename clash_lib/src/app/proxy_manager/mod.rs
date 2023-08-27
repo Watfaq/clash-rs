@@ -14,7 +14,7 @@ use http::Request;
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -30,10 +30,10 @@ mod http_client;
 pub mod providers;
 
 #[derive(Clone, Serialize)]
-#[serde(rename_all = "kebab-case")]
 pub struct DelayHistory {
     time: DateTime<Utc>,
     delay: u16,
+    #[serde(rename = "meanDelay")]
     mean_delay: u16,
 }
 
@@ -43,8 +43,7 @@ struct ProxyState {
     delay_history: VecDeque<DelayHistory>,
 }
 
-/// ProxyManager is only the latency registry.
-/// TODO: move all proxies here, too, maybe.
+/// ProxyManager is the latency registry.
 #[derive(Clone)]
 pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
@@ -133,10 +132,12 @@ impl ProxyManager {
             timeout
         );
         let name = proxy.name().to_owned();
+        let name_clone = name.clone();
         let default_timeout = Duration::from_secs(30);
 
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
+            let name = name_clone;
             let connector = LocalConnector(proxy.clone(), dns_resolver);
 
             let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
@@ -152,11 +153,27 @@ impl ProxyManager {
 
             let delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp).await {
-                    Ok(_) => Ok(now
-                        .elapsed()
-                        .as_millis()
-                        .try_into()
-                        .expect("delay is too large")),
+                    Ok(res) => match res {
+                        Ok(b) => {
+                            let delay = now
+                                .elapsed()
+                                .as_millis()
+                                .try_into()
+                                .expect("delay is too large");
+                            debug!(
+                                "urltest for proxy {} with url {} returned response {} in {}ms",
+                                &name,
+                                url,
+                                b.status(),
+                                delay
+                            );
+                            Ok(delay)
+                        }
+                        Err(e) => {
+                            warn!("urltest for proxy {} with url {} failed: {}", &name, url, e);
+                            Err(new_io_error(format!("{}: {}", url, e).as_str()))
+                        }
+                    },
                     Err(_) => Err(new_io_error(format!("timeout for {}", url).as_str())),
                 }?;
 

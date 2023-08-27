@@ -33,6 +33,8 @@ use crate::{
 
 use super::utils::proxy_groups_dag_sort;
 
+static RESERVED_PROVIDER_NAME: &str = "default";
+
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
@@ -49,6 +51,7 @@ impl OutboundManager {
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProvider>,
+        proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
@@ -67,6 +70,7 @@ impl OutboundManager {
         Self::load_handlers(
             outbounds,
             outbound_groups,
+            proxy_names,
             proxy_manager.clone(),
             &mut provider_registry,
             &mut handlers,
@@ -86,6 +90,7 @@ impl OutboundManager {
         self.handlers.get(name).map(Clone::clone)
     }
 
+    /// this doesn't populate history/liveness information
     pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
         self.proxy_providers.get(name).map(Clone::clone)
     }
@@ -159,6 +164,7 @@ impl OutboundManager {
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
+        proxy_names: Vec<String>,
         proxy_manager: ThreadSafeProxyManager,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
@@ -202,7 +208,14 @@ impl OutboundManager {
                 handlers: &HashMap<String, AnyOutboundHandler>,
                 proxy_manager: ThreadSafeProxyManager,
                 proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
+                provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
             ) -> Result<ThreadSafeProxyProvider, Error> {
+                if name == PROXY_DIRECT || name == PROXY_REJECT {
+                    return Err(Error::InvalidConfig(format!(
+                        "proxy group {} is reserved",
+                        name
+                    )));
+                }
                 let proxies = proxies
                     .into_iter()
                     .map(|x| {
@@ -229,6 +242,7 @@ impl OutboundManager {
                 ));
 
                 proxy_providers.push(pd.clone());
+                provider_registry.insert(name.to_owned(), pd.clone());
 
                 Ok(pd)
             }
@@ -245,6 +259,7 @@ impl OutboundManager {
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
+                            provider_registry,
                         )?);
                     }
 
@@ -280,6 +295,7 @@ impl OutboundManager {
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
+                            provider_registry,
                         )?);
                     }
 
@@ -317,6 +333,7 @@ impl OutboundManager {
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
+                            provider_registry,
                         )?);
                     }
 
@@ -353,6 +370,7 @@ impl OutboundManager {
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
+                            provider_registry,
                         )?);
                     }
 
@@ -388,6 +406,7 @@ impl OutboundManager {
                             handlers,
                             proxy_manager.clone(),
                             &mut proxy_providers,
+                            provider_registry,
                         )?);
                     }
 
@@ -417,9 +436,10 @@ impl OutboundManager {
             }
         }
 
+        // insert GLOBAL
         let mut g = vec![];
-        for handler in handlers.values() {
-            g.push(handler.clone());
+        for name in proxy_names {
+            g.push(handlers.get(&name).unwrap().clone());
         }
         let hc = HealthCheck::new(
             g.clone(),
@@ -429,22 +449,22 @@ impl OutboundManager {
             proxy_manager.clone(),
         )
         .unwrap();
-        let pd = PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap();
+        let pd = Arc::new(Mutex::new(
+            PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap(),
+        ));
+        let h = selector::Handler::new(
+            selector::HandlerOptions {
+                name: PROXY_GLOBAL.to_owned(),
+                udp: true,
+                ..Default::default()
+            },
+            vec![pd.clone()],
+        )
+        .await;
 
-        handlers.insert(
-            PROXY_GLOBAL.to_owned(),
-            Arc::new(
-                selector::Handler::new(
-                    selector::HandlerOptions {
-                        name: PROXY_GLOBAL.to_owned(),
-                        udp: true,
-                        ..Default::default()
-                    },
-                    vec![Arc::new(Mutex::new(pd))],
-                )
-                .await,
-            ),
-        );
+        provider_registry.insert(RESERVED_PROVIDER_NAME.to_owned(), pd);
+        handlers.insert(PROXY_GLOBAL.to_owned(), Arc::new(h.clone()));
+        selector_control.insert(PROXY_GLOBAL.to_owned(), Arc::new(Mutex::new(h)));
 
         for provider in proxy_providers {
             info!("initializing provider {}", provider.lock().await.name());
