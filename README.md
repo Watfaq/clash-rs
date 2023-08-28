@@ -22,14 +22,14 @@ TODOs
             - [x] ws
             - [x] aead and non-aead
         - [ ] trojan
-        - [ ]...
+        - [ ] ...
         - [ ] transports
             - [ ] grpc
             - [ ] tls
             - [ ] http
-- [-] providers (untested)
-    - [-] file
-    - [-] remote
+- [ ] providers (untested)
+    - [x] file
+    - [x] remote
 - [ ] rules
     - [x] domain_keyword
     - [x] domain_suffix
