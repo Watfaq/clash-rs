@@ -5,19 +5,56 @@ TODOs
 - [ ] inbounds
     - [x] http
     - [x] socks5
+    - [ ] mix port
     - [ ] authentication
-    - [ ] other...
-- [x] proxy rules (relay, select, ...)
-    - [x] ss
-    - [x] plain vmess
-    - [ ] other protos and exts
+- [x] proxy rules
+    - [x] groups
+        - [x] relay
+        - [x] select
+        - [x] urltest
+        - [x] loadbalance
+        - [x] fallback
+    - [x] proxies
+        - [x] ss
+        - [x] socks5
+            - [ ] with TLS
+        - [x] vmess
+            - [x] ws
+            - [x] aead and non-aead
         - [ ] trojan
-        - [ ] socks5 + tls
-        - [ ] grpc/tls/ws/http transport
+        - [ ]...
+        - [ ] transports
+            - [ ] grpc
+            - [ ] tls
+            - [ ] http
+- [-] providers (untested)
+    - [-] file
+    - [-] remote
+- [ ] rules
+    - [x] domain_keyword
+    - [x] domain_suffix
+    - [x] geoip
+    - [x] ipcidr
+    - [x] port
+    - [ ] process
+    - [ ] ruleset
 - [ ] DNS
+    - [x] clients
+        - [x] DoH
+        - [x] DoT
+        - [x] UDP/TCP
+        - [x] dhcp
     - [ ] server
     - [ ] HTTP query
-- [x] hc and fetchers
-- [ ] API - connections
+- [ ] API
+    - [x] proxies
+    - [x] configs
+    - [x] logs (TODO: log format)
+    - [x] providers
+    - [x] rules
+    - [ ] connections
+    - [ ] dns
 - [ ] linux support
 - [ ] fwmark and bind interface impl
+- [ ] profile store
+- [ ] what else?
