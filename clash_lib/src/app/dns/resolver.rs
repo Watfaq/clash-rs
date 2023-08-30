@@ -426,23 +426,48 @@ mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
     use crate::dns::{Resolver, ThreadSafeDNSClient};
     use std::sync::Arc;
-    use trust_dns_client::op;
+    use std::time::Duration;
+    use tokio::net::UdpSocket;
+    use trust_dns_client::{client, op};
     use trust_dns_proto::rr;
+    use trust_dns_proto::udp::UdpClientStream;
+    use trust_dns_proto::xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer};
 
-    #[test]
-    fn test_bad_labels() {
+    #[tokio::test]
+    async fn test_bad_labels_with_custom_resolver() {
         let name = rr::Name::from_str_relaxed("some_domain.understore")
             .unwrap()
             .append_domain(&rr::Name::root())
             .unwrap();
-        assert_eq!(name.to_string(), "some_domain.understore");
+        assert_eq!(name.to_string(), "some_domain.understore.");
+
+        let mut m = op::Message::new();
+        let mut q = op::Query::new();
+
+        q.set_name(name);
+        q.set_query_type(rr::RecordType::A);
+        m.add_query(q);
+        m.set_recursion_desired(true);
+
+        let stream = UdpClientStream::<UdpSocket>::with_timeout(
+            "1.1.1.1:53".parse().unwrap(),
+            Duration::from_secs(5),
+        );
+        let (mut client, bg) = client::AsyncClient::connect(stream).await.unwrap();
+
+        tokio::spawn(bg);
+
+        let mut req = DnsRequest::new(m, DnsRequestOptions::default());
+        req.set_id(rand::random::<u16>());
+        let res = client.send(req).first_answer().await;
+        assert!(res.is_ok());
     }
 
     #[tokio::test]
     async fn test_udp_resolve() {
         let c = DnsClient::new(Opts {
             r: None,
-            host: "1.1.1.1".to_string(),
+            host: "114.114.114.114".to_string(),
             port: 53,
             net: DNSNetMode::UDP,
             iface: None,
