@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::common::auth;
 use crate::config::def;
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
 use crate::config::internal::rule::RuleType;
@@ -24,6 +25,7 @@ pub struct Config {
     pub experimental: Option<Experimental>,
     pub profile: Profile,
     pub rules: Vec<RuleType>,
+    pub users: Vec<auth::User>,
     /// a list maintaining the order from the config file
     pub proxy_names: Vec<String>,
     pub proxies: HashMap<String, OutboundProxy>,
@@ -80,7 +82,16 @@ impl TryFrom<def::Config> for Config {
                         .map_err(|x| Error::InvalidConfig(x.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-
+            users: c
+                .authentication
+                .into_iter()
+                .map(|u| {
+                    let mut parts = u.splitn(2, ':');
+                    let username = parts.next().unwrap().to_string();
+                    let password = parts.next().unwrap_or("").to_string();
+                    auth::User::new(username, password)
+                })
+                .collect(),
             proxies: c.proxy.into_iter().try_fold(
                 HashMap::from([
                     (

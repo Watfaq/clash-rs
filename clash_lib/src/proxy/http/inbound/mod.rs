@@ -1,7 +1,9 @@
+mod auth;
 mod codec;
 mod connector;
 mod proxy;
 
+use crate::common::auth::ThreadSafeAuthenticator;
 use crate::proxy::utils::apply_tcp_options;
 use crate::proxy::{AnyInboundListener, InboundListener};
 use crate::Dispatcher;
@@ -19,6 +21,7 @@ use tracing::warn;
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
 }
 
 impl Drop for Listener {
@@ -28,8 +31,16 @@ impl Drop for Listener {
 }
 
 impl Listener {
-    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
-        Arc::new(Self { addr, dispatcher }) as _
+    pub fn new(
+        addr: SocketAddr,
+        dispatcher: Arc<Dispatcher>,
+        authenticator: ThreadSafeAuthenticator,
+    ) -> AnyInboundListener {
+        Arc::new(Self {
+            addr,
+            dispatcher,
+            authenticator,
+        }) as _
     }
 }
 
@@ -52,10 +63,11 @@ impl InboundListener for Listener {
             let socket = apply_tcp_options(socket).await?;
 
             let dispatcher = self.dispatcher.clone();
+            let author = self.authenticator.clone();
 
-            tokio::spawn(
-                async move { proxy::handle(Box::new(socket), src_addr, dispatcher).await },
-            );
+            tokio::spawn(async move {
+                proxy::handle(Box::new(socket), src_addr, dispatcher, author).await
+            });
         }
     }
 

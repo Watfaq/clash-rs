@@ -1,3 +1,4 @@
+use crate::common::auth::ThreadSafeAuthenticator;
 use crate::proxy::{AnyInboundListener, InboundListener};
 use crate::session::{Network, Session};
 use crate::Dispatcher;
@@ -15,6 +16,7 @@ use super::{http, socks};
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
 }
 
 impl Drop for Listener {
@@ -24,8 +26,16 @@ impl Drop for Listener {
 }
 
 impl Listener {
-    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
-        Arc::new(Self { addr, dispatcher }) as _
+    pub fn new(
+        addr: SocketAddr,
+        dispatcher: Arc<Dispatcher>,
+        authenticator: ThreadSafeAuthenticator,
+    ) -> AnyInboundListener {
+        Arc::new(Self {
+            addr,
+            dispatcher,
+            authenticator,
+        }) as _
     }
 }
 
@@ -53,6 +63,9 @@ impl InboundListener for Listener {
                 continue;
             }
 
+            let dispatcher = self.dispatcher.clone();
+            let authenticator = self.authenticator.clone();
+
             match p[0] {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
@@ -62,17 +75,14 @@ impl InboundListener for Listener {
                         ..Default::default()
                     };
 
-                    let dispatcher = self.dispatcher.clone();
-
                     tokio::spawn(async move {
-                        socks::handle_tcp(&mut sess, &mut socket, dispatcher, &HashMap::new() as _)
-                            .await
+                        socks::handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
                     });
                 }
 
                 _ => {
                     let src = socket.peer_addr()?;
-                    http::handle_http(Box::new(socket), src, self.dispatcher.clone()).await;
+                    http::handle_http(Box::new(socket), src, dispatcher, authenticator).await;
                 }
             }
         }

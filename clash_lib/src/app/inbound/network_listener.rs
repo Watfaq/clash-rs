@@ -1,3 +1,4 @@
+use crate::common::auth::ThreadSafeAuthenticator;
 use crate::config::internal::config::BindAddress;
 
 use crate::proxy::{http, mixed, socks, AnyInboundListener};
@@ -24,6 +25,7 @@ pub struct NetworkInboundListener {
     pub port: u16,
     pub listener_type: ListenerType,
     pub dispatcher: Arc<Dispatcher>,
+    pub authenticator: ThreadSafeAuthenticator,
 }
 
 impl NetworkInboundListener {
@@ -95,15 +97,21 @@ impl NetworkInboundListener {
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
         let listener: AnyInboundListener = match self.listener_type {
-            ListenerType::HTTP => {
-                http::Listener::new((ip, self.port).into(), self.dispatcher.clone())
-            }
-            ListenerType::SOCKS5 => {
-                socks::Listener::new((ip, self.port).into(), self.dispatcher.clone())
-            }
-            ListenerType::Mixed => {
-                mixed::Listener::new((ip, self.port).into(), self.dispatcher.clone())
-            }
+            ListenerType::HTTP => http::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+                self.authenticator.clone(),
+            ),
+            ListenerType::SOCKS5 => socks::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+                self.authenticator.clone(),
+            ),
+            ListenerType::Mixed => mixed::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+                self.authenticator.clone(),
+            ),
         };
 
         if listener.handle_tcp() {

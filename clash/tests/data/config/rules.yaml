@@ -3,6 +3,9 @@ port: 8888
 socks-port: 8889
 mixed-port: 8899
 
+authentication:
+ - "user1:pass1"
+ - "user2:pass2"
 
 dns:
   enable: true

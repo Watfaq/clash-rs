@@ -3,6 +3,7 @@ use tokio::sync::Mutex;
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::inbound::network_listener::{ListenerType, NetworkInboundListener};
+use crate::common::auth::ThreadSafeAuthenticator;
 use crate::config::internal::config::{BindAddress, Inbound};
 use crate::{Error, Runner};
 use std::collections::HashMap;
@@ -12,6 +13,7 @@ pub struct InboundManager {
     network_listeners: HashMap<ListenerType, NetworkInboundListener>,
     dispatcher: Arc<Dispatcher>,
     bind_address: BindAddress,
+    authenticator: ThreadSafeAuthenticator,
 }
 
 pub type ThreadSafeInboundManager = Arc<Mutex<InboundManager>>;
@@ -30,13 +32,18 @@ pub struct Ports {
 }
 
 impl InboundManager {
-    pub fn new(inbound: Inbound, dispatcher: Arc<Dispatcher>) -> Result<Self, Error> {
+    pub fn new(
+        inbound: Inbound,
+        dispatcher: Arc<Dispatcher>,
+        authenticator: ThreadSafeAuthenticator,
+    ) -> Result<Self, Error> {
         let network_listeners = HashMap::new();
 
         let mut s = Self {
             network_listeners,
             dispatcher,
             bind_address: inbound.bind_address,
+            authenticator,
         };
 
         let ports = Ports {
@@ -107,6 +114,7 @@ impl InboundManager {
                     port: http_port,
                     listener_type: ListenerType::HTTP,
                     dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
                 },
             );
         }
@@ -120,6 +128,7 @@ impl InboundManager {
                     port: socks_port,
                     listener_type: ListenerType::SOCKS5,
                     dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
                 },
             );
         }
@@ -133,6 +142,7 @@ impl InboundManager {
                     port: mixed_port,
                     listener_type: ListenerType::Mixed,
                     dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
                 },
             );
         }

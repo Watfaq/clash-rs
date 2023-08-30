@@ -1,3 +1,5 @@
+use crate::common::auth::ThreadSafeAuthenticator;
+use crate::common::errors::new_io_error;
 use crate::proxy::datagram::InboundUdp;
 use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
 use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS5_VERSION};
@@ -5,22 +7,20 @@ use crate::proxy::utils::new_udp_socket;
 use crate::session::{Network, Session, SocksAddr};
 use crate::Dispatcher;
 use bytes::{BufMut, BytesMut};
-use std::collections::HashMap;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_util::udp::UdpFramed;
-use tracing::{debug, info};
-use tracing::{event, instrument};
+use tracing::{debug, info, warn};
 
-#[instrument]
-pub async fn handle_tcp(
-    sess: &mut Session,
-    s: &mut TcpStream,
+pub async fn handle_tcp<'a>(
+    sess: &'a mut Session,
+    s: &'a mut TcpStream,
     dispatcher: Arc<Dispatcher>,
-    users: &HashMap<String, String>,
+    authenticator: ThreadSafeAuthenticator,
 ) -> io::Result<()> {
     // handshake
     let mut buf = BytesMut::new();
@@ -45,10 +45,25 @@ pub async fn handle_tcp(
 
         let mut response = [SOCKS5_VERSION, auth_methods::NO_METHODS];
         let methods = &buf[..];
-        if methods.contains(&auth_methods::USER_PASS) {
+
+        if authenticator.enabled() {
+            if !methods.contains(&auth_methods::USER_PASS) {
+                response[1] = response_code::FAILURE;
+                s.write_all(&response).await?;
+                s.shutdown().await?;
+                return Err(new_io_error("auth required"));
+            }
+
             response[1] = auth_methods::USER_PASS;
             s.write_all(&response).await?;
 
+            /*
+            +----+------+----------+------+----------+
+            |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+            +----+------+----------+------+----------+
+            | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+            +----+------+----------+------+----------+
+              */
             buf.resize(2, 0);
             s.read_exact(&mut buf[..]).await?;
             let ulen = buf[1] as usize;
@@ -62,12 +77,19 @@ pub async fn handle_tcp(
             s.read_exact(&mut buf[..]).await?;
             let pass = unsafe { str::from_utf8_unchecked(buf.to_owned().as_ref()).to_owned() };
 
-            match users.get(&user) {
-                Some(p) if p == &pass => {
+            match authenticator.authenticate(&user, &pass) {
+                /*
+                +----+--------+
+                |VER | STATUS |
+                +----+--------+
+                | 1  |   1    |
+                +----+--------+
+                 */
+                true => {
                     response = [0x1, response_code::SUCCEEDED];
                     s.write_all(&response).await?;
                 }
-                _ => {
+                false => {
                     response = [0x1, response_code::FAILURE];
                     s.write_all(&response).await?;
                     s.shutdown().await?;
@@ -160,11 +182,7 @@ pub async fn handle_tcp(
                     info!("UDP association finished, closing");
                 }
                 Err(e) => {
-                    event!(
-                        tracing::Level::DEBUG,
-                        "SOCKS client closed connection: {}",
-                        e
-                    );
+                    warn!("SOCKS client closed connection: {}", e);
                 }
             }
 

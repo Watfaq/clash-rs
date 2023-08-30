@@ -10,6 +10,7 @@ use crate::app::{dns, ThreadSafeDNSResolver};
 use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
+use common::auth;
 use config::def::LogLevel;
 use state::Storage;
 use std::io;
@@ -161,9 +162,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         config.general.mode,
     ));
 
+    let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
+
     let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
         config.general.inbound,
         dispatcher.clone(),
+        authenticator,
     )?));
 
     let inbound_runner = inbound_manager.lock().await.get_runner()?;

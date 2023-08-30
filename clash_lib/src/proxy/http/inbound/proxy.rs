@@ -13,11 +13,12 @@ use tracing::warn;
 
 use crate::{
     app::dispatcher::Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
     proxy::{AnyStream, ProxyError},
     session::{Network, Session, SocksAddr},
 };
 
-use super::connector::Connector;
+use super::{auth::authenticate_req, connector::Connector};
 
 pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
     let port = r
@@ -41,7 +42,14 @@ async fn proxy(
     req: Request<Body>,
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
 ) -> Result<Response<Body>, ProxyError> {
+    if authenticator.enabled() {
+        if let Some(res) = authenticate_req(&req, authenticator) {
+            return Ok(res);
+        }
+    }
+
     let client = Client::builder()
         .http1_title_case_headers(true)
         .http1_preserve_header_case(true)
@@ -97,6 +105,7 @@ async fn proxy(
 struct ProxyService {
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
 }
 
 impl Service<Request<Body>> for ProxyService {
@@ -114,16 +123,33 @@ impl Service<Request<Body>> for ProxyService {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        Box::pin(proxy(req, self.src, self.dispatcher.clone()))
+        Box::pin(proxy(
+            req,
+            self.src,
+            self.dispatcher.clone(),
+            self.authenticator.clone(),
+        ))
     }
 }
 
-pub async fn handle(stream: AnyStream, src: SocketAddr, dispatcher: Arc<Dispatcher>) {
+pub async fn handle(
+    stream: AnyStream,
+    src: SocketAddr,
+    dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
+) {
     tokio::task::spawn(async move {
         if let Err(http_err) = Http::new()
             .http1_only(true)
             .http1_keep_alive(true)
-            .serve_connection(stream, ProxyService { src, dispatcher })
+            .serve_connection(
+                stream,
+                ProxyService {
+                    src,
+                    dispatcher,
+                    authenticator,
+                },
+            )
             .with_upgrades()
             .await
         {

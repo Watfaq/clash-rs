@@ -7,7 +7,7 @@ TODOs
     - [x] socks5
     - [x] mix port
     - [ ] tproxy
-    - [ ] authentication
+    - [x] authentication
 - [x] proxy rules
     - [x] groups
         - [x] relay

@@ -1,6 +1,7 @@
 mod datagram;
 mod stream;
 
+use crate::common::auth::ThreadSafeAuthenticator;
 use crate::proxy::utils::apply_tcp_options;
 use crate::proxy::{AnyInboundListener, InboundListener};
 use crate::session::{Network, Session};
@@ -44,6 +45,7 @@ pub(crate) mod socks_command {
 pub struct Listener {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    authenticator: ThreadSafeAuthenticator,
 }
 
 impl Drop for Listener {
@@ -53,8 +55,16 @@ impl Drop for Listener {
 }
 
 impl Listener {
-    pub fn new(addr: SocketAddr, dispatcher: Arc<Dispatcher>) -> AnyInboundListener {
-        Arc::new(Self { addr, dispatcher }) as _
+    pub fn new(
+        addr: SocketAddr,
+        dispatcher: Arc<Dispatcher>,
+        authenticator: ThreadSafeAuthenticator,
+    ) -> AnyInboundListener {
+        Arc::new(Self {
+            addr,
+            dispatcher,
+            authenticator,
+        }) as _
     }
 }
 
@@ -84,9 +94,10 @@ impl InboundListener for Listener {
             };
 
             let dispatcher = self.dispatcher.clone();
+            let authenticator = self.authenticator.clone();
 
             tokio::spawn(async move {
-                handle_tcp(&mut sess, &mut socket, dispatcher, &HashMap::new() as _).await
+                handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
             });
         }
     }
