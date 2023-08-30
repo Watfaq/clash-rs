@@ -1,6 +1,6 @@
 use crate::proxy::datagram::InboundUdp;
 use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
-use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS_VERSION};
+use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS5_VERSION};
 use crate::proxy::utils::new_udp_socket;
 use crate::session::{Network, Session, SocksAddr};
 use crate::Dispatcher;
@@ -16,7 +16,7 @@ use tracing::{debug, info};
 use tracing::{event, instrument};
 
 #[instrument]
-pub(crate) async fn handle_tcp(
+pub async fn handle_tcp(
     sess: &mut Session,
     s: &mut TcpStream,
     dispatcher: Arc<Dispatcher>,
@@ -28,7 +28,7 @@ pub(crate) async fn handle_tcp(
         buf.resize(2, 0);
         s.read_exact(&mut buf[..]).await?;
 
-        if buf[0] != SOCKS_VERSION {
+        if buf[0] != SOCKS5_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "unsupported SOCKS version",
@@ -43,7 +43,7 @@ pub(crate) async fn handle_tcp(
         buf.resize(n_methods, 0);
         s.read_exact(&mut buf[..]).await?;
 
-        let mut response = [SOCKS_VERSION, auth_methods::NO_METHODS];
+        let mut response = [SOCKS5_VERSION, auth_methods::NO_METHODS];
         let methods = &buf[..];
         if methods.contains(&auth_methods::USER_PASS) {
             response[1] = auth_methods::USER_PASS;
@@ -87,7 +87,7 @@ pub(crate) async fn handle_tcp(
 
     buf.resize(3, 0);
     s.read_exact(&mut buf[..]).await?;
-    if buf[0] != SOCKS_VERSION {
+    if buf[0] != SOCKS5_VERSION {
         return Err(io::Error::new(
             io::ErrorKind::Other,
             "unsupported SOCKS version",
@@ -101,7 +101,7 @@ pub(crate) async fn handle_tcp(
             debug!("Got a CONNECT request from {}", s.peer_addr()?);
 
             buf.clear();
-            buf.put_u8(SOCKS_VERSION);
+            buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
             let bnd = SocksAddr::from(s.local_addr()?);
@@ -126,7 +126,7 @@ pub(crate) async fn handle_tcp(
             );
 
             buf.clear();
-            buf.put_u8(SOCKS_VERSION);
+            buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
             let bnd = SocksAddr::from(udp_inbound.local_addr()?);
@@ -174,7 +174,7 @@ pub(crate) async fn handle_tcp(
         }
         _ => {
             buf.clear();
-            buf.put_u8(SOCKS_VERSION);
+            buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::COMMAND_NOT_SUPPORTED);
             buf.put_u8(0x0);
             SocksAddr::any_ipv4().write_buf(&mut buf);

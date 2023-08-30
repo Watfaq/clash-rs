@@ -1,6 +1,6 @@
 use crate::config::internal::config::BindAddress;
 
-use crate::proxy::{http, socks, AnyInboundListener};
+use crate::proxy::{http, mixed, socks, AnyInboundListener};
 
 use crate::proxy::utils::Interface;
 use crate::{Dispatcher, Error, Runner};
@@ -11,9 +11,11 @@ use tracing::{info, warn};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
+#[derive(Eq, PartialEq, Hash)]
 pub enum ListenerType {
     HTTP,
     SOCKS5,
+    Mixed,
 }
 
 pub struct NetworkInboundListener {
@@ -99,9 +101,11 @@ impl NetworkInboundListener {
             ListenerType::SOCKS5 => {
                 socks::Listener::new((ip, self.port).into(), self.dispatcher.clone())
             }
+            ListenerType::Mixed => {
+                mixed::Listener::new((ip, self.port).into(), self.dispatcher.clone())
+            }
         };
 
-        // TODO: remove the clone here
         if listener.handle_tcp() {
             info!("{} TCP listening at: {}:{}", self.name, ip, self.port);
 

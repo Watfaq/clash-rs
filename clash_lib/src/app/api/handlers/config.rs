@@ -13,10 +13,7 @@ use crate::{
         inbound::manager::{Ports, ThreadSafeInboundManager},
         ThreadSafeDNSResolver,
     },
-    config::{
-        def,
-        internal::config::{self, BindAddress},
-    },
+    config::{def, internal::config::BindAddress},
     GlobalState,
 };
 

@@ -5,7 +5,8 @@ TODOs
 - [ ] inbounds
     - [x] http
     - [x] socks5
-    - [ ] mix port
+    - [x] mix port
+    - [ ] tproxy
     - [ ] authentication
 - [x] proxy rules
     - [x] groups

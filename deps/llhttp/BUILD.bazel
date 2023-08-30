@@ -1,0 +1,15 @@
+load("@rules_rust//bindgen:bindgen.bzl", "rust_bindgen_library")
+
+cc_library(
+    name = "llhttp",
+    srcs = glob(["src/src/*.c"]),
+    hdrs = [
+        "src/src/native/api.h",
+    ],
+)
+
+rust_bindgen_library(
+    name = "llhttp_sys",
+    cc_lib = ":llhttp",
+    header = "src/src/native/api.h",
+)

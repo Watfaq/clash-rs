@@ -11,14 +11,6 @@ http_archive(
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.26.0/rules_rust-v0.26.0.tar.gz"],
 )
 
-# load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
-
-# git_repository(
-#     name = "rules_rust",
-#     branch = "pass-to-bindgen",
-#     remote = "https://github.com/ibigbug/rules_rust.git",
-# )
-
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 
 rules_rust_dependencies()
@@ -29,6 +21,16 @@ rust_register_toolchains(
         "1.67.1",
     ],
 )
+
+load("@rules_rust//bindgen:repositories.bzl", "rust_bindgen_dependencies", "rust_bindgen_register_toolchains")
+
+rust_bindgen_dependencies()
+
+rust_bindgen_register_toolchains()
+
+load("@rules_rust//bindgen:transitive_repositories.bzl", "rust_bindgen_transitive_dependencies")
+
+rust_bindgen_transitive_dependencies()
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
 

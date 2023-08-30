@@ -344,6 +344,7 @@ pub enum Network {
     Udp,
     Http,
     Https,
+    Ws,
 }
 
 impl Display for Network {
@@ -353,6 +354,7 @@ impl Display for Network {
             Network::Udp => "UDP",
             Network::Http => "HTTP",
             Network::Https => "HTTPS",
+            Network::Ws => "WebSocket",
         })
     }
 }

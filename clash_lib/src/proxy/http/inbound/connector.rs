@@ -1,4 +1,3 @@
-use crate::proxy::http::inbound::maybe_socks_addr;
 use crate::proxy::{AnyStream, ProxyError};
 use crate::session::{Network, Session};
 use crate::Dispatcher;
@@ -11,6 +10,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::duplex;
+
+use super::proxy::maybe_socks_addr;
 
 #[derive(Clone)]
 pub struct Connector {

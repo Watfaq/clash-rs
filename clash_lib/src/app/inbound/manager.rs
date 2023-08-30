@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct InboundManager {
-    network_listeners: HashMap<String, NetworkInboundListener>,
+    network_listeners: HashMap<ListenerType, NetworkInboundListener>,
+    dispatcher: Arc<Dispatcher>,
     bind_address: BindAddress,
 }
 
@@ -30,37 +31,24 @@ pub struct Ports {
 
 impl InboundManager {
     pub fn new(inbound: Inbound, dispatcher: Arc<Dispatcher>) -> Result<Self, Error> {
-        let mut network_listeners = HashMap::new();
-        if let Some(http_port) = inbound.port {
-            network_listeners.insert(
-                "HTTP".to_string(),
-                NetworkInboundListener {
-                    name: "HTTP".to_string(),
-                    bind_addr: inbound.bind_address.clone(),
-                    port: http_port,
-                    listener_type: ListenerType::HTTP,
-                    dispatcher: dispatcher.clone(),
-                },
-            );
-        }
+        let network_listeners = HashMap::new();
 
-        if let Some(socks_port) = inbound.socks_port {
-            network_listeners.insert(
-                "SOCKS5".to_string(),
-                NetworkInboundListener {
-                    name: "SOCKS5".to_string(),
-                    bind_addr: inbound.bind_address.clone(),
-                    port: socks_port,
-                    listener_type: ListenerType::SOCKS5,
-                    dispatcher: dispatcher.clone(),
-                },
-            );
-        }
-
-        Ok(Self {
+        let mut s = Self {
             network_listeners,
+            dispatcher,
             bind_address: inbound.bind_address,
-        })
+        };
+
+        let ports = Ports {
+            port: inbound.port,
+            socks_port: inbound.socks_port,
+            redir_port: inbound.redir_port,
+            tproxy_port: inbound.tproxy_port,
+            mixed_port: inbound.mixed_port,
+        };
+
+        s.rebuild_listeners(ports);
+        Ok(s)
     }
 
     pub fn get_runner(&self) -> Result<Runner, Error> {
@@ -100,6 +88,9 @@ impl InboundManager {
                 ListenerType::SOCKS5 => {
                     ports.socks_port = Some(x.port);
                 }
+                ListenerType::Mixed => {
+                    ports.mixed_port = Some(x.port);
+                }
             });
 
         ports
@@ -109,36 +100,39 @@ impl InboundManager {
         let mut network_listeners = HashMap::new();
         if let Some(http_port) = ports.port {
             network_listeners.insert(
-                "HTTP".to_string(),
+                ListenerType::HTTP,
                 NetworkInboundListener {
                     name: "HTTP".to_string(),
                     bind_addr: self.bind_address.clone(),
                     port: http_port,
                     listener_type: ListenerType::HTTP,
-                    dispatcher: self
-                        .network_listeners
-                        .get("HTTP")
-                        .unwrap()
-                        .dispatcher
-                        .clone(),
+                    dispatcher: self.dispatcher.clone(),
                 },
             );
         }
 
         if let Some(socks_port) = ports.socks_port {
             network_listeners.insert(
-                "SOCKS5".to_string(),
+                ListenerType::SOCKS5,
                 NetworkInboundListener {
                     name: "SOCKS5".to_string(),
                     bind_addr: self.bind_address.clone(),
                     port: socks_port,
                     listener_type: ListenerType::SOCKS5,
-                    dispatcher: self
-                        .network_listeners
-                        .get("SOCKS5")
-                        .unwrap()
-                        .dispatcher
-                        .clone(),
+                    dispatcher: self.dispatcher.clone(),
+                },
+            );
+        }
+
+        if let Some(mixed_port) = ports.mixed_port {
+            network_listeners.insert(
+                ListenerType::Mixed,
+                NetworkInboundListener {
+                    name: "Mixed".to_string(),
+                    bind_addr: self.bind_address.clone(),
+                    port: mixed_port,
+                    listener_type: ListenerType::Mixed,
+                    dispatcher: self.dispatcher.clone(),
                 },
             );
         }

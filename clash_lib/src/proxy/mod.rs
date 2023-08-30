@@ -6,10 +6,12 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::sync::Arc;
+
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 
@@ -18,6 +20,7 @@ pub mod reject;
 
 pub(crate) mod datagram;
 pub mod http;
+pub mod mixed;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
