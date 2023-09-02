@@ -62,7 +62,7 @@ trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-h
 # DoH
 rustls = { version  = "0.21", features=["dangerous_configuration"] }
 rustls-pemfile = "1.0.3"
-webpki-roots = "0.22"
+webpki-roots = "0.25"
 dhcproto = "0.8"
 
 rand = "0.8"
@@ -72,7 +72,7 @@ tokio-tungstenite = "0.20.0"
 
 tracing = "0.1"
 tracing-subscriber = "0.3"
-atty = "0.2"
+
 
 shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"] }
 maxminddb = "0.23.0"

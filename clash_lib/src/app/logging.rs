@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use crate::def::LogLevel;
 use tokio::sync::broadcast::Sender;
 
@@ -74,7 +76,7 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
         .with(collector)
         .with(
             tracing_subscriber::fmt::Layer::new()
-                .with_ansi(atty::is(atty::Stream::Stdout))
+                .with_ansi(std::io::stdout().is_terminal())
                 .pretty()
                 .with_file(true)
                 .with_line_number(true)
