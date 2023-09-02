@@ -84,8 +84,15 @@ async fn handle_inbound_datagram(
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
             if dst_addr.port() == 53 {
                 match resolver.generate_fake_ip_packet(data).await {
-                    Ok(pkt) => {
-                        if let Err(e) = l_tx.send(pkt).await {
+                    Ok(resp) => {
+                        if let Err(e) = l_tx
+                            .send(UdpPacket::new(
+                                data,
+                                SocksAddr::any_ipv4(),
+                                SocksAddr::any_ipv4(),
+                            ))
+                            .await
+                        {
                             warn!("failed to send udp packet to proxy: {}", e);
                         }
                         continue;

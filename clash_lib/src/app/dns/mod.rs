@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use trust_dns_proto::xfer::DnsResponse;
 
 use std::fmt::Debug;
 
@@ -82,6 +83,12 @@ pub trait ClashResolver: Sync + Send {
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool;
     async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool;
+    async fn lookup_fake_ip(&self, host: &str) -> Option<std::net::IpAddr> {
+        todo!();
+    }
+    async fn generate_fake_ip_packet(&self, data: Vec<u8>) -> anyhow::Result<DnsResponse> {
+        todo!();
+    }
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);
