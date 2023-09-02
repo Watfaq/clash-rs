@@ -1855,9 +1855,9 @@ checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 
 [[package]]
 name = "network-interface"
-version = "1.0.1"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "296ae2183dab440e352740b1fcf0589d8058afa40bc29fd163227ddb01fbf539"
+checksum = "afd878f93491173e5d272d0dd3124ff89739e50f276c7b9857ac0d97cc024f96"
 dependencies = [
  "cc",
  "libc",
