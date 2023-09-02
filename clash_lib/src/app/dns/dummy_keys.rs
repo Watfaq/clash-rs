@@ -2,7 +2,7 @@
 /// host: dns.example.com
 /// TODO(#51): use real certificate and key
 
-pub static TEST_CERT: &str = r#"""-----BEGIN CERTIFICATE-----
+pub static TEST_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDITCCAgmgAwIBAgIQOp++4lLpVGLWkaGuRrrP2zANBgkqhkiG9w0BAQsFADAS
 MRAwDgYDVQQKEwdBY21lIENvMB4XDTIzMDkwMjA4MzIyM1oXDTI0MDkwMTA4MzIy
 M1owEjEQMA4GA1UEChMHQWNtZSBDbzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
@@ -21,9 +21,9 @@ BL4HS1wFaYZw9WhXk3nzb+wjBhvyEQkI9oeMqVYZLN/9kIY9QuGtDg5onFrVSgjZ
 qiR7EfdICe8ogM6IiemQJfZ5SeWkoLpuRlaeVhqFFaFFeJ6cMTJ+Jluh6a3DGP91
 aRaPVO7r8gPq4mACua0HQcBfmH4VKS3hsQHdWDivRUT7xkZ/6g==
 -----END CERTIFICATE-----
-"""#;
+";
 
-pub static TEST_KEY: &str = r#"""-----BEGIN PRIVATE KEY-----
+pub static TEST_KEY: &str = "-----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQD0vqX2HsSh6udJ
 so52OpAGdbiw5oEf1cvcu6z3K5KnItuQpQp7lIlIGAAYa3ateqFtsDspnPQOemB/
 V/fVDV+hPlZnJAj/L/cXD1eP2aHPiiHriR0VARxTConolnuetF3EQkz+zrnVGfok
@@ -51,4 +51,4 @@ A91ZGjWfh3YPXYkjOOjw1MWqeO7LQi6A8uWkfRFPWn/h3gECqItrWFogJixRyL+G
 TWQ7SWmJctHD8YjU3E6tlPSWQhD2U75pZWtjpGAIYSdvS5V9Q+95jaKKhsYneThB
 SNEnosgWOR5eg9c0FznaDn6nRw==
 -----END PRIVATE KEY-----
-"""#;
+";

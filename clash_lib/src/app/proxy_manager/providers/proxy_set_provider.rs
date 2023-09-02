@@ -191,7 +191,7 @@ mod tests {
     use tokio::time::sleep;
 
     use crate::app::{
-        dns::resolver::MockClashResolver,
+        dns::MockClashResolver,
         proxy_manager::{
             healthcheck::HealthCheck,
             providers::{

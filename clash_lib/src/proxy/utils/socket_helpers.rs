@@ -56,7 +56,7 @@ pub async fn new_tcp_stream<'a>(
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
-        .resolve(address)
+        .resolve(address, false)
         .await
         .map_err(|v| io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v)))?
         .ok_or(io::Error::new(

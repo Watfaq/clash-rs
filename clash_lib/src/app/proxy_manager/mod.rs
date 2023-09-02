@@ -234,7 +234,7 @@ mod tests {
     use futures::TryFutureExt;
 
     use crate::{
-        app::dns::resolver::MockClashResolver, config::internal::proxy::PROXY_DIRECT,
+        app::dns::MockClashResolver, config::internal::proxy::PROXY_DIRECT,
         proxy::mocks::MockDummyOutboundHandler,
     };
 
@@ -243,7 +243,7 @@ mod tests {
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver
             .expect_resolve()
-            .returning(|_| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
+            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
         let manager = super::ProxyManager::new(Arc::new(mock_resolver));
 
@@ -298,7 +298,7 @@ mod tests {
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver
             .expect_resolve()
-            .returning(|_| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
+            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
         let manager = super::ProxyManager::new(Arc::new(mock_resolver));
 

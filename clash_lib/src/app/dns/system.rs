@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use trust_dns_resolver::{Name, TokioAsyncResolver};
 
-use super::{resolver::ResolverKind, ClashResolver};
+use super::{ClashResolver, ResolverKind};
 
 pub(crate) struct SystemResolver {
     resolver: TokioAsyncResolver,
@@ -17,13 +17,13 @@ impl SystemResolver {
 
 #[async_trait]
 impl ClashResolver for SystemResolver {
-    async fn resolve(&self, host: &str) -> anyhow::Result<Option<std::net::IpAddr>> {
+    async fn resolve(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::IpAddr>> {
         let host = Name::from_str_relaxed(host)?;
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response.iter().choose(&mut rand::thread_rng()))
     }
 
-    async fn resolve_v4(&self, host: &str) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
+    async fn resolve_v4(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let host = Name::from_str_relaxed(host)?;
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response
@@ -34,7 +34,7 @@ impl ClashResolver for SystemResolver {
             })
             .choose(&mut rand::thread_rng()))
     }
-    async fn resolve_v6(&self, host: &str) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+    async fn resolve_v6(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
         let host = Name::from_str_relaxed(host)?;
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response
@@ -56,6 +56,22 @@ impl ClashResolver for SystemResolver {
 
     fn kind(&self) -> ResolverKind {
         ResolverKind::System
+    }
+
+    fn fake_ip_enabled(&self) -> bool {
+        false
+    }
+
+    async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool {
+        false
+    }
+
+    async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool {
+        false
+    }
+
+    async fn reverse_lookup(&self, _: std::net::IpAddr) -> Option<String> {
+        None
     }
 }
 

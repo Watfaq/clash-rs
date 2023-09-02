@@ -1,6 +1,6 @@
 use crate::dns::dns_client::DNSNetMode;
 use crate::dns::helper::make_clients;
-use crate::dns::{Client, NameServer, Resolver, ThreadSafeDNSClient};
+use crate::dns::{Client, Resolver, ThreadSafeDNSClient};
 use crate::proxy::utils::{new_udp_socket, Interface};
 use crate::{dns_debug, dns_warn};
 use async_trait::async_trait;
@@ -18,6 +18,8 @@ use tokio::task::yield_now;
 
 use tracing::{debug, warn};
 use trust_dns_proto::op::Message;
+
+use super::config::NameServer;
 
 const IFACE_TTL: Duration = Duration::from_secs(20);
 const DHCP_TTL: Duration = Duration::from_secs(3600);

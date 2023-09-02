@@ -61,6 +61,34 @@ impl Dispatcher {
     where
         S: AsyncRead + AsyncWrite + Unpin + ?Sized,
     {
+        let sess = if self.resolver.fake_ip_enabled() {
+            match sess.destination {
+                crate::session::SocksAddr::Ip(addr) => {
+                    let ip = addr.ip();
+                    if self.resolver.is_fake_ip(ip).await {
+                        let host = self.resolver.reverse_lookup(ip).await;
+                        match host {
+                            Some(host) => {
+                                let mut sess = sess;
+                                sess.destination =
+                                    crate::session::SocksAddr::Domain(host, addr.port());
+                                sess
+                            }
+                            None => {
+                                error!("failed to reverse lookup fake ip: {}", ip);
+                                return;
+                            }
+                        }
+                    } else {
+                        sess
+                    }
+                }
+                crate::session::SocksAddr::Domain(_, _) => sess,
+            }
+        } else {
+            sess
+        };
+
         let mode = self.mode.lock().await;
         info!("dispatching {} with mode {}", sess, mode);
         let outbound_name = match *mode {
@@ -123,6 +151,7 @@ impl Dispatcher {
         let router = self.router.clone();
         let outbound_manager = self.outbound_manager.clone();
         let resolver = self.resolver.clone();
+        let mode = self.mode.clone();
 
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
@@ -133,7 +162,41 @@ impl Dispatcher {
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = packet.dst_addr.clone();
 
-                let outbound_name = router.match_route(&sess).await.to_string();
+                let sess = if resolver.fake_ip_enabled() {
+                    match sess.destination {
+                        crate::session::SocksAddr::Ip(addr) => {
+                            let ip = addr.ip();
+                            if resolver.is_fake_ip(ip).await {
+                                let host = resolver.reverse_lookup(ip).await;
+                                match host {
+                                    Some(host) => {
+                                        let mut sess = sess;
+                                        sess.destination =
+                                            crate::session::SocksAddr::Domain(host, addr.port());
+                                        sess
+                                    }
+                                    None => {
+                                        error!("failed to reverse lookup fake ip: {}", ip);
+                                        return;
+                                    }
+                                }
+                            } else {
+                                sess
+                            }
+                        }
+                        crate::session::SocksAddr::Domain(_, _) => sess,
+                    }
+                } else {
+                    sess
+                };
+
+                let mode = mode.lock().await;
+                info!("dispatching {} with mode {}", sess, mode);
+                let outbound_name = match *mode {
+                    RunMode::Global => PROXY_GLOBAL.to_string(),
+                    RunMode::Rule => router.match_route(&sess).await.to_string(),
+                    RunMode::Direct => PROXY_DIRECT.to_string(),
+                };
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
@@ -249,7 +312,7 @@ impl Dispatcher {
 
         tokio::spawn(async move {
             let _ = close_receiver.await;
-            event!(tracing::Level::DEBUG, "UDP close signal received");
+            debug!("UDP close signal received");
             t1.abort();
             t2.abort();
         });

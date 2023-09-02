@@ -1,9 +1,11 @@
 use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
-use crate::dns::{ClashResolver, NameServer, ThreadSafeDNSClient};
+use crate::dns::{ClashResolver, ThreadSafeDNSClient};
 use crate::dns_debug;
 use crate::proxy::utils::Interface;
 use std::sync::Arc;
 use tracing::{debug, warn};
+
+use super::config::NameServer;
 
 pub async fn make_clients(
     servers: Vec<NameServer>,

@@ -116,7 +116,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
             return Some(node);
         }
 
-        if let Some(c) = node.get_child(&parts.last().unwrap().clone().to_owned()) {
+        if let Some(c) = node.get_child(&parts.last().unwrap().to_owned()) {
             if let Some(n) = self.search_inner(c, parts[0..parts.len() - 1].into()) {
                 if n.data.is_some() {
                     return Some(n);

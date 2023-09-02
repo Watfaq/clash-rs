@@ -192,7 +192,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = port as u16;
-                    let mut fut = resolver.resolve(domain.as_str());
+                    let mut fut = resolver.resolve(domain.as_str(), false);
                     let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
                         io::Error::new(io::ErrorKind::Other, "resolve domain failed")
                     }))?;

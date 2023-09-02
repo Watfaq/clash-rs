@@ -26,7 +26,7 @@ use trust_dns_proto::{
 use crate::proxy::utils::Interface;
 use crate::Error;
 
-use super::{resolver::ClashResolver, Client};
+use super::{ClashResolver, Client};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
@@ -81,7 +81,7 @@ impl DnsClient {
             other => {
                 let ip = if let Some(r) = opts.r {
                     if let Some(ip) = r
-                        .resolve(&opts.host)
+                        .resolve(&opts.host, false)
                         .await
                         .map_err(|x| anyhow!("resolve hostname failure: {}", x.to_string()))?
                     {

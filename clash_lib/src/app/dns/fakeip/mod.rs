@@ -1,4 +1,7 @@
-use std::{net, sync::Arc};
+use std::{
+    net::{self, IpAddr},
+    sync::Arc,
+};
 
 use crate::{app::dns::fakeip::mem_store::InMemStore, common::trie, Error};
 
@@ -25,6 +28,8 @@ trait Store: Sync + Send {
     fn exist(&mut self, ip: net::IpAddr) -> bool;
     fn copy_to(&self, store: &mut Box<dyn Store>);
 }
+
+pub type ThreadSafeFakeDns = Arc<RwLock<FakeDns>>;
 
 pub struct FakeDns {
     max: u32,
@@ -102,6 +107,14 @@ impl FakeDns {
         }
     }
 
+    pub async fn is_fake_ip(&mut self, ip: net::IpAddr) -> bool {
+        if !ip.is_ipv4() {
+            false
+        } else {
+            self.ipnet.contains(&ip)
+        }
+    }
+
     pub fn gateway(&self) -> net::Ipv4Addr {
         net::Ipv4Addr::from(self.gateway)
     }
@@ -140,10 +153,6 @@ impl FakeDns {
             .await
             .put_by_ip(std::net::IpAddr::V4(ip), host);
         std::net::IpAddr::V4(ip)
-    }
-
-    fn get_mut(&mut self) -> &mut Self {
-        self
     }
 
     fn ip_to_uint(ip: &net::Ipv4Addr) -> u32 {

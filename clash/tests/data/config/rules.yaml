@@ -156,6 +156,7 @@ proxies:
 
 rules:
   - DOMAIN,ipinfo.io,relay
+  - GEOIP,CN,relay
   - DOMAIN-KEYWORD,httpbin,vmess-altid
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,ss

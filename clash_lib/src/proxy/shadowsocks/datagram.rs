@@ -84,7 +84,7 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
                 let domain = domain.to_string();
                 let port = port.to_owned();
 
-                let mut fut = resolver.resolve(domain.as_str());
+                let mut fut = resolver.resolve(domain.as_str(), false);
                 let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
                     io::Error::new(io::ErrorKind::Other, "resolve domain failed")
                 }))?;

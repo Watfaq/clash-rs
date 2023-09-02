@@ -2,7 +2,6 @@ use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use http::Uri;
 
 mod vmess_impl;
 
@@ -238,7 +237,7 @@ impl OutboundHandler for Handler {
         .await?;
 
         let remote_addr = resolver
-            .resolve_v4(sess.destination.host().as_str())
+            .resolve_v4(sess.destination.host().as_str(), false)
             .map_err(map_io_error)
             .await?
             .ok_or(new_io_error(

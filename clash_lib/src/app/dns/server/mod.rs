@@ -21,17 +21,15 @@ use trust_dns_server::{
     ServerFuture,
 };
 
-use crate::{app::ThreadSafeDNSResolver, common::trie, Runner};
+use crate::{app::ThreadSafeDNSResolver, Runner};
 
-use super::{fakeip::FakeDns, Config};
+use super::Config;
 
 struct DnsListener {
     server: ServerFuture<DnsHandler>,
 }
 
 struct DnsHandler {
-    hosts: Option<trie::StringTrie<IpAddr>>,
-    fake_dns: Option<Arc<RwLock<FakeDns>>>,
     resolver: ThreadSafeDNSResolver,
 }
 
@@ -78,47 +76,7 @@ impl DnsHandler {
         let mut header = Header::response_from_request(request.header());
         header.set_authoritative(true);
 
-        if let Some(hosts) = &self.hosts {
-            if let Some(ip) = hosts.search(&host) {
-                let rdata = match ip.get_data().unwrap() {
-                    IpAddr::V4(a) => RData::A(A(*a)),
-                    IpAddr::V6(aaaa) => RData::AAAA(AAAA(*aaaa)),
-                };
-
-                let records = vec![Record::from_rdata(
-                    name.clone().into(),
-                    DEFAULT_DNS_SERVER_TTL,
-                    rdata,
-                )];
-
-                let resp = builder.build(header, records.iter(), &[], &[], &[]);
-                return Ok(response_handle.send_response(resp).await?);
-            }
-        }
-        if let Some(fake_dns) = &self.fake_dns {
-            let mut dns_guard = fake_dns.write().await;
-            if request.query().original().query_type() == RecordType::A {
-                if !dns_guard.should_skip(&host) {
-                    let ip = dns_guard.lookup(&host).await;
-
-                    let rdata = match ip {
-                        IpAddr::V4(a) => RData::A(A(a)),
-                        IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
-                    };
-
-                    let records = vec![Record::from_rdata(
-                        name.into(),
-                        DEFAULT_DNS_SERVER_TTL,
-                        rdata,
-                    )];
-
-                    let resp = builder.build(header, records.iter(), &[], &[], &[]);
-                    return Ok(response_handle.send_response(resp).await?);
-                }
-            }
-        }
-
-        match self.resolver.resolve(&host).await {
+        match self.resolver.resolve(&host, true).await {
             Ok(resp) => match resp {
                 Some(ip) => {
                     let rdata = match ip {
@@ -177,11 +135,7 @@ impl RequestHandler for DnsHandler {
 static DEFAULT_DNS_SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> Option<Runner> {
-    let h = DnsHandler {
-        hosts: cfg.hosts,
-        fake_dns: cfg.fake_dns.map(|x| Arc::new(RwLock::new(x))),
-        resolver,
-    };
+    let h = DnsHandler { resolver };
     let mut s = ServerFuture::new(h);
 
     if let Some(addr) = cfg.listen.udp {
