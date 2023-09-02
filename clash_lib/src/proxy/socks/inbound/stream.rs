@@ -137,7 +137,13 @@ pub async fn handle_tcp<'a>(
         }
         socks_command::UDP_ASSOCIATE => {
             let udp_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
-            let udp_inbound = new_udp_socket(Some(&udp_addr), None).await?;
+            let udp_inbound = new_udp_socket(
+                Some(&udp_addr),
+                None,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
 
             debug!(
                 "Got a UDP_ASSOCIATE request from {}, UDP assigned at {}",

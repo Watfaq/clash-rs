@@ -47,6 +47,8 @@ impl OutboundHandler for Handler {
             sess.destination.host().as_str(),
             sess.destination.port(),
             None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
         )
         .await
     }
@@ -65,8 +67,13 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyOutboundDatagram> {
-        new_udp_socket(None, sess.iface.as_ref())
-            .await
-            .map(|x| OutboundDatagramImpl::new(x, resolver))
+        new_udp_socket(
+            None,
+            sess.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
+        )
+        .await
+        .map(|x| OutboundDatagramImpl::new(x, resolver))
     }
 }

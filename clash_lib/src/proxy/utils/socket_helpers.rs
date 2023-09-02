@@ -38,7 +38,7 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
             }
             #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
             {
-                socket.bind_device(&name)
+                socket.bind_device(Some(name.as_bytes()))
             }
             #[cfg(target_os = "windows")]
             {

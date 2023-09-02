@@ -189,6 +189,8 @@ impl OutboundHandler for Handler {
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
         )
         .map_err(|x| {
             io::Error::new(
@@ -224,6 +226,8 @@ impl OutboundHandler for Handler {
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
         )
         .map_err(|x| {
             io::Error::new(

@@ -177,6 +177,8 @@ impl OutboundHandler for Handler {
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
         )
         .map_err(|x| {
             io::Error::new(
@@ -250,7 +252,13 @@ impl OutboundHandler for Handler {
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "unsupported cipher")),
             },
         );
-        let socket = new_udp_socket(None, self.opts.common_opts.iface.as_ref()).await?;
+        let socket = new_udp_socket(
+            None,
+            self.opts.common_opts.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
+        )
+        .await?;
         let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
         Ok(OutboundDatagramShadowsocks::new(
             socket,

@@ -56,7 +56,7 @@ TODOs
     - [x] rules
     - [ ] connections
     - [ ] dns
-- [ ] linux support
+- [x] linux support(untested)
 - [ ] fwmark and bind interface impl
 - [ ] profile store
 - [ ] what else?
