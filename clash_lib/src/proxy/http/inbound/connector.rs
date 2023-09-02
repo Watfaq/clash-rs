@@ -54,7 +54,7 @@ impl tower::Service<Uri> for Connector {
             };
 
             tokio::spawn(async move {
-                dispatcher.dispatch_stream(sess, Box::new(right) as _).await;
+                dispatcher.dispatch_stream(sess, right).await;
             });
 
             Ok(Box::new(left) as _)

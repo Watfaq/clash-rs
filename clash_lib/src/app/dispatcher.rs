@@ -57,9 +57,9 @@ impl Dispatcher {
         mode.clone()
     }
 
-    pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: Box<S>)
+    pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: S)
     where
-        S: AsyncRead + AsyncWrite + Unpin + ?Sized,
+        S: AsyncRead + AsyncWrite + Unpin + Send,
     {
         let sess = if self.resolver.fake_ip_enabled() {
             match sess.destination {

@@ -69,6 +69,7 @@ crates_repository(
         "//:Cargo.toml",
         "//clash:Cargo.toml",
         "//clash_lib:Cargo.toml",
+        "//clash_doc:Cargo.toml",
     ],
 )
 

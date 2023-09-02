@@ -75,11 +75,7 @@ impl TryFrom<def::Config> for Config {
             tun: match c.tun {
                 Some(mapping) => TunConfig::deserialize(MapDeserializer::new(mapping.into_iter()))
                     .map_err(|e| Error::InvalidConfig(format!("invalid tun config: {}", e)))?,
-                None => TunConfig {
-                    enable: false,
-                    device_url: String::new(),
-                    dns_hijack: Vec::new(),
-                },
+                None => TunConfig::default(),
             },
             profile: Profile {
                 store_selected: c.profile.store_selected,
@@ -207,12 +203,11 @@ pub struct Profile {
     store_fakeip: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
-    pub device_url: String,
-    pub dns_hijack: Vec<String>,
+    pub device_id: String,
 }
 
 #[derive(Clone, Default)]

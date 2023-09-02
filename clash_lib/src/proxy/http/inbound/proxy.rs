@@ -69,9 +69,7 @@ async fn proxy(
                             ..Default::default()
                         };
 
-                        dispatcher
-                            .dispatch_stream(sess, Box::new(upgraded) as _)
-                            .await
+                        dispatcher.dispatch_stream(sess, upgraded).await
                     }
                     Err(e) => warn!("HTTP handshake failure, {}", e),
                 }
