@@ -62,7 +62,7 @@ trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-h
 # DoH
 rustls = { version  = "0.21", features=["dangerous_configuration"] }
 rustls-pemfile = "1.0.3"
-webpki-roots = "0.22"
+webpki-roots = "0.25"
 dhcproto = "0.8"
 
 rand = "0.8"
