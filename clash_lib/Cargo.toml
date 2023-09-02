@@ -9,7 +9,7 @@ default = ["shadowsocks"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io"] }
-tokio-rustls = "0.23.4"
+tokio-rustls = "0.24"
 thiserror = "1.0"
 async-trait = "0.1"
 anyhow = "1.0"
@@ -54,11 +54,13 @@ serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 erased-serde = "0.3.30"
 
-trust-dns-client = "0.22"
-trust-dns-resolver = "0.22.0"
-trust-dns-proto = { version = "0.22", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+trust-dns-client = "0.23"
+trust-dns-resolver = "0.23"
+trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 # DoH
-rustls = { version  = "0.20", features=["dangerous_configuration"] }
+rustls = { version  = "0.21", features=["dangerous_configuration"] }
+rustls-pemfile = "1.0.3"
 webpki-roots = "0.22"
 dhcproto = "0.8"
 

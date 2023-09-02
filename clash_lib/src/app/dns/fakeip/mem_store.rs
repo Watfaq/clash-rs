@@ -1,13 +1,13 @@
-use std::{cell::RefCell, net::IpAddr};
+use std::net::IpAddr;
 
 use super::Store;
 
-pub struct InmemStore {
+pub struct InMemStore {
     itoh: lru_time_cache::LruCache<IpAddr, String>,
     htoi: lru_time_cache::LruCache<String, IpAddr>,
 }
 
-impl InmemStore {
+impl InMemStore {
     pub fn new(size: usize) -> Self {
         Self {
             itoh: lru_time_cache::LruCache::with_capacity(size),
@@ -16,7 +16,7 @@ impl InmemStore {
     }
 }
 
-impl Store for InmemStore {
+impl Store for InMemStore {
     fn get_by_host(&mut self, host: &str) -> Option<std::net::IpAddr> {
         self.htoi.get_mut(host).map(|ip| {
             self.itoh.get_mut(ip);
@@ -49,7 +49,7 @@ impl Store for InmemStore {
         self.itoh.contains_key(&ip)
     }
 
-    fn copy_to(&self, _store: &mut RefCell<Box<dyn Store>>) {
+    fn copy_to(&self, _store: &mut Box<dyn Store>) {
         todo!("not implemented yet")
     }
 }

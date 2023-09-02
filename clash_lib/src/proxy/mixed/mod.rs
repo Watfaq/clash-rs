@@ -3,7 +3,6 @@ use crate::proxy::{AnyInboundListener, InboundListener};
 use crate::session::{Network, Session};
 use crate::Dispatcher;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 

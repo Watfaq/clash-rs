@@ -1,25 +1,34 @@
 use async_trait::async_trait;
 use ipnet::AddrParseError;
 use regex::Regex;
+use rustls::{Certificate, PrivateKey};
 use std::fmt::Debug;
+use std::io::BufReader;
+use std::net::SocketAddr;
 use std::{collections::HashMap, net::IpAddr, sync::Arc};
 use trust_dns_proto::op;
 use url::Url;
 
+use crate::config::def::DNSListen;
 use crate::{common::trie, config::def::DNSMode, Error};
 
 mod dhcp;
 mod dns_client;
+mod dummy_keys;
 mod fakeip;
 mod filters;
 mod helper;
 pub mod resolver;
+mod server;
 mod system;
 
 use crate::dns::dns_client::DNSNetMode;
 
 pub use resolver::ClashResolver;
 pub use resolver::Resolver;
+pub use server::get_dns_listener;
+
+use self::dummy_keys::{TEST_CERT, TEST_KEY};
 
 #[macro_export]
 macro_rules! dns_debug {
@@ -65,6 +74,25 @@ pub struct FallbackFilter {
     domain: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+pub struct DoHConfig {
+    certificate_and_key: (Vec<Certificate>, PrivateKey),
+    dns_hostname: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DoTConfig {
+    certificate_and_key: (Vec<Certificate>, PrivateKey),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct DNSListenAddr {
+    udp: Option<SocketAddr>,
+    tcp: Option<SocketAddr>,
+    doh: Option<(SocketAddr, DoHConfig)>,
+    dot: Option<(SocketAddr, DoTConfig)>,
+}
+
 #[derive(Default)]
 pub struct Config {
     enable: bool,
@@ -72,10 +100,10 @@ pub struct Config {
     nameserver: Vec<NameServer>,
     fallback: Vec<NameServer>,
     fallback_filter: FallbackFilter,
-    listen: String,
+    listen: DNSListenAddr,
     enhance_mode: DNSMode,
     default_nameserver: Vec<NameServer>,
-    fake_ip_range: Option<fakeip::FakeDns>,
+    fake_dns: Option<fakeip::FakeDns>,
     hosts: Option<trie::StringTrie<IpAddr>>,
     nameserver_policy: HashMap<String, NameServer>,
 }
@@ -243,11 +271,91 @@ impl TryFrom<&crate::config::def::Config> for Config {
             nameserver: nameservers,
             fallback,
             fallback_filter: dc.fallback_filter.clone().into(),
-            listen: dc.listen.clone(),
+            listen: dc
+                .listen
+                .clone()
+                .map(|l| match l {
+                    DNSListen::Udp(u) => {
+                        let addr = u.parse::<SocketAddr>().map_err(|_| {
+                            Error::InvalidConfig(
+                                format!("invalid dns udp listen address: {}", u).into(),
+                            )
+                        })?;
+                        Ok(DNSListenAddr {
+                            udp: Some(addr),
+                            ..Default::default()
+                        })
+                    }
+                    DNSListen::Multiple(map) => {
+                        let mut udp = None;
+                        let mut tcp = None;
+                        let mut doh = None;
+                        let mut dot = None;
+
+                        for (k, v) in map {
+                            let addr = v.parse::<SocketAddr>().map_err(|_| {
+                                Error::InvalidConfig(
+                                    format!("invalid DNS listen address: {} -> {}", k, v).into(),
+                                )
+                            })?;
+                            match k.as_str() {
+                                "udp" => udp = Some(addr),
+                                "tcp" => tcp = Some(addr),
+                                "doh" => {
+                                    let mut buf_read: Box<dyn std::io::BufRead> =
+                                        Box::new(BufReader::new(TEST_CERT.as_bytes()));
+                                    let certs = rustls_pemfile::certs(&mut buf_read)
+                                        .unwrap()
+                                        .into_iter()
+                                        .map(Certificate)
+                                        .collect::<Vec<_>>();
+
+                                    let mut buf_read: Box<dyn std::io::BufRead> =
+                                        Box::new(BufReader::new(TEST_KEY.as_bytes()));
+                                    let mut keys =
+                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                    let c = DoHConfig {
+                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        dns_hostname: Some("dns.example.com".to_owned()),
+                                    };
+                                    doh = Some((addr, c))
+                                }
+                                "dot" => {
+                                    let mut buf_read: Box<dyn std::io::BufRead> =
+                                        Box::new(BufReader::new(TEST_CERT.as_bytes()));
+                                    let certs = rustls_pemfile::certs(&mut buf_read)
+                                        .unwrap()
+                                        .into_iter()
+                                        .map(Certificate)
+                                        .collect::<Vec<_>>();
+
+                                    let mut buf_read: Box<dyn std::io::BufRead> =
+                                        Box::new(BufReader::new(TEST_KEY.as_bytes()));
+                                    let mut keys =
+                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                    let c = DoTConfig {
+                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                    };
+                                    dot = Some((addr, c))
+                                }
+                                _ => {
+                                    return Err(Error::InvalidConfig(format!(
+                                        "invalid dns listen address: {}",
+                                        k
+                                    )))
+                                }
+                            }
+                        }
+
+                        Ok(DNSListenAddr { udp, tcp, doh, dot })
+                    }
+                })
+                .transpose()?
+                .unwrap_or_default(),
             enhance_mode: dc.enhanced_mode.clone(),
             default_nameserver,
-            fake_ip_range: match dc.enhanced_mode {
-                DNSMode::FakeIP => {
+            fake_dns: match dc.enhanced_mode {
+                DNSMode::FakeIp => {
                     let ipnet = dc
                         .fake_ip_range
                         .parse::<ipnet::IpNet>()
@@ -255,7 +363,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
                     Some(fakeip::FakeDns::new(fakeip::Opts {
                         ipnet,
-                        host: if dc.fake_ip_filter.len() != 0 {
+                        skipped_hostnames: if dc.fake_ip_filter.len() != 0 {
                             let mut host = trie::StringTrie::new();
                             for domain in dc.fake_ip_filter.iter() {
                                 host.insert(domain.as_str(), Arc::new(true));

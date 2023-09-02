@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
 use rand::prelude::SliceRandom;
-use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
@@ -204,8 +203,8 @@ impl Resolver {
             })
             .map(|r| match r.data() {
                 Some(data) => match data {
-                    rr::RData::A(v4) => net::IpAddr::V4(*v4),
-                    rr::RData::AAAA(v6) => net::IpAddr::V6(*v6),
+                    rr::RData::A(v4) => net::IpAddr::V4(**v4),
+                    rr::RData::AAAA(v6) => net::IpAddr::V6(**v6),
                     _ => unreachable!("should be only A/AAAA"),
                 },
                 None => unreachable!("should only be A/AAAA"),
@@ -316,7 +315,7 @@ impl Resolver {
         }
     }
 
-    pub async fn new(cfg: Config) -> ThreadSafeDNSResolver {
+    pub async fn new(cfg: &Config) -> ThreadSafeDNSResolver {
         if !cfg.enable {
             return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
         }
@@ -324,7 +323,7 @@ impl Resolver {
         let default_resolver = Arc::new(Resolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
-            main: make_clients(cfg.default_nameserver, None).await,
+            main: make_clients(cfg.default_nameserver.clone(), None).await,
             fallback: None,
             fallback_domain_filters: None,
             fallback_ip_filters: None,
@@ -334,10 +333,10 @@ impl Resolver {
 
         let r = Resolver {
             ipv6: AtomicBool::new(cfg.ipv6),
-            main: make_clients(cfg.nameserver, Some(default_resolver.clone())).await,
-            hosts: cfg.hosts,
+            main: make_clients(cfg.nameserver.clone(), Some(default_resolver.clone())).await,
+            hosts: cfg.hosts.clone(),
             fallback: if cfg.fallback.len() > 0 {
-                Some(make_clients(cfg.fallback, Some(default_resolver.clone())).await)
+                Some(make_clients(cfg.fallback.clone(), Some(default_resolver.clone())).await)
             } else {
                 None
             },
@@ -360,10 +359,10 @@ impl Resolver {
                 filters.push(Box::new(GeoIPFilter::new(&cfg.fallback_filter.geo_ip_code))
                     as Box<dyn FallbackIPFilter>);
 
-                if let Some(ipcidr) = cfg.fallback_filter.ip_cidr {
+                if let Some(ipcidr) = &cfg.fallback_filter.ip_cidr {
                     for subnet in ipcidr {
                         filters
-                            .push(Box::new(IPNetFilter::new(subnet)) as Box<dyn FallbackIPFilter>)
+                            .push(Box::new(IPNetFilter::new(*subnet)) as Box<dyn FallbackIPFilter>)
                     }
                 }
 
@@ -376,10 +375,12 @@ impl Resolver {
             )),
             policy: if cfg.nameserver_policy.len() > 0 {
                 let mut p = trie::StringTrie::new();
-                for (domain, ns) in cfg.nameserver_policy {
+                for (domain, ns) in &cfg.nameserver_policy {
                     p.insert(
                         domain.as_str(),
-                        Arc::new(make_clients(vec![ns], Some(default_resolver.clone())).await),
+                        Arc::new(
+                            make_clients(vec![ns.to_owned()], Some(default_resolver.clone())).await,
+                        ),
                     );
                 }
                 Some(p)

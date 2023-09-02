@@ -165,8 +165,16 @@ impl Default for Config {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum DNSListen {
+    Udp(String),
+    Multiple(HashMap<String, String>),
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
+#[serde(rename_all = "kebab-case")]
 pub struct DNS {
     pub enable: bool,
     pub ipv6: bool,
@@ -174,7 +182,7 @@ pub struct DNS {
     pub nameserver: Vec<String>,
     pub fallback: Vec<String>,
     pub fallback_filter: FallbackFilter,
-    pub listen: String,
+    pub listen: Option<DNSListen>,
     pub enhanced_mode: DNSMode,
     pub fake_ip_range: String,
     pub fake_ip_filter: Vec<String>,
@@ -202,11 +210,11 @@ impl Default for DNS {
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub enum DNSMode {
     #[default]
     Normal,
-    FakeIP,
-    Mapping,
+    FakeIp,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

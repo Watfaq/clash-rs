@@ -9,7 +9,12 @@ authentication:
 
 dns:
   enable: true
-  listen: 127.0.0.1:53533
+  listen:
+    udp: 127.0.0.1:53553
+    tcp: 127.0.0.1:53553
+    dot: 127.0.0.1:53554
+    doh: 127.0.0.1:53555
+
   # ipv6: false # when the false, response to AAAA questions will be empty
 
   # These nameservers are used to resolve the DNS nameserver hostnames below.
@@ -17,7 +22,7 @@ dns:
   default-nameserver:
     - 114.114.114.114
     - 8.8.8.8
-  enhanced-mode: fake-ip # or fake-ip
+  enhanced-mode: fake-ip 
   fake-ip-range: 198.18.0.1/16 # Fake IP addresses pool CIDR
   # use-hosts: true # lookup hosts and return IP record
   

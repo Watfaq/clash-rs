@@ -7,17 +7,19 @@ static COMPLEX_WILDCARD: &str = "+";
 static DOT_WILDCARD: &str = "";
 static WILDCARD: &str = "*";
 
-pub struct StringTrie<T: Sync + Send> {
+#[derive(Clone)]
+pub struct StringTrie<T: Sync + Send + Clone> {
     root: Node<T>,
     __type_holder: PhantomData<T>,
 }
 
-pub struct Node<T: Sync + Send> {
+#[derive(Clone)]
+pub struct Node<T: Sync + Send + Clone> {
     children: HashMap<String, Node<T>>,
     data: Option<Arc<T>>,
 }
 
-impl<T: Sync + Send> Node<T> {
+impl<T: Sync + Send + Clone> Node<T> {
     pub fn new() -> Self {
         Node {
             children: HashMap::new(),
@@ -46,8 +48,7 @@ impl<T: Sync + Send> Node<T> {
     }
 }
 
-// TODO: impl Drop
-impl<T: Sync + Send> StringTrie<T> {
+impl<T: Sync + Send + Clone> StringTrie<T> {
     pub fn new() -> Self {
         StringTrie {
             root: Node::new(),

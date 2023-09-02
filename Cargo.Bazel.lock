@@ -1,5 +1,5 @@
 {
-  "checksum": "4cbdcb9e3b0bf965148711c63b8c4f9f82332f99af211db5d11b917158b49e50",
+  "checksum": "36af40e40ba9c0e271414f9fedb7f339191c46dba1985033606191a9aac5bd10",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -3599,8 +3599,12 @@
               "target": "regex"
             },
             {
-              "id": "rustls 0.20.8",
+              "id": "rustls 0.21.7",
               "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 1.0.3",
+              "target": "rustls_pemfile"
             },
             {
               "id": "serde 1.0.185",
@@ -3639,7 +3643,7 @@
               "target": "tokio_boring"
             },
             {
-              "id": "tokio-rustls 0.23.4",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             },
             {
@@ -3667,16 +3671,20 @@
               "target": "tracing_subscriber"
             },
             {
-              "id": "trust-dns-client 0.22.0",
+              "id": "trust-dns-client 0.23.0",
               "target": "trust_dns_client"
             },
             {
-              "id": "trust-dns-proto 0.22.0",
+              "id": "trust-dns-proto 0.23.0",
               "target": "trust_dns_proto"
             },
             {
-              "id": "trust-dns-resolver 0.22.0",
+              "id": "trust-dns-resolver 0.23.0",
               "target": "trust_dns_resolver"
+            },
+            {
+              "id": "trust-dns-server 0.23.0",
+              "target": "trust_dns_server"
             },
             {
               "id": "url 2.4.0",
@@ -4802,6 +4810,45 @@
       },
       "license": "MIT"
     },
+    "drain 0.1.1": {
+      "name": "drain",
+      "version": "0.1.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/drain/0.1.1/download",
+          "sha256": "2f1a0abf3fcefad9b4dd0e414207a7408e12b68414a01e6bb19b897d5bd7632d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "drain",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "drain",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "tokio 1.29.1",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.1"
+      },
+      "license": "Apache-2.0"
+    },
     "ecdsa 0.13.4": {
       "name": "ecdsa",
       "version": "0.13.4",
@@ -5133,6 +5180,57 @@
         },
         "edition": "2018",
         "version": "0.5.1"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "enum-as-inner 0.6.0": {
+      "name": "enum-as-inner",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/enum-as-inner/0.6.0/download",
+          "sha256": "5ffccbb6966c05b32ef8fbac435df276c4ae4d3dc55a8cd0eb9745e6c12f546a"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "enum_as_inner",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "enum_as_inner",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.32",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.28",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -12118,7 +12216,8 @@
             "alloc",
             "default",
             "dev_urandom_fallback",
-            "once_cell"
+            "once_cell",
+            "std"
           ],
           "selects": {}
         },
@@ -12444,13 +12543,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustls 0.20.8": {
+    "rustls 0.21.7": {
       "name": "rustls",
-      "version": "0.20.8",
+      "version": "0.21.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustls/0.20.8/download",
-          "sha256": "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
+          "url": "https://crates.io/api/v1/crates/rustls/0.21.7/download",
+          "sha256": "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
         }
       },
       "targets": [
@@ -12499,22 +12598,22 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.20.8",
+              "id": "rustls 0.21.7",
               "target": "build_script_build"
+            },
+            {
+              "id": "rustls-webpki 0.101.4",
+              "target": "webpki"
             },
             {
               "id": "sct 0.7.0",
               "target": "sct"
-            },
-            {
-              "id": "webpki 0.22.0",
-              "target": "webpki"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.20.8"
+        "edition": "2021",
+        "version": "0.21.7"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -12530,7 +12629,7 @@
           "selects": {}
         }
       },
-      "license": "Apache-2.0/ISC/MIT"
+      "license": "Apache-2.0 OR ISC OR MIT"
     },
     "rustls-pemfile 1.0.3": {
       "name": "rustls-pemfile",
@@ -12570,6 +12669,57 @@
         "version": "1.0.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT"
+    },
+    "rustls-webpki 0.101.4": {
+      "name": "rustls-webpki",
+      "version": "0.101.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rustls-webpki/0.101.4/download",
+          "sha256": "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "webpki",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            },
+            {
+              "id": "untrusted 0.7.1",
+              "target": "untrusted"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.101.4"
+      },
+      "license": "ISC"
     },
     "rustversion 1.0.14": {
       "name": "rustversion",
@@ -13253,6 +13403,51 @@
         },
         "edition": "2021",
         "version": "0.1.14"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "serde_spanned 0.6.3": {
+      "name": "serde_spanned",
+      "version": "0.6.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/serde_spanned/0.6.3/download",
+          "sha256": "96426c9936fd7a0124915f9185ea1d20aa9445cc9821142f0a73bc9207a2e186"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_spanned",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "serde_spanned",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.3"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -15180,13 +15375,13 @@
       },
       "license": "MIT"
     },
-    "tokio-rustls 0.23.4": {
+    "tokio-rustls 0.24.1": {
       "name": "tokio-rustls",
-      "version": "0.23.4",
+      "version": "0.24.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-rustls/0.23.4/download",
-          "sha256": "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
+          "url": "https://crates.io/api/v1/crates/tokio-rustls/0.24.1/download",
+          "sha256": "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
         }
       },
       "targets": [
@@ -15217,22 +15412,18 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.20.8",
+              "id": "rustls 0.21.7",
               "target": "rustls"
             },
             {
               "id": "tokio 1.29.1",
               "target": "tokio"
-            },
-            {
-              "id": "webpki 0.22.0",
-              "target": "webpki"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.23.4"
+        "version": "0.24.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -15547,6 +15738,172 @@
         "version": "0.7.8"
       },
       "license": "MIT"
+    },
+    "toml 0.7.6": {
+      "name": "toml",
+      "version": "0.7.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/toml/0.7.6/download",
+          "sha256": "c17e963a819c331dcacd7ab957d80bc2b9a9c1e71c804826d2f283dd65306542"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "toml",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "display",
+            "parse"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            },
+            {
+              "id": "serde_spanned 0.6.3",
+              "target": "serde_spanned"
+            },
+            {
+              "id": "toml_datetime 0.6.3",
+              "target": "toml_datetime"
+            },
+            {
+              "id": "toml_edit 0.19.14",
+              "target": "toml_edit"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.6"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "toml_datetime 0.6.3": {
+      "name": "toml_datetime",
+      "version": "0.6.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/toml_datetime/0.6.3/download",
+          "sha256": "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_datetime",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "toml_datetime",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.3"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "toml_edit 0.19.14": {
+      "name": "toml_edit",
+      "version": "0.19.14",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/toml_edit/0.19.14/download",
+          "sha256": "f8123f27e969974a3dfba720fdb560be359f57b44302d280ba72e76a74480e8a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "toml_edit",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "toml_edit",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "serde"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 2.0.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            },
+            {
+              "id": "serde_spanned 0.6.3",
+              "target": "serde_spanned"
+            },
+            {
+              "id": "toml_datetime 0.6.3",
+              "target": "toml_datetime"
+            },
+            {
+              "id": "winnow 0.5.15",
+              "target": "winnow"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.19.14"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "tower 0.4.13": {
       "name": "tower",
@@ -16133,13 +16490,13 @@
       },
       "license": "MIT"
     },
-    "trust-dns-client 0.22.0": {
+    "trust-dns-client 0.23.0": {
       "name": "trust-dns-client",
-      "version": "0.22.0",
+      "version": "0.23.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/trust-dns-client/0.22.0/download",
-          "sha256": "6c408c32e6a9dbb38037cece35740f2cf23c875d8ca134d33631cec83f74d3fe"
+          "url": "https://crates.io/api/v1/crates/trust-dns-client/0.23.0/download",
+          "sha256": "8e1bcca49cb7115ce70857db94ebff3f2903b50e3e5c20b1def5cf9b1273455f"
         }
       },
       "targets": [
@@ -16177,8 +16534,8 @@
               "target": "futures_util"
             },
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             },
             {
               "id": "radix_trie 0.2.1",
@@ -16193,10 +16550,6 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.24",
-              "target": "time"
-            },
-            {
               "id": "tokio 1.29.1",
               "target": "tokio"
             },
@@ -16205,16 +16558,16 @@
               "target": "tracing"
             },
             {
-              "id": "trust-dns-proto 0.22.0",
+              "id": "trust-dns-proto 0.23.0",
               "target": "trust_dns_proto"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.22.0"
+        "edition": "2021",
+        "version": "0.23.0"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "trust-dns-proto 0.21.2": {
       "name": "trust-dns-proto",
@@ -16347,16 +16700,137 @@
         ],
         "crate_features": {
           "common": [
+            "tokio",
+            "tokio-runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
+            },
+            {
+              "id": "futures-channel 0.3.28",
+              "target": "futures_channel"
+            },
+            {
+              "id": "futures-io 0.3.28",
+              "target": "futures_io"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "idna 0.2.3",
+              "target": "idna"
+            },
+            {
+              "id": "ipnet 2.8.0",
+              "target": "ipnet"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "smallvec 1.11.0",
+              "target": "smallvec"
+            },
+            {
+              "id": "thiserror 1.0.44",
+              "target": "thiserror"
+            },
+            {
+              "id": "tinyvec 1.6.0",
+              "target": "tinyvec"
+            },
+            {
+              "id": "tokio 1.29.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            },
+            {
+              "id": "url 2.4.0",
+              "target": "url"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.72",
+              "target": "async_trait"
+            },
+            {
+              "id": "enum-as-inner 0.5.1",
+              "target": "enum_as_inner"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.22.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "trust-dns-proto 0.23.0": {
+      "name": "trust-dns-proto",
+      "version": "0.23.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/trust-dns-proto/0.23.0/download",
+          "sha256": "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "trust_dns_proto",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "trust_dns_proto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
             "bytes",
             "default",
             "dns-over-https",
             "dns-over-https-rustls",
             "dns-over-rustls",
             "dns-over-tls",
+            "dnssec",
+            "dnssec-ring",
             "h2",
             "http",
+            "ring",
             "rustls",
             "rustls-pemfile",
+            "serde",
+            "serde-config",
+            "text-parsing",
             "tokio",
             "tokio-runtime",
             "tokio-rustls",
@@ -16400,7 +16874,7 @@
               "target": "http"
             },
             {
-              "id": "idna 0.2.3",
+              "id": "idna 0.4.0",
               "target": "idna"
             },
             {
@@ -16408,20 +16882,32 @@
               "target": "ipnet"
             },
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             },
             {
               "id": "rand 0.8.5",
               "target": "rand"
             },
             {
-              "id": "rustls 0.20.8",
+              "id": "ring 0.16.20",
+              "target": "ring"
+            },
+            {
+              "id": "rustls 0.21.7",
               "target": "rustls"
             },
             {
               "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-webpki 0.101.4",
+              "target": "webpki"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
             },
             {
               "id": "smallvec 1.11.0",
@@ -16440,7 +16926,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-rustls 0.23.4",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             },
             {
@@ -16452,17 +16938,13 @@
               "target": "url"
             },
             {
-              "id": "webpki 0.22.0",
-              "target": "webpki"
-            },
-            {
-              "id": "webpki-roots 0.22.6",
+              "id": "webpki-roots 0.25.2",
               "target": "webpki_roots"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
@@ -16470,15 +16952,15 @@
               "target": "async_trait"
             },
             {
-              "id": "enum-as-inner 0.5.1",
+              "id": "enum-as-inner 0.6.0",
               "target": "enum_as_inner"
             }
           ],
           "selects": {}
         },
-        "version": "0.22.0"
+        "version": "0.23.0"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "trust-dns-resolver 0.22.0": {
       "name": "trust-dns-resolver",
@@ -16576,6 +17058,266 @@
         "version": "0.22.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "trust-dns-resolver 0.23.0": {
+      "name": "trust-dns-resolver",
+      "version": "0.23.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/trust-dns-resolver/0.23.0/download",
+          "sha256": "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "trust_dns_resolver",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "trust_dns_resolver",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "dns-over-https",
+            "dns-over-https-rustls",
+            "dns-over-rustls",
+            "dns-over-tls",
+            "dnssec",
+            "dnssec-ring",
+            "ipconfig",
+            "resolv-conf",
+            "rustls",
+            "serde",
+            "serde-config",
+            "system-config",
+            "tokio",
+            "tokio-runtime",
+            "tokio-rustls",
+            "webpki-roots"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "lru-cache 0.1.2",
+              "target": "lru_cache"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "parking_lot 0.12.1",
+              "target": "parking_lot"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "resolv-conf 0.7.0",
+              "target": "resolv_conf"
+            },
+            {
+              "id": "rustls 0.21.7",
+              "target": "rustls"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            },
+            {
+              "id": "smallvec 1.11.0",
+              "target": "smallvec"
+            },
+            {
+              "id": "thiserror 1.0.44",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.29.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            },
+            {
+              "id": "trust-dns-proto 0.23.0",
+              "target": "trust_dns_proto"
+            },
+            {
+              "id": "webpki-roots 0.25.2",
+              "target": "webpki_roots"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "ipconfig 0.3.2",
+                "target": "ipconfig"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.23.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "trust-dns-server 0.23.0": {
+      "name": "trust-dns-server",
+      "version": "0.23.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/trust-dns-server/0.23.0/download",
+          "sha256": "0f2863cefc06d1d5605ea937bfd8939e23687bb44dd5d136217ad9378582f9cc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "trust_dns_server",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "trust_dns_server",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "dns-over-https",
+            "dns-over-https-rustls",
+            "dns-over-rustls",
+            "dns-over-tls",
+            "dnssec",
+            "dnssec-ring",
+            "h2",
+            "http",
+            "rustls",
+            "tokio-rustls",
+            "trust-dns-resolver"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "drain 0.1.1",
+              "target": "drain"
+            },
+            {
+              "id": "futures-executor 0.3.28",
+              "target": "futures_executor"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "h2 0.3.20",
+              "target": "h2"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "rustls 0.21.7",
+              "target": "rustls"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 1.0.44",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.24",
+              "target": "time"
+            },
+            {
+              "id": "tokio 1.29.1",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "toml 0.7.6",
+              "target": "toml"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            },
+            {
+              "id": "trust-dns-proto 0.23.0",
+              "target": "trust_dns_proto"
+            },
+            {
+              "id": "trust-dns-resolver 0.23.0",
+              "target": "trust_dns_resolver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.72",
+              "target": "async_trait"
+            },
+            {
+              "id": "enum-as-inner 0.6.0",
+              "target": "enum_as_inner"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.23.0"
+      },
+      "license": "MIT OR Apache-2.0"
     },
     "try-lock 0.2.4": {
       "name": "try-lock",
@@ -17099,7 +17841,8 @@
         ],
         "crate_features": {
           "common": [
-            "default"
+            "default",
+            "serde"
           ],
           "selects": {}
         },
@@ -17116,6 +17859,10 @@
             {
               "id": "percent-encoding 2.3.0",
               "target": "percent_encoding"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -17929,13 +18676,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -17990,6 +18730,36 @@
         },
         "edition": "2018",
         "version": "0.22.6"
+      },
+      "license": "MPL-2.0"
+    },
+    "webpki-roots 0.25.2": {
+      "name": "webpki-roots",
+      "version": "0.25.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/webpki-roots/0.25.2/download",
+          "sha256": "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_roots",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "webpki_roots",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.25.2"
       },
       "license": "MPL-2.0"
     },
@@ -19852,6 +20622,44 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "winnow 0.5.15": {
+      "name": "winnow",
+      "version": "0.5.15",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/winnow/0.5.15/download",
+          "sha256": "7c2e3184b9c4e92ad5167ca73039d0c42476302ab603e2fec4487511f38ccefc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winnow",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "winnow",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.5.15"
+      },
+      "license": "MIT"
     },
     "winreg 0.50.0": {
       "name": "winreg",

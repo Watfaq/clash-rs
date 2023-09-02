@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use super::Store;
 
 pub struct FileStore;
@@ -35,7 +33,7 @@ impl Store for FileStore {
         todo!()
     }
 
-    fn copy_to(&self, _store: &mut RefCell<Box<dyn Store>>) {
+    fn copy_to(&self, _store: &mut Box<dyn Store>) {
         todo!()
     }
 }

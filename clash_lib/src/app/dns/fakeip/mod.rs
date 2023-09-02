@@ -1,6 +1,6 @@
-use std::{cell::RefCell, net};
+use std::{net, sync::Arc};
 
-use crate::{app::dns::fakeip::mem_store::InmemStore, common::trie, Error};
+use crate::{app::dns::fakeip::mem_store::InMemStore, common::trie, Error};
 
 use byteorder::{BigEndian, ByteOrder};
 use tokio::sync::RwLock;
@@ -10,13 +10,31 @@ mod mem_store;
 
 pub struct Opts {
     pub ipnet: ipnet::IpNet,
-    pub host: Option<trie::StringTrie<bool>>,
+    pub skipped_hostnames: Option<trie::StringTrie<bool>>,
     pub size: usize,
     pub persistence: bool,
     pub db_path: Option<String>,
 }
 
-pub struct FakeDns(RwLock<FakeDnsImpl>);
+trait Store: Sync + Send {
+    fn get_by_host(&mut self, host: &str) -> Option<net::IpAddr>;
+    fn pub_by_host(&mut self, host: &str, ip: net::IpAddr);
+    fn get_by_ip(&mut self, ip: net::IpAddr) -> Option<String>;
+    fn put_by_ip(&mut self, ip: net::IpAddr, host: &str);
+    fn del_by_ip(&mut self, ip: net::IpAddr);
+    fn exist(&mut self, ip: net::IpAddr) -> bool;
+    fn copy_to(&self, store: &mut Box<dyn Store>);
+}
+
+pub struct FakeDns {
+    max: u32,
+    min: u32,
+    gateway: u32,
+    offset: u32,
+    skipped_hostnames: Option<trie::StringTrie<bool>>,
+    ipnet: ipnet::IpNet,
+    store: Arc<RwLock<Box<dyn Store>>>,
+}
 
 impl FakeDns {
     pub fn new(opt: Opts) -> Result<Self, Error> {
@@ -24,7 +42,7 @@ impl FakeDns {
             net::IpAddr::V4(ip) => ip,
             _ => unreachable!("fakeip range must be valid ipv4 subnet"),
         };
-        let min = FakeDns::ip_to_uint(&ip) + 2;
+        let min = Self::ip_to_uint(&ip) + 2;
         let prefix_len = opt.ipnet.prefix_len();
         let max_prefix_len = opt.ipnet.max_prefix_len();
         debug_assert_eq!(max_prefix_len, 32, "v4 subnet");
@@ -32,116 +50,55 @@ impl FakeDns {
 
         let max = min + total - 1;
 
-        let store: RefCell<Box<dyn Store>>;
-        if !opt.persistence {
-            store = RefCell::new(Box::new(InmemStore::new(opt.size)));
+        let store = if !opt.persistence {
+            Arc::new(RwLock::new(Box::new(InMemStore::new(opt.size)) as _))
         } else {
             return Err(Error::InvalidConfig(
                 "do not support fakeip range persistent(yet)".to_string(),
             ));
-        }
+        };
 
-        let inner = FakeDnsImpl {
+        Ok(Self {
             max,
             min,
             gateway: min - 1,
             offset: 0,
-            host: opt.host,
+            skipped_hostnames: opt.skipped_hostnames,
             ipnet: opt.ipnet,
             store,
-        };
-
-        Ok(Self(RwLock::new(inner)))
+        })
     }
 
-    pub async fn lookup(&self, host: &str) -> net::IpAddr {
-        self.0.write().await.lookup(host)
-    }
-
-    pub async fn reverse_lookup(&mut self, ip: net::IpAddr) -> Option<String> {
-        self.0.write().await.reverse_lookup(ip)
-    }
-
-    pub async fn should_skip(&self, domain: &str) -> bool {
-        self.0.read().await.should_skip(domain)
-    }
-
-    pub async fn exist(&mut self, ip: net::IpAddr) -> bool {
-        self.0.write().await.exist(ip)
-    }
-
-    pub async fn gateway(&self) -> net::Ipv4Addr {
-        self.0.read().await.gateway()
-    }
-
-    pub async fn ipnet(&self) -> ipnet::IpNet {
-        self.0.read().await.ipnet()
-    }
-
-    pub async fn copy_from(&mut self, src: &FakeDns) {
-        self.0
-            .write()
-            .await
-            .copy_from(&src.0.write().await.get_mut())
-    }
-
-    fn ip_to_uint(ip: &net::Ipv4Addr) -> u32 {
-        BigEndian::read_u32(&ip.octets())
-    }
-}
-
-trait Store {
-    fn get_by_host(&mut self, host: &str) -> Option<net::IpAddr>;
-    fn pub_by_host(&mut self, host: &str, ip: net::IpAddr);
-    fn get_by_ip(&mut self, ip: net::IpAddr) -> Option<String>;
-    fn put_by_ip(&mut self, ip: net::IpAddr, host: &str);
-    fn del_by_ip(&mut self, ip: net::IpAddr);
-    fn exist(&mut self, ip: net::IpAddr) -> bool;
-    fn copy_to(&self, store: &mut RefCell<Box<dyn Store>>);
-}
-
-// Usage to FakeDnsImpl should be guarded by Mutex
-struct FakeDnsImpl {
-    max: u32,
-    min: u32,
-    gateway: u32,
-    offset: u32,
-    host: Option<trie::StringTrie<bool>>,
-    ipnet: ipnet::IpNet,
-    store: RefCell<Box<dyn Store>>,
-}
-
-impl FakeDnsImpl {
-    pub fn lookup(&mut self, host: &str) -> net::IpAddr {
-        if let Some(ip) = self.store.borrow_mut().get_by_host(host) {
+    pub async fn lookup(&mut self, host: &str) -> net::IpAddr {
+        if let Some(ip) = self.store.write().await.get_by_host(host) {
             return ip;
         }
 
-        let ip = self.get(host);
-        self.store.borrow_mut().pub_by_host(host, ip);
+        let ip = self.get(host).await;
+        self.store.write().await.pub_by_host(host, ip);
         return ip;
     }
 
-    pub fn reverse_lookup(&mut self, ip: net::IpAddr) -> Option<String> {
+    pub async fn reverse_lookup(&mut self, ip: net::IpAddr) -> Option<String> {
         if !ip.is_ipv4() {
             None
         } else {
-            self.store.borrow_mut().get_by_ip(ip)
+            self.store.write().await.get_by_ip(ip)
         }
     }
 
     pub fn should_skip(&self, domain: &str) -> bool {
-        match &self.host {
+        match &self.skipped_hostnames {
             None => false,
             Some(host) => host.search(domain).is_some(),
         }
     }
 
-    pub fn exist(&mut self, ip: net::IpAddr) -> bool {
+    pub async fn exist(&mut self, ip: net::IpAddr) -> bool {
         if !ip.is_ipv4() {
             false
         } else {
-            self.store.borrow_mut().exist(ip)
+            self.store.write().await.exist(ip)
         }
     }
 
@@ -153,11 +110,12 @@ impl FakeDnsImpl {
         self.ipnet
     }
 
-    pub fn copy_from(&mut self, src: &FakeDnsImpl) {
-        src.store.borrow().copy_to(&mut self.store)
+    pub async fn copy_from(&mut self, src: &Self) {
+        let mut store = self.store.write().await;
+        src.store.read().await.copy_to(&mut *store);
     }
 
-    fn get(&mut self, host: &str) -> net::IpAddr {
+    async fn get(&mut self, host: &str) -> net::IpAddr {
         let current = self.offset;
 
         loop {
@@ -166,25 +124,30 @@ impl FakeDnsImpl {
             if self.offset == current {
                 self.offset = (self.offset + 1) % (self.max - self.min);
                 let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
-                self.store.borrow_mut().del_by_ip(std::net::IpAddr::V4(ip));
+                self.store.write().await.del_by_ip(std::net::IpAddr::V4(ip));
                 break;
             }
 
             let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
-            if !self.store.borrow_mut().exist(std::net::IpAddr::V4(ip)) {
+            if !self.store.write().await.exist(std::net::IpAddr::V4(ip)) {
                 break;
             }
         }
 
         let ip = net::Ipv4Addr::from(self.min + self.offset - 1);
         self.store
-            .borrow_mut()
+            .write()
+            .await
             .put_by_ip(std::net::IpAddr::V4(ip), host);
         std::net::IpAddr::V4(ip)
     }
 
     fn get_mut(&mut self) -> &mut Self {
         self
+    }
+
+    fn ip_to_uint(ip: &net::Ipv4Addr) -> u32 {
+        BigEndian::read_u32(&ip.octets())
     }
 }
 
@@ -201,7 +164,7 @@ mod tests {
         let ipnet = "192.168.0.0/29".parse::<ipnet::IpNet>().unwrap();
         let mut pool = FakeDns::new(Opts {
             ipnet,
-            host: None,
+            skipped_hostnames: None,
             size: 10,
             persistence: false,
             db_path: None,
@@ -221,8 +184,8 @@ mod tests {
         assert_eq!(last, net::IpAddr::from([192, 168, 0, 3]));
         assert!(bar.is_some());
         assert_eq!(bar, Some("bar.com".into()));
-        assert_eq!(pool.gateway().await, net::IpAddr::from([192, 168, 0, 1]));
-        assert_eq!(pool.ipnet().await.to_string(), ipnet.to_string());
+        assert_eq!(pool.gateway(), net::IpAddr::from([192, 168, 0, 1]));
+        assert_eq!(pool.ipnet().to_string(), ipnet.to_string());
         assert!(pool.exist(net::IpAddr::from([192, 168, 0, 3])).await);
         assert!(!pool.exist(net::IpAddr::from([192, 168, 0, 4])).await);
         assert!(!pool.exist("::1".parse().unwrap()).await);
@@ -231,9 +194,9 @@ mod tests {
     #[tokio::test]
     async fn test_inmem_cycle_used() {
         let ipnet = "192.168.0.0/29".parse::<ipnet::IpNet>().unwrap();
-        let pool = FakeDns::new(Opts {
+        let mut pool = FakeDns::new(Opts {
             ipnet,
-            host: None,
+            skipped_hostnames: None,
             size: 10,
             persistence: false,
             db_path: None,
@@ -261,23 +224,23 @@ mod tests {
 
         let pool = FakeDns::new(Opts {
             ipnet,
-            host: Some(tree),
+            skipped_hostnames: Some(tree),
             size: 10,
             persistence: false,
             db_path: None,
         })
         .unwrap();
 
-        assert!(pool.should_skip("example.com").await);
-        assert!(!pool.should_skip("foo.com").await);
+        assert!(pool.should_skip("example.com"));
+        assert!(!pool.should_skip("foo.com"));
     }
 
     #[tokio::test]
     async fn test_pool_max_cache_size() {
         let ipnet = "192.168.0.0/24".parse::<ipnet::IpNet>().unwrap();
-        let pool = FakeDns::new(Opts {
+        let mut pool = FakeDns::new(Opts {
             ipnet,
-            host: None,
+            skipped_hostnames: None,
             size: 2,
             persistence: false,
             db_path: None,
@@ -297,9 +260,9 @@ mod tests {
     #[ignore = "copy not implemented"]
     async fn test_pool_clone() {
         let ipnet = "192.168.0.0/24".parse::<ipnet::IpNet>().unwrap();
-        let pool = FakeDns::new(Opts {
+        let mut pool = FakeDns::new(Opts {
             ipnet,
-            host: None,
+            skipped_hostnames: None,
             size: 2,
             persistence: false,
             db_path: None,
@@ -313,7 +276,7 @@ mod tests {
 
         let mut new_pool = FakeDns::new(Opts {
             ipnet,
-            host: None,
+            skipped_hostnames: None,
             size: 2,
             persistence: false,
             db_path: None,

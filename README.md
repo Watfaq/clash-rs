@@ -46,6 +46,7 @@ TODOs
         - [x] UDP/TCP
         - [x] dhcp
     - [ ] server
+        - [ ] fake ip persistence
     - [ ] HTTP query
 - [ ] API
     - [x] proxies

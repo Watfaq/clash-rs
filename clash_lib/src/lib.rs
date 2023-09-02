@@ -59,6 +59,7 @@ pub enum Config {
 pub struct GlobalState {
     log_level: LogLevel,
     inbound_listener_handle: Option<JoinHandle<()>>,
+    dns_listener_handle: Option<JoinHandle<()>>,
 }
 
 pub struct RuntimeController {
@@ -118,7 +119,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
-    let dns_resolver = dns::Resolver::new(config.dns).await;
+    let dns_resolver = dns::Resolver::new(&config.dns).await;
 
     let outbound_manager = Arc::new(RwLock::new(
         OutboundManager::new(
@@ -171,12 +172,16 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     )?));
 
     let inbound_runner = inbound_manager.lock().await.get_runner()?;
+    let inbound_listener_handle = tokio::spawn(inbound_runner);
 
-    let runner_handle = tokio::spawn(inbound_runner);
+    let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
+        .await
+        .map(|l| tokio::spawn(l));
 
     let global_state = Arc::new(Mutex::new(GlobalState {
         log_level: config.general.log_level,
-        inbound_listener_handle: Some(runner_handle),
+        inbound_listener_handle: Some(inbound_listener_handle),
+        dns_listener_handle,
     }));
 
     let api_runner = app::api::get_api_runner(
