@@ -95,6 +95,8 @@ pub struct Config {
     #[serde(rename = "proxy-providers")]
     pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
     pub experimental: Option<Experimental>,
+
+    pub tun: Option<HashMap<String, Value>>,
 }
 
 impl FromStr for Config {
@@ -161,6 +163,7 @@ impl Default for Config {
                 "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb"
                     .to_owned(),
             ),
+            tun: Default::default(),
         }
     }
 }
@@ -296,6 +299,13 @@ socks-port: 7891
 # Set to true to allow connections to the local-end server from
 # other LAN IP addresses
 allow-lan: false
+
+tun:
+  enable: true
+  stack: system
+  device-url: dev://clash0
+  dns-hijack:
+    - 10.0.0.5
 
 # This is only applicable when `allow-lan` is `true`
 # '*': bind all IP addresses

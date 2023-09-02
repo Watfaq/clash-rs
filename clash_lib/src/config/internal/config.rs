@@ -4,16 +4,17 @@ use std::fmt::Display;
 use std::net::IpAddr;
 use std::str::FromStr;
 
+use serde::de::value::MapDeserializer;
 use serde::{Deserialize, Serialize};
 
 use crate::common::auth;
-use crate::config::def;
+use crate::config::def::{self};
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
 use crate::config::internal::rule::RuleType;
 use crate::proxy::utils::Interface;
 use crate::{
     app::dns,
-    config::def::{Experimental, LogLevel, RunMode},
+    config::def::{LogLevel, RunMode},
     Error,
 };
 
@@ -22,7 +23,8 @@ use super::proxy::{OutboundProxyProtocol, OutboundProxyProvider};
 pub struct Config {
     pub general: General,
     pub dns: dns::Config,
-    pub experimental: Option<Experimental>,
+    pub tun: TunConfig,
+    pub experimental: Option<def::Experimental>,
     pub profile: Profile,
     pub rules: Vec<RuleType>,
     pub users: Vec<auth::User>,
@@ -70,6 +72,15 @@ impl TryFrom<def::Config> for Config {
             },
             dns: (&c).try_into()?,
             experimental: c.experimental,
+            tun: match c.tun {
+                Some(mapping) => TunConfig::deserialize(MapDeserializer::new(mapping.into_iter()))
+                    .map_err(|e| Error::InvalidConfig(format!("invalid tun config: {}", e)))?,
+                None => TunConfig {
+                    enable: false,
+                    device_url: String::new(),
+                    dns_hijack: Vec::new(),
+                },
+            },
             profile: Profile {
                 store_selected: c.profile.store_selected,
                 store_fakeip: c.profile.store_fake_ip,
@@ -195,6 +206,15 @@ pub struct Profile {
     store_selected: bool,
     store_fakeip: bool,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct TunConfig {
+    pub enable: bool,
+    pub device_url: String,
+    pub dns_hijack: Vec<String>,
+}
+
 #[derive(Clone, Default)]
 pub enum BindAddress {
     #[default]
