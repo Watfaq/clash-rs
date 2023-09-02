@@ -1,5 +1,5 @@
 {
-  "checksum": "36af40e40ba9c0e271414f9fedb7f339191c46dba1985033606191a9aac5bd10",
+  "checksum": "8890f546dd54ed95ce8ac5363cc3bab5f58848c5f866b7e2a71e0f3b7c5c080d",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -1235,59 +1235,6 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "atty 0.2.14": {
-      "name": "atty",
-      "version": "0.2.14",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/atty/0.2.14/download",
-          "sha256": "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "atty",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "atty",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(target_os = \"hermit\")": [
-              {
-                "id": "hermit-abi 0.1.19",
-                "target": "hermit_abi"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.147",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.2.14"
-      },
-      "license": "MIT"
     },
     "autocfg 1.1.0": {
       "name": "autocfg",
@@ -3467,10 +3414,6 @@
               "target": "anyhow"
             },
             {
-              "id": "atty 0.2.14",
-              "target": "atty"
-            },
-            {
               "id": "axum 0.6.20",
               "target": "axum"
             },
@@ -3687,6 +3630,10 @@
               "target": "trust_dns_server"
             },
             {
+              "id": "tun 0.5.5",
+              "target": "tun"
+            },
+            {
               "id": "url 2.4.0",
               "target": "url"
             },
@@ -3695,7 +3642,7 @@
               "target": "uuid"
             },
             {
-              "id": "webpki-roots 0.22.6",
+              "id": "webpki-roots 0.25.2",
               "target": "webpki_roots"
             }
           ],
@@ -7006,45 +6953,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hermit-abi 0.1.19": {
-      "name": "hermit-abi",
-      "version": "0.1.19",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hermit-abi/0.1.19/download",
-          "sha256": "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hermit_abi",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "hermit_abi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.147",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.19"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "hermit-abi 0.3.2": {
       "name": "hermit-abi",
       "version": "0.3.2",
@@ -8137,6 +8045,36 @@
         },
         "edition": "2021",
         "version": "0.1.3"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "ioctl-sys 0.6.0": {
+      "name": "ioctl-sys",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ioctl-sys/0.6.0/download",
+          "sha256": "1c429fffa658f288669529fc26565f728489a2e39bc7b24a428aaaf51355182e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ioctl_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ioctl_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.6.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -17349,6 +17287,57 @@
       },
       "license": "MIT"
     },
+    "tun 0.5.5": {
+      "name": "tun",
+      "version": "0.5.5",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/tun/0.5.5/download",
+          "sha256": "cbc25e23adc6cac7dd895ce2780f255902290fc39b00e1ae3c33e89f3d20fa66"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tun",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "tun",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.147",
+              "target": "libc"
+            },
+            {
+              "id": "thiserror 1.0.44",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {
+            "cfg(any(target_os = \"linux\", target_os = \"macos\"))": [
+              {
+                "id": "ioctl-sys 0.6.0",
+                "target": "ioctl_sys",
+                "alias": "ioctl"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.5.5"
+      },
+      "license": "WTFPL"
+    },
     "tungstenite 0.20.0": {
       "name": "tungstenite",
       "version": "0.20.0",
@@ -18650,88 +18639,6 @@
         "version": "0.3.64"
       },
       "license": "MIT/Apache-2.0"
-    },
-    "webpki 0.22.0": {
-      "name": "webpki",
-      "version": "0.22.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/webpki/0.22.0/download",
-          "sha256": "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "webpki",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "webpki",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ring 0.16.20",
-              "target": "ring"
-            },
-            {
-              "id": "untrusted 0.7.1",
-              "target": "untrusted"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.22.0"
-      },
-      "license": null
-    },
-    "webpki-roots 0.22.6": {
-      "name": "webpki-roots",
-      "version": "0.22.6",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/webpki-roots/0.22.6/download",
-          "sha256": "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "webpki_roots",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "webpki_roots",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "webpki 0.22.0",
-              "target": "webpki"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.22.6"
-      },
-      "license": "MPL-2.0"
     },
     "webpki-roots 0.25.2": {
       "name": "webpki-roots",
@@ -20947,6 +20854,18 @@
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
       "x86_64-linux-android",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(any(target_os = \"linux\", target_os = \"macos\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "arm-unknown-linux-gnueabi",
+      "armv7-unknown-linux-gnueabi",
+      "i686-apple-darwin",
+      "i686-unknown-linux-gnu",
+      "powerpc-unknown-linux-gnu",
+      "s390x-unknown-linux-gnu",
+      "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
