@@ -757,7 +757,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "shadowsocks",
- "socket2 0.4.9",
+ "socket2 0.5.3",
  "state",
  "tempfile",
  "thiserror",

@@ -68,7 +68,7 @@ dhcproto = "0.8"
 
 rand = "0.8"
 
-socket2 = "0.4"
+socket2 = "0.5"
 tokio-tungstenite = "0.20.0"
 
 tracing = "0.1"
