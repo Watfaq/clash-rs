@@ -38,6 +38,7 @@ pub enum LogLevel {
     Info,
     Warning,
     Error,
+    #[serde(alias = "off")]
     Silent,
 }
 
@@ -55,21 +56,45 @@ impl Display for LogLevel {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
+/// Example
+/// ```yaml
+/// port: 7890
+/// ```
 pub struct Config {
-    /// these options are optional to tell whether
-    /// the regarding listeners should be enabled
+    /// The HTTP proxy port
     pub port: Option<u16>,
+    /// The SOCKS5 proxy port
     pub socks_port: Option<u16>,
+    /// The redir port
+    #[doc(hidden)]
     pub redir_port: Option<u16>,
+    #[doc(hidden)]
     pub tproxy_port: Option<u16>,
+    /// The HTTP/SOCKS5 mixed proxy port
+    /// # Example
+    /// ```yaml
+    /// mixed-port: 7892
+    /// ```
     pub mixed_port: Option<u16>,
 
-    /// these options have Default::default()
+    /// HTTP and SOCKS5 proxy authentication
     pub authentication: Vec<String>,
+    /// Allow connections to the local-end server from other LAN IP addresses
+    #[deprecated = "dont use. see `bind_address`"]
     pub allow_lan: bool,
+    /// The address that the inbound listens on
+    /// # Note
+    /// - setting this to `*` will listen on all interfaces, which is essentially the same as setting it to `0.0.0.0`
+    /// - setting this to non local IP will enable `allow_lan` automatically
+    /// - and if you don't want `allow_lan` to be enabled, you should set this to `localhost` or `127.1`
     pub bind_address: String,
+    /// Clash router working mode
+    /// Either `rule`, `global` or `direct`
     pub mode: RunMode,
+    /// Log level
+    /// Either `debug`, `info`, `warning`, `error` or `off`
     pub log_level: LogLevel,
+    /// DNS client/server settings
     pub dns: DNS,
     pub profile: Profile,
     #[serde(rename = "proxies")]
@@ -178,18 +203,44 @@ pub enum DNSListen {
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 #[serde(rename_all = "kebab-case")]
+/// DNS client/server settings
+/// This section is optional. When not present, the DNS server will be disabled and system DNS config will be used
+/// # Example
+/// ```yaml
+/// dns:
+///   enable: true
+///   ipv6: false # when the false, response to AAAA questions will be empty
+///   listen:
+///     udp: 127.0.0.1:5353
+///     tcp: 127.0.0.1:5353
+///     doh: 127.0.0.1:5354
+///     dot: 127.0.0.1:5355
+/// ```
 pub struct DNS {
+    /// When disabled, system DNS config will be used
+    /// All other DNS related options will only be used when this is enabled
     pub enable: bool,
+    /// When false, response to AAAA questions will be empty
     pub ipv6: bool,
+    /// Whether to `Config::hosts` as when resolving hostnames
     pub user_hosts: bool,
+    /// DNS servers
     pub nameserver: Vec<String>,
+    /// Fallback DNS servers
     pub fallback: Vec<String>,
+    /// Fallback DNS filter
     pub fallback_filter: FallbackFilter,
+    /// DNS server listening address. If not present, the DNS server will be disabled.
     pub listen: Option<DNSListen>,
+    /// Whether to use fake IP addresses
     pub enhanced_mode: DNSMode,
+    /// Fake IP addresses pool CIDR
     pub fake_ip_range: String,
+    /// Fake IP addresses filter
     pub fake_ip_filter: Vec<String>,
+    /// Default nameservers, used to resolve DoH hostnames
     pub default_nameserver: Vec<String>,
+    /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
 }
 

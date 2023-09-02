@@ -642,6 +642,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clash_doc"
+version = "0.1.0"
+dependencies = [
+ "clash_lib",
+]
+
+[[package]]
 name = "clash_lib"
 version = "0.1.0"
 dependencies = [

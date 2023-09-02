@@ -26,6 +26,9 @@ mod config;
 mod proxy;
 mod session;
 
+pub use config::def::Config as ClashConfigDef;
+pub use config::def::DNS as ClashDNSConfigDef;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
