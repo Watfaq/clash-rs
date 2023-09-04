@@ -16,6 +16,8 @@ pub mod rule_provider;
 #[cfg(test)]
 use mockall::automock;
 
+use crate::app::outbound::manager::ThreadSafeOutboundManager;
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ProviderVehicleType {
     File,

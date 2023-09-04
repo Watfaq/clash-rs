@@ -1,2 +1,5 @@
 [build]
 target-dir = "target"
+
+[env]
+BORING_BSSL_SOURCE_PATH = { value = "./deps/boringssl/src", relative = true}

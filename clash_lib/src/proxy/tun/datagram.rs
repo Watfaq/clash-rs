@@ -16,6 +16,7 @@ pub struct TunDatagram {
     flushed: bool,
 }
 
+// TODO: make this work
 impl TunDatagram {
     pub fn new(
         tx: tokio::sync::mpsc::Sender<UdpPacket>,
@@ -85,10 +86,6 @@ impl Sink<UdpPacket> for TunDatagram {
         let pkt_container = pkt;
 
         if let Some(pkt) = pkt_container.take() {
-            let data = pkt.data;
-            let addr: shadowsocks::relay::Address =
-                (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
-
             match tx.blocking_send(pkt) {
                 Ok(_) => Poll::Ready(Ok(())),
                 Err(err) => Poll::Ready(Err(new_io_error(err.to_string().as_str()))),
@@ -103,7 +100,6 @@ impl Sink<UdpPacket> for TunDatagram {
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         ready!(self.poll_flush(cx))?;
-        self.rx.close();
         Poll::Ready(Ok(()))
     }
 }

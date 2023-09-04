@@ -81,28 +81,8 @@ async fn handle_inbound_datagram(
     });
 
     tokio::spawn(async move {
+        // TODO: handle DNS
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
-            if dst_addr.port() == 53 {
-                match resolver.generate_fake_ip_packet(data).await {
-                    Ok(resp) => {
-                        if let Err(e) = l_tx
-                            .send(UdpPacket::new(
-                                data,
-                                SocksAddr::any_ipv4(),
-                                SocksAddr::any_ipv4(),
-                            ))
-                            .await
-                        {
-                            warn!("failed to send udp packet to proxy: {}", e);
-                        }
-                        continue;
-                    }
-                    Err(e) => {
-                        warn!("failed to generate fake ip packet: {}", e);
-                    }
-                }
-            }
-
             let pkt = UdpPacket {
                 data,
                 src_addr: src_addr.into(),
@@ -118,7 +98,7 @@ async fn handle_inbound_datagram(
         }
     });
 
-    let mut sess = Session {
+    let sess = Session {
         network: Network::Udp,
         ..Default::default()
     };
@@ -203,14 +183,16 @@ pub fn get_runner(
             }
         }));
 
+        let dsp = dispatcher.clone();
+        let rsv = resolver.clone();
         futs.push(Box::pin(async move {
             while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
                 tokio::spawn(handl_inbound_stream(
                     stream,
                     local_addr,
                     remote_addr,
-                    dispatcher.clone(),
-                    resolver.clone(),
+                    dsp.clone(),
+                    rsv.clone(),
                 ));
             }
         }));

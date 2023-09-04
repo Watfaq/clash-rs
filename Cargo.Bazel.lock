@@ -1,5 +1,5 @@
 {
-  "checksum": "0af5c01f188447da06ff420d36d10dbc2070bb9b583c4e469662e1f2c2c769c7",
+  "checksum": "768ad301a2943def9ac3944c23c1d3600965319cde69050c1901a9273298005d",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -2027,13 +2027,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "bindgen 0.65.1": {
+    "bindgen 0.66.1": {
       "name": "bindgen",
-      "version": "0.65.1",
+      "version": "0.66.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bindgen/0.65.1/download",
-          "sha256": "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
+          "url": "https://crates.io/api/v1/crates/bindgen/0.66.1/download",
+          "sha256": "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
         }
       },
       "targets": [
@@ -2070,11 +2070,11 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.65.1",
+              "id": "bindgen 0.66.1",
               "target": "build_script_build"
             },
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.4.0",
               "target": "bitflags"
             },
             {
@@ -2096,10 +2096,6 @@
             {
               "id": "peeking_take_while 0.1.2",
               "target": "peeking_take_while"
-            },
-            {
-              "id": "prettyplease 0.2.12",
-              "target": "prettyplease"
             },
             {
               "id": "proc-macro2 1.0.66",
@@ -2129,7 +2125,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.65.1"
+        "version": "0.66.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2140,10 +2136,6 @@
             {
               "id": "clang-sys 1.6.1",
               "target": "clang_sys"
-            },
-            {
-              "id": "prettyplease 0.2.12",
-              "target": "prettyplease"
             }
           ],
           "selects": {}
@@ -2187,13 +2179,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "bitflags 2.3.3": {
+    "bitflags 2.4.0": {
       "name": "bitflags",
-      "version": "2.3.3",
+      "version": "2.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bitflags/2.3.3/download",
-          "sha256": "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
+          "url": "https://crates.io/api/v1/crates/bitflags/2.4.0/download",
+          "sha256": "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
         }
       },
       "targets": [
@@ -2219,7 +2211,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.3.3"
+        "version": "2.4.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -2352,14 +2344,14 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "boring 2.1.0": {
+    "boring 3.0.4": {
       "name": "boring",
-      "version": "2.1.0",
+      "version": "3.0.4",
       "repository": {
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Rev": "a5c2442"
+            "Rev": "24c006f"
           },
           "strip_prefix": "boring"
         }
@@ -2383,11 +2375,11 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.4.0",
               "target": "bitflags"
             },
             {
-              "id": "boring-sys 2.1.0",
+              "id": "boring-sys 3.0.4",
               "target": "boring_sys"
             },
             {
@@ -2395,29 +2387,29 @@
               "target": "foreign_types"
             },
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
               "id": "libc 0.2.147",
               "target": "libc"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "2.1.0"
+        "edition": "2021",
+        "version": "3.0.4"
       },
       "license": "Apache-2.0"
     },
-    "boring-sys 2.1.0": {
+    "boring-sys 3.0.4": {
       "name": "boring-sys",
-      "version": "2.1.0",
+      "version": "3.0.4",
       "repository": {
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Rev": "a5c2442"
+            "Rev": "24c006f"
           },
           "strip_prefix": "boring-sys"
         }
@@ -2456,14 +2448,14 @@
         "deps": {
           "common": [
             {
-              "id": "boring-sys 2.1.0",
+              "id": "boring-sys 3.0.4",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "2.1.0"
+        "edition": "2021",
+        "version": "3.0.4"
       },
       "build_script_attrs": {
         "data": {
@@ -2478,12 +2470,20 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.65.1",
+              "id": "bindgen 0.66.1",
               "target": "bindgen"
             },
             {
               "id": "cmake 0.1.50",
               "target": "cmake"
+            },
+            {
+              "id": "fs_extra 1.3.0",
+              "target": "fs_extra"
+            },
+            {
+              "id": "fslock 0.2.1",
+              "target": "fslock"
             }
           ],
           "selects": {}
@@ -3754,11 +3754,11 @@
               "target": "base64"
             },
             {
-              "id": "boring 2.1.0",
+              "id": "boring 3.0.4",
               "target": "boring"
             },
             {
-              "id": "boring-sys 2.1.0",
+              "id": "boring-sys 3.0.4",
               "target": "boring_sys"
             },
             {
@@ -3826,7 +3826,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-boring 2.1.2",
+              "id": "hyper-boring 3.0.4",
               "target": "hyper_boring"
             },
             {
@@ -3858,7 +3858,7 @@
               "target": "netstack_lwip"
             },
             {
-              "id": "network-interface 1.0.1",
+              "id": "network-interface 1.0.3",
               "target": "network_interface"
             },
             {
@@ -3902,7 +3902,7 @@
               "target": "shadowsocks"
             },
             {
-              "id": "socket2 0.4.9",
+              "id": "socket2 0.5.3",
               "target": "socket2"
             },
             {
@@ -3918,7 +3918,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-boring 2.1.5",
+              "id": "tokio-boring 3.0.4",
               "target": "tokio_boring"
             },
             {
@@ -6203,6 +6203,36 @@
       },
       "license": "Apache-2.0"
     },
+    "fs_extra 1.3.0": {
+      "name": "fs_extra",
+      "version": "1.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/fs_extra/1.3.0/download",
+          "sha256": "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fs_extra",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "fs_extra",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.3.0"
+      },
+      "license": "MIT"
+    },
     "fsevent-sys 4.1.0": {
       "name": "fsevent-sys",
       "version": "4.1.0",
@@ -6239,6 +6269,60 @@
         },
         "edition": "2018",
         "version": "4.1.0"
+      },
+      "license": "MIT"
+    },
+    "fslock 0.2.1": {
+      "name": "fslock",
+      "version": "0.2.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/fslock/0.2.1/download",
+          "sha256": "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fslock",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "fslock",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.147",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.2.1"
       },
       "license": "MIT"
     },
@@ -7871,6 +7955,7 @@
           "common": [
             "client",
             "default",
+            "full",
             "h2",
             "http1",
             "http2",
@@ -7956,14 +8041,14 @@
       },
       "license": "MIT"
     },
-    "hyper-boring 2.1.2": {
+    "hyper-boring 3.0.4": {
       "name": "hyper-boring",
-      "version": "2.1.2",
+      "version": "3.0.4",
       "repository": {
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Rev": "a5c2442"
+            "Rev": "24c006f"
           },
           "strip_prefix": "hyper-boring"
         }
@@ -7998,7 +8083,7 @@
               "target": "antidote"
             },
             {
-              "id": "boring 2.1.0",
+              "id": "boring 3.0.4",
               "target": "boring"
             },
             {
@@ -8022,7 +8107,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-boring 2.1.5",
+              "id": "tokio-boring 3.0.4",
               "target": "tokio_boring"
             },
             {
@@ -8032,8 +8117,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "2.1.2"
+        "edition": "2021",
+        "version": "3.0.4"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -10277,13 +10362,13 @@
       },
       "license": null
     },
-    "network-interface 1.0.1": {
+    "network-interface 1.0.3": {
       "name": "network-interface",
-      "version": "1.0.1",
+      "version": "1.0.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/network-interface/1.0.1/download",
-          "sha256": "296ae2183dab440e352740b1fcf0589d8058afa40bc29fd163227ddb01fbf539"
+          "url": "https://crates.io/api/v1/crates/network-interface/1.0.3/download",
+          "sha256": "afd878f93491173e5d272d0dd3124ff89739e50f276c7b9857ac0d97cc024f96"
         }
       },
       "targets": [
@@ -10314,7 +10399,7 @@
         "deps": {
           "common": [
             {
-              "id": "network-interface 1.0.1",
+              "id": "network-interface 1.0.3",
               "target": "build_script_build"
             },
             {
@@ -10323,13 +10408,13 @@
             }
           ],
           "selects": {
-            "cfg(target_os = \"linux\")": [
+            "cfg(any(target_os = \"android\", target_os = \"linux\"))": [
               {
                 "id": "libc 0.2.147",
                 "target": "libc"
               }
             ],
-            "cfg(target_os = \"macos\")": [
+            "cfg(any(target_os = \"ios\", target_os = \"macos\"))": [
               {
                 "id": "libc 0.2.147",
                 "target": "libc"
@@ -10348,7 +10433,7 @@
           }
         },
         "edition": "2018",
-        "version": "1.0.1"
+        "version": "1.0.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -11714,68 +11799,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prettyplease 0.2.12": {
-      "name": "prettyplease",
-      "version": "0.2.12",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prettyplease/0.2.12/download",
-          "sha256": "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prettyplease",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "prettyplease",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "prettyplease 0.2.12",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.66",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "syn 2.0.28",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.12"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "links": "prettyplease02"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
     "proc-macro2 1.0.66": {
       "name": "proc-macro2",
       "version": "1.0.66",
@@ -12989,7 +13012,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 2.3.3",
+              "id": "bitflags 2.4.0",
               "target": "bitflags"
             },
             {
@@ -14797,6 +14820,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "all"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [],
           "selects": {
@@ -15889,14 +15918,14 @@
       },
       "license": "MIT"
     },
-    "tokio-boring 2.1.5": {
+    "tokio-boring 3.0.4": {
       "name": "tokio-boring",
-      "version": "2.1.5",
+      "version": "3.0.4",
       "repository": {
         "Git": {
           "remote": "https://github.com/Watfaq/boring.git",
           "commitish": {
-            "Rev": "a5c2442"
+            "Rev": "24c006f"
           },
           "strip_prefix": "tokio-boring"
         }
@@ -15920,11 +15949,11 @@
         "deps": {
           "common": [
             {
-              "id": "boring 2.1.0",
+              "id": "boring 3.0.4",
               "target": "boring"
             },
             {
-              "id": "boring-sys 2.1.0",
+              "id": "boring-sys 3.0.4",
               "target": "boring_sys"
             },
             {
@@ -15934,8 +15963,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "2.1.5"
+        "edition": "2021",
+        "version": "3.0.4"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -16710,7 +16739,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 2.3.3",
+              "id": "bitflags 2.4.0",
               "target": "bitflags"
             },
             {
@@ -19645,8 +19674,10 @@
             "ntdef",
             "ntsecapi",
             "processenv",
+            "processthreadsapi",
             "profileapi",
             "std",
+            "synchapi",
             "sysinfoapi",
             "timezoneapi",
             "winbase",
@@ -21732,6 +21763,14 @@
       "i686-unknown-freebsd",
       "x86_64-unknown-freebsd"
     ],
+    "cfg(any(target_os = \"ios\", target_os = \"macos\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
+      "i686-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-apple-ios"
+    ],
     "cfg(any(target_os = \"linux\", target_os = \"android\"))": [
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
@@ -21986,15 +22025,6 @@
     "cfg(target_os = \"dragonfly\")": [],
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
-    "cfg(target_os = \"linux\")": [
-      "aarch64-unknown-linux-gnu",
-      "arm-unknown-linux-gnueabi",
-      "armv7-unknown-linux-gnueabi",
-      "i686-unknown-linux-gnu",
-      "powerpc-unknown-linux-gnu",
-      "s390x-unknown-linux-gnu",
-      "x86_64-unknown-linux-gnu"
-    ],
     "cfg(target_os = \"macos\")": [
       "aarch64-apple-darwin",
       "i686-apple-darwin",

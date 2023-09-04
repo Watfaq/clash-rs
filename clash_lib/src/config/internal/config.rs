@@ -35,12 +35,27 @@ pub struct Config {
     pub proxy_providers: HashMap<String, OutboundProxyProvider>,
 }
 
+impl Config {
+    fn validate(self) -> Result<Self, crate::Error> {
+        for r in self.rules.iter() {
+            if !self.proxies.contains_key(r.target()) && !self.proxy_groups.contains_key(r.target())
+            {
+                return Err(Error::InvalidConfig(format!(
+                    "proxy `{}` referenced in a rule was not found",
+                    r.target()
+                )));
+            }
+        }
+        Ok(self)
+    }
+}
+
 impl TryFrom<def::Config> for Config {
     type Error = crate::Error;
 
     fn try_from(c: def::Config) -> Result<Self, Self::Error> {
         let mut proxy_names = vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
-        Ok(Self {
+        Self {
             general: General {
                 inbound: Inbound {
                     port: c.port,
@@ -164,7 +179,8 @@ impl TryFrom<def::Config> for Config {
                         .expect("proxy provider parse error")
                 })
                 .unwrap_or_default(),
-        })
+        }
+        .validate()
     }
 }
 

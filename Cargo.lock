@@ -398,17 +398,16 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.65.1"
+version = "0.66.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
+checksum = "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.0",
  "cexpr",
  "clang-sys",
  "lazy_static",
  "lazycell",
  "peeking_take_while",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -425,9 +424,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.3.3"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
+checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
 name = "blake3"
@@ -454,23 +453,25 @@ dependencies = [
 
 [[package]]
 name = "boring"
-version = "2.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
+version = "3.0.4"
+source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.0",
  "boring-sys",
  "foreign-types",
- "lazy_static",
  "libc",
+ "once_cell",
 ]
 
 [[package]]
 name = "boring-sys"
-version = "2.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
+version = "3.0.4"
+source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
 dependencies = [
- "bindgen 0.65.1",
+ "bindgen 0.66.1",
  "cmake",
+ "fs_extra",
+ "fslock",
 ]
 
 [[package]]
@@ -1205,12 +1206,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
 
 [[package]]
+name = "fs_extra"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
+
+[[package]]
 name = "fsevent-sys"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "fslock"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -1527,8 +1544,8 @@ dependencies = [
 
 [[package]]
 name = "hyper-boring"
-version = "2.1.2"
-source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
+version = "3.0.4"
+source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
 dependencies = [
  "antidote",
  "boring",
@@ -2245,16 +2262,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prettyplease"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
-dependencies = [
- "proc-macro2",
- "syn 2.0.28",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2469,7 +2476,7 @@ version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a962918ea88d644592894bc6dc55acc6c0956488adcebbfb6e273506b7fd6e5"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -3018,8 +3025,8 @@ dependencies = [
 
 [[package]]
 name = "tokio-boring"
-version = "2.1.5"
-source = "git+https://github.com/Watfaq/boring.git?rev=a5c2442#a5c2442e894777f35b196dd99bbacd828aadc92b"
+version = "3.0.4"
+source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
 dependencies = [
  "boring",
  "boring-sys",
@@ -3184,7 +3191,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55ae70283aba8d2a8b411c695c437fe25b8b5e44e23e780662002fc72fb47a82"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "bytes",
  "futures-core",
  "futures-util",

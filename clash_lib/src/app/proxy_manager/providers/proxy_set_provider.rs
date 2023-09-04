@@ -27,7 +27,7 @@ struct ProviderScheme {
 
 struct Inner {
     proxies: Vec<AnyOutboundHandler>,
-    hc: HealthCheck,
+    hc: Arc<HealthCheck>,
 }
 
 pub struct ProxySetProvider {
@@ -43,11 +43,16 @@ impl ProxySetProvider {
         name: String,
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
-        mut hc: HealthCheck,
+        hc: HealthCheck,
     ) -> anyhow::Result<Self> {
+        let hc = Arc::new(hc);
+
         if hc.auto() {
-            debug!("kicking off healthcheck: {}", name);
-            hc.kick_off();
+            let hc = hc.clone();
+            debug!("kicking off healthcheck for: {}", name);
+            tokio::spawn(async move {
+                hc.kick_off().await;
+            });
         }
 
         let inner = Arc::new(tokio::sync::Mutex::new(Inner {
@@ -59,12 +64,12 @@ impl ProxySetProvider {
 
         let updater: Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static> =
             Box::new(move |input: Vec<AnyOutboundHandler>| -> () {
-                let mut hc = hc.clone();
-                hc.update(input.clone());
+                let hc = hc.clone();
                 let inner = inner_clone.clone();
                 tokio::spawn(async move {
                     let mut inner = inner.lock().await;
-                    inner.proxies = input;
+                    inner.proxies = input.clone();
+                    hc.update(input).await;
                 });
             });
 
@@ -83,8 +88,8 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Direct => Ok(direct::Handler::new()),
                             OutboundProxyProtocol::Reject => Ok(reject::Handler::new()),
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
-                            OutboundProxyProtocol::Socks5(_) => todo!(),
-                            OutboundProxyProtocol::Trojan(_) => todo!(),
+                            OutboundProxyProtocol::Socks5(_) => todo!("socks5 not supported yet"),
+                            OutboundProxyProtocol::Trojan(_) => todo!("trojan not supported yet"),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
@@ -141,18 +146,6 @@ impl Provider for ProxySetProvider {
             "vehicleType".to_owned(),
             Box::new(self.vehicle_type().to_string()),
         );
-
-        let proxies = futures::future::join_all(
-            self.inner
-                .lock()
-                .await
-                .proxies
-                .clone()
-                .iter()
-                .map(|p| p.as_map()),
-        )
-        .await;
-        m.insert("proxies".to_owned(), Box::new(proxies));
 
         m.insert(
             "updatedAt".to_owned(),

@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Display,
     io::BufReader,
     net::{IpAddr, SocketAddr},
     sync::Arc,
@@ -26,6 +27,17 @@ pub struct NameServer {
     pub net: DNSNetMode,
     pub address: String,
     pub interface: Option<String>,
+}
+impl Display for NameServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}://{}#{}",
+            self.net,
+            self.address,
+            self.interface.as_ref().unwrap_or(&"".to_owned())
+        )
+    }
 }
 
 #[derive(Clone, Debug, Default)]

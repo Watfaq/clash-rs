@@ -28,7 +28,7 @@ TODOs
             - [ ] grpc
             - [ ] tls
             - [ ] http
-- [ ] providers (untested)
+- [x] providers
     - [x] file
     - [x] remote
 - [ ] rules

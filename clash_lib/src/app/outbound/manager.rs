@@ -221,10 +221,10 @@ impl OutboundManager {
                     .map(|x| {
                         handlers
                             .get(x)
-                            .expect(format!("proxy {} not found", x).as_str())
-                            .clone()
+                            .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
+                            .map(Clone::clone)
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let hc = HealthCheck::new(
                     proxies.clone(),
@@ -248,6 +248,19 @@ impl OutboundManager {
             }
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
+                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                        + proto
+                            .use_provider
+                            .as_ref()
+                            .map(|x| x.len())
+                            .unwrap_or_default()
+                        == 0
+                    {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -284,6 +297,19 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), relay);
                 }
                 OutboundGroupProtocol::UrlTest(proto) => {
+                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                        + proto
+                            .use_provider
+                            .as_ref()
+                            .map(|x| x.len())
+                            .unwrap_or_default()
+                        == 0
+                    {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -322,6 +348,19 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(url_test));
                 }
                 OutboundGroupProtocol::Fallback(proto) => {
+                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                        + proto
+                            .use_provider
+                            .as_ref()
+                            .map(|x| x.len())
+                            .unwrap_or_default()
+                        == 0
+                    {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -359,6 +398,19 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(fallback));
                 }
                 OutboundGroupProtocol::LoadBalance(proto) => {
+                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                        + proto
+                            .use_provider
+                            .as_ref()
+                            .map(|x| x.len())
+                            .unwrap_or_default()
+                        == 0
+                    {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -395,6 +447,19 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(load_balance));
                 }
                 OutboundGroupProtocol::Select(proto) => {
+                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                        + proto
+                            .use_provider
+                            .as_ref()
+                            .map(|x| x.len())
+                            .unwrap_or_default()
+                        == 0
+                    {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -530,6 +595,11 @@ impl OutboundManager {
                     provider_registry.insert(name, Arc::new(Mutex::new(provider)));
                 }
             }
+        }
+
+        for p in provider_registry.values() {
+            info!("initializing provider {}", p.lock().await.name());
+            p.lock().await.initialize().await?;
         }
         Ok(())
     }

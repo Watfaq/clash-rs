@@ -60,8 +60,6 @@ impl Provider for PlainProvider {
         Ok(())
     }
 
-    /// the proxy only contains basic information
-    /// to populate history/liveness information, use the proxy_manager
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut m: HashMap<String, Box<dyn Serialize + Send>> = HashMap::new();
 
@@ -71,10 +69,6 @@ impl Provider for PlainProvider {
             "vehicleType".to_owned(),
             Box::new(self.vehicle_type().to_string()),
         );
-
-        let proxies =
-            futures::future::join_all(self.proxies().await.iter().map(|p| p.as_map())).await;
-        m.insert("proxies".to_owned(), Box::new(proxies));
 
         m
     }

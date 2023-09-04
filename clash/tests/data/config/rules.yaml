@@ -9,11 +9,11 @@ authentication:
 
 dns:
   enable: true
-  listen:
-    udp: 127.0.0.1:53553
-    tcp: 127.0.0.1:53553
-    dot: 127.0.0.1:53554
-    doh: 127.0.0.1:53555
+  # listen:
+  #   udp: 127.0.0.1:53553
+  #   tcp: 127.0.0.1:53553
+  #   dot: 127.0.0.1:53554
+  #   doh: 127.0.0.1:53555
 
   # ipv6: false # when the false, response to AAAA questions will be empty
 
@@ -56,7 +56,6 @@ proxy-groups:
   - name: "relay"
     type: relay
     proxies:
-      - "ss"
       - "plain-vmess"
       - "ws-vmess"
       - "auto"
@@ -67,29 +66,32 @@ proxy-groups:
   
   - name: "relay-one"
     type: relay
-    proxies:
-      - "ss"
+    use:
+      - "file-provider"
 
   - name: "auto"
     type: url-test
+    use:
+      - "file-provider"
     proxies:
-      - "ss"
       - DIRECT
     url: "http://www.gstatic.com/generate_204"
     interval: 300
 
   - name: "fallback-auto"
     type: fallback
+    use:
+      - "file-provider"
     proxies:
-      - "ss"
       - DIRECT
     url: "http://www.gstatic.com/generate_204"
     interval: 300
 
   - name: "load-balance"
     type: load-balance
+    use:
+      - "file-provider"
     proxies:
-      - "ss"
       - DIRECT
     strategy: round-robin
     url: "http://www.gstatic.com/generate_204"
@@ -97,26 +99,17 @@ proxy-groups:
 
   - name: select
     type: select
-    proxies:
-      - "ss"
-      - DIRECT
+    use:
+      - "file-provider"
 
   - name: test 🌏
     type: select
+    use:
+      - "file-provider"
     proxies:
-      - "ss"
       - DIRECT
 
-
-
 proxies:
-  - name: "ss"
-    type: ss
-    server: 10.0.0.13
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
-    udp: true
   - name: plain-vmess
     type: vmess
     server: 10.0.0.13
@@ -154,13 +147,31 @@ proxies:
       headers:
         Host: 5607b9d187e655736f563fee87d7283994721.laowanxiang.com
 
+proxy-providers:
+  file-provider:
+    type: file
+    path: ./ss.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+  remote-provider:
+    type: http
+    url: https://xample.com/proxies.yaml
+    interval: 300
+    path: ./proxies.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+
 rules:
   - DOMAIN,ipinfo.io,relay
   - GEOIP,CN,relay
   - DOMAIN-KEYWORD,httpbin,vmess-altid
   - DOMAIN-SUFFIX,facebook.com,REJECT
-  - DOMAIN-KEYWORD,google,ss
-  - DOMAIN,google.com,ss
+  - DOMAIN-KEYWORD,google,select
+  - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
   - DST-PORT,53,plain-vmess

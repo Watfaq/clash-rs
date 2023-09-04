@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::{net, sync::Arc, time::Duration};
@@ -35,6 +35,18 @@ pub enum DNSNetMode {
     DoT,
     DoH,
     DHCP,
+}
+
+impl Display for DNSNetMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UDP => write!(f, "UDP"),
+            Self::TCP => write!(f, "TCP"),
+            Self::DoT => write!(f, "DoT"),
+            Self::DoH => write!(f, "DoH"),
+            Self::DHCP => write!(f, "DHCP"),
+        }
+    }
 }
 
 impl FromStr for DNSNetMode {

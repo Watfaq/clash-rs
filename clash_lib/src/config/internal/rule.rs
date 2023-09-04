@@ -48,6 +48,43 @@ pub enum RuleType {
     },
 }
 
+impl RuleType {
+    pub fn target(&self) -> &str {
+        match self {
+            RuleType::Domain { domain, target } => target,
+            RuleType::DomainSuffix {
+                domain_suffix,
+                target,
+            } => target,
+            RuleType::DomainKeyword {
+                domain_keyword,
+                target,
+            } => target,
+            RuleType::GeoIP {
+                target,
+                country_code,
+                no_resolve,
+            } => target,
+            RuleType::IPCIDR {
+                ipnet,
+                target,
+                no_resolve,
+            } => target,
+            RuleType::SRCIPCIDR {
+                ipnet,
+                target,
+                no_resolve,
+            } => target,
+            RuleType::SRCPort { target, port } => target,
+            RuleType::DSTPort { target, port } => target,
+            RuleType::ProcessName => todo!(),
+            RuleType::ProcessPath => todo!(),
+            RuleType::RuleSet { rule_set, target } => target,
+            RuleType::Match { target } => target,
+        }
+    }
+}
+
 impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -57,7 +57,12 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     let mut providers = HashMap::new();
 
     for (name, p) in outbound_manager.get_proxy_providers() {
-        let m = p.lock().await.as_map().await;
+        let p = p.lock().await;
+        let proxies = p.proxies().await;
+        let proxies =
+            futures::future::join_all(proxies.iter().map(|x| outbound_manager.get_proxy(x)));
+        let mut m = p.as_map().await;
+        m.insert("proxies".to_owned(), Box::new(proxies.await));
         providers.insert(name, m);
     }
 

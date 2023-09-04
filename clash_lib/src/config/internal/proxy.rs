@@ -292,12 +292,14 @@ pub struct OutboundGroupSelect {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
 pub enum OutboundProxyProvider {
     Http(OutboundHttpProvider),
     File(OutboundFileProvider),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundHttpProvider {
     #[serde(skip)]
     pub name: String,
@@ -308,6 +310,7 @@ pub struct OutboundHttpProvider {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundFileProvider {
     #[serde(skip)]
     pub name: String,

@@ -218,11 +218,11 @@ where
                         };
 
                     if same {
-                        tracing::info!("{} no update", &name);
+                        tracing::info!("provider {} no update", &name);
                         return;
                     }
 
-                    tracing::info!("{} updated", &name);
+                    tracing::info!("provider {} updated", &name);
 
                     let on_update = on_update.lock().await.take();
                     if let Some(on_update) = on_update {

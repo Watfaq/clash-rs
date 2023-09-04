@@ -1,4 +1,7 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+};
 
 use crate::{config::internal::proxy::OutboundGroupProtocol, Error};
 
@@ -63,19 +66,21 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
     }
 
     let mut index = 0;
-    let mut queue = vec![];
+    let mut queue = VecDeque::new();
 
     for (name, node) in graph.iter() {
         if node.borrow_mut().in_degree == 0 {
-            queue.push(name.clone());
+            queue.push_back(name.clone());
         }
     }
 
     let group_len = groups.len();
 
     while !queue.is_empty() {
-        let name = queue.first().unwrap().to_owned();
-        let node = graph.get(&name).unwrap();
+        let name = queue.pop_front().unwrap().to_owned();
+        let node = graph
+            .get(&name)
+            .expect(format!("node {} not found", &name).as_str());
 
         if node.borrow().proto.is_some() {
             index += 1;
@@ -89,14 +94,12 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
                 let node = graph.get(proxy.as_str()).unwrap();
                 node.borrow_mut().in_degree -= 1;
                 if node.borrow().in_degree == 0 {
-                    queue.push(proxy.clone());
+                    queue.push_back(proxy.clone());
                 }
             }
         }
 
         graph.remove(&name);
-
-        queue.remove(0);
     }
 
     if graph.len() == 0 {

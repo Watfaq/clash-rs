@@ -33,13 +33,13 @@ pub async fn make_clients(
             port: port
                 .parse::<u16>()
                 .expect(format!("no port for DNS server: {}", s.address).as_str()),
-            net: s.net,
-            iface: s.interface.map(|x| Interface::Name(x)),
+            net: s.net.to_owned(),
+            iface: s.interface.as_ref().map(|x| Interface::Name(x.to_owned())),
         })
         .await
         {
             Ok(c) => rv.push(c),
-            Err(e) => warn!("initializing DNS client: {}", e),
+            Err(e) => warn!("initializing DNS client {} with error {}", &s, e),
         }
     }
 
