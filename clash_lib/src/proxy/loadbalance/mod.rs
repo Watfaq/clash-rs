@@ -8,7 +8,8 @@ use tracing::debug;
 
 use crate::{
     app::{
-        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
+        dns::ThreadSafeDNSResolver,
+        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     config::internal::proxy::LoadBalanceStrategy,
     session::{Session, SocksAddr},

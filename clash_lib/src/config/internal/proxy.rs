@@ -324,6 +324,7 @@ pub struct HealthCheck {
     pub enable: bool,
     pub url: String,
     pub interval: u64,
+    pub lazy: Option<bool>,
 }
 
 impl TryFrom<HashMap<String, Value>> for OutboundProxyProvider {

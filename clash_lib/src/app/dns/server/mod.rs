@@ -1,18 +1,15 @@
-use std::{net::IpAddr, sync::Arc, time::Duration};
+use std::{net::IpAddr, time::Duration};
 
 use async_trait::async_trait;
 
 use thiserror::Error;
-use tokio::{
-    net::{TcpListener, UdpSocket},
-    sync::RwLock,
-};
+use tokio::net::{TcpListener, UdpSocket};
 use tracing::{debug, info, warn};
 use trust_dns_proto::{
     op::{Header, MessageType, OpCode, ResponseCode},
     rr::{
         rdata::{A, AAAA},
-        RData, Record, RecordType,
+        RData, Record,
     },
 };
 use trust_dns_server::{
@@ -21,9 +18,9 @@ use trust_dns_server::{
     ServerFuture,
 };
 
-use crate::{app::ThreadSafeDNSResolver, Runner};
+use crate::Runner;
 
-use super::Config;
+use super::{Config, ThreadSafeDNSResolver};
 
 struct DnsListener {
     server: ServerFuture<DnsHandler>,

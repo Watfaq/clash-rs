@@ -6,7 +6,7 @@ use futures::TryFutureExt;
 mod vmess_impl;
 
 use crate::{
-    app::ThreadSafeDNSResolver,
+    app::dns::ThreadSafeDNSResolver,
     common::errors::{map_io_error, new_io_error},
     session::{Session, SocksAddr},
 };

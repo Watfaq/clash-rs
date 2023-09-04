@@ -10,6 +10,7 @@ use std::{
 use boring::ssl::{SslConnector, SslMethod};
 
 use chrono::{DateTime, Utc};
+use futures::StreamExt;
 use http::Request;
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
@@ -23,7 +24,7 @@ use crate::{
 
 use self::http_client::LocalConnector;
 
-use super::ThreadSafeDNSResolver;
+use super::dns::ThreadSafeDNSResolver;
 
 pub mod healthcheck;
 mod http_client;
@@ -80,20 +81,24 @@ impl ProxyManager {
         url: &str,
         timeout: Option<Duration>,
     ) {
-        let mut futures = vec![];
+        let mut futs = vec![];
         for proxy in proxies {
             let proxy = proxy.clone();
             let url = url.to_owned();
             let timeout = timeout.clone();
             let manager = self.clone();
-            futures.push(async move {
+            futs.push(tokio::spawn(async move {
                 manager
                     .url_test(proxy, url.as_str(), timeout)
                     .await
                     .map_err(|e| warn!("healthcheck failed: {}", e))
-            });
+            }));
         }
-        futures::future::join_all(futures).await;
+
+        futures::stream::iter(futs)
+            .buffer_unordered(10)
+            .collect::<Vec<_>>()
+            .await;
     }
 
     pub async fn alive(&self, name: &str) -> bool {
@@ -213,6 +218,7 @@ impl ProxyManager {
             delay: result.as_ref().map(|x| x.0).unwrap_or(0),
             mean_delay: result.as_ref().map(|x| x.1).unwrap_or(0),
         };
+
         let mut state = self.proxy_state.write().await;
         let state = state.entry(name.to_owned()).or_default();
 

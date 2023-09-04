@@ -57,10 +57,14 @@ serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 erased-serde = "0.3.30"
 
-trust-dns-client = "0.23"
-trust-dns-resolver = "0.23"
-trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+trust-dns-client = { git = "https://github.com/Watfaq/trust-dns.git", rev = "ca798f2" }
+trust-dns-resolver = { git = "https://github.com/Watfaq/trust-dns.git", rev = "ca798f2" }
+trust-dns-server = { git = "https://github.com/Watfaq/trust-dns.git", rev = "ca798f2", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+trust-dns-proto = { git = "https://github.com/Watfaq/trust-dns.git", rev = "ca798f2", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+
+# trust-dns-resolver = "0.23"
+# trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+# trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 # DoH
 rustls = { version  = "0.21", features=["dangerous_configuration"] }
 rustls-pemfile = "1.0.3"

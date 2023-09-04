@@ -57,7 +57,7 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     let mut providers = HashMap::new();
 
     for (name, p) in outbound_manager.get_proxy_providers() {
-        let p = p.lock().await;
+        let p = p.read().await;
         let proxies = p.proxies().await;
         let proxies =
             futures::future::join_all(proxies.iter().map(|x| outbound_manager.get_proxy(x)));
@@ -92,14 +92,14 @@ async fn find_proxy_provider_by_name<B>(
 async fn get_provider(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.lock().await;
+    let provider = provider.read().await;
     axum::response::Json(provider.as_map().await)
 }
 
 async fn update_provider(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.lock().await;
+    let provider = provider.read().await;
     match provider.update().await {
         Ok(_) => (StatusCode::ACCEPTED, "provider update started").into_response(),
         Err(err) => (
@@ -117,9 +117,10 @@ async fn update_provider(
 async fn provider_healthcheck(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
 ) -> impl IntoResponse {
-    let provider = provider.lock().await;
+    let provider = provider.read().await;
     provider.healthcheck().await;
-    (StatusCode::ACCEPTED, "provider healthcheck started")
+
+    (StatusCode::ACCEPTED, "provider healthcheck done")
 }
 
 async fn find_provider_proxy_by_name<B>(
@@ -128,7 +129,7 @@ async fn find_provider_proxy_by_name<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Response {
-    let proxy = provider.lock().await.proxies().await;
+    let proxy = provider.read().await.proxies().await;
     let proxy = proxy
         .iter()
         .find(|x| Some(&x.name().to_string()) == params.get("proxy_name"));
@@ -142,7 +143,7 @@ async fn find_provider_proxy_by_name<B>(
             format!(
                 "proxy {} not found in provider {}",
                 params.get("proxy_name").unwrap(),
-                provider.lock().await.name()
+                provider.read().await.name()
             ),
         )
             .into_response()

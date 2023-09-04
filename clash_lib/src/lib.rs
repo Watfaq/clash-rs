@@ -3,10 +3,10 @@ extern crate anyhow;
 extern crate core;
 
 use crate::app::dispatcher::Dispatcher;
+use crate::app::dns;
 use crate::app::inbound::manager::InboundManager;
 use crate::app::outbound::manager::OutboundManager;
 use crate::app::router::Router;
-use crate::app::{dns, ThreadSafeDNSResolver};
 use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;

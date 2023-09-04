@@ -11,7 +11,7 @@ use hyper_boring::HttpsConnector;
 use tower::Service;
 
 use crate::{
-    app::ThreadSafeDNSResolver,
+    app::dns::ThreadSafeDNSResolver,
     proxy::{utils::new_tcp_stream, AnyStream},
 };
 

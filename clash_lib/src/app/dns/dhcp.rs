@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{env, io};
 use tokio::net::UdpSocket;
+use tokio::sync::Mutex;
 use tokio::task::yield_now;
 
 use tracing::{debug, warn};
@@ -25,39 +26,37 @@ const IFACE_TTL: Duration = Duration::from_secs(20);
 const DHCP_TTL: Duration = Duration::from_secs(3600);
 const DHCP_TIMEOUT: Duration = Duration::from_secs(60);
 
-pub struct DhcpClient {
-    iface: String,
-
-    iface_addr: ipnet::IpNet,
-
+struct Inner {
     clients: Vec<ThreadSafeDNSClient>,
     iface_expires_at: std::time::Instant,
     dns_expires_at: std::time::Instant,
+    iface_addr: ipnet::IpNet,
+}
+
+pub struct DhcpClient {
+    iface: String,
+
+    inner: Mutex<Inner>,
 }
 
 impl Debug for DhcpClient {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DhcpClient")
             .field("iface", &self.iface)
-            .field("iface_addr", &self.iface_addr)
-            .field("iface_expires_at", &self.iface_expires_at)
-            .field("clients", &self.clients)
-            .field("dns_expires_at", &self.dns_expires_at)
             .finish()
     }
 }
 
 #[async_trait]
 impl Client for DhcpClient {
-    async fn exchange(&mut self, msg: &Message) -> anyhow::Result<Message> {
+    async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let clients = self.resolve().await?;
         let mut dbg_str = vec![];
-        for c in clients {
-            let l = c.lock().await;
-            dbg_str.push(format!("{:?}", l));
+        for c in &clients {
+            dbg_str.push(format!("{:?}", c));
         }
         debug!("using clients: {:?}", dbg_str);
-        tokio::time::timeout(DHCP_TIMEOUT, Resolver::batch_exchange(clients, msg)).await?
+        tokio::time::timeout(DHCP_TIMEOUT, Resolver::batch_exchange(&clients, msg)).await?
     }
 }
 
@@ -65,18 +64,22 @@ impl DhcpClient {
     pub async fn new(iface: &str) -> Self {
         Self {
             iface: iface.to_owned(),
-            iface_addr: ipnet::IpNet::default(),
-            clients: vec![],
-            iface_expires_at: Instant::now(),
-            dns_expires_at: Instant::now(),
+            inner: Mutex::new(Inner {
+                clients: vec![],
+                iface_expires_at: Instant::now(),
+                dns_expires_at: Instant::now(),
+                iface_addr: ipnet::IpNet::default(),
+            }),
         }
     }
 
-    async fn resolve(&mut self) -> io::Result<&Vec<ThreadSafeDNSClient>> {
-        let expired = self.update_if_lease_expired()?;
+    async fn resolve(&self) -> io::Result<Vec<ThreadSafeDNSClient>> {
+        let expired = self.update_if_lease_expired().await?;
         if expired {
             let dns = probe_dns_server(&self.iface).await?;
-            self.clients = make_clients(
+            let mut inner = self.inner.lock().await;
+
+            inner.clients = make_clients(
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::UDP,
@@ -89,21 +92,22 @@ impl DhcpClient {
             .await;
         }
 
-        Ok(&self.clients)
+        Ok(self.inner.lock().await.clients.clone())
     }
 
     /// Check if interface updated or DHCP changed
     /// and update if necessary
-    fn update_if_lease_expired(&mut self) -> io::Result<bool> {
-        if self.clients.is_empty() {
+    async fn update_if_lease_expired(&self) -> io::Result<bool> {
+        let mut inner = self.inner.lock().await;
+        if inner.clients.is_empty() {
             return Ok(true);
         }
 
-        if Instant::now() < self.iface_expires_at {
+        if Instant::now() < inner.iface_expires_at {
             return Ok(false);
         }
 
-        self.iface_expires_at = Instant::now().add(IFACE_TTL);
+        inner.iface_expires_at = Instant::now().add(IFACE_TTL);
 
         let iface = network_interface::NetworkInterface::show()
             .map_err(|x| io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", x)))?
@@ -124,9 +128,9 @@ impl DhcpClient {
 
         match addr {
             Addr::V4(v4) => {
-                if Instant::now() < self.dns_expires_at
-                    && self.iface_addr.addr() == v4.ip
-                    && self.iface_addr.netmask()
+                if Instant::now() < inner.dns_expires_at
+                    && inner.iface_addr.addr() == v4.ip
+                    && inner.iface_addr.netmask()
                         == v4.netmask.ok_or(io::Error::new(
                             io::ErrorKind::Other,
                             format!("no netmask on iface: {}", self.iface),
@@ -134,8 +138,8 @@ impl DhcpClient {
                 {
                     Ok(false)
                 } else {
-                    self.dns_expires_at = Instant::now().add(DHCP_TTL);
-                    self.iface_addr = ipnet::IpNet::new(
+                    inner.dns_expires_at = Instant::now().add(DHCP_TTL);
+                    inner.iface_addr = ipnet::IpNet::new(
                         v4.ip.into(),
                         u32::from(
                             v4.netmask

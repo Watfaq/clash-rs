@@ -1,7 +1,7 @@
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
 use crate::session::{Session, SocksAddr};
-use crate::ThreadSafeDNSResolver;
 use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};

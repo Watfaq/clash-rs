@@ -10,7 +10,7 @@ use tokio::io::ReadBuf;
 use tracing::{debug, instrument};
 
 use crate::{
-    app::ThreadSafeDNSResolver,
+    app::dns::ThreadSafeDNSResolver,
     proxy::{datagram::UdpPacket, AnyOutboundDatagram},
     session::SocksAddr,
 };

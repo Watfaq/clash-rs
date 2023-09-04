@@ -48,16 +48,17 @@ macro_rules! dns_warn {
 
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
-    // TODO: make this non mutable
-    async fn exchange(&mut self, msg: &op::Message) -> anyhow::Result<op::Message>;
+    async fn exchange(&self, msg: &op::Message) -> anyhow::Result<op::Message>;
 }
 
-type ThreadSafeDNSClient = Arc<futures::lock::Mutex<dyn Client>>;
+type ThreadSafeDNSClient = Arc<dyn Client>;
 
 pub enum ResolverKind {
     Clash,
     System,
 }
+
+pub type ThreadSafeDNSResolver = Arc<dyn ClashResolver>;
 
 /// A implementation of "anti-poisoning" Resolver
 /// it can hold multiple clients in different protocols

@@ -7,7 +7,7 @@ use tun::TunPacket;
 use url::Url;
 
 use crate::{
-    app::{dispatcher::Dispatcher, ThreadSafeDNSResolver},
+    app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     config::internal::config::TunConfig,
     proxy::datagram::UdpPacket,
     session::{Network, Session, SocksAddr},

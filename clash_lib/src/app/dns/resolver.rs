@@ -10,7 +10,6 @@ use tracing::{debug, warn};
 
 use trust_dns_proto::{op, rr};
 
-use crate::app::ThreadSafeDNSResolver;
 use crate::config::def::DNSMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
@@ -23,7 +22,7 @@ use super::{
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
     Config,
 };
-use super::{ClashResolver, ResolverKind};
+use super::{ClashResolver, ResolverKind, ThreadSafeDNSResolver};
 
 static TTL: Duration = Duration::from_secs(60);
 
@@ -180,9 +179,7 @@ impl Resolver {
         for c in clients {
             queries.push(
                 async move {
-                    c.lock()
-                        .await
-                        .exchange(message)
+                    c.exchange(message)
                         .inspect_err(|x| warn!("DNS resolve error: {}", x.to_string()))
                         .await
                 }

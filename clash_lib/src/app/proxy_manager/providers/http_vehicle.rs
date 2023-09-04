@@ -1,5 +1,5 @@
 use super::{ProviderVehicle, ProviderVehicleType};
-use crate::app::ThreadSafeDNSResolver;
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::common::errors::map_io_error;
 use crate::common::http::{new_http_client, HttpClient};
 
@@ -63,7 +63,7 @@ mod tests {
 
     use http::Uri;
 
-    use crate::app::{dns::Resolver, ThreadSafeDNSResolver};
+    use crate::app::dns::{Resolver, ThreadSafeDNSResolver};
 
     #[tokio::test]
     async fn test_http_vehicle() {

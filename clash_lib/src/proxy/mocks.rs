@@ -5,10 +5,10 @@ use mockall::mock;
 
 use crate::{
     app::{
+        dns::ThreadSafeDNSResolver,
         proxy_manager::providers::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
         },
-        ThreadSafeDNSResolver,
     },
     session::{Session, SocksAddr},
 };

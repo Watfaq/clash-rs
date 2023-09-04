@@ -4,7 +4,6 @@ use std::str::FromStr;
 use std::{net, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use futures::lock::Mutex;
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
 use trust_dns_client::{
     client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
@@ -88,7 +87,7 @@ impl DnsClient {
     pub async fn new(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
         match &opts.net {
-            DNSNetMode::DHCP => Ok(Arc::new(Mutex::new(DhcpClient::new(&opts.host).await))),
+            DNSNetMode::DHCP => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
 
             other => {
                 let ip = if let Some(r) = opts.r {
@@ -134,14 +133,14 @@ impl DnsClient {
                             .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self {
+                        Ok(Arc::new(Self {
                             c: client,
 
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
                             iface: opts.iface,
-                        })))
+                        }))
                     }
                     DNSNetMode::TCP => {
                         let (stream, sender) = TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
@@ -160,13 +159,14 @@ impl DnsClient {
                             .await
                             .map_err(|x| Error::DNSError(x.to_string()))?;
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self {
+                        Ok(Arc::new(Self {
                             c: client,
+
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
                             iface: opts.iface,
-                        })))
+                        }))
                     }
                     DNSNetMode::DoT => {
                         let mut root_store = RootCertStore::empty();
@@ -210,14 +210,14 @@ impl DnsClient {
                         .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self {
+                        Ok(Arc::new(Self {
                             c: client,
 
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
                             iface: opts.iface,
-                        })))
+                        }))
                     }
                     DNSNetMode::DoH => {
                         let mut root_store = RootCertStore::empty();
@@ -262,13 +262,14 @@ impl DnsClient {
                             .map_err(|x| Error::DNSError(x.to_string()))?;
 
                         tokio::spawn(bg);
-                        Ok(Arc::new(Mutex::new(Self {
+                        Ok(Arc::new(Self {
                             c: client,
+
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
                             iface: opts.iface,
-                        })))
+                        }))
                     }
                     _ => unreachable!("."),
                 }
@@ -290,7 +291,7 @@ impl Debug for DnsClient {
 
 #[async_trait]
 impl Client for DnsClient {
-    async fn exchange(&mut self, msg: &Message) -> anyhow::Result<Message> {
+    async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
         req.set_id(rand::random::<u16>());
         self.c

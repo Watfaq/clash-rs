@@ -1,9 +1,10 @@
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::proxy::datagram::OutboundDatagramImpl;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
 use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
 use crate::session::{Session, SocksAddr};
-use crate::ThreadSafeDNSResolver;
+
 use async_trait::async_trait;
 use serde::Serialize;
 use std::sync::Arc;

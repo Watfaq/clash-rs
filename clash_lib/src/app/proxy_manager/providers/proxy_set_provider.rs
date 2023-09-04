@@ -8,7 +8,7 @@ use serde_yaml::Value;
 use tracing::debug;
 
 use super::{
-    fether::Fetcher, proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
+    fetcher::Fetcher, proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
     ThreadSafeProviderVehicle,
 };
 use crate::{
@@ -35,7 +35,7 @@ pub struct ProxySetProvider {
         Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
-    inner: std::sync::Arc<tokio::sync::Mutex<Inner>>,
+    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
 }
 
 impl ProxySetProvider {
@@ -55,7 +55,7 @@ impl ProxySetProvider {
             });
         }
 
-        let inner = Arc::new(tokio::sync::Mutex::new(Inner {
+        let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             proxies: vec![],
             hc: hc.clone(),
         }));
@@ -67,9 +67,11 @@ impl ProxySetProvider {
                 let hc = hc.clone();
                 let inner = inner_clone.clone();
                 tokio::spawn(async move {
-                    let mut inner = inner.lock().await;
+                    let mut inner = inner.write().await;
                     inner.proxies = input.clone();
                     hc.update(input).await;
+                    // check once after update
+                    hc.check().await;
                 });
             });
 
@@ -160,7 +162,7 @@ impl Provider for ProxySetProvider {
 impl ProxyProvider for ProxySetProvider {
     async fn proxies(&self) -> Vec<AnyOutboundHandler> {
         self.inner
-            .lock()
+            .read()
             .await
             .proxies
             .iter()
@@ -169,11 +171,11 @@ impl ProxyProvider for ProxySetProvider {
     }
 
     async fn touch(&self) {
-        self.inner.lock().await.hc.touch().await;
+        self.inner.read().await.hc.touch().await;
     }
 
     async fn healthcheck(&self) {
-        self.inner.lock().await.hc.check().await;
+        self.inner.read().await.hc.check().await;
     }
 }
 

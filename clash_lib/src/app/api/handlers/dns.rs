@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{response::IntoResponse, routing::get, Router};
 use http::StatusCode;
 
-use crate::app::{api::AppState, ThreadSafeDNSResolver};
+use crate::app::{api::AppState, dns::ThreadSafeDNSResolver};
 
 #[derive(Clone)]
 struct DNSState {

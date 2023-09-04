@@ -1,7 +1,7 @@
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::socks::Socks5UDPCodec;
 use crate::proxy::{AnyOutboundDatagram, InboundDatagram};
 use crate::session::SocksAddr;
-use crate::ThreadSafeDNSResolver;
 use bytes::Bytes;
 use futures::{ready, Sink, SinkExt, Stream, StreamExt};
 use std::fmt::{Debug, Display, Formatter};

@@ -10,7 +10,7 @@ use crate::{app::proxy_manager::healthcheck::HealthCheck, proxy::AnyOutboundHand
 use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
 
 struct Inner {
-    hc: HealthCheck,
+    hc: Arc<HealthCheck>,
 }
 
 pub struct PlainProvider {
@@ -23,15 +23,20 @@ impl PlainProvider {
     pub fn new(
         name: String,
         proxies: Vec<AnyOutboundHandler>,
-        mut hc: HealthCheck,
+        hc: HealthCheck,
     ) -> anyhow::Result<Self> {
+        let hc = Arc::new(hc);
+
         if proxies.is_empty() {
             return Err(Error::InvalidConfig(format!("{}: proxies is empty", name)).into());
         }
 
         if hc.auto() {
             debug!("kicking off healthcheck: {}", name);
-            hc.kick_off();
+            let hc = hc.clone();
+            tokio::spawn(async move {
+                hc.kick_off().await;
+            });
         }
 
         Ok(Self {

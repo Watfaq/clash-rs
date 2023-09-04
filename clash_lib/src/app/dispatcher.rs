@@ -1,6 +1,5 @@
 use crate::app::outbound::manager::ThreadSafeOutboundManager;
 use crate::app::router::ThreadSafeRouter;
-use crate::app::ThreadSafeDNSResolver;
 use crate::config::def::RunMode;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::config::internal::proxy::PROXY_GLOBAL;
@@ -17,6 +16,8 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use tracing::{event, instrument};
+
+use super::dns::ThreadSafeDNSResolver;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,

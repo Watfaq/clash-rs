@@ -4,7 +4,6 @@ use crate::app::router::rules::domain_suffix::DomainSuffix;
 use crate::app::router::rules::ipcidr::IPCIDR;
 use crate::app::router::rules::ruleset::RuleSet;
 use crate::app::router::rules::RuleMatcher;
-use crate::app::ThreadSafeDNSResolver;
 
 use crate::common::http::new_http_client;
 use crate::config::internal::rule::RuleType;
@@ -14,6 +13,8 @@ use crate::app::router::rules::final_::Final;
 use std::sync::Arc;
 
 use tracing::info;
+
+use super::dns::ThreadSafeDNSResolver;
 
 mod mmdb;
 mod rules;

@@ -6,7 +6,10 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use tokio::{sync::Mutex, time::Instant};
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::Instant,
+};
 use tracing::info;
 
 use crate::common::utils;
@@ -24,16 +27,10 @@ pub struct Fetcher<U, P> {
     vehicle: ThreadSafeProviderVehicle,
     thread_handle: Option<tokio::task::JoinHandle<()>>,
     ticker: Option<tokio::time::Interval>,
-    inner: std::sync::Arc<tokio::sync::Mutex<Inner>>,
+    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
     parser: Arc<Mutex<P>>,
     pub on_update: Arc<Mutex<Option<U>>>,
 }
-
-/*impl Drop for Fetcher<U, P> {
-    fn drop(&mut self) {
-        self.destroy();
-    }
-}*/
 
 impl<T, U, P> Fetcher<U, P>
 where
@@ -60,7 +57,7 @@ where
                     interval,
                 )),
             },
-            inner: Arc::new(tokio::sync::Mutex::new(Inner {
+            inner: Arc::new(tokio::sync::RwLock::new(Inner {
                 updated_at: SystemTime::UNIX_EPOCH,
                 hash: [0; 16],
             })),
@@ -77,7 +74,7 @@ where
     }
 
     pub async fn updated_at(&self) -> DateTime<Utc> {
-        self.inner.lock().await.updated_at.into()
+        self.inner.read().await.updated_at.into()
     }
 
     pub async fn initial(&mut self) -> anyhow::Result<T> {
@@ -86,7 +83,7 @@ where
 
         let vehicle_path = self.vehicle.path().to_owned();
 
-        let mut inner = self.inner.lock().await;
+        let mut inner = self.inner.write().await;
 
         let content = match metadata(&vehicle_path) {
             Ok(meta) => {
@@ -146,11 +143,11 @@ where
     }
 
     async fn update_inner(
-        inner: Arc<Mutex<Inner>>,
+        inner: Arc<RwLock<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
         parser: Arc<Mutex<P>>,
     ) -> anyhow::Result<(T, bool)> {
-        let mut this = inner.lock().await;
+        let mut this = inner.write().await;
         let content = vehicle.read().await?;
         let proxies = (parser.lock().await)(&content)?;
 

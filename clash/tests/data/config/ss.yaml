@@ -43,7 +43,15 @@ experimental:
   ignore-resolve-fail: true
 
 proxies:
-  - name: "ss"
+  - name: "ss-01"
+    type: ss
+    server: 10.0.0.13
+    port: 8388
+    cipher: aes-256-gcm
+    password: "password"
+    udp: true
+
+  - name: "ss-02"
     type: ss
     server: 10.0.0.13
     port: 8388

@@ -7,7 +7,8 @@ use tracing::debug;
 
 use crate::{
     app::{
-        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
+        dns::ThreadSafeDNSResolver,
+        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     p_debug,
     session::{Session, SocksAddr},
@@ -51,7 +52,7 @@ impl Handler {
         let current = providers
             .first()
             .unwrap()
-            .lock()
+            .read()
             .await
             .proxies()
             .await
@@ -170,7 +171,7 @@ impl OutboundHandler for Handler {
 mod tests {
     use std::sync::Arc;
 
-    use tokio::sync::Mutex;
+    use tokio::sync::{Mutex, RwLock};
 
     use crate::proxy::{
         mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
@@ -198,7 +199,7 @@ mod tests {
                 udp: false,
                 common_option: super::CommonOption::default(),
             },
-            vec![Arc::new(Mutex::new(mock_provider))],
+            vec![Arc::new(RwLock::new(mock_provider))],
         )
         .await;
 

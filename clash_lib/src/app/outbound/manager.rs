@@ -7,6 +7,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::app::proxy_manager::healthcheck::HealthCheck;
 use crate::app::proxy_manager::providers::file_vehicle;
 use crate::app::proxy_manager::providers::http_vehicle;
@@ -25,7 +26,6 @@ use crate::proxy::selector::ThreadSafeSelectorControl;
 use crate::proxy::urltest;
 use crate::proxy::{reject, relay};
 use crate::{
-    app::ThreadSafeDNSResolver,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{direct, AnyOutboundHandler},
     Error,
@@ -235,7 +235,7 @@ impl OutboundManager {
                 )
                 .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
 
-                let pd = Arc::new(Mutex::new(
+                let pd = Arc::new(RwLock::new(
                     PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
                         Error::InvalidConfig(format!("invalid provider config: {}", x))
                     })?,
@@ -514,7 +514,7 @@ impl OutboundManager {
             proxy_manager.clone(),
         )
         .unwrap();
-        let pd = Arc::new(Mutex::new(
+        let pd = Arc::new(RwLock::new(
             PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap(),
         ));
         let h = selector::Handler::new(
@@ -530,11 +530,6 @@ impl OutboundManager {
         provider_registry.insert(RESERVED_PROVIDER_NAME.to_owned(), pd);
         handlers.insert(PROXY_GLOBAL.to_owned(), Arc::new(h.clone()));
         selector_control.insert(PROXY_GLOBAL.to_owned(), Arc::new(Mutex::new(h)));
-
-        for provider in proxy_providers {
-            info!("initializing provider {}", provider.lock().await.name());
-            provider.lock().await.initialize().await?;
-        }
 
         Ok(())
     }
@@ -559,7 +554,7 @@ impl OutboundManager {
                         vec![],
                         http.health_check.url,
                         http.health_check.interval,
-                        true,
+                        http.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
                     )
                     .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
@@ -571,7 +566,7 @@ impl OutboundManager {
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 
-                    provider_registry.insert(name, Arc::new(Mutex::new(provider)));
+                    provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
                 OutboundProxyProvider::File(file) => {
                     let vehicle = file_vehicle::Vehicle::new(&file.path);
@@ -579,7 +574,7 @@ impl OutboundManager {
                         vec![],
                         file.health_check.url,
                         file.health_check.interval,
-                        true,
+                        file.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
                     )
                     .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
@@ -592,14 +587,14 @@ impl OutboundManager {
                     )
                     .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
 
-                    provider_registry.insert(name, Arc::new(Mutex::new(provider)));
+                    provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
             }
         }
 
         for p in provider_registry.values() {
-            info!("initializing provider {}", p.lock().await.name());
-            p.lock().await.initialize().await?;
+            info!("initializing provider {}", p.read().await.name());
+            p.write().await.initialize().await?;
         }
         Ok(())
     }

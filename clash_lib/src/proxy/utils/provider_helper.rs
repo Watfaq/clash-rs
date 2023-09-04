@@ -10,11 +10,11 @@ pub async fn get_proxies_from_providers(
     let mut proxies = vec![];
     for provider in providers {
         if touch {
-            provider.lock().await.touch().await;
+            provider.read().await.touch().await;
         }
 
         let mut proxies_from_provider = provider
-            .lock()
+            .read()
             .await
             .proxies()
             .await

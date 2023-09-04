@@ -10,9 +10,8 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{app::ThreadSafeDNSResolver, proxy::AnyStream};
-
 use super::Interface;
+use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
 pub async fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     let s = socket2::Socket::from(s.into_std()?);

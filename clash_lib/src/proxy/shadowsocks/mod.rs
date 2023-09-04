@@ -11,7 +11,7 @@ use shadowsocks::{
 };
 
 use crate::{
-    app::ThreadSafeDNSResolver,
+    app::dns::ThreadSafeDNSResolver,
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
     Error,

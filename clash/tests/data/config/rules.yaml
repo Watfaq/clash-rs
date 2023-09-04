@@ -40,7 +40,7 @@ dns:
     - 114.114.114.114 # default value
     - 8.8.8.8 # default value
     - tls://dns.google:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
+    - https://dns.google/dns-query # DNS over HTTPS
 #    - dhcp://en0 # dns from dhcp
 
 allow-lan: true
@@ -150,14 +150,14 @@ proxies:
 proxy-providers:
   file-provider:
     type: file
-    path: ./ss.yaml
+    path: ./ss-loop.yaml
     health-check:
       enable: true
       url: http://www.gstatic.com/generate_204
       interval: 300
   remote-provider:
     type: http
-    url: https://xample.com/proxies.yaml
+    url: https://example.com/clash/proxies
     interval: 300
     path: ./proxies.yaml
     health-check:

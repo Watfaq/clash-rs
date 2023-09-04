@@ -9,7 +9,7 @@ use http::Uri;
 use tower::Service;
 
 use crate::{
-    app::ThreadSafeDNSResolver,
+    app::dns::ThreadSafeDNSResolver,
     proxy::{AnyOutboundHandler, AnyStream},
     session::Session,
 };

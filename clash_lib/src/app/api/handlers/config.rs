@@ -10,8 +10,8 @@ use crate::{
     app::{
         api::AppState,
         dispatcher,
+        dns::ThreadSafeDNSResolver,
         inbound::manager::{Ports, ThreadSafeInboundManager},
-        ThreadSafeDNSResolver,
     },
     config::{def, internal::config::BindAddress},
     GlobalState,

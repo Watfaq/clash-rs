@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::sync::Arc;
 
-pub mod fether;
+pub mod fetcher;
 pub mod file_vehicle;
 pub mod http_vehicle;
 pub mod plain_provider;
@@ -15,8 +15,6 @@ pub mod rule_provider;
 
 #[cfg(test)]
 use mockall::automock;
-
-use crate::app::outbound::manager::ThreadSafeOutboundManager;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ProviderVehicleType {

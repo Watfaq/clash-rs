@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 use crate::proxy::AnyOutboundHandler;
 
 use super::Provider;
 
-pub type ThreadSafeProxyProvider = Arc<Mutex<dyn ProxyProvider + Send + Sync>>;
+pub type ThreadSafeProxyProvider = Arc<RwLock<dyn ProxyProvider + Send + Sync>>;
 
 #[async_trait]
 pub trait ProxyProvider: Provider {
     async fn proxies(&self) -> Vec<AnyOutboundHandler>;
     async fn touch(&self);
+    /// this is a blocking call, you may want to spawn a new task to run this
     async fn healthcheck(&self);
 }

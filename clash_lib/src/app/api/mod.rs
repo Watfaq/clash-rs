@@ -11,10 +11,11 @@ use tracing::info;
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
+use super::dns::ThreadSafeDNSResolver;
 use super::logging::LogEvent;
 use super::{
     dispatcher, inbound::manager::ThreadSafeInboundManager,
-    outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter, ThreadSafeDNSResolver,
+    outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter,
 };
 
 mod handlers;

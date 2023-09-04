@@ -9,5 +9,3 @@ pub mod outbound;
 pub mod profile;
 pub mod proxy_manager;
 pub mod router;
-
-pub type ThreadSafeDNSResolver = Arc<dyn dns::ClashResolver>;

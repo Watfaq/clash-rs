@@ -3288,8 +3288,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-client"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e1bcca49cb7115ce70857db94ebff3f2903b50e3e5c20b1def5cf9b1273455f"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
 dependencies = [
  "cfg-if",
  "data-encoding",
@@ -3356,8 +3355,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3376,7 +3374,6 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-pemfile",
- "rustls-webpki",
  "serde",
  "smallvec",
  "thiserror",
@@ -3385,7 +3382,6 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "url",
- "webpki-roots",
 ]
 
 [[package]]
@@ -3411,8 +3407,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -3430,14 +3425,12 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "trust-dns-proto 0.23.0",
- "webpki-roots",
 ]
 
 [[package]]
 name = "trust-dns-server"
 version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f2863cefc06d1d5605ea937bfd8939e23687bb44dd5d136217ad9378582f9cc"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
 dependencies = [
  "async-trait",
  "bytes",

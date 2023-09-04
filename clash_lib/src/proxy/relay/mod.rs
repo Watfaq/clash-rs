@@ -6,7 +6,8 @@ use futures::stream::{self, StreamExt};
 
 use crate::{
     app::{
-        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeDNSResolver,
+        dns::ThreadSafeDNSResolver,
+        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
     proxy::utils::new_tcp_stream,
