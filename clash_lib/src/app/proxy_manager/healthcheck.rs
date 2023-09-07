@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::{pm_debug, proxy::AnyOutboundHandler};
 
-use super::ThreadSafeProxyManager;
+use super::ProxyManager;
 
 struct HealCheckInner {
     last_check: Instant,
@@ -17,7 +17,7 @@ pub struct HealthCheck {
     url: String,
     interval: u64,
     lazy: bool,
-    proxy_manager: ThreadSafeProxyManager,
+    proxy_manager: ProxyManager,
     inner: Arc<tokio::sync::RwLock<HealCheckInner>>,
 }
 
@@ -27,7 +27,7 @@ impl HealthCheck {
         url: String,
         interval: u64,
         lazy: bool,
-        proxy_manager: ThreadSafeProxyManager,
+        proxy_manager: ProxyManager,
     ) -> anyhow::Result<Self> {
         let health_check = Self {
             url,

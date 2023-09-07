@@ -15,7 +15,7 @@ use crate::app::proxy_manager::providers::plain_provider::PlainProvider;
 use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider;
 use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
 use crate::app::proxy_manager::ProxyManager;
-use crate::app::proxy_manager::ThreadSafeProxyManager;
+
 use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::fallback;
@@ -38,7 +38,7 @@ static RESERVED_PROVIDER_NAME: &str = "default";
 pub struct OutboundManager {
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
-    proxy_manager: ThreadSafeProxyManager,
+    proxy_manager: ProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
 
@@ -57,7 +57,7 @@ impl OutboundManager {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
         let mut selector_control = HashMap::new();
-        let proxy_manager = Arc::new(ProxyManager::new(dns_resolver.clone()));
+        let proxy_manager = ProxyManager::new(dns_resolver.clone());
 
         Self::load_proxy_providers(
             proxy_providers,
@@ -165,7 +165,7 @@ impl OutboundManager {
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_names: Vec<String>,
-        proxy_manager: ThreadSafeProxyManager,
+        proxy_manager: ProxyManager,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
         selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
@@ -206,7 +206,7 @@ impl OutboundManager {
                 interval: u64,
                 lazy: bool,
                 handlers: &HashMap<String, AnyOutboundHandler>,
-                proxy_manager: ThreadSafeProxyManager,
+                proxy_manager: ProxyManager,
                 proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
                 provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
             ) -> Result<ThreadSafeProxyProvider, Error> {
@@ -536,7 +536,7 @@ impl OutboundManager {
 
     async fn load_proxy_providers(
         proxy_providers: HashMap<String, OutboundProxyProvider>,
-        proxy_manager: ThreadSafeProxyManager,
+        proxy_manager: ProxyManager,
         resolver: ThreadSafeDNSResolver,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
     ) -> Result<(), Error> {

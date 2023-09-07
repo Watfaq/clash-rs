@@ -80,7 +80,9 @@ impl ProxySetProvider {
             dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
         > = Box::new(
             move |input: &[u8]| -> anyhow::Result<Vec<AnyOutboundHandler>> {
-                let scheme: ProviderScheme = serde_yaml::from_slice(input)?;
+                let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
+                    Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
+                })?;
                 let proxies = scheme.proxies;
                 if let Some(proxies) = proxies {
                     let proxies = proxies
@@ -226,7 +228,7 @@ proxies:
 
         let mock_resolver = MockClashResolver::new();
 
-        let latency_manager = Arc::new(ProxyManager::new(Arc::new(mock_resolver)));
+        let latency_manager = ProxyManager::new(Arc::new(mock_resolver));
         let hc = HealthCheck::new(
             vec![],
             "http://www.google.com".to_owned(),

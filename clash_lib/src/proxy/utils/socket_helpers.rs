@@ -9,6 +9,7 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
+use tracing::debug;
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
@@ -81,11 +82,20 @@ pub async fn new_tcp_stream<'a>(
     socket.set_nodelay(true)?;
     socket.set_nonblocking(true)?;
 
+    let now = std::time::Instant::now();
+
     let stream = timeout(
         Duration::from_secs(10),
         TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),
     )
     .await??;
+
+    debug!(
+        "connect to stream {}:{}: took {:?}",
+        address,
+        port,
+        now.elapsed().as_millis(),
+    );
 
     Ok(Box::new(stream))
 }
@@ -123,4 +133,39 @@ pub async fn new_udp_socket(
     socket.set_nonblocking(true)?;
 
     UdpSocket::from_std(socket.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{net::IpAddr, time::Duration};
+
+    use tokio::{net::TcpSocket, time::timeout};
+
+    #[tokio::test]
+    #[ignore = "not a real test"]
+    async fn test_connect_tcp() {
+        let mut futs = vec![];
+
+        for i in 0..100 {
+            futs.push(tokio::spawn(async move {
+                let now = std::time::Instant::now();
+                let socket =
+                    socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)
+                        .unwrap();
+
+                timeout(
+                    Duration::from_secs(10),
+                    TcpSocket::from_std_stream(socket.into())
+                        .connect(("1.1.1.1".parse::<IpAddr>().unwrap(), 443).into()),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+
+                println!("fut {} took {:?}", i, now.elapsed().as_millis());
+            }));
+        }
+
+        futures::future::join_all(futs).await;
+    }
 }

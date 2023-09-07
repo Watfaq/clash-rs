@@ -95,6 +95,9 @@ pub fn shutdown() -> bool {
 }
 
 async fn start_async(opts: Options) -> Result<(), Error> {
+    #[cfg(feature = "tracing")]
+    console_subscriber::init();
+
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
     RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
@@ -114,10 +117,13 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let (log_tx, _) = broadcast::channel(100);
 
-    let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
+    #[cfg(not(feature = "tracing"))]
+    {
+        let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-    app::logging::setup_logging(config.general.log_level, log_collector)
-        .expect("failed to setup logging");
+        app::logging::setup_logging(config.general.log_level, log_collector)
+            .expect("failed to setup logging");
+    }
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();

@@ -120,7 +120,7 @@ async fn provider_healthcheck(
     let provider = provider.read().await;
     provider.healthcheck().await;
 
-    (StatusCode::ACCEPTED, "provider healthcheck done")
+    (StatusCode::ACCEPTED, "provider healthcheck")
 }
 
 async fn find_provider_proxy_by_name<B>(

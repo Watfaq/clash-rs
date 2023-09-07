@@ -11,7 +11,7 @@ use boring::ssl::{SslConnector, SslMethod};
 
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use http::Request;
+use http::{Request, Version};
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
@@ -64,8 +64,6 @@ pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 }
-
-pub type ThreadSafeProxyManager = std::sync::Arc<ProxyManager>;
 
 impl ProxyManager {
     pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
@@ -166,10 +164,14 @@ impl ProxyManager {
             let connector = HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
             let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
 
-            let now = Instant::now();
-            let req = Request::get(url).body(hyper::Body::empty()).unwrap();
+            let req = Request::get(url)
+                .header("Connection", "Close")
+                .version(Version::HTTP_11)
+                .body(hyper::Body::empty())
+                .unwrap();
             let resp = client.request(req);
 
+            let now = Instant::now();
             let delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp).await {
                     Ok(res) => match res {
@@ -196,13 +198,16 @@ impl ProxyManager {
                     Err(_) => Err(new_io_error(format!("timeout for {}", url).as_str())),
                 }?;
 
-            let req2 = Request::get(url).body(hyper::Body::empty()).unwrap();
+            let req2 = Request::get(url)
+                .header("Connection", "Close")
+                .version(Version::HTTP_11)
+                .body(hyper::Body::empty())
+                .unwrap();
             let resp2 = client.request(req2);
+
             let mean_delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp2).await {
-                    Ok(_) => now
-                        .elapsed()
-                        .as_millis()
+                    Ok(_) => (now.elapsed().as_millis() / 2)
                         .try_into()
                         .expect("delay is too large"),
                     Err(_) => 0,
@@ -212,7 +217,9 @@ impl ProxyManager {
         };
 
         let result = tester.await;
+
         self.report_alive(&name, result.is_ok()).await;
+
         let ins = DelayHistory {
             time: Utc::now(),
             delay: result.as_ref().map(|x| x.0).unwrap_or(0),

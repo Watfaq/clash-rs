@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 use tracing::{event, instrument};
 
-use super::dns::ThreadSafeDNSResolver;
+use crate::app::dns::ThreadSafeDNSResolver;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,

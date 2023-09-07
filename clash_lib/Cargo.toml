@@ -5,6 +5,8 @@ edition = "2021"
 
 [features]
 default = ["shadowsocks"]
+tracing = ["console-subscriber", "tracing-timing"]
+bench = ["criterion"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -32,7 +34,7 @@ libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "1.0.3"
 base64 = "0.21"
-uuid = { version = "1.2.1", features = ["v4", "fast-rng", "macro-diagnostics"] }
+uuid = { version = "1.2.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 boring-sys = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 hyper-boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
@@ -85,12 +87,17 @@ maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
+console-subscriber = { version = "0.1.10", optional = true }
+tracing-timing = { version = "0.6.0", optional = true }
+criterion = { version = "0.4", features = ["html_reports", "async_tokio"], optional = true }
+
 [dev-dependencies]
 tempfile = "3.3"
 ctor = "0.2"
 mockall = "0.11.4"
 tokio-test = "0.4.2"
 axum-macros = "0.3.8"
+
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2.8.0"

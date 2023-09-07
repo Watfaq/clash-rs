@@ -1,5 +1,5 @@
 {
-  "checksum": "768ad301a2943def9ac3944c23c1d3600965319cde69050c1901a9273298005d",
+  "checksum": "17e17bfb7bf5ea2717ccb6c562de6bf702f44b7ab3e5587737bbea7e547b5ba1",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -17200,9 +17200,12 @@
       "name": "trust-dns-client",
       "version": "0.23.0",
       "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/trust-dns-client/0.23.0/download",
-          "sha256": "8e1bcca49cb7115ce70857db94ebff3f2903b50e3e5c20b1def5cf9b1273455f"
+        "Git": {
+          "remote": "https://github.com/Watfaq/trust-dns.git",
+          "commitish": {
+            "Rev": "ca798f2"
+          },
+          "strip_prefix": "crates/client"
         }
       },
       "targets": [
@@ -17498,9 +17501,12 @@
       "name": "trust-dns-proto",
       "version": "0.23.0",
       "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/trust-dns-proto/0.23.0/download",
-          "sha256": "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
+        "Git": {
+          "remote": "https://github.com/Watfaq/trust-dns.git",
+          "commitish": {
+            "Rev": "ca798f2"
+          },
+          "strip_prefix": "crates/proto"
         }
       },
       "targets": [
@@ -17539,9 +17545,7 @@
             "text-parsing",
             "tokio",
             "tokio-runtime",
-            "tokio-rustls",
-            "webpki",
-            "webpki-roots"
+            "tokio-rustls"
           ],
           "selects": {}
         },
@@ -17608,10 +17612,6 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-webpki 0.101.4",
-              "target": "webpki"
-            },
-            {
               "id": "serde 1.0.185",
               "target": "serde"
             },
@@ -17642,10 +17642,6 @@
             {
               "id": "url 2.4.0",
               "target": "url"
-            },
-            {
-              "id": "webpki-roots 0.25.2",
-              "target": "webpki_roots"
             }
           ],
           "selects": {}
@@ -17769,9 +17765,12 @@
       "name": "trust-dns-resolver",
       "version": "0.23.0",
       "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/trust-dns-resolver/0.23.0/download",
-          "sha256": "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
+        "Git": {
+          "remote": "https://github.com/Watfaq/trust-dns.git",
+          "commitish": {
+            "Rev": "ca798f2"
+          },
+          "strip_prefix": "crates/resolver"
         }
       },
       "targets": [
@@ -17807,8 +17806,7 @@
             "system-config",
             "tokio",
             "tokio-runtime",
-            "tokio-rustls",
-            "webpki-roots"
+            "tokio-rustls"
           ],
           "selects": {}
         },
@@ -17873,10 +17871,6 @@
             {
               "id": "trust-dns-proto 0.23.0",
               "target": "trust_dns_proto"
-            },
-            {
-              "id": "webpki-roots 0.25.2",
-              "target": "webpki_roots"
             }
           ],
           "selects": {
@@ -17897,9 +17891,12 @@
       "name": "trust-dns-server",
       "version": "0.23.0",
       "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/trust-dns-server/0.23.0/download",
-          "sha256": "0f2863cefc06d1d5605ea937bfd8939e23687bb44dd5d136217ad9378582f9cc"
+        "Git": {
+          "remote": "https://github.com/Watfaq/trust-dns.git",
+          "commitish": {
+            "Rev": "ca798f2"
+          },
+          "strip_prefix": "crates/server"
         }
       },
       "targets": [

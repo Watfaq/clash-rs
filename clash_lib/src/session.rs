@@ -6,9 +6,10 @@ use std::{
 
 use crate::proxy::utils::Interface;
 use bytes::{Buf, BufMut};
+use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
     Ip(SocketAddr),
     Domain(String, u16),
@@ -338,7 +339,7 @@ impl TryFrom<SocksAddr> for SocketAddr {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, Serialize)]
 pub enum Network {
     Tcp,
     Udp,
@@ -359,6 +360,7 @@ impl Display for Network {
     }
 }
 
+#[derive(Serialize)]
 pub struct Session {
     /// The network type, representing either TCP or UDP.
     pub network: Network,

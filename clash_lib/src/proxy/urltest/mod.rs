@@ -7,9 +7,7 @@ use tracing::debug;
 use crate::{
     app::{
         dns::ThreadSafeDNSResolver,
-        proxy_manager::{
-            providers::proxy_provider::ThreadSafeProxyProvider, ThreadSafeProxyManager,
-        },
+        proxy_manager::{providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager},
     },
     p_debug,
     session::{Session, SocksAddr},
@@ -37,7 +35,7 @@ pub struct Handler {
     tolerance: u16,
 
     providers: Vec<ThreadSafeProxyProvider>,
-    proxy_manager: ThreadSafeProxyManager,
+    proxy_manager: ProxyManager,
 
     inner: Arc<Mutex<HandlerInner>>,
 }
@@ -47,7 +45,7 @@ impl Handler {
         opts: HandlerOptions,
         tolerance: u16,
         providers: Vec<ThreadSafeProxyProvider>,
-        proxy_manager: ThreadSafeProxyManager,
+        proxy_manager: ProxyManager,
     ) -> Self {
         Self {
             opts,
