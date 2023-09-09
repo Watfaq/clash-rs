@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     app::{
-        dns::ThreadSafeDNSResolver,
+        dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver,
         proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     config::internal::proxy::LoadBalanceStrategy,
@@ -90,11 +90,17 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
+    ) -> io::Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        proxy.connect_stream(sess, resolver).await
+        match proxy.connect_stream(sess, resolver).await {
+            Ok(s) => {
+                s.append_to_chain(self.name()).await;
+                Ok(s)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// wraps a stream with outbound handler

@@ -10,6 +10,7 @@ use crate::app::router::Router;
 use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
+use app::dispatcher::StatisticsManager;
 use common::auth;
 use config::def::LogLevel;
 use state::Storage;
@@ -165,11 +166,14 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         .await,
     );
 
+    let statistics_manager = StatisticsManager::new();
+
     let dispatcher = Arc::new(Dispatcher::new(
         outbound_manager.clone(),
         router.clone(),
         dns_resolver.clone(),
         config.general.mode,
+        statistics_manager.clone(),
     ));
 
     let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
@@ -201,6 +205,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         global_state,
         dns_resolver,
         outbound_manager,
+        statistics_manager,
         router,
     );
     if let Some(r) = api_runner {

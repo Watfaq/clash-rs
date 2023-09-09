@@ -22,7 +22,7 @@ pub trait RuleMatcher: Send + Sync + Unpin {
     fn target(&self) -> &str;
 
     /// the actual content of the rule
-    fn payload(&self) -> Box<dyn Serialize + Send>;
+    fn payload(&self) -> String;
 
     /// the type of the rule
     fn type_name(&self) -> &str;
@@ -35,7 +35,7 @@ pub trait RuleMatcher: Send + Sync + Unpin {
         let mut m: HashMap<String, Box<dyn Serialize + Send>> = HashMap::new();
         m.insert("type".to_string(), Box::new(self.type_name().to_owned()));
         m.insert("proxy".to_string(), Box::new(self.target().to_owned()));
-        m.insert("payload".to_string(), self.payload());
+        m.insert("payload".to_string(), Box::new(self.payload().to_owned()));
         m
     }
 }

@@ -6,7 +6,10 @@ use futures::TryFutureExt;
 mod vmess_impl;
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
+    app::{
+        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
+        dns::ThreadSafeDNSResolver,
+    },
     common::errors::{map_io_error, new_io_error},
     session::{Session, SocksAddr},
 };
@@ -183,7 +186,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
+    ) -> io::Result<BoxedChainedStream> {
         let stream = new_tcp_stream(
             resolver,
             self.opts.server.as_str(),
@@ -203,7 +206,10 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        self.inner_proxy_stream(stream, sess, false).await
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 
     /// wraps a stream with outbound handler

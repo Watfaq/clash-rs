@@ -125,6 +125,7 @@ impl Provider for ProxySetProvider {
 
     async fn initialize(&mut self) -> std::io::Result<()> {
         let ele = self.fetcher.initial().map_err(map_io_error).await?;
+        debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.clone().lock().await.as_ref() {
             updater(ele);
         }
@@ -133,6 +134,12 @@ impl Provider for ProxySetProvider {
 
     async fn update(&self) -> std::io::Result<()> {
         let (ele, same) = self.fetcher.update().map_err(map_io_error).await?;
+        debug!(
+            "{} updated with {} proxies, same? {}",
+            self.name(),
+            ele.len(),
+            same
+        );
         if !same {
             if let Some(updater) = self.fetcher.on_update.clone().lock().await.as_ref() {
                 updater(ele);

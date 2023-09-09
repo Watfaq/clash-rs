@@ -5,6 +5,7 @@ use mockall::mock;
 
 use crate::{
     app::{
+        dispatcher::BoxedChainedStream,
         dns::ThreadSafeDNSResolver,
         proxy_manager::providers::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
@@ -61,7 +62,7 @@ mock! {
             &self,
             sess: &Session,
             resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<AnyStream>;
+        ) -> io::Result<BoxedChainedStream>;
 
         /// wraps a stream with outbound handler
         async fn proxy_stream(

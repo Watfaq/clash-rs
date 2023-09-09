@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::{
     io,
@@ -8,6 +9,8 @@ use crate::proxy::utils::Interface;
 use bytes::{Buf, BufMut};
 use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
+
+use erased_serde::Serialize as ESerialize;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
@@ -343,9 +346,13 @@ impl TryFrom<SocksAddr> for SocketAddr {
 pub enum Network {
     Tcp,
     Udp,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, Serialize)]
+pub enum Type {
     Http,
-    Https,
-    Ws,
+    HttpConnect,
+    Socks5,
 }
 
 impl Display for Network {
@@ -353,9 +360,6 @@ impl Display for Network {
         f.write_str(match self {
             Network::Tcp => "TCP",
             Network::Udp => "UDP",
-            Network::Http => "HTTP",
-            Network::Https => "HTTPS",
-            Network::Ws => "WebSocket",
         })
     }
 }
@@ -364,6 +368,8 @@ impl Display for Network {
 pub struct Session {
     /// The network type, representing either TCP or UDP.
     pub network: Network,
+    /// The type of the inbound connection.
+    pub typ: Type,
     /// The socket address of the remote peer of an inbound connection.
     pub source: SocketAddr,
     /// The proxy target address of a proxy connection.
@@ -374,10 +380,32 @@ pub struct Session {
     pub iface: Option<Interface>,
 }
 
+impl Session {
+    pub fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send + Sync>> {
+        let mut rv = HashMap::new();
+        rv.insert("network".to_string(), Box::new(self.network) as _);
+        rv.insert("type".to_string(), Box::new(self.typ) as _);
+        rv.insert("sourceIP".to_string(), Box::new(self.source.ip()) as _);
+        rv.insert("sourcePort".to_string(), Box::new(self.source.port()) as _);
+        rv.insert(
+            "destinationIP".to_string(),
+            Box::new(self.destination.ip()) as _,
+        );
+        rv.insert(
+            "destinationPort".to_string(),
+            Box::new(self.destination.port()) as _,
+        );
+        rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
+
+        return rv;
+    }
+}
+
 impl Default for Session {
     fn default() -> Self {
         Self {
             network: Network::Tcp,
+            typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
             packet_mark: None,
@@ -393,11 +421,7 @@ impl Display for Session {
             "[{}] {} -> {}",
             self.network,
             self.source,
-            match self.network {
-                Network::Http => format!("http://{}", self.destination),
-                Network::Https => format!("https://{}", self.destination),
-                _ => self.destination.to_string(),
-            }
+            self.destination.to_string(),
         )
     }
 }
@@ -418,6 +442,7 @@ impl Clone for Session {
     fn clone(&self) -> Self {
         Self {
             network: self.network,
+            typ: self.typ,
             source: self.source,
             destination: self.destination.clone(),
             packet_mark: self.packet_mark,

@@ -15,7 +15,7 @@ use crate::{
     app::dispatcher::Dispatcher,
     common::auth::ThreadSafeAuthenticator,
     proxy::{AnyStream, ProxyError},
-    session::{Network, Session, SocksAddr},
+    session::{Network, Session, SocksAddr, Type},
 };
 
 use super::{auth::authenticate_req, connector::Connector};
@@ -62,7 +62,8 @@ async fn proxy(
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
                         let sess = Session {
-                            network: Network::Https,
+                            network: Network::Tcp,
+                            typ: Type::HttpConnect,
                             source: src,
                             destination: addr,
 

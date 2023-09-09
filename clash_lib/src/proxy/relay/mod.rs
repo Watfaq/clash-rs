@@ -6,6 +6,7 @@ use futures::stream::{self, StreamExt};
 
 use crate::{
     app::{
+        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
         dns::ThreadSafeDNSResolver,
         proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
@@ -65,7 +66,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
+    ) -> io::Result<BoxedChainedStream> {
         let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
             .filter_map(|x| async {
                 match x.remote_addr().await {
@@ -109,7 +110,9 @@ impl OutboundHandler for Handler {
                 }
 
                 s = last.proxy_stream(s, &sess, resolver).await?;
-                Ok(s)
+                let chained = ChainedStreamWrapper::new(s);
+                chained.append_to_chain(self.name()).await;
+                Ok(Box::new(chained))
             }
         }
     }

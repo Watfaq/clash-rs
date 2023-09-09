@@ -1,34 +1,97 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
-    extract::{ws::Message, ConnectInfo, WebSocketUpgrade},
+    extract::{ws::Message, FromRequest, Path, Query, State, WebSocketUpgrade},
     response::IntoResponse,
-    routing::get,
-    Router,
+    routing::{delete, get},
+    Json, Router,
 };
-use tracing::{debug, warn};
+use http::{HeaderMap, Request};
+use hyper::{body::HttpBody, Body};
+use serde::Deserialize;
+use tracing::warn;
 
-use crate::app::api::AppState;
+use crate::app::{
+    api::{handlers::utils::is_request_websocket, AppState},
+    dispatcher::StatisticsManager,
+};
 
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/", get(get_connections))
+#[derive(Clone)]
+struct ConnectionState {
+    statistics_manager: Arc<StatisticsManager>,
+}
+
+pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/", get(get_connections).delete(close_all_connection))
+        .route("/:id", delete(close_connection))
+        .with_state(ConnectionState { statistics_manager })
+}
+
+#[derive(Deserialize)]
+struct GetConnectionsQuery {
+    interval: Option<u64>,
 }
 
 async fn get_connections(
-    ws: WebSocketUpgrade,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(state): State<ConnectionState>,
+    q: Query<GetConnectionsQuery>,
+    req: Request<Body>,
 ) -> impl IntoResponse {
-    debug!("ws connect from {}", addr);
+    if !is_request_websocket(headers) {
+        let mgr = state.statistics_manager.clone();
+        let snapshot = mgr.snapshot().await;
+        return Json(snapshot).into_response();
+    }
+
+    let ws = match WebSocketUpgrade::from_request(req, &state).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            warn!("ws upgrade error: {}", e);
+            return e.into_response();
+        }
+    };
+
     ws.on_failed_upgrade(|e| {
         warn!("ws upgrade error: {}", e);
     })
     .on_upgrade(move |mut socket| async move {
-        if let Err(e) = socket
-            .send(Message::Text("not implemented".to_owned()))
-            .await
-        {
-            warn!("ws send error: {}", e);
+        let interval = q.interval;
+
+        let mgr = state.statistics_manager.clone();
+
+        loop {
+            let snapshot = mgr.snapshot().await;
+            let j = Json(snapshot)
+                .into_response()
+                .data()
+                .await
+                .unwrap()
+                .unwrap();
+            let body = String::from_utf8(j.to_vec()).unwrap();
+
+            if let Err(e) = socket.send(Message::Text(body)).await {
+                warn!("ws send error: {}", e);
+                break;
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(interval.unwrap_or(1))).await;
         }
-        _ = socket.close().await;
     })
+}
+
+async fn close_connection(
+    State(state): State<ConnectionState>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let mgr = state.statistics_manager;
+    mgr.close(id).await;
+    format!("connection {} closed", id).into_response()
+}
+
+async fn close_all_connection(State(state): State<ConnectionState>) -> impl IntoResponse {
+    let mgr = state.statistics_manager;
+    mgr.close_all().await;
+    "all connections closed".into_response()
 }

@@ -1,5 +1,5 @@
 use crate::proxy::{AnyStream, ProxyError};
-use crate::session::{Network, Session};
+use crate::session::{Network, Session, Type};
 use crate::Dispatcher;
 use futures::FutureExt;
 
@@ -47,7 +47,8 @@ impl tower::Service<Uri> for Connector {
             let (left, right) = duplex(1024 * 1024);
 
             let sess = Session {
-                network: Network::Http,
+                network: Network::Tcp,
+                typ: Type::Http,
                 source: src,
                 destination: destination.ok_or(ProxyError::InvalidUrl(url.to_string()))?,
                 ..Default::default()

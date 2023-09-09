@@ -596,6 +596,7 @@ impl OutboundManager {
             info!("initializing provider {}", p.read().await.name());
             p.write().await.initialize().await?;
         }
+
         Ok(())
     }
 }

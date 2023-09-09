@@ -1,6 +1,7 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::{Session, SocksAddr};
 
+#[derive(Clone)]
 pub struct DomainSuffix {
     pub suffix: String,
     pub target: String,
@@ -21,11 +22,11 @@ impl RuleMatcher for DomainSuffix {
         self.target.as_str()
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.suffix.clone())
+    fn payload(&self) -> String {
+        self.suffix.clone()
     }
 
     fn type_name(&self) -> &str {
-        "DomainSuffix"
+        "DomainSuffix".into()
     }
 }

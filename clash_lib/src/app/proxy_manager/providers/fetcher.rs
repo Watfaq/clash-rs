@@ -10,7 +10,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     time::Instant,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::common::utils;
 
@@ -159,10 +159,8 @@ where
         if hash == this.hash {
             this.updated_at = now;
             filetime::set_file_times(vehicle.path(), now.into(), now.into())?;
-            return Ok((proxies, false));
+            return Ok((proxies, true));
         }
-
-        let proxies = (parser.lock().await)(&content)?;
 
         if vehicle.typ() != ProviderVehicleType::File {
             let p = vehicle.path().to_owned();
@@ -173,7 +171,6 @@ where
             }
 
             fs::write(vehicle.path(), &content)?;
-            return Ok((proxies, false));
         }
 
         this.hash = hash;

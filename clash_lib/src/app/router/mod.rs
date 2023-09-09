@@ -3,7 +3,6 @@ use crate::app::router::rules::domain_keyword::DomainKeyword;
 use crate::app::router::rules::domain_suffix::DomainSuffix;
 use crate::app::router::rules::ipcidr::IPCIDR;
 use crate::app::router::rules::ruleset::RuleSet;
-use crate::app::router::rules::RuleMatcher;
 
 use crate::common::http::new_http_client;
 use crate::config::internal::rule::RuleType;
@@ -18,6 +17,7 @@ use super::dns::ThreadSafeDNSResolver;
 
 mod mmdb;
 mod rules;
+pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
@@ -116,7 +116,10 @@ impl Router {
         }
     }
 
-    pub async fn match_route<'a>(&'a self, sess: &'a Session) -> &str {
+    pub async fn match_route<'a>(
+        &'a self,
+        sess: &'a Session,
+    ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
         let mut sess_resolved = false;
         let mut sess_dup = sess.clone();
 
@@ -136,11 +139,11 @@ impl Router {
 
             if r.apply(&sess_dup) {
                 info!("matched {} to target {}", &sess_dup, r.target());
-                return r.target();
+                return (r.target(), Some(r));
             }
         }
 
-        MATCH
+        (MATCH, None)
     }
 
     /// API handlers

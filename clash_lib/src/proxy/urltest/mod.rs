@@ -6,6 +6,7 @@ use tracing::debug;
 
 use crate::{
     app::{
+        dispatcher::BoxedChainedStream,
         dns::ThreadSafeDNSResolver,
         proxy_manager::{providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager},
     },
@@ -145,11 +146,14 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.fastest(false)
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .fastest(false)
             .await
             .connect_stream(sess, resolver)
-            .await
+            .await?;
+        s.append_to_chain(self.name()).await;
+        Ok(s)
     }
 
     /// wraps a stream with outbound handler

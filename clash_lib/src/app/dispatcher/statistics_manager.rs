@@ -8,22 +8,45 @@ use std::{
 
 use chrono::Utc;
 use serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::{oneshot::Sender, Mutex, RwLock};
 
 use crate::session::Session;
 
-use super::tracked_conn::TrackedStream;
+use super::tracked::Tracked;
+
+#[derive(Default, Clone, Debug)]
+pub struct ProxyChain(Arc<RwLock<Vec<String>>>);
+
+impl ProxyChain {
+    pub async fn push(&self, s: String) {
+        let mut chain = self.0.write().await;
+        chain.push(s);
+    }
+}
 
 #[derive(Serialize, Default)]
 pub struct TrackerInfo {
+    #[serde(rename = "id")]
     pub uuid: uuid::Uuid,
-    pub session: Session,
+    #[serde(rename = "metadata")]
+    pub session: HashMap<String, Box<dyn erased_serde::Serialize + Send + Sync>>,
+    #[serde(rename = "upload")]
     pub upload_total: AtomicU64,
+    #[serde(rename = "download")]
     pub download_total: AtomicU64,
+    #[serde(rename = "start")]
     pub start_time: chrono::DateTime<Utc>,
+    #[serde(rename = "chains")]
     pub proxy_chain: Vec<String>,
+    #[serde(rename = "rule")]
     pub rule: String,
+    #[serde(rename = "rulePayload")]
     pub rule_payload: String,
+
+    #[serde(skip)]
+    pub proxy_chain_holder: ProxyChain,
+    #[serde(skip)]
+    pub session_holder: Session,
 }
 
 #[derive(Serialize)]
@@ -35,7 +58,7 @@ pub struct Snapshot {
 }
 
 pub struct Manager {
-    connections: Arc<Mutex<HashMap<uuid::Uuid, Arc<TrackedStream>>>>,
+    connections: Arc<Mutex<HashMap<uuid::Uuid, (Tracked, Sender<()>)>>>,
     upload_temp: AtomicI64,
     download_temp: AtomicI64,
     upload_blip: AtomicI64,
@@ -45,7 +68,7 @@ pub struct Manager {
 }
 
 impl Manager {
-    fn new() -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         let v = Arc::new(Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
             upload_temp: AtomicI64::new(0),
@@ -62,14 +85,41 @@ impl Manager {
         v
     }
 
-    pub async fn track(&self, stream: Arc<TrackedStream>) {
+    pub async fn track(&self, item: Tracked, close_notify: Sender<()>) {
         let mut connections = self.connections.lock().await;
-        connections.insert(stream.id(), stream);
+
+        connections.insert(item.id(), (item, close_notify));
     }
 
-    pub async fn untrack(&self, id: uuid::Uuid) {
-        let mut connections = self.connections.lock().await;
-        connections.remove(&id);
+    /// Untrack a connection.
+    /// this method is not async because it is called in Drop.
+    pub fn untrack(&self, id: uuid::Uuid) {
+        let connections = self.connections.clone();
+
+        tokio::spawn(async move {
+            let mut connections = connections.lock().await;
+            connections.remove(&id);
+        });
+    }
+
+    pub async fn close(&self, id: uuid::Uuid) {
+        let connections = self.connections.clone();
+
+        tokio::spawn(async move {
+            let mut connections = connections.lock().await;
+            if let Some((_, close_notify)) = connections.remove(&id) {
+                let _ = close_notify.send(());
+            }
+        });
+    }
+
+    pub async fn close_all(&self) {
+        let connections = self.connections.clone();
+
+        let mut connections = connections.lock().await;
+        for (_, (_, close_notify)) in connections.drain() {
+            let _ = close_notify.send(());
+        }
     }
 
     pub fn push_uploaded(&self, n: usize) {
@@ -86,6 +136,7 @@ impl Manager {
             .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
     }
 
+    //TODO: make this u64
     pub fn now(&self) -> (i64, i64) {
         (
             self.upload_blip.load(std::sync::atomic::Ordering::Relaxed),
@@ -98,16 +149,18 @@ impl Manager {
         let mut connections = vec![];
         let conns = self.connections.lock().await;
         for (_, v) in conns.iter() {
-            let t = v.tracker_info();
+            let t = v.0.tracker_info();
+            let chain = t.proxy_chain_holder.0.read().await;
             connections.push(TrackerInfo {
                 uuid: t.uuid,
-                upload_total: AtomicU64::new(t.upload_total.load(Ordering::Relaxed)),
-                download_total: AtomicU64::new(t.download_total.load(Ordering::Relaxed)),
+                upload_total: AtomicU64::new(t.upload_total.load(Ordering::Acquire)),
+                download_total: AtomicU64::new(t.download_total.load(Ordering::Acquire)),
                 start_time: t.start_time,
-                proxy_chain: t.proxy_chain.clone(),
+                proxy_chain: chain.clone(),
                 rule: t.rule.clone(),
                 rule_payload: t.rule_payload.clone(),
-                session: t.session.clone(),
+                session: t.session_holder.as_map(),
+                ..Default::default()
             });
         }
 

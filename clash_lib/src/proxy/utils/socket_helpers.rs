@@ -9,7 +9,6 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-use tracing::debug;
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
@@ -89,13 +88,6 @@ pub async fn new_tcp_stream<'a>(
         TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),
     )
     .await??;
-
-    debug!(
-        "connect to stream {}:{}: took {:?}",
-        address,
-        port,
-        now.elapsed().as_millis(),
-    );
 
     Ok(Box::new(stream))
 }

@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::{
     app::{
-        dns::ThreadSafeDNSResolver,
+        dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver,
         proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     p_debug,
@@ -49,17 +49,17 @@ pub struct Handler {
 
 impl Handler {
     pub async fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
-        let current = providers
-            .first()
-            .unwrap()
-            .read()
-            .await
-            .proxies()
-            .await
-            .first()
-            .unwrap()
-            .name()
-            .to_owned();
+        let provider = providers.first().unwrap();
+        let proxies = provider.read().await.proxies().await;
+        debug!(
+            "provider {} with {} proxies, {}",
+            provider.read().await.name(),
+            proxies.len(),
+            opts.name
+        );
+
+        let current = proxies.first().unwrap().name().to_owned();
+
         Self {
             opts,
             providers,
@@ -119,11 +119,20 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.selected_proxy(true)
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .selected_proxy(true)
             .await
             .connect_stream(sess, resolver)
-            .await
+            .await;
+
+        match s {
+            Ok(s) => {
+                s.append_to_chain(self.name()).await;
+                Ok(s)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     async fn proxy_stream(

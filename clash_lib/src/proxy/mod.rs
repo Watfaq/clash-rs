@@ -1,3 +1,4 @@
+use crate::app::dispatcher::BoxedChainedStream;
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
@@ -156,7 +157,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream>;
+    ) -> io::Result<BoxedChainedStream>;
 
     /// wraps a stream with outbound handler
     async fn proxy_stream(

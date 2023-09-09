@@ -2,6 +2,7 @@ use crate::session;
 
 use super::RuleMatcher;
 
+#[derive(Clone)]
 pub struct Domain {
     pub domain: String,
     pub target: String,
@@ -19,8 +20,8 @@ impl RuleMatcher for Domain {
         &self.target
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.domain.clone())
+    fn payload(&self) -> String {
+        self.domain.clone()
     }
 
     fn type_name(&self) -> &str {

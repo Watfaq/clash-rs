@@ -4,6 +4,7 @@ use crate::{app::router::mmdb, session::Session};
 
 use super::RuleMatcher;
 
+#[derive(Clone)]
 pub struct GeoIP {
     pub target: String,
     pub country_code: String,
@@ -36,8 +37,8 @@ impl RuleMatcher for GeoIP {
         !self.no_resolve
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.country_code.clone())
+    fn payload(&self) -> String {
+        self.country_code.clone()
     }
 
     fn type_name(&self) -> &str {

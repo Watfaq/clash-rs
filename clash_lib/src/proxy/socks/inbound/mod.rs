@@ -4,7 +4,7 @@ mod stream;
 use crate::common::auth::ThreadSafeAuthenticator;
 use crate::proxy::utils::apply_tcp_options;
 use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::session::{Network, Session};
+use crate::session::{Network, Session, Type};
 use crate::Dispatcher;
 use async_trait::async_trait;
 use std::net::SocketAddr;
@@ -87,6 +87,7 @@ impl InboundListener for Listener {
 
             let mut sess = Session {
                 network: Network::Tcp,
+                typ: Type::Socks5,
                 source: socket.peer_addr()?,
 
                 ..Default::default()

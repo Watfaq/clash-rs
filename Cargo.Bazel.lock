@@ -1,5 +1,5 @@
 {
-  "checksum": "17e17bfb7bf5ea2717ccb6c562de6bf702f44b7ab3e5587737bbea7e547b5ba1",
+  "checksum": "4564aec5a8749e220a660c0df36a86d7883e3499efd72e21fa84a34fd4e5a5ff",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -18794,6 +18794,7 @@
             "macro-diagnostics",
             "rand",
             "rng",
+            "serde",
             "std",
             "uuid-macro-internal",
             "v4"
@@ -18809,6 +18810,10 @@
             {
               "id": "rand 0.8.5",
               "target": "rand"
+            },
+            {
+              "id": "serde 1.0.185",
+              "target": "serde"
             }
           ],
           "selects": {}

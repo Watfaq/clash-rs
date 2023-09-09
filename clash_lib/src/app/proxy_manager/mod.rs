@@ -244,10 +244,12 @@ impl ProxyManager {
 mod tests {
     use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
+    use anyhow::Chain;
     use futures::TryFutureExt;
 
     use crate::{
-        app::dns::MockClashResolver, config::internal::proxy::PROXY_DIRECT,
+        app::{dispatcher::ChainedStreamWrapper, dns::MockClashResolver},
+        config::internal::proxy::PROXY_DIRECT,
         proxy::mocks::MockDummyOutboundHandler,
     };
 
@@ -265,11 +267,11 @@ mod tests {
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());
         mock_handler.expect_connect_stream().returning(|_, _| {
-            Ok(Box::new(
+            Ok(Box::new(ChainedStreamWrapper::new(
                 tokio_test::io::Builder::new()
                     .wait(Duration::from_millis(50))
                     .build(),
-            ))
+            )))
         });
 
         let mock_handler = Arc::new(mock_handler);
@@ -320,11 +322,11 @@ mod tests {
             .expect_name()
             .return_const(PROXY_DIRECT.to_owned());
         mock_handler.expect_connect_stream().returning(|_, _| {
-            Ok(Box::new(
+            Ok(Box::new(ChainedStreamWrapper::new(
                 tokio_test::io::Builder::new()
                     .wait(Duration::from_secs(10))
                     .build(),
-            ))
+            )))
         });
 
         let mock_handler = Arc::new(mock_handler);

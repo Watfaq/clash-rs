@@ -4,7 +4,7 @@ use crate::proxy::datagram::InboundUdp;
 use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
 use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS5_VERSION};
 use crate::proxy::utils::new_udp_socket;
-use crate::session::{Network, Session, SocksAddr};
+use crate::session::{Network, Session, SocksAddr, Type};
 use crate::Dispatcher;
 use bytes::{BufMut, BytesMut};
 
@@ -164,6 +164,7 @@ pub async fn handle_tcp<'a>(
 
             let sess = Session {
                 network: Network::Udp,
+                typ: Type::Socks5,
                 packet_mark: None,
                 iface: None,
                 ..Default::default()

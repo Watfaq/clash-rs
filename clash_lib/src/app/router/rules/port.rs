@@ -1,6 +1,7 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::Session;
 
+#[derive(Clone)]
 pub struct Port {
     pub port: u16,
     pub target: String,
@@ -20,8 +21,8 @@ impl RuleMatcher for Port {
         self.target.as_str()
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.port.to_string().clone())
+    fn payload(&self) -> String {
+        self.port.to_string()
     }
 
     fn type_name(&self) -> &str {

@@ -11,7 +11,10 @@ use shadowsocks::{
 };
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
+    app::{
+        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
+        dns::ThreadSafeDNSResolver,
+    },
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
     Error,
@@ -171,7 +174,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
+    ) -> io::Result<BoxedChainedStream> {
         let stream = new_tcp_stream(
             resolver.clone(),
             self.opts.server.as_str(),
@@ -191,7 +194,10 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        self.proxy_stream(stream, sess, resolver).await
+        let s = self.proxy_stream(stream, sess, resolver).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 
     async fn proxy_stream(

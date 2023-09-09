@@ -1,3 +1,5 @@
+use crate::app::dispatcher::tracked::TrackedDatagram;
+use crate::app::dispatcher::tracked::TrackedStream;
 use crate::app::outbound::manager::ThreadSafeOutboundManager;
 use crate::app::router::ThreadSafeRouter;
 use crate::config::def::RunMode;
@@ -19,11 +21,15 @@ use tracing::{event, instrument};
 
 use crate::app::dns::ThreadSafeDNSResolver;
 
+use super::statistics_manager::Manager;
+
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
     mode: Arc<Mutex<RunMode>>,
+
+    manager: Arc<Manager>,
 }
 
 impl Debug for Dispatcher {
@@ -38,12 +44,15 @@ impl Dispatcher {
         router: ThreadSafeRouter,
         resolver: ThreadSafeDNSResolver,
         mode: RunMode,
+
+        statistics_manager: Arc<Manager>,
     ) -> Self {
         Self {
             outbound_manager,
             router,
             resolver,
             mode: Arc::new(Mutex::new(mode)),
+            manager: statistics_manager,
         }
     }
 
@@ -92,22 +101,25 @@ impl Dispatcher {
 
         let mode = self.mode.lock().await;
         info!("dispatching {} with mode {}", sess, mode);
-        let outbound_name = match *mode {
-            RunMode::Global => PROXY_GLOBAL.to_string(),
-            RunMode::Rule => self.router.match_route(&sess).await.to_string(),
-            RunMode::Direct => PROXY_DIRECT.to_string(),
+        let (outbound_name, rule) = match *mode {
+            RunMode::Global => (PROXY_GLOBAL, None),
+            RunMode::Rule => self.router.match_route(&sess).await,
+            RunMode::Direct => (PROXY_DIRECT, None),
         };
 
         let handler = self
             .outbound_manager
             .read()
             .await
-            .get_outbound(outbound_name.as_str())
+            .get_outbound(outbound_name)
             .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
 
         match handler.connect_stream(&sess, self.resolver.clone()).await {
-            Ok(mut rhs) => {
+            Ok(rhs) => {
                 info!("remote connection established {}", sess);
+                let mut rhs = Box::new(
+                    TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await,
+                );
                 match copy_bidirectional(&mut lhs, &mut rhs).await {
                     Ok((up, down)) => {
                         debug!(
@@ -153,6 +165,7 @@ impl Dispatcher {
         let outbound_manager = self.outbound_manager.clone();
         let resolver = self.resolver.clone();
         let mode = self.mode.clone();
+        let manager = self.manager.clone();
 
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
@@ -193,18 +206,20 @@ impl Dispatcher {
 
                 let mode = mode.lock().await;
                 info!("dispatching {} with mode {}", sess, mode);
-                let outbound_name = match *mode {
-                    RunMode::Global => PROXY_GLOBAL.to_string(),
-                    RunMode::Rule => router.match_route(&sess).await.to_string(),
-                    RunMode::Direct => PROXY_DIRECT.to_string(),
+                let (outbound_name, rule) = match *mode {
+                    RunMode::Global => (PROXY_GLOBAL, None),
+                    RunMode::Rule => router.match_route(&sess).await,
+                    RunMode::Direct => (PROXY_DIRECT, None),
                 };
+
+                let outbound_name = outbound_name.to_string();
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
                 let handler = outbound_manager
                     .read()
                     .await
-                    .get_outbound(outbound_name.as_str())
+                    .get_outbound(&outbound_name)
                     .expect(format!("unknown rule: {}", outbound_name).as_str());
 
                 let mut outbound_handle_guard = outbound_handle_guard.lock().await;
@@ -222,6 +237,14 @@ impl Dispatcher {
 
                         debug!("{} outbound datagram connected", sess);
 
+                        let outbound_datagram = TrackedDatagram::new(
+                            outbound_datagram,
+                            manager.clone(),
+                            sess.clone(),
+                            rule,
+                        )
+                        .await;
+
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =
                             tokio::sync::mpsc::channel::<UdpPacket>(32);
@@ -232,12 +255,8 @@ impl Dispatcher {
                                 // NAT
                                 let mut packet = packet;
                                 packet.dst_addr = sess.source.into();
-                                event!(
-                                    tracing::Level::DEBUG,
-                                    "UDP NAT for packet: {:?}, session: {}",
-                                    packet,
-                                    sess
-                                );
+
+                                debug!("UDP NAT for packet: {:?}, session: {}", packet, sess);
                                 match remote_receiver_w.send(packet).await {
                                     Ok(_) => {}
                                     Err(err) => {

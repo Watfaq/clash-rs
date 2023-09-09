@@ -1,3 +1,4 @@
+use crate::app::dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::proxy::datagram::OutboundDatagramImpl;
@@ -42,8 +43,8 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        new_tcp_stream(
+    ) -> std::io::Result<BoxedChainedStream> {
+        let s = new_tcp_stream(
             resolver,
             sess.destination.host().as_str(),
             sess.destination.port(),
@@ -51,7 +52,11 @@ impl OutboundHandler for Handler {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
-        .await
+        .await?;
+
+        let s = ChainedStreamWrapper::new(s);
+        s.append_to_chain(self.name()).await;
+        Ok(Box::new(s))
     }
 
     async fn proxy_stream(

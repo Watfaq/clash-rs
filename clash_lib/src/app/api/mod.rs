@@ -11,6 +11,7 @@ use tracing::info;
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
+use super::dispatcher::StatisticsManager;
 use super::dns::ThreadSafeDNSResolver;
 use super::logging::LogEvent;
 use super::{
@@ -23,6 +24,7 @@ mod middlewares;
 
 pub struct AppState {
     log_source_tx: Sender<LogEvent>,
+    statistics_manager: Arc<StatisticsManager>,
 }
 
 pub fn get_api_runner(
@@ -33,11 +35,13 @@ pub fn get_api_runner(
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
     outbound_manager: ThreadSafeOutboundManager,
+    statistics_manager: Arc<StatisticsManager>,
     router: ThreadSafeRouter,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
         let app_state = Arc::new(AppState {
             log_source_tx: log_source,
+            statistics_manager: statistics_manager.clone(),
         });
 
         let addr = bind_addr.parse().unwrap();
@@ -52,6 +56,7 @@ pub fn get_api_runner(
             let mut app = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
+                .route("/traffic", get(handlers::traffic::handle))
                 .route("/version", get(handlers::version::handle))
                 .nest(
                     "/configs",
@@ -67,7 +72,10 @@ pub fn get_api_runner(
                     "/proxies",
                     handlers::proxy::routes(outbound_manager.clone()),
                 )
-                .nest("/connections", handlers::connection::routes())
+                .nest(
+                    "/connections",
+                    handlers::connection::routes(statistics_manager),
+                )
                 .nest(
                     "/providers/proxies",
                     handlers::provider::routes(outbound_manager),

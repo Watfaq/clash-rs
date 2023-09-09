@@ -9,8 +9,8 @@ use http::Uri;
 use tower::Service;
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    proxy::{AnyOutboundHandler, AnyStream},
+    app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
+    proxy::AnyOutboundHandler,
     session::Session,
 };
 
@@ -19,7 +19,7 @@ use crate::{
 pub struct LocalConnector(pub AnyOutboundHandler, pub ThreadSafeDNSResolver);
 
 impl Service<Uri> for LocalConnector {
-    type Response = AnyStream;
+    type Response = BoxedChainedStream;
     type Error = std::io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 

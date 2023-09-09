@@ -1,3 +1,4 @@
+use crate::app::dispatcher::BoxedChainedStream;
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_REJECT;
 use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
@@ -40,7 +41,7 @@ impl OutboundHandler for Handler {
         &self,
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
+    ) -> io::Result<BoxedChainedStream> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 

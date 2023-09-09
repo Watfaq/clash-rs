@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 
 use crate::def::LogLevel;
+use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing_subscriber::filter::Directive;
@@ -20,7 +21,7 @@ impl From<LogLevel> for filter::LevelFilter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct LogEvent {
     pub level: LogLevel,
     pub msg: String,

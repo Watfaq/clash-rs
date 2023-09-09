@@ -1,6 +1,7 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::{Session, SocksAddr};
 
+#[derive(Clone)]
 pub struct IPCIDR {
     pub ipnet: ipnet::IpNet,
     pub target: String,
@@ -26,8 +27,8 @@ impl RuleMatcher for IPCIDR {
         !self.no_resolve
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.ipnet.to_string())
+    fn payload(&self) -> String {
+        self.ipnet.to_string()
     }
 
     fn type_name(&self) -> &str {

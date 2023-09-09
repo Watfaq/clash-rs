@@ -2,6 +2,7 @@ use crate::session;
 
 use super::RuleMatcher;
 
+#[derive(Clone)]
 pub struct DomainKeyword {
     pub keyword: String,
     pub target: String,
@@ -19,8 +20,8 @@ impl RuleMatcher for DomainKeyword {
         &self.target
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new(self.keyword.clone())
+    fn payload(&self) -> String {
+        self.keyword.to_owned()
     }
 
     fn type_name(&self) -> &str {

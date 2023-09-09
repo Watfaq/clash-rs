@@ -1,6 +1,7 @@
 use crate::app::router::rules::RuleMatcher;
 use crate::session::Session;
 
+#[derive(Clone)]
 pub struct Final {
     pub target: String,
 }
@@ -14,8 +15,8 @@ impl RuleMatcher for Final {
         self.target.as_str()
     }
 
-    fn payload(&self) -> Box<dyn erased_serde::Serialize + Send> {
-        Box::new("")
+    fn payload(&self) -> String {
+        "".to_owned()
     }
 
     fn type_name(&self) -> &str {
