@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use boring::ssl::{SslConnector, SslMethod};
@@ -18,7 +18,10 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::{
-    common::errors::{map_io_error, new_io_error},
+    common::{
+        errors::{map_io_error, new_io_error},
+        timed_future::TimedFuture,
+    },
     proxy::AnyOutboundHandler,
 };
 
@@ -79,24 +82,24 @@ impl ProxyManager {
         url: &str,
         timeout: Option<Duration>,
     ) {
-        let mut futs = vec![];
-        for proxy in proxies {
-            let proxy = proxy.clone();
-            let url = url.to_owned();
-            let timeout = timeout.clone();
-            let manager = self.clone();
-            futs.push(tokio::spawn(async move {
-                manager
-                    .url_test(proxy, url.as_str(), timeout)
-                    .await
-                    .map_err(|e| warn!("healthcheck failed: {}", e))
-            }));
-        }
+        for proxies in proxies.chunks(10) {
+            let mut futs = vec![];
 
-        futures::stream::iter(futs)
-            .buffer_unordered(10)
-            .collect::<Vec<_>>()
-            .await;
+            for proxy in proxies {
+                let proxy = proxy.clone();
+                let url = url.to_owned();
+                let timeout = timeout.clone();
+                let manager = self.clone();
+                futs.push(tokio::spawn(async move {
+                    manager
+                        .url_test(proxy, url.as_str(), timeout)
+                        .await
+                        .map_err(|e| warn!("healthcheck failed: {}", e))
+                }));
+            }
+
+            futures::future::join_all(futs).await;
+        }
     }
 
     pub async fn alive(&self, name: &str) -> bool {
@@ -169,23 +172,19 @@ impl ProxyManager {
                 .version(Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
-            let resp = client.request(req);
 
-            let now = Instant::now();
+            let resp = TimedFuture::new(client.request(req), None);
+
             let delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp).await {
-                    Ok(res) => match res {
-                        Ok(b) => {
-                            let delay = now
-                                .elapsed()
-                                .as_millis()
-                                .try_into()
-                                .expect("delay is too large");
+                    Ok((res, delay)) => match res {
+                        Ok(res) => {
+                            let delay = delay.as_millis().try_into().expect("delay is too large");
                             pm_debug!(
                                 "urltest for proxy {} with url {} returned response {} in {}ms",
                                 &name,
                                 url,
-                                b.status(),
+                                res.status(),
                                 delay
                             );
                             Ok(delay)
@@ -203,13 +202,16 @@ impl ProxyManager {
                 .version(Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
-            let resp2 = client.request(req2);
+            let resp2 = TimedFuture::new(client.request(req2), None);
 
             let mean_delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp2).await {
-                    Ok(_) => (now.elapsed().as_millis() / 2)
-                        .try_into()
-                        .expect("delay is too large"),
+                    Ok((res, delay2)) => match res {
+                        Ok(_) => ((delay2.as_millis() + delay as u128) / 2)
+                            .try_into()
+                            .expect("delay is too large"),
+                        Err(_) => 0,
+                    },
                     Err(_) => 0,
                 };
 
