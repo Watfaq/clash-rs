@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
-use futures::TryFutureExt;
+use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tracing::debug;
@@ -32,7 +32,7 @@ struct Inner {
 
 pub struct ProxySetProvider {
     fetcher: Fetcher<
-        Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static>,
+        Box<dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static>,
         Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
     >,
     inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
@@ -49,7 +49,7 @@ impl ProxySetProvider {
 
         if hc.auto() {
             let hc = hc.clone();
-            debug!("kicking off healthcheck for: {}", name);
+            debug!("kicking off healthcheck for: {}", &name);
             tokio::spawn(async move {
                 hc.kick_off().await;
             });
@@ -62,18 +62,26 @@ impl ProxySetProvider {
 
         let inner_clone = inner.clone();
 
-        let updater: Box<dyn Fn(Vec<AnyOutboundHandler>) + Send + Sync + 'static> =
-            Box::new(move |input: Vec<AnyOutboundHandler>| -> () {
+        let n = name.clone();
+        let updater: Box<
+            dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static,
+        > = Box::new(
+            move |input: Vec<AnyOutboundHandler>| -> BoxFuture<'static, ()> {
                 let hc = hc.clone();
-                let inner = inner_clone.clone();
-                tokio::spawn(async move {
+                let n = n.clone();
+                let inner: Arc<tokio::sync::RwLock<Inner>> = inner_clone.clone();
+                Box::pin(async move {
                     let mut inner = inner.write().await;
+                    debug!("updating {} proxies for: {}", n, input.len());
                     inner.proxies = input.clone();
                     hc.update(input).await;
                     // check once after update
-                    hc.check().await;
-                });
-            });
+                    tokio::spawn(async move {
+                        hc.check().await;
+                    });
+                })
+            },
+        );
 
         let n = name.clone();
         let parser: Box<
@@ -124,16 +132,16 @@ impl Provider for ProxySetProvider {
     }
 
     async fn initialize(&mut self) -> std::io::Result<()> {
-        let ele = self.fetcher.initial().map_err(map_io_error).await?;
+        let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
-        if let Some(updater) = self.fetcher.on_update.clone().lock().await.as_ref() {
-            updater(ele);
+        if let Some(updater) = self.fetcher.on_update.as_ref() {
+            updater.lock().await(ele).await;
         }
         Ok(())
     }
 
     async fn update(&self) -> std::io::Result<()> {
-        let (ele, same) = self.fetcher.update().map_err(map_io_error).await?;
+        let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
         debug!(
             "{} updated with {} proxies, same? {}",
             self.name(),
@@ -141,8 +149,8 @@ impl Provider for ProxySetProvider {
             same
         );
         if !same {
-            if let Some(updater) = self.fetcher.on_update.clone().lock().await.as_ref() {
-                updater(ele);
+            if let Some(updater) = self.fetcher.on_update.as_ref() {
+                updater.lock().await(ele);
             }
         }
         Ok(())

@@ -6,11 +6,12 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+use futures::future::BoxFuture;
 use tokio::{
     sync::{Mutex, RwLock},
     time::Instant,
 };
-use tracing::{debug, info};
+use tracing::{info, trace, warn};
 
 use crate::common::utils;
 
@@ -29,13 +30,13 @@ pub struct Fetcher<U, P> {
     ticker: Option<tokio::time::Interval>,
     inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
     parser: Arc<Mutex<P>>,
-    pub on_update: Arc<Mutex<Option<U>>>,
+    pub on_update: Option<Arc<Mutex<U>>>,
 }
 
 impl<T, U, P> Fetcher<U, P>
 where
     T: Send + Sync + 'static,
-    U: Fn(T) + Send + Sync + 'static,
+    U: Fn(T) -> BoxFuture<'static, ()> + Send + Sync + 'static,
     P: Fn(&[u8]) -> anyhow::Result<T> + Send + Sync + 'static,
 {
     pub fn new(
@@ -62,7 +63,7 @@ where
                 hash: [0; 16],
             })),
             parser: Arc::new(Mutex::new(parser)),
-            on_update: Arc::new(Mutex::new(on_update)),
+            on_update: on_update.map(|f| Arc::new(Mutex::new(f))),
         }
     }
     pub fn name(&self) -> &str {
@@ -206,21 +207,19 @@ where
                         match Fetcher::<U, P>::update_inner(inner, vehicle, parser).await {
                             Ok((elm, same)) => (elm, same),
                             Err(e) => {
-                                tracing::error!("{} update failed: {}", &name, e);
+                                warn!("{} update failed: {}", &name, e);
                                 return;
                             }
                         };
 
                     if same {
-                        tracing::info!("provider {} no update", &name);
+                        trace!("fetcher {} no update", &name);
                         return;
                     }
 
-                    tracing::info!("provider {} updated", &name);
-
-                    let on_update = on_update.lock().await.take();
                     if let Some(on_update) = on_update {
-                        on_update(elm)
+                        info!("fetcher {} updated", &name);
+                        on_update.lock().await(elm).await;
                     }
                 };
 
@@ -240,6 +239,7 @@ where
 mod tests {
     use std::{path::Path, sync::Arc, time::Duration};
 
+    use futures::future::BoxFuture;
     use tokio::time::sleep;
 
     use crate::app::proxy_manager::providers::{MockProviderVehicle, ProviderVehicleType};
@@ -272,8 +272,10 @@ mod tests {
             Ok("parsed".to_owned())
         };
 
-        let updater = move |input: String| -> () {
-            assert_eq!(input, "parsed".to_owned());
+        let updater = move |input: String| -> BoxFuture<'static, ()> {
+            Box::pin(async move {
+                assert_eq!(input, "parsed".to_owned());
+            })
         };
 
         let mut f = Fetcher::new(

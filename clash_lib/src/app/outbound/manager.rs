@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
+use tracing::debug;
 use tracing::info;
 
 use crate::app::dns::ThreadSafeDNSResolver;
@@ -246,6 +247,7 @@ impl OutboundManager {
 
                 Ok(pd)
             }
+
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
                     if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
@@ -481,6 +483,7 @@ impl OutboundManager {
                                 .get(provider_name)
                                 .expect(format!("provider {} not found", provider_name).as_str())
                                 .clone();
+
                             providers.push(provider);
                         }
                     }

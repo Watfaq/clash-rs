@@ -147,10 +147,11 @@ proxy-providers:
   file-provider:
     type: file
     path: ./ss.yaml
+    interval: 5
     health-check:
       enable: true
       url: http://www.gstatic.com/generate_204
-      interval: 300
+      interval: 5
 
 rules:
   - DOMAIN,ipinfo.io,relay

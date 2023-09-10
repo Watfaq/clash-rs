@@ -51,13 +51,6 @@ impl Handler {
     pub async fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
         let provider = providers.first().unwrap();
         let proxies = provider.read().await.proxies().await;
-        debug!(
-            "provider {} with {} proxies, {}",
-            provider.read().await.name(),
-            proxies.len(),
-            opts.name
-        );
-
         let current = proxies.first().unwrap().name().to_owned();
 
         Self {
