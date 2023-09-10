@@ -70,7 +70,7 @@ impl Sink<UdpPacket> for TunDatagram {
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if self.flushed {
             return Poll::Ready(Ok(()));
@@ -87,7 +87,10 @@ impl Sink<UdpPacket> for TunDatagram {
 
         if let Some(pkt) = pkt_container.take() {
             match tx.blocking_send(pkt) {
-                Ok(_) => Poll::Ready(Ok(())),
+                Ok(_) => {
+                    *flushed = true;
+                    Poll::Ready(Ok(()))
+                }
                 Err(err) => Poll::Ready(Err(new_io_error(err.to_string().as_str()))),
             }
         } else {
@@ -96,7 +99,7 @@ impl Sink<UdpPacket> for TunDatagram {
     }
 
     fn poll_close(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         ready!(self.poll_flush(cx))?;

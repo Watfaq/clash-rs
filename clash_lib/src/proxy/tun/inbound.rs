@@ -1,17 +1,18 @@
 use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, process::Command, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use tracing::{error, info, warn};
-use tun::TunPacket;
+use tracing::{debug, error, info, warn};
+use tun::{Device, TunPacket};
 use url::Url;
 
 use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
+    common::errors::map_io_error,
     config::internal::config::TunConfig,
     proxy::datagram::UdpPacket,
     session::{Network, Session, SocksAddr},
-    Runner,
+    Error, Runner,
 };
 
 async fn handl_inbound_stream(
@@ -110,38 +111,64 @@ pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
-) -> anyhow::Result<Runner> {
+) -> Result<Option<Runner>, Error> {
     if !cfg.enable {
-        return Ok(Box::pin(async {}));
+        return Ok(None);
     }
 
     let device_id = cfg.device_id;
 
-    let u = Url::parse(&device_id)?;
+    let u =
+        Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
 
     match u.scheme() {
         "fd" => {
-            let fd = u.path().parse()?;
+            let fd = u
+                .host()
+                .expect("tun fd must be provided")
+                .to_string()
+                .parse()
+                .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
             tun_cfg.raw_fd(fd);
         }
         "dev" => {
-            let dev = u.path();
+            let dev = u.host().expect("tun dev must be provided").to_string();
             tun_cfg.name(dev);
         }
         _ => {
-            return Err(anyhow!("invalid device id: {}", device_id));
+            return Err(Error::InvalidConfig(format!(
+                "invalid device id: {}",
+                device_id
+            )));
         }
     }
 
-    tun_cfg.up();
+    let network = cfg
+        .network
+        .as_ref()
+        .unwrap_or(&"198.18.0.0/16".to_owned())
+        .parse::<ipnet::IpNet>()?;
 
-    let tun = tun::create_as_async(&tun_cfg)?;
+    tun_cfg
+        .address(
+            network.hosts().nth(0).expect(
+                format!("tun network {:?} doesn't contain any address", cfg.network).as_str(),
+            ),
+        )
+        .netmask(network.netmask())
+        .up();
 
-    let (stack, mut tcp_listener, udp_socket) = netstack::NetStack::with_buffer_size(512, 256)?;
+    let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
 
-    Ok(Box::pin(async move {
+    let tun_name = tun.get_ref().name().to_owned();
+    info!("tun started at {}", tun_name);
+
+    let (stack, mut tcp_listener, udp_socket) =
+        netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
+
+    Ok(Some(Box::pin(async move {
         let framed = tun.into_framed();
 
         let (mut tun_sink, mut tun_stream) = framed.split();
@@ -201,7 +228,8 @@ pub fn get_runner(
             handle_inbound_datagram(udp_socket, dispatcher, resolver).await;
         }));
 
-        info!("tun started");
-        futures::future::select_all(futs).await;
-    }))
+        futures::future::join_all(futs).await;
+
+        warn!("tun at {} stopped", tun_name);
+    })))
 }

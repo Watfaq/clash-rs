@@ -170,6 +170,7 @@ impl Dispatcher {
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
 
+        let s = sess.clone();
         let t1 = tokio::spawn(async move {
             while let Some(packet) = local_r.next().await {
                 let mut sess = sess.clone();
@@ -332,7 +333,7 @@ impl Dispatcher {
 
         tokio::spawn(async move {
             let _ = close_receiver.await;
-            debug!("UDP close signal received");
+            debug!("UDP close signal for {} received", s);
             t1.abort();
             t2.abort();
         });

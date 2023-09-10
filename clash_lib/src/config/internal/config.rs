@@ -223,7 +223,14 @@ pub struct Profile {
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
+    /// tun device id, could be
+    /// dev://utun886 # Linux
+    /// fd://3 # file descriptor
     pub device_id: String,
+    /// tun device address
+    /// default: 198.18.0.0/16
+    pub network: Option<String>,
+    pub gateway: Option<IpAddr>,
 }
 
 #[derive(Clone, Default)]

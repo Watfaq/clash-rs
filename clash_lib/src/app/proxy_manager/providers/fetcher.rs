@@ -11,7 +11,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     time::Instant,
 };
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::common::utils;
 
@@ -195,7 +195,7 @@ where
         let fire_immediately = immediately_update;
 
         self.thread_handle = Some(tokio::spawn(async move {
-            info!("{} started", &name);
+            debug!("fetcher {} started", &name);
             loop {
                 let inner = inner.clone();
                 let vehicle = vehicle.clone();

@@ -1,5 +1,5 @@
 {
-  "checksum": "4564aec5a8749e220a660c0df36a86d7883e3499efd72e21fa84a34fd4e5a5ff",
+  "checksum": "3d3bfbbd122465276d5d3d21dd039d9f0b89f028939bf4f1e2bde118e2268121",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -18056,9 +18056,11 @@
       "name": "tun",
       "version": "0.5.5",
       "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/tun/0.5.5/download",
-          "sha256": "cbc25e23adc6cac7dd895ce2780f255902290fc39b00e1ae3c33e89f3d20fa66"
+        "Git": {
+          "remote": "https://github.com/Watfaq/rust-tun.git",
+          "commitish": {
+            "Rev": "5c0702b"
+          }
         }
       },
       "targets": [

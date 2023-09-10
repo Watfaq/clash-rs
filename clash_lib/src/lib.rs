@@ -13,6 +13,7 @@ use crate::config::internal::InternalConfig;
 use app::dispatcher::StatisticsManager;
 use common::auth;
 use config::def::LogLevel;
+use proxy::tun::get_tun_runner;
 use state::Storage;
 use std::io;
 use tokio::task::JoinHandle;
@@ -186,6 +187,11 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let inbound_runner = inbound_manager.lock().await.get_runner()?;
     let inbound_listener_handle = tokio::spawn(inbound_runner);
+
+    let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
+    if let Some(tun_runner) = tun_runner {
+        runners.push(tun_runner);
+    }
 
     let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
         .await
