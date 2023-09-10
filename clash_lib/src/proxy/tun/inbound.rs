@@ -1,8 +1,8 @@
 use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, process::Command, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use tun::{Device, TunPacket};
 use url::Url;
 
@@ -11,7 +11,7 @@ use crate::{
     common::errors::map_io_error,
     config::internal::config::TunConfig,
     proxy::datagram::UdpPacket,
-    session::{Network, Session, SocksAddr},
+    session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
 
@@ -24,6 +24,7 @@ async fn handl_inbound_stream(
 ) {
     let mut sess = Session {
         network: Network::Tcp,
+        typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
         ..Default::default()
@@ -46,18 +47,29 @@ async fn handle_inbound_datagram(
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) {
-    // netstack communications
+    // tun i/o
     let (ls, mut lr) = socket.split();
     let ls = Arc::new(ls);
 
+    // dispatcher <-> tun communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
-    let (d_tx, mut d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+    // forward packets from tun to dispatcher
+    let (d_tx, d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
     // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
     // and send back packets to this channel, which is to the tun
     let udp_stream = TunDatagram::new(l_tx, d_rx);
 
+    let sess = Session {
+        network: Network::Udp,
+        typ: Type::Tun,
+        ..Default::default()
+    };
+
+    let closer = dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
+
+    // dispatcher -> tun
     tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
             let src_addr = match pkt.src_addr {
@@ -81,8 +93,8 @@ async fn handle_inbound_datagram(
         }
     });
 
+    // tun  -> dispatcher
     tokio::spawn(async move {
-        // TODO: handle DNS
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
             let pkt = UdpPacket {
                 data,
@@ -97,14 +109,8 @@ async fn handle_inbound_datagram(
                 }
             }
         }
+        closer.send(0).ok();
     });
-
-    let sess = Session {
-        network: Network::Udp,
-        ..Default::default()
-    };
-
-    dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
 }
 
 pub fn get_runner(

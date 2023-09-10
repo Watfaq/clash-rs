@@ -24,7 +24,6 @@ pub struct UdpPacket {
 impl Debug for UdpPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UdpPacket")
-            .field("data", &format_args!("{:x?}", &self.data))
             .field("src_addr", &self.src_addr)
             .field("dst_addr", &self.dst_addr)
             .finish()

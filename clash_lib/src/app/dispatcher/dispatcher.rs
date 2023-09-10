@@ -290,9 +290,7 @@ impl Dispatcher {
                         drop(outbound_handle_guard);
 
                         match remote_sender.send(packet.clone()).await {
-                            Ok(_) => {
-                                event!(tracing::Level::DEBUG, "local -> remote: packet sent");
-                            }
+                            Ok(_) => {}
                             Err(err) => {
                                 error!("failed to send packet to remote: {}", err);
                             }
@@ -310,15 +308,8 @@ impl Dispatcher {
 
         let t2 = tokio::spawn(async move {
             while let Some(packet) = remote_receiver_r.recv().await {
-                event!(
-                    tracing::Level::DEBUG,
-                    "remote -> local: packet received: {:?}",
-                    packet
-                );
                 match local_w.send(packet.clone()).await {
-                    Ok(_) => {
-                        event!(tracing::Level::DEBUG, "outer remote -> local: packet sent");
-                    }
+                    Ok(_) => {}
                     Err(err) => {
                         error!(
                             "failed to send packet to local: {}, packet: {}",

@@ -16,10 +16,11 @@ pub struct TunDatagram {
     flushed: bool,
 }
 
-// TODO: make this work
 impl TunDatagram {
     pub fn new(
+        // send to tun
         tx: tokio::sync::mpsc::Sender<UdpPacket>,
+        // receive from tun
         rx: tokio::sync::mpsc::Receiver<UdpPacket>,
     ) -> Self {
         Self {
@@ -86,7 +87,7 @@ impl Sink<UdpPacket> for TunDatagram {
         let pkt_container = pkt;
 
         if let Some(pkt) = pkt_container.take() {
-            match tx.blocking_send(pkt) {
+            match tx.try_send(pkt) {
                 Ok(_) => {
                     *flushed = true;
                     Poll::Ready(Ok(()))

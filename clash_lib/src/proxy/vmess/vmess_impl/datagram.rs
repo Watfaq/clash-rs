@@ -148,7 +148,6 @@ impl Stream for OutboundDatagramVmess {
         let mut buf = ReadBuf::new(buf);
 
         let rv = ready!(inner.poll_read(cx, &mut buf));
-        debug!("recv udp packet from remote ss server: {:?}", rv);
 
         match rv {
             Ok(()) => Poll::Ready(Some(UdpPacket {
