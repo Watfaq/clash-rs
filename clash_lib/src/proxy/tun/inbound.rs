@@ -2,7 +2,7 @@ use super::{datagram::TunDatagram, netstack};
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 use tun::{Device, TunPacket};
 use url::Url;
 
@@ -47,7 +47,9 @@ async fn handle_inbound_datagram(
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) {
+    let local_addr = socket.local_addr();
     // tun i/o
+
     let (ls, mut lr) = socket.split();
     let ls = Arc::new(ls);
 
@@ -59,7 +61,7 @@ async fn handle_inbound_datagram(
 
     // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
     // and send back packets to this channel, which is to the tun
-    let udp_stream = TunDatagram::new(l_tx, d_rx);
+    let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
 
     let sess = Session {
         network: Network::Udp,
@@ -72,14 +74,21 @@ async fn handle_inbound_datagram(
     // dispatcher -> tun
     tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
+            trace!("tun <- dispatcher: {:?}", pkt);
+            // populate the correct src_addr, though is it necessary?
             let src_addr = match pkt.src_addr {
                 SocksAddr::Ip(ip) => ip,
                 SocksAddr::Domain(host, port) => {
-                    if let Some(ip) = resolver.lookup_fake_ip(&host).await {
-                        (ip, port).into()
-                    } else {
-                        warn!("failed to resolve fake ip: {}", host);
-                        continue;
+                    match resolver.resolve(&host, resolver.fake_ip_enabled()).await {
+                        Ok(Some(ip)) => (ip, port).into(),
+                        Ok(None) => {
+                            warn!("failed to resolve domain: {}", host);
+                            continue;
+                        }
+                        Err(e) => {
+                            warn!("failed to resolve domain: {}", e);
+                            continue;
+                        }
                     }
                 }
             };
@@ -93,7 +102,7 @@ async fn handle_inbound_datagram(
         }
     });
 
-    // tun  -> dispatcher
+    // tun -> dispatcher
     tokio::spawn(async move {
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
             let pkt = UdpPacket {
@@ -101,6 +110,8 @@ async fn handle_inbound_datagram(
                 src_addr: src_addr.into(),
                 dst_addr: dst_addr.into(),
             };
+
+            trace!("tun -> dispatcher: {:?}", pkt);
 
             match d_tx.send(pkt).await {
                 Ok(_) => {}
@@ -154,7 +165,7 @@ pub fn get_runner(
     let network = cfg
         .network
         .as_ref()
-        .unwrap_or(&"198.18.0.0/16".to_owned())
+        .unwrap_or(&"198.19.0.0/16".to_owned())
         .parse::<ipnet::IpNet>()?;
 
     tun_cfg

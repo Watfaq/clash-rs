@@ -291,6 +291,10 @@ impl Debug for DnsClient {
 
 #[async_trait]
 impl Client for DnsClient {
+    fn id(&self) -> String {
+        format!("{}#{}:{}", &self.net, &self.host, &self.port)
+    }
+
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
         req.set_id(rand::random::<u16>());

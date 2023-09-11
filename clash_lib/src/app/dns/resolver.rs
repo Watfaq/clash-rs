@@ -180,7 +180,9 @@ impl Resolver {
             queries.push(
                 async move {
                     c.exchange(message)
-                        .inspect_err(|x| warn!("DNS resolve error: {}", x.to_string()))
+                        .inspect_err(|x| {
+                            warn!("DNS client {} resolve error: {}", c.id(), x.to_string())
+                        })
                         .await
                 }
                 .boxed(),

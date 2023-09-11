@@ -173,6 +173,7 @@ impl Manager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset_statistic(&self) {
         self.upload_temp.store(0, Ordering::Relaxed);
         self.upload_blip.store(0, Ordering::Relaxed);

@@ -8,7 +8,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::{Mutex, RwLock};
 use std::task::{Context, Poll};
 use tokio::io::ReadBuf;
 use tokio::net::UdpSocket;
@@ -53,7 +52,7 @@ impl UdpPacket {
 }
 
 pub struct InboundUdp<I> {
-    inner: Mutex<I>,
+    inner: I,
 }
 
 impl<I> InboundUdp<I>
@@ -62,9 +61,7 @@ where
     I: Sink<((Bytes, SocksAddr), SocketAddr)>,
 {
     pub fn new(inner: I) -> Self {
-        Self {
-            inner: Mutex::new(inner),
-        }
+        Self { inner }
     }
 }
 
@@ -79,25 +76,20 @@ impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let pin = self.get_mut();
-        match pin.inner.try_lock() {
-            Ok(mut guard) => match guard.poll_next_unpin(cx) {
-                Poll::Ready(item) => match item {
-                    None => Poll::Ready(None),
-                    Some(item) => match item {
-                        Ok(((dst, pkt), src)) => Poll::Ready(Some(UdpPacket {
-                            data: pkt.to_vec(),
-                            src_addr: SocksAddr::Ip(src),
-                            dst_addr: dst,
-                        })),
-                        Err(_) => Poll::Ready(None),
-                    },
+
+        match pin.inner.poll_next_unpin(cx) {
+            Poll::Ready(item) => match item {
+                None => Poll::Ready(None),
+                Some(item) => match item {
+                    Ok(((dst, pkt), src)) => Poll::Ready(Some(UdpPacket {
+                        data: pkt.to_vec(),
+                        src_addr: SocksAddr::Ip(src),
+                        dst_addr: dst,
+                    })),
+                    Err(_) => Poll::Ready(None),
                 },
-                Poll::Pending => Poll::Pending,
             },
-            Err(err) => match err {
-                std::sync::TryLockError::WouldBlock => Poll::Pending,
-                std::sync::TryLockError::Poisoned(_) => Poll::Ready(None),
-            },
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -107,12 +99,12 @@ impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
-        pin.inner.lock().expect("lock error").poll_ready_unpin(cx)
+        pin.inner.poll_ready_unpin(cx)
     }
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         let pin = self.get_mut();
-        pin.inner.lock().expect("lock error").start_send_unpin((
+        pin.inner.start_send_unpin((
             (item.data.into(), item.src_addr),
             item.dst_addr.must_into_socket_addr(),
         ))
@@ -120,12 +112,12 @@ impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
-        pin.inner.lock().expect("lock error").poll_flush_unpin(cx)
+        pin.inner.poll_flush_unpin(cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
-        pin.inner.lock().expect("lock error").poll_close_unpin(cx)
+        pin.inner.poll_close_unpin(cx)
     }
 }
 
@@ -133,7 +125,7 @@ impl InboundDatagram<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {}
 
 #[must_use = "sinks do nothing unless polled"]
 pub struct OutboundDatagramImpl {
-    inner: RwLock<UdpSocket>,
+    inner: UdpSocket,
     resolver: ThreadSafeDNSResolver,
     flushed: bool,
     pkt: Option<UdpPacket>,
@@ -142,7 +134,7 @@ pub struct OutboundDatagramImpl {
 impl OutboundDatagramImpl {
     pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> AnyOutboundDatagram {
         let s = Self {
-            inner: RwLock::new(udp),
+            inner: udp,
             resolver,
             flushed: true,
             pkt: None,
@@ -184,13 +176,14 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ..
         } = *self;
 
-        if let Some(pkt) = pkt.take() {
-            let dst = pkt.dst_addr;
-            let data = pkt.data;
+        if pkt.is_some() {
+            let p = pkt.as_ref().unwrap();
+            let dst = &p.dst_addr;
+            let data = &p.data;
             let dst = match dst {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
-                    let port = port as u16;
+                    let port = *port as u16;
                     let mut fut = resolver.resolve(domain.as_str(), false);
                     let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
                         io::Error::new(io::ErrorKind::Other, "resolve domain failed")
@@ -204,14 +197,10 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         )));
                     }
                 }
-                SocksAddr::Ip(addr) => addr,
+                SocksAddr::Ip(addr) => *addr,
             };
 
-            let n =
-                ready!(inner
-                    .write()
-                    .expect("lock error")
-                    .poll_send_to(cx, data.as_slice(), dst))?;
+            let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
             let wrote_all = n == data.len();
             self.pkt = None;
             self.flushed = true;
@@ -245,11 +234,7 @@ impl Stream for OutboundDatagramImpl {
         let Self { ref mut inner, .. } = *self;
         let mut mem = vec![0u8; 65535];
         let mut buf = ReadBuf::new(&mut mem);
-        match ready!(inner
-            .read()
-            .expect("lock error")
-            .poll_recv_from(cx, &mut buf))
-        {
+        match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
                 Poll::Ready(Some(UdpPacket {

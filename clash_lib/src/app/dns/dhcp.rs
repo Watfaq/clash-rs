@@ -49,6 +49,10 @@ impl Debug for DhcpClient {
 
 #[async_trait]
 impl Client for DhcpClient {
+    fn id(&self) -> String {
+        format!("dhcp#{}", self.iface)
+    }
+
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let clients = self.resolve().await?;
         let mut dbg_str = vec![];

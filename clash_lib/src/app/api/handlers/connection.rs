@@ -9,7 +9,7 @@ use axum::{
 use http::{HeaderMap, Request};
 use hyper::{body::HttpBody, Body};
 use serde::Deserialize;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::app::{
     api::{handlers::utils::is_request_websocket, AppState},
@@ -72,7 +72,8 @@ async fn get_connections(
             let body = String::from_utf8(j.to_vec()).unwrap();
 
             if let Err(e) = socket.send(Message::Text(body)).await {
-                warn!("ws send error: {}", e);
+                // likely client gone
+                debug!("ws send error: {}", e);
                 break;
             }
 

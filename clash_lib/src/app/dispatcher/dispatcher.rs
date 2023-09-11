@@ -12,12 +12,16 @@ use futures::SinkExt;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use tracing::instrument;
+use tracing::trace;
 use tracing::{debug, error, info, warn};
-use tracing::{event, instrument};
 
 use crate::app::dns::ThreadSafeDNSResolver;
 
@@ -159,7 +163,7 @@ impl Dispatcher {
         sess: Session,
         udp_inbound: AnyInboundDatagram,
     ) -> tokio::sync::oneshot::Sender<u8> {
-        let outbound_handle_guard = Arc::new(Mutex::new(OutboundHandleMap::new()));
+        let outbound_handle_guard = TimeoutUdpSessionManager::new();
 
         let router = self.router.clone();
         let outbound_manager = self.outbound_manager.clone();
@@ -177,14 +181,18 @@ impl Dispatcher {
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = packet.dst_addr.clone();
 
+                // populate fake ip for route matching
                 let sess = if resolver.fake_ip_enabled() {
+                    trace!("fake ip enabled");
                     match sess.destination {
                         crate::session::SocksAddr::Ip(addr) => {
                             let ip = addr.ip();
                             if resolver.is_fake_ip(ip).await {
+                                trace!("fake ip detected");
                                 let host = resolver.reverse_lookup(ip).await;
                                 match host {
                                     Some(host) => {
+                                        trace!("fake ip resolved to {}", host);
                                         let mut sess = sess;
                                         sess.destination =
                                             crate::session::SocksAddr::Domain(host, addr.port());
@@ -205,6 +213,10 @@ impl Dispatcher {
                     sess
                 };
 
+                // mutate packet for fake ip
+                let mut packet = packet;
+                packet.dst_addr = sess.destination.clone();
+
                 let mode = mode.lock().await;
                 info!("dispatching {} with mode {}", sess, mode);
                 let (outbound_name, rule) = match *mode {
@@ -223,9 +235,13 @@ impl Dispatcher {
                     .get_outbound(&outbound_name)
                     .expect(format!("unknown rule: {}", outbound_name).as_str());
 
-                let mut outbound_handle_guard = outbound_handle_guard.lock().await;
-
-                match outbound_handle_guard.get_outbound_sender_mut(&outbound_name) {
+                match outbound_handle_guard
+                    .get_outbound_sender_mut(
+                        &outbound_name,
+                        packet.src_addr.clone().must_into_socket_addr(), // this is only expected to be socket addr as it's from local udp
+                    )
+                    .await
+                {
                     None => {
                         let outbound_datagram =
                             match handler.connect_datagram(&sess, resolver.clone()).await {
@@ -255,6 +271,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
+                                packet.src_addr = sess.destination.clone().into();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!("UDP NAT for packet: {:?}, session: {}", packet, sess);
@@ -280,14 +297,15 @@ impl Dispatcher {
                             }
                         });
 
-                        outbound_handle_guard.insert(
-                            &outbound_name,
-                            r_handle,
-                            w_handle,
-                            remote_sender.clone(),
-                        );
-
-                        drop(outbound_handle_guard);
+                        outbound_handle_guard
+                            .insert(
+                                &outbound_name,
+                                packet.src_addr.clone().must_into_socket_addr(),
+                                r_handle,
+                                w_handle,
+                                remote_sender.clone(),
+                            )
+                            .await;
 
                         match remote_sender.send(packet.clone()).await {
                             Ok(_) => {}
@@ -333,8 +351,98 @@ impl Dispatcher {
     }
 }
 
-type OutBoundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>; // outbound packet sender
-struct OutboundHandleMap(HashMap<String, (JoinHandle<()>, JoinHandle<()>, OutBoundPacketSender)>);
+type OutboundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>; // outbound packet sender
+
+struct TimeoutUdpSessionManager {
+    map: Arc<Mutex<OutboundHandleMap>>,
+
+    cleaner: Option<JoinHandle<()>>,
+}
+
+impl Drop for TimeoutUdpSessionManager {
+    fn drop(&mut self) {
+        trace!("dropping timeout udp session manager");
+        self.cleaner.take().map(|x| x.abort());
+    }
+}
+
+impl TimeoutUdpSessionManager {
+    fn new() -> Self {
+        let map = Arc::new(Mutex::new(OutboundHandleMap::new()));
+        let timeout = Duration::from_secs(10);
+
+        let map_cloned = map.clone();
+
+        let cleaner = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+
+                trace!("timeout udp session cleaner scanning");
+                let mut g = map_cloned.lock().await;
+                let mut alived = 0;
+                let mut expired = 0;
+                g.0.retain(|k, x| {
+                    let (h1, h2, _, last) = x;
+                    let now = Instant::now();
+                    let alive = now.duration_since(*last) < timeout;
+                    if !alive {
+                        expired += 1;
+                        trace!("udp session expired: {:?}", k);
+                        h1.abort();
+                        h2.abort();
+                    } else {
+                        alived += 1;
+                    }
+                    alive
+                });
+                trace!(
+                    "timeout udp session cleaner finished, alived: {}, expired: {}",
+                    alived,
+                    expired
+                );
+            }
+        });
+
+        Self {
+            map,
+
+            cleaner: Some(cleaner),
+        }
+    }
+
+    async fn insert(
+        &self,
+        outbound_name: &str,
+        src_addr: SocketAddr,
+        recv_handle: JoinHandle<()>,
+        send_handle: JoinHandle<()>,
+        sender: OutboundPacketSender,
+    ) {
+        let mut map = self.map.lock().await;
+        map.insert(outbound_name, src_addr, recv_handle, send_handle, sender);
+    }
+
+    async fn get_outbound_sender_mut(
+        &self,
+        outbound_name: &str,
+        src_addr: SocketAddr,
+    ) -> Option<OutboundPacketSender> {
+        let mut map = self.map.lock().await;
+        map.get_outbound_sender_mut(outbound_name, src_addr)
+    }
+}
+
+struct OutboundHandleMap(
+    HashMap<
+        (String, SocketAddr),
+        (
+            JoinHandle<()>,
+            JoinHandle<()>,
+            OutboundPacketSender,
+            Instant,
+        ),
+    >,
+);
 
 impl OutboundHandleMap {
     fn new() -> Self {
@@ -344,28 +452,42 @@ impl OutboundHandleMap {
     fn insert(
         &mut self,
         outbound_name: &str,
+        src_addr: SocketAddr,
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
-        sender: OutBoundPacketSender,
+        sender: OutboundPacketSender,
     ) {
         self.0.insert(
-            outbound_name.to_string(),
-            (recv_handle, send_handle, sender),
+            (outbound_name.to_string(), src_addr),
+            (recv_handle, send_handle, sender, Instant::now()),
         );
     }
 
     fn get_outbound_sender_mut(
         &mut self,
         outbound_name: &str,
-    ) -> Option<&mut OutBoundPacketSender> {
-        self.0.get_mut(outbound_name).map(|(_, _, sender)| sender)
+        src_addr: SocketAddr,
+    ) -> Option<OutboundPacketSender> {
+        self.0
+            .get_mut(&(outbound_name.to_owned(), src_addr))
+            .map(|(_, _, sender, last)| {
+                trace!(
+                    "updating last access time for outbound {:?}",
+                    (outbound_name, src_addr)
+                );
+                *last = Instant::now();
+                sender.clone()
+            })
     }
 }
 
 impl Drop for OutboundHandleMap {
     fn drop(&mut self) {
-        debug!("dropping outbound handle map");
-        for (_, (recv_handle, send_handle, _)) in self.0.drain() {
+        trace!(
+            "dropping inner outbound handle map that has {} sessions",
+            self.0.len()
+        );
+        for (_, (recv_handle, send_handle, _, _)) in self.0.drain() {
             recv_handle.abort();
             send_handle.abort();
         }

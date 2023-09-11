@@ -6,7 +6,9 @@ def check_socks5_tun():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     req = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x05\x62\x61\x69\x64\x75\x03\x63\x6f\x6d\x00\x00\x01\x00\x01"
-    s.sendto(req, ("8.8.8.8", 53))
+    s.sendto(req, ("198.18.0.2", 53))
+
+    print(s.getsockname())
 
     (res, address) = s.recvfrom(4096)
     if res[0] == req[0] and res[1] == req[1]:

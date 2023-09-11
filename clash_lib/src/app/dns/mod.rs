@@ -48,6 +48,8 @@ macro_rules! dns_warn {
 
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
+    /// used to identify the client for logging
+    fn id(&self) -> String;
     async fn exchange(&self, msg: &op::Message) -> anyhow::Result<op::Message>;
 }
 
@@ -84,12 +86,6 @@ pub trait ClashResolver: Sync + Send {
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool;
     async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool;
-    async fn lookup_fake_ip(&self, host: &str) -> Option<std::net::IpAddr> {
-        todo!();
-    }
-    async fn generate_fake_ip_packet(&self, data: Vec<u8>) -> anyhow::Result<DnsResponse> {
-        todo!();
-    }
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);

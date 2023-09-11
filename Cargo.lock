@@ -2227,7 +2227,7 @@ checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 [[package]]
 name = "netstack-lwip"
 version = "0.3.4"
-source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=4fef23#4fef237a9c8f4a94afaa05a3d0e9c57bd0ae8754"
+source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=8c8c0b0#8c8c0b0646ebeb6eb84821d95b7261d3e00d94dd"
 dependencies = [
  "anyhow",
  "bindgen 0.59.2",
@@ -3720,7 +3720,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-client"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
 dependencies = [
  "cfg-if",
  "data-encoding",
@@ -3787,7 +3787,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3839,7 +3839,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -3862,7 +3862,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-server"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=ca798f2#ca798f2b931b9c85cb28bdaad7a922f3049c9394"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
 dependencies = [
  "async-trait",
  "bytes",

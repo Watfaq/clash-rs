@@ -7,7 +7,7 @@ use std::{
 use futures::{ready, Sink, Stream};
 use shadowsocks::ProxySocket;
 use tokio::io::ReadBuf;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use crate::{
     app::dns::ThreadSafeDNSResolver,
@@ -90,6 +90,7 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
                 }))?;
 
                 if let Some(ip) = ip {
+                    trace!("resolve domain {} to {}", domain, ip);
                     (ip, port).into()
                 } else {
                     return Poll::Ready(Err(io::Error::new(
