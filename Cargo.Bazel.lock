@@ -1,5 +1,5 @@
 {
-  "checksum": "3d3bfbbd122465276d5d3d21dd039d9f0b89f028939bf4f1e2bde118e2268121",
+  "checksum": "5dbed95073e45222657cac438a2cbd0a7480ab91c3f5308e62f34f5b3b41cc08",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -10277,7 +10277,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/netstack-lwip.git",
           "commitish": {
-            "Rev": "4fef23"
+            "Rev": "8c8c0b0"
           }
         }
       },
@@ -17203,7 +17203,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "ca798f2"
+            "Rev": "3386076"
           },
           "strip_prefix": "crates/client"
         }
@@ -17504,7 +17504,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "ca798f2"
+            "Rev": "3386076"
           },
           "strip_prefix": "crates/proto"
         }
@@ -17768,7 +17768,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "ca798f2"
+            "Rev": "3386076"
           },
           "strip_prefix": "crates/resolver"
         }
@@ -17894,7 +17894,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "ca798f2"
+            "Rev": "3386076"
           },
           "strip_prefix": "crates/server"
         }
