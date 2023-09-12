@@ -94,7 +94,6 @@ impl TryFrom<def::Config> for Config {
             },
             profile: Profile {
                 store_selected: c.profile.store_selected,
-                store_fakeip: c.profile.store_fake_ip,
             },
             rules: c
                 .rule
@@ -161,7 +160,7 @@ impl TryFrom<def::Config> for Config {
                 },
             )?,
             // https://stackoverflow.com/a/62001313/1109167
-            proxy_names: proxy_names,
+            proxy_names,
             proxy_providers: c
                 .proxy_provider
                 .map(|m| {
@@ -215,8 +214,9 @@ pub struct General {
 }
 
 pub struct Profile {
-    store_selected: bool,
-    store_fakeip: bool,
+    pub store_selected: bool,
+    // this is read to dns config directly
+    // store_fake_ip: bool,
 }
 
 #[derive(Deserialize, Default)]

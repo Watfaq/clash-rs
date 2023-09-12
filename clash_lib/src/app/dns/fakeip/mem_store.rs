@@ -1,5 +1,7 @@
 use std::net::IpAddr;
 
+use async_trait::async_trait;
+
 use super::Store;
 
 pub struct InMemStore {
@@ -16,40 +18,42 @@ impl InMemStore {
     }
 }
 
+#[async_trait]
 impl Store for InMemStore {
-    fn get_by_host(&mut self, host: &str) -> Option<std::net::IpAddr> {
+    async fn get_by_host(&mut self, host: &str) -> Option<std::net::IpAddr> {
         self.htoi.get_mut(host).map(|ip| {
             self.itoh.get_mut(ip);
             *ip
         })
     }
 
-    fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {
+    async fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {
         self.htoi.insert(host.into(), ip);
     }
 
-    fn get_by_ip(&mut self, ip: std::net::IpAddr) -> Option<String> {
+    async fn get_by_ip(&mut self, ip: std::net::IpAddr) -> Option<String> {
         self.itoh.get_mut(&ip).map(|h| {
             self.htoi.get_mut(h);
             h.to_string()
         })
     }
 
-    fn put_by_ip(&mut self, ip: std::net::IpAddr, host: &str) {
+    async fn put_by_ip(&mut self, ip: std::net::IpAddr, host: &str) {
         self.itoh.insert(ip, host.into());
     }
 
-    fn del_by_ip(&mut self, ip: std::net::IpAddr) {
+    async fn del_by_ip(&mut self, ip: std::net::IpAddr) {
         if let Some(host) = self.itoh.remove(&ip) {
             self.htoi.remove(&host);
         }
     }
 
-    fn exist(&mut self, ip: std::net::IpAddr) -> bool {
+    async fn exist(&mut self, ip: std::net::IpAddr) -> bool {
         self.itoh.contains_key(&ip)
     }
 
-    fn copy_to(&self, _store: &mut Box<dyn Store>) {
-        todo!("not implemented yet")
+    async fn copy_to(&self, #[allow(unused)] store: &mut Box<dyn Store>) {
+        // TODO: copy
+        // NOTE: use file based persistence store
     }
 }

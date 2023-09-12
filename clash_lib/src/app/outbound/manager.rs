@@ -9,6 +9,7 @@ use tracing::debug;
 use tracing::info;
 
 use crate::app::dns::ThreadSafeDNSResolver;
+use crate::app::profile::ThreadSafeCacheFile;
 use crate::app::proxy_manager::healthcheck::HealthCheck;
 use crate::app::proxy_manager::providers::file_vehicle;
 use crate::app::proxy_manager::providers::http_vehicle;
@@ -54,6 +55,7 @@ impl OutboundManager {
         proxy_providers: HashMap<String, OutboundProxyProvider>,
         proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
+        cache_store: ThreadSafeCacheFile,
     ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
@@ -76,6 +78,7 @@ impl OutboundManager {
             &mut provider_registry,
             &mut handlers,
             &mut selector_control,
+            cache_store,
         )
         .await?;
 
@@ -170,6 +173,7 @@ impl OutboundManager {
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         handlers: &mut HashMap<String, AnyOutboundHandler>,
         selector_control: &mut HashMap<String, ThreadSafeSelectorControl>,
+        cache_store: ThreadSafeCacheFile,
     ) -> Result<(), Error> {
         let mut proxy_providers = vec![];
 
@@ -488,6 +492,8 @@ impl OutboundManager {
                         }
                     }
 
+                    let stored_selection = cache_store.get_selected(&proto.name).await;
+
                     let selector = selector::Handler::new(
                         selector::HandlerOptions {
                             name: proto.name.clone(),
@@ -495,6 +501,7 @@ impl OutboundManager {
                             ..Default::default()
                         },
                         providers,
+                        stored_selection,
                     )
                     .await;
 
@@ -520,6 +527,8 @@ impl OutboundManager {
         let pd = Arc::new(RwLock::new(
             PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap(),
         ));
+
+        let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
         let h = selector::Handler::new(
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
@@ -527,6 +536,7 @@ impl OutboundManager {
                 ..Default::default()
             },
             vec![pd.clone()],
+            stored_selection,
         )
         .await;
 

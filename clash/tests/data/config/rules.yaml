@@ -52,6 +52,11 @@ external-ui: "public"
 experimental:
   ignore-resolve-fail: true
 
+profile:
+  store-selected: true
+  store-fake-ip: false
+
+
 proxy-groups:
   - name: "relay"
     type: relay

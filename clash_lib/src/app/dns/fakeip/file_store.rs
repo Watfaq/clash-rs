@@ -1,39 +1,49 @@
+use async_trait::async_trait;
+
+use crate::app::profile::ThreadSafeCacheFile;
+
 use super::Store;
 
-pub struct FileStore;
+pub struct FileStore(ThreadSafeCacheFile);
 
 impl FileStore {
-    pub fn new() -> Self {
-        Self
+    pub fn new(store: ThreadSafeCacheFile) -> Self {
+        Self(store)
     }
 }
 
+#[async_trait]
 impl Store for FileStore {
-    fn get_by_host(&mut self, _host: &str) -> Option<std::net::IpAddr> {
-        todo!()
+    async fn get_by_host(&mut self, host: &str) -> Option<std::net::IpAddr> {
+        self.0
+            .get_fake_ip(host)
+            .await
+            .map(|ip| ip.parse().ok())
+            .flatten()
     }
 
-    fn pub_by_host(&mut self, _host: &str, _ip: std::net::IpAddr) {
-        todo!()
+    async fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {
+        self.0.set_host_to_ip(host, &ip.to_string()).await;
     }
 
-    fn get_by_ip(&mut self, _ip: std::net::IpAddr) -> Option<String> {
-        todo!()
+    async fn get_by_ip(&mut self, ip: std::net::IpAddr) -> Option<String> {
+        self.0.get_fake_ip(&ip.to_string()).await
     }
 
-    fn put_by_ip(&mut self, _ip: std::net::IpAddr, _host: &str) {
-        todo!()
+    async fn put_by_ip(&mut self, ip: std::net::IpAddr, host: &str) {
+        self.0.set_ip_to_host(&ip.to_string(), host).await;
     }
 
-    fn del_by_ip(&mut self, _ip: std::net::IpAddr) {
-        todo!()
+    async fn del_by_ip(&mut self, ip: std::net::IpAddr) {
+        let host = self.get_by_ip(ip).await.unwrap_or_default();
+        self.0.delete_fake_ip_pair(&ip.to_string(), &host).await;
     }
 
-    fn exist(&mut self, _ip: std::net::IpAddr) -> bool {
-        todo!()
+    async fn exist(&mut self, ip: std::net::IpAddr) -> bool {
+        self.0.get_fake_ip(&ip.to_string()).await.is_some()
     }
 
-    fn copy_to(&self, _store: &mut Box<dyn Store>) {
-        todo!()
+    async fn copy_to(&self, #[allow(unused)] store: &mut Box<dyn Store>) {
+        //NO-OP
     }
 }

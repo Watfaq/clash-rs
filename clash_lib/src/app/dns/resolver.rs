@@ -10,13 +10,14 @@ use tracing::{debug, warn};
 
 use trust_dns_proto::{op, rr};
 
+use crate::app::profile::ThreadSafeCacheFile;
 use crate::config::def::DNSMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
 use crate::dns_debug;
 use crate::{common::trie, Error};
 
-use super::fakeip::{self, ThreadSafeFakeDns};
+use super::fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns};
 use super::system::SystemResolver;
 use super::{
     filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
@@ -71,7 +72,7 @@ impl Resolver {
         }
     }
 
-    pub async fn new(cfg: &Config) -> ThreadSafeDNSResolver {
+    pub async fn new(cfg: &Config, store: ThreadSafeCacheFile) -> ThreadSafeDNSResolver {
         if !cfg.enable {
             return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
         }
@@ -158,9 +159,11 @@ impl Resolver {
                         } else {
                             None
                         },
-                        size: 1000,
-                        persistence: cfg.store_fake_ip,
-                        db_path: None,
+                        store: if cfg.store_fake_ip {
+                            Box::new(FileStore::new(store))
+                        } else {
+                            Box::new(InMemStore::new(1000))
+                        },
                     })
                     .unwrap(),
                 ))),

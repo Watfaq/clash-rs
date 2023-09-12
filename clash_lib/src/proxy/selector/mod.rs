@@ -48,7 +48,11 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub async fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
+    pub async fn new(
+        opts: HandlerOptions,
+        providers: Vec<ThreadSafeProxyProvider>,
+        seleted: Option<String>,
+    ) -> Self {
         let provider = providers.first().unwrap();
         let proxies = provider.read().await.proxies().await;
         let current = proxies.first().unwrap().name().to_owned();
@@ -56,7 +60,9 @@ impl Handler {
         Self {
             opts,
             providers,
-            inner: Arc::new(Mutex::new(HandlerInner { current })),
+            inner: Arc::new(Mutex::new(HandlerInner {
+                current: seleted.unwrap_or(current),
+            })),
         }
     }
 
@@ -202,6 +208,7 @@ mod tests {
                 common_option: super::CommonOption::default(),
             },
             vec![Arc::new(RwLock::new(mock_provider))],
+            None,
         )
         .await;
 

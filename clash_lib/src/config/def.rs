@@ -295,6 +295,7 @@ pub struct Experimental {}
 
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Profile {
     pub store_selected: bool,
     pub store_fake_ip: bool,
@@ -304,7 +305,7 @@ impl Default for Profile {
     fn default() -> Self {
         Self {
             store_selected: true,
-            store_fake_ip: Default::default(),
+            store_fake_ip: false,
         }
     }
 }

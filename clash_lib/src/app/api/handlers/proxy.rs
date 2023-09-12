@@ -13,18 +13,25 @@ use http::StatusCode;
 use serde::Deserialize;
 
 use crate::{
-    app::{api::AppState, outbound::manager::ThreadSafeOutboundManager},
+    app::{
+        api::AppState, outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+    },
     proxy::AnyOutboundHandler,
 };
 
 #[derive(Clone)]
 pub struct ProxyState {
     outbound_manager: ThreadSafeOutboundManager,
+    cache_store: ThreadSafeCacheFile,
 }
 
-pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppState>> {
+pub fn routes(
+    outbound_manager: ThreadSafeOutboundManager,
+    cache_store: ThreadSafeCacheFile,
+) -> Router<Arc<AppState>> {
     let state = ProxyState {
-        outbound_manager: outbound_manager.clone(),
+        outbound_manager,
+        cache_store,
     };
     Router::new()
         .route("/", get(get_proxies))
@@ -87,10 +94,14 @@ async fn update_proxy(
     let outbound_manager = state.outbound_manager.read().await;
     if let Some(ctrl) = outbound_manager.get_selector_control(proxy.name()) {
         match ctrl.lock().await.select(&payload.name).await {
-            Ok(_) => (
-                StatusCode::ACCEPTED,
-                format!("selected proxy {} for {}", payload.name, proxy.name()),
-            ),
+            Ok(_) => {
+                let cache_store = state.cache_store;
+                cache_store.set_selected(proxy.name(), &payload.name).await;
+                (
+                    StatusCode::ACCEPTED,
+                    format!("selected proxy {} for {}", payload.name, proxy.name()),
+                )
+            }
             Err(err) => (
                 StatusCode::BAD_REQUEST,
                 format!(

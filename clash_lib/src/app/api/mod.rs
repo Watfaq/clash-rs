@@ -14,6 +14,7 @@ use crate::{config::internal::config::Controller, GlobalState, Runner};
 use super::dispatcher::StatisticsManager;
 use super::dns::ThreadSafeDNSResolver;
 use super::logging::LogEvent;
+use super::profile::ThreadSafeCacheFile;
 use super::{
     dispatcher, inbound::manager::ThreadSafeInboundManager,
     outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter,
@@ -36,6 +37,7 @@ pub fn get_api_runner(
     dns_resolver: ThreadSafeDNSResolver,
     outbound_manager: ThreadSafeOutboundManager,
     statistics_manager: Arc<StatisticsManager>,
+    cache_store: ThreadSafeCacheFile,
     router: ThreadSafeRouter,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
@@ -70,7 +72,7 @@ pub fn get_api_runner(
                 .nest("/rules", handlers::rule::routes(router))
                 .nest(
                     "/proxies",
-                    handlers::proxy::routes(outbound_manager.clone()),
+                    handlers::proxy::routes(outbound_manager.clone(), cache_store),
                 )
                 .nest(
                     "/connections",

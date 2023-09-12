@@ -11,6 +11,7 @@ use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
 use app::dispatcher::StatisticsManager;
+use app::profile;
 use common::auth;
 use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
@@ -130,7 +131,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
-    let dns_resolver = dns::Resolver::new(&config.dns).await;
+    let cache_store = profile::ThreadSafeCacheFile::new("cache.db", config.profile.store_selected);
+
+    let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone()).await;
 
     let outbound_manager = Arc::new(RwLock::new(
         OutboundManager::new(
@@ -153,6 +156,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.proxy_providers,
             config.proxy_names,
             dns_resolver.clone(),
+            cache_store.clone(),
         )
         .await?,
     ));
@@ -212,6 +216,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         dns_resolver,
         outbound_manager,
         statistics_manager,
+        cache_store,
         router,
     );
     if let Some(r) = api_runner {
