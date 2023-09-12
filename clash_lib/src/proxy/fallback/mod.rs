@@ -7,7 +7,9 @@ use crate::{
     app::{
         dispatcher::BoxedChainedStream,
         dns::ThreadSafeDNSResolver,
-        proxy_manager::{providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager},
+        remote_content_manager::{
+            providers::proxy_provider::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
+        },
     },
     session::{Session, SocksAddr},
 };

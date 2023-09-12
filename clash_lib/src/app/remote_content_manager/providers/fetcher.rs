@@ -242,7 +242,7 @@ mod tests {
     use futures::future::BoxFuture;
     use tokio::time::sleep;
 
-    use crate::app::proxy_manager::providers::{MockProviderVehicle, ProviderVehicleType};
+    use crate::app::remote_content_manager::providers::{MockProviderVehicle, ProviderVehicleType};
 
     use super::Fetcher;
 

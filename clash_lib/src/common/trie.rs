@@ -16,6 +16,7 @@ pub struct StringTrie<T: Sync + Send + Clone> {
 #[derive(Clone)]
 pub struct Node<T: Sync + Send + Clone> {
     children: HashMap<String, Node<T>>,
+    // TODO: maybe we only need RefCell here
     data: Option<Arc<T>>,
 }
 

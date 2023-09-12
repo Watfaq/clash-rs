@@ -5,19 +5,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
+
 use tracing::info;
 
 use crate::app::dns::ThreadSafeDNSResolver;
-use crate::app::profile::ThreadSafeCacheFile;
-use crate::app::proxy_manager::healthcheck::HealthCheck;
-use crate::app::proxy_manager::providers::file_vehicle;
-use crate::app::proxy_manager::providers::http_vehicle;
-use crate::app::proxy_manager::providers::plain_provider::PlainProvider;
-use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider;
-use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
-use crate::app::proxy_manager::ProxyManager;
+use crate::app::remote_content_manager::healthcheck::HealthCheck;
+use crate::app::remote_content_manager::providers::file_vehicle;
+use crate::app::remote_content_manager::providers::http_vehicle;
+use crate::app::remote_content_manager::ProxyManager;
 
+use crate::app::remote_content_manager::providers::proxy_provider::PlainProvider;
+use crate::app::remote_content_manager::providers::proxy_provider::ProxySetProvider;
+use crate::app::remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider;
 use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::fallback;

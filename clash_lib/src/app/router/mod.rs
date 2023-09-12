@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 use tracing::info;
 
+use self::mmdb::MMDB;
+
 use super::dns::ThreadSafeDNSResolver;
 
 mod mmdb;
@@ -45,72 +47,7 @@ impl Router {
         Self {
             rules: rules
                 .into_iter()
-                .map(|r| match r {
-                    RuleType::Domain { domain, target } => {
-                        Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
-                    }
-                    RuleType::DomainSuffix {
-                        domain_suffix,
-                        target,
-                    } => Box::new(DomainSuffix {
-                        suffix: domain_suffix,
-                        target,
-                    }),
-                    RuleType::DomainKeyword {
-                        domain_keyword,
-                        target,
-                    } => Box::new(DomainKeyword {
-                        keyword: domain_keyword,
-                        target,
-                    }),
-                    RuleType::IPCIDR {
-                        ipnet,
-                        target,
-                        no_resolve,
-                    } => Box::new(IPCIDR {
-                        ipnet,
-                        target,
-                        no_resolve,
-                        match_src: false,
-                    }),
-                    RuleType::SRCIPCIDR {
-                        ipnet,
-                        target,
-                        no_resolve,
-                    } => Box::new(IPCIDR {
-                        ipnet,
-                        target,
-                        no_resolve,
-                        match_src: true,
-                    }),
-
-                    RuleType::GeoIP {
-                        target,
-                        country_code,
-                        no_resolve,
-                    } => Box::new(rules::geoip::GeoIP {
-                        target,
-                        country_code,
-                        no_resolve,
-                        mmdb: mmdb.clone(),
-                    }),
-                    RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
-                        port,
-                        target,
-                        is_src: true,
-                    }),
-                    RuleType::DSTPort { target, port } => Box::new(rules::port::Port {
-                        port,
-                        target,
-                        is_src: false,
-                    }),
-                    RuleType::ProcessName => todo!(),
-                    RuleType::ProcessPath => todo!(),
-                    RuleType::RuleSet { rule_set, target } => {
-                        Box::new(RuleSet { rule_set, target })
-                    }
-                    RuleType::Match { target } => Box::new(Final { target }),
-                })
+                .map(|r| map_rule_type(r, mmdb.clone()))
                 .collect(),
             dns_resolver,
         }
@@ -149,5 +86,72 @@ impl Router {
     /// API handlers
     pub fn get_all_rules(&self) -> &Vec<Box<dyn RuleMatcher>> {
         &self.rules
+    }
+}
+
+fn map_rule_type(rule_type: RuleType, mmdb: Arc<MMDB>) -> Box<dyn RuleMatcher> {
+    match rule_type {
+        RuleType::Domain { domain, target } => {
+            Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
+        }
+        RuleType::DomainSuffix {
+            domain_suffix,
+            target,
+        } => Box::new(DomainSuffix {
+            suffix: domain_suffix,
+            target,
+        }),
+        RuleType::DomainKeyword {
+            domain_keyword,
+            target,
+        } => Box::new(DomainKeyword {
+            keyword: domain_keyword,
+            target,
+        }),
+        RuleType::IPCIDR {
+            ipnet,
+            target,
+            no_resolve,
+        } => Box::new(IPCIDR {
+            ipnet,
+            target,
+            no_resolve,
+            match_src: false,
+        }),
+        RuleType::SRCIPCIDR {
+            ipnet,
+            target,
+            no_resolve,
+        } => Box::new(IPCIDR {
+            ipnet,
+            target,
+            no_resolve,
+            match_src: true,
+        }),
+
+        RuleType::GeoIP {
+            target,
+            country_code,
+            no_resolve,
+        } => Box::new(rules::geoip::GeoIP {
+            target,
+            country_code,
+            no_resolve,
+            mmdb: mmdb.clone(),
+        }),
+        RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
+            port,
+            target,
+            is_src: true,
+        }),
+        RuleType::DSTPort { target, port } => Box::new(rules::port::Port {
+            port,
+            target,
+            is_src: false,
+        }),
+        RuleType::ProcessName => todo!(),
+        RuleType::ProcessPath => todo!(),
+        RuleType::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),
+        RuleType::Match { target } => Box::new(Final { target }),
     }
 }

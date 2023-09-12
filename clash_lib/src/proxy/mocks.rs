@@ -7,7 +7,7 @@ use crate::{
     app::{
         dispatcher::BoxedChainedStream,
         dns::ThreadSafeDNSResolver,
-        proxy_manager::providers::{
+        remote_content_manager::providers::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
         },
     },

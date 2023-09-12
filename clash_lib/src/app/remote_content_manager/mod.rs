@@ -10,7 +10,7 @@ use std::{
 use boring::ssl::{SslConnector, SslMethod};
 
 use chrono::{DateTime, Utc};
-use futures::StreamExt;
+
 use http::{Request, Version};
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
@@ -246,11 +246,10 @@ impl ProxyManager {
 mod tests {
     use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
-    use anyhow::Chain;
     use futures::TryFutureExt;
 
     use crate::{
-        app::{dispatcher::ChainedStreamWrapper, dns::MockClashResolver},
+        app::{dispatcher::ChainedStreamWrapper, dns::MockClashResolver, remote_content_manager},
         config::internal::proxy::PROXY_DIRECT,
         proxy::mocks::MockDummyOutboundHandler,
     };
@@ -262,7 +261,7 @@ mod tests {
             .expect_resolve()
             .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
-        let manager = super::ProxyManager::new(Arc::new(mock_resolver));
+        let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler
@@ -317,7 +316,7 @@ mod tests {
             .expect_resolve()
             .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
 
-        let manager = super::ProxyManager::new(Arc::new(mock_resolver));
+        let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler

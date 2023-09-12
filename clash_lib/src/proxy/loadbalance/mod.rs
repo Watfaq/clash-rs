@@ -9,7 +9,7 @@ use tracing::debug;
 use crate::{
     app::{
         dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver,
-        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     config::internal::proxy::LoadBalanceStrategy,
     session::{Session, SocksAddr},

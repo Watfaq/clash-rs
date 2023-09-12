@@ -1,5 +1,5 @@
 use crate::{
-    app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+    app::remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     proxy::AnyOutboundHandler,
 };
 
