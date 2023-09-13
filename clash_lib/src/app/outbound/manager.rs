@@ -9,6 +9,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
 use crate::app::dns::ThreadSafeDNSResolver;
+use crate::app::profile::ThreadSafeCacheFile;
 use crate::app::remote_content_manager::healthcheck::HealthCheck;
 use crate::app::remote_content_manager::providers::file_vehicle;
 use crate::app::remote_content_manager::providers::http_vehicle;
