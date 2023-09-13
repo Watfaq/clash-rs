@@ -2,7 +2,7 @@ use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
         transport::TLSOptions,
-        vmess::{Handler, HandlerOptions, VmessTransport, WsOption},
+        vmess::{Handler, HandlerOptions, Http2Option, VmessTransport, WsOption},
         AnyOutboundHandler, CommonOption,
     },
     Error,
@@ -54,6 +54,18 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
+                        )),
+                    "h2" => s
+                        .h2_opts
+                        .as_ref()
+                        .map(|x| {
+                            VmessTransport::H2(Http2Option {
+                                host: x.host.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                            })
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "h2_opts is required for h2".to_owned(),
                         )),
                     _ => {
                         return Err(Error::InvalidConfig(format!("unsupported network: {}", x)));

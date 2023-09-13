@@ -5,7 +5,7 @@ use rustls::{Certificate, ServerName};
 use std::time::SystemTime;
 
 /// Warning: NO validation on certs.
-struct DummyTlsVerifier;
+pub struct DummyTlsVerifier;
 
 impl ServerCertVerifier for DummyTlsVerifier {
     fn verify_server_cert(

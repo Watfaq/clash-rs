@@ -138,6 +138,32 @@ proxies:
       path: /api/v3/download.getFile
       headers:
         Host: www.amazon.com
+
+  - name: tls-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 8443
+    uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
+    tls: true
+
+  - name: h2-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 8444
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
+    tls: true
+    network: h2
+    h2-opts:
+      path: /ray
+
   - name: vmess-altid
     type: vmess
     server: tw-1.ac.laowanxiang.com
@@ -171,8 +197,8 @@ proxy-providers:
 
 rules:
   - DOMAIN,ipinfo.io,relay
+  - DOMAIN-KEYWORD,httpbin,h2-vmess
   - GEOIP,CN,relay
-  - DOMAIN-KEYWORD,httpbin,vmess-altid
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,select
   - DOMAIN,google.com,select

@@ -124,6 +124,12 @@ pub struct WsOpt {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct H2Opt {
+    pub host: Option<Vec<String>>,
+    pub path: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct GrpcOpt {
     pub grpc_service_name: Option<String>,
 }
@@ -160,6 +166,8 @@ pub struct OutboundVmess {
     pub network: Option<String>,
     #[serde(alias = "ws-opts")]
     pub ws_opts: Option<WsOpt>,
+    #[serde(alias = "h2-opts")]
+    pub h2_opts: Option<H2Opt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

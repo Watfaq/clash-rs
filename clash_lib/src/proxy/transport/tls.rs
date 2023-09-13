@@ -3,10 +3,9 @@ use std::{io, sync::Arc};
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use serde::Serialize;
 use tokio_rustls::TlsConnector;
+use tracing::warn;
 
 use crate::{common::tls, proxy::AnyStream};
-
-const DEFAULT_ALPN: [&'static str; 2] = ["h2", "http/1.1"];
 
 #[derive(Serialize, Clone)]
 pub struct TLSOptions {
@@ -16,6 +15,7 @@ pub struct TLSOptions {
 }
 
 pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnyStream> {
+    // TODO save root store to avoid re-creating it
     let mut root_store = RootCertStore::empty();
     root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -30,15 +30,16 @@ pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnySt
         .with_no_client_auth();
     tls_config.alpn_protocols = opt
         .alpn
-        .unwrap_or_else(|| DEFAULT_ALPN.iter().map(|x| x.to_string()).collect())
+        .unwrap_or_default()
         .into_iter()
         .map(|x| x.as_bytes().to_vec())
         .collect();
 
     if opt.skip_cert_verify {
+        warn!("skip certificate verification to host {}", opt.sni);
         tls_config
             .dangerous()
-            .set_certificate_verifier(Arc::new(tls::NoHostnameTlsVerifier));
+            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier {}));
     }
 
     let connector = TlsConnector::from(Arc::new(tls_config));
@@ -48,5 +49,5 @@ pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnySt
     connector
         .connect(dns_name, stream)
         .await
-        .map(|x| x.into_inner().0)
+        .map(|x| Box::new(x) as _)
 }
