@@ -104,7 +104,7 @@ impl Dispatcher {
         };
 
         let mode = self.mode.lock().await;
-        info!("dispatching {} with mode {}", sess, mode);
+        debug!("dispatching {} with mode {}", sess, mode);
         let (outbound_name, rule) = match *mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
@@ -120,7 +120,7 @@ impl Dispatcher {
 
         match handler.connect_stream(&sess, self.resolver.clone()).await {
             Ok(rhs) => {
-                info!("remote connection established {}", sess);
+                debug!("remote connection established {}", sess);
                 let mut rhs = Box::new(
                     TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await,
                 );

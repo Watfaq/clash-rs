@@ -164,6 +164,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let router = Arc::new(
         Router::new(
             config.rules,
+            config.rule_providers,
             dns_resolver.clone(),
             config.general.mmdb,
             config.general.mmdb_download_url,

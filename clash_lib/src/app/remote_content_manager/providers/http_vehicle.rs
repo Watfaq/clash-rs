@@ -51,7 +51,7 @@ impl ProviderVehicle for Vehicle {
     }
 
     fn typ(&self) -> ProviderVehicleType {
-        ProviderVehicleType::HTTP
+        ProviderVehicleType::Http
     }
 }
 

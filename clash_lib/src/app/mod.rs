@@ -5,5 +5,5 @@ pub mod inbound;
 pub mod logging;
 pub mod outbound;
 pub mod profile;
-pub mod proxy_manager;
+pub mod remote_content_manager;
 pub mod router;

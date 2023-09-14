@@ -7,10 +7,8 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
-use tokio::{
-    sync::{Mutex, RwLock},
-    time::Instant,
-};
+use serde::de;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, trace, warn};
 
 use crate::common::utils;
@@ -20,14 +18,15 @@ use super::{ProviderVehicleType, ThreadSafeProviderVehicle};
 struct Inner {
     updated_at: SystemTime,
     hash: [u8; 16],
+
+    thread_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 pub struct Fetcher<U, P> {
     name: String,
     interval: Duration,
     vehicle: ThreadSafeProviderVehicle,
-    thread_handle: Option<tokio::task::JoinHandle<()>>,
-    ticker: Option<tokio::time::Interval>,
+    ticker_interval: Duration,
     inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
     parser: Arc<Mutex<P>>,
     pub on_update: Option<Arc<Mutex<U>>>,
@@ -50,17 +49,11 @@ where
             name,
             interval,
             vehicle,
-            thread_handle: None,
-            ticker: match interval.as_secs() {
-                0 => None,
-                _ => Some(tokio::time::interval_at(
-                    Instant::now() + interval,
-                    interval,
-                )),
-            },
+            ticker_interval: interval,
             inner: Arc::new(tokio::sync::RwLock::new(Inner {
                 updated_at: SystemTime::UNIX_EPOCH,
                 hash: [0; 16],
+                thread_handle: None,
             })),
             parser: Arc::new(Mutex::new(parser)),
             on_update: on_update.map(|f| Arc::new(Mutex::new(f))),
@@ -78,7 +71,7 @@ where
         self.inner.read().await.updated_at.into()
     }
 
-    pub async fn initial(&mut self) -> anyhow::Result<T> {
+    pub async fn initial(&self) -> anyhow::Result<T> {
         let mut is_local = false;
         let mut immediately_update = false;
 
@@ -100,14 +93,16 @@ where
             Err(_) => self.vehicle.read().await?,
         };
 
-        let proxies = match (self.parser.lock().await)(&content) {
+        let parser_guard = self.parser.lock().await;
+
+        let proxies = match (parser_guard)(&content) {
             Ok(proxies) => proxies,
             Err(e) => {
                 if !is_local {
                     return Err(e);
                 }
                 let content = self.vehicle.read().await?;
-                (self.parser.lock().await)(&content)?
+                (parser_guard)(&content)?
             }
         };
 
@@ -127,8 +122,12 @@ where
 
         drop(inner);
 
-        if let Some(ticker) = self.ticker.take() {
-            self.pull_loop(immediately_update, ticker);
+        if !self.ticker_interval.is_zero() {
+            self.pull_loop(
+                immediately_update,
+                tokio::time::interval(self.ticker_interval),
+            )
+            .await;
         }
 
         Ok(proxies)
@@ -180,13 +179,13 @@ where
         Ok((proxies, false))
     }
 
-    pub fn destroy(&mut self) {
-        if let Some(handle) = self.thread_handle.take() {
+    pub async fn destroy(&mut self) {
+        if let Some(handle) = self.inner.write().await.thread_handle.take() {
             handle.abort();
         }
     }
 
-    fn pull_loop(&mut self, immediately_update: bool, mut ticker: tokio::time::Interval) {
+    async fn pull_loop(&self, immediately_update: bool, mut ticker: tokio::time::Interval) {
         let inner = self.inner.clone();
         let vehicle = self.vehicle.clone();
         let parser = self.parser.clone();
@@ -194,7 +193,7 @@ where
         let name = self.name.clone();
         let fire_immediately = immediately_update;
 
-        self.thread_handle = Some(tokio::spawn(async move {
+        let thread_handle = Some(tokio::spawn(async move {
             debug!("fetcher {} started", &name);
             loop {
                 let inner = inner.clone();
@@ -232,6 +231,8 @@ where
                 }
             }
         }));
+
+        self.inner.write().await.thread_handle = thread_handle;
     }
 }
 
@@ -242,7 +243,7 @@ mod tests {
     use futures::future::BoxFuture;
     use tokio::time::sleep;
 
-    use crate::app::proxy_manager::providers::{MockProviderVehicle, ProviderVehicleType};
+    use crate::app::remote_content_manager::providers::{MockProviderVehicle, ProviderVehicleType};
 
     use super::Fetcher;
 

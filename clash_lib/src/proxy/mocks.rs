@@ -7,7 +7,7 @@ use crate::{
     app::{
         dispatcher::BoxedChainedStream,
         dns::ThreadSafeDNSResolver,
-        proxy_manager::providers::{
+        remote_content_manager::providers::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
         },
     },
@@ -24,7 +24,7 @@ mock! {
         fn name(&self) -> &str;
         fn vehicle_type(&self) -> ProviderVehicleType;
         fn typ(&self) -> ProviderType;
-        async fn initialize(&mut self) -> std::io::Result<()>;
+        async fn initialize(&self) -> std::io::Result<()>;
         async fn update(&self) -> std::io::Result<()>;
 
         async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;

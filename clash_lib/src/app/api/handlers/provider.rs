@@ -11,11 +11,11 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::app::{api::AppState, outbound::manager::ThreadSafeOutboundManager};
-use crate::{
-    app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
-    proxy::AnyOutboundHandler,
+use crate::app::{
+    api::AppState, outbound::manager::ThreadSafeOutboundManager,
+    remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
 };
+use crate::proxy::AnyOutboundHandler;
 #[derive(Clone)]
 struct ProviderState {
     outbound_manager: ThreadSafeOutboundManager,

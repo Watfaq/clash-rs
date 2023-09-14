@@ -195,9 +195,16 @@ proxy-providers:
       url: http://www.gstatic.com/generate_204
       interval: 300
 
+rule-providers:
+  file-provider:
+    type: file
+    path: ./rule-set.yaml
+    interval: 300
+    behavior: domain
+
 rules:
   - DOMAIN,ipinfo.io,relay
-  - DOMAIN-KEYWORD,httpbin,h2-vmess
+  - RULE-SET,file-provider,h2-vmess
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,select

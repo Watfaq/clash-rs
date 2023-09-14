@@ -800,6 +800,7 @@ dependencies = [
  "httparse",
  "hyper",
  "hyper-boring",
+ "ip_network_table-deps-treebitmap",
  "ipnet",
  "libc",
  "lru_time_cache",
@@ -1898,6 +1899,12 @@ name = "ioctl-sys"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c429fffa658f288669529fc26565f728489a2e39bc7b24a428aaaf51355182e"
+
+[[package]]
+name = "ip_network_table-deps-treebitmap"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e537132deb99c0eb4b752f0346b6a836200eaaa3516dd7e5514b63930a09e5d"
 
 [[package]]
 name = "ipconfig"

@@ -6,7 +6,9 @@ use std::str::FromStr;
 
 use serde::de::value::MapDeserializer;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 
+use crate::app::remote_content_manager::providers::rule_provider::RuleSetBehavior;
 use crate::common::auth;
 use crate::config::def::{self};
 use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
@@ -18,7 +20,7 @@ use crate::{
     Error,
 };
 
-use super::proxy::{OutboundProxyProtocol, OutboundProxyProvider};
+use super::proxy::{map_serde_error, OutboundProxyProtocol, OutboundProxyProviderDef};
 
 pub struct Config {
     pub general: General,
@@ -27,12 +29,13 @@ pub struct Config {
     pub experimental: Option<def::Experimental>,
     pub profile: Profile,
     pub rules: Vec<RuleType>,
+    pub rule_providers: HashMap<String, RuleProviderDef>,
     pub users: Vec<auth::User>,
     /// a list maintaining the order from the config file
     pub proxy_names: Vec<String>,
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
-    pub proxy_providers: HashMap<String, OutboundProxyProvider>,
+    pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
 }
 
 impl Config {
@@ -103,6 +106,23 @@ impl TryFrom<def::Config> for Config {
                         .map_err(|x| Error::InvalidConfig(x.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
+            rule_providers: c
+                .rule_provider
+                .map(|m| {
+                    m.into_iter()
+                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                            let provider = RuleProviderDef::try_from(body).map_err(|x| {
+                                Error::InvalidConfig(format!(
+                                    "invalid rule provider {}: {}",
+                                    name, x
+                                ))
+                            })?;
+                            rv.insert(name, provider);
+                            Ok::<HashMap<std::string::String, RuleProviderDef>, Error>(rv)
+                        })
+                        .expect("proxy provider parse error")
+                })
+                .unwrap_or_default(),
             users: c
                 .authentication
                 .into_iter()
@@ -166,14 +186,15 @@ impl TryFrom<def::Config> for Config {
                 .map(|m| {
                     m.into_iter()
                         .try_fold(HashMap::new(), |mut rv, (name, body)| {
-                            let provider = OutboundProxyProvider::try_from(body).map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "invalid proxy provider {}: {}",
-                                    name, x
-                                ))
-                            })?;
+                            let provider =
+                                OutboundProxyProviderDef::try_from(body).map_err(|x| {
+                                    Error::InvalidConfig(format!(
+                                        "invalid proxy provider {}: {}",
+                                        name, x
+                                    ))
+                                })?;
                             rv.insert(name, provider);
-                            Ok::<HashMap<std::string::String, OutboundProxyProvider>, Error>(rv)
+                            Ok::<HashMap<std::string::String, OutboundProxyProviderDef>, Error>(rv)
                         })
                         .expect("proxy provider parse error")
                 })
@@ -285,4 +306,36 @@ pub struct Controller {
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,
     pub secret: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum RuleProviderDef {
+    Http(HttpRuleProvider),
+    File(FileRuleProvider),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HttpRuleProvider {
+    pub url: String,
+    pub interval: u64,
+    pub behavior: RuleSetBehavior,
+    pub path: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileRuleProvider {
+    pub path: String,
+    pub interval: Option<u64>,
+    pub behavior: RuleSetBehavior,
+}
+
+impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
+    type Error = crate::Error;
+
+    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        RuleProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
+            .map_err(map_serde_error)
+    }
 }

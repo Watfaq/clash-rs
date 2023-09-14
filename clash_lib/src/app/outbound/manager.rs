@@ -5,21 +5,23 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
+use tracing::error;
+use tracing::warn;
+
 use tracing::info;
 
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::app::profile::ThreadSafeCacheFile;
-use crate::app::proxy_manager::healthcheck::HealthCheck;
-use crate::app::proxy_manager::providers::file_vehicle;
-use crate::app::proxy_manager::providers::http_vehicle;
-use crate::app::proxy_manager::providers::plain_provider::PlainProvider;
-use crate::app::proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider;
-use crate::app::proxy_manager::providers::proxy_set_provider::ProxySetProvider;
-use crate::app::proxy_manager::ProxyManager;
+use crate::app::remote_content_manager::healthcheck::HealthCheck;
+use crate::app::remote_content_manager::providers::file_vehicle;
+use crate::app::remote_content_manager::providers::http_vehicle;
+use crate::app::remote_content_manager::ProxyManager;
 
+use crate::app::remote_content_manager::providers::proxy_provider::PlainProvider;
+use crate::app::remote_content_manager::providers::proxy_provider::ProxySetProvider;
+use crate::app::remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider;
 use crate::config::internal::proxy::PROXY_GLOBAL;
-use crate::config::internal::proxy::{OutboundProxyProvider, PROXY_DIRECT, PROXY_REJECT};
+use crate::config::internal::proxy::{OutboundProxyProviderDef, PROXY_DIRECT, PROXY_REJECT};
 use crate::proxy::fallback;
 use crate::proxy::loadbalance;
 use crate::proxy::selector;
@@ -52,7 +54,7 @@ impl OutboundManager {
     pub async fn new(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
-        proxy_providers: HashMap<String, OutboundProxyProvider>,
+        proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
         cache_store: ThreadSafeCacheFile,
@@ -548,14 +550,14 @@ impl OutboundManager {
     }
 
     async fn load_proxy_providers(
-        proxy_providers: HashMap<String, OutboundProxyProvider>,
+        proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_manager: ProxyManager,
         resolver: ThreadSafeDNSResolver,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
     ) -> Result<(), Error> {
         for (name, provider) in proxy_providers.into_iter() {
             match provider {
-                OutboundProxyProvider::Http(http) => {
+                OutboundProxyProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url
                             .parse::<Uri>()
@@ -581,7 +583,7 @@ impl OutboundManager {
 
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
-                OutboundProxyProvider::File(file) => {
+                OutboundProxyProviderDef::File(file) => {
                     let vehicle = file_vehicle::Vehicle::new(&file.path);
                     let hc = HealthCheck::new(
                         vec![],
@@ -607,7 +609,16 @@ impl OutboundManager {
 
         for p in provider_registry.values() {
             info!("initializing provider {}", p.read().await.name());
-            p.write().await.initialize().await?;
+            match p.write().await.initialize().await {
+                Ok(_) => {}
+                Err(err) => {
+                    error!(
+                        "failed to initialize proxy provider {}: {}",
+                        p.read().await.name(),
+                        err
+                    );
+                }
+            }
         }
 
         Ok(())

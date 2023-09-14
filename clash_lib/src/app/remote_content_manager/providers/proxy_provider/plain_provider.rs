@@ -5,9 +5,16 @@ use erased_serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::{app::proxy_manager::healthcheck::HealthCheck, proxy::AnyOutboundHandler, Error};
+use crate::{
+    app::remote_content_manager::{
+        healthcheck::HealthCheck,
+        providers::{Provider, ProviderType, ProviderVehicleType},
+    },
+    proxy::AnyOutboundHandler,
+    Error,
+};
 
-use super::{proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType};
+use super::proxy_provider::ProxyProvider;
 
 struct Inner {
     hc: Arc<HealthCheck>,
@@ -58,7 +65,7 @@ impl Provider for PlainProvider {
     fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
-    async fn initialize(&mut self) -> std::io::Result<()> {
+    async fn initialize(&self) -> std::io::Result<()> {
         Ok(())
     }
     async fn update(&self) -> std::io::Result<()> {

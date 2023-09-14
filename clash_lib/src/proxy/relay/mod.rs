@@ -8,7 +8,7 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
         dns::ThreadSafeDNSResolver,
-        proxy_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
     proxy::utils::new_tcp_stream,

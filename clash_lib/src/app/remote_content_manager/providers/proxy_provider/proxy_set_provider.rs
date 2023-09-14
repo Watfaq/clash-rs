@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tracing::debug;
 
-use super::{
-    fetcher::Fetcher, proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
-    ThreadSafeProviderVehicle,
-};
+use super::proxy_provider::ProxyProvider;
 use crate::{
-    app::proxy_manager::healthcheck::HealthCheck,
+    app::remote_content_manager::{
+        healthcheck::HealthCheck,
+        providers::{fetcher::Fetcher, ThreadSafeProviderVehicle},
+        providers::{Provider, ProviderType, ProviderVehicleType},
+    },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{direct, reject, AnyOutboundHandler},
@@ -131,7 +132,7 @@ impl Provider for ProxySetProvider {
         ProviderType::Proxy
     }
 
-    async fn initialize(&mut self) -> std::io::Result<()> {
+    async fn initialize(&self) -> std::io::Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.as_ref() {
@@ -204,10 +205,10 @@ mod tests {
 
     use crate::app::{
         dns::MockClashResolver,
-        proxy_manager::{
+        remote_content_manager::{
             healthcheck::HealthCheck,
             providers::{
-                proxy_provider::ProxyProvider, proxy_set_provider::ProxySetProvider,
+                proxy_provider::{proxy_set_provider::ProxySetProvider, ProxyProvider},
                 MockProviderVehicle, Provider, ProviderVehicleType,
             },
             ProxyManager,

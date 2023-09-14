@@ -3,9 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use crate::proxy::AnyOutboundHandler;
-
-use super::Provider;
+use crate::{app::remote_content_manager::providers::Provider, proxy::AnyOutboundHandler};
 
 pub type ThreadSafeProxyProvider = Arc<RwLock<dyn ProxyProvider + Send + Sync>>;
 

@@ -25,7 +25,7 @@ impl OutboundProxy {
     }
 }
 
-fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
+pub fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
     Error::InvalidConfig(if let Some(loc) = x.location() {
         format!(
             "{}, line, {}, column: {}",
@@ -301,7 +301,7 @@ pub struct OutboundGroupSelect {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
-pub enum OutboundProxyProvider {
+pub enum OutboundProxyProviderDef {
     Http(OutboundHttpProvider),
     File(OutboundFileProvider),
 }
@@ -335,11 +335,11 @@ pub struct HealthCheck {
     pub lazy: Option<bool>,
 }
 
-impl TryFrom<HashMap<String, Value>> for OutboundProxyProvider {
+impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        OutboundProxyProvider::deserialize(MapDeserializer::new(mapping.into_iter()))
+        OutboundProxyProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
             .map_err(map_serde_error)
     }
 }

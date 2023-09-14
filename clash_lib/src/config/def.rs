@@ -119,6 +119,8 @@ pub struct Config {
     pub routing_mask: Option<u32>,
     #[serde(rename = "proxy-providers")]
     pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    #[serde(rename = "rule-providers")]
+    pub rule_provider: Option<HashMap<String, HashMap<String, Value>>>,
     pub experimental: Option<Experimental>,
 
     pub tun: Option<HashMap<String, Value>>,
@@ -176,6 +178,7 @@ impl Default for Config {
             interface: Default::default(),
             routing_mask: Default::default(),
             proxy_provider: Default::default(),
+            rule_provider: Default::default(),
             hosts: Default::default(),
             dns: Default::default(),
             experimental: Default::default(),
