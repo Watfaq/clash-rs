@@ -37,8 +37,14 @@ pub enum RuleType {
         target: String,
         port: u16,
     },
-    ProcessName,
-    ProcessPath,
+    ProcessName {
+        process_name: String,
+        target: String,
+    },
+    ProcessPath {
+        process_path: String,
+        target: String,
+    },
     RuleSet {
         rule_set: String,
         target: String,
@@ -77,8 +83,14 @@ impl RuleType {
             } => target,
             RuleType::SRCPort { target, port } => target,
             RuleType::DSTPort { target, port } => target,
-            RuleType::ProcessName => todo!(),
-            RuleType::ProcessPath => todo!(),
+            RuleType::ProcessName {
+                process_name,
+                target,
+            } => target,
+            RuleType::ProcessPath {
+                process_path,
+                target,
+            } => target,
             RuleType::RuleSet { rule_set, target } => target,
             RuleType::Match { target } => target,
         }
@@ -114,8 +126,14 @@ impl Display for RuleType {
             } => write!(f, "SRC-IP-CIDR"),
             RuleType::SRCPort { target, port } => write!(f, "SRC-PORT"),
             RuleType::DSTPort { target, port } => write!(f, "DST-PORT"),
-            RuleType::ProcessName => write!(f, "PROCESS-NAME"),
-            RuleType::ProcessPath => write!(f, "PROCESS-PATH"),
+            RuleType::ProcessName {
+                process_name,
+                target,
+            } => write!(f, "PROCESS-NAME"),
+            RuleType::ProcessPath {
+                process_path,
+                target,
+            } => write!(f, "PROCESS-PATH"),
             RuleType::RuleSet { rule_set, target } => write!(f, "RULE-SET"),
             RuleType::Match { target } => write!(f, "MATCH"),
         }
@@ -181,8 +199,14 @@ impl RuleType {
                     .parse()
                     .expect(format!("invalid port: {}", payload).as_str()),
             }),
-            "PROCESS-NAME" => todo!(),
-            "PROCESS-PATH" => todo!(),
+            "PROCESS-NAME" => Ok(RuleType::ProcessName {
+                process_name: payload.to_string(),
+                target: target.to_string(),
+            }),
+            "PROCESS-PATH" => Ok(RuleType::ProcessPath {
+                process_path: payload.to_string(),
+                target: target.to_string(),
+            }),
             "RULE-SET" => Ok(RuleType::RuleSet {
                 rule_set: payload.to_string(),
                 target: target.to_string(),

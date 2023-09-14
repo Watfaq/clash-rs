@@ -65,7 +65,7 @@ impl Provider for PlainProvider {
     fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
-    async fn initialize(&mut self) -> std::io::Result<()> {
+    async fn initialize(&self) -> std::io::Result<()> {
         Ok(())
     }
     async fn update(&self) -> std::io::Result<()> {

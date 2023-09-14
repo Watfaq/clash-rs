@@ -132,7 +132,7 @@ impl Provider for ProxySetProvider {
         ProviderType::Proxy
     }
 
-    async fn initialize(&mut self) -> std::io::Result<()> {
+    async fn initialize(&self) -> std::io::Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.as_ref() {

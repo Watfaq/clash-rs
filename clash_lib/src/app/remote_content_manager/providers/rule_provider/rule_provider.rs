@@ -1,18 +1,27 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
+use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use tracing::trace;
+use tracing::{debug, trace};
+use tracing_subscriber::field::debug;
 
 use crate::{
     app::{
         remote_content_manager::providers::{
-            fetcher::Fetcher, Provider, ThreadSafeProviderVehicle,
+            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
+            ThreadSafeProviderVehicle,
         },
-        router::RuleMatcher,
+        router::{map_rule_type, RuleMatcher, MMDB},
     },
-    common::trie,
+    common::{errors::map_io_error, trie},
     config::internal::rule::RuleType,
     session::Session,
     Error,
@@ -25,10 +34,22 @@ struct ProviderScheme {
     pub payload: Vec<String>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
 pub enum RuleSetBehavior {
     Domain,
     IPCIDR,
     Classical,
+}
+
+impl Display for RuleSetBehavior {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuleSetBehavior::Domain => write!(f, "Domain"),
+            RuleSetBehavior::IPCIDR => write!(f, "IPCIDR"),
+            RuleSetBehavior::Classical => write!(f, "Classical"),
+        }
+    }
 }
 
 enum RuleContent {
@@ -39,16 +60,14 @@ enum RuleContent {
 
 struct Inner {
     content: RuleContent,
-    count: usize,
 }
 
-#[async_trait]
 pub trait RuleProvider: Provider {
-    async fn rules(&self) -> Vec<String>;
-    async fn search(&self, sess: &Session) -> bool;
-    async fn rule_count(&self) -> usize;
+    fn search(&self, sess: &Session) -> bool;
     fn behavior(&self) -> RuleSetBehavior;
 }
+
+pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
 
 pub struct RuleProviderImpl {
     fetcher: Fetcher<
@@ -65,6 +84,7 @@ impl RuleProviderImpl {
         behovior: RuleSetBehavior,
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
+        mmdb: Arc<MMDB>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behovior {
@@ -72,7 +92,6 @@ impl RuleProviderImpl {
                 RuleSetBehavior::IPCIDR => RuleContent::IPCIDR(CidrTrie::new()),
                 RuleSetBehavior::Classical => RuleContent::Classical(vec![]),
             },
-            count: 0,
         }));
 
         let inner_clone = inner.clone();
@@ -95,17 +114,115 @@ impl RuleProviderImpl {
                 let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
                     Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
                 })?;
-                let rules = make_rules(behovior, scheme.payload)?;
+                let rules = make_rules(behovior, scheme.payload, mmdb.clone())?;
                 Ok(rules)
             });
+
+        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
+
+        Self {
+            fetcher,
+            inner,
+            behavior: behovior,
+        }
     }
 }
 
-fn make_rules(behavior: RuleSetBehavior, rules: Vec<String>) -> Result<RuleContent, Error> {
+#[async_trait]
+impl RuleProvider for RuleProviderImpl {
+    fn search(&self, sess: &Session) -> bool {
+        let inner = self.inner.try_read();
+
+        match inner {
+            Ok(inner) => match &inner.content {
+                RuleContent::Domain(trie) => trie.search(&sess.destination.host()).is_some(),
+                RuleContent::IPCIDR(trie) => trie.contains(
+                    sess.destination
+                        .ip()
+                        .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
+                ),
+                RuleContent::Classical(rules) => {
+                    for rule in rules.iter() {
+                        if rule.apply(sess) {
+                            return true;
+                        }
+                    }
+                    false
+                }
+            },
+            Err(_) => {
+                debug!("rule provider {} is busy", self.name());
+                false
+            }
+        }
+    }
+    fn behavior(&self) -> RuleSetBehavior {
+        self.behavior
+    }
+}
+
+#[async_trait]
+impl Provider for RuleProviderImpl {
+    fn name(&self) -> &str {
+        self.fetcher.name()
+    }
+    fn vehicle_type(&self) -> ProviderVehicleType {
+        self.fetcher.vehicle_type()
+    }
+    fn typ(&self) -> ProviderType {
+        ProviderType::Rule
+    }
+    async fn initialize(&self) -> std::io::Result<()> {
+        let ele = self.fetcher.initial().await.map_err(map_io_error)?;
+        debug!("initializing rule provider {}", self.name());
+        if let Some(updater) = self.fetcher.on_update.as_ref() {
+            updater.lock().await(ele).await;
+        }
+        Ok(())
+    }
+    async fn update(&self) -> std::io::Result<()> {
+        let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
+        debug!("rule provider {} updated. same? {}", self.name(), same);
+        if !same {
+            if let Some(updater) = self.fetcher.on_update.as_ref() {
+                updater.lock().await(ele);
+            }
+        }
+        Ok(())
+    }
+
+    async fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
+        let mut m: HashMap<String, Box<dyn ESerialize + Send>> = HashMap::new();
+
+        m.insert("name".to_owned(), Box::new(self.name().to_string()));
+        m.insert("type".to_owned(), Box::new(self.typ().to_string()));
+        m.insert(
+            "vehicleType".to_owned(),
+            Box::new(self.vehicle_type().to_string()),
+        );
+
+        m.insert(
+            "updatedAt".to_owned(),
+            Box::new(self.fetcher.updated_at().await),
+        );
+
+        m.insert("behavior".to_owned(), Box::new(self.behavior().to_string()));
+
+        m
+    }
+}
+
+fn make_rules(
+    behavior: RuleSetBehavior,
+    rules: Vec<String>,
+    mmdb: Arc<MMDB>,
+) -> Result<RuleContent, Error> {
     match behavior {
-        RuleSetBehavior::Domain => todo!(),
-        RuleSetBehavior::IPCIDR => todo!(),
-        RuleSetBehavior::Classical => todo!(),
+        RuleSetBehavior::Domain => Ok(RuleContent::Domain(make_domain_rules(rules)?)),
+        RuleSetBehavior::IPCIDR => Ok(RuleContent::IPCIDR(make_ip_cidr_rules(rules)?)),
+        RuleSetBehavior::Classical => {
+            Ok(RuleContent::Classical(make_classical_rules(rules, mmdb)?))
+        }
     }
 }
 
@@ -125,11 +242,15 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
     Ok(trie)
 }
 
-fn make_classical_rules(rules: Vec<String>) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
+fn make_classical_rules(
+    rules: Vec<String>,
+    mmdb: Arc<MMDB>,
+) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
         let rule_type = rule.parse::<RuleType>()?;
-        rv.push(matcher);
+        let rule_matcher = map_rule_type(rule_type, mmdb.clone(), None);
+        rv.push(rule_matcher);
     }
     Ok(rv)
 }

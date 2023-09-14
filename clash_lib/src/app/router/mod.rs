@@ -3,19 +3,28 @@ use crate::app::router::rules::domain_keyword::DomainKeyword;
 use crate::app::router::rules::domain_suffix::DomainSuffix;
 use crate::app::router::rules::ipcidr::IPCIDR;
 use crate::app::router::rules::ruleset::RuleSet;
+use crate::Error;
 
 use crate::common::http::new_http_client;
+use crate::config::internal::config::RuleProviderDef;
 use crate::config::internal::rule::RuleType;
 use crate::session::{Session, SocksAddr};
 
 use crate::app::router::rules::final_::Final;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
-use tracing::info;
+use http::Uri;
+use tracing::{error, info, warn};
 
-use self::mmdb::MMDB;
+pub use self::mmdb::MMDB;
 
 use super::dns::ThreadSafeDNSResolver;
+use super::remote_content_manager::providers::rule_provider::{
+    RuleProviderImpl, ThreadSafeRuleProvider,
+};
+use super::remote_content_manager::providers::{file_vehicle, http_vehicle};
 
 mod mmdb;
 mod rules;
@@ -23,6 +32,7 @@ pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
+    rule_provider_registry: HashMap<String, ThreadSafeRuleProvider>,
     dns_resolver: ThreadSafeDNSResolver,
 }
 
@@ -33,6 +43,7 @@ const MATCH: &str = "MATCH";
 impl Router {
     pub async fn new(
         rules: Vec<RuleType>,
+        rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
         mmdb_path: String,
         mmdb_download_url: Option<String>,
@@ -44,12 +55,24 @@ impl Router {
                 .expect("failed to load mmdb"),
         );
 
+        let mut rule_provider_registry = HashMap::new();
+
+        Self::load_rule_providers(
+            rule_providers,
+            &mut rule_provider_registry,
+            dns_resolver.clone(),
+            mmdb.clone(),
+        )
+        .await
+        .ok();
+
         Self {
             rules: rules
                 .into_iter()
-                .map(|r| map_rule_type(r, mmdb.clone()))
+                .map(|r| map_rule_type(r, mmdb.clone(), Some(&rule_provider_registry)))
                 .collect(),
             dns_resolver,
+            rule_provider_registry,
         }
     }
 
@@ -75,12 +98,75 @@ impl Router {
             }
 
             if r.apply(&sess_dup) {
-                info!("matched {} to target {}", &sess_dup, r.target());
+                info!(
+                    "matched {} to target {}[{}]",
+                    &sess_dup,
+                    r.target(),
+                    r.type_name()
+                );
                 return (r.target(), Some(r));
             }
         }
 
         (MATCH, None)
+    }
+
+    async fn load_rule_providers(
+        rule_providers: HashMap<String, RuleProviderDef>,
+        rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
+        resolver: ThreadSafeDNSResolver,
+        mmdb: Arc<MMDB>,
+    ) -> Result<(), Error> {
+        for (name, provider) in rule_providers.into_iter() {
+            match provider {
+                RuleProviderDef::Http(http) => {
+                    let vehicle = http_vehicle::Vehicle::new(
+                        http.url
+                            .parse::<Uri>()
+                            .expect(format!("invalid provider url: {}", http.url).as_str()),
+                        http.path,
+                        resolver.clone(),
+                    );
+
+                    let provider = RuleProviderImpl::new(
+                        name.clone(),
+                        http.behavior,
+                        Duration::from_secs(http.interval),
+                        Arc::new(vehicle),
+                        mmdb.clone(),
+                    );
+
+                    rule_provider_registry.insert(name, Arc::new(provider));
+                }
+                RuleProviderDef::File(file) => {
+                    let vehicle = file_vehicle::Vehicle::new(&file.path);
+
+                    let provider = RuleProviderImpl::new(
+                        name.clone(),
+                        file.behavior,
+                        Duration::from_secs(file.interval.unwrap_or_default()),
+                        Arc::new(vehicle),
+                        mmdb.clone(),
+                    );
+
+                    rule_provider_registry.insert(name, Arc::new(provider));
+                }
+            }
+        }
+
+        for p in rule_provider_registry.values() {
+            info!("initializing rule provider {}", p.name());
+            match p.initialize().await {
+                Ok(_) => {
+                    info!("rule provider {} initialized", p.name());
+                }
+                Err(err) => {
+                    error!("failed to initialize rule provider {}: {}", p.name(), err);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// API handlers
@@ -89,7 +175,11 @@ impl Router {
     }
 }
 
-fn map_rule_type(rule_type: RuleType, mmdb: Arc<MMDB>) -> Box<dyn RuleMatcher> {
+pub fn map_rule_type(
+    rule_type: RuleType,
+    mmdb: Arc<MMDB>,
+    rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
+) -> Box<dyn RuleMatcher> {
     match rule_type {
         RuleType::Domain { domain, target } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
@@ -149,9 +239,33 @@ fn map_rule_type(rule_type: RuleType, mmdb: Arc<MMDB>) -> Box<dyn RuleMatcher> {
             target,
             is_src: false,
         }),
-        RuleType::ProcessName => todo!(),
-        RuleType::ProcessPath => todo!(),
-        RuleType::RuleSet { rule_set, target } => Box::new(RuleSet { rule_set, target }),
+        RuleType::ProcessName {
+            process_name,
+            target,
+        } => Box::new(rules::process::Process {
+            name: process_name,
+            target,
+            name_only: true,
+        }),
+        RuleType::ProcessPath {
+            process_path,
+            target,
+        } => Box::new(rules::process::Process {
+            name: process_path,
+            target,
+            name_only: false,
+        }),
+        RuleType::RuleSet { rule_set, target } => match rule_provider_registry {
+            Some(rule_provider_registry) => Box::new(RuleSet::new(
+                rule_set.clone(),
+                target,
+                rule_provider_registry
+                    .get(&rule_set)
+                    .expect(format!("rule provider {} not found", rule_set).as_str())
+                    .clone(),
+            )),
+            None => unreachable!("you shouldn't next rule-set within another rule-set"),
+        },
         RuleType::Match { target } => Box::new(Final { target }),
     }
 }

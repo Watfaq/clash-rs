@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use ip_network_table_deps_treebitmap::IpLookupTable;
 
@@ -29,6 +29,13 @@ impl CidrTrie {
             }
         } else {
             false
+        }
+    }
+
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        match ip {
+            IpAddr::V4(v4) => self.v4.longest_match(v4).is_some(),
+            IpAddr::V6(v6) => self.v6.longest_match(v6).is_some(),
         }
     }
 }
