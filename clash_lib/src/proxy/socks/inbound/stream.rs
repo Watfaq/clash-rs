@@ -14,7 +14,7 @@ use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_util::udp::UdpFramed;
-use tracing::{debug, info, warn};
+use tracing::{trace, warn};
 
 pub async fn handle_tcp<'a>(
     sess: &'a mut Session,
@@ -120,7 +120,7 @@ pub async fn handle_tcp<'a>(
 
     match buf[1] {
         socks_command::CONNECT => {
-            debug!("Got a CONNECT request from {}", s.peer_addr()?);
+            trace!("Got a CONNECT request from {}", s.peer_addr()?);
 
             buf.clear();
             buf.put_u8(SOCKS5_VERSION);
@@ -145,7 +145,7 @@ pub async fn handle_tcp<'a>(
             )
             .await?;
 
-            debug!(
+            trace!(
                 "Got a UDP_ASSOCIATE request from {}, UDP assigned at {}",
                 s.peer_addr()?,
                 udp_inbound.local_addr()?
@@ -184,7 +184,7 @@ pub async fn handle_tcp<'a>(
             buf.resize(1, 0);
             match s.read(&mut buf[..]).await {
                 Ok(_) => {
-                    info!("UDP association finished, closing");
+                    trace!("UDP association finished, closing");
                 }
                 Err(e) => {
                     warn!("SOCKS client closed connection: {}", e);

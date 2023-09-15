@@ -5,9 +5,9 @@ use std::{
     task::Poll,
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures::{pin_mut, ready, Future, Sink, Stream};
-use tracing::{debug, instrument};
+use tracing::{debug, trace};
 
 use tokio::io::{AsyncReadExt, AsyncWrite};
 
@@ -94,21 +94,22 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             payload.put_slice(b"\r\n");
             payload.put_slice(&data);
 
-            let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
+            while payload.len() != 0 {
+                let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
 
-            let wrote_all = n == data.len();
-            *pkt_container = None;
+                payload.advance(n);
+
+                trace!(
+                    "written {} bytes to trojan stream, remaining {}, data len {}",
+                    n,
+                    payload.len(),
+                    data.len()
+                );
+            }
+
             *flushed = true;
 
-            let res = if wrote_all {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "failed to write entire datagram",
-                ))
-            };
-            Poll::Ready(res)
+            Poll::Ready(Ok(()))
         } else {
             debug!("no udp packet to send");
             Poll::Ready(Err(io::Error::new(
@@ -314,11 +315,18 @@ impl Stream for OutboundDatagramTrojan {
                                 debug!("invalid trojan data");
                                 return Poll::Ready(None);
                             }
-                            let data = read_buf.split_to(*len);
+
+                            let addr = addr.to_owned();
+                            let len = len.to_owned();
+
+                            *state = ReadState::Atyp;
+
+                            let data = read_buf.split_to(len);
+
                             return Poll::Ready(Some(UdpPacket {
                                 data: data.to_vec(),
                                 src_addr: remote_addr.clone(),
-                                dst_addr: addr.to_owned(),
+                                dst_addr: addr,
                             }));
                         }
                         Err(err) => {

@@ -58,6 +58,41 @@ impl Handler {
     pub fn new(opts: Opts) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
+
+    /// TCP: 0x01,
+    /// UDP: 0x03,
+    async fn inner_proxy_stream(
+        &self,
+        s: AnyStream,
+        sess: &Session,
+        tcp: bool,
+    ) -> io::Result<AnyStream> {
+        let tls_opt = TLSOptions {
+            skip_cert_verify: self.opts.skip_cert_verify,
+            sni: self.opts.sni.clone(),
+            alpn: self.opts.alpn.clone().or(Some(
+                DEFAULT_ALPN
+                    .to_vec()
+                    .into_iter()
+                    .map(|x| x.to_owned())
+                    .collect::<Vec<String>>(),
+            )),
+        };
+
+        let mut s = transport::tls::wrap_stream(s, tls_opt.to_owned()).await?;
+
+        let mut buf = BytesMut::new();
+        let password = Sha224::digest(self.opts.password.as_bytes());
+        let password = utils::encode_hex(&password[..]);
+        buf.put_slice(password.as_bytes());
+        buf.put_slice(b"\r\n");
+        buf.put_u8(if tcp { 0x01 } else { 0x03 }); // tcp
+        sess.destination.write_buf(&mut buf);
+        buf.put_slice(b"\r\n");
+        s.write_all(&buf).await?;
+
+        Ok(s)
+    }
 }
 
 #[async_trait]
@@ -115,31 +150,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         _: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        let tls_opt = TLSOptions {
-            skip_cert_verify: self.opts.skip_cert_verify,
-            sni: self.opts.sni.clone(),
-            alpn: self.opts.alpn.clone().or(Some(
-                DEFAULT_ALPN
-                    .to_vec()
-                    .into_iter()
-                    .map(|x| x.to_owned())
-                    .collect::<Vec<String>>(),
-            )),
-        };
-
-        let mut s = transport::tls::wrap_stream(s, tls_opt.to_owned()).await?;
-
-        let mut buf = BytesMut::new();
-        let password = Sha224::digest(self.opts.password.as_bytes());
-        let password = utils::encode_hex(&password[..]);
-        buf.put_slice(password.as_bytes());
-        buf.put_slice(b"\r\n");
-        buf.put_u8(0x01); // tcp
-        sess.destination.write_buf(&mut buf);
-        buf.put_slice(b"\r\n");
-        s.write_all(&buf).await?;
-
-        Ok(s)
+        self.inner_proxy_stream(s, sess, true).await
     }
 
     async fn connect_datagram(
@@ -166,7 +177,8 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.proxy_stream(stream, sess, resolver).await?;
+        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+
         Ok(Box::new(OutboundDatagramTrojan::new(
             stream,
             sess.destination.clone(),

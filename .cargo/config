@@ -4,4 +4,4 @@ rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
 BORING_BSSL_SOURCE_PATH = { value = "deps/boringssl/src", relative = true}
-RUST_LOG= { value = "clash=trace" }
+RUST_LOG= { value = "clash=debug" }

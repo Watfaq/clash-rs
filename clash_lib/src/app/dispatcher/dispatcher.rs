@@ -342,7 +342,7 @@ impl Dispatcher {
 
         tokio::spawn(async move {
             let _ = close_receiver.await;
-            debug!("UDP close signal for {} received", s);
+            trace!("UDP close signal for {} received", s);
             t1.abort();
             t2.abort();
         });
