@@ -27,5 +27,5 @@ venv/
 /output/
 
 # don't check in this real config
-ignore.yaml
+ignore*.yaml
 cache.db

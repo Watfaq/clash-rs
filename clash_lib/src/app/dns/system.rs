@@ -18,6 +18,10 @@ impl SystemResolver {
 #[async_trait]
 impl ClashResolver for SystemResolver {
     async fn resolve(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::IpAddr>> {
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            return Ok(Some(ip));
+        }
+
         let host = Name::from_str_relaxed(host)?;
         let response = self.resolver.lookup_ip(host).await?;
         Ok(response.iter().choose(&mut rand::thread_rng()))

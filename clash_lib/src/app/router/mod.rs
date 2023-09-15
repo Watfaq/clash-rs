@@ -155,15 +155,18 @@ impl Router {
         }
 
         for p in rule_provider_registry.values() {
-            info!("initializing rule provider {}", p.name());
-            match p.initialize().await {
-                Ok(_) => {
-                    info!("rule provider {} initialized", p.name());
+            let p = p.clone();
+            tokio::spawn(async move {
+                info!("initializing rule provider {}", p.name());
+                match p.initialize().await {
+                    Ok(_) => {
+                        info!("rule provider {} initialized", p.name());
+                    }
+                    Err(err) => {
+                        error!("failed to initialize rule provider {}: {}", p.name(), err);
+                    }
                 }
-                Err(err) => {
-                    error!("failed to initialize rule provider {}: {}", p.name(), err);
-                }
-            }
+            });
         }
 
         Ok(())

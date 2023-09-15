@@ -248,7 +248,19 @@ fn make_classical_rules(
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
-        let rule_type = rule.parse::<RuleType>()?;
+        let parts = rule.split(",").map(str::trim).collect::<Vec<&str>>();
+
+        // the rule inside RULE-SET is slightly different from the rule in config
+        // the target is always empty as it's holded in the RULE-SET container
+        // let's parse it manually
+        let rule_type = match parts.as_slice() {
+            [proto, payload] => RuleType::new(proto, payload, "", None),
+            [proto, payload, params @ ..] => {
+                RuleType::new(proto, payload, "", Some(params.to_vec()))
+            }
+            _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", rule))),
+        }?;
+
         let rule_matcher = map_rule_type(rule_type, mmdb.clone(), None);
         rv.push(rule_matcher);
     }
