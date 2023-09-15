@@ -1,8 +1,9 @@
 use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
+        options::{Http2Option, WsOption},
         transport::TLSOptions,
-        vmess::{Handler, HandlerOptions, Http2Option, VmessTransport, WsOption},
+        vmess::{Handler, HandlerOptions, VmessTransport},
         AnyOutboundHandler, CommonOption,
     },
     Error,

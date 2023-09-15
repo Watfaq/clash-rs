@@ -184,6 +184,17 @@ proxies:
     cipher: aes-256-gcm
     password: "password"
     udp: true
+  - name: "trojan"
+    type: trojan
+    server: 10.0.0.13
+    port: 9443
+    password: password1
+    udp: true
+    # sni: example.com # aka server name
+    alpn:
+      - h2
+      - http/1.1
+    skip-cert-verify: true
 
 proxy-providers:
   file-provider:
@@ -204,14 +215,14 @@ rule-providers:
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - RULE-SET,file-provider,h2-vmess
+  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,select
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
-  - DST-PORT,53,ss-simple
+  - DST-PORT,53,trojan
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
 ...

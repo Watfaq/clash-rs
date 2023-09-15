@@ -130,11 +130,13 @@ pub struct H2Opt {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct GrpcOpt {
     pub grpc_service_name: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
     pub name: String,
     pub server: String,
@@ -150,6 +152,7 @@ pub struct OutboundTrojan {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundVmess {
     pub name: String,
     pub server: String,
@@ -160,13 +163,11 @@ pub struct OutboundVmess {
     pub cipher: Option<String>,
     pub udp: Option<bool>,
     pub tls: Option<bool>,
-    #[serde(alias = "skip-cert-verify")]
     pub skip_cert_verify: Option<bool>,
+    #[serde(alias = "servername")]
     pub server_name: Option<String>,
     pub network: Option<String>,
-    #[serde(alias = "ws-opts")]
     pub ws_opts: Option<WsOpt>,
-    #[serde(alias = "h2-opts")]
     pub h2_opts: Option<H2Opt>,
 }
 

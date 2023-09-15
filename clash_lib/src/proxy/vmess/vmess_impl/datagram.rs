@@ -87,14 +87,12 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                 )));
             }
             let data = pkt.data;
-            let addr: shadowsocks::relay::Address =
-                (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
             let n = ready!(inner.as_mut().poll_write(cx, data.as_ref()))?;
 
             debug!(
                 "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
-                n, remote_addr, addr
+                n, remote_addr, pkt.dst_addr
             );
 
             let wrote_all = n == data.len();

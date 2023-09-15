@@ -23,12 +23,13 @@ pub mod http;
 pub mod mixed;
 
 pub(crate) mod datagram;
+mod options;
 
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+pub mod trojan;
 pub mod tun;
-//pub mod trojan;
 pub mod utils;
 pub mod vmess;
 
@@ -125,6 +126,7 @@ pub type AnyInboundListener = Arc<dyn InboundListener>;
 pub enum OutboundType {
     Shadowsocks,
     Vmess,
+    Trojan,
 
     #[serde(rename = "URLTest")]
     UrlTest,

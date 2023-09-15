@@ -31,12 +31,12 @@ impl Display for SocksAddr {
     }
 }
 
-struct SocksAddrType;
+pub struct SocksAddrType;
 
 impl SocksAddrType {
-    const V4: u8 = 0x1;
-    const DOMAIN: u8 = 0x3;
-    const V6: u8 = 0x4;
+    pub const V4: u8 = 0x1;
+    pub const DOMAIN: u8 = 0x3;
+    pub const V6: u8 = 0x4;
 }
 
 impl SocksAddr {

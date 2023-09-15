@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tracing::error;
-use tracing::warn;
 
 use tracing::info;
 
@@ -194,6 +193,10 @@ impl OutboundManager {
                 }
 
                 OutboundProxyProtocol::Vmess(v) => {
+                    handlers.insert(v.name.clone(), v.try_into()?);
+                }
+
+                OutboundProxyProtocol::Trojan(v) => {
                     handlers.insert(v.name.clone(), v.try_into()?);
                 }
 
