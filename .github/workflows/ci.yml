@@ -21,3 +21,67 @@ jobs:
       with:
         submodules: recursive
     - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
+
+  release:
+    name: Create Github Release
+    if: contains(github.ref, 'tags/v')
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+    - name: Output Release URL File
+      run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
+    - name: Save Release URL File for publish
+      uses: actions/upload-artifact@v1
+      with:
+        name: release_url
+        path: release_url.txt
+    
+  publish:
+    if: contains(github.ref, 'tags/v')
+    needs: [test, release]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-13]
+        include:
+          - os: ubuntu-22.04
+            platform: linux-amd64
+          - os: macos-13
+            platform: darwin-amd64
+    steps:
+    - uses: actions/checkout@v4
+    - name: Load Release URL File from release job
+      uses: actions/download-artifact@v1
+      with:
+        name: release_url
+    - name: Build
+      run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazel build --strip=always //clash/...
+    - name: Get Release File Name & Upload URL
+      id: get_release_info
+      run: |
+        echo ::set-output name=file_name::${REPOSITORY_NAME##*/}-${TAG_REF_NAME##*/v} # RepositoryName-v1.0.0
+        value=`cat release_url/release_url.txt`
+        echo ::set-output name=upload_url::$value
+      env:
+        TAG_REF_NAME: ${{ github.ref }}
+        REPOSITORY_NAME: ${{ github.repository }}
+    - name: Upload Release Asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.get_release_info.outputs.upload_url }}
+        asset_path: ./bazel-bin/clash/clash
+        asset_name: ${{ steps.get_release_info.outputs.file_name }}-${{ matrix.platform }}.zip
+        asset_content_type: application/octet-stream
