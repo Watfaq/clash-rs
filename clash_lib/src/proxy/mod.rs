@@ -61,6 +61,7 @@ pub enum ProxyError {
     General(String),
     #[error("invalid url: {0}")]
     InvalidUrl(String),
+    #[allow(dead_code)]
     #[error("socks5 error: {0}")]
     Socks5(String),
 }
@@ -106,6 +107,7 @@ pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
 
 #[derive(Default, Debug, Clone)]
 pub struct CommonOption {
+    #[allow(dead_code)]
     so_mark: Option<u32>,
     iface: Option<Interface>,
 }

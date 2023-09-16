@@ -15,7 +15,7 @@ use http::{Request, Version};
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::{
     common::{
