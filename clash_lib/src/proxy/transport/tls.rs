@@ -36,7 +36,6 @@ pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnySt
         .collect();
 
     if opt.skip_cert_verify {
-        warn!("skip certificate verification to host {}", opt.sni);
         tls_config
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier {}));

@@ -174,6 +174,10 @@ impl Resolver {
                     })
                     .unwrap(),
                 ))),
+                DNSMode::RedirHost => {
+                    warn!("dns redir-host is not supported and will not do anything");
+                    None
+                }
                 _ => None,
             },
         };

@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
@@ -21,6 +23,11 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundVmess) -> Result<Self, Self::Error> {
+        let skip_cert_verify = s.skip_cert_verify.unwrap_or_default();
+        if skip_cert_verify {
+            warn!("skipping TLS cert verification for {}", s.server);
+        }
+
         let h = Handler::new(HandlerOptions {
             name: s.name.to_owned(),
             common_opts: CommonOption::default(),

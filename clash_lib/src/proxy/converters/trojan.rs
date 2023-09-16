@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{
     config::internal::proxy::OutboundTrojan,
     proxy::{
@@ -20,6 +22,11 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundTrojan) -> Result<Self, Self::Error> {
+        let skip_cert_verify = s.skip_cert_verify.unwrap_or_default();
+        if skip_cert_verify {
+            warn!("skipping TLS cert verification for {}", s.server);
+        }
+
         let h = Handler::new(Opts {
             name: s.name.to_owned(),
             common_opts: CommonOption::default(),
@@ -33,7 +40,7 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                 .map(|x| x.to_owned())
                 .unwrap_or(s.server.to_owned()),
             alpn: s.alpn.as_ref().map(|x| x.to_owned()),
-            skip_cert_verify: s.skip_cert_verify.unwrap_or_default(),
+            skip_cert_verify,
             transport: s
                 .network
                 .as_ref()

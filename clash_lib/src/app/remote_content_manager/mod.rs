@@ -190,7 +190,7 @@ impl ProxyManager {
                             Ok(delay)
                         }
                         Err(e) => {
-                            warn!("urltest for proxy {} with url {} failed: {}", &name, url, e);
+                            pm_debug!("urltest for proxy {} with url {} failed: {}", &name, url, e);
                             Err(new_io_error(format!("{}: {}", url, e).as_str()))
                         }
                     },

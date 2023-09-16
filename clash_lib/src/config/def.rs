@@ -273,6 +273,7 @@ pub enum DNSMode {
     #[default]
     Normal,
     FakeIp,
+    RedirHost,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
