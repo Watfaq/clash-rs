@@ -1,5 +1,5 @@
 {
-  "checksum": "5dbed95073e45222657cac438a2cbd0a7480ab91c3f5308e62f34f5b3b41cc08",
+  "checksum": "274456cc6aa61a9b7808c48e1d1eb645f359c662a9344de0961a646c19ace44f",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -3828,6 +3828,10 @@
             {
               "id": "hyper-boring 3.0.4",
               "target": "hyper_boring"
+            },
+            {
+              "id": "ip_network_table-deps-treebitmap 0.5.0",
+              "target": "ip_network_table_deps_treebitmap"
             },
             {
               "id": "ipnet 2.8.0",
@@ -8633,6 +8637,36 @@
         "version": "0.6.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "ip_network_table-deps-treebitmap 0.5.0": {
+      "name": "ip_network_table-deps-treebitmap",
+      "version": "0.5.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ip_network_table-deps-treebitmap/0.5.0/download",
+          "sha256": "8e537132deb99c0eb4b752f0346b6a836200eaaa3516dd7e5514b63930a09e5d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ip_network_table_deps_treebitmap",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ip_network_table_deps_treebitmap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.5.0"
+      },
+      "license": "MIT"
     },
     "ipconfig 0.3.2": {
       "name": "ipconfig",
