@@ -15,29 +15,19 @@ use crate::{
     Error, Runner,
 };
 
-async fn handl_inbound_stream(
+async fn handle_inbound_stream(
     stream: netstack::TcpStream,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
-    resolver: ThreadSafeDNSResolver,
 ) {
-    let mut sess = Session {
+    let sess = Session {
         network: Network::Tcp,
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
         ..Default::default()
     };
-
-    if resolver.fake_ip_enabled() && resolver.is_fake_ip(remote_addr.ip()).await {
-        if let Some(host) = resolver.reverse_lookup(remote_addr.ip()).await {
-            sess.destination = (host, remote_addr.port()).try_into().unwrap();
-        } else {
-            error!("failed to resolve fake ip: {}", remote_addr.ip());
-            return;
-        }
-    }
 
     dispatcher.dispatch_stream(sess, stream).await;
 }
@@ -180,6 +170,7 @@ pub fn get_runner(
 
         let mut futs: Vec<Runner> = vec![];
 
+        // dispatcher -> stack -> tun
         futs.push(Box::pin(async move {
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
@@ -197,6 +188,7 @@ pub fn get_runner(
             }
         }));
 
+        // tun -> stack -> dispatcher
         futs.push(Box::pin(async move {
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
@@ -215,15 +207,13 @@ pub fn get_runner(
         }));
 
         let dsp = dispatcher.clone();
-        let rsv = resolver.clone();
         futs.push(Box::pin(async move {
             while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-                tokio::spawn(handl_inbound_stream(
+                tokio::spawn(handle_inbound_stream(
                     stream,
                     local_addr,
                     remote_addr,
                     dsp.clone(),
-                    rsv.clone(),
                 ));
             }
         }));

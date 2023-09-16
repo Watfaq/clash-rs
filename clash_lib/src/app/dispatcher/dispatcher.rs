@@ -18,6 +18,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::instrument;
 use tracing::trace;
@@ -31,7 +32,7 @@ pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    mode: Arc<Mutex<RunMode>>,
+    mode: Arc<RwLock<RunMode>>,
 
     manager: Arc<Manager>,
 }
@@ -55,19 +56,19 @@ impl Dispatcher {
             outbound_manager,
             router,
             resolver,
-            mode: Arc::new(Mutex::new(mode)),
+            mode: Arc::new(RwLock::new(mode)),
             manager: statistics_manager,
         }
     }
 
     pub async fn set_mode(&self, mode: RunMode) {
         info!("run mode switched to {}", mode);
-        let mut m = self.mode.lock().await;
+        let mut m = self.mode.write().await;
         *m = mode;
     }
 
     pub async fn get_mode(&self) -> RunMode {
-        let mode = self.mode.lock().await;
+        let mode = self.mode.read().await;
         mode.clone()
     }
 
@@ -103,8 +104,8 @@ impl Dispatcher {
             sess
         };
 
-        let mode = self.mode.lock().await;
-        debug!("dispatching {} with mode {}", sess, mode);
+        let mode = self.mode.read().await;
+        info!("dispatching {} with mode {}", sess, mode);
         let (outbound_name, rule) = match *mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
@@ -217,7 +218,7 @@ impl Dispatcher {
                 let mut packet = packet;
                 packet.dst_addr = sess.destination.clone();
 
-                let mode = mode.lock().await;
+                let mode = mode.read().await;
                 info!("dispatching {} with mode {}", sess, mode);
                 let (outbound_name, rule) = match *mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
