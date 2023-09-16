@@ -3,7 +3,6 @@ use std::{io, sync::Arc};
 use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use serde::Serialize;
 use tokio_rustls::TlsConnector;
-use tracing::warn;
 
 use crate::{common::tls, proxy::AnyStream};
 

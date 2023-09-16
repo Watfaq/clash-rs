@@ -162,20 +162,7 @@ pub fn get_runner(
         }
     }
 
-    let network = cfg
-        .network
-        .as_ref()
-        .unwrap_or(&"198.19.0.0/16".to_owned())
-        .parse::<ipnet::IpNet>()?;
-
-    tun_cfg
-        .address(
-            network.hosts().nth(0).expect(
-                format!("tun network {:?} doesn't contain any address", cfg.network).as_str(),
-            ),
-        )
-        .netmask(network.netmask())
-        .up();
+    tun_cfg.up();
 
     let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
 
