@@ -37,7 +37,7 @@ pub struct Resolver {
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
-    lru_cache: Option<lru_time_cache::LruCache<String, op::Message>>,
+    lru_cache: Option<Arc<RwLock<lru_time_cache::LruCache<String, op::Message>>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     fake_dns: Option<ThreadSafeFakeDns>,
@@ -136,9 +136,9 @@ impl Resolver {
             } else {
                 None
             },
-            lru_cache: Some(lru_time_cache::LruCache::with_expiry_duration_and_capacity(
-                TTL, 4096,
-            )),
+            lru_cache: Some(Arc::new(RwLock::new(
+                lru_time_cache::LruCache::with_expiry_duration_and_capacity(TTL, 4096),
+            ))),
             policy: if cfg.nameserver_policy.len() > 0 {
                 let mut p = trie::StringTrie::new();
                 for (domain, ns) in &cfg.nameserver_policy {
@@ -246,7 +246,7 @@ impl Resolver {
     async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
-                if let Some(cached) = lru.peek(q.to_string().as_str()) {
+                if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
                     return Ok(cached.clone());
                 }
             }
@@ -259,14 +259,41 @@ impl Resolver {
     async fn exchange_no_cache(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let q = message.query().unwrap();
 
-        if Resolver::is_ip_request(q) {
-            return self.ip_exchange(message).await;
+        let query = async move {
+            if Resolver::is_ip_request(q) {
+                return self.ip_exchange(message).await;
+            }
+
+            if let Some(matched) = self.match_policy(&message) {
+                return Resolver::batch_exchange(&matched, message).await;
+            }
+
+            return Resolver::batch_exchange(&self.main, message).await;
+        };
+
+        let rv = query.await;
+
+        if let Ok(msg) = &rv {
+            if let Some(lru) = &self.lru_cache {
+                if !(q.query_type() == rr::RecordType::TXT
+                    && q.name().to_ascii().starts_with("_acme-challenge."))
+                {
+                    // TODO: make this TTL wired to LRU cache
+                    #[allow(unused_variables)]
+                    let ttl = if msg.answer_count() != 0 {
+                        msg.answers().iter().map(|x| x.ttl()).min().unwrap()
+                    } else if msg.name_server_count() != 0 {
+                        msg.name_servers().iter().map(|x| x.ttl()).min().unwrap()
+                    } else {
+                        msg.additionals().iter().map(|x| x.ttl()).min().unwrap()
+                    };
+
+                    lru.write().await.insert(q.to_string(), msg.clone());
+                }
+            }
         }
 
-        if let Some(matched) = self.match_policy(&message) {
-            return Resolver::batch_exchange(&matched, message).await;
-        }
-        return Resolver::batch_exchange(&self.main, message).await;
+        return rv;
     }
 
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
