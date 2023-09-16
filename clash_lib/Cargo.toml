@@ -80,7 +80,7 @@ socket2 = { version = "0.5", features = ["all"] }
 tokio-tungstenite = "0.20.0"
 
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 
 shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"] }
