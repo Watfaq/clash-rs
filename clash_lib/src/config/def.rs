@@ -96,33 +96,59 @@ pub struct Config {
     pub log_level: LogLevel,
     /// DNS client/server settings
     pub dns: DNS,
+    /// Profile settings
     pub profile: Profile,
+    /// Proxy settings
     #[serde(rename = "proxies")]
     pub proxy: Vec<HashMap<String, Value>>,
     #[serde(rename = "proxy-groups")]
+    /// Proxy group settings
     pub proxy_group: Vec<HashMap<String, Value>>,
     #[serde(rename = "rules")]
+    /// Rule settings
     pub rule: Vec<String>,
+    /// Hosts
     pub hosts: HashMap<String, String>,
+    /// Country database path relative to the $CWD
     pub mmdb: String,
+    /// Country database download url
     pub mmdb_download_url: Option<String>,
 
     /// these options has default vals,
     /// and needs extra processing
     #[deprecated = "this is essentially just dns.ipv6 in original clash"]
     pub ipv6: Option<bool>,
+    /// external controller address
     pub external_controller: Option<String>,
+    /// dashboard folder path relative to the $CWD
     pub external_ui: Option<String>,
+    /// external controller secret
     pub secret: Option<String>,
     #[serde(rename = "interface-name")]
+    /// outbound interface name
+    /// # Note
+    /// - not implemented yet
     pub interface: Option<String>,
+    /// fwmark on Linux only
+    /// # Note
+    /// - not implemented yet
     pub routing_mask: Option<u32>,
     #[serde(rename = "proxy-providers")]
+    /// proxy provider settings
     pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
     #[serde(rename = "rule-providers")]
+    /// rule provider settings
     pub rule_provider: Option<HashMap<String, HashMap<String, Value>>>,
+    /// experimental settings, if any
     pub experimental: Option<Experimental>,
 
+    /// tun settings
+    /// # Example
+    /// ```yaml
+    /// tun:
+    ///   enable: true
+    ///   device-id: "dev://utun1989"
+    /// ```
     pub tun: Option<HashMap<String, Value>>,
 }
 
@@ -306,7 +332,9 @@ pub struct Experimental {}
 #[serde(default)]
 #[serde(rename_all = "kebab-case")]
 pub struct Profile {
+    /// Store the `select` results in $CWD/cache.db
     pub store_selected: bool,
+    /// persistence fakeip
     pub store_fake_ip: bool,
 }
 
