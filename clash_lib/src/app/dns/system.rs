@@ -4,7 +4,7 @@ use trust_dns_resolver::{Name, TokioAsyncResolver};
 
 use super::{ClashResolver, ResolverKind};
 
-pub(crate) struct SystemResolver {
+pub struct SystemResolver {
     resolver: TokioAsyncResolver,
 }
 
@@ -66,11 +66,11 @@ impl ClashResolver for SystemResolver {
         false
     }
 
-    async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool {
+    async fn is_fake_ip(&self, _: std::net::IpAddr) -> bool {
         false
     }
 
-    async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool {
+    async fn fake_ip_exists(&self, _: std::net::IpAddr) -> bool {
         false
     }
 

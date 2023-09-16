@@ -65,6 +65,7 @@ impl ThreadSafeCacheFile {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_selected_map(&self) -> HashMap<String, String> {
         let g = self.0.lock().await;
         if g.store_selected() {

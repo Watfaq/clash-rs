@@ -254,7 +254,7 @@ proxies:
         )
         .unwrap();
 
-        let mut provider =
+        let provider =
             ProxySetProvider::new("test".to_owned(), Duration::from_secs(1), vehicle, hc).unwrap();
 
         assert_eq!(provider.proxies().await.len(), 0);

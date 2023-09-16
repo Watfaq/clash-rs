@@ -7,6 +7,7 @@ use crate::app::{api::AppState, dns::ThreadSafeDNSResolver};
 
 #[derive(Clone)]
 struct DNSState {
+    #[allow(dead_code)]
     resolver: ThreadSafeDNSResolver,
 }
 

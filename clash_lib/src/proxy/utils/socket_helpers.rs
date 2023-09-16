@@ -81,8 +81,6 @@ pub async fn new_tcp_stream<'a>(
     socket.set_nodelay(true)?;
     socket.set_nonblocking(true)?;
 
-    let now = std::time::Instant::now();
-
     let stream = timeout(
         Duration::from_secs(10),
         TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),

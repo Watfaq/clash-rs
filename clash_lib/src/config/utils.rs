@@ -3,8 +3,6 @@ use serde::Deserialize;
 use std::fmt::Display;
 use std::str::FromStr;
 
-struct U64Visitor;
-
 pub fn deserialize_u64<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,

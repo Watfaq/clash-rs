@@ -5,7 +5,7 @@ use crate::app::router::rules::ipcidr::IPCIDR;
 use crate::app::router::rules::ruleset::RuleSet;
 use crate::Error;
 
-use crate::common::http::new_http_client;
+use crate::common::mmdb::MMDB;
 use crate::config::internal::config::RuleProviderDef;
 use crate::config::internal::rule::RuleType;
 use crate::session::{Session, SocksAddr};
@@ -16,9 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use http::Uri;
-use tracing::{error, info, warn};
-
-pub use self::mmdb::MMDB;
+use tracing::{error, info};
 
 use super::dns::ThreadSafeDNSResolver;
 use super::remote_content_manager::providers::rule_provider::{
@@ -26,12 +24,12 @@ use super::remote_content_manager::providers::rule_provider::{
 };
 use super::remote_content_manager::providers::{file_vehicle, http_vehicle};
 
-mod mmdb;
 mod rules;
 pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
+    #[allow(dead_code)]
     rule_provider_registry: HashMap<String, ThreadSafeRuleProvider>,
     dns_resolver: ThreadSafeDNSResolver,
 }
@@ -45,16 +43,8 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        mmdb_path: String,
-        mmdb_download_url: Option<String>,
+        mmdb: Arc<MMDB>,
     ) -> Self {
-        let client = new_http_client(dns_resolver.clone()).expect("failed to create http client");
-        let mmdb = Arc::new(
-            mmdb::MMDB::new(mmdb_path, mmdb_download_url, client)
-                .await
-                .expect("failed to load mmdb"),
-        );
-
         let mut rule_provider_registry = HashMap::new();
 
         Self::load_rule_providers(

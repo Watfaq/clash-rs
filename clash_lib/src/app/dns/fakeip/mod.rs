@@ -37,6 +37,7 @@ pub type ThreadSafeFakeDns = Arc<RwLock<FakeDns>>;
 pub struct FakeDns {
     max: u32,
     min: u32,
+    #[allow(dead_code)]
     gateway: u32,
     offset: u32,
     skipped_hostnames: Option<trie::StringTrie<bool>>,
@@ -110,14 +111,17 @@ impl FakeDns {
         }
     }
 
+    #[allow(dead_code)]
     pub fn gateway(&self) -> net::Ipv4Addr {
         net::Ipv4Addr::from(self.gateway)
     }
 
+    #[allow(dead_code)]
     pub fn ipnet(&self) -> ipnet::IpNet {
         self.ipnet
     }
 
+    #[allow(dead_code)]
     pub async fn copy_from(&mut self, src: &Self) {
         src.store.copy_to(&mut self.store).await;
     }

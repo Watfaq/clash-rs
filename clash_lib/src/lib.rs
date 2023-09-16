@@ -11,8 +11,11 @@ use crate::config::def;
 use crate::config::internal::proxy::OutboundProxy;
 use crate::config::internal::InternalConfig;
 use app::dispatcher::StatisticsManager;
+use app::dns::SystemResolver;
 use app::profile;
 use common::auth;
+use common::http::new_http_client;
+use common::mmdb;
 use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
 use state::Storage;
@@ -65,6 +68,7 @@ pub enum Config {
 pub struct GlobalState {
     log_level: LogLevel,
     inbound_listener_handle: Option<JoinHandle<()>>,
+    #[allow(dead_code)]
     dns_listener_handle: Option<JoinHandle<()>>,
 }
 
@@ -131,9 +135,22 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
+    let system_resolver =
+        Arc::new(SystemResolver::new().expect("failed to create system resolver"));
+    let client = new_http_client(system_resolver).expect("failed to create http client");
+    let mmdb = Arc::new(
+        mmdb::MMDB::new(
+            config.general.mmdb,
+            config.general.mmdb_download_url,
+            client,
+        )
+        .await
+        .expect("failed to load mmdb"),
+    );
+
     let cache_store = profile::ThreadSafeCacheFile::new("cache.db", config.profile.store_selected);
 
-    let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone()).await;
+    let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
     let outbound_manager = Arc::new(RwLock::new(
         OutboundManager::new(
@@ -166,8 +183,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.rules,
             config.rule_providers,
             dns_resolver.clone(),
-            config.general.mmdb,
-            config.general.mmdb_download_url,
+            mmdb,
         )
         .await,
     );

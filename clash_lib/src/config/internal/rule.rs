@@ -57,41 +57,17 @@ pub enum RuleType {
 impl RuleType {
     pub fn target(&self) -> &str {
         match self {
-            RuleType::Domain { domain, target } => target,
-            RuleType::DomainSuffix {
-                domain_suffix,
-                target,
-            } => target,
-            RuleType::DomainKeyword {
-                domain_keyword,
-                target,
-            } => target,
-            RuleType::GeoIP {
-                target,
-                country_code,
-                no_resolve,
-            } => target,
-            RuleType::IPCIDR {
-                ipnet,
-                target,
-                no_resolve,
-            } => target,
-            RuleType::SRCIPCIDR {
-                ipnet,
-                target,
-                no_resolve,
-            } => target,
-            RuleType::SRCPort { target, port } => target,
-            RuleType::DSTPort { target, port } => target,
-            RuleType::ProcessName {
-                process_name,
-                target,
-            } => target,
-            RuleType::ProcessPath {
-                process_path,
-                target,
-            } => target,
-            RuleType::RuleSet { rule_set, target } => target,
+            RuleType::Domain { target, .. } => target,
+            RuleType::DomainSuffix { target, .. } => target,
+            RuleType::DomainKeyword { target, .. } => target,
+            RuleType::GeoIP { target, .. } => target,
+            RuleType::IPCIDR { target, .. } => target,
+            RuleType::SRCIPCIDR { target, .. } => target,
+            RuleType::SRCPort { target, .. } => target,
+            RuleType::DSTPort { target, .. } => target,
+            RuleType::ProcessName { target, .. } => target,
+            RuleType::ProcessPath { target, .. } => target,
+            RuleType::RuleSet { target, .. } => target,
             RuleType::Match { target } => target,
         }
     }
@@ -101,41 +77,17 @@ impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RuleType::Domain { domain, target } => write!(f, "DOMAIN,{},{}", domain, target),
-            RuleType::DomainSuffix {
-                domain_suffix,
-                target,
-            } => write!(f, "DOMAIN-SUFFIX"),
-            RuleType::DomainKeyword {
-                domain_keyword,
-                target,
-            } => write!(f, "DOMAIN-KEYWORD"),
-            RuleType::GeoIP {
-                target,
-                country_code,
-                no_resolve,
-            } => write!(f, "GEOIP"),
-            RuleType::IPCIDR {
-                ipnet,
-                target,
-                no_resolve,
-            } => write!(f, "IP-CIDR"),
-            RuleType::SRCIPCIDR {
-                ipnet,
-                target,
-                no_resolve,
-            } => write!(f, "SRC-IP-CIDR"),
-            RuleType::SRCPort { target, port } => write!(f, "SRC-PORT"),
-            RuleType::DSTPort { target, port } => write!(f, "DST-PORT"),
-            RuleType::ProcessName {
-                process_name,
-                target,
-            } => write!(f, "PROCESS-NAME"),
-            RuleType::ProcessPath {
-                process_path,
-                target,
-            } => write!(f, "PROCESS-PATH"),
-            RuleType::RuleSet { rule_set, target } => write!(f, "RULE-SET"),
-            RuleType::Match { target } => write!(f, "MATCH"),
+            RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
+            RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
+            RuleType::GeoIP { .. } => write!(f, "GEOIP"),
+            RuleType::IPCIDR { .. } => write!(f, "IP-CIDR"),
+            RuleType::SRCIPCIDR { .. } => write!(f, "SRC-IP-CIDR"),
+            RuleType::SRCPort { .. } => write!(f, "SRC-PORT"),
+            RuleType::DSTPort { .. } => write!(f, "DST-PORT"),
+            RuleType::ProcessName { .. } => write!(f, "PROCESS-NAME"),
+            RuleType::ProcessPath { .. } => write!(f, "PROCESS-PATH"),
+            RuleType::RuleSet { .. } => write!(f, "RULE-SET"),
+            RuleType::Match { .. } => write!(f, "MATCH"),
         }
     }
 }

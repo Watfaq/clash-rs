@@ -11,7 +11,6 @@ use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
-use tracing_subscriber::field::debug;
 
 use crate::{
     app::{
@@ -19,9 +18,9 @@ use crate::{
             fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
             ThreadSafeProviderVehicle,
         },
-        router::{map_rule_type, RuleMatcher, MMDB},
+        router::{map_rule_type, RuleMatcher},
     },
-    common::{errors::map_io_error, trie},
+    common::{errors::map_io_error, mmdb::MMDB, trie},
     config::internal::rule::RuleType,
     session::Session,
     Error,

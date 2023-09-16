@@ -1,5 +1,6 @@
 use std::pin::Pin;
 
+use base64::Engine;
 use hyper::Request;
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -38,7 +39,7 @@ impl AsyncWrite for HTTPObfs {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        let mut pin = self.get_mut();
+        let pin = self.get_mut();
         if !pin.first_packet_sent {
             let rand_bytes = rand::random::<[u8; 16]>();
             let mut req = Request::builder()
@@ -64,7 +65,10 @@ impl AsyncWrite for HTTPObfs {
                 .insert("Content-Length", buf.len().to_string().parse().unwrap());
             req.headers_mut().insert(
                 "Sec-WebSocket-Key",
-                base64::encode(&rand_bytes).parse().unwrap(),
+                base64::engine::general_purpose::STANDARD
+                    .encode(&rand_bytes)
+                    .parse()
+                    .unwrap(),
             );
 
             let req = dump_request(req);
@@ -98,7 +102,7 @@ impl AsyncRead for HTTPObfs {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        let mut pin = self.get_mut();
+        let pin = self.get_mut();
         if !pin.first_packet_recv {
             match Pin::new(&mut pin.inner).poll_read(cx, buf) {
                 std::task::Poll::Ready(rv) => match rv {

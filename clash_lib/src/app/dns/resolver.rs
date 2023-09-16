@@ -11,6 +11,7 @@ use tracing::{debug, warn};
 use trust_dns_proto::{op, rr};
 
 use crate::app::profile::ThreadSafeCacheFile;
+use crate::common::mmdb::MMDB;
 use crate::config::def::DNSMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
@@ -72,7 +73,11 @@ impl Resolver {
         }
     }
 
-    pub async fn new(cfg: &Config, store: ThreadSafeCacheFile) -> ThreadSafeDNSResolver {
+    pub async fn new(
+        cfg: &Config,
+        store: ThreadSafeCacheFile,
+        mmdb: Arc<MMDB>,
+    ) -> ThreadSafeDNSResolver {
         if !cfg.enable {
             return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
         }
@@ -115,8 +120,10 @@ impl Resolver {
             {
                 let mut filters = vec![];
 
-                filters.push(Box::new(GeoIPFilter::new(&cfg.fallback_filter.geo_ip_code))
-                    as Box<dyn FallbackIPFilter>);
+                filters.push(
+                    Box::new(GeoIPFilter::new(&cfg.fallback_filter.geo_ip_code, mmdb))
+                        as Box<dyn FallbackIPFilter>,
+                );
 
                 if let Some(ipcidr) = &cfg.fallback_filter.ip_cidr {
                     for subnet in ipcidr {
@@ -520,7 +527,7 @@ mod tests {
             "1.1.1.1:53".parse().unwrap(),
             Duration::from_secs(5),
         );
-        let (mut client, bg) = client::AsyncClient::connect(stream).await.unwrap();
+        let (client, bg) = client::AsyncClient::connect(stream).await.unwrap();
 
         tokio::spawn(bg);
 

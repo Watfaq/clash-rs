@@ -58,6 +58,7 @@ impl TryFrom<def::Config> for Config {
 
     fn try_from(c: def::Config) -> Result<Self, Self::Error> {
         let mut proxy_names = vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
+        #[allow(deprecated)]
         Self {
             general: General {
                 inbound: Inbound {
@@ -247,6 +248,7 @@ pub struct TunConfig {
     /// tun device id, could be
     /// dev://utun886 # Linux
     /// fd://3 # file descriptor
+    #[serde(alias = "device-url")]
     pub device_id: String,
     /// tun device address
     /// default: 198.18.0.0/16

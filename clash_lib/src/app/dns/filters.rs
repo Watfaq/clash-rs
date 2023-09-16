@@ -1,22 +1,25 @@
 use std::{net, sync::Arc};
 
-use crate::common::trie;
+use crate::common::{mmdb::MMDB, trie};
 
 pub trait FallbackIPFilter: Sync + Send {
     fn apply(&self, ip: &net::IpAddr) -> bool;
 }
 
-pub struct GeoIPFilter(String);
+pub struct GeoIPFilter(String, Arc<MMDB>);
 
 impl GeoIPFilter {
-    pub fn new(code: &str) -> Self {
-        Self(code.to_owned())
+    pub fn new(code: &str, mmdb: Arc<MMDB>) -> Self {
+        Self(code.to_owned(), mmdb)
     }
 }
 
 impl FallbackIPFilter for GeoIPFilter {
-    fn apply(&self, _ip: &net::IpAddr) -> bool {
-        todo!("mmdb not implemented yet")
+    fn apply(&self, ip: &net::IpAddr) -> bool {
+        self.1
+            .lookup(*ip)
+            .map(|x| x.country)
+            .is_ok_and(|x| x.is_some_and(|x| x.iso_code == Some(self.0.as_str())))
     }
 }
 

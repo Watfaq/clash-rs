@@ -1,5 +1,4 @@
 mod auth;
-mod codec;
 mod connector;
 mod proxy;
 

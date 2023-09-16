@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use trust_dns_proto::xfer::DnsResponse;
 
 use std::fmt::Debug;
 
@@ -19,6 +18,8 @@ mod helper;
 pub mod resolver;
 mod server;
 mod system;
+
+pub use system::SystemResolver;
 
 pub use config::Config;
 

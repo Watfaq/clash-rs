@@ -7,7 +7,6 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
-use serde::de;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, trace, warn};
 
@@ -179,6 +178,7 @@ where
         Ok((proxies, false))
     }
 
+    #[cfg(test)]
     pub async fn destroy(&mut self) {
         if let Some(handle) = self.inner.write().await.thread_handle.take() {
             handle.abort();
@@ -290,7 +290,7 @@ mod tests {
         let _ = f.initial().await;
 
         sleep(Duration::from_secs_f64(5.5)).await;
-        f.destroy();
+        f.destroy().await;
 
         drop(tx);
         drop(f);

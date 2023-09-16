@@ -3,7 +3,7 @@ mod websocket_early_data;
 
 use std::collections::HashMap;
 
-use http::{Request, StatusCode, Uri};
+use http::{Request, StatusCode};
 use tokio_tungstenite::{
     client_async_with_config,
     tungstenite::{handshake::client::generate_key, protocol::WebSocketConfig},

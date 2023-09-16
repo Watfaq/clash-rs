@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{app::router::mmdb, session::Session};
+use crate::{common::mmdb, session::Session};
 
 use super::RuleMatcher;
 

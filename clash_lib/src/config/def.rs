@@ -47,7 +47,7 @@ impl Display for LogLevel {
         match self {
             LogLevel::Debug => write!(f, "debug"),
             LogLevel::Info => write!(f, "info"),
-            LogLevel::Warning => write!(f, "warning"),
+            LogLevel::Warning => write!(f, "warn"),
             LogLevel::Error => write!(f, "error"),
             LogLevel::Silent => write!(f, "off"),
         }
@@ -160,6 +160,7 @@ impl FromStr for Config {
 
 impl Default for Config {
     fn default() -> Self {
+        #[allow(deprecated)]
         Self {
             port: Default::default(),
             socks_port: Default::default(),
@@ -275,9 +276,13 @@ pub enum DNSMode {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct FallbackFilter {
+    #[serde(rename = "geoip")]
     pub geo_ip: bool,
+    #[serde(rename = "geoip-code")]
     pub geo_ip_code: String,
+    #[serde(rename = "ipcidr")]
     pub ip_cidr: Vec<String>,
     pub domain: Vec<String>,
 }
