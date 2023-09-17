@@ -108,7 +108,7 @@ impl Dispatcher {
         };
 
         let mode = self.mode.read().await;
-        info!("dispatching {} with mode {}", sess, mode);
+        debug!("dispatching {} with mode {}", sess, mode);
         let (outbound_name, rule) = match *mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
@@ -237,7 +237,7 @@ impl Dispatcher {
                 packet.dst_addr = sess.destination.clone();
 
                 let mode = mode.read().await;
-                info!("dispatching {} with mode {}", sess, mode);
+                debug!("dispatching {} with mode {}", sess, mode);
                 let (outbound_name, rule) = match *mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
                     RunMode::Rule => router.match_route(&sess).await,
