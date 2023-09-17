@@ -96,7 +96,7 @@ impl DnsHandler {
                 }
             },
             Err(e) => {
-                warn!("dns resolve error: {}", e);
+                debug!("dns resolve error: {}", e);
                 Err(DNSError::QueryFailed(e.to_string()))
             }
         }
