@@ -4,12 +4,18 @@ use std::str::FromStr;
 use std::{net, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore};
+
+use rustls::ClientConfig;
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
+use tracing::warn;
+use trust_dns_client::client::AsyncClient;
 use trust_dns_client::{
     client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
 };
+use trust_dns_proto::error::ProtoError;
 
-use crate::common::tls;
+use crate::common::tls::{self, GLOBAL_ROOT_STORE};
 use crate::dns::dhcp::DhcpClient;
 use crate::dns::ThreadSafeDNSClient;
 use tokio::net::TcpStream as TokioTcpStream;
@@ -72,9 +78,23 @@ pub struct Opts {
     pub iface: Option<Interface>,
 }
 
+enum DnsConfig {
+    Udp(net::SocketAddr, Option<Interface>),
+    Tcp(net::SocketAddr, Option<Interface>),
+    Tls(net::SocketAddr, String, Option<Interface>),
+    Https(net::SocketAddr, String, Option<Interface>),
+}
+
+struct Inner {
+    c: client::AsyncClient,
+    bg_handle: Option<JoinHandle<Result<(), ProtoError>>>,
+}
+
 /// DnsClient
 pub struct DnsClient {
-    c: client::AsyncClient,
+    inner: Arc<RwLock<Inner>>,
+
+    cfg: DnsConfig,
 
     // debug purpose
     host: String,
@@ -116,25 +136,17 @@ impl DnsClient {
 
                 match other {
                     DNSNetMode::UDP => {
-                        let stream = UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
-                            net::SocketAddr::new(ip, opts.port),
-                            // TODO: simplify this match
-                            match &opts.iface {
-                                Some(iface) => match iface {
-                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
-                                    _ => None,
-                                },
-                                _ => None,
-                            },
-                            Duration::from_secs(5),
-                        );
-                        let (client, bg) = client::AsyncClient::connect(stream)
-                            .await
-                            .map_err(|x| Error::DNSError(x.to_string()))?;
+                        let cfg =
+                            DnsConfig::Udp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
+                        let (client, bg) = dns_stream_builder(&cfg).await?;
 
-                        tokio::spawn(bg);
                         Ok(Arc::new(Self {
-                            c: client,
+                            inner: Arc::new(RwLock::new(Inner {
+                                c: client,
+                                bg_handle: Some(bg),
+                            })),
+
+                            cfg,
 
                             host: opts.host,
                             port: opts.port,
@@ -143,24 +155,18 @@ impl DnsClient {
                         }))
                     }
                     DNSNetMode::TCP => {
-                        let (stream, sender) = TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
-                            net::SocketAddr::new(ip, opts.port),
-                            match &opts.iface {
-                                Some(iface) => match iface {
-                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
-                                    _ => None,
-                                },
-                                _ => None,
-                            },
-                            Duration::from_secs(5),
-                        );
+                        let cfg =
+                            DnsConfig::Tcp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
 
-                        let (client, bg) = client::AsyncClient::new(stream, sender, None)
-                            .await
-                            .map_err(|x| Error::DNSError(x.to_string()))?;
-                        tokio::spawn(bg);
+                        let (client, bg) = dns_stream_builder(&cfg).await?;
+
                         Ok(Arc::new(Self {
-                            c: client,
+                            inner: Arc::new(RwLock::new(Inner {
+                                c: client,
+                                bg_handle: Some(bg),
+                            })),
+
+                            cfg,
 
                             host: opts.host,
                             port: opts.port,
@@ -169,49 +175,21 @@ impl DnsClient {
                         }))
                     }
                     DNSNetMode::DoT => {
-                        let mut root_store = RootCertStore::empty();
-                        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(
-                            |ta| {
-                                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    ta.subject,
-                                    ta.spki,
-                                    ta.name_constraints,
-                                )
-                            },
-                        ));
-                        let mut tls_config = ClientConfig::builder()
-                            .with_safe_defaults()
-                            .with_root_certificates(root_store)
-                            .with_no_client_auth();
-                        tls_config.alpn_protocols = vec!["dot".into()];
-
-                        let (stream, sender) = tls_client_connect_with_bind_addr::<
-                            AsyncIoTokioAsStd<TokioTcpStream>,
-                        >(
+                        let cfg = DnsConfig::Tls(
                             net::SocketAddr::new(ip, opts.port),
-                            match &opts.iface {
-                                Some(iface) => match iface {
-                                    Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
-                                    _ => None,
-                                },
-                                _ => None,
-                            },
                             opts.host.clone(),
-                            Arc::new(tls_config),
+                            opts.iface.clone(),
                         );
 
-                        let (client, bg) = client::AsyncClient::with_timeout(
-                            stream,
-                            sender,
-                            Duration::from_secs(5),
-                            None,
-                        )
-                        .await
-                        .map_err(|x| Error::DNSError(x.to_string()))?;
+                        let (client, bg) = dns_stream_builder(&cfg).await?;
 
-                        tokio::spawn(bg);
                         Ok(Arc::new(Self {
-                            c: client,
+                            inner: Arc::new(RwLock::new(Inner {
+                                c: client,
+                                bg_handle: Some(bg),
+                            })),
+
+                            cfg,
 
                             host: opts.host,
                             port: opts.port,
@@ -220,51 +198,21 @@ impl DnsClient {
                         }))
                     }
                     DNSNetMode::DoH => {
-                        let mut root_store = RootCertStore::empty();
-                        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(
-                            |ta| {
-                                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                                    ta.subject,
-                                    ta.spki,
-                                    ta.name_constraints,
-                                )
-                            },
-                        ));
-                        let mut tls_config = ClientConfig::builder()
-                            .with_safe_defaults()
-                            .with_root_certificates(root_store)
-                            .with_no_client_auth();
-                        tls_config.alpn_protocols = vec!["h2".into()];
-
-                        if opts.host == ip.to_string() {
-                            tls_config
-                                .dangerous()
-                                .set_certificate_verifier(Arc::new(tls::NoHostnameTlsVerifier));
-                        }
-
-                        let mut stream_builder =
-                            HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));
-                        if let Some(iface) = &opts.iface {
-                            match iface {
-                                Interface::IpAddr(ip) => {
-                                    stream_builder.bind_addr(net::SocketAddr::new(ip.clone(), 0))
-                                }
-                                _ => {}
-                            }
-                        }
-                        let stream = stream_builder.build::<AsyncIoTokioAsStd<TokioTcpStream>>(
+                        let cfg = DnsConfig::Https(
                             net::SocketAddr::new(ip, opts.port),
                             opts.host.clone(),
+                            opts.iface.clone(),
                         );
 
-                        let (client, bg) = client::AsyncClient::connect(stream)
-                            .await
-                            .map_err(|x| Error::DNSError(x.to_string()))?;
+                        let (client, bg) = dns_stream_builder(&cfg).await?;
 
-                        tokio::spawn(bg);
                         Ok(Arc::new(Self {
-                            c: client,
+                            inner: Arc::new(RwLock::new(Inner {
+                                c: client,
+                                bg_handle: Some(bg),
+                            })),
 
+                            cfg,
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
@@ -296,13 +244,133 @@ impl Client for DnsClient {
     }
 
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
+        let mut inner = self.inner.write().await;
+        if let Some(bg) = &inner.bg_handle {
+            if bg.is_finished() {
+                warn!("dns client background task is finished, likely connection closed, restarting a new one");
+                let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                inner.c = client;
+                inner.bg_handle.replace(bg);
+            }
+        } else {
+            unreachable!("dns bg task handle dangling");
+        }
+
+        drop(inner);
+
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
         req.set_id(rand::random::<u16>());
-        self.c
+        self.inner
+            .read()
+            .await
+            .c
             .send(req)
             .first_answer()
             .await
             .map_err(|x| Error::DNSError(x.to_string()).into())
             .map(|x| x.into())
+    }
+}
+
+async fn dns_stream_builder(
+    cfg: &DnsConfig,
+) -> Result<(AsyncClient, JoinHandle<Result<(), ProtoError>>), Error> {
+    match cfg {
+        DnsConfig::Udp(addr, iface) => {
+            let stream = UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
+                net::SocketAddr::new(addr.ip(), addr.port()),
+                // TODO: simplify this match
+                match iface {
+                    Some(iface) => match iface {
+                        Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                Duration::from_secs(5),
+            );
+            client::AsyncClient::connect(stream)
+                .await
+                .map(|(x, y)| (x, tokio::spawn(y)))
+                .map_err(|x| Error::DNSError(x.to_string()))
+        }
+        DnsConfig::Tcp(addr, iface) => {
+            let (stream, sender) =
+                TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
+                    net::SocketAddr::new(addr.ip(), addr.port()),
+                    match iface {
+                        Some(iface) => match iface {
+                            Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                    Duration::from_secs(5),
+                );
+
+            client::AsyncClient::new(stream, sender, None)
+                .await
+                .map(|(x, y)| (x, tokio::spawn(y)))
+                .map_err(|x| Error::DNSError(x.to_string()))
+        }
+        DnsConfig::Tls(addr, host, iface) => {
+            let mut tls_config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
+            tls_config.alpn_protocols = vec!["dot".into()];
+
+            let (stream, sender) =
+                tls_client_connect_with_bind_addr::<AsyncIoTokioAsStd<TokioTcpStream>>(
+                    net::SocketAddr::new(addr.ip(), addr.port()),
+                    match iface {
+                        Some(iface) => match iface {
+                            Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                    host.clone(),
+                    Arc::new(tls_config),
+                );
+
+            client::AsyncClient::with_timeout(stream, sender, Duration::from_secs(5), None)
+                .await
+                .map(|(x, y)| (x, tokio::spawn(y)))
+                .map_err(|x| Error::DNSError(x.to_string()))
+        }
+        DnsConfig::Https(addr, host, iface) => {
+            let mut tls_config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
+            tls_config.alpn_protocols = vec!["h2".into()];
+
+            if host == &addr.ip().to_string() {
+                tls_config
+                    .dangerous()
+                    .set_certificate_verifier(Arc::new(tls::NoHostnameTlsVerifier));
+            }
+
+            let mut stream_builder =
+                HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));
+            if let Some(iface) = iface {
+                match iface {
+                    Interface::IpAddr(ip) => {
+                        stream_builder.bind_addr(net::SocketAddr::new(ip.clone(), 0))
+                    }
+                    _ => {}
+                }
+            }
+            let stream = stream_builder.build::<AsyncIoTokioAsStd<TokioTcpStream>>(
+                net::SocketAddr::new(addr.ip(), addr.port()),
+                host.clone(),
+            );
+
+            client::AsyncClient::connect(stream)
+                .await
+                .map(|(x, y)| (x, tokio::spawn(y)))
+                .map_err(|x| Error::DNSError(x.to_string()))
+        }
     }
 }

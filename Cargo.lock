@@ -810,6 +810,7 @@ dependencies = [
  "murmur3",
  "netstack-lwip",
  "network-interface",
+ "once_cell",
  "prost",
  "public-suffix",
  "rand",

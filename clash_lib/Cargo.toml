@@ -40,6 +40,7 @@ boring-sys = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 hyper-boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 tokio-boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 ip_network_table-deps-treebitmap = "0.5.0"
+once_cell = "1.18.0"
 
 crc32fast = "1.3.2"
 brotli = "3.3.4"

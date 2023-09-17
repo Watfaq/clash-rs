@@ -1,5 +1,5 @@
 {
-  "checksum": "347ca0fe4b75977928f2e59b15583a8514505bc59a8dea46398337f26e3344a8",
+  "checksum": "b6fd3963e35e2a6beb1e16662f2a7be5ac7bb50ddcaf7e47880459331b4ad8f0",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -3944,6 +3944,10 @@
             {
               "id": "network-interface 1.0.3",
               "target": "network_interface"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             },
             {
               "id": "prost 0.11.9",

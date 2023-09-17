@@ -1,8 +1,27 @@
-use rustls::client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier};
+use once_cell::sync::Lazy;
+use rustls::{
+    client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier},
+    OwnedTrustAnchor, RootCertStore,
+};
 use tracing::warn;
 
 use rustls::{Certificate, ServerName};
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
+
+pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(|| global_root_store());
+
+fn global_root_store() -> Arc<RootCertStore> {
+    let mut root_store = RootCertStore::empty();
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+
+    Arc::new(root_store)
+}
 
 /// Warning: NO validation on certs.
 pub struct DummyTlsVerifier;
