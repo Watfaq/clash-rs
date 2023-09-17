@@ -120,7 +120,7 @@ impl RequestHandler for DnsHandler {
         match self.handle(request, response_handle).await {
             Ok(info) => info,
             Err(e) => {
-                warn!("dns request error: {}", e);
+                debug!("dns request error: {}", e);
                 let mut h = Header::new();
                 h.set_response_code(ResponseCode::ServFail);
                 h.into()
