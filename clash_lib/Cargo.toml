@@ -42,6 +42,11 @@ tokio-boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 ip_network_table-deps-treebitmap = "0.5.0"
 once_cell = "1.18.0"
 
+# opentelemetry
+opentelemetry = "0.20"
+tracing-opentelemetry = "0.21" 
+opentelemetry-jaeger = { version = "0.19", features = ["collector_client", "isahc_collector_client", "rt-tokio"] }
+
 crc32fast = "1.3.2"
 brotli = "3.3.4"
 hmac = "0.12.1"

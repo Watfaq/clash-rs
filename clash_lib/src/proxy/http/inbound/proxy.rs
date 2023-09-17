@@ -9,7 +9,7 @@ use http::{uri::Scheme, Method, Request, Response, Uri};
 use hyper::{server::conn::Http, Body, Client};
 
 use tower::Service;
-use tracing::warn;
+use tracing::{instrument, warn};
 
 use crate::{
     app::dispatcher::Dispatcher,
@@ -131,6 +131,7 @@ impl Service<Request<Body>> for ProxyService {
     }
 }
 
+#[instrument(skip(stream, dispatcher, authenticator))]
 pub async fn handle(
     stream: AnyStream,
     src: SocketAddr,

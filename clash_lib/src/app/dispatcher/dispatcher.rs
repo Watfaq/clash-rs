@@ -20,8 +20,10 @@ use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tracing::info_span;
 use tracing::instrument;
 use tracing::trace;
+use tracing::Instrument;
 use tracing::{debug, error, info, warn};
 
 use crate::app::dns::ThreadSafeDNSResolver;
@@ -72,6 +74,7 @@ impl Dispatcher {
         mode.clone()
     }
 
+    #[instrument(skip(lhs))]
     pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: S)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -119,13 +122,28 @@ impl Dispatcher {
             .get_outbound(outbound_name)
             .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
 
-        match handler.connect_stream(&sess, self.resolver.clone()).await {
+        match handler
+            .connect_stream(&sess, self.resolver.clone())
+            .instrument(info_span!(
+                "connect_stream",
+                outbound_name = outbound_name,
+                session = %sess,
+            ))
+            .await
+        {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
                 let mut rhs = Box::new(
                     TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await,
                 );
-                match copy_bidirectional(&mut lhs, &mut rhs).await {
+                match copy_bidirectional(&mut lhs, &mut rhs)
+                    .instrument(info_span!(
+                        "copy_bidirectional",
+                        outbound_name = outbound_name,
+                        session = %sess,
+                    ))
+                    .await
+                {
                     Ok((up, down)) => {
                         debug!(
                             "connection {} closed with {} bytes up, {} bytes down",

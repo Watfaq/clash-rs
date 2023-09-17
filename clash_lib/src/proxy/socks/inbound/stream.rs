@@ -14,8 +14,9 @@ use std::{io, str};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_util::udp::UdpFramed;
-use tracing::{trace, warn};
+use tracing::{instrument, trace, warn};
 
+#[instrument(skip(s, dispatcher, authenticator))]
 pub async fn handle_tcp<'a>(
     sess: &'a mut Session,
     s: &'a mut TcpStream,

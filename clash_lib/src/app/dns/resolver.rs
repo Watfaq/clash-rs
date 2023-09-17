@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use std::{net, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use trust_dns_proto::{op, rr};
 
@@ -395,6 +395,7 @@ impl Resolver {
 
 #[async_trait]
 impl ClashResolver for Resolver {
+    #[instrument(skip(self))]
     async fn resolve(&self, host: &str, enhanced: bool) -> anyhow::Result<Option<net::IpAddr>> {
         match self.ipv6.load(Relaxed) {
             true => self

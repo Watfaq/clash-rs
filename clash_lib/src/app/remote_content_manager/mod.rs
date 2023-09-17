@@ -15,7 +15,7 @@ use http::{Request, Version};
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
     common::{
@@ -139,6 +139,7 @@ impl ProxyManager {
             .unwrap_or(max)
     }
 
+    #[instrument(skip(self, proxy))]
     pub async fn url_test(
         &self,
         proxy: AnyOutboundHandler,

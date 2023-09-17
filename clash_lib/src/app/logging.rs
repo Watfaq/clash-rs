@@ -1,9 +1,11 @@
 use std::io::IsTerminal;
 
 use crate::def::LogLevel;
+use opentelemetry::global;
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
+use tracing::debug;
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
@@ -75,7 +77,22 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
         )
         .from_env_lossy();
 
+    let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+
+        let tracer = opentelemetry_jaeger::new_collector_pipeline()
+            .with_service_name("clash-rs")
+            .with_endpoint(jager_endpoint)
+            .with_isahc()
+            .install_batch(opentelemetry::runtime::Tokio)?;
+
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
+    };
+
     let subscriber = tracing_subscriber::registry()
+        .with(jaeger)
         .with(filter)
         .with(collector)
         .with(
@@ -87,8 +104,14 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
                 .with_writer(std::io::stdout),
         );
 
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|x| anyhow!("setup logging error: {}", x))
+    let v = tracing::subscriber::set_global_default(subscriber)
+        .map_err(|x| anyhow!("setup logging error: {}", x))?;
+
+    if let Ok(jager_endpiont) = std::env::var("JAGER_ENDPOINT") {
+        debug!("jager endpoint: {}", jager_endpiont);
+    }
+
+    Ok(v)
 }
 
 struct EventVisitor<'a>(&'a mut Vec<String>);
