@@ -61,7 +61,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Load Release URL File from release job
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v3
       with:
         name: release_url
     - name: Build
