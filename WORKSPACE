@@ -26,7 +26,7 @@ load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencie
 
 crate_universe_dependencies()
 
-load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository")
+load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 
 MACOS_BINDGEN_FLAGS = "-I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/"
 
@@ -61,6 +61,9 @@ crates_repository(
         "//clash_lib:Cargo.toml",
         "//clash_doc:Cargo.toml",
     ],
+    splicing_config = splicing_config(
+        resolver_version = "2",
+    ),
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")

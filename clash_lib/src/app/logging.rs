@@ -83,7 +83,7 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
         let tracer = opentelemetry_jaeger::new_collector_pipeline()
             .with_service_name("clash-rs")
             .with_endpoint(jager_endpoint)
-            .with_isahc()
+            .with_hyper()
             .install_batch(opentelemetry::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
