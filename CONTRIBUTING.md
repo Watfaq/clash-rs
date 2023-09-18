@@ -1,0 +1,3 @@
+- Try to use this project and report issues
+- Request any features that you'd like to see
+- Contributing to coding is more than welcome
