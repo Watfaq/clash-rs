@@ -195,7 +195,7 @@ impl Resolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            warn!("DNS client {} resolve error: {}", c.id(), x.to_string())
+                            debug!("DNS client {} resolve error: {}", c.id(), x.to_string())
                         })
                         .await
                 }

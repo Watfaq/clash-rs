@@ -32,6 +32,7 @@ pub mod trojan;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
+//pub mod wg;
 
 pub mod converters;
 
@@ -129,6 +130,7 @@ pub enum OutboundType {
     Shadowsocks,
     Vmess,
     Trojan,
+    WireGuard,
 
     #[serde(rename = "URLTest")]
     UrlTest,
