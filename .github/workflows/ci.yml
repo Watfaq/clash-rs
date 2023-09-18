@@ -69,9 +69,8 @@ jobs:
     - name: Get Release File Name & Upload URL
       id: get_release_info
       run: |
-        echo ::set-output name=file_name::${REPOSITORY_NAME##*/}-${TAG_REF_NAME##*/v} # RepositoryName-v1.0.0
         value=`cat release_url/release_url.txt`
-        echo ::set-output name=upload_url::$value
+        echo "upload_url=$value" >> $GITHUB_OUTPUT
       env:
         TAG_REF_NAME: ${{ github.ref }}
         REPOSITORY_NAME: ${{ github.repository }}
@@ -83,5 +82,5 @@ jobs:
       with:
         upload_url: ${{ steps.get_release_info.outputs.upload_url }}
         asset_path: ./bazel-bin/clash/clash
-        asset_name: ${{ steps.get_release_info.outputs.file_name }}-${{ matrix.platform }}.zip
+        asset_name: clash-${{ matrix.platform }}
         asset_content_type: application/octet-stream
