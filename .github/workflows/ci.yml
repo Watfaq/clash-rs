@@ -60,13 +60,15 @@ jobs:
             platform: darwin-amd64
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
     - name: Load Release URL File from release job
       uses: actions/download-artifact@v3
       with:
         name: release_url
     - name: Build
       run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazel build --strip=always //clash/...
-    - name: Get Release File Name & Upload URL
+    - name: Get Release Upload URL
       id: get_release_info
       run: |
         value=`cat release_url/release_url.txt`
