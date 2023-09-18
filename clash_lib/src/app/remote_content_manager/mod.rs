@@ -252,7 +252,7 @@ mod tests {
     use crate::{
         app::{dispatcher::ChainedStreamWrapper, dns::MockClashResolver, remote_content_manager},
         config::internal::proxy::PROXY_DIRECT,
-        proxy::mocks::MockDummyOutboundHandler,
+        proxy::{direct, mocks::MockDummyOutboundHandler},
     };
 
     #[tokio::test]
@@ -260,28 +260,16 @@ mod tests {
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver
             .expect_resolve()
-            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
+            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67)))));
 
         let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
-        let mut mock_handler = MockDummyOutboundHandler::new();
-        mock_handler
-            .expect_name()
-            .return_const(PROXY_DIRECT.to_owned());
-        mock_handler.expect_connect_stream().returning(|_, _| {
-            Ok(Box::new(ChainedStreamWrapper::new(
-                tokio_test::io::Builder::new()
-                    .wait(Duration::from_millis(50))
-                    .build(),
-            )))
-        });
-
-        let mock_handler = Arc::new(mock_handler);
+        let mock_handler = direct::Handler::new();
 
         manager
             .url_test(
                 mock_handler.clone(),
-                "http://www.google.com/generate_204",
+                "http://www.gstatic.com/generate_204",
                 None,
             )
             .await
@@ -298,7 +286,7 @@ mod tests {
             manager
                 .url_test(
                     mock_handler.clone(),
-                    "http://www.google.com/generate_204",
+                    "http://www.gstatic.com/generate_204",
                     None,
                 )
                 .await
@@ -336,7 +324,7 @@ mod tests {
         let result = manager
             .url_test(
                 mock_handler.clone(),
-                "http://www.google.com/generate_204",
+                "http://www.gstatic.com/generate_204",
                 Some(Duration::from_secs(3)),
             )
             .map_err(|x| assert!(x.to_string().contains("timeout")))
