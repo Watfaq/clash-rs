@@ -1,5 +1,5 @@
 {
-  "checksum": "a201eb376599b4ca16b59ab27cf77bf7101b4dfb454682daa39b3810c6cdadbd",
+  "checksum": "cd646971bde929e9531258c538327382207ae404646944887a4f150fa4ae0e78",
   "crates": {
     "addr2line 0.20.0": {
       "name": "addr2line",
@@ -143,6 +143,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "getrandom",
             "rand_core"
           ],
@@ -2342,6 +2343,52 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "blake2 0.10.6": {
+      "name": "blake2",
+      "version": "0.10.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/blake2/0.10.6/download",
+          "sha256": "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "blake2",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "blake2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.10.6"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "blake3 1.4.1": {
       "name": "blake3",
       "version": "1.4.1",
@@ -2630,6 +2677,125 @@
         "links": "boringssl"
       },
       "license": "MIT"
+    },
+    "boringtun 0.6.0": {
+      "name": "boringtun",
+      "version": "0.6.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/boringtun/0.6.0/download",
+          "sha256": "751787b019c674b9ac353f4eaa285e6711c21badb421cd8c199bf2c83b727f29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "boringtun",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "boringtun",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "device",
+            "socket2",
+            "thiserror"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "aead 0.5.2",
+              "target": "aead"
+            },
+            {
+              "id": "base64 0.13.1",
+              "target": "base64"
+            },
+            {
+              "id": "blake2 0.10.6",
+              "target": "blake2"
+            },
+            {
+              "id": "chacha20poly1305 0.10.1",
+              "target": "chacha20poly1305"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            },
+            {
+              "id": "ip_network 0.4.1",
+              "target": "ip_network"
+            },
+            {
+              "id": "ip_network_table 0.2.0",
+              "target": "ip_network_table"
+            },
+            {
+              "id": "libc 0.2.147",
+              "target": "libc"
+            },
+            {
+              "id": "parking_lot 0.12.1",
+              "target": "parking_lot"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            },
+            {
+              "id": "socket2 0.4.9",
+              "target": "socket2"
+            },
+            {
+              "id": "thiserror 1.0.44",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            },
+            {
+              "id": "untrusted 0.9.0",
+              "target": "untrusted"
+            },
+            {
+              "id": "x25519-dalek 2.0.0-rc.3",
+              "target": "x25519_dalek"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "nix 0.25.1",
+                "target": "nix"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.6.0"
+      },
+      "license": "BSD-3-Clause"
     },
     "brotli 3.3.4": {
       "name": "brotli",
@@ -3919,6 +4085,10 @@
               "target": "boring_sys"
             },
             {
+              "id": "boringtun 0.6.0",
+              "target": "boringtun"
+            },
+            {
               "id": "brotli 3.3.4",
               "target": "brotli"
             },
@@ -5200,6 +5370,163 @@
       },
       "license": "MIT"
     },
+    "curve25519-dalek 4.0.0-rc.3": {
+      "name": "curve25519-dalek",
+      "version": "4.0.0-rc.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/curve25519-dalek/4.0.0-rc.3/download",
+          "sha256": "436ace70fc06e06f7f689d2624dc4e2f0ea666efb5aa704215f7249ae6e047a7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "curve25519_dalek",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "curve25519_dalek",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "precomputed-tables",
+            "zeroize"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "curve25519-dalek 4.0.0-rc.3",
+              "target": "build_script_build"
+            },
+            {
+              "id": "subtle 2.5.0",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.6.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {
+            "cfg(curve25519_dalek_backend = \"fiat\")": [
+              {
+                "id": "fiat-crypto 0.1.20",
+                "target": "fiat_crypto"
+              }
+            ],
+            "cfg(target_arch = \"x86_64\")": [
+              {
+                "id": "cpufeatures 0.2.9",
+                "target": "cpufeatures"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [],
+          "selects": {
+            "cfg(all(not(curve25519_dalek_backend = \"fiat\"), not(curve25519_dalek_backend = \"serial\"), target_arch = \"x86_64\"))": [
+              {
+                "id": "curve25519-dalek-derive 0.1.0",
+                "target": "curve25519_dalek_derive"
+              }
+            ]
+          }
+        },
+        "version": "4.0.0-rc.3"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "platforms 3.1.2",
+              "target": "platforms"
+            },
+            {
+              "id": "rustc_version 0.4.0",
+              "target": "rustc_version"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause"
+    },
+    "curve25519-dalek-derive 0.1.0": {
+      "name": "curve25519-dalek-derive",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/curve25519-dalek-derive/0.1.0/download",
+          "sha256": "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "curve25519_dalek_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "curve25519_dalek_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.32",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.28",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "data-encoding 2.4.0": {
       "name": "data-encoding",
       "version": "2.4.0",
@@ -6370,6 +6697,36 @@
         "version": "2.0.0"
       },
       "license": "Apache-2.0 OR MIT"
+    },
+    "fiat-crypto 0.1.20": {
+      "name": "fiat-crypto",
+      "version": "0.1.20",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/fiat-crypto/0.1.20/download",
+          "sha256": "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fiat_crypto",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "fiat_crypto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.20"
+      },
+      "license": "MIT OR Apache-2.0 OR BSD-1-Clause"
     },
     "filetime 0.2.21": {
       "name": "filetime",
@@ -9306,6 +9663,79 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "ip_network 0.4.1": {
+      "name": "ip_network",
+      "version": "0.4.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ip_network/0.4.1/download",
+          "sha256": "aa2f047c0a98b2f299aa5d6d7088443570faae494e9ae1305e48be000c9e0eb1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ip_network",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ip_network",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.4.1"
+      },
+      "license": "BSD-2-Clause"
+    },
+    "ip_network_table 0.2.0": {
+      "name": "ip_network_table",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ip_network_table/0.2.0/download",
+          "sha256": "4099b7cfc5c5e2fe8c5edf3f6f7adf7a714c9cc697534f63a5a5da30397cb2c0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ip_network_table",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ip_network_table",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ip_network 0.4.1",
+              "target": "ip_network"
+            },
+            {
+              "id": "ip_network_table-deps-treebitmap 0.5.0",
+              "target": "ip_network_table_deps_treebitmap"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.0"
+      },
+      "license": "BSD-2-Clause"
+    },
     "ip_network_table-deps-treebitmap 0.5.0": {
       "name": "ip_network_table-deps-treebitmap",
       "version": "0.5.0",
@@ -9999,7 +10429,16 @@
             "aarch64-linux-android": [
               "extra_traits"
             ],
+            "aarch64-unknown-linux-gnu": [
+              "extra_traits"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "extra_traits"
+            ],
             "armv7-linux-androideabi": [
+              "extra_traits"
+            ],
+            "armv7-unknown-linux-gnueabi": [
               "extra_traits"
             ],
             "i686-apple-darwin": [
@@ -10009,6 +10448,9 @@
               "extra_traits"
             ],
             "i686-unknown-freebsd": [
+              "extra_traits"
+            ],
+            "i686-unknown-linux-gnu": [
               "extra_traits"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -10045,6 +10487,9 @@
               "extra_traits"
             ],
             "x86_64-unknown-freebsd": [
+              "extra_traits"
+            ],
+            "x86_64-unknown-linux-gnu": [
               "extra_traits"
             ],
             "x86_64-unknown-none": [
@@ -11537,6 +11982,61 @@
         },
         "edition": "2018",
         "version": "0.1.0"
+      },
+      "license": "MIT"
+    },
+    "nix 0.25.1": {
+      "name": "nix",
+      "version": "0.25.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/nix/0.25.1/download",
+          "sha256": "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "feature",
+            "time",
+            "user"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 1.3.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.147",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.25.1"
       },
       "license": "MIT"
     },
@@ -13163,6 +13663,43 @@
         "version": "0.3.27"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "platforms 3.1.2": {
+      "name": "platforms",
+      "version": "3.1.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/platforms/3.1.2/download",
+          "sha256": "4503fa043bf02cee09a9582e9554b4c6403b2ef55e4612e96561d294419429f8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "platforms",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "platforms",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "3.1.2"
+      },
+      "license": "Apache-2.0 OR MIT"
     },
     "polling 2.8.0": {
       "name": "polling",
@@ -14819,6 +15356,45 @@
       },
       "license": "Apache-2.0/MIT"
     },
+    "rustc_version 0.4.0": {
+      "name": "rustc_version",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/rustc_version/0.4.0/download",
+          "sha256": "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustc_version",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rustc_version",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "semver 1.0.18",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "rustix 0.38.4": {
       "name": "rustix",
       "version": "0.38.4",
@@ -15597,6 +16173,66 @@
         },
         "edition": "2021",
         "version": "2.9.1"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "semver 1.0.18": {
+      "name": "semver",
+      "version": "1.0.18",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/semver/1.0.18/download",
+          "sha256": "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "semver",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "semver",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "semver 1.0.18",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.18"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -17244,13 +17880,10 @@
             "printing",
             "proc-macro",
             "quote",
+            "visit",
             "visit-mut"
           ],
-          "selects": {
-            "wasm32-unknown-unknown": [
-              "visit"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -20945,6 +21578,36 @@
       },
       "license": "ISC"
     },
+    "untrusted 0.9.0": {
+      "name": "untrusted",
+      "version": "0.9.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/untrusted/0.9.0/download",
+          "sha256": "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "untrusted",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "untrusted",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.9.0"
+      },
+      "license": "ISC"
+    },
     "url 2.4.0": {
       "name": "url",
       "version": "2.4.0",
@@ -23934,6 +24597,64 @@
       },
       "license": "MIT"
     },
+    "x25519-dalek 2.0.0-rc.3": {
+      "name": "x25519-dalek",
+      "version": "2.0.0-rc.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/x25519-dalek/2.0.0-rc.3/download",
+          "sha256": "ec7fae07da688e17059d5886712c933bb0520f15eff2e09cfa18e30968f4e63a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "x25519_dalek",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "x25519_dalek",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "precomputed-tables",
+            "reusable_secrets",
+            "static_secrets",
+            "zeroize"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "curve25519-dalek 4.0.0-rc.3",
+              "target": "curve25519_dalek"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "zeroize 1.6.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.0-rc.3"
+      },
+      "license": "BSD-3-Clause"
+    },
     "zeroize 1.6.0": {
       "name": "zeroize",
       "version": "1.6.0",
@@ -23959,8 +24680,71 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "zeroize_derive"
+          ],
+          "selects": {}
+        },
         "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "zeroize_derive 1.4.2",
+              "target": "zeroize_derive"
+            }
+          ],
+          "selects": {}
+        },
         "version": "1.6.0"
+      },
+      "license": "Apache-2.0 OR MIT"
+    },
+    "zeroize_derive 1.4.2": {
+      "name": "zeroize_derive",
+      "version": "1.4.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/zeroize_derive/1.4.2/download",
+          "sha256": "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "zeroize_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "zeroize_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.66",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.32",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.28",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.4.2"
       },
       "license": "Apache-2.0 OR MIT"
     }
@@ -23987,6 +24771,16 @@
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
       "x86_64-linux-android"
+    ],
+    "cfg(all(not(curve25519_dalek_backend = \"fiat\"), not(curve25519_dalek_backend = \"serial\"), target_arch = \"x86_64\"))": [
+      "x86_64-apple-darwin",
+      "x86_64-apple-ios",
+      "x86_64-fuchsia",
+      "x86_64-linux-android",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-freebsd",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"))))": [
       "aarch64-unknown-linux-gnu",
@@ -24320,6 +25114,7 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(curve25519_dalek_backend = \"fiat\")": [],
     "cfg(loom)": [],
     "cfg(not(any(target_arch = \"wasm32\", target_arch = \"wasm64\")))": [
       "aarch64-apple-darwin",
@@ -24465,6 +25260,16 @@
     "cfg(target_arch = \"wasm32\")": [
       "wasm32-unknown-unknown",
       "wasm32-wasi"
+    ],
+    "cfg(target_arch = \"x86_64\")": [
+      "x86_64-apple-darwin",
+      "x86_64-apple-ios",
+      "x86_64-fuchsia",
+      "x86_64-linux-android",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-freebsd",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-none"
     ],
     "cfg(target_env = \"msvc\")": [
       "aarch64-pc-windows-msvc",
