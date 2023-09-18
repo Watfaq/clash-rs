@@ -11,8 +11,6 @@ on:
 jobs:
   test:
     name: test on ${{ matrix.os }}
-    concurrency:
-      group: ${{ github.head_ref || github.run_id }}
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-13]
