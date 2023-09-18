@@ -105,7 +105,7 @@ criterion = { version = "0.4", features = ["html_reports", "async_tokio"], optio
 tempfile = "3.3"
 ctor = "0.2"
 mockall = "0.11.4"
-tokio-test = "0.4.2"
+tokio-test = "0.4.3"
 axum-macros = "0.3.8"
 
 
