@@ -40,25 +40,20 @@ impl NetworkInboundListener {
                         network_interface::NetworkInterface::show().expect("list interfaces");
 
                     for iface in all_ifaces.into_iter() {
-                        let ip =
-                            iface
-                                .addr
-                                .map(|x| x.ip())
-                                .filter(|x| x.is_ipv4())
-                                .map(|x| match x {
-                                    IpAddr::V4(v4) => v4,
-                                    IpAddr::V6(_) => unreachable!(),
-                                });
+                        let ip = iface
+                            .addr
+                            .into_iter()
+                            .map(|x| x.ip())
+                            .find(|x| !x.is_unspecified() && !x.is_multicast() && x.is_ipv4());
 
-                        if !ip.is_some() {
+                        if ip.is_none() {
                             continue;
                         }
 
-                        let ip = ip.unwrap();
-                        if ip.is_unspecified() || ip.is_link_local() || ip.is_multicast() {
-                            continue;
-                        }
-
+                        let ip = match ip.unwrap() {
+                            IpAddr::V4(v4) => v4,
+                            IpAddr::V6(_) => unreachable!(),
+                        };
                         self.build_and_insert_listener(&mut runners, ip);
                     }
                 }

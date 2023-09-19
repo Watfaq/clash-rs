@@ -25,7 +25,6 @@ pub mod mixed;
 pub(crate) mod datagram;
 mod options;
 
-#[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
 pub mod trojan;

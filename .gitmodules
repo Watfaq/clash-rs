@@ -1,6 +1,6 @@
 [submodule "deps/boringssl/src"] 
   path = deps/boringssl/src
-  url = https://github.com/google/boringssl.git
+  url = https://github.com/Watfaq/boringssl.git
 [submodule "deps/llhttp/src"]
 	path = deps/llhttp/src
 	url = https://github.com/nodejs/llhttp.git
