@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 clash_lib = { path = "../clash_lib" }
 
+[build-dependencies]
+
 [lib]
-name = "greetings"
+name = "libclash"
 crate-type = ["staticlib", "cdylib"]

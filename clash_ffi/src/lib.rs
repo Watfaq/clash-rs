@@ -1,14 +1,11 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use std::os::raw::c_char;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use clash_lib::Config;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+#[no_mangle]
+pub extern "C" fn start_clash(cfg_str: *const c_char) {
+    println!("start clash");
+    let c_str = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    let cfg = Config::Str(c_str.to_string_lossy().to_string());
+    clash_lib::start(clash_lib::Options { config: cfg }).unwrap();
 }

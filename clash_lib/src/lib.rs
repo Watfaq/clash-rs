@@ -59,6 +59,7 @@ pub struct Options {
     pub config: Config,
 }
 
+#[repr(C)]
 pub enum Config {
     Internal(InternalConfig),
     File(String, String),

@@ -18,3 +18,18 @@ Options:
   -h, --help                   Print help
   -V, --version                Print version
 ```
+
+## Access
+
+### SSH
+
+```
+Host gitea-ssh.yba.dev
+  ProxyCommand /opt/homebrew/bin/cloudflared access ssh --hostname %h
+```
+
+### LFS
+
+```
+git config --add http.extraheader "cf-access-token: $(cloudflared access token -app=https://gitea.yba.dev)"
+```
