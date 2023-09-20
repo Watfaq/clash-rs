@@ -16,7 +16,7 @@ thiserror = "1.0"
 async-trait = "0.1"
 anyhow = "1.0"
 futures = "0.3"
-bytes = "1.1"
+bytes = "1.5"
 async-recursion = "1"
 ipnet = "2.5"
 url = "2.2"
@@ -92,7 +92,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 
-shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"] }
+shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"], rev = "2021741" }
 maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"

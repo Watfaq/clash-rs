@@ -31,7 +31,7 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
         Interface::Name(name) => {
             #[cfg(target_vendor = "apple")]
             {
-                socket.bind_device_by_index(std::num::NonZeroU32::new(unsafe {
+                socket.bind_device_by_index_v4(std::num::NonZeroU32::new(unsafe {
                     libc::if_nametoindex(name.as_str().as_ptr() as *const _)
                 }))
             }
