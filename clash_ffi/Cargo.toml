@@ -12,4 +12,4 @@ clash_lib = { path = "../clash_lib" }
 
 [lib]
 name = "libclash"
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["staticlib"]
