@@ -1,5 +1,5 @@
 {
-  "checksum": "f94014b40a60244f04567fad120393cb01678d18773f55db7e6b120bbdf00796",
+  "checksum": "ef69c6848e3c30e2670f43dbd9c39bf86e96ee77b45b4b966e8578ca8c3e2156",
   "crates": {
     "addr2line 0.21.0": {
       "name": "addr2line",
@@ -18307,7 +18307,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "3386076"
+            "Rev": "a6a7b2c"
           },
           "strip_prefix": "crates/client"
         }
@@ -18516,7 +18516,6 @@
             "bytes",
             "default",
             "dns-over-https",
-            "dns-over-https-rustls",
             "dns-over-rustls",
             "dns-over-tls",
             "dnssec",
@@ -18646,8 +18645,6 @@
         "crate_features": {
           "common": [
             "default",
-            "dns-over-https",
-            "dns-over-https-rustls",
             "dns-over-rustls",
             "dns-over-tls",
             "dnssec",
@@ -18736,7 +18733,7 @@
         "Git": {
           "remote": "https://github.com/Watfaq/trust-dns.git",
           "commitish": {
-            "Rev": "3386076"
+            "Rev": "a6a7b2c"
           },
           "strip_prefix": "crates/server"
         }
@@ -18760,7 +18757,6 @@
         "crate_features": {
           "common": [
             "dns-over-https",
-            "dns-over-https-rustls",
             "dns-over-rustls",
             "dns-over-tls",
             "dnssec",

@@ -3890,7 +3890,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-client"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c#a6a7b2c9ba9907cd63375aa6de44a45662072f4b"
 dependencies = [
  "cfg-if",
  "data-encoding",
@@ -3957,7 +3957,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c#a6a7b2c9ba9907cd63375aa6de44a45662072f4b"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4010,7 +4010,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c#a6a7b2c9ba9907cd63375aa6de44a45662072f4b"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -4033,7 +4033,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-server"
 version = "0.23.0"
-source = "git+https://github.com/Watfaq/trust-dns.git?rev=3386076#3386076e7c670e7a7e35d65dba1830a48cd815b5"
+source = "git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c#a6a7b2c9ba9907cd63375aa6de44a45662072f4b"
 dependencies = [
  "async-trait",
  "bytes",

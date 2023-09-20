@@ -69,10 +69,10 @@ serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 erased-serde = "0.3.30"
 
-trust-dns-client = { git = "https://github.com/Watfaq/trust-dns.git", rev = "3386076" }
-trust-dns-resolver = { git = "https://github.com/Watfaq/trust-dns.git", rev = "3386076" }
-trust-dns-server = { git = "https://github.com/Watfaq/trust-dns.git", rev = "3386076", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-trust-dns-proto = { git = "https://github.com/Watfaq/trust-dns.git", rev = "3386076", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+trust-dns-client = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c" }
+trust-dns-resolver = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c" }
+trust-dns-server = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https"] }
+trust-dns-proto = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https"] }
 
 # trust-dns-resolver = "0.23"
 # trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
