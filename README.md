@@ -21,6 +21,7 @@ A custom protocol, rule based network proxy software.
 - 🛡 Run as a HTTP/Socks5 proxy, or utun device as a home network gateway.
 - ⚙️ Shadowsocks/Trojan/Vmess outbound support with different underlying trasports.
 - 🌍 Dynamic remote rule/proxy loader.
+- 🎵 Tracing with Jaeger
 
 ## 🖥 Environment Support
 
