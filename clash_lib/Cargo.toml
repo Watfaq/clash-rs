@@ -71,12 +71,14 @@ erased-serde = "0.3.30"
 
 trust-dns-client = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c" }
 trust-dns-resolver = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c" }
-trust-dns-server = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https"] }
-trust-dns-proto = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https"] }
+trust-dns-server = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+trust-dns-proto = { git = "https://github.com/Watfaq/trust-dns.git", rev = "a6a7b2c", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 
-# trust-dns-resolver = "0.23"
-# trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-# trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+#trust-dns-client = "0.23"
+#trust-dns-resolver = "0.23"
+#trust-dns-server = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+#trust-dns-proto = { version = "0.23", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+
 # DoH
 rustls = { version  = "0.21", features=["dangerous_configuration"] }
 rustls-pemfile = "1.0.3"

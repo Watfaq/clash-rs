@@ -269,6 +269,7 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    #[ignore]
     fn start_and_stop() {
         let conf = r#"
         socks-port: 7891

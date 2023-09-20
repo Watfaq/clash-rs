@@ -813,8 +813,8 @@ dependencies = [
  "tracing-subscriber",
  "tracing-timing",
  "trust-dns-client",
- "trust-dns-proto 0.23.0",
- "trust-dns-resolver 0.23.0",
+ "trust-dns-proto 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
+ "trust-dns-resolver 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
  "trust-dns-server",
  "tun",
  "url",
@@ -3221,7 +3221,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tfo",
- "trust-dns-resolver 0.23.0",
+ "trust-dns-resolver 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
  "windows-sys",
 ]
@@ -3902,7 +3902,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "trust-dns-proto 0.23.0",
+ "trust-dns-proto 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
 ]
 
 [[package]]
@@ -4004,7 +4004,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
- "trust-dns-proto 0.23.0",
+ "trust-dns-proto 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4027,7 +4027,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
- "trust-dns-proto 0.23.0",
+ "trust-dns-proto 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
 ]
 
 [[package]]
@@ -4052,8 +4052,8 @@ dependencies = [
  "tokio-rustls",
  "toml",
  "tracing",
- "trust-dns-proto 0.23.0",
- "trust-dns-resolver 0.23.0",
+ "trust-dns-proto 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
+ "trust-dns-resolver 0.23.0 (git+https://github.com/Watfaq/trust-dns.git?rev=a6a7b2c)",
 ]
 
 [[package]]
