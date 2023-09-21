@@ -1,7 +1,3 @@
-#[macro_use]
-extern crate anyhow;
-extern crate core;
-
 use crate::app::dispatcher::Dispatcher;
 use crate::app::dns;
 use crate::app::inbound::manager::InboundManager;
@@ -18,7 +14,7 @@ use common::http::new_http_client;
 use common::mmdb;
 use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
-use state::Storage;
+use state::InitCell;
 use std::io;
 use tokio::task::JoinHandle;
 
@@ -86,7 +82,7 @@ pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
 }
 
-static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Storage::new();
+static RUNTIME_CONTROLLER: InitCell<std::sync::RwLock<RuntimeController>> = InitCell::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
