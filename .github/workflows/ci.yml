@@ -65,7 +65,10 @@ jobs:
       run: sh ./scripts/build.sh "${{ matrix.targets }}"
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v1        
+      with:
+        generate_release_notes: true
+
     - name: Upload Release Asset
       id: upload-release-asset 
       uses: dwenegar/upload-release-assets@v1
