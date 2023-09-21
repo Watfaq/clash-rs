@@ -28,7 +28,7 @@ hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp
 http = { version = "0.2" }
 httparse = "1.8.0"
 h2 = "0.3"
-prost = "0.11"
+prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
