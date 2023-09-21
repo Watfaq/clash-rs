@@ -40,12 +40,18 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-13]
+        arch: [x86_64, aarch64]
         include:
           - os: ubuntu-22.04
+            arch: x86_64
             container: quay.io/pypa/manylinux_2_28_x86_64
             targets: >
               x86_64-unknown-linux-gnu
-#              aarch64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            arch: aarch64
+            container: quay.io/pypa/manylinux_2_28_aarch64
+            targets: >
+              aarch64-unknown-linux-gnu
           - os: macos-13
             targets: >
               aarch64-apple-darwin
