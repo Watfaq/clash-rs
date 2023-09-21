@@ -42,7 +42,7 @@ jobs:
         os: [ubuntu-22.04, macos-13]
         include:
           - os: ubuntu-22.04
-            container: quay.io/pypa/manylinux2010_x86_64
+            container: quay.io/pypa/manylinux_2_28
             targets: >
               x86_64-unknown-linux-gnu
 #              aarch64-unknown-linux-gnu
