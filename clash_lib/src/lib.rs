@@ -240,12 +240,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         runners.push(r);
     }
 
-    tasks.push(Box::pin(async move {
-        futures::future::join_all(runners).await;
+    runners.push(Box::pin(async move {
+        shutdown_rx.recv().await;
     }));
 
     tasks.push(Box::pin(async move {
-        shutdown_rx.recv().await;
+        futures::future::join_all(runners).await;
     }));
 
     tasks.push(Box::pin(async move {
