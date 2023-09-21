@@ -45,10 +45,6 @@ jobs:
             container: ubuntu:18.04
             targets: >
               x86_64-unknown-linux-gnu
-          - os: ubuntu-22.04
-            container: arm64v8/ubuntu:18.04
-            targets: >
-              aarch64-unknown-linux-gnu
           - os: macos-13
             targets: >
               aarch64-apple-darwin
