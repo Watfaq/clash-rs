@@ -70,7 +70,7 @@ Options:
 
 ## 🔗 Links
 
-- [Documentation(Coming Soon)]()
+- [Documentation](https://watfaq.gitbook.io/clashrs-user-manual/)
 - [Config Reference](https://watfaq.github.io/clash-rs/)
 - [Roadmap](https://github.com/Watfaq/clash-rs/issues/59)
 
