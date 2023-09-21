@@ -99,5 +99,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        release_id: ${{ steps.get_release_info.outputs.id }}
+        release_id: ${{ steps.get_release_info.outputs.upload_id }}
         assets_path: target/artifacts
