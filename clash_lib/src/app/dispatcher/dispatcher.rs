@@ -115,12 +115,11 @@ impl Dispatcher {
             RunMode::Direct => (PROXY_DIRECT, None),
         };
 
-        let handler = self
-            .outbound_manager
-            .read()
-            .await
-            .get_outbound(outbound_name)
-            .expect(format!("unknown rule: {}", outbound_name).as_str()); // should never happen
+        let mgr = self.outbound_manager.read().await;
+        let handler = mgr.get_outbound(outbound_name).unwrap_or_else(|| {
+            debug!("unknown rule: {}, fallback to direct", outbound_name);
+            mgr.get_outbound(PROXY_DIRECT).unwrap()
+        });
 
         match handler
             .connect_stream(&sess, self.resolver.clone())

@@ -44,12 +44,12 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Output Release URL File
-      run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
+      run: echo "${{ steps.create_release.outputs.id }}" > release_id.txt
     - name: Save Release URL File for publish
       uses: actions/upload-artifact@v3
       with:
-        name: release_url
-        path: release_url.txt
+        name: release_id
+        path: release_id.txt
     
   publish:
     if: contains(github.ref, 'tags/v')
@@ -60,9 +60,15 @@ jobs:
         os: [ubuntu-22.04, macos-13]
         include:
           - os: ubuntu-22.04
-            platform: linux-amd64
+            targets: >
+              x86_64-unknown-linux-gnu
+              x86_64-unknown-none
+              aarch64-unknown-linux-gnu
+              aarch64-unknown-none
           - os: macos-13
-            platform: darwin-amd64
+            targets: >
+              aarch64-apple-darwin
+              x86_64-apple-darwin
     steps:
     - uses: actions/checkout@v4
       with:
@@ -70,25 +76,23 @@ jobs:
     - name: Load Release URL File from release job
       uses: actions/download-artifact@v3
       with:
-        path: release_url
-        name: release_url
+        path: release_id
+        name: release_id
     - name: Build
-      run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazel build --strip=always //clash/...
+      run: sh ./scripts/build.sh "${{ matrix.targets }}"
     - name: Get Release Upload URL
       id: get_release_info
       run: |
-        value=`cat release_url/release_url.txt`
-        echo "upload_url=$value" >> $GITHUB_OUTPUT
+        value=`cat release_id/release_id.txt`
+        echo "upload_id=$value" >> $GITHUB_OUTPUT
       env:
         TAG_REF_NAME: ${{ github.ref }}
         REPOSITORY_NAME: ${{ github.repository }}
     - name: Upload Release Asset
       id: upload-release-asset 
-      uses: actions/upload-release-asset@v1.0.2
+      uses: dwenegar/upload-release-assets@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.get_release_info.outputs.upload_url }}
-        asset_path: ./bazel-bin/clash/clash
-        asset_name: clash-${{ matrix.platform }}
-        asset_content_type: application/octet-stream
+        release_id: ${{ steps.get_release_info.outputs.id }}
+        assets_path: target/artifacts
