@@ -1,4 +1,4 @@
-name: Run Build and Test
+name: Build/Test/Release
 
 on:
   push:
@@ -20,65 +20,58 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
-
-  release:
-    name: Create Github Release
-    if: contains(github.ref, 'tags/v')
-    needs: [test]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Create Release
-      id: create_release
-      uses: marvinpinto/action-automatic-releases@latest
+    - uses: actions/setup-go@v4
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Output Release URL File
-      run: echo "${{ steps.create_release.outputs.upload_url }}" > release_url.txt
-    - name: Save Release URL File for publish
-      uses: actions/upload-artifact@v3
+        go-version: '1.20'
+    - uses: actions-rs/toolchain@v1
       with:
-        name: release_url
-        path: release_url.txt
+        toolchain: stable
+#    https://github.com/bazelbuild/rules_rust/issues/1966
+#    maybe we should not use bazel anymore
+#    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo test --all --all-features
     
   publish:
     if: contains(github.ref, 'tags/v')
-    needs: [test, release]
+    needs: [test]
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     strategy:
       matrix:
         os: [ubuntu-22.04, macos-13]
         include:
           - os: ubuntu-22.04
-            platform: linux-amd64
+            targets: >
+              x86_64-unknown-linux-gnu
           - os: macos-13
-            platform: darwin-amd64
+            targets: >
+              aarch64-apple-darwin
+              x86_64-apple-darwin
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - name: Load Release URL File from release job
-      uses: actions/download-artifact@v3
+    - uses: actions/setup-go@v4
       with:
-        path: release_url
-        name: release_url
+        go-version: '1.20'
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - uses: Swatinem/rust-cache@v2
     - name: Build
-      run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazel build --strip=always //clash/...
-    - name: Get Release Upload URL
-      id: get_release_info
-      run: |
-        value=`cat release_url/release_url.txt`
-        echo "upload_url=$value" >> $GITHUB_OUTPUT
-      env:
-        TAG_REF_NAME: ${{ github.ref }}
-        REPOSITORY_NAME: ${{ github.repository }}
+      run: sh ./scripts/build.sh "${{ matrix.targets }}"
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1        
+      with:
+        generate_release_notes: true
+
     - name: Upload Release Asset
       id: upload-release-asset 
-      uses: actions/upload-release-asset@v1.0.2
+      uses: dwenegar/upload-release-assets@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.get_release_info.outputs.upload_url }}
-        asset_path: ./bazel-bin/clash/clash
-        asset_name: clash-${{ matrix.platform }}
-        asset_content_type: application/octet-stream
+        release_id: ${{ steps.create_release.outputs.id }}
+        assets_path: target/artifacts
