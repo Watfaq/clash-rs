@@ -88,7 +88,7 @@ dhcproto = "0.8"
 rand = "0.8"
 
 socket2 = { version = "0.5", features = ["all"] }
-tokio-tungstenite = "0.20.0"
+tokio-tungstenite = "0.20.1"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
