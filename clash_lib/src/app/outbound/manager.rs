@@ -2,6 +2,7 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use http::Uri;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -591,7 +592,12 @@ impl OutboundManager {
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
                 OutboundProxyProviderDef::File(file) => {
-                    let vehicle = file_vehicle::Vehicle::new(&file.path);
+                    let vehicle = file_vehicle::Vehicle::new(
+                        PathBuf::from(cwd.clone())
+                            .join(&file.path)
+                            .to_str()
+                            .unwrap(),
+                    );
                     let hc = HealthCheck::new(
                         vec![],
                         file.health_check.url,
@@ -616,14 +622,11 @@ impl OutboundManager {
 
         for p in provider_registry.values() {
             info!("initializing provider {}", p.read().await.name());
-            match p.write().await.initialize().await {
+            let p = p.write().await;
+            match p.initialize().await {
                 Ok(_) => {}
                 Err(err) => {
-                    error!(
-                        "failed to initialize proxy provider {}: {}",
-                        p.read().await.name(),
-                        err
-                    );
+                    error!("failed to initialize proxy provider {}: {}", p.name(), err);
                 }
             }
         }

@@ -132,6 +132,10 @@ impl RequestHandler for DnsHandler {
 static DEFAULT_DNS_SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> Option<Runner> {
+    if !cfg.enable {
+        return None;
+    }
+
     let h = DnsHandler { resolver };
     let mut s = ServerFuture::new(h);
 

@@ -110,6 +110,7 @@ async fn handle_inbound_datagram(
                 }
             }
         }
+
         closer.send(0).ok();
     });
 }
@@ -120,6 +121,7 @@ pub fn get_runner(
     resolver: ThreadSafeDNSResolver,
 ) -> Result<Option<Runner>, Error> {
     if !cfg.enable {
+        trace!("tun is disabled");
         return Ok(None);
     }
 

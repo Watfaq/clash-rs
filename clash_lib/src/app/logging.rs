@@ -99,7 +99,6 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
     };
 
     let subscriber = tracing_subscriber::registry()
-        .with(ios_os_log)
         .with(jaeger)
         .with(filter)
         .with(collector)
@@ -110,7 +109,8 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
                 .with_file(true)
                 .with_line_number(true)
                 .with_writer(std::io::stdout),
-        );
+        )
+        .with(ios_os_log);
 
     let v = tracing::subscriber::set_global_default(subscriber)
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
