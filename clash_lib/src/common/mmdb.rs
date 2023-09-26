@@ -22,20 +22,20 @@ impl MMDB {
         path: P,
         download_url: Option<String>,
         http_client: HttpClient,
-    ) -> anyhow::Result<MMDB> {
+    ) -> Result<MMDB, Error> {
         debug!("mmdb path: {}", path.as_ref().to_string_lossy());
 
-        let cwd = std::env::current_dir().unwrap();
-        let mmdb_file = Path::new(&cwd).join(&path);
+        let mmdb_file = path.as_ref().to_path_buf();
 
         if !mmdb_file.exists() {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
-                Self::download(url, &mmdb_file, &http_client).await?;
+                Self::download(url, &mmdb_file, &http_client)
+                    .await
+                    .map_err(|x| Error::InvalidConfig(format!("mmdb download failed: {}", x)))?;
             } else {
                 return Err(Error::InvalidConfig(format!(
-                    "mmdb `{}/{}` not found and mmdb_download_url is not set",
-                    cwd.to_string_lossy(),
+                    "mmdb `{}` not found and mmdb_download_url is not set",
                     path.as_ref().to_string_lossy()
                 ))
                 .into());
@@ -48,8 +48,7 @@ impl MMDB {
                 maxminddb::MaxMindDBError::InvalidDatabaseError(_)
                 | maxminddb::MaxMindDBError::IoError(_) => {
                     warn!(
-                        "invalid mmdb `{}/{}`: {}, trying to download again",
-                        cwd.to_string_lossy(),
+                        "invalid mmdb `{}`: {}, trying to download again",
                         path.as_ref().to_string_lossy(),
                         e.to_string()
                     );
@@ -58,22 +57,30 @@ impl MMDB {
                     fs::remove_file(&mmdb_file)?;
                     if let Some(url) = download_url.as_ref() {
                         info!("downloading mmdb from {}", url);
-                        Self::download(url, &mmdb_file, &http_client).await?;
+                        Self::download(url, &mmdb_file, &http_client)
+                            .await
+                            .map_err(|x| {
+                                Error::InvalidConfig(format!("mmdb download failed: {}", x))
+                            })?;
                         Ok(MMDB {
-                            reader: maxminddb::Reader::open_readfile(&path)?,
+                            reader: maxminddb::Reader::open_readfile(&path).map_err(|x| {
+                                Error::InvalidConfig(format!(
+                                    "cant open mmdb `{}`: {}",
+                                    path.as_ref().to_string_lossy(),
+                                    x.to_string()
+                                ))
+                            })?,
                         })
                     } else {
                         return Err(Error::InvalidConfig(format!(
-                            "mmdb `{}/{}` not found and mmdb_download_url is not set",
-                            cwd.to_string_lossy(),
+                            "mmdb `{}` not found and mmdb_download_url is not set",
                             path.as_ref().to_string_lossy()
                         ))
                         .into());
                     }
                 }
                 _ => Err(Error::InvalidConfig(format!(
-                    "cant open mmdb `{}/{}`: {}",
-                    cwd.to_string_lossy(),
+                    "cant open mmdb `{}`: {}",
                     path.as_ref().to_string_lossy(),
                     e.to_string()
                 ))

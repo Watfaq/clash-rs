@@ -224,7 +224,7 @@ mod tests {
 }
 
 pub struct General {
-    pub(crate) inbound: Inbound,
+    pub inbound: Inbound,
     pub(crate) controller: Controller,
     pub mode: RunMode,
     pub log_level: LogLevel,
