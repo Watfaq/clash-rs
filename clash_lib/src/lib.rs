@@ -34,6 +34,8 @@ mod session;
 
 pub use config::def::Config as ClashConfigDef;
 pub use config::def::DNS as ClashDNSConfigDef;
+pub use config::DNSListen as ClashDNSListen;
+pub use config::RuntimeConfig as ClashRuntimeConfig;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -57,9 +59,11 @@ pub type Runner = futures::future::BoxFuture<'static, ()>;
 
 pub struct Options {
     pub config: Config,
+    pub cwd: Option<String>,
 }
 
 pub enum Config {
+    Def(ClashConfigDef),
     Internal(InternalConfig),
     File(String, String),
     Str(String),
@@ -81,17 +85,16 @@ static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Stora
 pub fn start(opts: Options) -> Result<(), Error> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .build()
-        .unwrap()
+        .build()?
         .block_on(async {
             match start_async(opts).await {
                 Err(e) => {
                     eprintln!("start error: {}", e);
+                    Err(e)
                 }
-                Ok(_) => {}
+                Ok(_) => Ok(()),
             }
-        });
-    Ok(())
+        })
 }
 
 pub fn shutdown() -> bool {
@@ -110,15 +113,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
 
     let config: InternalConfig = match opts.config {
+        Config::Def(c) => c.try_into()?,
         Config::Internal(c) => c,
-        Config::File(home, file) => {
-            if !home.is_empty() {
-                std::env::set_current_dir(std::path::Path::new(&home))
-                    .unwrap_or_else(|_| panic!("invalid home: {}", &home));
-            }
-
-            file.parse::<def::Config>()?.try_into()?
-        }
+        Config::File(_, file) => file.parse::<def::Config>()?.try_into()?,
         Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
     };
 
@@ -128,27 +125,33 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     {
         let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-        app::logging::setup_logging(config.general.log_level, log_collector)
-            .expect("failed to setup logging");
+        app::logging::setup_logging(config.general.log_level, log_collector).map_err(|x| {
+            Error::InvalidConfig(format!("failed to setup logging: {}", x.to_string()))
+        })?;
     }
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
+    let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
+    let cwd = std::path::Path::new(&cwd);
+
     let system_resolver =
-        Arc::new(SystemResolver::new().expect("failed to create system resolver"));
-    let client = new_http_client(system_resolver).expect("failed to create http client");
+        Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
+    let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
     let mmdb = Arc::new(
         mmdb::MMDB::new(
-            config.general.mmdb,
+            cwd.join(&config.general.mmdb),
             config.general.mmdb_download_url,
             client,
         )
-        .await
-        .expect("failed to load mmdb"),
+        .await?,
     );
 
-    let cache_store = profile::ThreadSafeCacheFile::new("cache.db", config.profile.store_selected);
+    let cache_store = profile::ThreadSafeCacheFile::new(
+        cwd.join("cache.db").as_path().to_str().unwrap(),
+        config.profile.store_selected,
+    );
 
     let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
@@ -174,6 +177,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.proxy_names,
             dns_resolver.clone(),
             cache_store.clone(),
+            cwd.to_string_lossy().to_string(),
         )
         .await?,
     ));
@@ -184,6 +188,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.rule_providers,
             dns_resolver.clone(),
             mmdb,
+            cwd.to_string_lossy().to_string(),
         )
         .await,
     );
@@ -280,6 +285,7 @@ mod tests {
         let handle = thread::spawn(|| {
             start(Options {
                 config: Config::Str(conf.to_string()),
+                cwd: None,
             })
             .unwrap()
         });

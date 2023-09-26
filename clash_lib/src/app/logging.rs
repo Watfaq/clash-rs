@@ -6,6 +6,7 @@ use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing::debug;
+use tracing_oslog::OsLogger;
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
@@ -91,7 +92,14 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
         None
     };
 
+    let ios_os_log = if cfg!(target_os = "ios") {
+        Some(OsLogger::new("com.watfaq.clash", "default"))
+    } else {
+        None
+    };
+
     let subscriber = tracing_subscriber::registry()
+        .with(ios_os_log)
         .with(jaeger)
         .with(filter)
         .with(collector)

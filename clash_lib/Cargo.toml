@@ -63,8 +63,6 @@ tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "5c0702b",  featur
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "8c8c0b0" }
 boringtun = { version = "0.6.0", features = ["device"] }
 
-
-
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 erased-serde = "0.3.30"
@@ -92,6 +90,7 @@ tokio-tungstenite = "0.20.0"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-oslog = "0.1"
 
 
 shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"], rev = "2021741" }

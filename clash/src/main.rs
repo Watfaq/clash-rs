@@ -1,7 +1,6 @@
 extern crate clash_lib as clash;
 
 use clap::Parser;
-use std::env;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -26,13 +25,8 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     clash::start(clash::Options {
-        config: clash::Config::File(
-            cli.directory
-                .unwrap_or(env::current_dir().expect("cwd error"))
-                .to_string_lossy()
-                .to_string(),
-            cli.config.to_string_lossy().to_string(),
-        ),
+        config: clash::Config::File("".to_string(), cli.config.to_string_lossy().to_string()),
+        cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
     })
     .unwrap();
 }
