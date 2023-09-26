@@ -44,6 +44,7 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
         mmdb: Arc<MMDB>,
+        cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
 
@@ -52,6 +53,7 @@ impl Router {
             &mut rule_provider_registry,
             dns_resolver.clone(),
             mmdb.clone(),
+            cwd,
         )
         .await
         .ok();
@@ -106,6 +108,7 @@ impl Router {
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
         mmdb: Arc<MMDB>,
+        cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
             match provider {
@@ -115,6 +118,7 @@ impl Router {
                             .parse::<Uri>()
                             .expect(format!("invalid provider url: {}", http.url).as_str()),
                         http.path,
+                        Some(cwd.clone()),
                         resolver.clone(),
                     );
 

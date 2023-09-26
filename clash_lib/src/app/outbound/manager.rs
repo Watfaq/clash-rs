@@ -57,6 +57,7 @@ impl OutboundManager {
         proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
         cache_store: ThreadSafeCacheFile,
+        cwd: String,
     ) -> Result<Self, Error> {
         let mut handlers = HashMap::new();
         let mut provider_registry = HashMap::new();
@@ -64,6 +65,7 @@ impl OutboundManager {
         let proxy_manager = ProxyManager::new(dns_resolver.clone());
 
         Self::load_proxy_providers(
+            cwd,
             proxy_providers,
             proxy_manager.clone(),
             dns_resolver.clone(),
@@ -553,6 +555,7 @@ impl OutboundManager {
     }
 
     async fn load_proxy_providers(
+        cwd: String,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_manager: ProxyManager,
         resolver: ThreadSafeDNSResolver,
@@ -566,6 +569,7 @@ impl OutboundManager {
                             .parse::<Uri>()
                             .expect(format!("invalid provider url: {}", http.url).as_str()),
                         http.path,
+                        Some(cwd.clone()),
                         resolver.clone(),
                     );
                     let hc = HealthCheck::new(

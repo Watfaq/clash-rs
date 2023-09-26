@@ -21,12 +21,16 @@ impl Vehicle {
     pub fn new<T: Into<Uri>, P: AsRef<Path>>(
         url: T,
         path: P,
+        cwd: Option<P>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
         let client = new_http_client(dns_resolver).expect("failed to create http client");
         Self {
             url: url.into(),
-            path: path.as_ref().to_path_buf(),
+            path: match cwd {
+                Some(cwd) => cwd.as_ref().join(path),
+                None => path.as_ref().to_path_buf(),
+            },
             http_client: client,
         }
     }
@@ -74,6 +78,7 @@ mod tests {
         let v = super::Vehicle::new(
             u,
             "/tmp/test_http_vehicle",
+            None,
             r.clone() as ThreadSafeDNSResolver,
         );
 

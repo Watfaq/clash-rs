@@ -54,8 +54,6 @@ impl Display for LogLevel {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", default)]
 /// Example
 /// ```yaml
 /// ---
@@ -286,6 +284,8 @@ impl Display for LogLevel {
 ///   - MATCH, DIRECT
 /// ...
 /// ```
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
 pub struct Config {
     /// The HTTP proxy port
     pub port: Option<u16>,
@@ -449,16 +449,13 @@ impl Default for Config {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum DNSListen {
     Udp(String),
     Multiple(HashMap<String, String>),
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(default)]
-#[serde(rename_all = "kebab-case")]
 /// DNS client/server settings
 /// This section is optional. When not present, the DNS server will be disabled and system DNS config will be used
 /// # Example
@@ -472,6 +469,9 @@ pub enum DNSListen {
 ///     doh: 127.0.0.1:5354
 ///     dot: 127.0.0.1:5355
 /// ```
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default)]
 pub struct DNS {
     /// When disabled, system DNS config will be used
     /// All other DNS related options will only be used when this is enabled
