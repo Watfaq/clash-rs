@@ -11,11 +11,11 @@ struct Db {
 }
 
 #[derive(Clone)]
-pub struct ThreadSafeCacheFile(Arc<tokio::sync::Mutex<CacheFile>>);
+pub struct ThreadSafeCacheFile(Arc<tokio::sync::RwLock<CacheFile>>);
 
 impl ThreadSafeCacheFile {
     pub fn new(path: &str, store_selected: bool) -> Self {
-        let store = Arc::new(tokio::sync::Mutex::new(CacheFile::new(
+        let store = Arc::new(tokio::sync::RwLock::new(CacheFile::new(
             path,
             store_selected,
         )));
@@ -28,7 +28,7 @@ impl ThreadSafeCacheFile {
                 let store = store_clone;
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                    let db = store.lock().await.db.clone();
+                    let db = store.read().await.db.clone();
                     let s = match serde_yaml::to_string(&db) {
                         Ok(s) => s,
                         Err(e) => {
@@ -50,14 +50,14 @@ impl ThreadSafeCacheFile {
     }
 
     pub async fn set_selected(&self, group: &str, server: &str) {
-        let mut g = self.0.lock().await;
+        let mut g = self.0.write().await;
         if g.store_selected() {
             g.set_selected(group, server);
         }
     }
 
     pub async fn get_selected(&self, group: &str) -> Option<String> {
-        let g = self.0.lock().await;
+        let g = self.0.read().await;
         if g.store_selected() {
             g.db.selected.get(group).map(Clone::clone)
         } else {
@@ -67,28 +67,28 @@ impl ThreadSafeCacheFile {
 
     #[allow(dead_code)]
     pub async fn get_selected_map(&self) -> HashMap<String, String> {
-        let g = self.0.lock().await;
+        let g = self.0.read().await;
         if g.store_selected() {
-            self.0.lock().await.get_selected_map()
+            g.get_selected_map()
         } else {
             HashMap::new()
         }
     }
 
     pub async fn set_ip_to_host(&self, ip: &str, host: &str) {
-        self.0.lock().await.set_ip_to_host(ip, host);
+        self.0.write().await.set_ip_to_host(ip, host);
     }
 
     pub async fn set_host_to_ip(&self, host: &str, ip: &str) {
-        self.0.lock().await.set_host_to_ip(host, ip);
+        self.0.write().await.set_host_to_ip(host, ip);
     }
 
     pub async fn get_fake_ip(&self, ip_or_host: &str) -> Option<String> {
-        self.0.lock().await.get_fake_ip(ip_or_host)
+        self.0.read().await.get_fake_ip(ip_or_host)
     }
 
     pub async fn delete_fake_ip_pair(&self, ip: &str, host: &str) {
-        self.0.lock().await.delete_fake_ip_pair(ip, host);
+        self.0.write().await.delete_fake_ip_pair(ip, host);
     }
 }
 
