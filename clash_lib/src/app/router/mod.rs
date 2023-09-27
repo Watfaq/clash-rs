@@ -12,6 +12,7 @@ use crate::session::{Session, SocksAddr};
 
 use crate::app::router::rules::final_::Final;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -133,7 +134,12 @@ impl Router {
                     rule_provider_registry.insert(name, Arc::new(provider));
                 }
                 RuleProviderDef::File(file) => {
-                    let vehicle = file_vehicle::Vehicle::new(&file.path);
+                    let vehicle = file_vehicle::Vehicle::new(
+                        PathBuf::from(cwd.clone())
+                            .join(&file.path)
+                            .to_str()
+                            .unwrap(),
+                    );
 
                     let provider = RuleProviderImpl::new(
                         name.clone(),

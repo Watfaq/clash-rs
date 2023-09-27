@@ -193,6 +193,7 @@ impl Dispatcher {
         let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
 
         let s = sess.clone();
+        let ss = sess.clone();
         let t1 = tokio::spawn(async move {
             while let Some(packet) = local_r.next().await {
                 let mut sess = sess.clone();
@@ -344,8 +345,11 @@ impl Dispatcher {
                     },
                 };
             }
+
+            trace!("UDP session local -> remote finished for {}", ss);
         });
 
+        let ss = s.clone();
         let t2 = tokio::spawn(async move {
             while let Some(packet) = remote_receiver_r.recv().await {
                 match local_w.send(packet.clone()).await {
@@ -358,6 +362,7 @@ impl Dispatcher {
                     }
                 }
             }
+            trace!("UDP session remote -> local finished for {}", ss);
         });
 
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
