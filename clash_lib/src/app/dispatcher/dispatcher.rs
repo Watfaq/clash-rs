@@ -236,22 +236,23 @@ impl Dispatcher {
                 packet.dst_addr = sess.destination.clone();
 
                 let mode = mode.read().await;
-                debug!("dispatching {} with mode {}", sess, mode);
+                trace!("dispatching {} with mode {}", sess, mode);
+
                 let (outbound_name, rule) = match *mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
                     RunMode::Rule => router.match_route(&sess).await,
                     RunMode::Direct => (PROXY_DIRECT, None),
                 };
-
                 let outbound_name = outbound_name.to_string();
+                debug!("dispatching {} to {}", sess, outbound_name);
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
-                let handler = outbound_manager
-                    .read()
-                    .await
-                    .get_outbound(&outbound_name)
-                    .expect(format!("unknown rule: {}", outbound_name).as_str());
+                let mgr = outbound_manager.read().await;
+                let handler = mgr.get_outbound(&outbound_name).unwrap_or_else(|| {
+                    debug!("unknown rule: {}, fallback to direct", outbound_name);
+                    mgr.get_outbound(PROXY_DIRECT).unwrap()
+                });
 
                 match outbound_handle_guard
                     .get_outbound_sender_mut(
@@ -261,6 +262,7 @@ impl Dispatcher {
                     .await
                 {
                     None => {
+                        debug!("building {} outbound datagram connecting", sess);
                         let outbound_datagram =
                             match handler.connect_datagram(&sess, resolver.clone()).await {
                                 Ok(v) => v,
@@ -333,7 +335,9 @@ impl Dispatcher {
                         };
                     }
                     Some(handle) => match handle.send(packet).await {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            debug!("reusing {} sent to remote", sess);
+                        }
                         Err(err) => {
                             error!("failed to send packet to remote: {}", err);
                         }
