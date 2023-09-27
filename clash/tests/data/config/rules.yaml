@@ -222,6 +222,7 @@ rules:
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
+  - IP-CIDR,10.0.0.11/32,select
   - DST-PORT,53,trojan
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
