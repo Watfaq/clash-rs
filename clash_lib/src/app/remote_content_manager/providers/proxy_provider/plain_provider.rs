@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use erased_serde::Serialize;
-use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
@@ -16,14 +15,10 @@ use crate::{
 
 use super::proxy_provider::ProxyProvider;
 
-struct Inner {
-    hc: Arc<HealthCheck>,
-}
-
 pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
-    inner: Arc<Mutex<Inner>>,
+    hc: Arc<HealthCheck>,
 }
 
 impl PlainProvider {
@@ -46,11 +41,7 @@ impl PlainProvider {
             });
         }
 
-        Ok(Self {
-            name,
-            proxies,
-            inner: Arc::new(Mutex::new(Inner { hc })),
-        })
+        Ok(Self { name, proxies, hc })
     }
 }
 
@@ -93,10 +84,10 @@ impl ProxyProvider for PlainProvider {
     }
 
     async fn touch(&self) {
-        self.inner.lock().await.hc.touch().await;
+        self.hc.touch().await;
     }
 
     async fn healthcheck(&self) {
-        self.inner.lock().await.hc.check().await;
+        self.hc.check().await;
     }
 }

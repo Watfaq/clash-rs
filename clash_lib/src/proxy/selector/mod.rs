@@ -2,7 +2,7 @@ use std::{collections::HashMap, io, sync::Arc};
 
 use async_trait::async_trait;
 use erased_serde::Serialize;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
 
 use crate::{
@@ -44,7 +44,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
-    inner: Arc<Mutex<HandlerInner>>,
+    inner: Arc<RwLock<HandlerInner>>,
 }
 
 impl Handler {
@@ -60,7 +60,7 @@ impl Handler {
         Self {
             opts,
             providers,
-            inner: Arc::new(Mutex::new(HandlerInner {
+            inner: Arc::new(RwLock::new(HandlerInner {
                 current: seleted.unwrap_or(current),
             })),
         }
@@ -69,7 +69,7 @@ impl Handler {
     async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         for proxy in proxies {
-            if proxy.name() == self.inner.lock().await.current {
+            if proxy.name() == self.inner.read().await.current {
                 p_debug!("{} selected {}", self.name(), proxy.name());
                 return proxy;
             }
@@ -83,7 +83,7 @@ impl SelectorControl for Handler {
     async fn select(&mut self, name: &str) -> Result<(), Error> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
-            self.inner.lock().await.current = name.to_owned();
+            self.inner.write().await.current = name.to_owned();
             Ok(())
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
@@ -91,7 +91,7 @@ impl SelectorControl for Handler {
     }
 
     async fn current(&self) -> String {
-        let inner = self.inner.lock().await.current.to_owned();
+        let inner = self.inner.read().await.current.to_owned();
         inner
     }
 }
@@ -165,7 +165,7 @@ impl OutboundHandler for Handler {
         m.insert("type".to_string(), Box::new(self.proto()) as _);
         m.insert(
             "now".to_string(),
-            Box::new(self.inner.lock().await.current.clone()) as _,
+            Box::new(self.inner.read().await.current.clone()) as _,
         );
         m.insert(
             "all".to_string(),

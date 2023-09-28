@@ -48,7 +48,7 @@ pub struct OutboundManager {
 
 static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
 
-pub type ThreadSafeOutboundManager = Arc<RwLock<OutboundManager>>;
+pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
 impl OutboundManager {
     pub async fn new(

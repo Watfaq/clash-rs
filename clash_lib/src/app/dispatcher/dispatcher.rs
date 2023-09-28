@@ -8,6 +8,7 @@ use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
+use arc_swap::ArcSwap;
 use futures::SinkExt;
 use futures::StreamExt;
 use std::collections::HashMap;
@@ -17,7 +18,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::info_span;
@@ -34,7 +34,7 @@ pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    mode: Arc<RwLock<RunMode>>,
+    mode: ArcSwap<RunMode>,
 
     manager: Arc<Manager>,
 }
@@ -58,20 +58,19 @@ impl Dispatcher {
             outbound_manager,
             router,
             resolver,
-            mode: Arc::new(RwLock::new(mode)),
+            mode: Arc::new(mode).into(),
             manager: statistics_manager,
         }
     }
 
     pub async fn set_mode(&self, mode: RunMode) {
         info!("run mode switched to {}", mode);
-        let mut m = self.mode.write().await;
-        *m = mode;
+
+        self.mode.store(Arc::new(mode));
     }
 
     pub async fn get_mode(&self) -> RunMode {
-        let mode = self.mode.read().await;
-        mode.clone()
+        **self.mode.load()
     }
 
     #[instrument(skip(lhs))]
@@ -107,15 +106,15 @@ impl Dispatcher {
             sess
         };
 
-        let mode = self.mode.read().await;
+        let mode = **self.mode.load();
         debug!("dispatching {} with mode {}", sess, mode);
-        let (outbound_name, rule) = match *mode {
+        let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
             RunMode::Direct => (PROXY_DIRECT, None),
         };
 
-        let mgr = self.outbound_manager.read().await;
+        let mgr = self.outbound_manager.clone();
         let handler = mgr.get_outbound(outbound_name).unwrap_or_else(|| {
             debug!("unknown rule: {}, fallback to direct", outbound_name);
             mgr.get_outbound(PROXY_DIRECT).unwrap()
@@ -186,7 +185,7 @@ impl Dispatcher {
         let router = self.router.clone();
         let outbound_manager = self.outbound_manager.clone();
         let resolver = self.resolver.clone();
-        let mode = self.mode.clone();
+        let mode = **self.mode.load();
         let manager = self.manager.clone();
 
         let (mut local_w, mut local_r) = udp_inbound.split();
@@ -236,10 +235,10 @@ impl Dispatcher {
                 let mut packet = packet;
                 packet.dst_addr = sess.destination.clone();
 
-                let mode = mode.read().await;
+                let mode = mode.clone();
                 trace!("dispatching {} with mode {}", sess, mode);
 
-                let (outbound_name, rule) = match *mode {
+                let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
                     RunMode::Rule => router.match_route(&sess).await,
                     RunMode::Direct => (PROXY_DIRECT, None),
@@ -249,7 +248,7 @@ impl Dispatcher {
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
-                let mgr = outbound_manager.read().await;
+                let mgr = outbound_manager.clone();
                 let handler = mgr.get_outbound(&outbound_name).unwrap_or_else(|| {
                     debug!("unknown rule: {}, fallback to direct", outbound_name);
                     mgr.get_outbound(PROXY_DIRECT).unwrap()
@@ -381,7 +380,7 @@ impl Dispatcher {
 type OutboundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>; // outbound packet sender
 
 struct TimeoutUdpSessionManager {
-    map: Arc<Mutex<OutboundHandleMap>>,
+    map: Arc<RwLock<OutboundHandleMap>>,
 
     cleaner: Option<JoinHandle<()>>,
 }
@@ -395,7 +394,7 @@ impl Drop for TimeoutUdpSessionManager {
 
 impl TimeoutUdpSessionManager {
     fn new() -> Self {
-        let map = Arc::new(Mutex::new(OutboundHandleMap::new()));
+        let map = Arc::new(RwLock::new(OutboundHandleMap::new()));
         let timeout = Duration::from_secs(10);
 
         let map_cloned = map.clone();
@@ -405,7 +404,7 @@ impl TimeoutUdpSessionManager {
                 tokio::time::sleep(Duration::from_secs(10)).await;
 
                 trace!("timeout udp session cleaner scanning");
-                let mut g = map_cloned.lock().await;
+                let mut g = map_cloned.write().await;
                 let mut alived = 0;
                 let mut expired = 0;
                 g.0.retain(|k, x| {
@@ -445,7 +444,7 @@ impl TimeoutUdpSessionManager {
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
     ) {
-        let mut map = self.map.lock().await;
+        let mut map = self.map.write().await;
         map.insert(outbound_name, src_addr, recv_handle, send_handle, sender);
     }
 
@@ -454,7 +453,7 @@ impl TimeoutUdpSessionManager {
         outbound_name: &str,
         src_addr: SocketAddr,
     ) -> Option<OutboundPacketSender> {
-        let mut map = self.map.lock().await;
+        let mut map = self.map.write().await;
         map.get_outbound_sender_mut(outbound_name, src_addr)
     }
 }
