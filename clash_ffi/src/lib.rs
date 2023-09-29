@@ -85,6 +85,7 @@ pub extern "C" fn start_clash_with_config(
                         .to_string_lossy()
                         .to_string(),
                 ),
+                rt: Some(clash_lib::TokioRuntime::SingleThread),
             };
 
             match clash_lib::start(opts) {
