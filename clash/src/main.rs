@@ -1,6 +1,7 @@
 extern crate clash_lib as clash;
 
 use clap::Parser;
+use clash::TokioRuntime;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -27,6 +28,7 @@ fn main() {
     clash::start(clash::Options {
         config: clash::Config::File("".to_string(), cli.config.to_string_lossy().to_string()),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
+        rt: Some(TokioRuntime::MultiThread),
     })
     .unwrap();
 }

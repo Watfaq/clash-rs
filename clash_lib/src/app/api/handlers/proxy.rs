@@ -50,7 +50,7 @@ pub fn routes(
 }
 
 async fn get_proxies(State(state): State<ProxyState>) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     let mut res = HashMap::new();
     let proxies = outbound_manager.get_proxies().await;
     res.insert("proxies".to_owned(), proxies);
@@ -63,7 +63,7 @@ async fn find_proxy_by_name<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Response {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     if let Some(proxy) = outbound_manager.get_outbound(&name) {
         req.extensions_mut().insert(proxy);
         next.run(req).await
@@ -76,7 +76,7 @@ async fn get_proxy(
     Extension(proxy): Extension<AnyOutboundHandler>,
     State(state): State<ProxyState>,
 ) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     axum::response::Json(outbound_manager.get_proxy(&proxy).await)
 }
 
@@ -91,7 +91,7 @@ async fn update_proxy(
     Extension(proxy): Extension<AnyOutboundHandler>,
     Json(payload): Json<UpdateProxyRequest>,
 ) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     if let Some(ctrl) = outbound_manager.get_selector_control(proxy.name()) {
         match ctrl.lock().await.select(&payload.name).await {
             Ok(_) => {
@@ -130,7 +130,7 @@ async fn get_proxy_delay(
     Extension(proxy): Extension<AnyOutboundHandler>,
     Query(q): Query<DelayRequest>,
 ) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
     let n = proxy.name().to_owned();
     match outbound_manager.url_test(proxy, &q.url, timeout).await {

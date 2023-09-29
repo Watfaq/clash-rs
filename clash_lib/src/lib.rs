@@ -24,7 +24,7 @@ use tokio::task::JoinHandle;
 
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 mod app;
 mod common;
@@ -60,6 +60,12 @@ pub type Runner = futures::future::BoxFuture<'static, ()>;
 pub struct Options {
     pub config: Config,
     pub cwd: Option<String>,
+    pub rt: Option<TokioRuntime>,
+}
+
+pub enum TokioRuntime {
+    MultiThread,
+    SingleThread,
 }
 
 #[repr(C)]
@@ -84,18 +90,24 @@ pub struct RuntimeController {
 static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Storage::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?
-        .block_on(async {
-            match start_async(opts).await {
-                Err(e) => {
-                    eprintln!("start error: {}", e);
-                    Err(e)
-                }
-                Ok(_) => Ok(()),
+    let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
+        &TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?,
+        &TokioRuntime::SingleThread => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?,
+    };
+
+    rt.block_on(async {
+        match start_async(opts).await {
+            Err(e) => {
+                eprintln!("start error: {}", e);
+                Err(e)
             }
-        })
+            Ok(_) => Ok(()),
+        }
+    })
 }
 
 pub fn shutdown() -> bool {
@@ -149,7 +161,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
-    let outbound_manager = Arc::new(RwLock::new(
+    let outbound_manager = Arc::new(
         OutboundManager::new(
             config
                 .proxies
@@ -174,7 +186,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             cwd.to_string_lossy().to_string(),
         )
         .await?,
-    ));
+    );
 
     let router = Arc::new(
         Router::new(
@@ -280,6 +292,7 @@ mod tests {
             start(Options {
                 config: Config::Str(conf.to_string()),
                 cwd: None,
+                rt: None,
             })
             .unwrap()
         });
