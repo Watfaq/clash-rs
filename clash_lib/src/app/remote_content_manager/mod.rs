@@ -66,6 +66,8 @@ struct ProxyState {
 pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
+
+    connector_map: Arc<RwLock<HashMap<String, HttpsConnector<LocalConnector>>>>,
 }
 
 impl ProxyManager {
@@ -73,6 +75,7 @@ impl ProxyManager {
         Self {
             dns_resolver,
             proxy_state: Arc::new(RwLock::new(HashMap::new())),
+            connector_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -165,7 +168,13 @@ impl ProxyManager {
             ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
                 .map_err(map_io_error)?;
 
-            let connector = HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
+            let mut g = self.connector_map.write().await;
+            let connector = g
+                .entry(name.clone())
+                .or_insert(HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?);
+
+            let connector = connector.clone();
+
             let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
 
             let req = Request::get(url)

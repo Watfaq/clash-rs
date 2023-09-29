@@ -51,7 +51,7 @@ pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppStat
 }
 
 async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     let mut res = HashMap::new();
 
     let mut providers = HashMap::new();
@@ -76,7 +76,7 @@ async fn find_proxy_provider_by_name<B>(
     mut req: Request<B>,
     next: Next<B>,
 ) -> Response {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     if let Some(provider) = outbound_manager.get_proxy_provider(&name) {
         req.extensions_mut().insert(provider);
         next.run(req).await
@@ -154,7 +154,7 @@ async fn get_proxy(
     Extension(proxy): Extension<AnyOutboundHandler>,
     State(state): State<ProviderState>,
 ) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     axum::response::Json(outbound_manager.get_proxy(&proxy).await)
 }
 
@@ -168,7 +168,7 @@ async fn get_proxy_delay(
     Extension(proxy): Extension<AnyOutboundHandler>,
     Query(q): Query<DelayRequest>,
 ) -> impl IntoResponse {
-    let outbound_manager = state.outbound_manager.read().await;
+    let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
     let n = proxy.name().to_owned();
     match outbound_manager.url_test(proxy, &q.url, timeout).await {
