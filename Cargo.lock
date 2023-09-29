@@ -2250,7 +2250,7 @@ checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 [[package]]
 name = "netstack-lwip"
 version = "0.3.4"
-source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=8c8c0b0#8c8c0b0646ebeb6eb84821d95b7261d3e00d94dd"
+source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=5ad376f#5ad376f6c48df459c9120a781c6e4d90650435db"
 dependencies = [
  "anyhow",
  "bindgen 0.59.2",
