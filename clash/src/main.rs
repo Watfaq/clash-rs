@@ -26,7 +26,14 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     clash::start(clash::Options {
-        config: clash::Config::File("".to_string(), cli.config.to_string_lossy().to_string()),
+        config: clash::Config::File(
+            cli.directory
+                .as_ref()
+                .unwrap_or(&std::env::current_dir().unwrap())
+                .join(cli.config)
+                .to_string_lossy()
+                .to_string(),
+        ),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
     })
