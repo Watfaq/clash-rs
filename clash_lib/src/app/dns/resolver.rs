@@ -398,10 +398,17 @@ impl ClashResolver for Resolver {
     #[instrument(skip(self))]
     async fn resolve(&self, host: &str, enhanced: bool) -> anyhow::Result<Option<net::IpAddr>> {
         match self.ipv6.load(Relaxed) {
-            true => self
-                .resolve_v6(host, enhanced)
-                .await
-                .map(|ip| ip.map(|v6| net::IpAddr::from(v6))),
+            true => {
+                let fut1 = self
+                    .resolve_v6(host, enhanced)
+                    .map(|x| x.map(|v6| v6.map(|v6| net::IpAddr::from(v6))));
+                let fut2 = self
+                    .resolve_v4(host, enhanced)
+                    .map(|x| x.map(|v4| v4.map(|v4| net::IpAddr::from(v4))));
+
+                let futs = vec![fut1.boxed(), fut2.boxed()];
+                futures::future::select_ok(futs).await.map(|v| v.0)
+            }
             false => self
                 .resolve_v4(host, enhanced)
                 .await
