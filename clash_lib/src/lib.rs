@@ -20,7 +20,6 @@ use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
 use state::Storage;
 use std::io;
-use std::path::PathBuf;
 use tokio::task::JoinHandle;
 
 use std::sync::Arc;
@@ -246,6 +245,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         statistics_manager,
         cache_store,
         router,
+        cwd.to_string_lossy().to_string(),
     );
     if let Some(r) = api_runner {
         runners.push(r);
