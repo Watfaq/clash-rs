@@ -407,7 +407,12 @@ impl ClashResolver for Resolver {
                     .map(|x| x.map(|v4| v4.map(|v4| net::IpAddr::from(v4))));
 
                 let futs = vec![fut1.boxed(), fut2.boxed()];
-                futures::future::select_ok(futs).await.map(|v| v.0)
+                let r = futures::future::select_ok(futs).await?;
+                if r.0.is_some() {
+                    return Ok(r.0);
+                }
+                let r = futures::future::select_all(r.1).await;
+                return r.0;
             }
             false => self
                 .resolve_v4(host, enhanced)
