@@ -281,11 +281,23 @@ impl Resolver {
                     // TODO: make this TTL wired to LRU cache
                     #[allow(unused_variables)]
                     let ttl = if msg.answer_count() != 0 {
-                        msg.answers().iter().map(|x| x.ttl()).min().unwrap()
+                        msg.answers()
+                            .iter()
+                            .map(|x| x.ttl())
+                            .min()
+                            .unwrap_or_default()
                     } else if msg.name_server_count() != 0 {
-                        msg.name_servers().iter().map(|x| x.ttl()).min().unwrap()
+                        msg.name_servers()
+                            .iter()
+                            .map(|x| x.ttl())
+                            .min()
+                            .unwrap_or_default()
                     } else {
-                        msg.additionals().iter().map(|x| x.ttl()).min().unwrap()
+                        msg.additionals()
+                            .iter()
+                            .map(|x| x.ttl())
+                            .min()
+                            .unwrap_or_default()
                     };
 
                     lru.write().await.insert(q.to_string(), msg.clone());
@@ -495,6 +507,10 @@ impl ClashResolver for Resolver {
         }
     }
 
+    async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
+        self.exchange(message).await
+    }
+
     fn ipv6(&self) -> bool {
         self.ipv6.load(Relaxed)
     }
@@ -510,6 +526,7 @@ impl ClashResolver for Resolver {
     fn fake_ip_enabled(&self) -> bool {
         self.fake_dns.is_some()
     }
+
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool {
         if !self.fake_ip_enabled() {
             return false;

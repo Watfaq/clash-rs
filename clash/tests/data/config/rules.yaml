@@ -218,7 +218,7 @@ rule-providers:
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - RULE-SET,file-provider,trojan
+#  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,select
