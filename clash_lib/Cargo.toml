@@ -22,7 +22,7 @@ ipnet = "2.5"
 url = "2.2"
 regex = "1"
 state = "0.5"
-byteorder = "1.4"
+byteorder = "1.5"
 lru_time_cache = "0.11"
 hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp"] }
 http = { version = "0.2" }
