@@ -15,6 +15,8 @@ pub struct GeneralConfig {
     pub socks_port: u16,
     pub mixed_port: u16,
 
+    pub secret: *const c_char,
+
     pub tun_enabled: bool,
     pub dns_enabled: bool,
     pub ipv6_enabled: bool,
@@ -108,7 +110,6 @@ pub extern "C" fn parse_general_config(
     cfg_str: *const c_char,
     general: *mut GeneralConfig,
 ) -> c_int {
-    println!("parse general config");
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -122,8 +123,113 @@ pub extern "C" fn parse_general_config(
                 (*general).port = cfg.port.unwrap_or_default();
                 (*general).socks_port = cfg.socks_port.unwrap_or_default();
                 (*general).mixed_port = cfg.mixed_port.unwrap_or_default();
+                (*general).secret = cfg.secret.unwrap_or_default().as_ptr() as _;
+                (*general).tun_enabled = cfg
+                    .tun
+                    .and_then(|tun| {
+                        tun.get("enable")
+                            .cloned()
+                            .map(|v| v.as_str() == Some("true"))
+                    })
+                    .unwrap_or_default();
                 (*general).dns_enabled = cfg.dns.enable;
                 (*general).ipv6_enabled = cfg.ipv6.unwrap_or_default();
+            }
+            ERR_OK
+        }
+        Err(err) => {
+            error::update_last_error(err);
+            ERR_CONFIG
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn parse_proxy_list(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
+    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    match s
+        .to_string_lossy()
+        .to_string()
+        .as_str()
+        .parse::<ClashConfigDef>()
+    {
+        Ok(cfg) => {
+            unsafe {
+                let proxy_list = serde_json::to_string(&cfg.proxy);
+                match proxy_list {
+                    Ok(s) => *rv = s.as_ptr() as _,
+                    Err(e) => {
+                        error::update_last_error(Error::Operation(format!(
+                            "parse proxy list error: {}",
+                            e
+                        )));
+                        return ERR_CONFIG;
+                    }
+                }
+            }
+            ERR_OK
+        }
+        Err(err) => {
+            error::update_last_error(err);
+            ERR_CONFIG
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn parse_proxy_group(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
+    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    match s
+        .to_string_lossy()
+        .to_string()
+        .as_str()
+        .parse::<ClashConfigDef>()
+    {
+        Ok(cfg) => {
+            unsafe {
+                let proxy_group = serde_json::to_string(&cfg.proxy_group);
+                match proxy_group {
+                    Ok(s) => *rv = s.as_ptr() as _,
+                    Err(e) => {
+                        error::update_last_error(Error::Operation(format!(
+                            "parse proxy group error: {}",
+                            e
+                        )));
+                        return ERR_CONFIG;
+                    }
+                }
+            }
+            ERR_OK
+        }
+        Err(err) => {
+            error::update_last_error(err);
+            ERR_CONFIG
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn parse_rule_list(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
+    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    match s
+        .to_string_lossy()
+        .to_string()
+        .as_str()
+        .parse::<ClashConfigDef>()
+    {
+        Ok(cfg) => {
+            unsafe {
+                let rule_list = serde_json::to_string(&cfg.rule);
+                match rule_list {
+                    Ok(s) => *rv = s.as_ptr() as _,
+                    Err(e) => {
+                        error::update_last_error(Error::Operation(format!(
+                            "parse rule list error: {}",
+                            e
+                        )));
+                        return ERR_CONFIG;
+                    }
+                }
             }
             ERR_OK
         }

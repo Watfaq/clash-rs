@@ -19,6 +19,7 @@ typedef struct GeneralConfig {
   uint16_t port;
   uint16_t socks_port;
   uint16_t mixed_port;
+  const char *secret;
   bool tun_enabled;
   bool dns_enabled;
   bool ipv6_enabled;
@@ -31,3 +32,9 @@ int start_clash_with_config(const char *cfg_dir,
                             const struct ConfigOverride *cfg_override);
 
 int parse_general_config(const char *cfg_str, struct GeneralConfig *general);
+
+int parse_proxy_list(const char *cfg_str, char *rv);
+
+int parse_proxy_group(const char *cfg_str, char *rv);
+
+int parse_rule_list(const char *cfg_str, char *rv);
