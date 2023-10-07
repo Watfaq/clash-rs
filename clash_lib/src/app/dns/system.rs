@@ -51,6 +51,13 @@ impl ClashResolver for SystemResolver {
             .choose(&mut rand::thread_rng()))
     }
 
+    async fn exchange(
+        &self,
+        _: trust_dns_proto::op::Message,
+    ) -> anyhow::Result<trust_dns_proto::op::Message> {
+        Err(anyhow::anyhow!("unsupported"))
+    }
+
     fn ipv6(&self) -> bool {
         true
     }

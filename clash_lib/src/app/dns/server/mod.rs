@@ -1,4 +1,4 @@
-use std::{net::IpAddr, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
 
@@ -6,11 +6,8 @@ use thiserror::Error;
 use tokio::net::{TcpListener, UdpSocket};
 use tracing::{debug, info, warn};
 use trust_dns_proto::{
-    op::{Header, MessageType, OpCode, ResponseCode},
-    rr::{
-        rdata::{A, AAAA},
-        RData, Record,
-    },
+    op::{Header, Message, MessageType, OpCode, ResponseCode},
+    rr::RecordType,
 };
 use trust_dns_server::{
     authority::MessageResponseBuilder,
@@ -40,8 +37,6 @@ pub enum DNSError {
     QueryFailed(String),
 }
 
-static DEFAULT_DNS_SERVER_TTL: u32 = 60;
-
 impl DnsHandler {
     async fn handle<R: ResponseHandler>(
         &self,
@@ -62,39 +57,48 @@ impl DnsHandler {
             )));
         }
 
-        let name = request.query().name();
-        let host = if name.is_fqdn() {
-            name.to_string().strip_suffix(".").unwrap().to_string()
-        } else {
-            name.to_string()
-        };
-
         let builder = MessageResponseBuilder::from_message_request(request);
         let mut header = Header::response_from_request(request.header());
-        header.set_authoritative(true);
 
-        match self.resolver.resolve(&host, true).await {
-            Ok(resp) => match resp {
-                Some(ip) => {
-                    let rdata = match ip {
-                        IpAddr::V4(a) => RData::A(A(a)),
-                        IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
-                    };
+        if request.query().query_type() == RecordType::AAAA && !self.resolver.ipv6() {
+            header.set_authoritative(true);
 
-                    let records = vec![Record::from_rdata(
-                        name.into(),
-                        DEFAULT_DNS_SERVER_TTL,
-                        rdata,
-                    )];
+            let resp = builder.build_no_records(header);
+            return Ok(response_handle.send_response(resp).await?);
+        }
 
-                    let resp = builder.build(header, records.iter(), &[], &[], &[]);
-                    Ok(response_handle.send_response(resp).await?)
+        let mut m = Message::new();
+        m.set_op_code(request.op_code());
+        m.set_message_type(request.message_type());
+        m.add_query(request.query().original().clone());
+        m.add_additionals(request.additionals().into_iter().map(Clone::clone));
+        m.add_name_servers(request.name_servers().into_iter().map(Clone::clone));
+        for sig0 in request.sig0() {
+            m.add_sig0(sig0.clone());
+        }
+        if let Some(edns) = request.edns() {
+            m.set_edns(edns.clone());
+        }
+
+        match self.resolver.exchange(m).await {
+            Ok(m) => {
+                header.set_recursion_available(m.recursion_available());
+                header.set_response_code(m.response_code());
+                header.set_authoritative(m.authoritative());
+
+                header.set_answer_count(m.answer_count());
+                header.set_name_server_count(m.name_server_count());
+                header.set_additional_count(m.additional_count());
+
+                let mut rv =
+                    builder.build(header, m.answers(), m.name_servers(), &[], m.additionals());
+
+                if let Some(edns) = m.extensions() {
+                    rv.set_edns(edns.clone());
                 }
-                None => {
-                    let resp = builder.build_no_records(header);
-                    Ok(response_handle.send_response(resp).await?)
-                }
-            },
+
+                Ok(response_handle.send_response(rv).await?)
+            }
             Err(e) => {
                 debug!("dns resolve error: {}", e);
                 Err(DNSError::QueryFailed(e.to_string()))

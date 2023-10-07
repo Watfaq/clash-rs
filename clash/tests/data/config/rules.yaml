@@ -4,11 +4,14 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
+
+ipv6: true
 
 dns:
   enable: true
+  ipv6: true
   listen: 127.0.0.1:53553
   #   udp: 127.0.0.1:53553
   #   tcp: 127.0.0.1:53553
@@ -22,7 +25,7 @@ dns:
   default-nameserver:
     - 114.114.114.114
     - 8.8.8.8
-  enhanced-mode: fake-ip 
+  enhanced-mode: normal
   fake-ip-range: 198.18.0.2/16 # Fake IP addresses pool CIDR
   # use-hosts: true # lookup hosts and return IP record
   
@@ -215,7 +218,7 @@ rule-providers:
 
 rules:
   - DOMAIN,ipinfo.io,relay
-  - RULE-SET,file-provider,trojan
+#  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,select

@@ -72,7 +72,7 @@ pub enum TokioRuntime {
 pub enum Config {
     Def(ClashConfigDef),
     Internal(InternalConfig),
-    File(String, String),
+    File(String),
     Str(String),
 }
 
@@ -125,8 +125,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let config: InternalConfig = match opts.config {
         Config::Def(c) => c.try_into()?,
         Config::Internal(c) => c,
-        Config::File(_, file) => file.parse::<def::Config>()?.try_into()?,
-        Config::Str(s) => s.as_str().parse::<def::Config>()?.try_into()?,
+        Config::File(file) => file.parse::<def::Config>()?.try_into()?,
+        Config::Str(s) => s.parse::<def::Config>()?.try_into()?,
     };
 
     let (log_tx, _) = broadcast::channel(100);
@@ -246,6 +246,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         statistics_manager,
         cache_store,
         router,
+        cwd.to_string_lossy().to_string(),
     );
     if let Some(r) = api_runner {
         runners.push(r);

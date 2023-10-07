@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{response::Redirect, routing::get, Router};
@@ -39,6 +40,7 @@ pub fn get_api_runner(
     statistics_manager: Arc<StatisticsManager>,
     cache_store: ThreadSafeCacheFile,
     router: ThreadSafeRouter,
+    cwd: String,
 ) -> Option<Runner> {
     if let Some(bind_addr) = controller_cfg.external_controller {
         let app_state = Arc::new(AppState {
@@ -92,7 +94,7 @@ pub fn get_api_runner(
             if let Some(external_ui) = controller_cfg.external_ui {
                 app = app
                     .route("/ui", get(|| async { Redirect::to("/ui/") }))
-                    .nest_service("/ui/", ServeDir::new(external_ui));
+                    .nest_service("/ui/", ServeDir::new(PathBuf::from(cwd).join(external_ui)));
             }
 
             axum::Server::bind(&addr)
