@@ -781,6 +781,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-boring",
+ "tokio-io-timeout",
  "tokio-rustls",
  "tokio-test",
  "tokio-tungstenite",

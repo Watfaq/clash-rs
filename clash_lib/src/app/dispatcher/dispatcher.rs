@@ -20,6 +20,7 @@ use std::time::Instant;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio_io_timeout::TimeoutStream;
 use tracing::info_span;
 use tracing::instrument;
 use tracing::trace;
@@ -131,9 +132,13 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let mut rhs = Box::new(
-                    TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await,
-                );
+                let rhs = TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
+                let mut rhs = TimeoutStream::new(rhs);
+                // let's close it if no data is transferred in 60 seconds
+                // plz do your own keepalive if you need it
+                rhs.set_read_timeout(Some(Duration::from_secs(60)));
+                rhs.set_write_timeout(Some(Duration::from_secs(60)));
+                let mut rhs = Box::pin(rhs);
                 match copy_bidirectional(&mut lhs, &mut rhs)
                     .instrument(info_span!(
                         "copy_bidirectional",
