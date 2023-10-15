@@ -194,6 +194,7 @@ impl AsyncRead for TrackedStream {
         self.tracker
             .download_total
             .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+
         v
     }
 }

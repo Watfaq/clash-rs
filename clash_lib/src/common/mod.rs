@@ -2,6 +2,7 @@ pub mod auth;
 pub mod crypto;
 pub mod errors;
 pub mod http;
+pub mod io;
 pub mod mmdb;
 pub mod timed_future;
 pub mod tls;
