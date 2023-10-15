@@ -195,12 +195,6 @@ impl AsyncRead for TrackedStream {
             .download_total
             .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
 
-        // notify the copy_bidirectional to close
-        if download == 0 {
-            debug!("connection closed by peer: {}", self.id());
-            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-        }
-
         v
     }
 }
@@ -230,12 +224,6 @@ impl AsyncWrite for TrackedStream {
         self.tracker
             .upload_total
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
-
-        // notify the copy_bidirectional to close
-        if upload == 0 {
-            debug!("connection closed by peer: {}", self.id());
-            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
-        }
 
         v
     }

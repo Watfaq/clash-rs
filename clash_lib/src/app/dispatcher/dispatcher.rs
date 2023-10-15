@@ -2,6 +2,7 @@ use crate::app::dispatcher::tracked::TrackedDatagram;
 use crate::app::dispatcher::tracked::TrackedStream;
 use crate::app::outbound::manager::ThreadSafeOutboundManager;
 use crate::app::router::ThreadSafeRouter;
+use crate::common::io::copy_buf_bidirectional_with_timeout;
 use crate::config::def::RunMode;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::config::internal::proxy::PROXY_GLOBAL;
@@ -17,10 +18,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tokio_io_timeout::TimeoutStream;
 use tracing::info_span;
 use tracing::instrument;
 use tracing::trace;
@@ -132,20 +132,21 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let rhs = TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
-                let mut rhs = TimeoutStream::new(rhs);
-                // let's close it if no data is transferred in 60 seconds
-                // plz do your own keepalive if you need it
-                rhs.set_read_timeout(Some(Duration::from_secs(60)));
-                rhs.set_write_timeout(Some(Duration::from_secs(60)));
-                let mut rhs = Box::pin(rhs);
-                match copy_bidirectional(&mut lhs, &mut rhs)
-                    .instrument(info_span!(
-                        "copy_bidirectional",
-                        outbound_name = outbound_name,
-                        session = %sess,
-                    ))
-                    .await
+                let mut rhs =
+                    TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
+                match copy_buf_bidirectional_with_timeout(
+                    &mut lhs,
+                    &mut rhs,
+                    4096,
+                    Duration::from_secs(10),
+                    Duration::from_secs(10),
+                )
+                .instrument(info_span!(
+                    "copy_bidirectional",
+                    outbound_name = outbound_name,
+                    session = %sess,
+                ))
+                .await
                 {
                     Ok((up, down)) => {
                         debug!(
