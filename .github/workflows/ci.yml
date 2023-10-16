@@ -69,7 +69,7 @@ jobs:
 
     - name: Upload Release Asset
       id: upload-release-asset 
-      uses: dwenegar/upload-release-assets@v1
+      uses: dwenegar/upload-release-assets@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
