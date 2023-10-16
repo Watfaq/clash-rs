@@ -1,4 +1,9 @@
-use std::{collections::HashMap, ffi::c_int, os::raw::c_char, ptr};
+use std::{
+    collections::HashMap,
+    ffi::{c_int, CString},
+    os::raw::c_char,
+    ptr,
+};
 
 use clash_lib::{ClashConfigDef, ClashDNSListen, Config, Error};
 use error::LAST_ERROR;
@@ -123,7 +128,10 @@ pub extern "C" fn parse_general_config(
                 (*general).port = cfg.port.unwrap_or_default();
                 (*general).socks_port = cfg.socks_port.unwrap_or_default();
                 (*general).mixed_port = cfg.mixed_port.unwrap_or_default();
-                (*general).secret = cfg.secret.unwrap_or_default().as_ptr() as _;
+                // this is a memory leak, but we don't care
+                (*general).secret = CString::new(cfg.secret.unwrap_or_default())
+                    .expect("invalid secret")
+                    .into_raw();
                 (*general).tun_enabled = cfg
                     .tun
                     .and_then(|tun| {
@@ -145,7 +153,7 @@ pub extern "C" fn parse_general_config(
 }
 
 #[no_mangle]
-pub extern "C" fn parse_proxy_list(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
+pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -154,62 +162,36 @@ pub extern "C" fn parse_proxy_list(cfg_str: *const c_char, rv: *mut c_char) -> c
         .parse::<ClashConfigDef>()
     {
         Ok(cfg) => {
-            unsafe {
-                let proxy_list = serde_json::to_string(&cfg.proxy);
-                match proxy_list {
-                    Ok(s) => *rv = s.as_ptr() as _,
-                    Err(e) => {
-                        error::update_last_error(Error::Operation(format!(
-                            "parse proxy list error: {}",
-                            e
-                        )));
-                        return ERR_CONFIG;
-                    }
+            let proxy_list = serde_json::to_string(&cfg.proxy);
+            match proxy_list {
+                Ok(s) => CString::new(s).unwrap().into_raw(),
+                Err(e) => {
+                    error::update_last_error(Error::Operation(format!(
+                        "parse proxy list error: {}",
+                        e
+                    )));
+                    return ptr::null_mut();
                 }
             }
-            ERR_OK
         }
         Err(err) => {
             error::update_last_error(err);
-            ERR_CONFIG
+            ptr::null_mut()
         }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn parse_proxy_group(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    match s
-        .to_string_lossy()
-        .to_string()
-        .as_str()
-        .parse::<ClashConfigDef>()
-    {
-        Ok(cfg) => {
-            unsafe {
-                let proxy_group = serde_json::to_string(&cfg.proxy_group);
-                match proxy_group {
-                    Ok(s) => *rv = s.as_ptr() as _,
-                    Err(e) => {
-                        error::update_last_error(Error::Operation(format!(
-                            "parse proxy group error: {}",
-                            e
-                        )));
-                        return ERR_CONFIG;
-                    }
-                }
-            }
-            ERR_OK
-        }
-        Err(err) => {
-            error::update_last_error(err);
-            ERR_CONFIG
+pub extern "C" fn free_proxy_list(ptr: *mut c_char) {
+    unsafe {
+        if !ptr.is_null() {
+            let _ = CString::from_raw(ptr);
         }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn parse_rule_list(cfg_str: *const c_char, rv: *mut c_char) -> c_int {
+pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -218,24 +200,68 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char, rv: *mut c_char) -> c_
         .parse::<ClashConfigDef>()
     {
         Ok(cfg) => {
-            unsafe {
-                let rule_list = serde_json::to_string(&cfg.rule);
-                match rule_list {
-                    Ok(s) => *rv = s.as_ptr() as _,
-                    Err(e) => {
-                        error::update_last_error(Error::Operation(format!(
-                            "parse rule list error: {}",
-                            e
-                        )));
-                        return ERR_CONFIG;
-                    }
+            let proxy_group = serde_json::to_string(&cfg.proxy_group);
+            match proxy_group {
+                Ok(s) => CString::new(s).unwrap().into_raw(),
+                Err(e) => {
+                    error::update_last_error(Error::Operation(format!(
+                        "parse proxy group error: {}",
+                        e
+                    )));
+                    return ptr::null_mut();
                 }
             }
-            ERR_OK
         }
         Err(err) => {
             error::update_last_error(err);
-            ERR_CONFIG
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn free_proxy_group(ptr: *mut c_char) {
+    unsafe {
+        if !ptr.is_null() {
+            let _ = CString::from_raw(ptr);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
+    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    match s
+        .to_string_lossy()
+        .to_string()
+        .as_str()
+        .parse::<ClashConfigDef>()
+    {
+        Ok(cfg) => {
+            let rule_list = serde_json::to_string(&cfg.rule);
+            match rule_list {
+                Ok(s) => CString::new(s).unwrap().into_raw(),
+                Err(e) => {
+                    error::update_last_error(Error::Operation(format!(
+                        "parse rule list error: {}",
+                        e
+                    )));
+                    return ptr::null_mut();
+                }
+            }
+        }
+        Err(err) => {
+            error::update_last_error(err);
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn free_rule_list(ptr: *mut c_char) {
+    unsafe {
+        if !ptr.is_null() {
+            let _ = CString::from_raw(ptr);
         }
     }
 }
