@@ -20,6 +20,7 @@ use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
 use state::Storage;
 use std::io;
+use std::path::PathBuf;
 use tokio::task::JoinHandle;
 
 use std::sync::Arc;
@@ -124,7 +125,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let config: InternalConfig = match opts.config {
         Config::Def(c) => c.try_into()?,
         Config::Internal(c) => c,
-        Config::File(file) => file.parse::<def::Config>()?.try_into()?,
+        Config::File(file) => TryInto::<def::Config>::try_into(PathBuf::from(file))?.try_into()?,
         Config::Str(s) => s.parse::<def::Config>()?.try_into()?,
     };
 

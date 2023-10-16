@@ -1,7 +1,5 @@
 use crate::Error;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::{collections::HashMap, fmt::Display};
 
@@ -378,35 +376,27 @@ pub struct Config {
     pub tun: Option<HashMap<String, Value>>,
 }
 
+impl TryFrom<PathBuf> for Config {
+    type Error = Error;
+
+    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
+        let content = std::fs::read_to_string(value)?;
+        let config = content.parse::<Config>()?;
+        Ok(config)
+    }
+}
+
 impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let path = Path::new(s);
-        match path.try_exists() {
-            Ok(exists) => {
-                if exists {
-                    let fd = File::open(path)?;
-                    let reader = BufReader::new(fd);
-                    Ok(serde_yaml::from_reader(reader).map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "cound not parse config content {}: {}",
-                            s,
-                            x.to_string()
-                        ))
-                    })?)
-                } else {
-                    Ok(serde_yaml::from_str(s).map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "cound not parse config content {}: {}",
-                            s,
-                            x.to_string()
-                        ))
-                    })?)
-                }
-            }
-            Err(err) => Err(err.into()),
-        }
+        Ok(serde_yaml::from_str(s).map_err(|x| {
+            Error::InvalidConfig(format!(
+                "cound not parse config content {}: {}",
+                s,
+                x.to_string()
+            ))
+        })?)
     }
 }
 
