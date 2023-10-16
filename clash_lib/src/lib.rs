@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate anyhow;
+
 use crate::app::dispatcher::Dispatcher;
 use crate::app::dns;
 use crate::app::inbound::manager::InboundManager;
