@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use std::fmt::Debug;
 
+use hickory_proto::op;
 use std::sync::Arc;
-use trust_dns_proto::op;
 
 #[cfg(test)]
 use mockall::automock;

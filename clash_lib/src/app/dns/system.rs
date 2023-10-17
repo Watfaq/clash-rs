@@ -53,8 +53,8 @@ impl ClashResolver for SystemResolver {
 
     async fn exchange(
         &self,
-        _: trust_dns_proto::op::Message,
-    ) -> anyhow::Result<trust_dns_proto::op::Message> {
+        _: hickory_proto::op::Message,
+    ) -> anyhow::Result<hickory_proto::op::Message> {
         Err(anyhow::anyhow!("unsupported"))
     }
 
@@ -89,7 +89,7 @@ impl ClashResolver for SystemResolver {
 
 #[cfg(test)]
 mod tests {
-    use trust_dns_resolver::TokioAsyncResolver;
+    use hickory_resolver::TokioAsyncResolver;
 
     use crate::app::dns::{ClashResolver, SystemResolver};
 
