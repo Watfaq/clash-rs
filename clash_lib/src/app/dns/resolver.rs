@@ -8,7 +8,7 @@ use std::{net, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, warn};
 
-use trust_dns_proto::{op, rr};
+use hickory_proto::{op, rr};
 
 use crate::app::profile::ThreadSafeCacheFile;
 use crate::common::mmdb::MMDB;
@@ -560,13 +560,13 @@ impl ClashResolver for Resolver {
 mod tests {
     use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
     use crate::dns::{Resolver, ThreadSafeDNSClient};
+    use hickory_client::{client, op};
+    use hickory_proto::rr;
+    use hickory_proto::udp::UdpClientStream;
+    use hickory_proto::xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer};
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::net::UdpSocket;
-    use trust_dns_client::{client, op};
-    use trust_dns_proto::rr;
-    use trust_dns_proto::udp::UdpClientStream;
-    use trust_dns_proto::xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer};
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
