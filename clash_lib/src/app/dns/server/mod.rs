@@ -70,6 +70,7 @@ impl DnsHandler {
         let mut m = Message::new();
         m.set_op_code(request.op_code());
         m.set_message_type(request.message_type());
+        m.set_recursion_desired(request.recursion_desired());
         m.add_query(request.query().original().clone());
         m.add_additionals(request.additionals().into_iter().map(Clone::clone));
         m.add_name_servers(request.name_servers().into_iter().map(Clone::clone));
@@ -93,9 +94,19 @@ impl DnsHandler {
                 let mut rv =
                     builder.build(header, m.answers(), m.name_servers(), &[], m.additionals());
 
-                if let Some(edns) = m.extensions() {
-                    rv.set_edns(edns.clone());
+                if let Some(edns) = request.edns() {
+                    if edns.dnssec_ok() {
+                        if let Some(edns) = m.extensions() {
+                            rv.set_edns(edns.clone());
+                        }
+                    }
                 }
+
+                debug!(
+                    "answering dns query {} with answer {:?}",
+                    request.query().name(),
+                    m.answers(),
+                );
 
                 Ok(response_handle.send_response(rv).await?)
             }
@@ -115,9 +126,10 @@ impl RequestHandler for DnsHandler {
         response_handle: R,
     ) -> ResponseInfo {
         debug!(
-            "got dns request {}-{} from {}",
+            "got dns request [{}][{}][{}] from {}",
             request.protocol(),
-            request.message_type(),
+            request.query().query_type(),
+            request.query().name(),
             request.src()
         );
 
