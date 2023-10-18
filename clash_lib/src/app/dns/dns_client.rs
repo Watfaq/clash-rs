@@ -5,28 +5,28 @@ use std::{net, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
+use hickory_client::client::AsyncClient;
+use hickory_client::{
+    client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
+};
+use hickory_proto::error::ProtoError;
 use rustls::ClientConfig;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::warn;
-use trust_dns_client::client::AsyncClient;
-use trust_dns_client::{
-    client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
-};
-use trust_dns_proto::error::ProtoError;
 
 use crate::common::tls::{self, GLOBAL_ROOT_STORE};
 use crate::dns::dhcp::DhcpClient;
 use crate::dns::ThreadSafeDNSClient;
-use tokio::net::TcpStream as TokioTcpStream;
-use tokio::net::UdpSocket as TokioUdpSocket;
-use trust_dns_proto::https::HttpsClientStreamBuilder;
-use trust_dns_proto::op::Message;
-use trust_dns_proto::rustls::tls_client_connect_with_bind_addr;
-use trust_dns_proto::{
+use hickory_proto::h2::HttpsClientStreamBuilder;
+use hickory_proto::op::Message;
+use hickory_proto::rustls::tls_client_connect_with_bind_addr;
+use hickory_proto::{
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
     DnsHandle,
 };
+use tokio::net::TcpStream as TokioTcpStream;
+use tokio::net::UdpSocket as TokioUdpSocket;
 
 use crate::proxy::utils::Interface;
 use crate::Error;

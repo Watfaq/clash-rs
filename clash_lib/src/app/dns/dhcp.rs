@@ -17,8 +17,8 @@ use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio::task::yield_now;
 
+use hickory_proto::op::Message;
 use tracing::{debug, warn};
-use trust_dns_proto::op::Message;
 
 use super::config::NameServer;
 

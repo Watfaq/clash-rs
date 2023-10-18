@@ -2,18 +2,18 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use thiserror::Error;
-use tokio::net::{TcpListener, UdpSocket};
-use tracing::{debug, info, warn};
-use trust_dns_proto::{
+use hickory_proto::{
     op::{Header, Message, MessageType, OpCode, ResponseCode},
     rr::RecordType,
 };
-use trust_dns_server::{
+use hickory_server::{
     authority::MessageResponseBuilder,
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     ServerFuture,
 };
+use thiserror::Error;
+use tokio::net::{TcpListener, UdpSocket};
+use tracing::{debug, info, warn};
 
 use crate::Runner;
 
@@ -189,7 +189,7 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
             .ok()?;
     }
 
-    let l = DnsListener { server: s };
+    let mut l = DnsListener { server: s };
 
     Some(Box::pin(async move {
         match l.server.block_until_done().await {

@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate anyhow;
-extern crate core;
 
 use crate::app::dispatcher::Dispatcher;
 use crate::app::dns;
@@ -18,8 +17,9 @@ use common::http::new_http_client;
 use common::mmdb;
 use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
-use state::Storage;
+use state::InitCell;
 use std::io;
+use std::path::PathBuf;
 use tokio::task::JoinHandle;
 
 use std::sync::Arc;
@@ -87,7 +87,7 @@ pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
 }
 
-static RUNTIME_CONTROLLER: Storage<std::sync::RwLock<RuntimeController>> = Storage::new();
+static RUNTIME_CONTROLLER: InitCell<std::sync::RwLock<RuntimeController>> = InitCell::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
@@ -125,7 +125,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let config: InternalConfig = match opts.config {
         Config::Def(c) => c.try_into()?,
         Config::Internal(c) => c,
-        Config::File(file) => file.parse::<def::Config>()?.try_into()?,
+        Config::File(file) => TryInto::<def::Config>::try_into(PathBuf::from(file))?.try_into()?,
         Config::Str(s) => s.parse::<def::Config>()?.try_into()?,
     };
 
