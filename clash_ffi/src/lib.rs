@@ -32,6 +32,7 @@ pub struct ConfigOverride {
     pub tun_fd: i32,
     pub dns_server: *const c_char,
     pub bind_address: *const c_char,
+    pub external_controller: *const c_char,
 }
 
 #[no_mangle]
@@ -46,6 +47,7 @@ pub extern "C" fn get_last_error() -> *const c_char {
 pub extern "C" fn start_clash_with_config(
     cfg_dir: *const c_char,
     cfg_str: *const c_char,
+    log_file: *const c_char,
     cfg_override: *const ConfigOverride,
 ) -> c_int {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
@@ -83,6 +85,14 @@ pub extern "C" fn start_clash_with_config(
                         .to_string();
                     cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
                 }
+
+                if cfg_override.external_controller != ptr::null() {
+                    let external_controller =
+                        unsafe { std::ffi::CStr::from_ptr(cfg_override.external_controller) }
+                            .to_string_lossy()
+                            .to_string();
+                    cfg_def.external_controller = Some(external_controller);
+                }
             }
 
             let opts = clash_lib::Options {
@@ -93,6 +103,15 @@ pub extern "C" fn start_clash_with_config(
                         .to_string(),
                 ),
                 rt: Some(clash_lib::TokioRuntime::SingleThread),
+                log_file: if log_file != ptr::null() {
+                    Some(
+                        unsafe { std::ffi::CStr::from_ptr(log_file) }
+                            .to_string_lossy()
+                            .to_string(),
+                    )
+                } else {
+                    None
+                },
             };
 
             match clash_lib::start(opts) {
@@ -182,7 +201,7 @@ pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn free_proxy_list(ptr: *mut c_char) {
+pub extern "C" fn free_string(ptr: *mut c_char) {
     unsafe {
         if !ptr.is_null() {
             let _ = CString::from_raw(ptr);
@@ -220,15 +239,6 @@ pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn free_proxy_group(ptr: *mut c_char) {
-    unsafe {
-        if !ptr.is_null() {
-            let _ = CString::from_raw(ptr);
-        }
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
@@ -257,15 +267,6 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn free_rule_list(ptr: *mut c_char) {
-    unsafe {
-        if !ptr.is_null() {
-            let _ = CString::from_raw(ptr);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::HashMap, ptr, vec};
@@ -287,6 +288,7 @@ mod tests {
             tun_fd: 1989,
             dns_server: "127.0.0.1:53\0".as_ptr() as _,
             bind_address: "240.0.0.2\0".as_ptr() as _,
+            external_controller: ptr::null(),
         });
 
         if let Some(cfg_override) = cfg_override {

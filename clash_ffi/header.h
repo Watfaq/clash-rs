@@ -13,6 +13,7 @@ typedef struct ConfigOverride {
   int32_t tun_fd;
   const char *dns_server;
   const char *bind_address;
+  const char *external_controller;
 } ConfigOverride;
 
 typedef struct GeneralConfig {
@@ -29,18 +30,15 @@ const char *get_last_error(void);
 
 int start_clash_with_config(const char *cfg_dir,
                             const char *cfg_str,
+                            const char *log_file,
                             const struct ConfigOverride *cfg_override);
 
 int parse_general_config(const char *cfg_str, struct GeneralConfig *general);
 
 char *parse_proxy_list(const char *cfg_str);
 
-void free_proxy_list(char *ptr);
+void free_string(char *ptr);
 
 char *parse_proxy_group(const char *cfg_str);
 
-void free_proxy_group(char *ptr);
-
 char *parse_rule_list(const char *cfg_str);
-
-void free_rule_list(char *ptr);
