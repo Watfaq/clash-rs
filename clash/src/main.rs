@@ -18,9 +18,6 @@ struct Cli {
         default_value = "config.yaml"
     )]
     config: PathBuf,
-
-    #[clap(short, long, action)]
-    test: bool,
 }
 
 fn main() {
@@ -36,6 +33,7 @@ fn main() {
         ),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
+        log_file: None,
     })
     .unwrap();
 }
