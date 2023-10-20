@@ -61,6 +61,7 @@ pub struct Options {
     pub config: Config,
     pub cwd: Option<String>,
     pub rt: Option<TokioRuntime>,
+    pub log_file: Option<String>,
 }
 
 pub enum TokioRuntime {
@@ -128,18 +129,23 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         Config::Str(s) => s.parse::<def::Config>()?.try_into()?,
     };
 
+    let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
+    let cwd = std::path::Path::new(&cwd);
+
     let (log_tx, _) = broadcast::channel(100);
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-    app::logging::setup_logging(config.general.log_level, log_collector)
-        .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x.to_string())))?;
+    let _g = app::logging::setup_logging(
+        config.general.log_level,
+        log_collector,
+        cwd.to_str().unwrap(),
+        opts.log_file,
+    )
+    .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x.to_string())))?;
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
-
-    let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
-    let cwd = std::path::Path::new(&cwd);
 
     let system_resolver =
         Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
@@ -293,6 +299,7 @@ mod tests {
                 config: Config::Str(conf.to_string()),
                 cwd: None,
                 rt: None,
+                log_file: None,
             })
             .unwrap()
         });
