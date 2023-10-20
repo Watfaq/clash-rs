@@ -792,6 +792,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-appender",
  "tracing-opentelemetry",
  "tracing-oslog",
  "tracing-subscriber",
@@ -3616,8 +3617,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "426f806f4089c493dcac0d24c29c01e2c38baf8e30f1b716ee37e83d200b18fe"
 dependencies = [
  "deranged",
+ "itoa",
  "serde",
  "time-core",
+ "time-macros",
 ]
 
 [[package]]
@@ -3625,6 +3628,15 @@ name = "time-core"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
+
+[[package]]
+name = "time-macros"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ad70d68dba9e1f8aceda7aa6711965dfec1cac869f311a51bd08b3a2ccbce20"
+dependencies = [
+ "time-core",
+]
 
 [[package]]
 name = "tinytemplate"
@@ -3887,6 +3899,17 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-appender"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09d48f71a791638519505cefafe162606f706c25592e4bde4d97600c0195312e"
+dependencies = [
+ "crossbeam-channel",
+ "time",
+ "tracing-subscriber",
 ]
 
 [[package]]
