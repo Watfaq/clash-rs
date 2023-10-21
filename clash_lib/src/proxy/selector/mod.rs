@@ -7,7 +7,8 @@ use tracing::debug;
 
 use crate::{
     app::{
-        dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver,
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     p_debug,
@@ -16,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler, OutboundType,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
+    CommonOption, OutboundHandler, OutboundType,
 };
 
 #[async_trait]
@@ -150,7 +151,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await
             .connect_datagram(sess, resolver)

@@ -12,7 +12,10 @@ use shadowsocks::{
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
+            ChainedStream, ChainedStreamWrapper,
+        },
         dns::ThreadSafeDNSResolver,
     },
     proxy::{CommonOption, OutboundHandler},
@@ -25,7 +28,7 @@ use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 
 use super::{
     utils::{new_tcp_stream, new_udp_socket},
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundType,
+    AnyOutboundHandler, AnyStream, OutboundType,
 };
 
 pub enum SimpleOBFSMode {
@@ -246,7 +249,7 @@ impl OutboundHandler for Handler {
         &self,
         #[allow(unused_variables)] sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         let ctx = Context::new_shared(ServerType::Local);
         let cfg = ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
@@ -266,11 +269,13 @@ impl OutboundHandler for Handler {
         )
         .await?;
         let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
-        Ok(OutboundDatagramShadowsocks::new(
+        let d = OutboundDatagramShadowsocks::new(
             socket,
             (self.opts.server.to_owned(), self.opts.port),
             resolver,
-        )
-        .into())
+        );
+        let d = ChainedDatagramWrapper::new(d);
+        d.append_to_chain(self.name()).await;
+        Ok(Box::new(d))
     }
 }

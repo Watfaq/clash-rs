@@ -1,9 +1,12 @@
-use crate::app::dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper};
+use crate::app::dispatcher::{
+    BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
+    ChainedStream, ChainedStreamWrapper,
+};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::proxy::datagram::OutboundDatagramImpl;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
-use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
+use crate::proxy::{AnyOutboundHandler, AnyStream, OutboundHandler};
 use crate::session::{Session, SocksAddr};
 
 use async_trait::async_trait;
@@ -72,14 +75,18 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyOutboundDatagram> {
-        new_udp_socket(
+    ) -> std::io::Result<BoxedChainedDatagram> {
+        let d = new_udp_socket(
             None,
             sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
         .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))
+        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
+
+        let d = ChainedDatagramWrapper::new(d);
+        d.append_to_chain(self.name()).await;
+        Ok(Box::new(d))
     }
 }

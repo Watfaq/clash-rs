@@ -8,6 +8,9 @@ use sha2::Digest;
 use sha2::Sha224;
 use tokio::io::AsyncWriteExt;
 
+use crate::app::dispatcher::BoxedChainedDatagram;
+use crate::app::dispatcher::ChainedDatagram;
+use crate::app::dispatcher::ChainedDatagramWrapper;
 use crate::app::dispatcher::ChainedStream;
 use crate::app::dispatcher::ChainedStreamWrapper;
 use crate::common::utils;
@@ -23,8 +26,7 @@ use super::transport::TLSOptions;
 use super::{
     options::{GrpcOption, WsOption},
     utils::new_tcp_stream,
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler,
-    OutboundType,
+    AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 mod datagram;
@@ -157,7 +159,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         let stream = new_tcp_stream(
             resolver.clone(),
             self.opts.server.as_str(),
@@ -179,9 +181,10 @@ impl OutboundHandler for Handler {
 
         let stream = self.inner_proxy_stream(stream, sess, false).await?;
 
-        Ok(Box::new(OutboundDatagramTrojan::new(
-            stream,
-            sess.destination.clone(),
-        )))
+        let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 }

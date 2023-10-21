@@ -33,7 +33,7 @@ libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "1.0.3"
 base64 = "0.21"
-uuid = { version = "1.2.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+uuid = { version = "1.5.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = { git = "https://github.com/Watfaq/boring.git", rev = "e99d7ffa" }
 boring-sys = { git = "https://github.com/Watfaq/boring.git", rev = "e99d7ffa" }
 hyper-boring = { git = "https://github.com/Watfaq/boring.git", rev = "e99d7ffa" }
@@ -87,6 +87,7 @@ tokio-tungstenite = "0.20.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-oslog = "0.1"
+tracing-appender = "0.2.2"
 
 shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", features=["aead-cipher-2022"], rev = "2021741" }
 

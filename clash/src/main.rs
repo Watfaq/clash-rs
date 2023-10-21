@@ -2,7 +2,7 @@ extern crate clash_lib as clash;
 
 use clap::Parser;
 use clash::TokioRuntime;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -18,24 +18,27 @@ struct Cli {
         default_value = "config.yaml"
     )]
     config: PathBuf,
-
-    #[clap(short, long, action)]
-    test: bool,
 }
 
 fn main() {
     let cli = Cli::parse();
+    let file = cli
+        .directory
+        .as_ref()
+        .unwrap_or(&std::env::current_dir().unwrap())
+        .join(cli.config)
+        .to_string_lossy()
+        .to_string();
+
+    if !Path::new(&file).exists() {
+        panic!("config file not found: {}", file);
+    }
+
     clash::start(clash::Options {
-        config: clash::Config::File(
-            cli.directory
-                .as_ref()
-                .unwrap_or(&std::env::current_dir().unwrap())
-                .join(cli.config)
-                .to_string_lossy()
-                .to_string(),
-        ),
+        config: clash::Config::File(file),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
+        log_file: None,
     })
     .unwrap();
 }

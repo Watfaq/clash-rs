@@ -6,6 +6,8 @@ use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing::debug;
+use tracing_appender::non_blocking::NonBlocking;
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::prelude::*;
@@ -68,10 +70,34 @@ where
     }
 }
 
-pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Result<()> {
+struct W(Option<NonBlocking>);
+
+impl std::io::Write for W {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self.0 {
+            Some(ref mut w) => w.write(buf),
+            None => Ok(buf.len()),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self.0 {
+            Some(ref mut w) => w.flush(),
+            None => Ok(()),
+        }
+    }
+}
+
+pub fn setup_logging(
+    level: LogLevel,
+    collector: EventCollector,
+    cwd: &str,
+    log_file: Option<String>,
+) -> anyhow::Result<Option<WorkerGuard>> {
     #[cfg(feature = "tracing")]
     {
         console_subscriber::init();
+        Ok(None)
     }
     #[cfg(not(feature = "tracing"))]
     {
@@ -104,6 +130,14 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
             None
         };
 
+        let (appender, g) = if let Some(log_file) = log_file {
+            let file_appender = tracing_appender::rolling::daily(cwd, log_file);
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+            (Some(non_blocking), Some(guard))
+        } else {
+            (None, None)
+        };
+
         let subscriber = tracing_subscriber::registry()
             .with(jaeger)
             .with(filter)
@@ -114,7 +148,10 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
                     .pretty()
                     .with_file(true)
                     .with_line_number(true)
-                    .with_writer(std::io::stdout),
+                    .with_writer(std::io::stdout)
+                    .with_writer(move || -> Box<dyn std::io::Write> {
+                        Box::new(W(appender.clone()))
+                    }),
             )
             .with(ios_os_log);
 
@@ -124,9 +161,9 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
         if let Ok(jager_endpiont) = std::env::var("JAGER_ENDPOINT") {
             debug!("jager endpoint: {}", jager_endpiont);
         }
-    }
 
-    Ok(())
+        Ok(g)
+    }
 }
 
 struct EventVisitor<'a>(&'a mut Vec<String>);
