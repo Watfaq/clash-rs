@@ -98,7 +98,7 @@ pub fn setup_logging(level: LogLevel, collector: EventCollector) -> anyhow::Resu
             None
         };
 
-        let ios_os_log = if cfg!(target_os = "ios") {
+        let ios_os_log = if cfg!(target_os = "ios") && cfg!(debug_assertions) {
             Some(OsLogger::new("com.watfaq.clash", "default"))
         } else {
             None
