@@ -6,7 +6,9 @@ use futures::stream::{self, StreamExt};
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedStream, ChainedStreamWrapper,
+        },
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
@@ -16,8 +18,8 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler, OutboundType,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
+    CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -130,7 +132,7 @@ impl OutboundHandler for Handler {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         Err(new_io_error("not implemented for Relay"))
     }
 

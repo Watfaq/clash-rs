@@ -6,7 +6,7 @@ use tracing::debug;
 
 use crate::{
     app::{
-        dispatcher::BoxedChainedStream,
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundDatagram, AnyOutboundHandler,
-    AnyStream, CommonOption, OutboundHandler, OutboundType,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
+    CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -176,11 +176,14 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
-        self.fastest(false)
+    ) -> io::Result<BoxedChainedDatagram> {
+        let d = self
+            .fastest(false)
             .await
             .connect_datagram(sess, resolver)
-            .await
+            .await?;
+        d.append_to_chain(self.name()).await;
+        Ok(d)
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

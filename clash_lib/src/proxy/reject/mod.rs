@@ -1,7 +1,7 @@
-use crate::app::dispatcher::BoxedChainedStream;
+use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_REJECT;
-use crate::proxy::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler};
+use crate::proxy::{AnyOutboundHandler, AnyStream, OutboundHandler};
 use crate::session::{Session, SocksAddr};
 use async_trait::async_trait;
 use serde::Serialize;
@@ -58,7 +58,7 @@ impl OutboundHandler for Handler {
         &self,
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 }

@@ -10,7 +10,7 @@ use tracing::debug;
 
 use crate::{
     app::router::RuleMatcher,
-    proxy::{datagram::UdpPacket, AnyOutboundDatagram, ProxyStream},
+    proxy::{datagram::UdpPacket, OutboundDatagram, ProxyStream},
     session::Session,
 };
 
@@ -263,8 +263,92 @@ impl AsyncWrite for TrackedStream {
     }
 }
 
+#[async_trait::async_trait]
+pub trait ChainedDatagram:
+    OutboundDatagram<UdpPacket, Item = UdpPacket, Error = std::io::Error>
+{
+    fn chain(&self) -> &ProxyChain;
+    async fn append_to_chain(&self, name: &str);
+}
+
+pub type BoxedChainedDatagram = Box<dyn ChainedDatagram + Send + Sync>;
+
+#[async_trait::async_trait]
+impl<T> ChainedDatagram for ChainedDatagramWrapper<T>
+where
+    T: Sink<UdpPacket, Error = std::io::Error> + Unpin + Send + Sync + 'static,
+    T: Stream<Item = UdpPacket>,
+{
+    fn chain(&self) -> &ProxyChain {
+        &self.chain
+    }
+
+    async fn append_to_chain(&self, name: &str) {
+        self.chain.push(name.to_owned()).await;
+    }
+}
+
+#[derive(Debug)]
+pub struct ChainedDatagramWrapper<T> {
+    inner: T,
+    chain: ProxyChain,
+}
+
+impl<T> ChainedDatagramWrapper<T> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            chain: ProxyChain::default(),
+        }
+    }
+}
+
+impl<T> Stream for ChainedDatagramWrapper<T>
+where
+    T: Stream<Item = UdpPacket> + Unpin,
+{
+    type Item = UdpPacket;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.get_mut().inner).poll_next(cx)
+    }
+}
+impl<T> Sink<UdpPacket> for ChainedDatagramWrapper<T>
+where
+    T: Sink<UdpPacket, Error = std::io::Error> + Unpin,
+{
+    type Error = std::io::Error;
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.get_mut().inner).poll_ready(cx)
+    }
+
+    fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+        Pin::new(&mut self.get_mut().inner).start_send(item)
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        Pin::new(&mut self.get_mut().inner).poll_close(cx)
+    }
+}
+
 pub struct TrackedDatagram {
-    inner: AnyOutboundDatagram,
+    inner: BoxedChainedDatagram,
     manager: Arc<Manager>,
     tracker: Arc<TrackerInfo>,
     close_notify: Receiver<()>,
@@ -272,12 +356,13 @@ pub struct TrackedDatagram {
 
 impl TrackedDatagram {
     pub async fn new(
-        inner: AnyOutboundDatagram,
+        inner: BoxedChainedDatagram,
         manager: Arc<Manager>,
         sess: Session,
         rule: Option<&Box<dyn RuleMatcher>>,
     ) -> Self {
         let uuid = uuid::Uuid::new_v4();
+        let chain = inner.chain().clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
         let s = Self {
             inner,
@@ -292,6 +377,7 @@ impl TrackedDatagram {
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
                 rule_payload: rule.map(|x| x.payload().to_owned()).unwrap_or_default(),
+                proxy_chain_holder: chain.clone(),
                 ..Default::default()
             }),
             close_notify: rx,

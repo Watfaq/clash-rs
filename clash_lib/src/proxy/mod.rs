@@ -1,4 +1,4 @@
-use crate::app::dispatcher::BoxedChainedStream;
+use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
@@ -91,21 +91,6 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[async_trait]
-pub trait OutboundDatagramRecvHalf: Sync + Send + Unpin {
-    /// Receives a message on the socket. On success, returns the number of
-    /// bytes read and the origin of the message.
-    async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocksAddr)>;
-}
-
-/// The send half.
-#[async_trait]
-pub trait OutboundDatagramSendHalf: Sync + Send + Unpin {
-    /// Sends a message on the socket to `dst_addr`. On success, returns the
-    /// number of bytes sent.
-    async fn send_to(&mut self, buf: &[u8], dst_addr: &SocksAddr) -> io::Result<usize>;
-}
-
 #[derive(Default, Debug, Clone)]
 pub struct CommonOption {
     #[allow(dead_code)]
@@ -178,7 +163,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram>;
+    ) -> io::Result<BoxedChainedDatagram>;
 
     /// for API
     /// the map only contains basic information

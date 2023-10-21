@@ -7,7 +7,10 @@ mod vmess_impl;
 
 use crate::{
     app::{
-        dispatcher::{BoxedChainedStream, ChainedStream, ChainedStreamWrapper},
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
+            ChainedStream, ChainedStreamWrapper,
+        },
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
@@ -20,8 +23,7 @@ use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
     utils::new_tcp_stream,
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler,
-    OutboundType,
+    AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[macro_export]
@@ -207,7 +209,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         let stream = new_tcp_stream(
             resolver.clone(),
             self.opts.server.as_str(),
@@ -237,13 +239,16 @@ impl OutboundHandler for Handler {
 
         let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
-        Ok(Box::new(OutboundDatagramVmess::new(
+        let d = OutboundDatagramVmess::new(
             stream,
             SocksAddr::Ip(std::net::SocketAddr::new(
                 IpAddr::V4(remote_addr),
                 sess.destination.port(),
             )),
-        )) as AnyOutboundDatagram)
-        .into()
+        );
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 }
