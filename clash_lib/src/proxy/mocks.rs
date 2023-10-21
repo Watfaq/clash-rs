@@ -5,7 +5,7 @@ use mockall::mock;
 
 use crate::{
     app::{
-        dispatcher::BoxedChainedStream,
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
@@ -14,7 +14,7 @@ use crate::{
     session::{Session, SocksAddr},
 };
 
-use super::{AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}
@@ -77,7 +77,7 @@ mock! {
             &self,
             sess: &Session,
             resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<AnyOutboundDatagram>;
+        ) -> io::Result<BoxedChainedDatagram>;
 
         /// for API
         async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
