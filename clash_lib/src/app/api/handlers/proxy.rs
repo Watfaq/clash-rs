@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
 };
 
-use http::StatusCode;
+use http::{header, HeaderMap, StatusCode};
 use serde::Deserialize;
 
 use crate::{
@@ -133,15 +133,18 @@ async fn get_proxy_delay(
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
     let n = proxy.name().to_owned();
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONNECTION, "close".parse().unwrap());
     match outbound_manager.url_test(proxy, &q.url, timeout).await {
         Ok((delay, mean_delay)) => {
             let mut r = HashMap::new();
             r.insert("delay".to_owned(), delay);
             r.insert("meanDelay".to_owned(), mean_delay);
-            axum::response::Json(delay).into_response()
+            (headers, axum::response::Json(delay)).into_response()
         }
         Err(err) => (
             StatusCode::BAD_REQUEST,
+            headers,
             format!("get delay for {} failed with error: {}", n, err),
         )
             .into_response(),

@@ -28,7 +28,10 @@ impl ThreadSafeCacheFile {
                 let store = store_clone;
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                    let db = store.read().await.db.clone();
+                    let r = store.read().await;
+                    let db = r.db.clone();
+                    drop(r);
+
                     let s = match serde_yaml::to_string(&db) {
                         Ok(s) => s,
                         Err(e) => {
