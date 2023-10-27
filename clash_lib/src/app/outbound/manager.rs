@@ -159,7 +159,6 @@ impl OutboundManager {
         timeout: Duration,
     ) -> std::io::Result<(u16, u16)> {
         let proxy_manager = self.proxy_manager.clone();
-
         proxy_manager.url_test(proxy, url, Some(timeout)).await
     }
 

@@ -65,10 +65,11 @@ impl HealthCheck {
                     _ = ticker.tick() => {
                         pm_debug!("healthcheck ticking: {}, lazy: {}", url, lazy);
                         let now = tokio::time::Instant::now();
-                        let mut inner = inner.write().await;
-                        if !lazy || now.duration_since(inner.last_check).as_secs() >= interval {
+                        let r = inner.read().await;
+                        if !lazy || now.duration_since(r.last_check).as_secs() >= interval {
                             proxy_manager.check(&proxies, &url, None).await;
-                            inner.last_check = now;
+                            let mut w = inner.write().await;
+                            w.last_check = now;
                         }
                     },
                 }
