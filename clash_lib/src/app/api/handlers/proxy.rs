@@ -140,7 +140,7 @@ async fn get_proxy_delay(
             let mut r = HashMap::new();
             r.insert("delay".to_owned(), delay);
             r.insert("meanDelay".to_owned(), mean_delay);
-            (headers, axum::response::Json(delay)).into_response()
+            (headers, axum::response::Json(r)).into_response()
         }
         Err(err) => (
             StatusCode::BAD_REQUEST,
