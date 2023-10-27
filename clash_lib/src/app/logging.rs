@@ -148,10 +148,10 @@ pub fn setup_logging(
                     .pretty()
                     .with_file(true)
                     .with_line_number(true)
-                    .with_writer(std::io::stdout)
                     .with_writer(move || -> Box<dyn std::io::Write> {
                         Box::new(W(appender.clone()))
-                    }),
+                    })
+                    .with_writer(std::io::stdout),
             )
             .with(ios_os_log);
 

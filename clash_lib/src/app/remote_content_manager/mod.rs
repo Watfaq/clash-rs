@@ -11,6 +11,7 @@ use boring::ssl::{SslConnector, SslMethod};
 
 use chrono::{DateTime, Utc};
 
+use futures::{stream::FuturesUnordered, StreamExt};
 use http::{Request, Version};
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
@@ -85,24 +86,22 @@ impl ProxyManager {
         url: &str,
         timeout: Option<Duration>,
     ) {
-        for proxies in proxies.chunks(10) {
-            let mut futs = vec![];
-
-            for proxy in proxies {
-                let proxy = proxy.clone();
-                let url = url.to_owned();
-                let timeout = timeout.clone();
-                let manager = self.clone();
-                futs.push(tokio::spawn(async move {
-                    manager
-                        .url_test(proxy, url.as_str(), timeout)
-                        .await
-                        .map_err(|e| debug!("healthcheck failed: {}", e))
-                }));
-            }
-
-            futures::future::join_all(futs).await;
+        let mut futs = vec![];
+        for proxy in proxies {
+            let proxy = proxy.clone();
+            let url = url.to_owned();
+            let timeout = timeout.clone();
+            let manager = self.clone();
+            futs.push(tokio::spawn(async move {
+                manager
+                    .url_test(proxy, url.as_str(), timeout)
+                    .await
+                    .map_err(|e| debug!("healthcheck failed: {}", e))
+            }));
         }
+
+        let futs: FuturesUnordered<_> = futs.into_iter().collect();
+        let _: Vec<_> = futs.collect().await;
     }
 
     pub async fn alive(&self, name: &str) -> bool {
@@ -157,7 +156,7 @@ impl ProxyManager {
         );
         let name = proxy.name().to_owned();
         let name_clone = name.clone();
-        let default_timeout = Duration::from_secs(30);
+        let default_timeout = Duration::from_secs(5);
 
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
@@ -174,6 +173,7 @@ impl ProxyManager {
                 .or_insert(HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?);
 
             let connector = connector.clone();
+            drop(g);
 
             let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
 
