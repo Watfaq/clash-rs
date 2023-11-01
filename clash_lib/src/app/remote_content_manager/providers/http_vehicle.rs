@@ -71,7 +71,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_http_vehicle() {
-        let u = "http://mockbin.org/bin/db6924ba-6b95-4766-b926-e609e1ce49d2"
+        let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
             .parse::<Uri>()
             .unwrap();
         let r = Arc::new(Resolver::new_default().await);
@@ -83,6 +83,6 @@ mod tests {
         );
 
         let data = v.read().await.unwrap();
-        assert_eq!(str::from_utf8(&data).unwrap(), "ok");
+        assert_eq!(str::from_utf8(&data).unwrap(), "HTTPBIN is awesome");
     }
 }
