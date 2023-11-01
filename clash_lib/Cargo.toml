@@ -33,7 +33,7 @@ prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
-network-interface = "1.0.3"
+network-interface = "1.1.0"
 base64 = "0.21"
 uuid = { version = "1.5.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
