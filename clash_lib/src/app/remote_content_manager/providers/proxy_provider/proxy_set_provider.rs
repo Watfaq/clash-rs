@@ -102,7 +102,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Reject => Ok(reject::Handler::new()),
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
                             OutboundProxyProtocol::Socks5(_) => todo!("socks5 not supported yet"),
-                            OutboundProxyProtocol::Trojan(_) => todo!("trojan not supported yet"),
+                            OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();

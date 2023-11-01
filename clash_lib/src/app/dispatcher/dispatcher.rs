@@ -108,12 +108,13 @@ impl Dispatcher {
         };
 
         let mode = **self.mode.load();
-        debug!("dispatching {} with mode {}", sess, mode);
         let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
             RunMode::Direct => (PROXY_DIRECT, None),
         };
+
+        debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);
 
         let mgr = self.outbound_manager.clone();
         let handler = mgr.get_outbound(outbound_name).unwrap_or_else(|| {
@@ -224,7 +225,7 @@ impl Dispatcher {
                                     }
                                     None => {
                                         error!("failed to reverse lookup fake ip: {}", ip);
-                                        return;
+                                        continue;
                                     }
                                 }
                             } else {
@@ -242,15 +243,16 @@ impl Dispatcher {
                 packet.dst_addr = sess.destination.clone();
 
                 let mode = mode.clone();
-                trace!("dispatching {} with mode {}", sess, mode);
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
                     RunMode::Rule => router.match_route(&sess).await,
                     RunMode::Direct => (PROXY_DIRECT, None),
                 };
+
                 let outbound_name = outbound_name.to_string();
-                debug!("dispatching {} to {}", sess, outbound_name);
+
+                debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
@@ -274,7 +276,7 @@ impl Dispatcher {
                                 Ok(v) => v,
                                 Err(err) => {
                                     error!("failed to connect outbound: {}", err);
-                                    return;
+                                    continue;
                                 }
                             };
 
@@ -312,10 +314,8 @@ impl Dispatcher {
                         // local -> remote
                         let w_handle = tokio::spawn(async move {
                             while let Some(packet) = remote_forwarder.recv().await {
-                                match remote_w.send(packet.clone()).await {
-                                    Ok(_) => {
-                                        debug!("{} sent to remote", packet);
-                                    }
+                                match remote_w.send(packet).await {
+                                    Ok(_) => {}
                                     Err(err) => {
                                         warn!("failed to send packet to remote: {}", err);
                                     }
@@ -333,7 +333,7 @@ impl Dispatcher {
                             )
                             .await;
 
-                        match remote_sender.send(packet.clone()).await {
+                        match remote_sender.send(packet).await {
                             Ok(_) => {}
                             Err(err) => {
                                 error!("failed to send packet to remote: {}", err);
@@ -406,10 +406,13 @@ impl TimeoutUdpSessionManager {
         let map_cloned = map.clone();
 
         let cleaner = tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(10)).await;
+            trace!("timeout udp session cleaner scanning");
+            let mut interval = tokio::time::interval(timeout);
 
-                trace!("timeout udp session cleaner scanning");
+            loop {
+                interval.tick().await;
+                trace!("timeout udp session cleaner ticking");
+
                 let mut g = map_cloned.write().await;
                 let mut alived = 0;
                 let mut expired = 0;
