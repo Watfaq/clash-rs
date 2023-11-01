@@ -1,7 +1,8 @@
 [package]
 name = "clash"
-version = "0.1.0"
-edition = "2021"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
 
 [[bin]]
 name = "clash"

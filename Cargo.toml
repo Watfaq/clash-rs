@@ -8,6 +8,12 @@ members = [
     "clash_ffi",
 ]
 
+
+[workspace.package]
+version = "0.1.5"
+repository = "https://github.com/Watfaq/clash-rs.git"
+edition = "2021"
+
 [profile.release]
 opt-level = "s"
 codegen-units = 1

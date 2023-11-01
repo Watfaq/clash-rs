@@ -21,6 +21,7 @@ use state::InitCell;
 use std::io;
 use std::path::PathBuf;
 use tokio::task::JoinHandle;
+use tracing::error;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -144,6 +145,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         opts.log_file,
     )
     .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x.to_string())))?;
+
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default_panic(info);
+        error!("panic hook: {:?}", info);
+    }));
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tracing::debug;
+
 use crate::{common::mmdb, session::Session};
 
 use super::RuleMatcher;
@@ -24,7 +26,10 @@ impl RuleMatcher for GeoIP {
                         .unwrap_or_default()
                         == self.country_code
                 }
-                Err(_) => todo!(),
+                Err(e) => {
+                    debug!("GeoIP lookup failed: {}", e);
+                    false
+                }
             },
             crate::session::SocksAddr::Domain(_, _) => false,
         }
