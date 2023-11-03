@@ -130,6 +130,11 @@ pub extern "C" fn start_clash_with_config(
 }
 
 #[no_mangle]
+pub extern "C" fn shutdown_clash() -> bool {
+    clash_lib::shutdown()
+}
+
+#[no_mangle]
 pub extern "C" fn parse_general_config(
     cfg_str: *const c_char,
     general: *mut GeneralConfig,

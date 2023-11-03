@@ -33,6 +33,8 @@ int start_clash_with_config(const char *cfg_dir,
                             const char *log_file,
                             const struct ConfigOverride *cfg_override);
 
+bool shutdown_clash(void);
+
 int parse_general_config(const char *cfg_str, struct GeneralConfig *general);
 
 char *parse_proxy_list(const char *cfg_str);
