@@ -22,6 +22,7 @@ use std::io;
 use std::path::PathBuf;
 use tokio::task::JoinHandle;
 use tracing::error;
+use tracing::info;
 
 use std::sync::Arc;
 use thiserror::Error;
@@ -265,6 +266,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }
 
     runners.push(Box::pin(async move {
+        info!("receive shutdown signal");
         shutdown_rx.recv().await;
     }));
 
