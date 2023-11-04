@@ -115,9 +115,10 @@ impl NetworkInboundListener {
             let tcp_listener = listener.clone();
             runners.push(
                 async move {
-                    if let Err(e) = tcp_listener.listen_tcp().await {
+                    tcp_listener.listen_tcp().await.map_err(|e| {
                         warn!("handler tcp listen failed: {}", e);
-                    }
+                        e.into()
+                    })
                 }
                 .boxed(),
             );
@@ -128,9 +129,10 @@ impl NetworkInboundListener {
             let udp_listener = listener.clone();
             runners.push(
                 async move {
-                    if let Err(e) = udp_listener.listen_udp().await {
+                    udp_listener.listen_udp().await.map_err(|e| {
                         warn!("handler udp listen failed: {}", e);
-                    }
+                        e.into()
+                    })
                 }
                 .boxed(),
             );

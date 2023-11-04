@@ -9,13 +9,13 @@ use crate::config::internal::proxy::PROXY_GLOBAL;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
-use arc_swap::ArcSwap;
 use futures::SinkExt;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -35,7 +35,7 @@ pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    mode: ArcSwap<RunMode>,
+    mode: Arc<Mutex<RunMode>>,
 
     manager: Arc<Manager>,
 }
@@ -59,7 +59,7 @@ impl Dispatcher {
             outbound_manager,
             router,
             resolver,
-            mode: Arc::new(mode).into(),
+            mode: Arc::new(Mutex::new(mode)),
             manager: statistics_manager,
         }
     }
@@ -67,11 +67,11 @@ impl Dispatcher {
     pub async fn set_mode(&self, mode: RunMode) {
         info!("run mode switched to {}", mode);
 
-        self.mode.store(Arc::new(mode));
+        *self.mode.lock().unwrap() = mode;
     }
 
     pub async fn get_mode(&self) -> RunMode {
-        **self.mode.load()
+        *self.mode.lock().unwrap()
     }
 
     #[instrument(skip(lhs))]
@@ -107,7 +107,7 @@ impl Dispatcher {
             sess
         };
 
-        let mode = **self.mode.load();
+        let mode = *self.mode.lock().unwrap();
         let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&sess).await,
@@ -192,7 +192,7 @@ impl Dispatcher {
         let router = self.router.clone();
         let outbound_manager = self.outbound_manager.clone();
         let resolver = self.resolver.clone();
-        let mode = **self.mode.load();
+        let mode = self.mode.clone();
         let manager = self.manager.clone();
 
         let (mut local_w, mut local_r) = udp_inbound.split();
@@ -242,7 +242,7 @@ impl Dispatcher {
                 let mut packet = packet;
                 packet.dst_addr = sess.destination.clone();
 
-                let mode = mode.clone();
+                let mode = *mode.lock().unwrap();
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
