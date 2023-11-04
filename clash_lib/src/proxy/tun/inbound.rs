@@ -188,6 +188,8 @@ pub fn get_runner(
                     }
                 }
             }
+
+            Err(Error::Operation("tun stopped unexpectedly 0".to_string()))
         }));
 
         // tun -> stack -> dispatcher
@@ -206,6 +208,8 @@ pub fn get_runner(
                     }
                 }
             }
+
+            Err(Error::Operation("tun stopped unexpectedly 1".to_string()))
         }));
 
         let dsp = dispatcher.clone();
@@ -218,14 +222,18 @@ pub fn get_runner(
                     dsp.clone(),
                 ));
             }
+
+            Err(Error::Operation("tun stopped unexpectedly 2".to_string()))
         }));
 
         futs.push(Box::pin(async move {
             handle_inbound_datagram(udp_socket, dispatcher, resolver).await;
+            Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
         }));
 
-        futures::future::join_all(futs).await;
-
-        warn!("tun at {} stopped", tun_name);
+        futures::future::select_all(futs).await.0.map_err(|x| {
+            error!("tun error: {}. stopped", x);
+            x
+        })
     })))
 }

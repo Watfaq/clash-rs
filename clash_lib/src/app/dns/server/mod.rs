@@ -204,11 +204,9 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
     let mut l = DnsListener { server: s };
 
     Some(Box::pin(async move {
-        match l.server.block_until_done().await {
-            Ok(_) => {}
-            Err(e) => {
-                warn!("dns server error: {}", e);
-            }
-        }
+        l.server.block_until_done().await.map_err(|x| {
+            warn!("dns server error: {}", x);
+            crate::Error::DNSError(format!("dns server error: {}", x))
+        })
     }))
 }
