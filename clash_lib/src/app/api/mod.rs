@@ -8,7 +8,7 @@ use http::Method;
 use tokio::sync::{broadcast::Sender, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
@@ -100,7 +100,10 @@ pub fn get_api_runner(
             axum::Server::bind(&addr)
                 .serve(app.into_make_service_with_connect_info::<SocketAddr>())
                 .await
-                .unwrap();
+                .map_err(|x| {
+                    error!("API server error: {}", x);
+                    crate::Error::Operation(format!("API server error: {}", x))
+                })
         };
         Some(Box::pin(runner))
     } else {

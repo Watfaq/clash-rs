@@ -57,7 +57,7 @@ pub enum Error {
     Operation(String),
 }
 
-pub type Runner = futures::future::BoxFuture<'static, ()>;
+pub type Runner = futures::future::BoxFuture<'static, Result<(), Error>>;
 
 pub struct Options {
     pub config: Config,
@@ -80,9 +80,9 @@ pub enum Config {
 
 pub struct GlobalState {
     log_level: LogLevel,
-    inbound_listener_handle: Option<JoinHandle<()>>,
+    inbound_listener_handle: Option<JoinHandle<Result<(), Error>>>,
     #[allow(dead_code)]
-    dns_listener_handle: Option<JoinHandle<()>>,
+    dns_listener_handle: Option<JoinHandle<Result<(), Error>>>,
 }
 
 pub struct RuntimeController {
@@ -268,18 +268,22 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     runners.push(Box::pin(async move {
         info!("receive shutdown signal");
         shutdown_rx.recv().await;
+        Ok(())
     }));
 
     tasks.push(Box::pin(async move {
-        futures::future::join_all(runners).await;
+        futures::future::select_all(runners).await.0
     }));
 
     tasks.push(Box::pin(async move {
         let _ = tokio::signal::ctrl_c().await;
+        Ok(())
     }));
 
-    futures::future::select_all(tasks).await;
-    Ok(())
+    futures::future::select_all(tasks).await.0.map_err(|x| {
+        error!("runtime error: {}, shutting down", x);
+        x
+    })
 }
 
 #[cfg(test)]

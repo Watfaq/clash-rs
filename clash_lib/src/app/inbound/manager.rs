@@ -65,7 +65,7 @@ impl InboundManager {
         }
 
         Ok(Box::pin(async move {
-            futures::future::join_all(runners).await;
+            futures::future::select_all(runners).await.0
         }))
     }
 
