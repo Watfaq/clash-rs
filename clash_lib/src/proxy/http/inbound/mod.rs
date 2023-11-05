@@ -59,7 +59,7 @@ impl InboundListener for Listener {
         loop {
             let (socket, src_addr) = listener.accept().await?;
 
-            let socket = apply_tcp_options(socket).await?;
+            let socket = apply_tcp_options(socket)?;
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();

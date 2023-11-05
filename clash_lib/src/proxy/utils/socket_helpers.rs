@@ -9,19 +9,33 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
+use tracing::warn;
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
-pub async fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
-    let s = socket2::Socket::from(s.into_std()?);
-    s.set_tcp_keepalive(
-        &TcpKeepalive::new()
-            .with_time(Duration::from_secs(10))
-            .with_interval(Duration::from_secs(1))
-            .with_retries(3),
-    )?;
-    Ok(TcpStream::from_std(s.into())?)
+pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let s = socket2::Socket::from(s.into_std()?);
+        s.set_tcp_keepalive(
+            &TcpKeepalive::new()
+                .with_time(Duration::from_secs(10))
+                .with_interval(Duration::from_secs(1))
+                .with_retries(3),
+        )?;
+        Ok(TcpStream::from_std(s.into())?)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let s = socket2::Socket::from(s.into_std()?);
+        s.set_tcp_keepalive(
+            &TcpKeepalive::new()
+                .with_time(Duration::from_secs(10))
+                .with_interval(Duration::from_secs(1)),
+        )?;
+        Ok(TcpStream::from_std(s.into())?)
+    }
 }
 
 fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
@@ -41,7 +55,11 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
             }
             #[cfg(target_os = "windows")]
             {
-                // TODO maybe fallback to IpAddr
+                warn!(
+                    "binding to interface[{}] by name is not supported on Windows",
+                    name
+                );
+                Ok(())
             }
         }
     }
