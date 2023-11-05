@@ -9,7 +9,6 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-use tracing::warn;
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
