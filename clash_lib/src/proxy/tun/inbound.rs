@@ -158,7 +158,7 @@ pub fn get_runner(
 
     let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
 
-    let tun_name = tun.get_ref().name().to_owned();
+    let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
 
     let (stack, mut tcp_listener, udp_socket) =
