@@ -2378,7 +2378,7 @@ checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 [[package]]
 name = "netstack-lwip"
 version = "0.3.4"
-source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=0528151#0528151c1cb2eb336fce6357e0805f09c023be0d"
+source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=ea4487b6b824d808cd29f09f098863cfcfcf78a5#ea4487b6b824d808cd29f09f098863cfcfcf78a5"
 dependencies = [
  "anyhow",
  "bindgen 0.59.2",
@@ -4126,7 +4126,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 [[package]]
 name = "tun"
 version = "0.6.1"
-source = "git+https://github.com/Watfaq/rust-tun.git?rev=f0df1d51cbbd205385ed82b036bf4bf0ea91aea6#f0df1d51cbbd205385ed82b036bf4bf0ea91aea6"
+source = "git+https://github.com/Watfaq/rust-tun.git?rev=4afb013ef3ed78ccb55692e4d7bb624aacc5e2ee#4afb013ef3ed78ccb55692e4d7bb624aacc5e2ee"
 dependencies = [
  "byteorder",
  "bytes",
