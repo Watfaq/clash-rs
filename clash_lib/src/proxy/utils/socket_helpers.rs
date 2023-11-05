@@ -10,6 +10,9 @@ use tokio::{
     time::timeout,
 };
 
+#[cfg(target_os = "windows")]
+use tracing::warn;
+
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
