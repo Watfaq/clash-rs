@@ -13,7 +13,7 @@ jobs:
     name: test on ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2019]
+        os: [ubuntu-22.04, macos-13, windows-2022]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -40,7 +40,7 @@ jobs:
     container: ${{ matrix.container }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2019]
+        os: [ubuntu-22.04, macos-13, windows-2022]
         include:
           - os: ubuntu-22.04
             targets: >
@@ -49,7 +49,7 @@ jobs:
             targets: >
               aarch64-apple-darwin
               x86_64-apple-darwin
-          - os: windows-2019
+          - os: windows-2022
             targets: >
               x86_64-pc-windows-msvc
     steps:
