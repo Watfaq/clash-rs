@@ -60,7 +60,7 @@ axum = { version = "0.6.20", features = ["ws"] }
 tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4.26", features = ["serde"] }
 
-tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "4afb013ef3ed78ccb55692e4d7bb624aacc5e2ee",  features = ["async"] }
+tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "27724d2d8754952e530af9fde5b3a3edebc42e10",  features = ["async"] }
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "ea4487b6b824d808cd29f09f098863cfcfcf78a5" }
 
 boringtun = { version = "0.6.0" }
