@@ -4126,7 +4126,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 [[package]]
 name = "tun"
 version = "0.6.1"
-source = "git+https://github.com/Watfaq/rust-tun.git?rev=c310e43928297697e7334bb28c2874282bff4334#c310e43928297697e7334bb28c2874282bff4334"
+source = "git+https://github.com/Watfaq/rust-tun.git?rev=8f7568190f1200d3e272ca534baf8d1578147e18#8f7568190f1200d3e272ca534baf8d1578147e18"
 dependencies = [
  "byteorder",
  "bytes",
