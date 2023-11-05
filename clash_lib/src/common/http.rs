@@ -73,6 +73,8 @@ pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<H
     let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
     ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
         .map_err(map_io_error)?;
+    #[cfg(target_os = "windows")]
+    ssl.set_verify(boring::ssl::SslVerifyMode::NONE); // TODO: verify certificate
 
     let connector = HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
     Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
