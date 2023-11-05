@@ -61,7 +61,7 @@ tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4.26", features = ["serde"] }
 
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
-netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "974a7339075386e7e31696d936c3b02bdfde3062" }
+netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
 
 boringtun = { version = "0.6.0" }
 
