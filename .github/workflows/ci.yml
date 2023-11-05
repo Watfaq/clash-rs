@@ -13,7 +13,7 @@ jobs:
     name: test on ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13]
+        os: [ubuntu-22.04, macos-13, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -39,7 +39,7 @@ jobs:
     container: ${{ matrix.container }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13]
+        os: [ubuntu-22.04, macos-13, windows-latest]
         include:
           - os: ubuntu-22.04
             targets: >
@@ -48,6 +48,9 @@ jobs:
             targets: >
               aarch64-apple-darwin
               x86_64-apple-darwin
+          - os: windows-latest
+            targets: >
+              x86_64-pc-windows-msvc
     steps:
     - uses: actions/checkout@v4
       with:
