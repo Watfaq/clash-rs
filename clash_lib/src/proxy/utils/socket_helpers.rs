@@ -9,6 +9,8 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
+
+#[cfg(target_os = "windows")]
 use tracing::warn;
 
 use super::Interface;
