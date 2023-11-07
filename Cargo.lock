@@ -1139,9 +1139,9 @@ checksum = "f2696e8a945f658fd14dc3b87242e6b80cd0f36ff04ea560fa39082368847946"
 
 [[package]]
 name = "dhcproto"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f50f70ee36644509addb2a569d132eef63c579ba1395b735eeef56675fbcbc7"
+checksum = "000717b4f6913807b6195419e0bacb008d449ba6023ca26abf349c4ff2f1866b"
 dependencies = [
  "dhcproto-macros",
  "hex",
