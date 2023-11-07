@@ -806,7 +806,7 @@ dependencies = [
  "netstack-lwip",
  "network-interface",
  "once_cell",
- "opentelemetry 0.20.0",
+ "opentelemetry 0.21.0",
  "opentelemetry-jaeger",
  "prost",
  "public-suffix",
