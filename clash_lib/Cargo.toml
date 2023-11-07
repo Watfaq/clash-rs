@@ -91,7 +91,7 @@ tracing-oslog = "0.1"
 tracing-appender = "0.2.2"
 
 
-shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust.git", optional = true, features=["aead-cipher-2022"], rev = "2021741" }
+shadowsocks = { version = "1.17.0", optional = true, features=["aead-cipher-2022"] }
 maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
