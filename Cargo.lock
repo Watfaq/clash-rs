@@ -1148,7 +1148,7 @@ dependencies = [
  "ipnet",
  "rand",
  "thiserror",
- "trust-dns-proto 0.22.0",
+ "trust-dns-proto",
  "url",
 ]
 
@@ -3359,18 +3359,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.191"
+version = "1.0.192"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a834c4821019838224821468552240d4d95d14e751986442c816572d39a080c9"
+checksum = "bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.191"
+version = "1.0.192"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46fa52d5646bce91b680189fe5b1c049d2ea38dabb4e2e7c8d00ca12cfbfbcfd"
+checksum = "d6c7207fbec9faa48073f3e3074cbe553af6ea512d7c21ba46e434e70ea9fbc1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3447,8 +3447,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.16.0"
-source = "git+https://github.com/Watfaq/shadowsocks-rust.git?rev=2021741#202174108c3255ce6e7abacc74b224f97f0459ee"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a88117e02c82d31aa5c967d8bb7f100747512d257fd3de8e0c14797262c9598a"
 dependencies = [
  "aes",
  "arc-swap",
@@ -3459,6 +3460,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "futures",
+ "hickory-resolver",
  "libc",
  "log",
  "lru_time_cache",
@@ -3477,7 +3479,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tfo",
- "trust-dns-resolver",
  "url",
  "windows-sys",
 ]
@@ -4147,52 +4148,6 @@ dependencies = [
  "tinyvec",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "trust-dns-proto"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
-dependencies = [
- "async-trait",
- "cfg-if",
- "data-encoding",
- "enum-as-inner 0.6.0",
- "futures-channel",
- "futures-io",
- "futures-util",
- "idna 0.4.0",
- "ipnet",
- "once_cell",
- "rand",
- "smallvec",
- "thiserror",
- "tinyvec",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "trust-dns-resolver"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
-dependencies = [
- "cfg-if",
- "futures-util",
- "ipconfig",
- "lru-cache",
- "once_cell",
- "parking_lot 0.12.1",
- "rand",
- "resolv-conf",
- "smallvec",
- "thiserror",
- "tokio",
- "tracing",
- "trust-dns-proto 0.23.0",
 ]
 
 [[package]]
