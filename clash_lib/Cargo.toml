@@ -77,7 +77,7 @@ hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-htt
 
 # DoH
 rustls = { version  = "0.21", features=["dangerous_configuration"] }
-rustls-pemfile = "1.0.3"
+rustls-pemfile = "1.0.4"
 webpki-roots = "0.25"
 dhcproto = "0.11"
 
