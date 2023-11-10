@@ -808,6 +808,7 @@ dependencies = [
  "once_cell",
  "opentelemetry",
  "opentelemetry-jaeger",
+ "opentelemetry_sdk",
  "prost",
  "public-suffix",
  "rand",
