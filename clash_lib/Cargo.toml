@@ -6,7 +6,7 @@ edition = { workspace = true }
 
 [features]
 default = ["shadowsocks"]
-tracing = ["console-subscriber", "tracing-timing"]
+tracing = []
 bench = ["criterion"]
 
 [dependencies]
@@ -45,7 +45,8 @@ once_cell = "1.18.0"
 
 # opentelemetry
 opentelemetry = "0.21"
-tracing-opentelemetry = "0.21" 
+opentelemetry_sdk = "0.21"
+tracing-opentelemetry = "0.22" 
 opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 
 crc32fast = "1.3.2"
@@ -96,8 +97,8 @@ maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
-console-subscriber = { version = "0.2.0", optional = true }
-tracing-timing = { version = "0.6.0", optional = true }
+console-subscriber = { version = "0.2.0" }
+tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 
 [dev-dependencies]
