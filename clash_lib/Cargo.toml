@@ -35,7 +35,7 @@ libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "1.1.1"
 base64 = "0.21"
-uuid = { version = "1.6.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 boring-sys = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
 hyper-boring = { git = "https://github.com/Watfaq/boring.git", rev = "24c006f" }
