@@ -40,7 +40,7 @@ Can be found at https://github.com/Watfaq/clash-rs/releases
 ### Local Build
 
 ```
-$ bazel build //clash
+$ cargo build
 ```
 
 ## 🔨 Usage
@@ -77,9 +77,6 @@ Options:
 - [Config Reference](https://watfaq.github.io/clash-rs/)
 - [Roadmap](https://github.com/Watfaq/clash-rs/issues/59)
 
-## ⌨️ Development
-
-We use *bazel* as our build system, however *cargo* is also supported.
 
 ## 🤝 Contributing
 

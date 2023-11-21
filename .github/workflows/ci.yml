@@ -27,9 +27,6 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-#    https://github.com/bazelbuild/rules_rust/issues/1966
-#    maybe we should not use bazel anymore
-#    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
     - uses: Swatinem/rust-cache@v2
     - run: cargo test --all --all-features
     
