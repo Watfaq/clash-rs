@@ -31,43 +31,21 @@ jobs:
     - run: cargo test --all --all-features
     
   publish:
-    name: publish ${{ matrix.id }}
+    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }}
     if: contains(github.ref, 'tags/v')
     needs: [test]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platforms.os }}
     strategy:
-      matrix:        
-        os: [ubuntu-22.04, macos-13, windows-2022]
-        target: [""],
-        include:
-          - os: ubuntu-22.04
-            id: ubuntu-22.04-x86_64
-            target: >
-              x86_64-unknown-linux-gnu
-          - os: ubuntu-22.04
-            id: ubuntu-22.04-aarch64
-            target: >
-              aarch64-unknown-linux-gnu
-          - os: ubuntu-22.04
-            id: ubuntu-22.04-armv7-hf
-            target: >
-              armv7-unknown-linux-gnueabihf
-          - os: ubuntu-22.04
-            id: ubuntu-22.04-armv7
-            target: >
-              armv7-unknown-linux-gnueabi
-          - os: macos-13
-            id: macos-13-x86_64
-            target: >
-              aarch64-apple-darwin
-          - os: macos-13
-            id: macos-13-aarch64
-            target: >
-              x86_64-apple-darwin
-          - os: windows-2022
-            id: windows-2022-x86_64
-            target: >
-              x86_64-pc-windows-msvc
+      matrix:
+        platforms: [
+          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
+          {os: macos-13, target: aarch64-apple-darwin},
+          {os: macos-13, target: x86_64-apple-darwin},
+          {os: windows-2022, target: x86_64-pc-windows-msvc},
+        ]   
     steps:
     - uses: actions/checkout@v4
       with:
@@ -81,7 +59,7 @@ jobs:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
     - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.target }}"
+      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}"
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1        
