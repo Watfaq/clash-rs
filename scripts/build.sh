@@ -25,7 +25,7 @@ for TARGET in $1; do
       export CXX=aarch64-linux-gnu-g++
       export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr/aarch64-linux-gnu"
       ;;
-    arm-unknown-linux-gnueabi)
+    arm-unknown-linux-gnueabi | armv7-unknown-linux-gnueabi)
       sudo apt install -y gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi libc6-dev-armel-cross
       export CC=arm-linux-gnueabi-gcc
       export CXX=arm-linux-gnueabi-g++
