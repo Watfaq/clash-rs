@@ -41,21 +41,27 @@ jobs:
         os: [ubuntu-22.04, macos-13, windows-2022]
         include:
           - os: ubuntu-22.04
+            id: ubuntu-22.04-x86_64
             target: >
               x86_64-unknown-linux-gnu
           - os: ubuntu-22.04
+            id: ubuntu-22.04-aarch64
             target: >
               aarch64-unknown-linux-gnu
           - os: ubuntu-22.04
+            id: ubuntu-22.04-armv7-hf
             target: >
               armv7-unknown-linux-gnueabihf
           - os: ubuntu-22.04
+            id: ubuntu-22.04-armv7
             target: >
               armv7-unknown-linux-gnueabi
           - os: macos-13
+            id: macos-13-x86_64
             target: >
               aarch64-apple-darwin
           - os: macos-13
+            id: macos-13-aarch64
             target: >
               x86_64-apple-darwin
           - os: windows-2022
