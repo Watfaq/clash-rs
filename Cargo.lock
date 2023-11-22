@@ -373,9 +373,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.66.1"
+version = "0.68.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
+checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
 dependencies = [
  "bitflags 2.4.0",
  "cexpr",
@@ -459,8 +459,8 @@ dependencies = [
 
 [[package]]
 name = "boring"
-version = "3.0.4"
-source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
+version = "4.1.0"
+source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
 dependencies = [
  "bitflags 2.4.0",
  "boring-sys",
@@ -471,10 +471,10 @@ dependencies = [
 
 [[package]]
 name = "boring-sys"
-version = "3.0.4"
-source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
+version = "4.1.0"
+source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
 dependencies = [
- "bindgen 0.66.1",
+ "bindgen 0.68.1",
  "cmake",
  "fs_extra",
  "fslock",
@@ -744,7 +744,7 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 
 [[package]]
 name = "clash"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "clap 4.4.8",
  "clash_lib",
@@ -752,14 +752,14 @@ dependencies = [
 
 [[package]]
 name = "clash_doc"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "clash_lib",
 ]
 
 [[package]]
 name = "clash_lib"
-version = "0.1.5"
+version = "0.1.8"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1892,8 +1892,8 @@ dependencies = [
 
 [[package]]
 name = "hyper-boring"
-version = "3.0.4"
-source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
+version = "4.1.0"
+source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
 dependencies = [
  "antidote",
  "boring",
@@ -3761,11 +3761,12 @@ dependencies = [
 
 [[package]]
 name = "tokio-boring"
-version = "3.0.4"
-source = "git+https://github.com/Watfaq/boring.git?rev=24c006f#24c006fd8200bdf4244a58fd3d73bbcd27b7717b"
+version = "4.1.0"
+source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
 dependencies = [
  "boring",
  "boring-sys",
+ "once_cell",
  "tokio",
 ]
 

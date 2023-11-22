@@ -27,31 +27,25 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-#    https://github.com/bazelbuild/rules_rust/issues/1966
-#    maybe we should not use bazel anymore
-#    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
     - uses: Swatinem/rust-cache@v2
     - run: cargo test --all --all-features
     
   publish:
+    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }}
     if: contains(github.ref, 'tags/v')
     needs: [test]
-    runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
+    runs-on: ${{ matrix.platforms.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
-        include:
-          - os: ubuntu-22.04
-            targets: >
-              x86_64-unknown-linux-gnu
-          - os: macos-13
-            targets: >
-              aarch64-apple-darwin
-              x86_64-apple-darwin
-          - os: windows-2022
-            targets: >
-              x86_64-pc-windows-msvc
+        platforms: [
+          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
+          {os: macos-13, target: aarch64-apple-darwin},
+          {os: macos-13, target: x86_64-apple-darwin},
+          {os: windows-2022, target: x86_64-pc-windows-msvc},
+        ]   
     steps:
     - uses: actions/checkout@v4
       with:
@@ -65,7 +59,7 @@ jobs:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
     - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.targets }}"
+      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}"
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1        
