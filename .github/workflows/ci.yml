@@ -31,13 +31,12 @@ jobs:
     - run: cargo test --all --all-features
     
   publish:
-    name: publish ${{ matrix.target }}
+    name: publish ${{ matrix.id }}
     if: contains(github.ref, 'tags/v')
     needs: [test]
     runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
     strategy:
-      matrix:
+      matrix:        
         os: [ubuntu-22.04, macos-13, windows-2022]
         include:
           - os: ubuntu-22.04
@@ -65,6 +64,7 @@ jobs:
             target: >
               x86_64-apple-darwin
           - os: windows-2022
+            id: windows-2022-x86_64
             target: >
               x86_64-pc-windows-msvc
     steps:
