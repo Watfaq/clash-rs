@@ -38,6 +38,7 @@ jobs:
     strategy:
       matrix:        
         os: [ubuntu-22.04, macos-13, windows-2022]
+        target: [],
         include:
           - os: ubuntu-22.04
             id: ubuntu-22.04-x86_64
