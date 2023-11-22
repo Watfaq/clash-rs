@@ -4,8 +4,14 @@ set -xe
 
 [ ! -d "target/artifacts" ] && mkdir -p target/artifacts
 
-sudo apt update
-sudo apt install -y gcc-multilib gcc make
+os=`uname`
+case $os in
+  Linux)
+    sudo apt update
+    sudo apt install -y gcc-multilib gcc make
+    ;;
+esac
+
 
 for TARGET in $1; do
   TARGET=`echo "$TARGET" | tr -d '[:space:]' | tr -d '\n' | tr -d '\r'`
