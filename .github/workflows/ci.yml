@@ -31,6 +31,7 @@ jobs:
     - run: cargo test --all --all-features
     
   publish:
+    name: publish ${{ matrix.target }}
     if: contains(github.ref, 'tags/v')
     needs: [test]
     runs-on: ${{ matrix.os }}
@@ -40,18 +41,25 @@ jobs:
         os: [ubuntu-22.04, macos-13, windows-2022]
         include:
           - os: ubuntu-22.04
-            targets: >
+            target: >
               x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            target: >
               aarch64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            target: >
               armv7-unknown-linux-gnueabihf
+          - os: ubuntu-22.04
+            target: >
               armv7-unknown-linux-gnueabi
           - os: macos-13
-            targets: >
+            target: >
               aarch64-apple-darwin
           - os: macos-13
+            target: >
               x86_64-apple-darwin
           - os: windows-2022
-            targets: >
+            target: >
               x86_64-pc-windows-msvc
     steps:
     - uses: actions/checkout@v4
@@ -66,7 +74,7 @@ jobs:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
     - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.targets }}"
+      run: sh ./scripts/build.sh "${{ matrix.target }}"
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1        
