@@ -1,6 +1,6 @@
 // a rust implementation of https://github.com/MetaCubeX/Clash.Meta/blob/Alpha/transport/simple-obfs/tls.go
 
-use std::{pin::Pin, borrow::Cow};
+use std::{borrow::Cow, pin::Pin};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::BufMut;
@@ -51,7 +51,6 @@ impl AsyncRead for TLSObfs {
         let this = self.get_mut();
         todo!()
     }
-
 }
 
 impl TLSObfs {

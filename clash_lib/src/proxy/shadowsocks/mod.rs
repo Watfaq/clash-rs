@@ -16,7 +16,7 @@ use crate::{
             BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
             ChainedStream, ChainedStreamWrapper,
         },
-        dns::ThreadSafeDNSResolver
+        dns::ThreadSafeDNSResolver,
     },
     proxy::{CommonOption, OutboundHandler},
     session::{Session, SocksAddr},
@@ -213,12 +213,11 @@ impl OutboundHandler for Handler {
             Some(plugin) => {
                 match plugin {
                     OBFSOption::Simple(opts) => {
-                        tracing::warn!("simple-obfs is deprecated, please use v2ray-plugin instead");
-                        simple_obfs::SimpleObfsHTTP::new(
-                            s,
-                            opts.host.clone(),
-                            self.opts.port,
-                        ).into()
+                        tracing::warn!(
+                            "simple-obfs is deprecated, please use v2ray-plugin instead"
+                        );
+                        simple_obfs::SimpleObfsHTTP::new(s, opts.host.clone(), self.opts.port)
+                            .into()
                         // return Err(io::Error::new(
                         //     io::ErrorKind::Other,
                         //     "simple-obfs is deprecated, please use v2ray-plugin instead",
@@ -228,7 +227,7 @@ impl OutboundHandler for Handler {
                         todo!("v2ray-plugin is not implemented yet")
                     }
                 }
-            },
+            }
             None => s,
         };
 
