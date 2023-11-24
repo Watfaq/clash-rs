@@ -210,24 +210,23 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin_opts {
-            Some(plugin) => {
-                match plugin {
-                    OBFSOption::Simple(opts) => {
-                        tracing::warn!(
-                            "simple-obfs is deprecated, please use v2ray-plugin instead"
-                        );
-                        simple_obfs::SimpleObfsHTTP::new(s, opts.host.clone(), self.opts.port)
-                            .into()
-                        // return Err(io::Error::new(
-                        //     io::ErrorKind::Other,
-                        //     "simple-obfs is deprecated, please use v2ray-plugin instead",
-                        // ))
-                    }
-                    OBFSOption::V2Ray(_opt) => {
-                        todo!("v2ray-plugin is not implemented yet")
+            Some(plugin) => match plugin {
+                OBFSOption::Simple(opts) => {
+                    tracing::warn!("simple-obfs is deprecated, please use v2ray-plugin instead");
+                    match opts.mode {
+                        SimpleOBFSMode::Http => {
+                            simple_obfs::SimpleObfsHTTP::new(s, opts.host.clone(), self.opts.port)
+                                .into()
+                        }
+                        SimpleOBFSMode::Tls => {
+                            simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
+                        }
                     }
                 }
-            }
+                OBFSOption::V2Ray(_opt) => {
+                    todo!("v2ray-plugin is not implemented yet")
+                }
+            },
             None => s,
         };
 
