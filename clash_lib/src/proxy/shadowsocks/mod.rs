@@ -1,10 +1,10 @@
 mod datagram;
-mod obfs;
+mod simple_obfs;
 mod stream;
 mod v2ray;
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
+use futures::{Stream, TryFutureExt};
 use shadowsocks::{
     config::ServerType, context::Context, crypto::CipherKind,
     relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket, ServerConfig,
@@ -209,19 +209,26 @@ impl OutboundHandler for Handler {
         sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
-        if let Some(plugin) = &self.opts.plugin_opts {
-            match plugin {
-                OBFSOption::Simple(_) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "simple-obfs is deprecated, please use v2ray-plugin instead",
-                    ))
+        let stream: AnyStream = match &self.opts.plugin_opts {
+            Some(plugin) => match plugin {
+                OBFSOption::Simple(opts) => {
+                    tracing::warn!("simple-obfs is deprecated, please use v2ray-plugin instead");
+                    match opts.mode {
+                        SimpleOBFSMode::Http => {
+                            simple_obfs::SimpleObfsHTTP::new(s, opts.host.clone(), self.opts.port)
+                                .into()
+                        }
+                        SimpleOBFSMode::Tls => {
+                            simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
+                        }
+                    }
                 }
                 OBFSOption::V2Ray(_opt) => {
                     todo!("v2ray-plugin is not implemented yet")
                 }
-            }
-        }
+            },
+            None => s,
+        };
 
         let ctx = Context::new_shared(ServerType::Local);
         let cfg = ServerConfig::new(
@@ -237,7 +244,7 @@ impl OutboundHandler for Handler {
 
         let stream = ProxyClientStream::from_stream(
             ctx,
-            s,
+            stream,
             &cfg,
             (sess.destination.host(), sess.destination.port()),
         );

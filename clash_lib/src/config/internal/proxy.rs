@@ -100,6 +100,7 @@ pub struct OutboundShadowsocks {
     #[serde(default = "default_bool_true")]
     pub udp: bool,
     pub plugin: Option<String>,
+    #[serde(alias = "plugin-opts")]
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
 }
 
