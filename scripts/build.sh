@@ -12,6 +12,19 @@ case $os in
     ;;
 esac
 
+llvm_version=16
+
+install_llvm() {
+  if ! command -v -- "clang-$llvm_version" &> /dev/null
+  then
+    wget https://apt.llvm.org/llvm.sh -O /tmp/llvm.sh
+    chmod +x /tmp/llvm.sh
+    sudo /tmp/llvm.sh $llvm_version
+  fi
+}
+
+ROOT_DIR=`git rev-parse --show-toplevel`
+
 
 for TARGET in $1; do
   TARGET=`echo "$TARGET" | tr -d '[:space:]' | tr -d '\n' | tr -d '\r'`
@@ -19,11 +32,25 @@ for TARGET in $1; do
   rustup target add $TARGET
 
   case $TARGET in
+    x86_64-unknown-linux-musl)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/x86_64-musl.cmake
+      ;;
     aarch64-unknown-linux-gnu)
       sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
       export CC=aarch64-linux-gnu-gcc
       export CXX=aarch64-linux-gnu-g++
       export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr/aarch64-linux-gnu"
+      ;;
+    aarch64-unknown-linux-musl)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export LDFLAGS="-fuse-ld=lld"
+      export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr/aarch64-linux-gnu"
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/aarch64-musl.cmake
       ;;
     arm-unknown-linux-gnueabi | armv7-unknown-linux-gnueabi)
       sudo apt install -y gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi libc6-dev-armel-cross
@@ -34,6 +61,34 @@ for TARGET in $1; do
       sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf libc6-dev-armhf-cross
       export CC=arm-linux-gnueabihf-gcc
       export CXX=arm-linux-gnueabihf-g++
+      ;;
+    arm-unknown-linux-musleabi)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export LDFLAGS="-fuse-ld=lld"
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/arm-musl.cmake
+      ;;
+    arm-unknown-linux-musleabihf)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export LDFLAGS="-fuse-ld=lld"
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armhf-musl.cmake
+      ;;
+    armv7-unknown-linux-musleabi)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export LDFLAGS="-fuse-ld=lld"
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armv7-musl.cmake
+      ;;
+    armv7-unknown-linux-musleabihf)
+      install_llvm
+      export CC=clang-$llvm_version
+      export CXX=clang++-$llvm_version
+      export LDFLAGS="-fuse-ld=lld"
+      export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armv7hf-musl.cmake
       ;;
     i686-unknown-linux-gnu)
       sudo apt install -y libc6-dev-i386
