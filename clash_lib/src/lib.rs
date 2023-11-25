@@ -135,12 +135,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
 
-    let config: InternalConfig = match opts.config {
-        Config::Def(c) => c.try_into()?,
-        Config::Internal(c) => c,
-        Config::File(file) => TryInto::<def::Config>::try_into(PathBuf::from(file))?.try_into()?,
-        Config::Str(s) => s.parse::<def::Config>()?.try_into()?,
-    };
+    let config: InternalConfig = opts.config.try_parse()?;
 
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
     let cwd = std::path::Path::new(&cwd);
