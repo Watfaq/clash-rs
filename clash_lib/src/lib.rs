@@ -78,6 +78,17 @@ pub enum Config {
     Str(String),
 }
 
+impl Config {
+    pub fn try_parse(self) -> Result<InternalConfig, Error> {
+        match self {
+            Config::Def(c) => c.try_into(),
+            Config::Internal(c) => Ok(c),
+            Config::File(file) => TryInto::<def::Config>::try_into(PathBuf::from(file))?.try_into(),
+            Config::Str(s) => s.parse::<def::Config>()?.try_into(),
+        }
+    }
+}
+
 pub struct GlobalState {
     log_level: LogLevel,
     inbound_listener_handle: Option<JoinHandle<Result<(), Error>>>,
