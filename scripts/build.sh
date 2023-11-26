@@ -45,6 +45,7 @@ for TARGET in $1; do
       export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=/usr/aarch64-linux-gnu"
       ;;
     aarch64-unknown-linux-musl)
+      sudo apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -63,6 +64,7 @@ for TARGET in $1; do
       export CXX=arm-linux-gnueabihf-g++
       ;;
     arm-unknown-linux-musleabi)
+      sudo apt install -y gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi libc6-dev-armel-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -70,6 +72,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/arm-musl.cmake
       ;;
     arm-unknown-linux-musleabihf)
+      sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf libc6-dev-armhf-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -77,6 +80,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armhf-musl.cmake
       ;;
     armv7-unknown-linux-musleabi)
+      sudo apt install -y gcc-arm-linux-gnueabi g++-arm-linux-gnueabi binutils-arm-linux-gnueabi libc6-dev-armel-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -84,6 +88,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armv7-musl.cmake
       ;;
     armv7-unknown-linux-musleabihf)
+      sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf libc6-dev-armhf-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
