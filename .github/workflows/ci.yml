@@ -42,15 +42,12 @@ jobs:
     runs-on: ${{ matrix.platforms.os }}
     strategy:
       matrix:
+        static: [true, false]
         platforms: [
-          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: x86_64-unknown-linux-musl},
+          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, static},
           {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: aarch64-unknown-linux-musl},
           {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
-# not working some how          {os: ubuntu-22.04, target: armv7-unknown-linux-musleabihf},
           {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-musleabi},
           {os: macos-13, target: aarch64-apple-darwin},
           {os: macos-13, target: x86_64-apple-darwin},
           {os: windows-2022, target: x86_64-pc-windows-msvc},
@@ -68,7 +65,7 @@ jobs:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
     - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}"
+      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1        
