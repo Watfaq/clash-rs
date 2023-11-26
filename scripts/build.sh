@@ -8,7 +8,7 @@ os=`uname`
 case $os in
   Linux)
     sudo apt update
-    sudo apt install -y gcc-multilib gcc make
+    sudo apt install -y gcc-multilib gcc make musl-dev musl-tools
     ;;
 esac
 
