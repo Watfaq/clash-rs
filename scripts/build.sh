@@ -33,11 +33,10 @@ for TARGET in $1; do
 
   case $TARGET in
     x86_64-unknown-linux-musl)
-      sudo apt install -y libc6-dev-arm64-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
-      export LDFLAGS="-fuse-ld=lld --sysroot=/usr/x86_64-linux-gnu"
+      export LDFLAGS="-fuse-ld=lld"
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/x86_64-musl.cmake
       ;;
     aarch64-unknown-linux-gnu)
