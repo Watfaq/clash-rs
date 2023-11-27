@@ -36,7 +36,7 @@ jobs:
       run: cargo test --all --all-features
     
   publish:
-    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static: ${{ matrix.static }}
+    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
     if: contains(github.ref, 'tags/v')
     needs: [test]
     runs-on: ${{ matrix.platforms.os }}
