@@ -156,7 +156,7 @@ for TARGET in $1; do
       ;;
     *)
       if [ "$2" = "true" ]; then
-        export RUSTFLAGS="-Clink-self-contained=yes -Ctarget-feature=+crt-static"
+        export RUSTFLAGS="-Ctarget-feature=+crt-static"
       fi
       ;;
   esac
