@@ -15,8 +15,8 @@ esac
 llvm_version=16
 
 install_llvm() {
-  if ! command -v -- "clang-$llvm_version" &> /dev/null
-  then
+  status=$(command -v -- "clang-$llvm_version" > /dev/null 2>&1; echo $?)
+  if [ $status -ne 0 ]; then
     wget https://apt.llvm.org/llvm.sh -O /tmp/llvm.sh
     chmod +x /tmp/llvm.sh
     sudo /tmp/llvm.sh $llvm_version
@@ -65,7 +65,7 @@ for TARGET in $1; do
       export CXX=arm-linux-gnueabihf-g++
       ;;
     arm-unknown-linux-musleabi)
-      sudo apt install -y libc6-dev-armel-cross gcc-arm-linux-gnueabi
+      sudo apt install -y libc6-dev-armel-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -73,7 +73,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/arm-musl.cmake
       ;;
     arm-unknown-linux-musleabihf)
-      sudo apt install -y libc6-dev-armhf-cross gcc-arm-linux-gnueabihf
+      sudo apt install -y libc6-dev-armhf-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -81,7 +81,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armhf-musl.cmake
       ;;
     armv7-unknown-linux-musleabi)
-      sudo apt install -y libc6-dev-armel-cross gcc-arm-linux-gnueabi
+      sudo apt install -y libc6-dev-armel-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -89,7 +89,7 @@ for TARGET in $1; do
       export CMAKE_TOOLCHAIN_FILE=$ROOT_DIR/scripts/cmake/armv7-musl.cmake
       ;;
     armv7-unknown-linux-musleabihf)
-      sudo apt install -y libc6-dev-armhf-cross gcc-arm-linux-gnueabihf
+      sudo apt install -y libc6-dev-armhf-cross
       install_llvm
       export CC=clang-$llvm_version
       export CXX=clang++-$llvm_version
@@ -145,19 +145,24 @@ for TARGET in $1; do
       export CXX=riscv64-linux-gnu-g++
       ;;
   esac
-  if [[ "$TARGET" == *"musl"* ]]; then
-    if [[ $2 == "true" ]]; then
-      export RUSTFLAGS="-Clinker=rust-lld -Clink-self-contained=yes -Ctarget-feature=+crt-static"
-    else
-      export RUSTFLAGS="-Clinker=rust-lld"
-    fi
-  else
-    if [[ $2 == "true" ]]; then
-      export RUSTFLAGS="-Clink-self-contained=yes -Ctarget-feature=+crt-static"
-    fi
-  fi
+  
+  case $TARGET in
+    *musl*)
+      if [ "$2" = "true" ]; then
+        export RUSTFLAGS="-Clinker=rust-lld -Clink-self-contained=yes -Ctarget-feature=+crt-static"
+      else
+        export RUSTFLAGS="-Clinker=rust-lld"
+      fi
+      ;;
+    *)
+      if [ "$2" = "true" ]; then
+        export RUSTFLAGS="-Clink-self-contained=yes -Ctarget-feature=+crt-static"
+      fi
+      ;;
+  esac
+
   OUTPUT_BIN=./target/artifacts/clash-$TARGET
-  if [[ "$2" == "true" ]]; then
+  if [ "$2" = "true" ]; then
     OUTPUT_BIN=$OUTPUT_BIN-static-crt
   fi
 
