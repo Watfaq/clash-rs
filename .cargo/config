@@ -14,3 +14,9 @@ linker = "/usr/bin/arm-linux-gnueabihf-gcc"
 
 [target.armv7-unknown-linux-gnueabi]
 linker = "/usr/bin/arm-linux-gnueabi-gcc"
+
+[target.arm-unknown-linux-gnueabihf]
+linker = "/usr/bin/arm-linux-gnueabihf-gcc"
+
+[target.arm-unknown-linux-gnueabi]
+linker = "/usr/bin/arm-linux-gnueabi-gcc"

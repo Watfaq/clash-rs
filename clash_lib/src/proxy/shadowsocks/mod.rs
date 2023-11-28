@@ -4,7 +4,7 @@ mod stream;
 mod v2ray;
 
 use async_trait::async_trait;
-use futures::{Stream, TryFutureExt};
+use futures::TryFutureExt;
 use shadowsocks::{
     config::ServerType, context::Context, crypto::CipherKind,
     relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket, ServerConfig,
