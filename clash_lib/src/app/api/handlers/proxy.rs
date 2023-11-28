@@ -1,8 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
-    extract::{Extension, Path, Query, State},
-    http::Request,
+    extract::{Extension, Path, Query, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -57,11 +56,11 @@ async fn get_proxies(State(state): State<ProxyState>) -> impl IntoResponse {
     axum::response::Json(res)
 }
 
-async fn find_proxy_by_name<B>(
+async fn find_proxy_by_name(
     State(state): State<ProxyState>,
     Path(name): Path<String>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request,
+    next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
     if let Some(proxy) = outbound_manager.get_outbound(&name) {

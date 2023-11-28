@@ -1,10 +1,9 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
-    extract::{Path, Query, State},
-    http::Request,
+    extract::{Path, Query, Request, State},
     http::StatusCode,
-    middleware::{self, Next},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::get,
     Extension, Router,
@@ -35,13 +34,13 @@ pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppStat
                     Router::new()
                         .route("/", get(get_proxy))
                         .route("/healthcheck", get(get_proxy_delay))
-                        .layer(middleware::from_fn_with_state(
+                        .layer(axum::middleware::from_fn_with_state(
                             state.clone(),
                             find_provider_proxy_by_name,
                         ))
                         .with_state(state.clone()),
                 )
-                .layer(middleware::from_fn_with_state(
+                .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     find_proxy_provider_by_name,
                 ))
@@ -73,8 +72,8 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
 async fn find_proxy_provider_by_name<B>(
     State(state): State<ProviderState>,
     Path(name): Path<String>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request,
+    next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
     if let Some(provider) = outbound_manager.get_proxy_provider(&name) {
@@ -126,8 +125,8 @@ async fn provider_healthcheck(
 async fn find_provider_proxy_by_name<B>(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
     Path(params): Path<HashMap<String, String>>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request,
+    next: Next,
 ) -> Response {
     let proxy = provider.read().await.proxies().await;
     let proxy = proxy
@@ -163,6 +162,7 @@ struct DelayRequest {
     url: String,
     timeout: u16,
 }
+#[axum_macros::debug_handler]
 async fn get_proxy_delay(
     State(state): State<ProviderState>,
     Extension(proxy): Extension<AnyOutboundHandler>,

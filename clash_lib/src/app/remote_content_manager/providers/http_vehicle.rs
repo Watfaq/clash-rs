@@ -5,7 +5,8 @@ use crate::common::http::{new_http_client, HttpClient};
 
 use async_trait::async_trait;
 
-use hyper::{body, Uri};
+use http::Uri;
+use hyper::body;
 
 use std::io;
 

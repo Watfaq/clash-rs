@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::{ws::Message, FromRequest, Path, Query, State, WebSocketUpgrade},
     response::IntoResponse,
     routing::{delete, get},
     Json, Router,
 };
 use http::{HeaderMap, Request};
-use hyper::{body::HttpBody, Body};
 use serde::Deserialize;
 use tracing::{debug, warn};
 
@@ -63,13 +63,8 @@ async fn get_connections(
 
         loop {
             let snapshot = mgr.snapshot().await;
-            let j = Json(snapshot)
-                .into_response()
-                .data()
-                .await
-                .unwrap()
-                .unwrap();
-            let body = String::from_utf8(j.to_vec()).unwrap();
+            let j = serde_json::to_vec(&snapshot).unwrap();
+            let body = String::from_utf8(j).unwrap();
 
             if let Err(e) = socket.send(Message::Text(body)).await {
                 // likely client gone

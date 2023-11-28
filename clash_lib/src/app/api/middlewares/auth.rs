@@ -73,7 +73,7 @@ where
 
         let unauthorised = Response::builder()
             .status(http::StatusCode::UNAUTHORIZED)
-            .body(axum::body::boxed("unauthorized".to_string()))
+            .body("unauthorized".into())
             .unwrap();
 
         if self.is_websocket(&req) {

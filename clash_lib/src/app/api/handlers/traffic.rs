@@ -3,9 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     extract::{ws::Message, ConnectInfo, State, WebSocketUpgrade},
     response::IntoResponse,
-    Json,
 };
-use hyper::body::HttpBody;
 use serde::Serialize;
 use tracing::warn;
 
@@ -29,10 +27,10 @@ pub async fn handle(
         loop {
             let (up, down) = mgr.now();
             let res = TrafficResponse { up, down };
-            let j = Json(res).into_response().data().await.unwrap().unwrap();
+            let j = serde_json::to_vec(&res).unwrap();
 
             if let Err(e) = socket
-                .send(Message::Text(String::from_utf8(j.to_vec()).unwrap()))
+                .send(Message::Text(String::from_utf8(j).unwrap()))
                 .await
             {
                 warn!("ws send error: {}", e);

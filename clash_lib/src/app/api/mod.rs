@@ -5,6 +5,7 @@ use axum::{response::Redirect, routing::get, Router};
 
 use http::header;
 use http::Method;
+use tokio::net::TcpListener;
 use tokio::sync::{broadcast::Sender, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
@@ -48,13 +49,12 @@ pub fn get_api_runner(
             statistics_manager: statistics_manager.clone(),
         });
 
-        let addr = bind_addr.parse().unwrap();
-
         let cors = CorsLayer::new()
             .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH])
             .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
             .allow_origin(Any);
 
+        let addr = bind_addr.to_string();
         let runner = async move {
             info!("Starting API server at {}", addr);
             let mut app = Router::new()
@@ -97,13 +97,16 @@ pub fn get_api_runner(
                     .nest_service("/ui/", ServeDir::new(PathBuf::from(cwd).join(external_ui)));
             }
 
-            axum::Server::bind(&addr)
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-                .await
-                .map_err(|x| {
-                    error!("API server error: {}", x);
-                    crate::Error::Operation(format!("API server error: {}", x))
-                })
+            let listener = TcpListener::bind(bind_addr).await?;
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .map_err(|x| {
+                error!("API server error: {}", x);
+                crate::Error::Operation(format!("API server error: {}", x))
+            })
         };
         Some(Box::pin(runner))
     } else {
