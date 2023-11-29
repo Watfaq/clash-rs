@@ -704,9 +704,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.9"
+version = "4.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46ca43acc1b21c6cc2d1d3129c19e323a613935b5bc28fb3b33b5b2e5fb00030"
+checksum = "41fffed7514f420abec6d183b1d3acfd9099c79c3a10a06ade4f8203f1411272"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -746,7 +746,7 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 name = "clash"
 version = "0.1.9"
 dependencies = [
- "clap 4.4.9",
+ "clap 4.4.10",
  "clash_lib",
 ]
 
@@ -951,7 +951,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.4.9",
+ "clap 4.4.10",
  "criterion-plot",
  "futures",
  "is-terminal",
