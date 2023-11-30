@@ -106,7 +106,7 @@ tempfile = "3.8"
 ctor = "0.2"
 mockall = "0.11.4"
 tokio-test = "0.4.3"
-axum-macros = "0.3.8"
+axum-macros = "0.4.0"
 
 
 [target.'cfg(target_os = "macos")'.dependencies]
