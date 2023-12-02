@@ -39,9 +39,12 @@ services:
         target: /etc/v2ray/v2ray.key
 
   nginx:
-    build: ./nginx
+    image: nginx
     network_mode: "host"
     volumes:
+      - type: bind
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
       - type: bind
         source: ./v2ray/cert.pem
         target: /etc/v2ray/v2ray.crt
