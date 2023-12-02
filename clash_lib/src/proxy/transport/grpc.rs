@@ -8,6 +8,7 @@ use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
+use tracing::debug;
 use tracing::log;
 
 use std::fmt::Debug;
@@ -113,13 +114,13 @@ impl AsyncRead for GrpcStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        dst: &mut tokio::io::ReadBuf<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         if !self.buffer.is_empty() {
-            let to_read = std::cmp::min(dst.remaining(), self.buffer.len());
+            let to_read = std::cmp::min(buf.remaining(), self.buffer.len());
             let data = self.buffer.split_to(to_read);
             self.payload_len -= to_read as u64;
-            dst.put_slice(&data[..to_read]);
+            buf.put_slice(&data[..to_read]);
             return Poll::Ready(Ok(()));
         };
 
@@ -131,14 +132,14 @@ impl AsyncRead for GrpcStream {
                         data.advance(6);
                         self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
                     }
-                    let to_read = std::cmp::min(dst.remaining(), data.len());
+                    let to_read = std::cmp::min(buf.remaining(), data.len());
                     let to_read = std::cmp::min(self.payload_len as usize, to_read);
                     if to_read == 0 {
                         self.buffer.extend_from_slice(&data[..]);
                         data.clear();
                         break;
                     }
-                    dst.put_slice(&data[..to_read]);
+                    buf.put_slice(&data[..to_read]);
                     self.payload_len -= to_read as u64;
                     data.advance(to_read);
                 }
@@ -147,7 +148,10 @@ impl AsyncRead for GrpcStream {
                     .flow_control()
                     .release_capacity(before_parse_data_len - data.len())
                     .map_or_else(
-                        |e| Err(Error::new(ErrorKind::ConnectionReset, e)),
+                        |e| {
+                            debug!("grpc flow control error: {}", e);
+                            Err(Error::new(ErrorKind::ConnectionReset, e))
+                        },
                         |_| Ok(()),
                     )
             }
@@ -167,18 +171,29 @@ impl AsyncWrite for GrpcStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         self.reserve_send_capacity(buf);
+
         Poll::Ready(match ready!(self.send.poll_capacity(cx)) {
             Some(Ok(to_write)) => {
                 let encoded_buf = self.encode_buf(buf);
                 self.send.send_data(encoded_buf, false).map_or_else(
-                    |e| Err(Error::new(ErrorKind::BrokenPipe, e)),
+                    |e| {
+                        debug!("grpc write error: {}", e);
+                        Err(Error::new(ErrorKind::BrokenPipe, e))
+                    },
                     |_| Ok(to_write),
                 )
+            }
+            Some(Err(e)) => {
+                debug!("grpc poll_capacity error: {}", e);
+                Err(Error::new(ErrorKind::BrokenPipe, e))
             }
             // is_send_streaming returns false
             // which indicates the state is
             // neither open nor half_close_remote
-            _ => Err(Error::new(ErrorKind::BrokenPipe, "broken pipe")),
+            _ => {
+                debug!("grpc poll_capacity conn closed");
+                Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+            }
         })
     }
 
