@@ -43,7 +43,6 @@ dns:
     - 114.114.114.114 # default value
     - 1.1.1.1 # default value
     - tls://1.1.1.1:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
 #    - dhcp://en0 # dns from dhcp
 
 allow-lan: true

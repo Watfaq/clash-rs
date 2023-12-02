@@ -50,7 +50,9 @@ impl GrpcStreamBuilder {
     }
 
     pub async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
-        let (mut client, h2) = h2::client::handshake(stream).await.map_err(map_io_error)?;
+        let (client, h2) = h2::client::handshake(stream).await.map_err(map_io_error)?;
+        let mut client = client.ready().await.map_err(map_io_error)?;
+
         let req = self.req()?;
         let (resp, send_stream) = client.send_request(req, false).map_err(map_io_error)?;
         tokio::spawn(async move {
@@ -92,13 +94,6 @@ impl GrpcStream {
         }
     }
 
-    fn reserve_send_capacity(&mut self, data: &[u8]) {
-        let mut buf = [0u8; 10];
-        let mut buf = &mut buf[..];
-        encode_varint(data.len() as u64, &mut buf);
-        self.send.reserve_capacity(6 + 10 - buf.len() + data.len());
-    }
-
     fn encode_buf(&self, data: &[u8]) -> Bytes {
         let mut buf = BytesMut::with_capacity(16 + data.len());
         let grpc_header = [0u8; 5];
@@ -128,8 +123,8 @@ impl AsyncRead for GrpcStream {
             log::debug!("receive grpc recv stream");
         }
 
-        if !self.buffer.is_empty() {
-            let to_read = std::cmp::min(buf.remaining(), self.buffer.len());
+        if self.payload_len > 0 {
+            let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
             let data = self.buffer.split_to(to_read);
             self.payload_len -= to_read as u64;
             buf.put_slice(&data[..to_read]);
@@ -138,14 +133,18 @@ impl AsyncRead for GrpcStream {
 
         Poll::Ready(
             match ready!(Pin::new(&mut self.recv).as_pin_mut().unwrap().poll_data(cx)) {
-                Some(Ok(mut data)) => {
-                    let before_parse_data_len = data.len();
+                Some(Ok(b)) => {
+                    let mut data = BytesMut::with_capacity(self.buffer.len() + b.len());
+                    data.extend_from_slice(&self.buffer[..]);
+                    data.extend_from_slice(&b[..]);
+                    self.buffer.clear();
+
                     while self.payload_len > 0 || data.len() > 6 {
                         if self.payload_len == 0 {
                             data.advance(6);
                             self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
                         }
-                        let to_read = std::cmp::min(buf.remaining(), data.len());
+                        let to_read = std::cmp::min(buf.remaining(), b.len());
                         let to_read = std::cmp::min(self.payload_len as usize, to_read);
                         if to_read == 0 {
                             self.buffer.extend_from_slice(&data[..]);
@@ -156,12 +155,12 @@ impl AsyncRead for GrpcStream {
                         self.payload_len -= to_read as u64;
                         data.advance(to_read);
                     }
-                    // increase recv window
+
                     self.recv
                         .as_mut()
                         .unwrap()
                         .flow_control()
-                        .release_capacity(before_parse_data_len - data.len())
+                        .release_capacity(b.len())
                         .map_or_else(
                             |e| {
                                 debug!("grpc flow control error: {}", e);
@@ -170,9 +169,6 @@ impl AsyncRead for GrpcStream {
                             |_| Ok(()),
                         )
                 }
-                // no more data frames
-                // maybe trailer
-                // or cancelled
                 _ => Ok(()),
             },
         )
@@ -186,17 +182,18 @@ impl AsyncWrite for GrpcStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        self.reserve_send_capacity(buf);
+        let encoded_buf = self.encode_buf(buf);
+        self.send.reserve_capacity(encoded_buf.len());
 
         Poll::Ready(match ready!(self.send.poll_capacity(cx)) {
-            Some(Ok(to_write)) => {
-                let encoded_buf = self.encode_buf(buf);
+            Some(Ok(cap)) => {
+                let overhead_len = encoded_buf.len() - buf.len();
                 self.send.send_data(encoded_buf, false).map_or_else(
                     |e| {
                         debug!("grpc write error: {}", e);
                         Err(Error::new(ErrorKind::BrokenPipe, e))
                     },
-                    |_| Ok(to_write),
+                    |_| Ok(cap - overhead_len),
                 )
             }
             Some(Err(e)) => {
