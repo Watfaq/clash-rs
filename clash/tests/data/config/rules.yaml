@@ -178,7 +178,7 @@ proxies:
     tls: true
     network: grpc
     grpc-opts:
-      grpc-service-name: abc/Tun
+      grpc-service-name: abc
 
   - name: vmess-altid
     type: vmess
