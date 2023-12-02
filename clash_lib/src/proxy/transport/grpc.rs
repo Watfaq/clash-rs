@@ -1,9 +1,11 @@
 use crate::common::errors::map_io_error;
 use crate::proxy::AnyStream;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::Buf;
+use bytes::{BufMut, Bytes, BytesMut};
 
 use futures::ready;
+use futures::Future;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
@@ -34,7 +36,7 @@ impl GrpcStreamBuilder {
             Uri::builder()
                 .scheme("https")
                 .authority(self.host.as_str())
-                .path_and_query(self.path.as_str())
+                .path_and_query(format!("/{}/Tun", self.path.as_str()))
                 .build()
                 .map_err(map_io_error)?
         };
@@ -43,7 +45,7 @@ impl GrpcStreamBuilder {
             .uri(uri)
             .version(Version::HTTP_2)
             .header("content-type", "application/grpc")
-            .header("user-agent", "grpc-go/1.46.0");
+            .header("user-agent", "tonic/0.10");
         Ok(request.body(()).unwrap())
     }
 
@@ -56,13 +58,13 @@ impl GrpcStreamBuilder {
                 log::error!("http2 got err:{:?}", e);
             }
         });
-        let recv_stream = resp.await.map_err(map_io_error)?.into_body();
-        return Ok(Box::new(GrpcStream::new(recv_stream, send_stream)));
+        return Ok(Box::new(GrpcStream::new(resp, send_stream)));
     }
 }
 
 pub struct GrpcStream {
-    recv: RecvStream,
+    resp_fut: h2::client::ResponseFuture,
+    recv: Option<RecvStream>,
     send: SendStream<Bytes>,
     buffer: BytesMut,
     payload_len: u64,
@@ -80,9 +82,10 @@ impl Debug for GrpcStream {
 }
 
 impl GrpcStream {
-    pub fn new(recv: RecvStream, send: SendStream<Bytes>) -> Self {
+    pub fn new(resp_fut: h2::client::ResponseFuture, send: SendStream<Bytes>) -> Self {
         Self {
-            recv,
+            resp_fut,
+            recv: None,
             send,
             buffer: BytesMut::with_capacity(1024 * 4),
             payload_len: 0,
@@ -116,6 +119,15 @@ impl AsyncRead for GrpcStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        if self.recv.is_none() {
+            self.recv = Some(
+                ready!(Pin::new(&mut self.resp_fut).poll(cx))
+                    .map_err(map_io_error)?
+                    .into_body(),
+            );
+            log::debug!("receive grpc recv stream");
+        }
+
         if !self.buffer.is_empty() {
             let to_read = std::cmp::min(buf.remaining(), self.buffer.len());
             let data = self.buffer.split_to(to_read);
@@ -124,42 +136,46 @@ impl AsyncRead for GrpcStream {
             return Poll::Ready(Ok(()));
         };
 
-        Poll::Ready(match ready!(Pin::new(&mut self.recv).poll_data(cx)) {
-            Some(Ok(mut data)) => {
-                let before_parse_data_len = data.len();
-                while self.payload_len > 0 || data.len() > 6 {
-                    if self.payload_len == 0 {
-                        data.advance(6);
-                        self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
+        Poll::Ready(
+            match ready!(Pin::new(&mut self.recv).as_pin_mut().unwrap().poll_data(cx)) {
+                Some(Ok(mut data)) => {
+                    let before_parse_data_len = data.len();
+                    while self.payload_len > 0 || data.len() > 6 {
+                        if self.payload_len == 0 {
+                            data.advance(6);
+                            self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
+                        }
+                        let to_read = std::cmp::min(buf.remaining(), data.len());
+                        let to_read = std::cmp::min(self.payload_len as usize, to_read);
+                        if to_read == 0 {
+                            self.buffer.extend_from_slice(&data[..]);
+                            data.clear();
+                            break;
+                        }
+                        buf.put_slice(&data[..to_read]);
+                        self.payload_len -= to_read as u64;
+                        data.advance(to_read);
                     }
-                    let to_read = std::cmp::min(buf.remaining(), data.len());
-                    let to_read = std::cmp::min(self.payload_len as usize, to_read);
-                    if to_read == 0 {
-                        self.buffer.extend_from_slice(&data[..]);
-                        data.clear();
-                        break;
-                    }
-                    buf.put_slice(&data[..to_read]);
-                    self.payload_len -= to_read as u64;
-                    data.advance(to_read);
+                    // increase recv window
+                    self.recv
+                        .as_mut()
+                        .unwrap()
+                        .flow_control()
+                        .release_capacity(before_parse_data_len - data.len())
+                        .map_or_else(
+                            |e| {
+                                debug!("grpc flow control error: {}", e);
+                                Err(Error::new(ErrorKind::ConnectionReset, e))
+                            },
+                            |_| Ok(()),
+                        )
                 }
-                // increase recv window
-                self.recv
-                    .flow_control()
-                    .release_capacity(before_parse_data_len - data.len())
-                    .map_or_else(
-                        |e| {
-                            debug!("grpc flow control error: {}", e);
-                            Err(Error::new(ErrorKind::ConnectionReset, e))
-                        },
-                        |_| Ok(()),
-                    )
-            }
-            // no more data frames
-            // maybe trailer
-            // or cancelled
-            _ => Ok(()),
-        })
+                // no more data frames
+                // maybe trailer
+                // or cancelled
+                _ => Ok(()),
+            },
+        )
     }
 }
 
@@ -187,9 +203,6 @@ impl AsyncWrite for GrpcStream {
                 debug!("grpc poll_capacity error: {}", e);
                 Err(Error::new(ErrorKind::BrokenPipe, e))
             }
-            // is_send_streaming returns false
-            // which indicates the state is
-            // neither open nor half_close_remote
             _ => {
                 debug!("grpc poll_capacity conn closed");
                 Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
