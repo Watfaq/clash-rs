@@ -170,6 +170,7 @@ pub struct OutboundVmess {
     pub network: Option<String>,
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
+    pub grpc_opts: Option<GrpcOpt>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

@@ -166,6 +166,19 @@ proxies:
     network: h2
     h2-opts:
       path: /ray
+  - name: grpc-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 9443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
+    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: abc
 
   - name: vmess-altid
     type: vmess
@@ -187,6 +200,7 @@ proxies:
     cipher: aes-256-gcm
     password: "password"
     udp: true
+
   - name: "trojan"
     type: trojan
     server: 10.0.0.13
@@ -217,7 +231,7 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,ipinfo.io,relay
+  - DOMAIN,ipinfo.io,grpc-vmess
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT

@@ -272,7 +272,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }
 
     runners.push(Box::pin(async move {
-        info!("receive shutdown signal");
+        info!("receiving shutdown signal");
         shutdown_rx.recv().await;
         Ok(())
     }));

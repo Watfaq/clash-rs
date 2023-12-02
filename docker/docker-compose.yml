@@ -37,3 +37,7 @@ services:
       - type: bind
         source: ./v2ray/key.pem
         target: /etc/v2ray/v2ray.key
+
+  nginx:
+    build: ./nginx
+    network_mode: "host"

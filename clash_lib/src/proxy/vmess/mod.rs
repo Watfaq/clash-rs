@@ -36,7 +36,6 @@ macro_rules! vmess_debug {
 pub enum VmessTransport {
     Ws(WsOption),
     H2(Http2Option),
-    #[allow(dead_code)]
     Grpc(GrpcOption),
     #[allow(dead_code)]
     Http(HttpOption),
