@@ -5,18 +5,19 @@ use bytes::Buf;
 use bytes::{BufMut, Bytes, BytesMut};
 
 use futures::ready;
-use futures::Future;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
-use tracing::debug;
-use tracing::log;
+use tokio::sync::{mpsc, Mutex};
+use tracing::warn;
+use tracing::{debug, trace};
 
 use std::fmt::Debug;
 use std::io;
 use std::io::{Error, ErrorKind};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -50,23 +51,52 @@ impl GrpcStreamBuilder {
     }
 
     pub async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
-        let (client, h2) = h2::client::handshake(stream).await.map_err(map_io_error)?;
+        let (client, h2) = h2::client::Builder::new()
+            .enable_push(false)
+            .handshake(stream)
+            .await
+            .map_err(map_io_error)?;
         let mut client = client.ready().await.map_err(map_io_error)?;
 
         let req = self.req()?;
         let (resp, send_stream) = client.send_request(req, false).map_err(map_io_error)?;
         tokio::spawn(async move {
             if let Err(e) = h2.await {
-                log::error!("http2 got err:{:?}", e);
+                //TODO: collect this somewhere?
+                warn!("http2 got err:{:?}", e);
             }
         });
-        return Ok(Box::new(GrpcStream::new(resp, send_stream)));
+
+        let (init_sender, init_ready) = mpsc::channel(1);
+        let recv_stream = Arc::new(Mutex::new(None));
+
+        {
+            let recv_stream = recv_stream.clone();
+            tokio::spawn(async move {
+                match resp.await {
+                    Ok(resp) => {
+                        debug!("grpc resp: {:?}", resp);
+                        recv_stream.lock().await.replace(resp.into_body());
+                    }
+                    Err(e) => {
+                        debug!("grpc resp err: {:?}", e);
+                    }
+                }
+                let _ = init_sender.send(());
+            });
+        }
+
+        return Ok(Box::new(GrpcStream::new(
+            init_ready,
+            recv_stream,
+            send_stream,
+        )));
     }
 }
 
 pub struct GrpcStream {
-    resp_fut: h2::client::ResponseFuture,
-    recv: Option<RecvStream>,
+    init_ready: mpsc::Receiver<()>,
+    recv: Arc<Mutex<Option<RecvStream>>>,
     send: SendStream<Bytes>,
     buffer: BytesMut,
     payload_len: u64,
@@ -75,7 +105,6 @@ pub struct GrpcStream {
 impl Debug for GrpcStream {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GrpcStream")
-            .field("recv", &self.recv)
             .field("send", &self.send)
             .field("buffer", &self.buffer)
             .field("payload_len", &self.payload_len)
@@ -84,10 +113,14 @@ impl Debug for GrpcStream {
 }
 
 impl GrpcStream {
-    pub fn new(resp_fut: h2::client::ResponseFuture, send: SendStream<Bytes>) -> Self {
+    pub fn new(
+        init_ready: mpsc::Receiver<()>,
+        recv: Arc<Mutex<Option<RecvStream>>>,
+        send: SendStream<Bytes>,
+    ) -> Self {
         Self {
-            resp_fut,
-            recv: None,
+            init_ready,
+            recv,
             send,
             buffer: BytesMut::with_capacity(1024 * 4),
             payload_len: 0,
@@ -114,16 +147,23 @@ impl AsyncRead for GrpcStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        if self.recv.is_none() {
-            self.recv = Some(
-                ready!(Pin::new(&mut self.resp_fut).poll(cx))
-                    .map_err(map_io_error)?
-                    .into_body(),
-            );
-            log::debug!("receive grpc recv stream");
+        trace!("grpc poll_read: {:?}", buf);
+
+        ready!(self.init_ready.poll_recv(cx));
+
+        let recv = self.recv.clone();
+
+        let mut recv = recv.try_lock().unwrap();
+        if recv.is_none() {
+            trace!("initialization error");
+            return Poll::Ready(Err(Error::new(
+                ErrorKind::ConnectionReset,
+                "initialization error",
+            )));
         }
 
         if self.payload_len > 0 {
+            trace!("grpc poll_read data left payload_len: {}", self.payload_len);
             let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
             let data = self.buffer.split_to(to_read);
             self.payload_len -= to_read as u64;
@@ -131,8 +171,13 @@ impl AsyncRead for GrpcStream {
             return Poll::Ready(Ok(()));
         };
 
+        trace!(
+            "no decoded data left, grpc poll_read data left buffer: {}",
+            self.buffer.len()
+        );
+
         Poll::Ready(
-            match ready!(Pin::new(&mut self.recv).as_pin_mut().unwrap().poll_data(cx)) {
+            match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
                 Some(Ok(b)) => {
                     let mut data = BytesMut::with_capacity(self.buffer.len() + b.len());
                     data.extend_from_slice(&self.buffer[..]);
@@ -144,7 +189,7 @@ impl AsyncRead for GrpcStream {
                             data.advance(6);
                             self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
                         }
-                        let to_read = std::cmp::min(buf.remaining(), b.len());
+                        let to_read = std::cmp::min(buf.remaining(), data.len());
                         let to_read = std::cmp::min(self.payload_len as usize, to_read);
                         if to_read == 0 {
                             self.buffer.extend_from_slice(&data[..]);
@@ -156,8 +201,8 @@ impl AsyncRead for GrpcStream {
                         data.advance(to_read);
                     }
 
-                    self.recv
-                        .as_mut()
+                    trace!("released grpc flow control capacity: {}", b.len());
+                    recv.as_mut()
                         .unwrap()
                         .flow_control()
                         .release_capacity(b.len())
@@ -182,11 +227,15 @@ impl AsyncWrite for GrpcStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        trace!("grpc poll_write: {:?}", buf.len());
+
         let encoded_buf = self.encode_buf(buf);
+        trace!("requesting capacity: {} bytes", encoded_buf.len());
         self.send.reserve_capacity(encoded_buf.len());
 
         Poll::Ready(match ready!(self.send.poll_capacity(cx)) {
             Some(Ok(cap)) => {
+                trace!("grpc got capacity: {} bytes", cap);
                 let overhead_len = encoded_buf.len() - buf.len();
                 self.send.send_data(encoded_buf, false).map_or_else(
                     |e| {
@@ -197,7 +246,7 @@ impl AsyncWrite for GrpcStream {
                 )
             }
             Some(Err(e)) => {
-                debug!("grpc poll_capacity error: {}", e);
+                warn!("grpc poll_capacity error: {}", e);
                 Err(Error::new(ErrorKind::BrokenPipe, e))
             }
             _ => {
@@ -214,14 +263,10 @@ impl AsyncWrite for GrpcStream {
 
     #[inline]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.send.reserve_capacity(0);
-        Poll::Ready(ready!(self.send.poll_capacity(cx)).map_or(
-            Err(Error::new(ErrorKind::BrokenPipe, "broken pipe")),
-            |_| {
-                self.send
-                    .send_data(Bytes::new(), true)
-                    .map_or_else(|e| Err(Error::new(ErrorKind::BrokenPipe, e)), |_| Ok(()))
-            },
-        ))
+        self.send.send_reset(h2::Reason::NO_ERROR);
+        self.send
+            .poll_reset(cx)
+            .map_err(map_io_error)
+            .map(|_| Ok(()))
     }
 }

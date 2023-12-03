@@ -230,11 +230,11 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,ipinfo.io,grpc-vmess
+  - DOMAIN,google.com,grpc-vmess
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
-  - DOMAIN-KEYWORD,google,select
+  - DOMAIN-KEYWORD,google,grpc-vmess
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT

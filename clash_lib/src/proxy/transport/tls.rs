@@ -34,6 +34,8 @@ pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnySt
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier {}));
     }
 
+    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
     let connector = TlsConnector::from(Arc::new(tls_config));
     let dns_name = ServerName::try_from(opt.sni.as_str())
         .expect(format!("invalid server name: {}", opt.sni).as_str());
