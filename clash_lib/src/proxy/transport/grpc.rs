@@ -52,6 +52,9 @@ impl GrpcStreamBuilder {
 
     pub async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
         let (client, h2) = h2::client::Builder::new()
+            .initial_connection_window_size(0x7FFFFFFF)
+            .initial_window_size(0x7FFFFFFF)
+            .initial_max_send_streams(1024)
             .enable_push(false)
             .handshake(stream)
             .await
@@ -77,7 +80,8 @@ impl GrpcStreamBuilder {
                 match resp.await {
                     Ok(resp) => {
                         debug!("grpc resp: {:?}", resp);
-                        recv_stream.lock().await.replace(resp.into_body());
+                        let handle = resp.into_body();
+                        recv_stream.lock().await.replace(handle);
                     }
                     Err(e) => {
                         debug!("grpc resp err: {:?}", e);
@@ -128,6 +132,7 @@ impl GrpcStream {
         }
     }
 
+    // encode data to grpc + protobuf format
     fn encode_buf(&self, data: &[u8]) -> Bytes {
         let mut protobuf_header = BytesMut::with_capacity(10 + 1);
         protobuf_header.put_u8(0x0a);
@@ -171,50 +176,46 @@ impl AsyncRead for GrpcStream {
             let data = self.buffer.split_to(to_read);
             self.payload_len -= to_read as u64;
             buf.put_slice(&data[..to_read]);
+            assert_ne!(to_read, 0);
             return Poll::Ready(Ok(()));
         };
 
-        Poll::Ready(
-            match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
-                Some(Ok(b)) => {
-                    let mut data = BytesMut::with_capacity(self.buffer.len() + b.len());
-                    data.extend_from_slice(&self.buffer[..]);
-                    data.extend_from_slice(&b[..]);
-                    self.buffer.clear();
+        match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
+            Some(Ok(b)) => {
+                self.buffer.reserve(b.len());
+                self.buffer.extend_from_slice(&b[..]);
 
-                    while self.payload_len > 0 || data.len() > 6 {
-                        if self.payload_len == 0 {
-                            data.advance(6);
-                            self.payload_len = decode_varint(&mut data).map_err(map_io_error)?;
-                        }
-                        let to_read = std::cmp::min(buf.remaining(), data.len());
-                        let to_read = std::cmp::min(self.payload_len as usize, to_read);
-                        if to_read == 0 {
-                            self.buffer.extend_from_slice(&data[..]);
-                            data.clear();
-                            break;
-                        }
-                        buf.put_slice(&data[..to_read]);
-                        self.payload_len -= to_read as u64;
-                        data.advance(to_read);
+                while self.payload_len > 0 || self.buffer.len() > 6 {
+                    if self.payload_len == 0 {
+                        self.buffer.advance(6);
+                        self.payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
                     }
-
-                    trace!("released grpc flow control capacity: {}", b.len());
-                    recv.as_mut()
-                        .unwrap()
-                        .flow_control()
-                        .release_capacity(b.len())
-                        .map_or_else(
-                            |e| {
-                                debug!("grpc flow control error: {}", e);
-                                Err(Error::new(ErrorKind::ConnectionReset, e))
-                            },
-                            |_| Ok(()),
-                        )
+                    let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
+                    if to_read == 0 {
+                        break;
+                    }
+                    buf.put_slice(self.buffer.split_to(to_read).freeze().as_ref());
+                    self.payload_len -= to_read as u64;
                 }
-                _ => Ok(()),
-            },
-        )
+
+                trace!("releasing grpc flow control capacity: {}", b.len());
+                recv.as_mut()
+                    .unwrap()
+                    .flow_control()
+                    .release_capacity(b.len())
+                    .map_or_else(
+                        |e| {
+                            debug!("grpc flow control error: {}", e);
+                            Poll::Ready(Err(Error::new(ErrorKind::ConnectionReset, e)))
+                        },
+                        |_| Poll::Ready(Ok(())),
+                    )
+            }
+            _ => {
+                assert_eq!(self.payload_len, 0);
+                Poll::Ready(Ok(()))
+            }
+        }
     }
 }
 
@@ -241,7 +242,10 @@ impl AsyncWrite for GrpcStream {
                         debug!("grpc write error: {}", e);
                         Err(Error::new(ErrorKind::BrokenPipe, e))
                     },
-                    |_| Ok(buf.len()),
+                    |_| {
+                        debug!("grpc wrote {} bytes", buf.len());
+                        Ok(buf.len())
+                    },
                 )
             }
             Some(Err(e)) => {
