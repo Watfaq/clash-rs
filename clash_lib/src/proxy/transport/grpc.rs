@@ -73,6 +73,7 @@ impl GrpcStreamBuilder {
         {
             let recv_stream = recv_stream.clone();
             tokio::spawn(async move {
+                trace!("initiating grpc recv stream");
                 match resp.await {
                     Ok(resp) => {
                         debug!("grpc resp: {:?}", resp);
@@ -128,13 +129,17 @@ impl GrpcStream {
     }
 
     fn encode_buf(&self, data: &[u8]) -> Bytes {
-        let mut buf = BytesMut::with_capacity(16 + data.len());
-        let grpc_header = [0u8; 5];
+        let mut protobuf_header = BytesMut::with_capacity(10 + 1);
+        protobuf_header.put_u8(0x0a);
+        encode_varint(data.len() as u64, &mut protobuf_header);
+        let mut grpc_header = [0u8; 5];
+        let grpc_payload_len = (protobuf_header.len() + data.len()) as u32;
+        grpc_header[1..5].copy_from_slice(&grpc_payload_len.to_be_bytes());
+
+        let mut buf =
+            BytesMut::with_capacity(grpc_header.len() + protobuf_header.len() + data.len());
         buf.put_slice(&grpc_header[..]);
-        buf.put_u8(0x0a);
-        encode_varint(data.len() as u64, &mut buf);
-        let payload_len = ((buf.len() - 5 + data.len()) as u32).to_be_bytes();
-        buf[1..5].copy_from_slice(&payload_len[..4]);
+        buf.put_slice(&protobuf_header.freeze()[..]);
         buf.put_slice(data);
         buf.freeze()
     }
@@ -147,15 +152,13 @@ impl AsyncRead for GrpcStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        trace!("grpc poll_read: {:?}", buf);
-
         ready!(self.init_ready.poll_recv(cx));
 
         let recv = self.recv.clone();
 
         let mut recv = recv.try_lock().unwrap();
         if recv.is_none() {
-            trace!("initialization error");
+            warn!("grpc initialization error");
             return Poll::Ready(Err(Error::new(
                 ErrorKind::ConnectionReset,
                 "initialization error",
@@ -170,11 +173,6 @@ impl AsyncRead for GrpcStream {
             buf.put_slice(&data[..to_read]);
             return Poll::Ready(Ok(()));
         };
-
-        trace!(
-            "no decoded data left, grpc poll_read data left buffer: {}",
-            self.buffer.len()
-        );
 
         Poll::Ready(
             match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
@@ -227,22 +225,23 @@ impl AsyncWrite for GrpcStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        trace!("grpc poll_write: {:?}", buf.len());
-
         let encoded_buf = self.encode_buf(buf);
         trace!("requesting capacity: {} bytes", encoded_buf.len());
         self.send.reserve_capacity(encoded_buf.len());
 
         Poll::Ready(match ready!(self.send.poll_capacity(cx)) {
             Some(Ok(cap)) => {
-                trace!("grpc got capacity: {} bytes", cap);
-                let overhead_len = encoded_buf.len() - buf.len();
+                trace!(
+                    "grpc got capacity: {} bytes, payload size: {}",
+                    cap,
+                    encoded_buf.len()
+                );
                 self.send.send_data(encoded_buf, false).map_or_else(
                     |e| {
                         debug!("grpc write error: {}", e);
                         Err(Error::new(ErrorKind::BrokenPipe, e))
                     },
-                    |_| Ok(cap - overhead_len),
+                    |_| Ok(buf.len()),
                 )
             }
             Some(Err(e)) => {
