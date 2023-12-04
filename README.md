@@ -80,7 +80,8 @@ Options:
 
 ## 🤝 Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Telegram User Group](https://t.me/thisisnotclash)
 
 ## ❤️ Inspired By
 - [Dreamacro/clash](https://github.com/Dreamacro/clash)
