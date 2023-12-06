@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
+use tracing::debug;
 use tracing::error;
 
 use tracing::info;
@@ -65,6 +66,7 @@ impl OutboundManager {
         let mut selector_control = HashMap::new();
         let proxy_manager = ProxyManager::new(dns_resolver.clone());
 
+        debug!("initializing proxy providers");
         Self::load_proxy_providers(
             cwd,
             proxy_providers,
@@ -74,6 +76,7 @@ impl OutboundManager {
         )
         .await?;
 
+        debug!("initializing handlers");
         Self::load_handlers(
             outbounds,
             outbound_groups,
@@ -628,6 +631,7 @@ impl OutboundManager {
                     error!("failed to initialize proxy provider {}: {}", p.name(), err);
                 }
             }
+            info!("initialized provider {}", p.name());
         }
 
         Ok(())

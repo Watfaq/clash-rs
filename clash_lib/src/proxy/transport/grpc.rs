@@ -4,13 +4,12 @@ use crate::proxy::AnyStream;
 use bytes::Buf;
 use bytes::{BufMut, Bytes, BytesMut};
 
-use futures::{ready, StreamExt};
+use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
 use tokio::sync::{mpsc, Mutex};
-use tokio_util::io::StreamReader;
 use tracing::warn;
 use tracing::{debug, trace};
 
@@ -81,12 +80,9 @@ impl GrpcStreamBuilder {
                 match resp.await {
                     Ok(resp) => {
                         debug!("grpc resp: {:?}", resp);
-                        let stream = resp
-                            .into_body()
-                            .map(|result| result.map_err(map_io_error))
-                            .into();
-                        let reader = StreamReader::new(stream);
-                        recv_stream.lock().await.replace(reader);
+                        let stream = resp.into_body();
+
+                        recv_stream.lock().await.replace(stream);
                     }
                     Err(e) => {
                         debug!("grpc resp err: {:?}", e);
@@ -106,10 +102,10 @@ impl GrpcStreamBuilder {
 
 pub struct GrpcStream {
     init_ready: mpsc::Receiver<()>,
-    recv: Arc<Mutex<Option<StreamReader<RecvStream, Bytes>>>>,
+    recv: Arc<Mutex<Option<RecvStream>>>,
     send: SendStream<Bytes>,
     buffer: BytesMut,
-    payload_len: u64,
+    payload_len: usize,
 }
 
 impl Debug for GrpcStream {
@@ -125,7 +121,7 @@ impl Debug for GrpcStream {
 impl GrpcStream {
     pub fn new(
         init_ready: mpsc::Receiver<()>,
-        recv: Arc<Mutex<Option<StreamReader<RecvStream, Bytes>>>>,
+        recv: Arc<Mutex<Option<RecvStream>>>,
         send: SendStream<Bytes>,
     ) -> Self {
         Self {
@@ -175,11 +171,12 @@ impl AsyncRead for GrpcStream {
             )));
         }
 
-        if self.payload_len > 0 {
+        if self.payload_len > 0 && self.buffer.len() > 0 {
             trace!("grpc poll_read data left payload_len: {}", self.payload_len);
             let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
+            let to_read = std::cmp::min(to_read, self.buffer.len());
             let data = self.buffer.split_to(to_read);
-            self.payload_len -= to_read as u64;
+            self.payload_len -= to_read;
             buf.put_slice(&data[..to_read]);
             assert_ne!(to_read, 0);
             return Poll::Ready(Ok(()));
@@ -193,14 +190,16 @@ impl AsyncRead for GrpcStream {
                 while self.payload_len > 0 || self.buffer.len() > 6 {
                     if self.payload_len == 0 {
                         self.buffer.advance(6);
-                        self.payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
+                        let payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
+                        self.payload_len = payload_len as usize;
                     }
-                    let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
+                    let to_read = std::cmp::min(self.buffer.len(), self.payload_len as usize);
+                    let to_read = std::cmp::min(buf.remaining(), to_read);
                     if to_read == 0 {
                         break;
                     }
                     buf.put_slice(self.buffer.split_to(to_read).freeze().as_ref());
-                    self.payload_len -= to_read as u64;
+                    self.payload_len -= to_read;
                 }
 
                 trace!("releasing grpc flow control capacity: {}", b.len());
