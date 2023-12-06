@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 #[derive(Debug)]
 pub struct CopyBuffer {
@@ -264,28 +264,120 @@ where
     }
 }
 
+// pub async fn copy_buf_bidirectional_with_timeout<A, B>(
+//     a: &mut A,
+//     b: &mut B,
+//     size: usize,
+//     a_to_b_timeout_duration: Duration,
+//     b_to_a_timeout_duration: Duration,
+// ) -> Result<(u64, u64), std::io::Error>
+// where
+//     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
+//     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
+// {
+//     CopyBidirectional {
+//         a,
+//         b,
+//         a_to_b: TransferState::Running(CopyBuffer::new_with_capacity(size)?),
+//         b_to_a: TransferState::Running(CopyBuffer::new_with_capacity(size)?),
+//         a_to_b_count: 0,
+//         b_to_a_count: 0,
+//         a_to_b_delay: None,
+//         b_to_a_delay: None,
+//         a_to_b_timeout_duration,
+//         b_to_a_timeout_duration,
+//     }
+//     .await
+// }
+
 pub async fn copy_buf_bidirectional_with_timeout<A, B>(
-    a: &mut A,
-    b: &mut B,
+    a: A,
+    b: B,
     size: usize,
     a_to_b_timeout_duration: Duration,
     b_to_a_timeout_duration: Duration,
 ) -> Result<(u64, u64), std::io::Error>
 where
-    A: AsyncRead + AsyncWrite + Unpin + ?Sized,
-    B: AsyncRead + AsyncWrite + Unpin + ?Sized,
+    A: AsyncRead + AsyncWrite + Unpin + Sized,
+    B: AsyncRead + AsyncWrite + Unpin + Sized,
 {
-    CopyBidirectional {
-        a,
-        b,
-        a_to_b: TransferState::Running(CopyBuffer::new_with_capacity(size)?),
-        b_to_a: TransferState::Running(CopyBuffer::new_with_capacity(size)?),
-        a_to_b_count: 0,
-        b_to_a_count: 0,
-        a_to_b_delay: None,
-        b_to_a_delay: None,
-        a_to_b_timeout_duration,
-        b_to_a_timeout_duration,
-    }
-    .await
+    let (mut a_reader, mut a_writer) = tokio::io::split(a);
+    let (mut b_reader, mut b_writer) = tokio::io::split(b);
+    let a_to_b = tokio::spawn(async move {
+        let mut upload_total_size = 0;
+        let mut buf = Vec::new();
+        buf.resize(size, 0);
+        loop {
+            match tokio::time::timeout(a_to_b_timeout_duration, a_reader.read(&mut buf[..])).await {
+                Ok(Ok(size)) => {
+                    if size == 0 {
+                        return Ok(upload_total_size);
+                    }
+                    match b_writer.write_all(&buf[..size]).await {
+                        Ok(_) => {
+                            upload_total_size += size;
+                            continue;
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    return Err(e);
+                }
+                Err(_) => {
+                    return Ok(upload_total_size);
+                }
+            }
+        }
+    });
+    let b_to_a = tokio::spawn(async move {
+        let download_total_size = 0;
+        let mut buf = Vec::new();
+        buf.resize(size, 0);
+        loop {
+            match tokio::time::timeout(b_to_a_timeout_duration, b_reader.read(&mut buf[..])).await {
+                Ok(Ok(size)) => {
+                    if size == 0 {
+                        return Ok(download_total_size);
+                    }
+                    match a_writer.write_all(&buf[..size]).await {
+                        Ok(_) => {
+                            download_total_size += size;
+                            continue;
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    return Err(e);
+                }
+                Err(_) => {
+                    return Ok(download_total_size);
+                }
+            }
+        }
+    });
+    let up = match a_to_b.await {
+        Ok(Ok(up)) => up,
+        Ok(Err(e)) => {
+            return Err(e);
+        }
+        Err(e) => {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
+        }
+    };
+    let down = match b_to_a.await {
+        Ok(Ok(up)) => up,
+        Ok(Err(e)) => {
+            return Err(e);
+        }
+        Err(e) => {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
+        }
+    };
+    Ok((up as u64, down as u64))
 }

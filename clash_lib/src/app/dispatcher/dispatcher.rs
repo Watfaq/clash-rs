@@ -11,6 +11,7 @@ use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
 use futures::SinkExt;
 use futures::StreamExt;
+use tokio::io::AsyncReadExt;
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
@@ -136,8 +137,8 @@ impl Dispatcher {
                 let mut rhs =
                     TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
                 match copy_buf_bidirectional_with_timeout(
-                    &mut lhs,
-                    &mut rhs,
+                    lhs,
+                    rhs,
                     4096,
                     Duration::from_secs(10),
                     Duration::from_secs(10),
