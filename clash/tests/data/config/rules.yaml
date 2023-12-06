@@ -43,7 +43,6 @@ dns:
     - 114.114.114.114 # default value
     - 1.1.1.1 # default value
     - tls://1.1.1.1:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
 #    - dhcp://en0 # dns from dhcp
 
 allow-lan: true
@@ -167,6 +166,20 @@ proxies:
     h2-opts:
       path: /ray
 
+  - name: grpc-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 19443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
+    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: abc
+
   - name: vmess-altid
     type: vmess
     server: tw-1.ac.laowanxiang.com
@@ -187,6 +200,7 @@ proxies:
     cipher: aes-256-gcm
     password: "password"
     udp: true
+
   - name: "trojan"
     type: trojan
     server: 10.0.0.13
@@ -198,6 +212,20 @@ proxies:
       - h2
       - http/1.1
     skip-cert-verify: true
+
+  - name: "trojan-grpc"
+    type: trojan
+    server: 10.0.0.13
+    port: 19443
+    password: password1
+    udp: true
+    # sni: example.com # aka server name
+    alpn:
+      - h2
+    skip-cert-verify: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: def
 
 proxy-providers:
   file-provider:
@@ -217,11 +245,13 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,ipinfo.io,relay
+  - DOMAIN,google.com,grpc-vmess
+  - DOMAIN-KEYWORD,httpbin,trojan-grpc
+  - DOMAIN,ipinfo.io,trojan-grpc
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
-  - DOMAIN-KEYWORD,google,select
+  - DOMAIN-KEYWORD,google,grpc-vmess
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT

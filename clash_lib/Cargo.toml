@@ -11,7 +11,7 @@ bench = ["criterion"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.7", features = ["net", "codec", "io"] }
+tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
 tokio-rustls = "0.24"
 thiserror = "1.0"
 async-trait = "0.1"
@@ -26,9 +26,9 @@ byteorder = "1.5"
 state = "0.6"
 lru_time_cache = "0.11"
 hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp"] }
-http = { version = "0.2" }
+http = { version = "0.2.11" }
 httparse = "1.8.0"
-h2 = "0.3"
+h2 = "0.3.22"
 prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"

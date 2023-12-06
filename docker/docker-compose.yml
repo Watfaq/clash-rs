@@ -24,13 +24,13 @@ services:
         source: ./v2ray/key.pem
         target: /etc/v2ray/v2ray.key
 
-  trojan:
-    image: trojangfw/trojan
+  nginx:
+    image: nginx
     network_mode: "host"
     volumes:
       - type: bind
-        source: ./trojan/config.json
-        target: /config/config.json
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
       - type: bind
         source: ./v2ray/cert.pem
         target: /etc/v2ray/v2ray.crt

@@ -40,6 +40,50 @@
       }
     },
     {
+      "port": 9443,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "password1"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/v2ray/v2ray.crt", // 证书文件
+              "keyFile": "/etc/v2ray/v2ray.key" // 密钥文件
+            }
+          ]
+        }
+      }
+    },
+    {
+      "port": 9444,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "password1" // 填写你的 password
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "grpcSettings": {
+          "serviceName": "def" // 填写你的 ServiceName
+        },
+        "security": "none"
+      }
+    },
+    {
       "port": 16824,
       "protocol": "vmess",
       "settings": {
@@ -58,6 +102,25 @@
             "Host": "www.amazon.com"
           }
         }
+      }
+    },
+    {
+      "port": 16825,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+            "alterId": 64
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "grpcSettings": {
+          "serviceName": "abc"
+        },
+        "security": "none"
       }
     },
     {

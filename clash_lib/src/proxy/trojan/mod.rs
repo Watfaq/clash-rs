@@ -30,7 +30,6 @@ use super::{
 };
 
 mod datagram;
-mod stream;
 
 static DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
 
@@ -81,7 +80,38 @@ impl Handler {
             )),
         };
 
-        let mut s = transport::tls::wrap_stream(s, tls_opt.to_owned()).await?;
+        let s = transport::tls::wrap_stream(s, tls_opt, None).await?;
+
+        let mut s = if let Some(transport) = self.opts.transport.as_ref() {
+            match transport {
+                Transport::Ws(ws_opts) => {
+                    let ws_builder = transport::WebsocketStreamBuilder::new(
+                        self.opts.server.clone(),
+                        self.opts.port,
+                        ws_opts.path.clone(),
+                        ws_opts.headers.clone(),
+                        None,
+                        ws_opts.max_early_data,
+                        ws_opts.early_data_header_name.clone(),
+                    );
+
+                    ws_builder.proxy_stream(s).await?
+                }
+                Transport::Grpc(grpc_opts) => {
+                    let grpc_builder = transport::GrpcStreamBuilder::new(
+                        self.opts.server.clone(),
+                        grpc_opts
+                            .service_name
+                            .to_owned()
+                            .try_into()
+                            .expect("invalid gRPC service path"),
+                    );
+                    grpc_builder.proxy_stream(s).await?
+                }
+            }
+        } else {
+            s
+        };
 
         let mut buf = BytesMut::new();
         let password = Sha224::digest(self.opts.password.as_bytes());

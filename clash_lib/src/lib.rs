@@ -17,16 +17,17 @@ use common::http::new_http_client;
 use common::mmdb;
 use config::def::LogLevel;
 use proxy::tun::get_tun_runner;
+
 use state::InitCell;
 use std::io;
 use std::path::PathBuf;
-use tokio::task::JoinHandle;
-use tracing::error;
-use tracing::info;
-
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::task::JoinHandle;
+use tracing::debug;
+use tracing::error;
+use tracing::info;
 
 mod app;
 mod common;
@@ -161,9 +162,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
+    debug!("initializing dns resolver");
     let system_resolver =
         Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
     let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+
+    debug!("initializing mmdb");
     let mmdb = Arc::new(
         mmdb::MMDB::new(
             cwd.join(&config.general.mmdb),
@@ -173,6 +177,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         .await?,
     );
 
+    debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
         cwd.join("cache.db").as_path().to_str().unwrap(),
         config.profile.store_selected,
@@ -180,6 +185,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
+    debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
         OutboundManager::new(
             config
@@ -207,6 +213,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         .await?,
     );
 
+    debug!("initializing router");
     let router = Arc::new(
         Router::new(
             config.rules,
@@ -230,6 +237,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
 
+    debug!("initializing inbound manager");
     let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
         config.general.inbound,
         dispatcher.clone(),
@@ -244,6 +252,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         runners.push(tun_runner);
     }
 
+    debug!("initializing dns listener");
     let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
         .await
         .map(|l| tokio::spawn(l));
@@ -272,7 +281,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }
 
     runners.push(Box::pin(async move {
-        info!("receive shutdown signal");
+        info!("receiving shutdown signal");
         shutdown_rx.recv().await;
         Ok(())
     }));

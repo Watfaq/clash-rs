@@ -26,17 +26,9 @@ use super::{
     AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
-#[macro_export]
-macro_rules! vmess_debug {
-    ($($arg:tt)*) => {
-        debug!(target: "vmess", $($arg)*)
-    };
-}
-
 pub enum VmessTransport {
     Ws(WsOption),
     H2(Http2Option),
-    #[allow(dead_code)]
     Grpc(GrpcOption),
     #[allow(dead_code)]
     Http(HttpOption),
@@ -85,7 +77,7 @@ impl Handler {
                 );
 
                 if let Some(tls_opt) = &self.opts.tls {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
                 }
 
                 ws_builder.proxy_stream(stream).await?
@@ -98,7 +90,7 @@ impl Handler {
                     .expect("H2 conn must have tls opt")
                     .clone();
                 tls_opt.alpn = Some(vec!["h2".to_string()]);
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
 
                 let h2_builder = Http2Config {
                     hosts: vec![self.opts.server.clone()],
@@ -111,7 +103,9 @@ impl Handler {
             }
             Some(VmessTransport::Grpc(ref opt)) => {
                 let tls_opt = self.opts.tls.as_ref().expect("gRPC conn must have tls opt");
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                stream =
+                    transport::tls::wrap_stream(stream, tls_opt.to_owned(), Some("h2")).await?;
+
                 let grpc_builder = transport::GrpcStreamBuilder::new(
                     self.opts.server.clone(),
                     opt.service_name
@@ -126,7 +120,7 @@ impl Handler {
             }
             None => {
                 if let Some(tls_opt) = self.opts.tls.as_ref() {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
                 }
                 stream
             }

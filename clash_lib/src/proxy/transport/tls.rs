@@ -16,7 +16,11 @@ pub struct TLSOptions {
     pub alpn: Option<Vec<String>>,
 }
 
-pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnyStream> {
+pub async fn wrap_stream(
+    stream: AnyStream,
+    opt: TLSOptions,
+    expected_alpn: Option<&str>,
+) -> io::Result<AnyStream> {
     let mut tls_config = ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
@@ -34,12 +38,27 @@ pub async fn wrap_stream(stream: AnyStream, opt: TLSOptions) -> io::Result<AnySt
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier {}));
     }
 
+    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
     let connector = TlsConnector::from(Arc::new(tls_config));
     let dns_name = ServerName::try_from(opt.sni.as_str())
         .expect(format!("invalid server name: {}", opt.sni).as_str());
 
-    connector
-        .connect(dns_name, stream)
-        .await
-        .map(|x| Box::new(x) as _)
+    let c = connector.connect(dns_name, stream).await.and_then(|x| {
+        if let Some(expected_alpn) = expected_alpn {
+            if x.get_ref().1.alpn_protocol() != Some(expected_alpn.as_bytes()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "unexpected alpn protocol: {:?}, expected: {:?}",
+                        x.get_ref().1.alpn_protocol(),
+                        expected_alpn
+                    ),
+                ));
+            }
+        }
+
+        Ok(x)
+    });
+    c.map(|x| Box::new(x) as _)
 }

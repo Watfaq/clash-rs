@@ -49,13 +49,15 @@ impl HealthCheck {
         let lazy = self.lazy;
         let proxies = self.inner.read().await.proxies.clone();
 
-        let url = self.url.clone();
-        tokio::spawn(async move {
-            proxy_manager.check(&proxies, &url, None).await;
-        });
+        {
+            let url = self.url.clone();
+            let proxies = proxies.clone();
+            tokio::spawn(async move {
+                proxy_manager.check(&proxies, &url, None).await;
+            });
+        }
 
         let inner = self.inner.clone();
-        let proxies = self.inner.read().await.proxies.clone();
         let proxy_manager = self.proxy_manager.clone();
         let url = self.url.clone();
         let task_handle = tokio::spawn(async move {
@@ -65,8 +67,8 @@ impl HealthCheck {
                     _ = ticker.tick() => {
                         pm_debug!("healthcheck ticking: {}, lazy: {}", url, lazy);
                         let now = tokio::time::Instant::now();
-                        let r = inner.read().await;
-                        if !lazy || now.duration_since(r.last_check).as_secs() >= interval {
+                        let last_check = inner.read().await.last_check;
+                        if !lazy || now.duration_since(last_check).as_secs() >= interval {
                             proxy_manager.check(&proxies, &url, None).await;
                             let mut w = inner.write().await;
                             w.last_check = now;

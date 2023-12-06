@@ -59,11 +59,15 @@ fn main() {
             }
         }
     }
-    clash::start(clash::Options {
+    match clash::start(clash::Options {
         config: clash::Config::File(file),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
         log_file: None,
-    })
-    .unwrap();
+    }) {
+        Ok(_) => {}
+        Err(_) => {
+            exit(1);
+        }
+    }
 }
