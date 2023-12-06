@@ -222,6 +222,7 @@ proxies:
     password: password1
     udp: true
     # sni: example.com # aka server name
+    tls: true
     alpn:
       - h2
     skip-cert-verify: true

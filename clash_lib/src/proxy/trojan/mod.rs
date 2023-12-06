@@ -80,7 +80,7 @@ impl Handler {
             )),
         };
 
-        let s = transport::tls::wrap_stream(s, tls_opt.to_owned()).await?;
+        let s = transport::tls::wrap_stream(s, tls_opt).await?;
 
         let mut s = if let Some(transport) = self.opts.transport.as_ref() {
             match transport {
