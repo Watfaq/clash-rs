@@ -83,7 +83,7 @@ impl InboundListener for Listener {
         loop {
             let (socket, _) = listener.accept().await?;
 
-            let mut socket = apply_tcp_options(socket)?;
+            let socket = apply_tcp_options(socket)?;
 
             let mut sess = Session {
                 network: Network::Tcp,
@@ -97,7 +97,7 @@ impl InboundListener for Listener {
             let authenticator = self.authenticator.clone();
 
             tokio::spawn(async move {
-                handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
+                handle_tcp(&mut sess, socket, dispatcher, authenticator).await
             });
         }
     }

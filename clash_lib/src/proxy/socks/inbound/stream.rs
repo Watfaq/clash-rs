@@ -19,7 +19,7 @@ use tracing::{instrument, trace, warn};
 #[instrument(skip(s, dispatcher, authenticator))]
 pub async fn handle_tcp<'a>(
     sess: &'a mut Session,
-    s: &'a mut TcpStream,
+    mut s: TcpStream,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 ) -> io::Result<()> {
@@ -117,7 +117,7 @@ pub async fn handle_tcp<'a>(
         ));
     }
 
-    let dst = SocksAddr::read_from(s).await?;
+    let dst = SocksAddr::read_from(& mut s).await?;
 
     match buf[1] {
         socks_command::CONNECT => {

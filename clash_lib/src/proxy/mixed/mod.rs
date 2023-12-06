@@ -53,7 +53,7 @@ impl InboundListener for Listener {
 
         loop {
             let (socket, _) = listener.accept().await?;
-            let mut socket = apply_tcp_options(socket)?;
+            let socket = apply_tcp_options(socket)?;
 
             let mut p = [0; 1];
             let n = socket.peek(&mut p).await?;
@@ -75,7 +75,7 @@ impl InboundListener for Listener {
                     };
 
                     tokio::spawn(async move {
-                        socks::handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
+                        socks::handle_tcp(&mut sess, socket, dispatcher, authenticator).await
                     });
                 }
 
