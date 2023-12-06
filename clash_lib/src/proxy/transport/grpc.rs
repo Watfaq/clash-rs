@@ -4,12 +4,13 @@ use crate::proxy::AnyStream;
 use bytes::Buf;
 use bytes::{BufMut, Bytes, BytesMut};
 
-use futures::ready;
+use futures::{ready, StreamExt};
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
 use tokio::sync::{mpsc, Mutex};
+use tokio_util::io::StreamReader;
 use tracing::warn;
 use tracing::{debug, trace};
 
@@ -80,8 +81,12 @@ impl GrpcStreamBuilder {
                 match resp.await {
                     Ok(resp) => {
                         debug!("grpc resp: {:?}", resp);
-                        let handle = resp.into_body();
-                        recv_stream.lock().await.replace(handle);
+                        let stream = resp
+                            .into_body()
+                            .map(|result| result.map_err(map_io_error))
+                            .into();
+                        let reader = StreamReader::new(stream);
+                        recv_stream.lock().await.replace(reader);
                     }
                     Err(e) => {
                         debug!("grpc resp err: {:?}", e);
@@ -101,7 +106,7 @@ impl GrpcStreamBuilder {
 
 pub struct GrpcStream {
     init_ready: mpsc::Receiver<()>,
-    recv: Arc<Mutex<Option<RecvStream>>>,
+    recv: Arc<Mutex<Option<StreamReader<RecvStream, Bytes>>>>,
     send: SendStream<Bytes>,
     buffer: BytesMut,
     payload_len: u64,
@@ -120,7 +125,7 @@ impl Debug for GrpcStream {
 impl GrpcStream {
     pub fn new(
         init_ready: mpsc::Receiver<()>,
-        recv: Arc<Mutex<Option<RecvStream>>>,
+        recv: Arc<Mutex<Option<StreamReader<RecvStream, Bytes>>>>,
         send: SendStream<Bytes>,
     ) -> Self {
         Self {

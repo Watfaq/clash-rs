@@ -215,7 +215,7 @@ proxies:
   - name: "trojan-grpc"
     type: trojan
     server: 10.0.0.13
-    port: 19444
+    port: 19443
     password: password1
     udp: true
     # sni: example.com # aka server name
