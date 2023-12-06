@@ -81,7 +81,7 @@
           "serviceName": "def" // 填写你的 ServiceName
         }
       }
-    }
+    },
     {
       "port": 16824,
       "protocol": "vmess",
