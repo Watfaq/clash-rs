@@ -79,7 +79,8 @@
         "network": "grpc",
         "grpcSettings": {
           "serviceName": "def" // 填写你的 ServiceName
-        }
+        },
+        "security": "none"
       }
     },
     {

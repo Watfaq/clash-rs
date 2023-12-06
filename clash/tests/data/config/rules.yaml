@@ -211,6 +211,20 @@ proxies:
       - h2
       - http/1.1
     skip-cert-verify: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: def
+
+  - name: "trojan-grpc"
+    type: trojan
+    server: 10.0.0.13
+    port: 19443
+    password: password1
+    udp: true
+    # sni: example.com # aka server name
+    alpn:
+      - h2
+    skip-cert-verify: true
 
 proxy-providers:
   file-provider:
@@ -230,7 +244,7 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,google.com,grpc-vmess
+  - DOMAIN,google.com,trojan-grpc
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
