@@ -171,19 +171,46 @@ impl AsyncRead for GrpcStream {
             )));
         }
 
-        if self.payload_len > 0 && self.buffer.len() > 0 {
+        if (self.payload_len > 0 && self.buffer.len() > 0)
+            || (self.payload_len == 0 && self.buffer.len() > 6)
+        {
+            if self.payload_len == 0 {
+                self.buffer.advance(6);
+                let payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
+                self.payload_len = payload_len as usize;
+            }
+
             trace!("grpc poll_read data left payload_len: {}", self.payload_len);
             let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
             let to_read = std::cmp::min(to_read, self.buffer.len());
+
+            if to_read == 0 {
+                assert!(buf.remaining() > 0);
+                trace!("no data left in buffer");
+                return Poll::Pending;
+            }
+
             let data = self.buffer.split_to(to_read);
+            trace!(
+                "consuming {} data, payload left: {}, buffer left: {}",
+                to_read,
+                self.payload_len - to_read,
+                self.buffer.len()
+            );
             self.payload_len -= to_read;
-            buf.put_slice(&data[..to_read]);
-            assert_ne!(to_read, 0);
+            buf.put_slice(&data[..]);
             return Poll::Ready(Ok(()));
-        };
+        }
+
+        trace!(
+            "no more data left, polling recv stream, current capacity: {}",
+            recv.as_mut().unwrap().flow_control().available_capacity()
+        );
 
         match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
             Some(Ok(b)) => {
+                trace!("got data from recv stream: {}", b.len());
+
                 self.buffer.reserve(b.len());
                 self.buffer.extend_from_slice(&b[..]);
 
@@ -198,6 +225,13 @@ impl AsyncRead for GrpcStream {
                     if to_read == 0 {
                         break;
                     }
+                    trace!(
+                        "consuming {} data, payload left: {}, buffer left: {}",
+                        to_read,
+                        self.payload_len - to_read,
+                        self.buffer.len() - to_read
+                    );
+
                     buf.put_slice(self.buffer.split_to(to_read).freeze().as_ref());
                     self.payload_len -= to_read;
                 }
@@ -217,7 +251,13 @@ impl AsyncRead for GrpcStream {
             }
             _ => {
                 assert_eq!(self.payload_len, 0);
-                Poll::Ready(Ok(()))
+                if recv.as_mut().unwrap().is_end_stream() {
+                    trace!("no more data left, recv stream closed");
+                    Poll::Ready(Ok(()))
+                } else {
+                    trace!("no more data left, recv stream pending");
+                    Poll::Pending
+                }
             }
         }
     }
