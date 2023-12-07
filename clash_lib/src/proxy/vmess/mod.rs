@@ -83,14 +83,14 @@ impl Handler {
                 ws_builder.proxy_stream(stream).await?
             }
             Some(VmessTransport::H2(ref opt)) => {
-                let mut tls_opt = self
-                    .opts
-                    .tls
-                    .as_ref()
-                    .expect("H2 conn must have tls opt")
-                    .clone();
-                tls_opt.alpn = Some(vec!["h2".to_string()]);
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
+                stream = match self.opts.tls.as_ref() {
+                    Some(tls_opt) => {
+                        let mut tls_opt = tls_opt.clone();
+                        tls_opt.alpn = Some(vec!["h2".to_string()]);
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                    }
+                    None => stream,
+                };
 
                 let h2_builder = Http2Config {
                     hosts: vec![self.opts.server.clone()],
@@ -102,9 +102,12 @@ impl Handler {
                 h2_builder.proxy_stream(stream).await?
             }
             Some(VmessTransport::Grpc(ref opt)) => {
-                let tls_opt = self.opts.tls.as_ref().expect("gRPC conn must have tls opt");
-                stream =
-                    transport::tls::wrap_stream(stream, tls_opt.to_owned(), Some("h2")).await?;
+                stream = match self.opts.tls.as_ref() {
+                    Some(tls_opt) => {
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                    }
+                    None => stream,
+                };
 
                 let grpc_builder = transport::GrpcStreamBuilder::new(
                     self.opts.server.clone(),
