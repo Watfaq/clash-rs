@@ -6,7 +6,11 @@
 use std::time::Duration;
 
 // use futures::ready;
+use futures::TryFutureExt;
+use std::io::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinHandle;
 
 // #[derive(Debug)]
 // pub struct CopyBuffer {
@@ -386,7 +390,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 // #2 1:1 implement the original logic, that is, the other direction has a timeout requirement after one direction is ready
 // if both directions are pending, no timeout limition will be imposed on them
 
-enum DirectionMsg {
+enum SyncMsg {
     SetTimeOut,
     Terminate(std::io::Error),
     Done,
@@ -403,142 +407,104 @@ where
     A: AsyncRead + AsyncWrite + Unpin + Sized + Send + 'static,
     B: AsyncRead + AsyncWrite + Unpin + Sized + Send + 'static,
 {
-    let (mut a_reader, mut a_writer) = tokio::io::split(a);
-    let (mut b_reader, mut b_writer) = tokio::io::split(b);
-    let (a_to_b_msg_tx, mut a_to_b_msg_rx) = tokio::sync::mpsc::unbounded_channel::<DirectionMsg>();
-    let (b_to_a_msg_tx, mut b_to_a_msg_rx) = tokio::sync::mpsc::unbounded_channel::<DirectionMsg>();
-    let a_to_b = tokio::spawn(async move {
-        let mut upload_total_size = 0;
-        let mut buf = Vec::new();
-        buf.resize(size, 0);
-        let mut need_timeout = false;
-        loop {
-            tokio::select! {
-                msg = async {
-                    if need_timeout{
-                        tokio::time::sleep(a_to_b_timeout_duration).await;
-                        DirectionMsg::Done
-                    }else{
-                        match a_to_b_msg_rx.recv().await{
-                            Some(v)=>v,
-                            None=>DirectionMsg::SetTimeOut  // the other direction is done
-                        }
-                    }
-                } =>{
-                    match msg{
-                        DirectionMsg::SetTimeOut => {
-                            need_timeout = true;
-                        },
-                        DirectionMsg::Terminate(e) =>{
-                            return Err(e);
-                        },
-                        DirectionMsg::Done => return Ok(upload_total_size),
-                    }
-                }
-                r = a_reader.read(&mut buf[..]) =>{
-                    match r{
-                        Ok(size)=>{
-                            if size == 0{
-                                // peer has shutdown
-                                match b_writer.shutdown().await{
-                                    Ok(_)=>{
-                                        let _ = b_to_a_msg_tx.send(DirectionMsg::SetTimeOut);
-                                    }
-                                    Err(e)=>{
-                                        let _ = b_to_a_msg_tx.send(DirectionMsg::Terminate(e));
-                                    }
-                                }
-                                return Ok(upload_total_size);
-                            }
-                            if let Err(e) =  b_writer.write_all(&buf[..size]).await{
-                                return Err(e);
-                            }
-                            upload_total_size += size;
-                            continue;
-                        }
-                        Err(e)=>{
-                            return Err(e);
-                        }
-                    }
-                }
-            };
-        }
-    });
-    let b_to_a = tokio::spawn(async move {
-        let mut download_total_size = 0;
-        let mut buf = Vec::new();
-        buf.resize(size, 0);
-        let mut need_timeout = false;
-        loop {
-            tokio::select! {
-                msg = async {
-                    if need_timeout{
-                        tokio::time::sleep(b_to_a_timeout_duration).await;
-                        DirectionMsg::Done
-                    }else{
-                        match b_to_a_msg_rx.recv().await{
-                            Some(v)=>v,
-                            None=>DirectionMsg::SetTimeOut  // the other direction is done
-                        }
-                    }
-                } =>{
-                    match msg{
-                        DirectionMsg::SetTimeOut => {
-                            need_timeout = true;
-                        },
-                        DirectionMsg::Terminate(e) =>{
-                            return Err(e);
-                        },
-                        DirectionMsg::Done => return Ok(download_total_size),
-                    }
-                }
-                r = b_reader.read(&mut buf[..]) =>{
-                    match r{
-                        Ok(size)=>{
-                            if size == 0{
-                                // peer has shutdown
-                                match a_writer.shutdown().await{
-                                    Ok(_)=>{
-                                        let _ = a_to_b_msg_tx.send(DirectionMsg::SetTimeOut);
-                                    }
-                                    Err(e)=>{
-                                        let _ = a_to_b_msg_tx.send(DirectionMsg::Terminate(e));
-                                    }
-                                }
-                                return Ok(download_total_size);
-                            }
-                            if let Err(e) =   a_writer.write_all(&buf[..size]).await{
-                                return Err(e);
-                            }
-                            download_total_size += size;
-                            continue;
-                        }
-                        Err(e)=>{
-                            return Err(e);
-                        }
-                    }
-                }
-            };
-        }
-    });
-    let up = match a_to_b.await {
-        Ok(Ok(up)) => up,
-        Ok(Err(e)) => {
-            return Err(e);
-        }
-        Err(_) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
-        }
-    };
-    let down = match b_to_a.await {
-        Ok(Ok(up)) => up,
-        Ok(Err(e)) => {
-            return Err(e);
-        }
-        Err(_) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
-        }
-    };
-	//dbg!(up,down);
+    let (a_reader, a_writer) = tokio::io::split(a);
+    let (b_reader, b_writer) = tokio::io::split(b);
+    let (tx_for_a_to_b, rx_for_a_to_b) = tokio::sync::mpsc::unbounded_channel();
+    let (tx_for_b_to_a, rx_for_b_to_a) = tokio::sync::mpsc::unbounded_channel();
+    let a_to_b = copy_from_lhs_to_rhs(
+        a_reader,
+        b_writer,
+        size,
+        a_to_b_timeout_duration,
+        rx_for_a_to_b,
+        tx_for_b_to_a,
+    );
+    let b_to_a = copy_from_lhs_to_rhs(
+        b_reader,
+        a_writer,
+        size,
+        b_to_a_timeout_duration,
+        rx_for_b_to_a,
+        tx_for_a_to_b,
+    );
+
+    let up = a_to_b
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, ""))
+        .await??;
+    let down = b_to_a
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, ""))
+        .await??;
+    //dbg!(up,down);
     Ok((up as u64, down as u64))
+}
+
+fn copy_from_lhs_to_rhs<A, B>(
+    mut lhs_reader: A,
+    mut rhs_writer: B,
+    buf_size: usize,
+    timeout: Duration,
+    mut msg_rx: UnboundedReceiver<SyncMsg>,
+    other_side_sender: UnboundedSender<SyncMsg>,
+) -> JoinHandle<Result<usize, Error>>
+where
+    A: AsyncRead + Unpin + Sized + Send + 'static,
+    B: AsyncWrite + Unpin + Sized + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut transferred_size = 0;
+        let mut buf = Vec::new();
+        buf.resize(buf_size, 0);
+        let mut need_timeout = false;
+        loop {
+            tokio::select! {
+                msg = async {
+                    if need_timeout{
+                        tokio::time::sleep(timeout).await;
+                        SyncMsg::Done
+                    }else{
+                        match msg_rx.recv().await{
+                            Some(v)=>v,
+                            None=>SyncMsg::SetTimeOut  // the other direction is done
+                        }
+                    }
+                } =>{
+                    match msg{
+                        SyncMsg::SetTimeOut => {
+                            need_timeout = true;
+                        },
+                        SyncMsg::Terminate(e) =>{
+                            return Err(e);
+                        },
+                        SyncMsg::Done => return Ok(transferred_size),
+                    }
+                }
+                r = lhs_reader.read(&mut buf[..]) =>{
+                    match r{
+                        Ok(size)=>{
+                            if size == 0{
+                                // peer has shutdown
+                                match rhs_writer.shutdown().await{
+                                    Ok(_)=>{
+                                        let _ = other_side_sender.send(SyncMsg::SetTimeOut);
+                                    }
+                                    Err(e)=>{
+                                        let _ = other_side_sender.send(SyncMsg::Terminate(e));
+                                    }
+                                }
+                                return Ok(transferred_size);
+                            }
+                            if let Err(e) =   rhs_writer.write_all(&buf[..size]).await{
+                                return Err(e);
+                            }
+                            transferred_size += size;
+                            continue;
+                        }
+                        Err(e)=>{
+                            return Err(e);
+                        }
+                    }
+                }
+            };
+        }
+    })
 }
