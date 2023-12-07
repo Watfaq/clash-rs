@@ -266,7 +266,7 @@ dependencies = [
  "bitflags 1.3.2",
  "bytes",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "hyper",
  "itoa",
@@ -298,7 +298,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "mime",
  "rustversion",
@@ -794,13 +794,13 @@ dependencies = [
  "filetime",
  "foreign-types-shared",
  "futures",
- "h2",
+ "h2 0.4.0",
  "hickory-client",
  "hickory-proto",
  "hickory-resolver",
  "hickory-server",
  "hmac",
- "http",
+ "http 0.2.11",
  "httparse",
  "hyper",
  "hyper-boring",
@@ -1625,7 +1625,26 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http",
+ "http 0.2.11",
+ "indexmap 2.0.0",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "h2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1d308f63daf4181410c242d34c11f928dcb3aa105852019e043c9d1f4e4368a"
+dependencies = [
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "http 1.0.0",
  "indexmap 2.0.0",
  "slab",
  "tokio",
@@ -1683,7 +1702,7 @@ dependencies = [
  "base64 0.21.5",
  "bytes",
  "headers-core",
- "http",
+ "http 0.2.11",
  "httpdate",
  "mime",
  "sha1",
@@ -1695,7 +1714,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7f66481bfee273957b1f20485a4ff3362987f85b2c236580d81b4eb7a326429"
 dependencies = [
- "http",
+ "http 0.2.11",
 ]
 
 [[package]]
@@ -1771,8 +1790,8 @@ dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
- "h2",
- "http",
+ "h2 0.3.22",
+ "http 0.2.11",
  "idna 0.4.0",
  "ipnet",
  "once_cell",
@@ -1824,10 +1843,10 @@ dependencies = [
  "cfg-if",
  "enum-as-inner 0.6.0",
  "futures-util",
- "h2",
+ "h2 0.3.22",
  "hickory-proto",
  "hickory-resolver",
- "http",
+ "http 0.2.11",
  "rustls",
  "serde",
  "thiserror",
@@ -1888,13 +1907,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "http"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b32afd38673a8016f7c9ae69e5af41a58f81b1d31689040f2f1959594ce194ea"
+dependencies = [
+ "bytes",
+ "fnv",
+ "itoa",
+]
+
+[[package]]
 name = "http-body"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes",
- "http",
+ "http 0.2.11",
  "pin-project-lite",
 ]
 
@@ -1932,8 +1962,8 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2",
- "http",
+ "h2 0.3.22",
+ "http 0.2.11",
  "http-body",
  "httparse",
  "httpdate",
@@ -1953,7 +1983,7 @@ source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20c
 dependencies = [
  "antidote",
  "boring",
- "http",
+ "http 0.2.11",
  "hyper",
  "linked_hash_set",
  "once_cell",
@@ -2619,7 +2649,7 @@ checksum = "7f51189ce8be654f9b5f7e70e49967ed894e84a06fc35c6c042e64ac1fc5399e"
 dependencies = [
  "async-trait",
  "bytes",
- "http",
+ "http 0.2.11",
  "hyper",
  "opentelemetry",
  "tokio",
@@ -2635,7 +2665,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "headers",
- "http",
+ "http 0.2.11",
  "hyper",
  "opentelemetry",
  "opentelemetry-http",
@@ -3967,8 +3997,8 @@ dependencies = [
  "axum",
  "base64 0.21.5",
  "bytes",
- "h2",
- "http",
+ "h2 0.3.22",
+ "http 0.2.11",
  "http-body",
  "hyper",
  "hyper-timeout",
@@ -4013,7 +4043,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
- "http",
+ "http 0.2.11",
  "http-body",
  "http-range-header",
  "httpdate",
@@ -4221,7 +4251,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "data-encoding",
- "http",
+ "http 0.2.11",
  "httparse",
  "log",
  "rand",
