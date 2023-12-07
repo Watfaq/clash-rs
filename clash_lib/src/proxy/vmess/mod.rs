@@ -82,7 +82,7 @@ impl Handler {
 
                 ws_builder.proxy_stream(stream).await?
             }
-            Some(VmessTransport::H2(ref opt)) => {                
+            Some(VmessTransport::H2(ref opt)) => {
                 stream = match self.opts.tls.as_ref() {
                     Some(tls_opt) => {
                         let mut tls_opt = tls_opt.clone();
