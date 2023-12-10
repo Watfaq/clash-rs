@@ -11,6 +11,7 @@ use crate::proxy::AnyInboundDatagram;
 use crate::session::Session;
 use futures::SinkExt;
 use futures::StreamExt;
+
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
@@ -77,7 +78,7 @@ impl Dispatcher {
     #[instrument(skip(lhs))]
     pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: S)
     where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
+        S: AsyncRead + AsyncWrite + Unpin + Send +'static,
     {
         let sess = if self.resolver.fake_ip_enabled() {
             match sess.destination {
@@ -133,11 +134,11 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let mut rhs =
+                let rhs =
                     TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
                 match copy_buf_bidirectional_with_timeout(
-                    &mut lhs,
-                    &mut rhs,
+                    lhs,
+                    rhs,
                     4096,
                     Duration::from_secs(10),
                     Duration::from_secs(10),
