@@ -126,6 +126,7 @@ proxies:
     cipher: auto
     udp: true
     skip-cert-verify: true
+
   - name: ws-vmess
     type: vmess
     server: 10.0.0.13
@@ -180,19 +181,6 @@ proxies:
     grpc-opts:
       grpc-service-name: abc
 
-  - name: vmess-altid
-    type: vmess
-    server: tw-1.ac.laowanxiang.com
-    port: 153
-    uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687
-    alterId: 64
-    cipher: auto
-    udp: true
-    network: ws
-    ws-opts:
-      path: /api/v3/download.getFile
-      headers:
-        Host: 5607b9d187e655736f563fee87d7283994721.laowanxiang.com
   - name: "ss-simple"
     type: ss
     server: 10.0.0.13
@@ -245,7 +233,7 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,google.com,grpc-vmess
+  - DOMAIN,google.com,relay
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,trojan-grpc
 #  - RULE-SET,file-provider,trojan
