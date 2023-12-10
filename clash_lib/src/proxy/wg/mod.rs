@@ -5,16 +5,22 @@ use std::{
 };
 
 use crate::{
-    app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
+    app::{
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dns::ThreadSafeDNSResolver,
+    },
     session::{Session, SocksAddr},
 };
 
-use super::{
-    AnyOutboundDatagram, AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
-};
+use super::{AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 pub use netstack_lwip as netstack;
+
+mod device;
+mod events;
+mod stack;
+mod wireguard;
 
 pub struct Opts {
     pub name: String,
@@ -34,15 +40,11 @@ pub struct Opts {
 
 pub struct Handler {
     opts: Opts,
-
-    device: boringtun::device::Device,
 }
 
 impl Handler {
     pub fn new(opts: Opts) -> AnyOutboundHandler {
-        let device_cfg = boringtun::device::DeviceConfig::default();
-        let device = boringtun::device::Device::new("utun", device_cfg).unwrap();
-        Arc::new(Self { opts, device })
+        Arc::new(Self { opts })
     }
 }
 
@@ -88,7 +90,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyOutboundDatagram> {
+    ) -> io::Result<BoxedChainedDatagram> {
         todo!()
     }
 }

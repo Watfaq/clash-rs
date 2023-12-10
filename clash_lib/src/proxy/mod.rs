@@ -32,7 +32,7 @@ pub mod trojan;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
-//pub mod wg;
+pub mod wg;
 
 pub mod converters;
 
