@@ -104,6 +104,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Socks5(_) => todo!("socks5 not supported yet"),
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
+                            OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
@@ -151,6 +152,7 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
+                // ? why not await here?
                 updater.lock().await(ele);
             }
         }

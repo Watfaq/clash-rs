@@ -76,7 +76,7 @@ hickory-server = { version = "0.24", features = ["dns-over-rustls", "dns-over-ht
 hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 
 # DoH
-rustls = { version  = "0.21", features=["dangerous_configuration"] }
+rustls = { version = "0.21", features = ["dangerous_configuration", "quic"] }
 rustls-pemfile = "1.0.4"
 webpki-roots = "0.25"
 dhcproto = "0.11"
@@ -100,6 +100,10 @@ murmur3 = "0.5.2"
 console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
+quinn = { version =  "0.10.2", features = ["runtime-tokio"] }
+h3 = "0.0.3"
+h3-quinn = "0.0.4"
+quinn-proto = "0.10.6"
 
 [dev-dependencies]
 tempfile = "3.8"

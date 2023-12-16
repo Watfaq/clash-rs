@@ -53,6 +53,7 @@ pub enum OutboundProxyProtocol {
     Trojan(OutboundTrojan),
     #[serde(rename = "vmess")]
     Vmess(OutboundVmess),
+    Hysteria2(OutboundHysteria2),
 }
 
 impl OutboundProxyProtocol {
@@ -64,6 +65,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
+            OutboundProxyProtocol::Hysteria2(hysteria) => &hysteria.name,
         }
     }
 }
@@ -86,6 +88,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
             OutboundProxyProtocol::Trojan(_) => write!(f, "{}", "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "{}", "Vmess"),
+            OutboundProxyProtocol::Hysteria2(_) => write!(f, "{}", "Hysteria2"),
         }
     }
 }
@@ -345,4 +348,54 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
         OutboundProxyProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
             .map_err(map_serde_error)
     }
+}
+
+//   #hysteria2
+//   - name: "hysteria2"
+//     type: hysteria2
+//     server: server.com
+//     port: 443
+//     #  up和down均不写或为0则使用BBR流控
+//     # up: "30 Mbps" # 若不写单位，默认为 Mbps
+//     # down: "200 Mbps" # 若不写单位，默认为 Mbps
+//     password: yourpassword
+//     # obfs: salamander # 默认为空，如果填写则开启obfs，目前仅支持salamander
+//     # obfs-password: yourpassword
+//     # sni: server.com
+//     # skip-cert-verify: false
+//     # fingerprint: xxxx
+//     # alpn:
+//     #   - h3
+//     # ca: "./my.ca"
+//     # ca-str: "xyz"
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundHysteria2 {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    /// port hopping
+    pub ports: Option<String>,
+    pub password: String,
+    pub obfs: Option<Hysteria2Obfs>,
+    pub obfs_password: Option<String>,
+    pub alpn: Option<Vec<String>>,
+    /// set burtal congestion control, need compare with tx which is received by auth request
+    pub up: Option<u64>,
+    /// receive_bps: send by auth request
+    pub down: Option<u64>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: bool,
+    pub ca: Option<String>,
+    pub ca_str: Option<String>,
+    pub fingerprint: Option<String>,
+    /// bbr congestion control window
+    pub cwnd: Option<u64>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Hysteria2Obfs {
+    Salamander,
 }

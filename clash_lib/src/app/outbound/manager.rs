@@ -204,6 +204,9 @@ impl OutboundManager {
                 OutboundProxyProtocol::Trojan(v) => {
                     handlers.insert(v.name.clone(), v.try_into()?);
                 }
+                OutboundProxyProtocol::Hysteria2(h) => {
+                    handlers.insert(h.name.clone(), h.clone().try_into()?);
+                }
 
                 p => {
                     unimplemented!("proto {} not supported yet", p);
