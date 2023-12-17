@@ -205,6 +205,10 @@ impl OutboundManager {
                     handlers.insert(v.name.clone(), v.try_into()?);
                 }
 
+                OutboundProxyProtocol::Wireguard(wg) => {
+                    handlers.insert(wg.name.clone(), wg.try_into()?);
+                }
+
                 p => {
                     unimplemented!("proto {} not supported yet", p);
                 }

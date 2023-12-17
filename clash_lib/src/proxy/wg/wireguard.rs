@@ -1,70 +1,87 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::Arc,
     time::Duration,
 };
 
 use async_recursion::async_recursion;
-use boringtun::noise::{errors::WireGuardError, Tunn, TunnResult};
+use boringtun::{
+    noise::{errors::WireGuardError, Tunn, TunnResult},
+    x25519::{PublicKey, StaticSecret},
+};
 
+use bytes::Bytes;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
-use tokio::net::UdpSocket;
+use tokio::{
+    net::UdpSocket,
+    sync::{
+        mpsc::{Receiver, Sender},
+        Mutex,
+    },
+};
 use tracing::{enabled, error, trace, warn};
 
-use crate::Error;
+use crate::{proxy::utils::new_udp_socket, Error};
 
-use super::events::{Bus, Event, PortProtocol};
+use super::events::PortProtocol;
 
 pub struct WireguardTunnel {
     pub(crate) source_peer_ip: IpAddr,
-    peer: Box<Tunn>,
+    peer: Arc<Mutex<Tunn>>,
     udp: UdpSocket,
     pub(crate) endpoint: SocketAddr,
-    bus: Bus,
+
+    // send side packet going out of the tunnel
+    packet_writer: Sender<(PortProtocol, Bytes)>,
+    // receive side packet coming into the tunnel
+    packet_reader: Arc<Mutex<Receiver<Bytes>>>,
 }
 
 pub struct Config {
-    pub private_key: [u8; 32],
-    pub endpoint_public_key: [u8; 32],
-    pub preshared_key: Option<[u8; 32]>,
+    pub private_key: StaticSecret,
+    pub endpoint_public_key: PublicKey,
+    pub preshared_key: Option<StaticSecret>,
     pub remote_endpoint: SocketAddr,
     pub source_peer_ip: IpAddr,
     pub keepalive_seconds: Option<u16>,
 }
 
 impl WireguardTunnel {
-    pub async fn new(config: Config, bus: Bus) -> Result<Self, Error> {
+    pub async fn new(
+        config: Config,
+        packet_writer: Sender<(PortProtocol, Bytes)>,
+        packet_reader: Receiver<Bytes>,
+    ) -> Result<Self, Error> {
         let source_peer_ip = config.source_peer_ip;
-        let peer = Box::new(
-            Tunn::new(
-                config.private_key.into(),
-                config.endpoint_public_key.into(),
-                config.preshared_key,
-                config.keepalive_seconds,
-                0,
-                None,
-            )
-            .map_err(|x| {
-                Error::InvalidConfig(format!("failed to create wireguard tunnel: {}", x))
-            })?,
-        );
+        let peer = Tunn::new(
+            config.private_key.into(),
+            config.endpoint_public_key.into(),
+            config.preshared_key.map(|x| x.to_bytes()),
+            config.keepalive_seconds,
+            0,
+            None,
+        )
+        .map_err(|x| Error::InvalidConfig(format!("failed to create wireguard tunnel: {}", x)))?;
 
         let remote_endpoint = config.remote_endpoint;
-        let udp = UdpSocket::bind("127.0.0.1:0").await?;
+        let udp = new_udp_socket(None, None).await?;
 
         Ok(Self {
             source_peer_ip,
-            peer,
+            peer: Arc::new(Mutex::new(peer)),
             udp,
             endpoint: remote_endpoint,
-            bus,
+            packet_writer,
+            packet_reader: Arc::new(Mutex::new(packet_reader)),
         })
     }
 
-    pub async fn send_ip_packet(&mut self, packet: &[u8]) -> Result<(), Error> {
+    pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
         trace_ip_packet("Sending IP packet", packet);
 
         let mut send_buf = [0u8; 65535];
-        match self.peer.encapsulate(packet, &mut send_buf) {
+        let mut peer = self.peer.lock().await;
+        match peer.encapsulate(packet, &mut send_buf) {
             boringtun::noise::TunnResult::Done => {}
             boringtun::noise::TunnResult::Err(e) => {
                 error!("failed to encapsulate packet: {e:?}");
@@ -79,46 +96,82 @@ impl WireguardTunnel {
         Ok(())
     }
 
-    pub async fn start_forwarding(&mut self) {
-        let mut ep = self.bus.new_endpoint();
+    pub async fn start_polling(&self) {
+        tokio::select! {
+            _ = self.start_forwarding() => {
+                trace!("forwarding stopped")
+            }
+            _ = self.start_heartbeat() => {
+                trace!("heartbeat stopped")
+            }
+            _ = self.start_receiving() => {
+                trace!("receiving stopped")
+            }
+        }
+    }
 
+    pub async fn start_forwarding(&self) {
+        let mut packet_reader = self.packet_reader.lock().await;
         loop {
-            if let Event::OutboundInternetPacket(data) = ep.recv().await {
-                if let Err(e) = self.send_ip_packet(&data).await {
-                    error!("failed to send packet: {}", e);
+            let timeouted_recv =
+                tokio::time::timeout(Duration::from_secs(30), packet_reader.recv());
+
+            match timeouted_recv.await {
+                Ok(Some(packet)) => {
+                    if let Err(e) = self.send_ip_packet(&packet).await {
+                        error!("failed to send packet: {}", e);
+                    }
+                }
+                Ok(None) => {
+                    trace!("connection closed, stopping");
+                    break;
+                }
+                Err(e) => {
+                    trace!("no active connection, stopping: {e:?}");
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    break;
                 }
             }
         }
     }
 
-    pub async fn start_heartbeat(&mut self) {
+    pub async fn start_heartbeat(&self) {
         loop {
             let mut send_buf = [0u8; 65535];
-            let tun_result = self.peer.update_timers(&mut send_buf);
+            let mut peer = self.peer.lock().await;
+            let tun_result = peer.update_timers(&mut send_buf);
             self.handle_routine_result(tun_result).await;
         }
     }
 
-    pub async fn start_receiving(&mut self) {
-        let ep = self.bus.new_endpoint();
-
+    pub async fn start_receiving(&self) {
         loop {
             let mut recv_buf = [0u8; 65535];
             let mut send_buf = [0u8; 65535];
 
-            let size = match self.udp.recv(&mut recv_buf).await {
-                Ok(size) => size,
-                Err(e) => {
+            let timeouted_recv =
+                tokio::time::timeout(Duration::from_secs(30), self.udp.recv(&mut recv_buf));
+
+            let size = match timeouted_recv.await {
+                Ok(Ok(size)) => size,
+                Ok(Err(e)) => {
                     error!("failed to receive packet: {e:?}");
                     tokio::time::sleep(Duration::from_millis(1)).await;
                     continue;
                 }
+                Err(e) => {
+                    trace!("no active connection, stopping: {e:?}");
+                    break;
+                }
             };
-
+            let mut peer = self.peer.lock().await;
             let data = &recv_buf[..size];
-            match self.peer.decapsulate(None, data, &mut send_buf) {
-                TunnResult::Done => todo!(),
-                TunnResult::Err(_) => todo!(),
+            match peer.decapsulate(None, data, &mut send_buf) {
+                TunnResult::Done => {}
+                TunnResult::Err(e) => {
+                    error!("failed to decapsulate packet: {e:?}");
+                    continue;
+                }
                 TunnResult::WriteToNetwork(packet) => {
                     match self.udp.send_to(&packet, self.endpoint).await {
                         Ok(_) => {}
@@ -130,7 +183,7 @@ impl WireguardTunnel {
 
                     loop {
                         let mut send_buf = [0u8; 65535];
-                        match self.peer.decapsulate(None, &[], &mut send_buf) {
+                        match peer.decapsulate(None, &[], &mut send_buf) {
                             TunnResult::WriteToNetwork(packet) => {
                                 match self.udp.send_to(packet, self.endpoint).await {
                                     Ok(_) => {}
@@ -146,12 +199,18 @@ impl WireguardTunnel {
                         }
                     }
                 }
+
                 TunnResult::WriteToTunnelV4(packet, _) | TunnResult::WriteToTunnelV6(packet, _) => {
                     trace_ip_packet("Received IP packet", packet);
 
                     if let Some(proto) = self.route_protocol(packet) {
-                        ep.send(Event::InboundInternetPacket(proto, packet.to_vec().into()));
-                        // TODO: avoid copy
+                        if let Err(e) = self
+                            .packet_writer
+                            .send((proto, packet.to_owned().into())) // TODO: avoid copy
+                            .await
+                        {
+                            error!("failed to send packet to virtual device: {}", e);
+                        }
                     }
                 }
             }
@@ -159,7 +218,7 @@ impl WireguardTunnel {
     }
 
     #[async_recursion]
-    async fn handle_routine_result<'a: 'async_recursion>(&mut self, result: TunnResult<'a>) {
+    async fn handle_routine_result<'a: 'async_recursion>(&self, result: TunnResult<'a>) {
         match result {
             TunnResult::Done => {
                 tokio::time::sleep(Duration::from_millis(1)).await;
@@ -167,7 +226,8 @@ impl WireguardTunnel {
             TunnResult::Err(WireGuardError::ConnectionExpired) => {
                 warn!("wireguard connection expired");
                 let mut buf = [0u8; 65535];
-                let tun_result = self.peer.format_handshake_initiation(&mut buf[..], false);
+                let mut peer = self.peer.lock().await;
+                let tun_result = peer.format_handshake_initiation(&mut buf[..], false);
                 self.handle_routine_result(tun_result).await;
             }
             TunnResult::Err(e) => {
