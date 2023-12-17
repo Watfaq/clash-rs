@@ -111,6 +111,8 @@ impl WireguardTunnel {
     }
 
     pub async fn start_forwarding(&self) {
+        trace!("wg stack writing data");
+
         let mut packet_reader = self.packet_reader.lock().await;
         loop {
             let timeouted_recv =
@@ -146,6 +148,8 @@ impl WireguardTunnel {
 
     pub async fn start_receiving(&self) {
         loop {
+            trace!("wg stack receiving data");
+
             let mut recv_buf = [0u8; 65535];
             let mut send_buf = [0u8; 65535];
 
@@ -211,6 +215,8 @@ impl WireguardTunnel {
                         {
                             error!("failed to send packet to virtual device: {}", e);
                         }
+                    } else {
+                        trace!("wg stack recevied unkown data");
                     }
                 }
             }
@@ -221,7 +227,7 @@ impl WireguardTunnel {
     async fn handle_routine_result<'a: 'async_recursion>(&self, result: TunnResult<'a>) {
         match result {
             TunnResult::Done => {
-                tokio::time::sleep(Duration::from_millis(1)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
             TunnResult::Err(WireGuardError::ConnectionExpired) => {
                 warn!("wireguard connection expired");
@@ -250,26 +256,22 @@ impl WireguardTunnel {
     /// Determine the inner protocol of the incoming IP packet (TCP/UDP).
     fn route_protocol(&self, packet: &[u8]) -> Option<PortProtocol> {
         match IpVersion::of_packet(packet) {
-            Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
-                .ok()
-                // Only care if the packet is destined for this tunnel
-                .filter(|packet| Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip)
-                .and_then(|packet| match packet.next_header() {
+            Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet).ok().and_then(|packet| {
+                match packet.next_header() {
                     IpProtocol::Tcp => Some(PortProtocol::Tcp),
                     IpProtocol::Udp => Some(PortProtocol::Udp),
                     // Unrecognized protocol, so we cannot determine where to route
                     _ => None,
-                }),
-            Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
-                .ok()
-                // Only care if the packet is destined for this tunnel
-                .filter(|packet| Ipv6Addr::from(packet.dst_addr()) == self.source_peer_ip)
-                .and_then(|packet| match packet.next_header() {
+                }
+            }),
+            Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet).ok().and_then(|packet| {
+                match packet.next_header() {
                     IpProtocol::Tcp => Some(PortProtocol::Tcp),
                     IpProtocol::Udp => Some(PortProtocol::Udp),
                     // Unrecognized protocol, so we cannot determine where to route
                     _ => None,
-                }),
+                }
+            }),
             _ => None,
         }
     }

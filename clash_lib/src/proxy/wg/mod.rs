@@ -1,10 +1,13 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
     sync::Arc,
 };
 
-use crate::app::dispatcher::{ChainedStream, ChainedStreamWrapper};
+use crate::{
+    app::dispatcher::{ChainedStream, ChainedStreamWrapper},
+    Error,
+};
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
@@ -14,12 +17,14 @@ use crate::{
     session::{Session, SocksAddr},
 };
 
-use self::{keys::KeyBytes, stack::VirtualInterfacePoll, wireguard::Config};
+use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
+
+use tokio::sync::OnceCell;
 
 mod device;
 mod events;
@@ -44,13 +49,92 @@ pub struct Opts {
     pub udp: bool,
 }
 
+struct Inner {
+    device_manager: Arc<device::DeviceManager>,
+    wg_handle: tokio::task::JoinHandle<()>,
+    device_manager_handle: tokio::task::JoinHandle<()>,
+}
+
 pub struct Handler {
     opts: Opts,
+    inner: OnceCell<Inner>,
 }
 
 impl Handler {
     pub fn new(opts: Opts) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+        Arc::new(Self {
+            opts,
+            inner: OnceCell::new(),
+        })
+    }
+
+    async fn initialize_inner(&self, resolver: ThreadSafeDNSResolver) -> Result<&Inner, Error> {
+        self.inner
+            .get_or_try_init(|| async {
+                let recv_pair = tokio::sync::mpsc::channel(1024);
+                let send_pair = tokio::sync::mpsc::channel(1024);
+                let server_ip = resolver
+                    .resolve(&self.opts.server, false)
+                    .await
+                    .map_err(map_io_error)?
+                    .ok_or(new_io_error(
+                        format!("invalid remote server: {}", self.opts.server).as_str(),
+                    ))?;
+
+                // we shouldn't create a new tunnel for each connection
+                let wg = wireguard::WireguardTunnel::new(
+                    Config {
+                        private_key: self.opts.private_key.parse::<KeyBytes>().unwrap().0.into(),
+                        endpoint_public_key: self
+                            .opts
+                            .public_key
+                            .parse::<KeyBytes>()
+                            .unwrap()
+                            .0
+                            .into(),
+                        preshared_key: self
+                            .opts
+                            .preshared_key
+                            .as_ref()
+                            .map(|s| s.parse::<KeyBytes>().unwrap().0.into()),
+                        remote_endpoint: (server_ip, self.opts.port).into(),
+                        source_peer_ip: self
+                            .opts
+                            .ipv6
+                            .map(|ip| ip.into())
+                            .unwrap_or(self.opts.ip.into()),
+                        keepalive_seconds: Some(10),
+                    },
+                    recv_pair.0,
+                    send_pair.1,
+                )
+                .await
+                .map_err(map_io_error)?;
+
+                let wg_handle = tokio::spawn(async move {
+                    wg.start_polling().await;
+                });
+
+                let device = device::VirtualIpDevice::new(
+                    send_pair.0,
+                    recv_pair.1,
+                    self.opts.mtu.unwrap_or(1420) as usize,
+                );
+
+                let device_manager = Arc::new(device::DeviceManager::new(self.opts.ip.into()));
+
+                let device_manager_clone = device_manager.clone();
+                let device_manager_handle = tokio::spawn(async move {
+                    device_manager_clone.poll_sockets(device).await;
+                });
+
+                Ok(Inner {
+                    device_manager,
+                    wg_handle,
+                    device_manager_handle,
+                })
+            })
+            .await
     }
 }
 
@@ -83,63 +167,14 @@ impl OutboundHandler for Handler {
             .map_err(map_io_error)
             .await?
             .ok_or(new_io_error("invalid remote address"))?;
+        let remote = (ip, sess.destination.port()).into();
 
-        let stack = stack::tcp::TcpSocketStack::new(
-            self.opts
-                .ipv6
-                .map(|ip| IpAddr::V6(ip))
-                .unwrap_or(IpAddr::V4(self.opts.ip)),
-            (ip, sess.destination.port()).into(),
-        );
-
-        let socket = stack.get_socket_pair();
-
-        let recv_pair = tokio::sync::mpsc::channel(1024);
-        let send_pair = tokio::sync::mpsc::channel(1024);
-        let server_ip = resolver
-            .resolve(&self.opts.server, false)
+        let inner = self
+            .initialize_inner(resolver)
             .await
-            .map_err(map_io_error)?
-            .ok_or(new_io_error(
-                format!("invalid remote server: {}", self.opts.server).as_str(),
-            ))?;
+            .map_err(map_io_error)?;
 
-        // we shouldn't create a new tunnel for each connection
-        let wg = wireguard::WireguardTunnel::new(
-            Config {
-                private_key: self.opts.private_key.parse::<KeyBytes>().unwrap().0.into(),
-                endpoint_public_key: self.opts.public_key.parse::<KeyBytes>().unwrap().0.into(),
-                preshared_key: self
-                    .opts
-                    .preshared_key
-                    .as_ref()
-                    .map(|s| s.parse::<KeyBytes>().unwrap().0.into()),
-                remote_endpoint: (server_ip, self.opts.port).into(),
-                source_peer_ip: self
-                    .opts
-                    .ipv6
-                    .map(|ip| ip.into())
-                    .unwrap_or(self.opts.ip.into()),
-                keepalive_seconds: Some(10),
-            },
-            recv_pair.0,
-            send_pair.1,
-        )
-        .await
-        .map_err(map_io_error)?;
-
-        tokio::spawn(async move {
-            wg.start_polling().await;
-        });
-
-        let device = device::VirtualIpDevice::new(
-            send_pair.0,
-            recv_pair.1,
-            self.opts.mtu.unwrap_or(1420) as usize,
-        );
-
-        tokio::spawn(stack.poll_loop(device));
-
+        let socket = inner.device_manager.new_tcp_socket(remote).await;
         let chained = ChainedStreamWrapper::new(socket);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))

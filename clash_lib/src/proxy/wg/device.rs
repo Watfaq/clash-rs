@@ -1,14 +1,179 @@
-use bytes::{Bytes, BytesMut};
-use smoltcp::phy::Device;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tracing::error;
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
-use super::{events::PortProtocol, ports::PortPool};
+use bytes::{BufMut, Bytes, BytesMut};
+use smoltcp::{
+    iface::{Config, Interface, SocketHandle, SocketSet},
+    phy::Device,
+    socket::tcp::{self, RecvError, Socket},
+    time::Instant,
+    wire::IpCidr,
+};
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
+};
+use tracing::{error, trace, warn};
+
+use super::{events::PortProtocol, ports::PortPool, stack::tcp::SocketPair};
+
+pub struct DeviceManager {
+    addr: IpAddr,
+
+    unconnected_sockets:
+        Arc<Mutex<Vec<(Socket<'static>, SocketAddr, Sender<Bytes>, Receiver<Bytes>)>>>,
+    socket_set: Arc<Mutex<SocketSet<'static>>>,
+    socket_pairs: Arc<Mutex<HashMap<SocketHandle, (Sender<Bytes>, Receiver<Bytes>)>>>,
+    tcp_port_pool: PortPool,
+}
+
+impl DeviceManager {
+    pub fn new(addr: IpAddr) -> Self {
+        let unconnected_sockets = Arc::new(Mutex::new(Vec::new()));
+        let socket_set = Arc::new(Mutex::new(SocketSet::new(Vec::new())));
+        let socket_pairs = Arc::new(Mutex::new(HashMap::new()));
+        let tcp_port_pool = PortPool::new();
+
+        Self {
+            addr,
+
+            unconnected_sockets,
+            socket_set,
+            socket_pairs,
+            tcp_port_pool,
+        }
+    }
+
+    pub async fn new_tcp_socket(&self, remote: SocketAddr) -> SocketPair {
+        let socket = Self::new_client_socket();
+        let read_pair = tokio::sync::mpsc::channel(1024);
+        let write_pair = tokio::sync::mpsc::channel(1024);
+        self.unconnected_sockets
+            .lock()
+            .await
+            .push((socket, remote, read_pair.0, write_pair.1));
+        SocketPair {
+            read: read_pair.1,
+            write: write_pair.0,
+        }
+    }
+
+    pub async fn poll_sockets(&self, mut device: VirtualIpDevice) {
+        let mut config = Config::new(smoltcp::wire::HardwareAddress::Ip);
+        config.random_seed = rand::random();
+
+        let mut iface = Interface::new(config, &mut device, Instant::now());
+        iface.update_ip_addrs(|addrs| {
+            addrs.push(IpCidr::new(self.addr.into(), 32)).unwrap();
+        });
+
+        loop {
+            let timestamp = Instant::now();
+            let mut sockets = self.socket_set.lock().await;
+            let mut socket_pairs = self.socket_pairs.lock().await;
+
+            trace!("polling active socket: {}", socket_pairs.len());
+            iface.poll(timestamp, &mut device, &mut sockets);
+
+            let mut unconnected_sockets = self.unconnected_sockets.lock().await;
+            let unconnected_sockets = unconnected_sockets.drain(0..);
+            for (mut socket, remote, sender, receiver) in unconnected_sockets {
+                socket
+                    .connect(
+                        iface.context(),
+                        remote,
+                        (self.addr, self.get_ephemeral_tcp_port().await),
+                    )
+                    .unwrap();
+
+                let handle = sockets.add(socket);
+                socket_pairs.insert(handle, (sender, receiver));
+            }
+
+            for (handle, (sender, receiver)) in socket_pairs.iter_mut() {
+                let socket = sockets.get_mut::<tcp::Socket>(*handle);
+                if socket.may_recv() {
+                    match socket.recv(|data| (data.len(), data)) {
+                        Ok(data) => match sender.try_send(data.to_owned().into()) {
+                            Ok(_) => {
+                                trace!("data forwared to socket: {:?}", socket);
+                            }
+                            Err(e) => {
+                                warn!("failed to send tcp packet: {:?}", e);
+                            }
+                        },
+                        Err(RecvError::Finished) => {
+                            warn!("tcp socket finished");
+                            continue;
+                        }
+                        Err(e) => {
+                            warn!("failed to receive tcp packet: {:?}", e);
+                        }
+                    }
+                }
+                if socket.may_send() {
+                    match receiver.try_recv() {
+                        Ok(data) => match socket.send_slice(&data) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!("failed to send tcp packet: {:?}", e);
+                            }
+                        },
+                        Err(e) => {
+                            warn!("failed to receive tcp packet: {:?}", e);
+                        }
+                    }
+                }
+            }
+
+            match iface.poll_delay(timestamp, &sockets) {
+                Some(delay) => {
+                    tokio::time::sleep(delay.into()).await;
+                }
+                None => {}
+            }
+
+            let mut port_to_release = Vec::new();
+            socket_pairs.retain(|handle, _| {
+                let socket = sockets.get::<tcp::Socket>(*handle);
+                if socket.is_open() {
+                    true
+                } else {
+                    trace!("socket closed, shutting down connection: {:?}", socket);
+                    let port = socket.local_endpoint().unwrap().port;
+                    sockets.remove(*handle);
+                    port_to_release.push(port);
+                    false
+                }
+            });
+
+            for port in port_to_release {
+                self.release_ephemeral_tcp_port(port).await;
+            }
+        }
+    }
+
+    async fn get_ephemeral_tcp_port(&self) -> u16 {
+        self.tcp_port_pool.next().await.unwrap()
+    }
+
+    async fn release_ephemeral_tcp_port(&self, port: u16) {
+        self.tcp_port_pool.release(port).await;
+    }
+
+    fn new_client_socket() -> Socket<'static> {
+        Socket::new(
+            smoltcp::socket::tcp::SocketBuffer::new(vec![0; 65535]),
+            smoltcp::socket::tcp::SocketBuffer::new(vec![0; 65535]),
+        )
+    }
+}
 
 pub struct VirtualIpDevice {
     mtu: usize,
-
-    tcp_port_pool: PortPool,
 
     packet_sender: Sender<Bytes>,
     packet_receiver: Receiver<(PortProtocol, Bytes)>,
@@ -22,17 +187,9 @@ impl VirtualIpDevice {
     ) -> Self {
         Self {
             mtu,
-            tcp_port_pool: PortPool::new(),
             packet_sender,
             packet_receiver,
         }
-    }
-
-    pub async fn get_ephemeral_tcp_port(&self) -> u16 {
-        self.tcp_port_pool.next().await.unwrap()
-    }
-    pub async fn release_ephemeral_tcp_port(&self, port: u16) {
-        self.tcp_port_pool.release(port).await;
     }
 }
 
@@ -44,14 +201,15 @@ impl Device for VirtualIpDevice {
         &mut self,
         timestamp: smoltcp::time::Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+        trace!("wg tun polling data");
         let next = self.packet_receiver.try_recv().ok();
-
         match next {
             Some((proto, data)) => {
+                trace!("wg tun received packet");
                 let rx_token = RxToken {
                     buffer: {
                         let mut buffer = BytesMut::new();
-                        buffer.extend_from_slice(&data);
+                        buffer.put(data);
                         buffer
                     },
                 };
@@ -65,6 +223,7 @@ impl Device for VirtualIpDevice {
     }
 
     fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+        trace!("wg tun writing data");
         Some(TxToken {
             sender: self.packet_sender.clone(),
         })

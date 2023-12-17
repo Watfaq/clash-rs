@@ -48,7 +48,7 @@ proxies:
     server: 10.0.0.17
     port: 51820
     private-key: 2AS8PSccSenWrws5ExglmpwjVBub9Oy9X3zOlk6heHU=
-    ip: 172.16.0.2
+    ip: 192.168.2.2
     public-key: MAZPwQBniuXmQf5w8BwM3owlO7Kw07rzyZUXxOvsF3w=
     allowed-ips: ['0.0.0.0/0']
     udp: true
