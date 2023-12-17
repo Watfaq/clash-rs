@@ -50,8 +50,9 @@ proxies:
     password: "passwd"
     sni: example.com
     skip-cert-verify: true
-    # obfs: salamander
-    # obfs-password: "passwd"
+    # obfs not work for now
+    obfs: salamander
+    obfs-password: "obfs"
 
 rules:
   - MATCH, hysteria

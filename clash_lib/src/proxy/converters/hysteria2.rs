@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     config::internal::proxy::OutboundHysteria2,
-    proxy::{hysteria2::HystClient, AnyOutboundHandler},
+    proxy::{
+        hysteria2::{HystClient, HystOption},
+        AnyOutboundHandler,
+    },
     session::SocksAddr,
 };
-
-use super::HystOption;
 
 impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
     type Error = crate::Error;
@@ -23,6 +24,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
         };
 
         let opts = HystOption {
+            sni: value.sni.or(addr.domain().map(|s| s.to_owned())),
             addr,
             alpn: value.alpn.unwrap_or_default(),
             ca: value.ca.map(|s| s.into()),
@@ -31,7 +33,6 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             passwd: value.password,
             ports: value.ports,
             salamander: obfs_passwd,
-            sni: value.sni,
             up_down: value.up.zip(value.down),
             ca_str: value.ca_str,
             cwnd: value.cwnd,

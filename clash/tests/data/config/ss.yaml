@@ -60,5 +60,5 @@ proxies:
     udp: true
 
 rules:
-  - MATCH, ss
+  - MATCH, ss-01
 ...

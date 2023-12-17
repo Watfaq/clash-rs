@@ -23,8 +23,8 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::Mutex,
 };
-
-mod convert;
+use tracing::debug;
+mod salamander;
 
 use crate::{
     app::{
@@ -189,12 +189,23 @@ impl HystClient {
             std::net::UdpSocket::bind::<SocketAddr>((server_socket_addr.ip(), 0).into())?;
 
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs and port hopping
-        let mut ep = quinn::Endpoint::new(
-            self.ep_config.clone(),
-            None,
-            udp_socket,
-            Arc::new(TokioRuntime),
-        )?;
+        let mut ep = if let Some(ref key) = self.opts.salamander {
+            debug!("Hysteria2 use salamander obfs");
+            quinn::Endpoint::new_with_abstract_socket(
+                self.ep_config.clone(),
+                None,
+                salamander::Salamander::new(udp_socket, key.clone().into_bytes())?,
+                Arc::new(TokioRuntime),
+            )?
+        } else {
+            quinn::Endpoint::new(
+                self.ep_config.clone(),
+                None,
+                udp_socket,
+                Arc::new(TokioRuntime),
+            )?
+        };
+
         ep.set_default_client_config(self.client_config.clone());
 
         let session = ep
@@ -203,7 +214,7 @@ impl HystClient {
                 self.opts.sni.as_ref().map(|s| s.as_str()).unwrap_or(""),
             )?
             .await?;
-
+        tracing::debug!("session enstablished");
         let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         //todo set congestion controller according to cc_rx
