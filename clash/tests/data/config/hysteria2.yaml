@@ -43,17 +43,16 @@ experimental:
   ignore-resolve-fail: true
 
 proxies:
-  - name: "hysteria"
+  - name: "hysteria2"
     type: Hysteria2
     server: 127.0.0.1
     port: 10086
     password: "passwd"
     sni: example.com
     skip-cert-verify: true
-    # obfs not work for now
     obfs: salamander
     obfs-password: "obfs"
 
 rules:
-  - MATCH, hysteria
+  - MATCH, hysteria2
 ...

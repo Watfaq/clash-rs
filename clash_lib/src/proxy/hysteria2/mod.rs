@@ -214,7 +214,6 @@ impl HystClient {
                 self.opts.sni.as_ref().map(|s| s.as_str()).unwrap_or(""),
             )?
             .await?;
-        tracing::debug!("session enstablished");
         let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         //todo set congestion controller according to cc_rx
