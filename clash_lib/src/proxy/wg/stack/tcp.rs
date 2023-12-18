@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -12,24 +12,52 @@ use tracing::trace;
 pub struct SocketPair {
     pub read: Receiver<Bytes>,
     pub write: Sender<Bytes>,
+
+    read_buf: BytesMut,
+}
+
+impl SocketPair {
+    pub fn new(read: Receiver<Bytes>, write: Sender<Bytes>) -> Self {
+        Self {
+            read,
+            write,
+            read_buf: BytesMut::new(),
+        }
+    }
 }
 
 impl AsyncRead for SocketPair {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        match self.read.try_recv() {
-            Ok(data) => {
-                trace!("tcp socket received: {:?}", data);
-                buf.put_slice(&data);
+        if !self.read_buf.is_empty() {
+            let len = std::cmp::min(self.read_buf.len(), buf.remaining());
+            buf.put_slice(&self.read_buf.split_to(len));
+            trace!(
+                "reusing cached data sent {}, left {}",
+                len,
+                self.read_buf.len()
+            );
+            return std::task::Poll::Ready(Ok(()));
+        }
+
+        match self.read.poll_recv(cx) {
+            std::task::Poll::Ready(Some(data)) => {
+                let len = std::cmp::min(data.len(), buf.remaining());
+                buf.put_slice(&data[..len]);
+                self.read_buf.extend_from_slice(&data[len..]);
+                trace!(
+                    "socket got {} data, sent {}, left {}",
+                    data.len(),
+                    len,
+                    self.read_buf.len()
+                );
                 std::task::Poll::Ready(Ok(()))
             }
-            Err(_) => {
-                trace!("no data ready");
-                std::task::Poll::Pending
-            }
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(Ok(())),
+            std::task::Poll::Pending => std::task::Poll::Pending,
         }
     }
 }

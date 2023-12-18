@@ -115,22 +115,14 @@ impl WireguardTunnel {
 
         let mut packet_reader = self.packet_reader.lock().await;
         loop {
-            let timeouted_recv =
-                tokio::time::timeout(Duration::from_secs(30), packet_reader.recv());
-
-            match timeouted_recv.await {
-                Ok(Some(packet)) => {
+            match packet_reader.recv().await {
+                Some(packet) => {
                     if let Err(e) = self.send_ip_packet(&packet).await {
                         error!("failed to send packet: {}", e);
                     }
                 }
-                Ok(None) => {
-                    trace!("connection closed, stopping");
-                    break;
-                }
-                Err(e) => {
-                    trace!("no active connection, stopping: {e:?}");
-                    tokio::time::sleep(Duration::from_millis(1)).await;
+                None => {
+                    trace!("no active connection, stopping");
                     break;
                 }
             }
@@ -148,24 +140,14 @@ impl WireguardTunnel {
 
     pub async fn start_receiving(&self) {
         loop {
-            trace!("wg stack receiving data");
-
             let mut recv_buf = [0u8; 65535];
             let mut send_buf = [0u8; 65535];
 
-            let timeouted_recv =
-                tokio::time::timeout(Duration::from_secs(30), self.udp.recv(&mut recv_buf));
-
-            let size = match timeouted_recv.await {
-                Ok(Ok(size)) => size,
-                Ok(Err(e)) => {
-                    error!("failed to receive packet: {e:?}");
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                    continue;
-                }
+            let size = match self.udp.recv(&mut recv_buf).await {
+                Ok(size) => size,
                 Err(e) => {
-                    trace!("no active connection, stopping: {e:?}");
-                    break;
+                    error!("failed to receive packet: {}", e);
+                    continue;
                 }
             };
             let mut peer = self.peer.lock().await;
@@ -256,22 +238,28 @@ impl WireguardTunnel {
     /// Determine the inner protocol of the incoming IP packet (TCP/UDP).
     fn route_protocol(&self, packet: &[u8]) -> Option<PortProtocol> {
         match IpVersion::of_packet(packet) {
-            Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet).ok().and_then(|packet| {
-                match packet.next_header() {
-                    IpProtocol::Tcp => Some(PortProtocol::Tcp),
-                    IpProtocol::Udp => Some(PortProtocol::Udp),
-                    // Unrecognized protocol, so we cannot determine where to route
-                    _ => None,
-                }
-            }),
-            Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet).ok().and_then(|packet| {
-                match packet.next_header() {
-                    IpProtocol::Tcp => Some(PortProtocol::Tcp),
-                    IpProtocol::Udp => Some(PortProtocol::Udp),
-                    // Unrecognized protocol, so we cannot determine where to route
-                    _ => None,
-                }
-            }),
+            Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
+                .ok()
+                .filter(|packet| Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip)
+                .and_then(|packet| {
+                    match packet.next_header() {
+                        IpProtocol::Tcp => Some(PortProtocol::Tcp),
+                        IpProtocol::Udp => Some(PortProtocol::Udp),
+                        // Unrecognized protocol, so we cannot determine where to route
+                        _ => None,
+                    }
+                }),
+            Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
+                .ok()
+                .filter(|packet| Ipv6Addr::from(packet.dst_addr()) == self.source_peer_ip)
+                .and_then(|packet| {
+                    match packet.next_header() {
+                        IpProtocol::Tcp => Some(PortProtocol::Tcp),
+                        IpProtocol::Udp => Some(PortProtocol::Udp),
+                        // Unrecognized protocol, so we cannot determine where to route
+                        _ => None,
+                    }
+                }),
             _ => None,
         }
     }

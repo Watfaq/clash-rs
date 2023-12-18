@@ -55,10 +55,7 @@ impl DeviceManager {
             .lock()
             .await
             .push((socket, remote, read_pair.0, write_pair.1));
-        SocketPair {
-            read: read_pair.1,
-            write: write_pair.0,
-        }
+        SocketPair::new(read_pair.1, write_pair.0)
     }
 
     pub async fn poll_sockets(&self, mut device: VirtualIpDevice) {
@@ -71,12 +68,11 @@ impl DeviceManager {
         });
 
         loop {
+            let mut need_wait = true;
+
             let timestamp = Instant::now();
             let mut sockets = self.socket_set.lock().await;
             let mut socket_pairs = self.socket_pairs.lock().await;
-
-            trace!("polling active socket: {}", socket_pairs.len());
-            iface.poll(timestamp, &mut device, &mut sockets);
 
             let mut unconnected_sockets = self.unconnected_sockets.lock().await;
             let unconnected_sockets = unconnected_sockets.drain(0..);
@@ -91,20 +87,23 @@ impl DeviceManager {
 
                 let handle = sockets.add(socket);
                 socket_pairs.insert(handle, (sender, receiver));
+
+                need_wait = false;
             }
+
+            iface.poll(timestamp, &mut device, &mut sockets);
 
             for (handle, (sender, receiver)) in socket_pairs.iter_mut() {
                 let socket = sockets.get_mut::<tcp::Socket>(*handle);
                 if socket.may_recv() {
-                    match socket.recv(|data| (data.len(), data)) {
-                        Ok(data) => match sender.try_send(data.to_owned().into()) {
-                            Ok(_) => {
-                                trace!("data forwared to socket: {:?}", socket);
-                            }
+                    match socket.recv(|data| (data.len(), data.to_owned())) {
+                        Ok(data) if !data.is_empty() => match sender.try_send(data.into()) {
+                            Ok(_) => {}
                             Err(e) => {
                                 warn!("failed to send tcp packet: {:?}", e);
                             }
                         },
+                        Ok(_) => {}
                         Err(RecvError::Finished) => {
                             warn!("tcp socket finished");
                             continue;
@@ -113,27 +112,35 @@ impl DeviceManager {
                             warn!("failed to receive tcp packet: {:?}", e);
                         }
                     }
+                    need_wait = false;
                 }
                 if socket.may_send() {
                     match receiver.try_recv() {
                         Ok(data) => match socket.send_slice(&data) {
-                            Ok(_) => {}
+                            Ok(n) => {
+                                trace!("sent {} bytes, total: {}", n, data.len());
+                                if n != data.len() {
+                                    error!("fix me");
+                                }
+                            }
                             Err(e) => {
                                 warn!("failed to send tcp packet: {:?}", e);
                             }
                         },
-                        Err(e) => {
-                            warn!("failed to receive tcp packet: {:?}", e);
-                        }
+                        Err(_) => {}
                     }
+                    need_wait = false;
                 }
             }
 
-            match iface.poll_delay(timestamp, &sockets) {
-                Some(delay) => {
-                    tokio::time::sleep(delay.into()).await;
+            if need_wait {
+                match iface.poll_delay(timestamp, &sockets) {
+                    Some(delay) => {
+                        trace!("device poll delay: {:?}", delay);
+                        tokio::time::sleep(delay.into()).await;
+                    }
+                    None => {}
                 }
-                None => {}
             }
 
             let mut port_to_release = Vec::new();
@@ -201,11 +208,9 @@ impl Device for VirtualIpDevice {
         &mut self,
         timestamp: smoltcp::time::Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        trace!("wg tun polling data");
         let next = self.packet_receiver.try_recv().ok();
         match next {
             Some((proto, data)) => {
-                trace!("wg tun received packet");
                 let rx_token = RxToken {
                     buffer: {
                         let mut buffer = BytesMut::new();
@@ -223,7 +228,6 @@ impl Device for VirtualIpDevice {
     }
 
     fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
-        trace!("wg tun writing data");
         Some(TxToken {
             sender: self.packet_sender.clone(),
         })
