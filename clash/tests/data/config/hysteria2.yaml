@@ -43,7 +43,7 @@ experimental:
   ignore-resolve-fail: true
 
 proxies:
-  - name: "hysteria2"
+  - name: "local"
     type: Hysteria2
     server: 127.0.0.1
     port: 10086
@@ -53,6 +53,7 @@ proxies:
     obfs: salamander
     obfs-password: "obfs"
 
+
 rules:
-  - MATCH, hysteria2
+  - MATCH, local
 ...

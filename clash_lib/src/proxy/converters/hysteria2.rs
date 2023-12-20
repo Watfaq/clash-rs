@@ -1,4 +1,10 @@
-use std::sync::Arc;
+use std::{
+    num::{NonZeroU16, ParseIntError},
+    ops::RangeInclusive,
+    sync::Arc,
+};
+
+use rand::Rng;
 
 use crate::{
     config::internal::proxy::OutboundHysteria2,
@@ -8,6 +14,70 @@ use crate::{
     },
     session::SocksAddr,
 };
+#[derive(Clone)]
+pub struct PortGenrateor {
+    // must have a default port
+    pub default: u16,
+    ports: Vec<u16>,
+    range: Vec<RangeInclusive<u16>>,
+}
+
+impl PortGenrateor {
+    pub fn new(port: u16) -> Self {
+        PortGenrateor {
+            default: port,
+            ports: vec![],
+            range: vec![],
+        }
+    }
+
+    pub fn add_single(&mut self, port: u16) {
+        self.ports.push(port);
+    }
+
+    fn add_range(&mut self, start: u16, end: u16) {
+        self.range.push(start..=end);
+    }
+
+    pub fn get(&self) -> u16 {
+        let mut rng = rand::thread_rng();
+        let len = 1 + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
+        let idx = rng.gen_range(0..len);
+        match idx {
+            0 => self.default,
+            idx if idx <= self.ports.len() => self.ports[idx - 1],
+            idx => {
+                let mut x = self.range.iter().cloned().flatten();
+                x.nth(idx - 1 - self.ports.len()).unwrap()
+            }
+        }
+    }
+
+    pub fn parse_ports_str(self, ports: &str) -> Result<Self, ParseIntError> {
+        if ports.is_empty() {
+            return Ok(self);
+        }
+        ports
+            .split(',')
+            .map(|s| s.trim())
+            .try_fold(self, |mut acc, ports| {
+                let x: Result<_, ParseIntError> = ports
+                    .parse::<u16>()
+                    .map(|p| acc.add_single(p))
+                    .or_else(|e| {
+                        let mut iter = ports.split('-');
+                        let start = iter.next().ok_or(e.clone())?;
+                        let end = iter.next().ok_or(e)?;
+                        let start = start.parse::<NonZeroU16>()?;
+                        let end = end.parse::<NonZeroU16>()?;
+                        acc.add_range(start.get(), end.get());
+                        Ok(())
+                    })
+                    .map(|_| acc);
+                x
+            })
+    }
+}
 
 impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
     type Error = crate::Error;
@@ -23,6 +93,20 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             None => None,
         };
 
+        let ports_gen = if let Some(ports) = value.ports {
+            Some(
+                PortGenrateor::new(value.port)
+                    .parse_ports_str(&ports)
+                    .map_err(|e| {
+                        crate::Error::InvalidConfig(format!(
+                            "hysteria2 parse ports error: {:?}, ports: {:?}",
+                            e, ports
+                        ))
+                    })?,
+            )
+        } else {
+            None
+        };
         let opts = HystOption {
             sni: value.sni.or(addr.domain().map(|s| s.to_owned())),
             addr,
@@ -31,7 +115,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             fingerprint: value.fingerprint,
             skip_cert_verify: value.skip_cert_verify,
             passwd: value.password,
-            ports: value.ports,
+            ports: ports_gen,
             salamander: obfs_passwd,
             up_down: value.up.zip(value.down),
             ca_str: value.ca_str,
@@ -40,5 +124,15 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
 
         let c = HystClient::new(opts).unwrap();
         Ok(Arc::new(c))
+    }
+}
+
+#[test]
+fn test_port_gen() {
+    let p = PortGenrateor::new(1000).parse_ports_str("").unwrap();
+    let p = p.parse_ports_str("1001,1002,1003, 5000-5001").unwrap();
+
+    for _ in 0..100 {
+        println!("{}", p.get());
     }
 }

@@ -21,6 +21,9 @@ struct SalamanderObfs {
 }
 
 impl SalamanderObfs {
+    /// create a new obfs
+    ///
+    /// new() should init a blake2b256 hasher with key to reduce calculation, but rust-analyzer can't recognize its type
     pub fn new(key: Vec<u8>) -> Self {
         Self { key }
     }
@@ -66,9 +69,11 @@ impl Salamander {
     pub fn new(socket: std::net::UdpSocket, key: Vec<u8>) -> std::io::Result<Self> {
         use quinn::Runtime;
         let inner = TokioRuntime.wrap_udp_socket(socket)?;
-        let obfs = SalamanderObfs::new(key);
 
-        std::io::Result::Ok(Self { inner, obfs })
+        std::io::Result::Ok(Self {
+            inner,
+            obfs: SalamanderObfs::new(key),
+        })
     }
 }
 
@@ -86,6 +91,7 @@ impl AsyncUdpSocket for Salamander {
         transmits: &[Transmit],
     ) -> Poll<std::io::Result<usize>> {
         let mut v = transmits.iter().cloned().collect::<Vec<_>>();
+
         v.iter_mut().for_each(|v| {
             v.contents = self.obfs.encrpyt(&mut v.contents.to_vec());
         });
@@ -100,6 +106,9 @@ impl AsyncUdpSocket for Salamander {
     ) -> Poll<std::io::Result<usize>> {
         // the number of udp packets received
         let packet_nums = ready!(self.inner.poll_recv(cx, bufs, meta))?;
+        meta.iter().take(packet_nums).for_each(|v| {
+            tracing::trace!("meta addr {:?}, dst_ip: {:?}", v.addr, v.dst_ip);
+        });
         bufs.iter_mut()
             .zip(meta.iter_mut())
             // first step take and then filter
@@ -166,5 +175,5 @@ fn test_obfs() {
     let res = &mut IoSliceMut::new(&mut x);
     obfs.decrpyt(res);
 
-    println!("{:?}", std::str::from_utf8(res[8..].as_ref()).unwrap());
+    assert!(std::str::from_utf8(res[8..].as_ref()).unwrap() == "hhh");
 }

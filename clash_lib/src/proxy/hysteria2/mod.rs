@@ -8,23 +8,22 @@ use std::{
     sync::{Arc, RwLock},
     task::{Context, Poll},
 };
-
 mod congestion;
+mod salamander;
+mod udp_hop;
+
 use bytes::{BufMut, Bytes};
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
-use quinn::{ClientConfig, Connection, TokioRuntime};
+use quinn::{ClientConfig, Connection, TokioRuntime, VarInt};
 use quinn_proto::{coding::Codec, TransportConfig};
 
-use quinn::VarInt;
 use rand::distributions::Alphanumeric;
 use rustls::{client::ServerCertVerifier, ClientConfig as RustlsClientConfig};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::Mutex,
 };
-use tracing::debug;
-mod salamander;
 
 use crate::{
     app::{
@@ -35,13 +34,14 @@ use crate::{
     proxy::hysteria2::congestion::DynCongestion,
     session::{Session, SocksAddr},
 };
+use tracing::debug;
 
-use super::{AnyStream, OutboundHandler, OutboundType};
+use super::{converters::hysteria2::PortGenrateor, AnyStream, OutboundHandler, OutboundType};
 
 #[derive(Clone)]
 pub struct HystOption {
     pub addr: SocksAddr,
-    pub ports: Option<String>,
+    pub ports: Option<PortGenrateor>,
     pub sni: Option<String>,
     pub passwd: String,
     pub salamander: Option<String>,
@@ -184,20 +184,29 @@ impl HystClient {
             }
         };
 
-        // bind to port 0, so the OS will choose a random port for us, and specify the fix source ip
-        let udp_socket =
-            std::net::UdpSocket::bind::<SocketAddr>((server_socket_addr.ip(), 0).into())?;
-
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs and port hopping
-        let mut ep = if let Some(ref key) = self.opts.salamander {
+        let mut ep = if self.opts.salamander.is_some() || self.opts.ports.is_some() {
             debug!("Hysteria2 use salamander obfs");
+
+            // let udp = salamander::Salamander::new(
+            //     udp_socket,
+            //     self.opts.salamander.as_ref().map(|s| s.as_bytes().to_vec()),
+            //     self.opts.ports.clone(),
+            // )?;
+
+            let port_gen = self.opts.ports.as_ref().unwrap().clone();
+            let udp_hop = udp_hop::UdpHop::new(server_socket_addr.port(), port_gen)?;
             quinn::Endpoint::new_with_abstract_socket(
                 self.ep_config.clone(),
                 None,
-                salamander::Salamander::new(udp_socket, key.clone().into_bytes())?,
+                udp_hop,
                 Arc::new(TokioRuntime),
             )?
         } else {
+            let udp = SocketAddr::from(([0, 0, 0, 0], 0));
+            // bind to port 0, so the OS will choose a random port for us, and specify the fix source ip
+            let udp_socket = std::net::UdpSocket::bind::<SocketAddr>(udp)?;
+
             quinn::Endpoint::new(
                 self.ep_config.clone(),
                 None,
@@ -312,6 +321,8 @@ impl OutboundHandler for HystClient {
                 }
             }
         };
+
+        // tracing::trace!("conn patch {} ", authed_conn.)
 
         let (mut tx, mut rx) = authed_conn.open_bi().await.unwrap();
         tx.write_all(&make_tcp_request(&sess.destination)).await?;
