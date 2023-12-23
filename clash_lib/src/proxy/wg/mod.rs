@@ -51,7 +51,9 @@ pub struct Opts {
 
 struct Inner {
     device_manager: Arc<device::DeviceManager>,
+    #[allow(unused)]
     wg_handle: tokio::task::JoinHandle<()>,
+    #[allow(unused)]
     device_manager_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -115,13 +117,20 @@ impl Handler {
                     wg.start_polling().await;
                 });
 
+                // use to notify the device manager to poll sockets
+                let packet_notifier = tokio::sync::mpsc::channel(1024);
+
                 let device = device::VirtualIpDevice::new(
                     send_pair.0,
                     recv_pair.1,
+                    packet_notifier.0,
                     self.opts.mtu.unwrap_or(1420) as usize,
                 );
 
-                let device_manager = Arc::new(device::DeviceManager::new(self.opts.ip.into()));
+                let device_manager = Arc::new(device::DeviceManager::new(
+                    self.opts.ip.into(),
+                    packet_notifier.1,
+                ));
 
                 let device_manager_clone = device_manager.clone();
                 let device_manager_handle = tokio::spawn(async move {
@@ -183,9 +192,9 @@ impl OutboundHandler for Handler {
     /// wraps a stream with outbound handler
     async fn proxy_stream(
         &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
+        _s: AnyStream,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         todo!()
     }
@@ -193,8 +202,8 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         todo!()
     }

@@ -1,4 +1,5 @@
 use std::{
+    fmt::Debug,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -19,7 +20,7 @@ use tokio::{
         Mutex,
     },
 };
-use tracing::{enabled, error, trace, warn};
+use tracing::{enabled, error, trace, trace_span, warn, Instrument};
 
 use crate::{proxy::utils::new_udp_socket, Error};
 
@@ -35,6 +36,15 @@ pub struct WireguardTunnel {
     packet_writer: Sender<(PortProtocol, Bytes)>,
     // receive side packet coming into the tunnel
     packet_reader: Arc<Mutex<Receiver<Bytes>>>,
+}
+
+impl Debug for WireguardTunnel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WireguardTunnel")
+            .field("source_peer_ip", &self.source_peer_ip)
+            .field("endpoint", &self.endpoint)
+            .finish()
+    }
 }
 
 pub struct Config {
@@ -135,23 +145,40 @@ impl WireguardTunnel {
         loop {
             let mut peer = self.peer.lock().await;
             let tun_result = peer.update_timers(&mut send_buf);
+            drop(peer);
+
             self.handle_routine_result(tun_result).await;
         }
     }
 
+    #[tracing::instrument]
     pub async fn start_receiving(&self) {
         let mut recv_buf = vec![0u8; 65535];
         let mut send_buf = vec![0u8; 65535];
+
         loop {
-            let size = match self.udp.recv(&mut recv_buf).await {
+            let size = match self
+                .udp
+                .recv(&mut recv_buf)
+                .instrument(trace_span!(
+                    "wg_receive",
+                    endpoint = %self.endpoint,
+                ))
+                .await
+            {
                 Ok(size) => size,
                 Err(e) => {
                     error!("failed to receive packet: {}", e);
                     continue;
                 }
             };
+
             let mut peer = self.peer.lock().await;
             let data = &recv_buf[..size];
+
+            let _ = trace_span!("wg_decapsulate", endpoint = %self.endpoint, size = data.len())
+                .entered();
+
             match peer.decapsulate(None, data, &mut send_buf) {
                 TunnResult::Done => {}
                 TunnResult::Err(e) => {
@@ -159,7 +186,16 @@ impl WireguardTunnel {
                     continue;
                 }
                 TunnResult::WriteToNetwork(packet) => {
-                    match self.udp.send_to(&packet, self.endpoint).await {
+                    match self
+                        .udp
+                        .send_to(&packet, self.endpoint)
+                        .instrument(trace_span!(
+                            "wg_send",
+                            endpoint = %self.endpoint,
+                            size = packet.len(),
+                        ))
+                        .await
+                    {
                         Ok(_) => {}
                         Err(e) => {
                             error!("failed to send packet: {}", e);
@@ -187,8 +223,10 @@ impl WireguardTunnel {
                 }
 
                 TunnResult::WriteToTunnelV4(packet, _) | TunnResult::WriteToTunnelV6(packet, _) => {
+                    let _ =
+                        trace_span!("wg_write_stack", endpoint = %self.endpoint, size = packet.len())
+                            .entered();
                     trace_ip_packet("Received IP packet", packet);
-
                     if let Some(proto) = self.route_protocol(packet) {
                         if let Err(e) = self
                             .packet_writer
@@ -236,6 +274,7 @@ impl WireguardTunnel {
     }
 
     /// Determine the inner protocol of the incoming IP packet (TCP/UDP).
+    #[tracing::instrument(skip(self, packet))]
     fn route_protocol(&self, packet: &[u8]) -> Option<PortProtocol> {
         match IpVersion::of_packet(packet) {
             Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
