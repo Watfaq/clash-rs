@@ -79,7 +79,7 @@ impl WireguardTunnel {
     pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
         trace_ip_packet("Sending IP packet", packet);
 
-        let mut send_buf = [0u8; 65535];
+        let mut send_buf = vec![0u8; 65535];
         let mut peer = self.peer.lock().await;
         match peer.encapsulate(packet, &mut send_buf) {
             boringtun::noise::TunnResult::Done => {}
@@ -130,8 +130,9 @@ impl WireguardTunnel {
     }
 
     pub async fn start_heartbeat(&self) {
+        let mut send_buf = vec![0u8; 65535];
+
         loop {
-            let mut send_buf = [0u8; 65535];
             let mut peer = self.peer.lock().await;
             let tun_result = peer.update_timers(&mut send_buf);
             self.handle_routine_result(tun_result).await;
@@ -139,10 +140,9 @@ impl WireguardTunnel {
     }
 
     pub async fn start_receiving(&self) {
+        let mut recv_buf = vec![0u8; 65535];
+        let mut send_buf = vec![0u8; 65535];
         loop {
-            let mut recv_buf = [0u8; 65535];
-            let mut send_buf = [0u8; 65535];
-
             let size = match self.udp.recv(&mut recv_buf).await {
                 Ok(size) => size,
                 Err(e) => {
@@ -167,8 +167,8 @@ impl WireguardTunnel {
                         }
                     }
 
+                    let mut send_buf = vec![0u8; 65535];
                     loop {
-                        let mut send_buf = [0u8; 65535];
                         match peer.decapsulate(None, &[], &mut send_buf) {
                             TunnResult::WriteToNetwork(packet) => {
                                 match self.udp.send_to(packet, self.endpoint).await {
@@ -213,7 +213,7 @@ impl WireguardTunnel {
             }
             TunnResult::Err(WireGuardError::ConnectionExpired) => {
                 warn!("wireguard connection expired");
-                let mut buf = [0u8; 65535];
+                let mut buf = vec![0u8; 65535];
                 let mut peer = self.peer.lock().await;
                 let tun_result = peer.format_handshake_initiation(&mut buf[..], false);
                 self.handle_routine_result(tun_result).await;

@@ -99,8 +99,9 @@ impl DeviceManager {
                     match socket.recv(|data| (data.len(), data.to_owned())) {
                         Ok(data) if !data.is_empty() => match sender.try_send(data.into()) {
                             Ok(_) => {}
-                            Err(e) => {
-                                warn!("failed to send tcp packet: {:?}", e);
+                            Err(_) => {
+                                trace!("socket closed");
+                                socket.abort();
                             }
                         },
                         Ok(_) => {}
@@ -146,10 +147,10 @@ impl DeviceManager {
             let mut port_to_release = Vec::new();
             socket_pairs.retain(|handle, _| {
                 let socket = sockets.get::<tcp::Socket>(*handle);
-                if socket.is_open() {
+                if socket.is_active() || socket.is_open() {
                     true
                 } else {
-                    trace!("socket closed, shutting down connection: {:?}", socket);
+                    trace!("socket closed, shutting down connection");
                     let port = socket.local_endpoint().unwrap().port;
                     sockets.remove(*handle);
                     port_to_release.push(port);
