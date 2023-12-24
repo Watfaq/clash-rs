@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::{
-    app::dispatcher::{ChainedStream, ChainedStreamWrapper},
+    app::dispatcher::{
+        ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+    },
     Error,
 };
 use crate::{
@@ -202,9 +204,25 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        todo!()
+        let ip = resolver
+            .resolve(&sess.destination.host(), false)
+            .map_err(map_io_error)
+            .await?
+            .ok_or(new_io_error("invalid remote address"))?;
+
+        let remote = (ip, sess.destination.port()).into();
+
+        let inner = self
+            .initialize_inner(resolver)
+            .await
+            .map_err(map_io_error)?;
+
+        let socket = inner.device_manager.new_udp_socket(remote).await;
+        let chained = ChainedDatagramWrapper::new(socket);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 }

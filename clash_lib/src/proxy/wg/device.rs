@@ -9,7 +9,10 @@ use bytes::{BufMut, Bytes, BytesMut};
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::Device,
-    socket::tcp::{self, RecvError, Socket},
+    socket::{
+        tcp::{self, RecvError},
+        udp,
+    },
     time::Instant,
     wire::IpCidr,
 };
@@ -19,27 +22,64 @@ use tokio::sync::{
 };
 use tracing::{error, trace, trace_span, warn, Instrument};
 
-use super::{events::PortProtocol, ports::PortPool, stack::tcp::SocketPair};
+use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
+
+use super::{
+    events::PortProtocol,
+    ports::PortPool,
+    stack::{
+        tcp::SocketPair,
+        udp::{UdpPair, MAX_PACKET},
+    },
+};
+
+enum Socket {
+    Tcp(
+        tcp::Socket<'static>,
+        SocketAddr,
+        Sender<Bytes>,
+        Receiver<Bytes>,
+    ),
+    Udp(
+        udp::Socket<'static>,
+        SocketAddr,
+        Sender<UdpPacket>,
+        Receiver<UdpPacket>,
+    ),
+}
+
+enum Transfer {
+    Tcp(SocketHandle, Bytes, bool),
+    Udp(SocketHandle, UdpPacket, bool),
+}
+
+enum SenderType {
+    Tcp(Sender<Bytes>),
+    Udp(Sender<UdpPacket>),
+}
 
 pub struct DeviceManager {
     addr: IpAddr,
 
     socket_set: Arc<Mutex<SocketSet<'static>>>,
-    socket_pairs: Arc<Mutex<HashMap<SocketHandle, Sender<Bytes>>>>,
+    socket_pairs: Arc<Mutex<HashMap<SocketHandle, SenderType>>>,
+
     tcp_port_pool: PortPool,
+    udp_port_pool: PortPool,
 
     packet_notifier: Arc<Mutex<Receiver<()>>>,
 
-    socket_notifier: Sender<(Socket<'static>, SocketAddr, Sender<Bytes>, Receiver<Bytes>)>,
-    socket_notifier_receiver:
-        Arc<Mutex<Receiver<(Socket<'static>, SocketAddr, Sender<Bytes>, Receiver<Bytes>)>>>,
+    socket_notifier: Sender<Socket>,
+    socket_notifier_receiver: Arc<Mutex<Receiver<Socket>>>,
 }
 
 impl DeviceManager {
     pub fn new(addr: IpAddr, packet_notifier: Receiver<()>) -> Self {
         let socket_set = Arc::new(Mutex::new(SocketSet::new(Vec::new())));
         let socket_pairs = Arc::new(Mutex::new(HashMap::new()));
+
         let tcp_port_pool = PortPool::new();
+        let udp_port_pool = PortPool::new();
 
         let (socket_notifier, socket_notifier_receiver) = tokio::sync::mpsc::channel(1024);
 
@@ -48,7 +88,9 @@ impl DeviceManager {
 
             socket_set,
             socket_pairs,
+
             tcp_port_pool,
+            udp_port_pool,
 
             packet_notifier: Arc::new(Mutex::new(packet_notifier)),
 
@@ -63,10 +105,22 @@ impl DeviceManager {
         let write_pair = tokio::sync::mpsc::channel(1024);
 
         self.socket_notifier
-            .send((socket, remote, read_pair.0, write_pair.1))
+            .send(Socket::Tcp(socket, remote, read_pair.0, write_pair.1))
             .await
             .unwrap();
         SocketPair::new(read_pair.1, write_pair.0)
+    }
+
+    pub async fn new_udp_socket(&self, remote: SocketAddr) -> UdpPair {
+        let socket = Self::new_client_datagram();
+        let read_pair = tokio::sync::mpsc::channel(1024);
+        let write_pair = tokio::sync::mpsc::channel(1024);
+
+        self.socket_notifier
+            .send(Socket::Udp(socket, remote, read_pair.0, write_pair.1))
+            .await
+            .unwrap();
+        UdpPair::new(read_pair.1, write_pair.0)
     }
 
     pub async fn poll_sockets(&self, mut device: VirtualIpDevice) {
@@ -79,7 +133,9 @@ impl DeviceManager {
         });
 
         let (device_sender, mut device_receiver) = tokio::sync::mpsc::channel(1024);
-        let mut send_queue: HashMap<SocketHandle, VecDeque<(Bytes, bool)>> = HashMap::new();
+
+        let mut tcp_queue: HashMap<SocketHandle, VecDeque<(Bytes, bool)>> = HashMap::new();
+        let mut udp_queue: HashMap<SocketHandle, VecDeque<(UdpPacket, bool)>> = HashMap::new();
         let mut next_poll = None;
 
         loop {
@@ -90,38 +146,80 @@ impl DeviceManager {
             let mut socket_notifier_receiver = self.socket_notifier_receiver.lock().await;
 
             tokio::select! {
-                Some((mut socket, remote, sender, mut receiver)) = socket_notifier_receiver.recv() => {
+                Some(socket) = socket_notifier_receiver.recv() => {
                     trace!("got new socket, notifying to poll sockets");
-                    socket
-                    .connect(
-                        iface.context(),
-                        remote,
-                        (self.addr, self.get_ephemeral_tcp_port().await),
-                    )
-                    .unwrap();
 
-                    let handle = sockets.add(socket);
-                    let device_sender = device_sender.clone();
-                    tokio::spawn(async move {
-                        loop {
-                            let data = match receiver.recv().await {
-                                Some(data) => data,
-                                None => {
-                                    break;
-                                }
-                            };
-                            trace!("sending {} bytes", data.len());
-                            device_sender.send((handle, data, true)).await.unwrap();
-                        }
-                        trace!("socket {} closed, sending close signal", handle);
-                        device_sender
-                            .send((handle, Vec::new().into(), false))
-                            .await
+                    match socket {
+                        Socket::Tcp(mut socket, remote, sender, mut receiver) => {
+                            socket
+                            .connect(
+                                iface.context(),
+                                remote,
+                                (self.addr, self.get_ephemeral_tcp_port().await),
+                            )
                             .unwrap();
-                    });
 
-                    socket_pairs.insert(handle, sender);
-                    send_queue.insert(handle, VecDeque::new());
+                            let handle = sockets.add(socket);
+
+                            let device_sender = device_sender.clone();
+                            tokio::spawn(async move {
+                                loop {
+                                    let data = match receiver.recv().await {
+                                        Some(data) => data,
+                                        None => {
+                                            break;
+                                        }
+                                    };
+                                    trace!("sending {} bytes", data.len());
+                                    device_sender.send(Transfer::Tcp(handle, data, true)).await.unwrap();
+                                }
+                                trace!("socket {} closed, sending close signal", handle);
+                                device_sender
+                                    .send(Transfer::Tcp(handle, Vec::new().into(), false))
+                                    .await
+                                    .unwrap();
+                            });
+
+                            socket_pairs.insert(handle, SenderType::Tcp(sender));
+                            tcp_queue.insert(handle, VecDeque::new());
+                        }
+                        Socket::Udp(mut socket, _remote, sender, mut receiver) => {
+                            socket
+                                .bind(
+                                    (self.addr, self.get_ephemeral_udp_port().await),
+                                )
+                                .unwrap();
+
+                            let handle = sockets.add(socket);
+
+                            let device_sender = device_sender.clone();
+                            tokio::spawn(async move {
+                                loop {
+                                    let data = match receiver.recv().await {
+                                        Some(data) => data,
+                                        None => {
+                                            break;
+                                        }
+                                    };
+
+                                    device_sender
+                                        .send(Transfer::Udp(handle, data, true))
+                                        .await
+                                        .unwrap();
+                                }
+
+                                trace!("socket {} closed, sending close signal", handle);
+                                device_sender
+                                    .send(Transfer::Udp(handle, UdpPacket::default() , false))
+                                    .await
+                                    .unwrap();
+                            });
+
+                            socket_pairs.insert(handle, SenderType::Udp(sender));
+                            udp_queue.insert(handle, VecDeque::new());
+                        }
+                    };
+
 
                     next_poll = None;
                 }
@@ -131,11 +229,23 @@ impl DeviceManager {
                     next_poll = None;
                 }
 
-                Some((handle, data, active)) = device_receiver.recv() => {
-                    if let Some(queue) = send_queue.get_mut(&handle) {
-                        trace!("socket {} has {} data to send", handle, data.len());
-                        queue.push_back((data, active));
-                        next_poll = None;
+                Some(transfer) = device_receiver.recv() => {
+                    match transfer {
+                        Transfer::Tcp(handle, data, active) => {
+                            if let Some(queue) = tcp_queue.get_mut(&handle) {
+                                trace!("socket {} has {} data to send", handle, data.len());
+                                queue.push_back((data, active));
+                                next_poll = None;
+                            }
+                        }
+
+                        Transfer::Udp(handle, data, active) => {
+                            if let Some(queue) = udp_queue.get_mut(&handle) {
+                                trace!("socket {} has {} data to send", handle, data.data.len());
+                                queue.push_back((data, active));
+                                next_poll = None;
+                            }
+                        }
                     }
                 }
 
@@ -156,78 +266,155 @@ impl DeviceManager {
                     iface.poll(timestamp, &mut device, &mut sockets);
 
                     for (handle, sender) in socket_pairs.iter_mut() {
-                        let socket = sockets.get_mut::<tcp::Socket>(*handle);
-                        if socket.may_recv() {
-                            match socket.recv(|data| (data.len(), data.to_owned())) {
-                                Ok(data) if !data.is_empty() => match sender.try_send(data.into()) {
-                                    Ok(_) => {}
-                                    Err(_) => {
-                                        trace!("socket {} closed from remote(?), aboring connection", handle);
-                                        socket.abort();
-                                    }
-                                },
-                                Ok(_) => {}
-                                Err(RecvError::Finished) => {
-                                    warn!("tcp socket finished");
-                                    continue;
-                                }
-                                Err(e) => {
-                                    warn!("failed to receive tcp packet: {:?}", e);
-                                }
-                            }
-                        }
-
-                        if socket.may_send() {
-                            if let Some(queue) = send_queue.get_mut(handle) {
-                                let data = queue.pop_front();
-                                if let Some((to_transfer_slice, active)) = data {
-                                    if !active {
-                                        trace!("socket {} closed from local(?), aboring socket", handle);
-                                        socket.abort();
-                                    } else {
-                                        let total = to_transfer_slice.len();
-                                        trace!("socket {} sending {} bytes", handle, total);
-                                        match socket.send_slice(&to_transfer_slice) {
-                                            Ok(sent) => {
-                                                if sent < total {
-                                                    // Sometimes only a subset is sent, so the rest needs to be sent on the next poll
-                                                    let tx_extra = Vec::from(&to_transfer_slice[sent..total]);
-                                                    queue.push_front((tx_extra.into(), true));
-                                                }
+                        match sender {
+                            SenderType::Tcp(sender) => {
+                                let socket = sockets.get_mut::<tcp::Socket>(*handle);
+                                if socket.may_recv() {
+                                    match socket.recv(|data| (data.len(), data.to_owned())) {
+                                        Ok(data) if !data.is_empty() => match sender.try_send(data.into()) {
+                                            Ok(_) => {}
+                                            Err(_) => {
+                                                trace!("socket {} closed from remote(?), aboring connection", handle);
+                                                socket.abort();
                                             }
-                                            Err(e) => {
-                                                error!(
-                                                    "Failed to send slice via virtual client socket: {:?}",
-                                                    e
-                                                );
-                                            }
+                                        },
+                                        Ok(_) => {}
+                                        Err(RecvError::Finished) => {
+                                            warn!("tcp socket finished");
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            warn!("failed to receive tcp packet: {:?}", e);
                                         }
                                     }
-                                } else {
-                                    // the local side has closed, but we don't know if the remote should be closed
-                                    // let the dispatcher timeout to close the connection
+                                }
+
+                                if socket.may_send() {
+                                    if let Some(queue) = tcp_queue.get_mut(handle) {
+                                        let data = queue.pop_front();
+                                        if let Some((to_transfer_slice, active)) = data {
+                                            if !active {
+                                                trace!("socket {} closed from local(?), aboring socket", handle);
+                                                socket.abort();
+                                            } else {
+                                                let total = to_transfer_slice.len();
+                                                trace!("socket {} sending {} bytes", handle, total);
+                                                match socket.send_slice(&to_transfer_slice) {
+                                                    Ok(sent) => {
+                                                        if sent < total {
+                                                            // Sometimes only a subset is sent, so the rest needs to be sent on the next poll
+                                                            let tx_extra = Vec::from(&to_transfer_slice[sent..total]);
+                                                            queue.push_front((tx_extra.into(), true));
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        error!(
+                                                            "Failed to send slice via virtual client socket: {:?}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // the local side has closed, but we don't know if the remote should be closed
+                                            // let the dispatcher timeout to close the connection
+                                        }
+                                    }
                                 }
                             }
-                        }
+                            SenderType::Udp(sender) => {
+                                let socket = sockets.get_mut::<udp::Socket>(*handle);
+                                if socket.can_recv() {
+                                    match socket.recv() {
+                                        Ok((data, md)) if !data.is_empty() => match sender.try_send(UdpPacket::new(data.into(), crate::session::SocksAddr::Ip(SocketAddr::new(md.endpoint.addr.into(), md.endpoint.port)), SocksAddr::any_ipv4())) {
+                                            Ok(_) => {}
+                                            Err(_) => {
+                                                trace!("socket {} closed from remote(?), aboring connection", handle);
+                                                socket.close();
+                                            }
+                                        },
+                                        Ok(_) => {}
+                                        Err(udp::RecvError::Exhausted) => {
+                                            trace!("no more data");
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                if socket.can_send() {
+                                    if let Some(queue) = udp_queue.get_mut(handle) {
+                                        let data = queue.pop_front();
+                                        if let Some((pkt, active)) = data {
+                                            if !active {
+                                                trace!("socket {} closed from local(?), aboring socket", handle);
+                                                socket.close();
+                                            } else {
+                                                let total = pkt.data.len();
+                                                trace!("socket {} sending {} bytes", handle, total);
+                                                match socket.send_slice(&pkt.data, (pkt.dst_addr.ip().unwrap(), pkt.dst_addr.port())) {
+                                                    Ok(_) => {}
+                                                    Err(e) => {
+                                                        error!(
+                                                            "Failed to send slice via virtual client socket: {:?}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // the local side has closed, but we don't know if the remote should be closed
+                                            // let the dispatcher timeout to close the connection
+                                        }
+                                    }
+                                }
+
+                            }
+                        };
                     }
 
-                    let mut port_to_release = Vec::new();
-                    socket_pairs.retain(|handle, _| {
-                        let socket = sockets.get::<tcp::Socket>(*handle);
-                        if socket.is_active() {
-                            true
-                        } else {
-                            trace!("socket {} closed, shutting down connection and releasing resources", handle);
-                            let port = socket.local_endpoint().unwrap().port;
-                            sockets.remove(*handle);
-                            send_queue.remove(handle);
-                            port_to_release.push(port);
-                            false
+                    let mut tcp_port_to_release = Vec::new();
+                    let mut udp_port_to_release = Vec::new();
+
+                    socket_pairs.retain(|handle, sender_type| {
+                        match sender_type {
+                            SenderType::Tcp(_) => {
+                                let socket = sockets.get::<tcp::Socket>(*handle);
+                                if socket.is_active() {
+                                    true
+                                } else {
+                                    let port = socket.local_endpoint().unwrap().port;
+                                    tcp_port_to_release.push(port);
+
+                                    trace!("socket {} closed, shutting down connection and releasing resources", handle);
+                                    sockets.remove(*handle);
+                                    tcp_queue.remove(handle);
+                                    false
+
+                                }
+                            }
+                            SenderType::Udp(_) => {
+                                let socket = sockets.get::<udp::Socket>(*handle);
+                                if socket.is_open() {
+                                    true
+                                } else {
+                                    let port = socket.endpoint().port;
+                                    udp_port_to_release.push(port);
+
+                                    trace!("socket {} closed, shutting down connection and releasing resources", handle);
+                                    sockets.remove(*handle);
+
+                                    udp_queue.remove(handle);
+                                    false
+                                }
+                            }
                         }
                     });
 
-                    for port in port_to_release {
+                    for port in tcp_port_to_release {
                         self.release_ephemeral_tcp_port(port).await;
+                    }
+                    for port in udp_port_to_release {
+                        self.release_ephemeral_udp_port(port).await;
                     }
 
                     next_poll = match iface.poll_delay(timestamp, &sockets) {
@@ -251,11 +438,31 @@ impl DeviceManager {
         self.tcp_port_pool.release(port).await;
     }
 
-    fn new_client_socket() -> Socket<'static> {
-        Socket::new(
+    async fn get_ephemeral_udp_port(&self) -> u16 {
+        self.udp_port_pool.next().await.unwrap()
+    }
+
+    async fn release_ephemeral_udp_port(&self, port: u16) {
+        self.udp_port_pool.release(port).await;
+    }
+
+    fn new_client_socket() -> tcp::Socket<'static> {
+        tcp::Socket::new(
             smoltcp::socket::tcp::SocketBuffer::new(vec![0; 65535]),
             smoltcp::socket::tcp::SocketBuffer::new(vec![0; 65535]),
         )
+    }
+
+    fn new_client_datagram() -> udp::Socket<'static> {
+        let rx_meta = vec![udp::PacketMetadata::EMPTY; 10];
+        let tx_meta = vec![udp::PacketMetadata::EMPTY; 10];
+        let rx_data = vec![0u8; MAX_PACKET];
+        let tx_data = vec![0u8; MAX_PACKET];
+        let udp_rx_buffer = udp::PacketBuffer::new(rx_meta, rx_data);
+        let udp_tx_buffer = udp::PacketBuffer::new(tx_meta, tx_data);
+        let socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
+
+        socket
     }
 }
 

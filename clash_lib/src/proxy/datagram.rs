@@ -20,6 +20,16 @@ pub struct UdpPacket {
     pub dst_addr: SocksAddr,
 }
 
+impl Default for UdpPacket {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+            src_addr: SocksAddr::any_ipv4(),
+            dst_addr: SocksAddr::any_ipv4(),
+        }
+    }
+}
+
 impl Debug for UdpPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UdpPacket")
