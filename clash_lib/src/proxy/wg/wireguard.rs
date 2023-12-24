@@ -74,7 +74,14 @@ impl WireguardTunnel {
         .map_err(|x| Error::InvalidConfig(format!("failed to create wireguard tunnel: {}", x)))?;
 
         let remote_endpoint = config.remote_endpoint;
-        let udp = new_udp_socket(None, None).await?;
+
+        let udp = new_udp_socket(
+            None,
+            None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
+        )
+        .await?;
 
         Ok(Self {
             source_peer_ip,
