@@ -198,7 +198,7 @@ impl OutboundHandler for Handler {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
-        todo!()
+        Err(new_io_error("not supported"))
     }
 
     /// connect to remote target via UDP
