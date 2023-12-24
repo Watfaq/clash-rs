@@ -351,6 +351,7 @@ impl DeviceManager {
                                             } else {
                                                 let total = pkt.data.len();
                                                 trace!("socket {} sending {} bytes", handle, total);
+                                                // TODO: handle DNS
                                                 match socket.send_slice(&pkt.data, (pkt.dst_addr.ip().unwrap(), pkt.dst_addr.port())) {
                                                     Ok(_) => {}
                                                     Err(e) => {
