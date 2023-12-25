@@ -109,7 +109,6 @@ impl WireguardTunnel {
             }
             boringtun::noise::TunnResult::WriteToNetwork(packet) => {
                 self.udp.send_to(&packet, self.endpoint).await?;
-                trace!("sent packet to {}", self.endpoint);
             }
             _ => {
                 error!("unexpected result from encapsulate");
@@ -133,8 +132,6 @@ impl WireguardTunnel {
     }
 
     pub async fn start_forwarding(&self) {
-        trace!("wg stack writing data");
-
         let mut packet_reader = self.packet_reader.lock().await;
         loop {
             match packet_reader.recv().await {
@@ -235,6 +232,8 @@ impl WireguardTunnel {
                 }
 
                 TunnResult::WriteToTunnelV4(packet, addr) => {
+                    trace_ip_packet("Received IP packet", packet);
+
                     if !self.is_ip_allowed(addr.into()) {
                         trace!(
                             "received packet from {} which is not in allowed_ips",
@@ -246,7 +245,7 @@ impl WireguardTunnel {
                     let _ =
                         trace_span!("wg_write_stack", endpoint = %self.endpoint, size = packet.len())
                             .entered();
-                    trace_ip_packet("Received IP packet", packet);
+
                     if let Some(proto) = self.route_protocol(packet) {
                         if let Err(e) = self
                             .packet_writer
@@ -256,10 +255,12 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        trace!("wg stack recevied unkown data");
+                        warn!("wg stack recevied unkown data");
                     }
                 }
                 TunnResult::WriteToTunnelV6(packet, addr) => {
+                    trace_ip_packet("Received IP packet", packet);
+
                     if !self.is_ip_allowed(addr.into()) {
                         trace!(
                             "received packet from {} which is not in allowed_ips",
@@ -271,7 +272,6 @@ impl WireguardTunnel {
                     let _ =
                         trace_span!("wg_write_stack", endpoint = %self.endpoint, size = packet.len())
                             .entered();
-                    trace_ip_packet("Received IP packet", packet);
                     if let Some(proto) = self.route_protocol(packet) {
                         if let Err(e) = self
                             .packet_writer
@@ -281,7 +281,7 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        trace!("wg stack recevied unkown data");
+                        warn!("wg stack recevied unkown data");
                     }
                 }
             }
@@ -299,6 +299,8 @@ impl WireguardTunnel {
                 let mut buf = vec![0u8; 65535];
                 let mut peer = self.peer.lock().await;
                 let tun_result = peer.format_handshake_initiation(&mut buf[..], false);
+                drop(peer);
+
                 self.handle_routine_result(tun_result).await;
             }
             TunnResult::Err(e) => {

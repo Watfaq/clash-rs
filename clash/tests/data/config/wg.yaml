@@ -52,7 +52,7 @@ proxies:
     allowed-ips: ['0.0.0.0/0']
     remote-dns-resolve: true
     dns:
-      - 1.1.1.1
+      - 8.8.8.8
     udp: true
 
 
