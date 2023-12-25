@@ -1,6 +1,12 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    routing::get,
+    Json, Router,
+};
+
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -52,7 +58,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
 
     let ports = inbound_manager.get_ports();
 
-    axum::response::Json(ConfigRequest {
+    axum::response::Json(PatchConfigRequest {
         port: ports.port,
         socks_port: ports.socks_port,
         redir_port: ports.redir_port,
@@ -73,16 +79,71 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
     })
 }
 
-async fn update_configs() -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        axum::response::Json("don't do this please"),
-    )
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct UpdateConfigRequest {
+    path: Option<String>,
+    payload: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct UploadConfigQuery {
+    force: Option<bool>,
+}
+
+async fn update_configs(
+    _q: Query<UploadConfigQuery>,
+    State(state): State<ConfigState>,
+    Json(req): Json<UpdateConfigRequest>,
+) -> impl IntoResponse {
+    let g = state.global_state.lock().await;
+    match (req.path, req.payload) {
+        (_, Some(payload)) => {
+            let msg = format!("config reloading from payload");
+            let cfg = crate::Config::Str(payload);
+            match g.reload_tx.send(cfg).await {
+                Ok(_) => (StatusCode::ACCEPTED, msg).into_response(),
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "could not signal config reload",
+                )
+                    .into_response(),
+            }
+        }
+        (Some(mut path), None) => {
+            if !PathBuf::from(&path).is_absolute() {
+                path = PathBuf::from(g.cwd.clone())
+                    .join(path)
+                    .to_string_lossy()
+                    .to_string();
+            }
+            if !PathBuf::from(&path).exists() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("config file {} not found", path),
+                )
+                    .into_response();
+            }
+
+            let msg = format!("config reloading from file {}", path);
+            let cfg: crate::Config = crate::Config::File(path);
+            match g.reload_tx.send(cfg).await {
+                Ok(_) => (StatusCode::ACCEPTED, msg).into_response(),
+
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "could not signal config reload",
+                )
+                    .into_response(),
+            }
+        }
+        (None, None) => (StatusCode::BAD_REQUEST, "no path or payload provided").into_response(),
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct ConfigRequest {
+struct PatchConfigRequest {
     port: Option<u16>,
     socks_port: Option<u16>,
     redir_port: Option<u16>,
@@ -95,7 +156,7 @@ struct ConfigRequest {
     allow_lan: Option<bool>,
 }
 
-impl ConfigRequest {
+impl PatchConfigRequest {
     fn rebuild_listeners(&self) -> bool {
         self.port.is_some()
             || self.socks_port.is_some()
@@ -108,7 +169,7 @@ impl ConfigRequest {
 
 async fn patch_configs(
     State(state): State<ConfigState>,
-    Json(payload): Json<ConfigRequest>,
+    Json(payload): Json<PatchConfigRequest>,
 ) -> impl IntoResponse {
     if payload.allow_lan.is_some() {
         warn!("setting allow_lan doesn't do anything. please set bind_address to a LAN address instead.");
