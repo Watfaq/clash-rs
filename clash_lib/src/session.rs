@@ -420,9 +420,7 @@ impl Display for Session {
         write!(
             f,
             "[{}] {} -> {}",
-            self.network,
-            self.source,
-            self.destination,
+            self.network, self.source, self.destination,
         )
     }
 }
