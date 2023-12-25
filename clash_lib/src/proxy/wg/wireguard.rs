@@ -213,21 +213,16 @@ impl WireguardTunnel {
                     }
 
                     let mut send_buf = vec![0u8; 65535];
-                    loop {
-                        match peer.decapsulate(None, &[], &mut send_buf) {
-                            TunnResult::WriteToNetwork(packet) => {
-                                match self.udp.send_to(packet, self.endpoint).await {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        error!("Failed to send decapsulation-instructed packet to WireGuard endpoint: {:?}", e);
-                                        break;
-                                    }
-                                };
-                            }
-                            _ => {
+                    while let TunnResult::WriteToNetwork(packet) =
+                        peer.decapsulate(None, &[], &mut send_buf)
+                    {
+                        match self.udp.send_to(packet, self.endpoint).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("Failed to send decapsulation-instructed packet to WireGuard endpoint: {:?}", e);
                                 break;
                             }
-                        }
+                        };
                     }
                 }
 

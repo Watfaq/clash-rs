@@ -4,6 +4,7 @@ use chacha20poly1305::ChaCha20Poly1305;
 
 use crate::common::crypto::AeadCipherHelper;
 
+#[allow(clippy::large_enum_variant)]
 pub enum VmessSecurity {
     Aes128Gcm(Aes128Gcm),
     ChaCha20Poly1305(ChaCha20Poly1305),
@@ -51,19 +52,19 @@ impl AeadCipher {
         match security {
             VmessSecurity::Aes128Gcm(cipher) => {
                 let dec = cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
-                if dec.is_err() {
+                if let Err(err) = dec {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        dec.unwrap_err().to_string(),
+                        err.to_string(),
                     ));
                 }
             }
             VmessSecurity::ChaCha20Poly1305(cipher) => {
                 let dec = cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
-                if dec.is_err() {
+                if let Err(err) = dec {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        dec.unwrap_err().to_string(),
+                        err.to_string(),
                     ));
                 }
             }

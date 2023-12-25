@@ -159,9 +159,9 @@ where
             )
         };
 
-        let (aead_read_cipher, aead_write_cipher) = match security {
-            &SECURITY_NONE => (None, None),
-            &SECURITY_AES_128_GCM => {
+        let (aead_read_cipher, aead_write_cipher) = match *security {
+            SECURITY_NONE => (None, None),
+            SECURITY_AES_128_GCM => {
                 let write_cipher =
                     VmessSecurity::Aes128Gcm(Aes128Gcm::new_with_slice(&req_body_key));
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
@@ -170,7 +170,7 @@ where
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);
                 (Some(read_cipher), Some(write_cipher))
             }
-            &SECURITY_CHACHA20_POLY1305 => {
+            SECURITY_CHACHA20_POLY1305 => {
                 let mut key = [0u8; 32];
                 let tmp = utils::md5(&req_body_key);
                 key.copy_from_slice(&tmp);

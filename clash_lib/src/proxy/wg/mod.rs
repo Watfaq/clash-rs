@@ -68,6 +68,7 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: HandlerOpts) -> AnyOutboundHandler {
         Arc::new(Self {
             opts,

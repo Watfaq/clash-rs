@@ -9,15 +9,10 @@ fn parse_basic_proxy_authorization(req: &Request<Body>) -> Option<&str> {
     req.headers()
         .get(http::header::PROXY_AUTHORIZATION)
         .map(|v| v.to_str().unwrap_or_default())
-        .map(|v| {
-            if let Some(remain) = v.strip_prefix("Basic ") {
-                Some(remain)
-            } else {
-                None
-            }
-        })
+        .map(|v| v.strip_prefix("Basic "))
         .and_then(|v| v)
 }
+
 fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(cred)

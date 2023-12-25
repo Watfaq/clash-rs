@@ -88,7 +88,7 @@ impl GrpcStreamBuilder {
                         debug!("grpc resp err: {:?}", e);
                     }
                 }
-                let _ = init_sender.send(());
+                let _ = init_sender.send(()).await;
             });
         }
 

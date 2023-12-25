@@ -71,6 +71,7 @@ pub enum TokioRuntime {
     SingleThread,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum Config {
     Def(ClashConfigDef),
     Internal(InternalConfig),
@@ -107,10 +108,10 @@ static RUNTIME_CONTROLLER: OnceLock<std::sync::RwLock<RuntimeController>> = Once
 
 pub fn start(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
-        &TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread()
+        TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?,
-        &TokioRuntime::SingleThread => tokio::runtime::Builder::new_current_thread()
+        TokioRuntime::SingleThread => tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?,
     };
