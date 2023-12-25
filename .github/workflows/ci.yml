@@ -30,8 +30,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run cargo check
       run: cargo check --all --all-features
-#   - name Run cargo clippy
-#      run: cargo clippy --all --all-features
+   - name Run cargo clippy
+      run: cargo clippy --all --all-features -- -D warnings
     - name: Run cargo test
       run: cargo test --all --all-features
     
