@@ -10,8 +10,8 @@ fn parse_basic_proxy_authorization(req: &Request<Body>) -> Option<&str> {
         .get(http::header::PROXY_AUTHORIZATION)
         .map(|v| v.to_str().unwrap_or_default())
         .map(|v| {
-            if v.starts_with("Basic ") {
-                Some(&v[6..])
+            if let Some(remain) = v.strip_prefix("Basic ") {
+                Some(remain)
             } else {
                 None
             }
@@ -25,8 +25,7 @@ fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
     let s = std::str::from_utf8(&decoded).ok()?;
 
     let (user, pass) = s.split_once(':')?;
-    
-    
+
     Some((user.to_owned(), pass.to_owned()))
 }
 

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tracing::debug;
 
-use super::proxy_provider::ProxyProvider;
+use super::ProxyProvider;
 use crate::{
     app::remote_content_manager::{
         healthcheck::HealthCheck,
@@ -31,11 +31,13 @@ struct Inner {
     hc: Arc<HealthCheck>,
 }
 
+type ProxyUpdater =
+    Box<dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
+type ProxyParser =
+    Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>;
+
 pub struct ProxySetProvider {
-    fetcher: Fetcher<
-        Box<dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static>,
-        Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>,
-    >,
+    fetcher: Fetcher<ProxyUpdater, ProxyParser>,
     inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
 }
 
@@ -64,9 +66,7 @@ impl ProxySetProvider {
         let inner_clone = inner.clone();
 
         let n = name.clone();
-        let updater: Box<
-            dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static,
-        > = Box::new(
+        let updater: ProxyUpdater = Box::new(
             move |input: Vec<AnyOutboundHandler>| -> BoxFuture<'static, ()> {
                 let hc = hc.clone();
                 let n = n.clone();
@@ -85,9 +85,7 @@ impl ProxySetProvider {
         );
 
         let n = name.clone();
-        let parser: Box<
-            dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
-        > = Box::new(
+        let parser: ProxyParser = Box::new(
             move |input: &[u8]| -> anyhow::Result<Vec<AnyOutboundHandler>> {
                 let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
                     Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
@@ -180,10 +178,7 @@ impl Provider for ProxySetProvider {
 #[async_trait]
 impl ProxyProvider for ProxySetProvider {
     async fn proxies(&self) -> Vec<AnyOutboundHandler> {
-        self.inner
-            .read()
-            .await
-            .proxies.to_vec()
+        self.inner.read().await.proxies.to_vec()
     }
 
     async fn touch(&self) {

@@ -138,15 +138,16 @@ impl TryFrom<def::Config> for Config {
                 HashMap::from([
                     (
                         String::from(PROXY_DIRECT),
-                        OutboundProxy::ProxyServer(OutboundProxyProtocol::Direct),
+                        OutboundProxy::ProxyServer(Box::new(OutboundProxyProtocol::Direct)),
                     ),
                     (
                         String::from(PROXY_REJECT),
-                        OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject),
+                        OutboundProxy::ProxyServer(Box::new(OutboundProxyProtocol::Reject)),
                     ),
                 ]),
                 |mut rv, x| {
-                    let proxy = OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
+                    let proxy =
+                        OutboundProxy::ProxyServer(Box::new(OutboundProxyProtocol::try_from(x)?));
                     let name = proxy.name();
                     if rv.contains_key(name.as_str()) {
                         return Err(Error::InvalidConfig(format!(
@@ -162,8 +163,8 @@ impl TryFrom<def::Config> for Config {
             proxy_groups: c.proxy_group.into_iter().try_fold(
                 HashMap::<String, OutboundProxy>::new(),
                 |mut rv, mapping| {
-                    let group = OutboundProxy::ProxyGroup(mapping.clone().try_into().map_err(
-                        |x: Error| {
+                    let group = OutboundProxy::ProxyGroup(Box::new(
+                        mapping.clone().try_into().map_err(|x: Error| {
                             if let Some(name) = mapping.get("name") {
                                 Error::InvalidConfig(format!(
                                     "proxy group: {}: {}",
@@ -173,8 +174,8 @@ impl TryFrom<def::Config> for Config {
                             } else {
                                 Error::InvalidConfig("proxy group name missing".to_string())
                             }
-                        },
-                    )?);
+                        })?,
+                    ));
                     proxy_names.push(group.name());
                     rv.insert(group.name().to_string(), group);
                     Ok::<HashMap<String, OutboundProxy>, Error>(rv)

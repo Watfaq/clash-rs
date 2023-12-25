@@ -85,7 +85,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn parse_nameserver(servers: &Vec<String>) -> Result<Vec<NameServer>, Error> {
+    pub fn parse_nameserver(servers: &[String]) -> Result<Vec<NameServer>, Error> {
         let mut nameservers = vec![];
 
         for (i, server) in servers.iter().enumerate() {
@@ -164,7 +164,7 @@ impl Config {
         Ok(policy)
     }
 
-    pub fn parse_fallback_ip_cidr(ipcidr: &Vec<String>) -> anyhow::Result<Vec<ipnet::IpNet>> {
+    pub fn parse_fallback_ip_cidr(ipcidr: &[String]) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
         for (_i, ip) in ipcidr.iter().enumerate() {
@@ -253,9 +253,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .map(|l| match l {
                     DNSListen::Udp(u) => {
                         let addr = u.parse::<SocketAddr>().map_err(|_| {
-                            Error::InvalidConfig(
-                                format!("invalid dns udp listen address: {}", u),
-                            )
+                            Error::InvalidConfig(format!("invalid dns udp listen address: {}", u))
                         })?;
                         Ok(DNSListenAddr {
                             udp: Some(addr),
@@ -270,9 +268,10 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
                         for (k, v) in map {
                             let addr = v.parse::<SocketAddr>().map_err(|_| {
-                                Error::InvalidConfig(
-                                    format!("invalid DNS listen address: {} -> {}", k, v),
-                                )
+                                Error::InvalidConfig(format!(
+                                    "invalid DNS listen address: {} -> {}",
+                                    k, v
+                                ))
                             })?;
                             match k.as_str() {
                                 "udp" => udp = Some(addr),

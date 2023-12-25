@@ -123,7 +123,7 @@ impl TrackedStream {
         inner: BoxedChainedStream,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        #[allow(clippy::borrowed_box)] rule: Option<&Box<dyn RuleMatcher>>,
     ) -> Self {
         let uuid = uuid::Uuid::new_v4();
         let chain = inner.chain().clone();
@@ -359,7 +359,7 @@ impl TrackedDatagram {
         inner: BoxedChainedDatagram,
         manager: Arc<Manager>,
         sess: Session,
-        rule: Option<&Box<dyn RuleMatcher>>,
+        #[allow(clippy::borrowed_box)] rule: Option<&Box<dyn RuleMatcher>>,
     ) -> Self {
         let uuid = uuid::Uuid::new_v4();
         let chain = inner.chain().clone();

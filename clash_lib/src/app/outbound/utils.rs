@@ -6,12 +6,12 @@ use std::{
 use crate::{config::internal::proxy::OutboundGroupProtocol, Error};
 
 // copy paste from https://github.com/Dreamacro/clash/blob/6a661bff0c185f38c4bd9d21c91a3233ba5fdb97/config/utils.go#L21
-pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<(), Error> {
+pub fn proxy_groups_dag_sort(groups: &mut Vec<Box<OutboundGroupProtocol>>) -> Result<(), Error> {
     struct Node {
         in_degree: i32,
 
         // could be either group/proxy
-        proto: Option<OutboundGroupProtocol>,
+        proto: Option<Box<OutboundGroupProtocol>>,
 
         outdegree: i32,
 
@@ -220,7 +220,10 @@ mod tests {
             OutboundGroupProtocol::Fallback(g3),
             OutboundGroupProtocol::LoadBalance(g4),
             OutboundGroupProtocol::Select(g5),
-        ];
+        ]
+        .into_iter()
+        .map(|x| Box::new(x) as Box<OutboundGroupProtocol>)
+        .collect();
 
         super::proxy_groups_dag_sort(&mut groups).unwrap();
 
@@ -261,7 +264,10 @@ mod tests {
             OutboundGroupProtocol::Relay(g1),
             OutboundGroupProtocol::UrlTest(g2),
             OutboundGroupProtocol::Fallback(g3),
-        ];
+        ]
+        .into_iter()
+        .map(|x| Box::new(x) as Box<OutboundGroupProtocol>)
+        .collect();
 
         let e = super::proxy_groups_dag_sort(&mut groups).unwrap_err();
         assert!(e.to_string().contains("loop detected in proxy groups"));

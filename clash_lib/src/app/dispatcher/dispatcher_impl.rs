@@ -394,7 +394,9 @@ struct TimeoutUdpSessionManager {
 impl Drop for TimeoutUdpSessionManager {
     fn drop(&mut self) {
         trace!("dropping timeout udp session manager");
-        if let Some(x) = self.cleaner.take() { x.abort() }
+        if let Some(x) = self.cleaner.take() {
+            x.abort()
+        }
     }
 }
 
@@ -467,17 +469,15 @@ impl TimeoutUdpSessionManager {
     }
 }
 
-struct OutboundHandleMap(
-    HashMap<
-        (String, SocketAddr),
-        (
-            JoinHandle<()>,
-            JoinHandle<()>,
-            OutboundPacketSender,
-            Instant,
-        ),
-    >,
+type OutboundHandleKey = (String, SocketAddr);
+type OutboundHandleVal = (
+    JoinHandle<()>,
+    JoinHandle<()>,
+    OutboundPacketSender,
+    Instant,
 );
+
+struct OutboundHandleMap(HashMap<OutboundHandleKey, OutboundHandleVal>);
 
 impl OutboundHandleMap {
     fn new() -> Self {

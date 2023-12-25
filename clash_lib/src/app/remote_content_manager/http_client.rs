@@ -36,8 +36,8 @@ impl Service<Uri> for LocalConnector {
         let port = remote.port_u16().unwrap_or(match remote.scheme_str() {
             None => 80,
             Some(s) => match s {
-                s if s == "http" => 80,
-                s if s == "https" => 443,
+                "http" => 80,
+                "https" => 443,
                 _ => panic!("invalid url: {}", remote),
             },
         });

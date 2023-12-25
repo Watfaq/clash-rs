@@ -86,7 +86,7 @@ impl DhcpClient {
             inner.clients = make_clients(
                 dns.into_iter()
                     .map(|s| NameServer {
-                        net: DNSNetMode::UDP,
+                        net: DNSNetMode::Udp,
                         address: format!("{}:53", s),
                         interface: None,
                     })

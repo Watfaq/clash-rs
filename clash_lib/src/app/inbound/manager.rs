@@ -89,10 +89,10 @@ impl InboundManager {
         self.network_listeners
             .values()
             .for_each(|x| match x.listener_type {
-                ListenerType::HTTP => {
+                ListenerType::Http => {
                     ports.port = Some(x.port);
                 }
-                ListenerType::SOCKS5 => {
+                ListenerType::Socks5 => {
                     ports.socks_port = Some(x.port);
                 }
                 ListenerType::Mixed => {
@@ -107,12 +107,12 @@ impl InboundManager {
         let mut network_listeners = HashMap::new();
         if let Some(http_port) = ports.port {
             network_listeners.insert(
-                ListenerType::HTTP,
+                ListenerType::Http,
                 NetworkInboundListener {
                     name: "HTTP".to_string(),
                     bind_addr: self.bind_address.clone(),
                     port: http_port,
-                    listener_type: ListenerType::HTTP,
+                    listener_type: ListenerType::Http,
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                 },
@@ -121,12 +121,12 @@ impl InboundManager {
 
         if let Some(socks_port) = ports.socks_port {
             network_listeners.insert(
-                ListenerType::SOCKS5,
+                ListenerType::Socks5,
                 NetworkInboundListener {
                     name: "SOCKS5".to_string(),
                     bind_addr: self.bind_address.clone(),
                     port: socks_port,
-                    listener_type: ListenerType::SOCKS5,
+                    listener_type: ListenerType::Socks5,
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                 },

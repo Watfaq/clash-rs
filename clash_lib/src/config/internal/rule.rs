@@ -19,12 +19,12 @@ pub enum RuleType {
         country_code: String,
         no_resolve: bool,
     },
-    IPCIDR {
+    IpCidr {
         ipnet: ipnet::IpNet,
         target: String,
         no_resolve: bool,
     },
-    SRCIPCIDR {
+    SrcCidr {
         ipnet: ipnet::IpNet,
         target: String,
         no_resolve: bool,
@@ -61,8 +61,8 @@ impl RuleType {
             RuleType::DomainSuffix { target, .. } => target,
             RuleType::DomainKeyword { target, .. } => target,
             RuleType::GeoIP { target, .. } => target,
-            RuleType::IPCIDR { target, .. } => target,
-            RuleType::SRCIPCIDR { target, .. } => target,
+            RuleType::IpCidr { target, .. } => target,
+            RuleType::SrcCidr { target, .. } => target,
             RuleType::SRCPort { target, .. } => target,
             RuleType::DSTPort { target, .. } => target,
             RuleType::ProcessName { target, .. } => target,
@@ -80,8 +80,8 @@ impl Display for RuleType {
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
             RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
             RuleType::GeoIP { .. } => write!(f, "GEOIP"),
-            RuleType::IPCIDR { .. } => write!(f, "IP-CIDR"),
-            RuleType::SRCIPCIDR { .. } => write!(f, "SRC-IP-CIDR"),
+            RuleType::IpCidr { .. } => write!(f, "IP-CIDR"),
+            RuleType::SrcCidr { .. } => write!(f, "SRC-IP-CIDR"),
             RuleType::SRCPort { .. } => write!(f, "SRC-PORT"),
             RuleType::DSTPort { .. } => write!(f, "DST-PORT"),
             RuleType::ProcessName { .. } => write!(f, "PROCESS-NAME"),
@@ -121,7 +121,7 @@ impl RuleType {
                     false
                 },
             }),
-            "IP-CIDR" | "IP-CIDR6" => Ok(RuleType::IPCIDR {
+            "IP-CIDR" | "IP-CIDR6" => Ok(RuleType::IpCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
                 no_resolve: if let Some(params) = params {
@@ -130,7 +130,7 @@ impl RuleType {
                     false
                 },
             }),
-            "SRC-IP-CIDR" => Ok(RuleType::SRCIPCIDR {
+            "SRC-IP-CIDR" => Ok(RuleType::SrcCidr {
                 ipnet: payload.parse()?,
                 target: target.to_string(),
                 no_resolve: if let Some(params) = params {

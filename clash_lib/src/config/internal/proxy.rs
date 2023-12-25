@@ -12,8 +12,8 @@ pub const PROXY_REJECT: &str = "REJECT";
 pub const PROXY_GLOBAL: &str = "GLOBAL";
 
 pub enum OutboundProxy {
-    ProxyServer(OutboundProxyProtocol),
-    ProxyGroup(OutboundGroupProtocol),
+    ProxyServer(Box<OutboundProxyProtocol>),
+    ProxyGroup(Box<OutboundGroupProtocol>),
 }
 
 impl OutboundProxy {
@@ -27,12 +27,7 @@ impl OutboundProxy {
 
 pub fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
     Error::InvalidConfig(if let Some(loc) = x.location() {
-        format!(
-            "{}, line, {}, column: {}",
-            x,
-            loc.line(),
-            loc.column()
-        )
+        format!("{}, line, {}, column: {}", x, loc.line(), loc.column())
     } else {
         x.to_string()
     })

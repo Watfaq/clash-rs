@@ -13,16 +13,16 @@ use crate::{
     Error,
 };
 
-pub struct MMDB {
+pub struct Mmdb {
     reader: maxminddb::Reader<Vec<u8>>,
 }
 
-impl MMDB {
+impl Mmdb {
     pub async fn new<P: AsRef<Path>>(
         path: P,
         download_url: Option<String>,
         http_client: HttpClient,
-    ) -> Result<MMDB, Error> {
+    ) -> Result<Mmdb, Error> {
         debug!("mmdb path: {}", path.as_ref().to_string_lossy());
         let reader = Self::load_mmdb(path, download_url, &http_client).await?;
         Ok(Self { reader })

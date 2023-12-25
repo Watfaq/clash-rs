@@ -14,6 +14,8 @@ use super::OutboundType;
 pub struct Handler;
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
+
     pub fn new() -> AnyOutboundHandler {
         Arc::new(Self)
     }

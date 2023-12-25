@@ -54,8 +54,8 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
 impl OutboundManager {
     pub async fn new(
-        outbounds: Vec<OutboundProxyProtocol>,
-        outbound_groups: Vec<OutboundGroupProtocol>,
+        outbounds: Vec<Box<OutboundProxyProtocol>>,
+        outbound_groups: Vec<Box<OutboundGroupProtocol>>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
@@ -172,9 +172,10 @@ impl OutboundManager {
 
     // API handlers end
 
+    #[allow(clippy::too_many_arguments)]
     async fn load_handlers(
-        outbounds: Vec<OutboundProxyProtocol>,
-        outbound_groups: Vec<OutboundGroupProtocol>,
+        outbounds: Vec<Box<OutboundProxyProtocol>>,
+        outbound_groups: Vec<Box<OutboundGroupProtocol>>,
         proxy_names: Vec<String>,
         proxy_manager: ProxyManager,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
@@ -185,7 +186,7 @@ impl OutboundManager {
         let mut proxy_providers = vec![];
 
         for outbound in outbounds.iter() {
-            match outbound {
+            match outbound.as_ref() {
                 OutboundProxyProtocol::Direct => {
                     handlers.insert(PROXY_DIRECT.to_string(), direct::Handler::new());
                 }
@@ -220,55 +221,55 @@ impl OutboundManager {
         let mut outbound_groups = outbound_groups;
         proxy_groups_dag_sort(&mut outbound_groups)?;
 
-        for outbound_group in outbound_groups.iter() {
-            fn make_provider_from_proxies(
-                name: &str,
-                proxies: &Vec<String>,
-                interval: u64,
-                lazy: bool,
-                handlers: &HashMap<String, AnyOutboundHandler>,
-                proxy_manager: ProxyManager,
-                proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
-                provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
-            ) -> Result<ThreadSafeProxyProvider, Error> {
-                if name == PROXY_DIRECT || name == PROXY_REJECT {
-                    return Err(Error::InvalidConfig(format!(
-                        "proxy group {} is reserved",
-                        name
-                    )));
-                }
-                let proxies = proxies
-                    .iter()
-                    .map(|x| {
-                        handlers
-                            .get(x)
-                            .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
-                            .map(Clone::clone)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let hc = HealthCheck::new(
-                    proxies.clone(),
-                    DEFAULT_LATENCY_TEST_URL.to_owned(),
-                    interval,
-                    lazy,
-                    proxy_manager.clone(),
-                )
-                .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
-
-                let pd = Arc::new(RwLock::new(
-                    PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
-                        Error::InvalidConfig(format!("invalid provider config: {}", x))
-                    })?,
-                ));
-
-                proxy_providers.push(pd.clone());
-                provider_registry.insert(name.to_owned(), pd.clone());
-
-                Ok(pd)
+        #[allow(clippy::too_many_arguments)]
+        fn make_provider_from_proxies(
+            name: &str,
+            proxies: &[String],
+            interval: u64,
+            lazy: bool,
+            handlers: &HashMap<String, AnyOutboundHandler>,
+            proxy_manager: ProxyManager,
+            proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
+            provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
+        ) -> Result<ThreadSafeProxyProvider, Error> {
+            if name == PROXY_DIRECT || name == PROXY_REJECT {
+                return Err(Error::InvalidConfig(format!(
+                    "proxy group {} is reserved",
+                    name
+                )));
             }
+            let proxies = proxies
+                .iter()
+                .map(|x| {
+                    handlers
+                        .get(x)
+                        .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
+                        .map(Clone::clone)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
-            match outbound_group {
+            let hc = HealthCheck::new(
+                proxies.clone(),
+                DEFAULT_LATENCY_TEST_URL.to_owned(),
+                interval,
+                lazy,
+                proxy_manager.clone(),
+            )
+            .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+
+            let pd = Arc::new(RwLock::new(
+                PlainProvider::new(name.to_owned(), proxies, hc)
+                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
+            ));
+
+            proxy_providers.push(pd.clone());
+            provider_registry.insert(name.to_owned(), pd.clone());
+
+            Ok(pd)
+        }
+
+        for outbound_group in outbound_groups.iter() {
+            match outbound_group.as_ref() {
                 OutboundGroupProtocol::Relay(proto) => {
                     if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
                         + proto

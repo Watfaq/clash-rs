@@ -55,12 +55,12 @@ where
         event.record(&mut EventVisitor(&mut strs));
 
         let event = LogEvent {
-            level: match event.metadata().level() {
-                &tracing::Level::ERROR => LogLevel::Error,
-                &tracing::Level::WARN => LogLevel::Warning,
-                &tracing::Level::INFO => LogLevel::Info,
-                &tracing::Level::DEBUG => LogLevel::Debug,
-                &tracing::Level::TRACE => LogLevel::Debug,
+            level: match *event.metadata().level() {
+                tracing::Level::ERROR => LogLevel::Error,
+                tracing::Level::WARN => LogLevel::Warning,
+                tracing::Level::INFO => LogLevel::Info,
+                tracing::Level::DEBUG => LogLevel::Debug,
+                tracing::Level::TRACE => LogLevel::Debug,
             },
             msg: strs.join(" "),
         };
@@ -95,11 +95,7 @@ pub fn setup_logging(
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::builder()
-        .with_default_directive(
-            format!("clash={}", level)
-                .parse::<Directive>()
-                .unwrap(),
-        )
+        .with_default_directive(format!("clash={}", level).parse::<Directive>().unwrap())
         .from_env_lossy();
 
     let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {

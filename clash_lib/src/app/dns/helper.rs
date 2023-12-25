@@ -16,7 +16,7 @@ pub async fn make_clients(
     for s in servers {
         dns_debug!("building nameserver: {:?}", s);
 
-        let (host, port) = if s.net == DNSNetMode::DHCP {
+        let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")
         } else {
             let port = s.address.split(':').last().unwrap();
@@ -27,7 +27,7 @@ pub async fn make_clients(
             (host, port)
         };
 
-        match DnsClient::new(Opts {
+        match DnsClient::new_client(Opts {
             r: resolver.as_ref().cloned(),
             host: host.to_string(),
             port: port

@@ -90,7 +90,6 @@ impl ProxyManager {
         for proxy in proxies {
             let proxy = proxy.clone();
             let url = url.to_owned();
-            let timeout = timeout;
             let manager = self.clone();
             futs.push(tokio::spawn(async move {
                 manager

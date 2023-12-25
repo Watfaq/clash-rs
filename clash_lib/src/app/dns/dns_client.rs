@@ -35,21 +35,21 @@ use super::{ClashResolver, Client};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
-    UDP,
-    TCP,
+    Udp,
+    Tcp,
     DoT,
     DoH,
-    DHCP,
+    Dhcp,
 }
 
 impl Display for DNSNetMode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UDP => write!(f, "UDP"),
-            Self::TCP => write!(f, "TCP"),
+            Self::Udp => write!(f, "UDP"),
+            Self::Tcp => write!(f, "TCP"),
             Self::DoT => write!(f, "DoT"),
             Self::DoH => write!(f, "DoH"),
-            Self::DHCP => write!(f, "DHCP"),
+            Self::Dhcp => write!(f, "DHCP"),
         }
     }
 }
@@ -59,11 +59,11 @@ impl FromStr for DNSNetMode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "UDP" => Ok(Self::UDP),
-            "TCP" => Ok(Self::TCP),
+            "UDP" => Ok(Self::Udp),
+            "TCP" => Ok(Self::Tcp),
             "DoH" => Ok(Self::DoH),
             "DoT" => Ok(Self::DoT),
-            "DHCP" => Ok(Self::DHCP),
+            "DHCP" => Ok(Self::Dhcp),
             _ => Err(Error::DNSError("unsupported protocol".into())),
         }
     }
@@ -104,10 +104,10 @@ pub struct DnsClient {
 }
 
 impl DnsClient {
-    pub async fn new(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
+    pub async fn new_client(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
         match &opts.net {
-            DNSNetMode::DHCP => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
+            DNSNetMode::Dhcp => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
 
             other => {
                 let ip = if let Some(r) = opts.r {
@@ -126,16 +126,12 @@ impl DnsClient {
                     }
                 } else {
                     opts.host.parse::<net::IpAddr>().map_err(|x| {
-                        Error::DNSError(format!(
-                            "resolve DNS hostname error: {}, {}",
-                            x,
-                            opts.host
-                        ))
+                        Error::DNSError(format!("resolve DNS hostname error: {}, {}", x, opts.host))
                     })?
                 };
 
                 match other {
-                    DNSNetMode::UDP => {
+                    DNSNetMode::Udp => {
                         let cfg =
                             DnsConfig::Udp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
                         let (client, bg) = dns_stream_builder(&cfg).await?;
@@ -154,7 +150,7 @@ impl DnsClient {
                             iface: opts.iface,
                         }))
                     }
-                    DNSNetMode::TCP => {
+                    DNSNetMode::Tcp => {
                         let cfg =
                             DnsConfig::Tcp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
 
@@ -281,10 +277,7 @@ async fn dns_stream_builder(
                 net::SocketAddr::new(addr.ip(), addr.port()),
                 // TODO: simplify this match
                 match iface {
-                    Some(iface) => match iface {
-                        Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
-                        _ => None,
-                    },
+                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
                     _ => None,
                 },
                 Duration::from_secs(5),
@@ -299,10 +292,7 @@ async fn dns_stream_builder(
                 TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
                     net::SocketAddr::new(addr.ip(), addr.port()),
                     match iface {
-                        Some(iface) => match iface {
-                            Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
-                            _ => None,
-                        },
+                        Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
                         _ => None,
                     },
                     Duration::from_secs(5),
@@ -324,10 +314,7 @@ async fn dns_stream_builder(
                 tls_client_connect_with_bind_addr::<AsyncIoTokioAsStd<TokioTcpStream>>(
                     net::SocketAddr::new(addr.ip(), addr.port()),
                     match iface {
-                        Some(iface) => match iface {
-                            Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
-                            _ => None,
-                        },
+                        Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
                         _ => None,
                     },
                     host.clone(),
@@ -354,13 +341,8 @@ async fn dns_stream_builder(
 
             let mut stream_builder =
                 HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));
-            if let Some(iface) = iface {
-                match iface {
-                    Interface::IpAddr(ip) => {
-                        stream_builder.bind_addr(net::SocketAddr::new(*ip, 0))
-                    }
-                    _ => {}
-                }
+            if let Some(Interface::IpAddr(ip)) = iface {
+                stream_builder.bind_addr(net::SocketAddr::new(*ip, 0));
             }
             let stream = stream_builder.build::<AsyncIoTokioAsStd<TokioTcpStream>>(
                 net::SocketAddr::new(addr.ip(), addr.port()),

@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum ListenerType {
-    HTTP,
-    SOCKS5,
+    Http,
+    Socks5,
     Mixed,
 }
 
@@ -96,12 +96,12 @@ impl NetworkInboundListener {
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
         let listener: AnyInboundListener = match self.listener_type {
-            ListenerType::HTTP => http::Listener::new(
+            ListenerType::Http => http::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             ),
-            ListenerType::SOCKS5 => socks::Listener::new(
+            ListenerType::Socks5 => socks::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),

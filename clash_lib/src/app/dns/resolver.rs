@@ -11,7 +11,7 @@ use tracing::{debug, instrument, warn};
 use hickory_proto::{op, rr};
 
 use crate::app::profile::ThreadSafeCacheFile;
-use crate::common::mmdb::MMDB;
+use crate::common::mmdb::Mmdb;
 use crate::config::def::DNSMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
@@ -56,7 +56,7 @@ impl Resolver {
             hosts: None,
             main: make_clients(
                 vec![NameServer {
-                    net: DNSNetMode::UDP,
+                    net: DNSNetMode::Udp,
                     address: "8.8.8.8:53".to_string(),
                     interface: None,
                 }],
@@ -73,10 +73,10 @@ impl Resolver {
         }
     }
 
-    pub async fn new(
+    pub async fn new_resolver(
         cfg: &Config,
         store: ThreadSafeCacheFile,
-        mmdb: Arc<MMDB>,
+        mmdb: Arc<Mmdb>,
     ) -> ThreadSafeDNSResolver {
         if !cfg.enable {
             return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
@@ -600,11 +600,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_udp_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "114.114.114.114".to_string(),
             port: 53,
-            net: DNSNetMode::UDP,
+            net: DNSNetMode::Udp,
             iface: None,
         })
         .await
@@ -615,11 +615,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_tcp_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "1.1.1.1".to_string(),
             port: 53,
-            net: DNSNetMode::TCP,
+            net: DNSNetMode::Tcp,
             iface: None,
         })
         .await
@@ -631,7 +631,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "network unstable on CI"]
     async fn test_dot_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: Some(Arc::new(Resolver::new_default().await)),
             host: "dns.google".to_string(),
             port: 853,
@@ -649,7 +649,7 @@ mod tests {
     async fn test_doh_resolve() {
         let default_resolver = Arc::new(Resolver::new_default().await);
 
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: Some(default_resolver.clone()),
             host: "cloudflare-dns.com".to_string(),
             port: 443,
@@ -665,11 +665,11 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_dhcp_client() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "en0".to_string(),
             port: 0,
-            net: DNSNetMode::DHCP,
+            net: DNSNetMode::Dhcp,
             iface: None,
         })
         .await

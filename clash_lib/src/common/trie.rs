@@ -100,7 +100,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
             return None;
         }
 
-        if let Some(n) = self.search_inner(&self.root, parts) {
+        if let Some(n) = Self::search_inner(&self.root, parts) {
             if n.data.is_some() {
                 return Some(n);
             }
@@ -124,13 +124,13 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         node.data = Some(data);
     }
 
-    fn search_inner<'a>(&'a self, node: &'a Node<T>, parts: Vec<&str>) -> Option<&Node<T>> {
+    fn search_inner<'a>(node: &'a Node<T>, parts: Vec<&str>) -> Option<&'a Node<T>> {
         if parts.is_empty() {
             return Some(node);
         }
 
         if let Some(c) = node.get_child(parts.last().unwrap().to_owned()) {
-            if let Some(n) = self.search_inner(c, parts[0..parts.len() - 1].into()) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
                 if n.data.is_some() {
                     return Some(n);
                 }
@@ -138,7 +138,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         }
 
         if let Some(c) = node.get_child(WILDCARD) {
-            if let Some(n) = self.search_inner(c, parts[0..parts.len() - 1].into()) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
                 if n.data.is_some() {
                     return Some(n);
                 }

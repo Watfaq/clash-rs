@@ -146,13 +146,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-    let _g = app::logging::setup_logging(
-        config.general.log_level,
-        log_collector,
-        &cwd,
-        opts.log_file,
-    )
-    .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x)))?;
+    let _g =
+        app::logging::setup_logging(config.general.log_level, log_collector, &cwd, opts.log_file)
+            .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x)))?;
 
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -171,7 +167,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     debug!("initializing mmdb");
     let cwd = PathBuf::from(cwd);
     let mmdb = Arc::new(
-        mmdb::MMDB::new(
+        mmdb::Mmdb::new(
             cwd.join(&config.general.mmdb),
             config.general.mmdb_download_url,
             client,
@@ -185,7 +181,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         config.profile.store_selected,
     );
 
-    let dns_resolver = dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
+    let dns_resolver =
+        dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
@@ -321,7 +318,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
             debug!("reloading mmdb");
             let mmdb = Arc::new(
-                mmdb::MMDB::new(
+                mmdb::Mmdb::new(
                     cwd.join(&config.general.mmdb),
                     config.general.mmdb_download_url,
                     client,
@@ -336,7 +333,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             );
 
             let dns_resolver =
-                dns::Resolver::new(&config.dns, cache_store.clone(), mmdb.clone()).await;
+                dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone()).await;
 
             debug!("reloading outbound manager");
             let outbound_manager = Arc::new(
