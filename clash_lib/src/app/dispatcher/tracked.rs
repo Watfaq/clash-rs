@@ -119,11 +119,12 @@ pub struct TrackedStream {
 }
 
 impl TrackedStream {
+    #[allow(clippy::borrowed_box)]
     pub async fn new(
         inner: BoxedChainedStream,
         manager: Arc<Manager>,
         sess: Session,
-        #[allow(clippy::borrowed_box)] rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&Box<dyn RuleMatcher>>,
     ) -> Self {
         let uuid = uuid::Uuid::new_v4();
         let chain = inner.chain().clone();
@@ -355,11 +356,12 @@ pub struct TrackedDatagram {
 }
 
 impl TrackedDatagram {
+    #[allow(clippy::borrowed_box)]
     pub async fn new(
         inner: BoxedChainedDatagram,
         manager: Arc<Manager>,
         sess: Session,
-        #[allow(clippy::borrowed_box)] rule: Option<&Box<dyn RuleMatcher>>,
+        rule: Option<&Box<dyn RuleMatcher>>,
     ) -> Self {
         let uuid = uuid::Uuid::new_v4();
         let chain = inner.chain().clone();

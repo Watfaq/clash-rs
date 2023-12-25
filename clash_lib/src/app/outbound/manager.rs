@@ -54,8 +54,8 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
 impl OutboundManager {
     pub async fn new(
-        outbounds: Vec<Box<OutboundProxyProtocol>>,
-        outbound_groups: Vec<Box<OutboundGroupProtocol>>,
+        outbounds: Vec<OutboundProxyProtocol>,
+        outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
         dns_resolver: ThreadSafeDNSResolver,
@@ -174,8 +174,8 @@ impl OutboundManager {
 
     #[allow(clippy::too_many_arguments)]
     async fn load_handlers(
-        outbounds: Vec<Box<OutboundProxyProtocol>>,
-        outbound_groups: Vec<Box<OutboundGroupProtocol>>,
+        outbounds: Vec<OutboundProxyProtocol>,
+        outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_names: Vec<String>,
         proxy_manager: ProxyManager,
         provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
@@ -186,7 +186,7 @@ impl OutboundManager {
         let mut proxy_providers = vec![];
 
         for outbound in outbounds.iter() {
-            match outbound.as_ref() {
+            match outbound {
                 OutboundProxyProtocol::Direct => {
                     handlers.insert(PROXY_DIRECT.to_string(), direct::Handler::new());
                 }
@@ -269,7 +269,7 @@ impl OutboundManager {
         }
 
         for outbound_group in outbound_groups.iter() {
-            match outbound_group.as_ref() {
+            match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
                     if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
                         + proto

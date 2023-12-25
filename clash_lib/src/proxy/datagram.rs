@@ -142,6 +142,7 @@ pub struct OutboundDatagramImpl {
 }
 
 impl OutboundDatagramImpl {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> AnyOutboundDatagram {
         let s = Self {
             inner: udp,
