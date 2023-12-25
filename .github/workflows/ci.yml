@@ -28,6 +28,8 @@ jobs:
       with:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
     - name: Run cargo check
       run: cargo check --all --all-features
     - name: Run cargo clippy
