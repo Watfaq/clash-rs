@@ -8,7 +8,7 @@ use std::{
 
 use ipnet::AddrParseError;
 use regex::Regex;
-use rustls::{Certificate, PrivateKey};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use url::Url;
 
 use crate::{
@@ -50,13 +50,13 @@ pub struct FallbackFilter {
 
 #[derive(Clone, Debug)]
 pub struct DoHConfig {
-    pub certificate_and_key: (Vec<Certificate>, PrivateKey),
+    pub certificate_and_key: (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
     pub dns_hostname: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct DoTConfig {
-    pub certificate_and_key: (Vec<Certificate>, PrivateKey),
+    pub certificate_and_key: (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -283,7 +283,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                     let certs = rustls_pemfile::certs(&mut buf_read)
                                         .unwrap()
                                         .into_iter()
-                                        .map(Certificate)
+                                        .map(|x| x.into())
                                         .collect::<Vec<_>>();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
@@ -291,7 +291,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                     let mut keys =
                                         rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
                                     let c = DoHConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        certificate_and_key: (certs, keys.remove(0).into()),
                                         dns_hostname: Some("dns.example.com".to_owned()),
                                     };
                                     doh = Some((addr, c))
@@ -302,7 +302,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                     let certs = rustls_pemfile::certs(&mut buf_read)
                                         .unwrap()
                                         .into_iter()
-                                        .map(Certificate)
+                                        .map(|x| x.into())
                                         .collect::<Vec<_>>();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
@@ -310,7 +310,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                     let mut keys =
                                         rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
                                     let c = DoTConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        certificate_and_key: (certs, keys.remove(0).into()),
                                     };
                                     dot = Some((addr, c))
                                 }

@@ -32,6 +32,9 @@ for TARGET in $1; do
   rustup target add $TARGET
 
   case $TARGET in
+    aarch64-pc-windows-msvc)
+      export TARGET_CC="C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\x64\bin\clang-cl.exe"
+      ;;
     x86_64-unknown-linux-musl)
       install_llvm
       export CC=clang-$llvm_version

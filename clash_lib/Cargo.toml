@@ -12,7 +12,7 @@ bench = ["criterion"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
-tokio-rustls = "0.24"
+tokio-rustls = "0.25"
 thiserror = "1.0"
 async-trait = "0.1"
 anyhow = "1.0"
@@ -64,19 +64,19 @@ chrono = { version = "0.4.26", features = ["serde"] }
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
 
-boringtun = { version = "0.6.0" }
+#boringtun = { version = "0.6.0" }
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 erased-serde = "0.3.30"
 
-hickory-client = "0.24"
-hickory-resolver = "0.24"
-hickory-server = { version = "0.24", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+hickory-client = { version = "0.24", git = "https://github.com/Watfaq/trust-dns.git", rev = "04536f3d80869dc0acd2c210390c839690aefaa5" }
+hickory-resolver = { version = "0.24", git = "https://github.com/Watfaq/trust-dns.git", rev = "04536f3d80869dc0acd2c210390c839690aefaa5" }
+hickory-server = { version = "0.24", git = "https://github.com/Watfaq/trust-dns.git", rev = "04536f3d80869dc0acd2c210390c839690aefaa5" }
+hickory-proto = { version = "0.24", git = "https://github.com/Watfaq/trust-dns.git", rev = "04536f3d80869dc0acd2c210390c839690aefaa5", features = ["dns-over-rustls"] }
 
 # DoH
-rustls = { version  = "0.21", features=["dangerous_configuration"] }
+rustls = { version  = "0.22" }
 rustls-pemfile = "1.0.4"
 webpki-roots = "0.25"
 dhcproto = "0.11"
@@ -92,7 +92,7 @@ tracing-oslog = "0.1"
 tracing-appender = "0.2.3"
 
 
-shadowsocks = { version = "1.17.1", optional = true, features=["aead-cipher-2022"] }
+shadowsocks = { optional = true, features=["aead-cipher-2022"], git = "https://github.com/Watfaq/shadowsocks-rust.git", rev = "4fa0dda5d1098b6d807e0ac077143d3b242e5466" }
 maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
