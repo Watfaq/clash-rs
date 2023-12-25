@@ -92,7 +92,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                             "grpc_opts is required for grpc".to_owned(),
                         )),
                     _ => {
-                        return Err(Error::InvalidConfig(format!("unsupported network: {}", x)));
+                        Err(Error::InvalidConfig(format!("unsupported network: {}", x)))
                     }
                 })
                 .transpose()?,
@@ -102,17 +102,15 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                     sni: s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
                         s.ws_opts
                             .as_ref()
-                            .map(|x| {
+                            .and_then(|x| {
                                 x.headers
                                     .as_ref()
                                     .map(Clone::clone)
-                                    .map(|x| {
+                                    .and_then(|x| {
                                         let h = x.get("Host");
                                         h.map(Clone::clone)
                                     })
-                                    .flatten()
                             })
-                            .flatten()
                             .unwrap_or(s.server.to_owned())
                             .to_owned(),
                     ),

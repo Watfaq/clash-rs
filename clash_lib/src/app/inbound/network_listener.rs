@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum ListenerType {
-    HTTP,
-    SOCKS5,
+    Http,
+    Socks5,
     Mixed,
 }
 
@@ -70,7 +70,7 @@ impl NetworkInboundListener {
             }
             BindAddress::One(iface) => match iface {
                 Interface::IpAddr(ip) => match ip {
-                    IpAddr::V4(ip) => self.build_and_insert_listener(&mut runners, ip.clone()),
+                    IpAddr::V4(ip) => self.build_and_insert_listener(&mut runners, *ip),
                     IpAddr::V6(_) => unreachable!("unsupported listening v6"),
                 },
                 Interface::Name(iface) => {
@@ -78,8 +78,7 @@ impl NetworkInboundListener {
                         .expect("list interfaces")
                         .into_iter()
                         .filter(|x| &x.name == iface)
-                        .map(|x| x.addr)
-                        .flatten()
+                        .flat_map(|x| x.addr)
                         .map(|x| match x {
                             Addr::V4(v4) => v4.ip,
                             Addr::V6(_) => unreachable!(),
@@ -97,12 +96,12 @@ impl NetworkInboundListener {
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
         let listener: AnyInboundListener = match self.listener_type {
-            ListenerType::HTTP => http::Listener::new(
+            ListenerType::Http => http::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             ),
-            ListenerType::SOCKS5 => socks::Listener::new(
+            ListenerType::Socks5 => socks::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),

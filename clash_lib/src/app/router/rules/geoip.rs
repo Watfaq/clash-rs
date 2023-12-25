@@ -11,7 +11,7 @@ pub struct GeoIP {
     pub target: String,
     pub country_code: String,
     pub no_resolve: bool,
-    pub mmdb: Arc<mmdb::MMDB>,
+    pub mmdb: Arc<mmdb::Mmdb>,
 }
 
 impl std::fmt::Display for GeoIP {

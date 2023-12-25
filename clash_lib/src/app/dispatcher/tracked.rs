@@ -119,6 +119,7 @@ pub struct TrackedStream {
 }
 
 impl TrackedStream {
+    #[allow(clippy::borrowed_box)]
     pub async fn new(
         inner: BoxedChainedStream,
         manager: Arc<Manager>,
@@ -164,7 +165,7 @@ impl TrackedStream {
 impl Drop for TrackedStream {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
-        let _ = self.manager.untrack(self.id());
+        self.manager.untrack(self.id());
     }
 }
 
@@ -355,6 +356,7 @@ pub struct TrackedDatagram {
 }
 
 impl TrackedDatagram {
+    #[allow(clippy::borrowed_box)]
     pub async fn new(
         inner: BoxedChainedDatagram,
         manager: Arc<Manager>,
@@ -400,7 +402,7 @@ impl TrackedDatagram {
 impl Drop for TrackedDatagram {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
-        let _ = self.manager.untrack(self.id());
+        self.manager.untrack(self.id());
     }
 }
 

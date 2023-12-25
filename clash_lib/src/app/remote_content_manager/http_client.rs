@@ -30,14 +30,14 @@ impl Service<Uri> for LocalConnector {
     fn call(&mut self, remote: Uri) -> Self::Future {
         let host = remote
             .host()
-            .expect(format!("invalid url: {}", remote.to_string()).as_str())
+            .unwrap_or_else(|| panic!("invalid url: {}", remote))
             .to_owned();
 
         let port = remote.port_u16().unwrap_or(match remote.scheme_str() {
             None => 80,
             Some(s) => match s {
-                s if s == "http" => 80,
-                s if s == "https" => 443,
+                "http" => 80,
+                "https" => 443,
                 _ => panic!("invalid url: {}", remote),
             },
         });
@@ -45,7 +45,7 @@ impl Service<Uri> for LocalConnector {
         let sess = Session {
             destination: (host, port)
                 .try_into()
-                .expect(format!("invalid url: {}", remote.to_string()).as_str()),
+                .unwrap_or_else(|_| panic!("invalid url: {}", remote)),
             ..Default::default()
         };
         let handler = self.0.clone();

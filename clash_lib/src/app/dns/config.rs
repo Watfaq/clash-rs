@@ -85,10 +85,10 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn parse_nameserver(servers: &Vec<String>) -> Result<Vec<NameServer>, Error> {
+    pub fn parse_nameserver(servers: &[String]) -> Result<Vec<NameServer>, Error> {
         let mut nameservers = vec![];
 
-        for (i, server) in servers.into_iter().enumerate() {
+        for (i, server) in servers.iter().enumerate() {
             let mut server = server.clone();
 
             if !server.contains("://") {
@@ -106,19 +106,19 @@ impl Config {
 
             match url.scheme() {
                 "udp" => {
-                    addr = Config::host_with_default_port(&host, "53")?;
+                    addr = Config::host_with_default_port(host, "53")?;
                     net = "UDP";
                 }
                 "tcp" => {
-                    addr = Config::host_with_default_port(&host, "53")?;
+                    addr = Config::host_with_default_port(host, "53")?;
                     net = "TCP";
                 }
                 "tls" => {
-                    addr = Config::host_with_default_port(&host, "853")?;
+                    addr = Config::host_with_default_port(host, "853")?;
                     net = "DoT";
                 }
                 "https" => {
-                    addr = Config::host_with_default_port(&host, "443")?;
+                    addr = Config::host_with_default_port(host, "443")?;
                     net = "DoH";
                 }
                 "dhcp" => {
@@ -126,11 +126,11 @@ impl Config {
                     net = "DHCP";
                 }
                 _ => {
-                    return Err(Error::InvalidConfig(String::from(format!(
+                    return Err(Error::InvalidConfig(format!(
                         "DNS nameserver [{}] unsupported scheme: {}",
                         i,
                         url.scheme()
-                    ))));
+                    )));
                 }
             }
 
@@ -150,9 +150,9 @@ impl Config {
         let mut policy = HashMap::new();
 
         for (domain, server) in policy_map {
-            let nameservers = Config::parse_nameserver(&vec![server.to_owned()])?;
+            let nameservers = Config::parse_nameserver(&[server.to_owned()])?;
 
-            let (_, valid) = trie::valid_and_split_domain(&domain);
+            let (_, valid) = trie::valid_and_split_domain(domain);
             if !valid {
                 return Err(Error::InvalidConfig(format!(
                     "DNS ResolverRule invalid domain: {}",
@@ -164,7 +164,7 @@ impl Config {
         Ok(policy)
     }
 
-    pub fn parse_fallback_ip_cidr(ipcidr: &Vec<String>) -> anyhow::Result<Vec<ipnet::IpNet>> {
+    pub fn parse_fallback_ip_cidr(ipcidr: &[String]) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
         for (_i, ip) in ipcidr.iter().enumerate() {
@@ -186,7 +186,7 @@ impl Config {
             Arc::new("127.0.0.1".parse::<IpAddr>().unwrap()),
         );
 
-        for (host, ip_str) in hosts_mapping.into_iter() {
+        for (host, ip_str) in hosts_mapping.iter() {
             let ip = ip_str.parse::<IpAddr>()?;
             tree.insert(host.as_str(), Arc::new(ip));
         }
@@ -197,7 +197,7 @@ impl Config {
     pub fn host_with_default_port(host: &str, port: &str) -> Result<String, Error> {
         let has_port_suffix = Regex::new(r":\d+$").unwrap();
 
-        if has_port_suffix.is_match(&host) {
+        if has_port_suffix.is_match(host) {
             Ok(host.into())
         } else {
             Ok(format!("{}:{}", host, port))
@@ -218,7 +218,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
     fn try_from(c: &crate::config::def::Config) -> Result<Self, Self::Error> {
         let dc = &c.dns;
-        if dc.enable && dc.nameserver.len() == 0 {
+        if dc.enable && dc.nameserver.is_empty() {
             return Err(Error::InvalidConfig(String::from(
                 "dns enabled, no nameserver specified",
             )));
@@ -228,7 +228,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
         let fallback = Config::parse_nameserver(&dc.fallback)?;
         let nameserver_policy = Config::parse_nameserver_policy(&dc.nameserver_policy)?;
 
-        if dc.default_nameserver.len() == 0 {
+        if dc.default_nameserver.is_empty() {
             return Err(Error::InvalidConfig(String::from(
                 "default nameserver empty",
             )));
@@ -253,9 +253,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .map(|l| match l {
                     DNSListen::Udp(u) => {
                         let addr = u.parse::<SocketAddr>().map_err(|_| {
-                            Error::InvalidConfig(
-                                format!("invalid dns udp listen address: {}", u).into(),
-                            )
+                            Error::InvalidConfig(format!("invalid dns udp listen address: {}", u))
                         })?;
                         Ok(DNSListenAddr {
                             udp: Some(addr),
@@ -270,9 +268,10 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
                         for (k, v) in map {
                             let addr = v.parse::<SocketAddr>().map_err(|_| {
-                                Error::InvalidConfig(
-                                    format!("invalid DNS listen address: {} -> {}", k, v).into(),
-                                )
+                                Error::InvalidConfig(format!(
+                                    "invalid DNS listen address: {} -> {}",
+                                    k, v
+                                ))
                             })?;
                             match k.as_str() {
                                 "udp" => udp = Some(addr),
@@ -336,7 +335,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .map_err(|_| Error::InvalidConfig(String::from("invalid fake ip range")))?,
             fake_ip_filter: dc.fake_ip_filter.clone(),
             store_fake_ip: c.profile.store_fake_ip,
-            hosts: if dc.user_hosts && c.hosts.len() > 0 {
+            hosts: if dc.user_hosts && !c.hosts.is_empty() {
                 Config::parse_hosts(&c.hosts).ok()
             } else {
                 let mut tree = trie::StringTrie::new();

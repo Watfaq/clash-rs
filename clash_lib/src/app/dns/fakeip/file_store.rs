@@ -18,8 +18,7 @@ impl Store for FileStore {
         self.0
             .get_fake_ip(host)
             .await
-            .map(|ip| ip.parse().ok())
-            .flatten()
+            .and_then(|ip| ip.parse().ok())
     }
 
     async fn pub_by_host(&mut self, host: &str, ip: std::net::IpAddr) {

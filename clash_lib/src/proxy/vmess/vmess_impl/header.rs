@@ -120,7 +120,7 @@ mod tests {
 
         let cmd_key = "1234567890123456".as_bytes();
         let mut aes_key = boring_sys::AES_KEY::default();
-        let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+        let pk = kdf::vmess_kdf_1_one_shot(cmd_key, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
         unsafe {
             boring_sys::AES_set_encrypt_key(pk.as_ptr() as _, 128, &mut aes_key);
             boring_sys::AES_encrypt(buf.as_mut_ptr() as _, buf.as_mut_ptr() as _, &aes_key);
@@ -140,13 +140,13 @@ mod tests {
         let data = vec![0u8; 16];
 
         let payload_header_length_aead_key = &kdf::vmess_kdf_3_one_shot(
-            &key[..],
+            key,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
             &auth_id[..],
             &connection_nonce[..],
         )[..16];
         let payload_header_length_aead_nonce = &kdf::vmess_kdf_3_one_shot(
-            &key[..],
+            key,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_IV,
             &auth_id[..],
             &connection_nonce[..],
@@ -161,13 +161,13 @@ mod tests {
         .unwrap();
 
         let payload_header_aead_key = &kdf::vmess_kdf_3_one_shot(
-            &key[..],
+            key,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_KEY,
             &auth_id[..],
             &connection_nonce[..],
         )[..16];
         let payload_header_aead_nonce = &kdf::vmess_kdf_3_one_shot(
-            &key[..],
+            key,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
             &auth_id[..],
             &connection_nonce[..],

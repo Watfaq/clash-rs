@@ -1,11 +1,11 @@
 use crate::app::router::rules::domain::Domain;
 use crate::app::router::rules::domain_keyword::DomainKeyword;
 use crate::app::router::rules::domain_suffix::DomainSuffix;
-use crate::app::router::rules::ipcidr::IPCIDR;
+use crate::app::router::rules::ipcidr::IpCidr;
 use crate::app::router::rules::ruleset::RuleSet;
 use crate::Error;
 
-use crate::common::mmdb::MMDB;
+use crate::common::mmdb::Mmdb;
 use crate::config::internal::config::RuleProviderDef;
 use crate::config::internal::rule::RuleType;
 use crate::session::{Session, SocksAddr};
@@ -44,7 +44,7 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        mmdb: Arc<MMDB>,
+        mmdb: Arc<Mmdb>,
         cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
@@ -82,15 +82,13 @@ impl Router {
                     "rule {r} local resolving domain {}",
                     sess.destination.domain().unwrap()
                 );
-                if let Ok(ip) = self
+                if let Ok(Some(ip)) = self
                     .dns_resolver
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
                 {
-                    if let Some(ip) = ip {
-                        sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
-                        sess_resolved = true;
-                    }
+                    sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
+                    sess_resolved = true;
                 }
             }
 
@@ -112,7 +110,7 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
-        mmdb: Arc<MMDB>,
+        mmdb: Arc<Mmdb>,
         cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
@@ -121,7 +119,7 @@ impl Router {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url
                             .parse::<Uri>()
-                            .expect(format!("invalid provider url: {}", http.url).as_str()),
+                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),
@@ -184,7 +182,7 @@ impl Router {
 
 pub fn map_rule_type(
     rule_type: RuleType,
-    mmdb: Arc<MMDB>,
+    mmdb: Arc<Mmdb>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
     match rule_type {
@@ -205,21 +203,21 @@ pub fn map_rule_type(
             keyword: domain_keyword,
             target,
         }),
-        RuleType::IPCIDR {
+        RuleType::IpCidr {
             ipnet,
             target,
             no_resolve,
-        } => Box::new(IPCIDR {
+        } => Box::new(IpCidr {
             ipnet,
             target,
             no_resolve,
             match_src: false,
         }),
-        RuleType::SRCIPCIDR {
+        RuleType::SrcCidr {
             ipnet,
             target,
             no_resolve,
-        } => Box::new(IPCIDR {
+        } => Box::new(IpCidr {
             ipnet,
             target,
             no_resolve,
@@ -268,7 +266,7 @@ pub fn map_rule_type(
                 target,
                 rule_provider_registry
                     .get(&rule_set)
-                    .expect(format!("rule provider {} not found", rule_set).as_str())
+                    .unwrap_or_else(|| panic!("rule provider {} not found", rule_set))
                     .clone(),
             )),
             None => unreachable!("you shouldn't next rule-set within another rule-set"),

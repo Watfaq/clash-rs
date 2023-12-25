@@ -9,24 +9,18 @@ fn parse_basic_proxy_authorization(req: &Request<Body>) -> Option<&str> {
     req.headers()
         .get(http::header::PROXY_AUTHORIZATION)
         .map(|v| v.to_str().unwrap_or_default())
-        .map(|v| {
-            if v.starts_with("Basic ") {
-                Some(&v[6..])
-            } else {
-                None
-            }
-        })
+        .map(|v| v.strip_prefix("Basic "))
         .and_then(|v| v)
 }
+
 fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(cred)
         .ok()?;
     let s = std::str::from_utf8(&decoded).ok()?;
 
-    let mut parts = s.splitn(2, ":");
-    let user = parts.next()?;
-    let pass = parts.next()?;
+    let (user, pass) = s.split_once(':')?;
+
     Some((user.to_owned(), pass.to_owned()))
 }
 

@@ -17,10 +17,7 @@ pub async fn get_proxies_from_providers(
             .read()
             .await
             .proxies()
-            .await
-            .iter()
-            .map(|x| x.clone())
-            .collect::<Vec<_>>();
+            .await.to_vec();
         proxies.append(&mut proxies_from_provider);
     }
     proxies

@@ -72,8 +72,8 @@ impl DnsHandler {
         m.set_message_type(request.message_type());
         m.set_recursion_desired(request.recursion_desired());
         m.add_query(request.query().original().clone());
-        m.add_additionals(request.additionals().into_iter().map(Clone::clone));
-        m.add_name_servers(request.name_servers().into_iter().map(Clone::clone));
+        m.add_additionals(request.additionals().iter().map(Clone::clone));
+        m.add_name_servers(request.name_servers().iter().map(Clone::clone));
         for sig0 in request.sig0() {
             m.add_sig0(sig0.clone());
         }
@@ -158,20 +158,18 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
     if let Some(addr) = cfg.listen.udp {
         UdpSocket::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on udp: {}", addr);
                 s.register_socket(x);
-                Ok(())
             })
             .ok()?;
     }
     if let Some(addr) = cfg.listen.tcp {
         TcpListener::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on tcp: {}", addr);
                 s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
-                Ok(())
             })
             .ok()?;
     }

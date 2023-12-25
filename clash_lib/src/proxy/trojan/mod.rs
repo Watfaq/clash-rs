@@ -56,6 +56,7 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: Opts) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
@@ -73,8 +74,8 @@ impl Handler {
             sni: self.opts.sni.clone(),
             alpn: self.opts.alpn.clone().or(Some(
                 DEFAULT_ALPN
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .copied()
                     .map(|x| x.to_owned())
                     .collect::<Vec<String>>(),
             )),

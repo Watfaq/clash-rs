@@ -88,15 +88,15 @@ impl GrpcStreamBuilder {
                         debug!("grpc resp err: {:?}", e);
                     }
                 }
-                let _ = init_sender.send(());
+                let _ = init_sender.send(()).await;
             });
         }
 
-        return Ok(Box::new(GrpcStream::new(
+        Ok(Box::new(GrpcStream::new(
             init_ready,
             recv_stream,
             send_stream,
-        )));
+        )))
     }
 }
 
@@ -171,7 +171,7 @@ impl AsyncRead for GrpcStream {
             )));
         }
 
-        if (self.payload_len > 0 && self.buffer.len() > 0)
+        if (self.payload_len > 0 && !self.buffer.is_empty())
             || (self.payload_len == 0 && self.buffer.len() > 6)
         {
             if self.payload_len == 0 {
@@ -181,7 +181,7 @@ impl AsyncRead for GrpcStream {
             }
 
             trace!("grpc poll_read data left payload_len: {}", self.payload_len);
-            let to_read = std::cmp::min(buf.remaining(), self.payload_len as usize);
+            let to_read = std::cmp::min(buf.remaining(), self.payload_len);
             let to_read = std::cmp::min(to_read, self.buffer.len());
 
             if to_read == 0 {
@@ -220,7 +220,7 @@ impl AsyncRead for GrpcStream {
                         let payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
                         self.payload_len = payload_len as usize;
                     }
-                    let to_read = std::cmp::min(self.buffer.len(), self.payload_len as usize);
+                    let to_read = std::cmp::min(self.buffer.len(), self.payload_len);
                     let to_read = std::cmp::min(buf.remaining(), to_read);
                     if to_read == 0 {
                         break;

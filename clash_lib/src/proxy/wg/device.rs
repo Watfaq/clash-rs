@@ -34,6 +34,7 @@ use super::{
     },
 };
 
+#[allow(clippy::large_enum_variant)]
 enum Socket {
     Tcp(
         tcp::Socket<'static>,
@@ -130,7 +131,7 @@ impl DeviceManager {
 
     pub async fn look_up_dns(&self, host: &str, server: SocketAddr) -> Option<IpAddr> {
         debug!("looking up {} on {}", host, server);
-        let mut socket = Self::new_udp_socket(&self).await;
+        let mut socket = Self::new_udp_socket(self).await;
         let mut msg = hickory_proto::op::Message::new();
 
         msg.add_query({
@@ -146,11 +147,7 @@ impl DeviceManager {
 
         msg.set_recursion_desired(true);
 
-        let pkt = UdpPacket::new(
-            msg.to_vec().unwrap().into(),
-            SocksAddr::any_ipv4(),
-            server.into(),
-        );
+        let pkt = UdpPacket::new(msg.to_vec().unwrap(), SocksAddr::any_ipv4(), server.into());
 
         socket.feed(pkt).await.ok()?;
         socket.flush().await.ok()?;
@@ -645,8 +642,7 @@ impl smoltcp::phy::TxToken for TxToken {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mut buffer = Vec::new();
-        buffer.resize(len, 0);
+        let mut buffer = vec![0u8; len];
         let result = f(&mut buffer);
         match self.sender.try_send(buffer.into()) {
             Ok(_) => {}

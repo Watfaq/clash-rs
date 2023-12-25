@@ -13,7 +13,7 @@ use crate::{
     Error,
 };
 
-use super::proxy_provider::ProxyProvider;
+use super::ProxyProvider;
 
 pub struct PlainProvider {
     name: String,

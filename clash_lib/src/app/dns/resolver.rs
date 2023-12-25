@@ -11,7 +11,7 @@ use tracing::{debug, instrument, warn};
 use hickory_proto::{op, rr};
 
 use crate::app::profile::ThreadSafeCacheFile;
-use crate::common::mmdb::MMDB;
+use crate::common::mmdb::Mmdb;
 use crate::config::def::DNSMode;
 use crate::dns::helper::make_clients;
 use crate::dns::ThreadSafeDNSClient;
@@ -56,7 +56,7 @@ impl Resolver {
             hosts: None,
             main: make_clients(
                 vec![NameServer {
-                    net: DNSNetMode::UDP,
+                    net: DNSNetMode::Udp,
                     address: "8.8.8.8:53".to_string(),
                     interface: None,
                 }],
@@ -73,10 +73,10 @@ impl Resolver {
         }
     }
 
-    pub async fn new(
+    pub async fn new_resolver(
         cfg: &Config,
         store: ThreadSafeCacheFile,
-        mmdb: Arc<MMDB>,
+        mmdb: Arc<Mmdb>,
     ) -> ThreadSafeDNSResolver {
         if !cfg.enable {
             return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
@@ -99,12 +99,12 @@ impl Resolver {
             ipv6: AtomicBool::new(cfg.ipv6),
             main: make_clients(cfg.nameserver.clone(), Some(default_resolver.clone())).await,
             hosts: cfg.hosts.clone(),
-            fallback: if cfg.fallback.len() > 0 {
+            fallback: if !cfg.fallback.is_empty() {
                 Some(make_clients(cfg.fallback.clone(), Some(default_resolver.clone())).await)
             } else {
                 None
             },
-            fallback_domain_filters: if cfg.fallback_filter.domain.len() > 0 {
+            fallback_domain_filters: if !cfg.fallback_filter.domain.is_empty() {
                 Some(vec![Box::new(DomainFilter::new(
                     cfg.fallback_filter
                         .domain
@@ -139,7 +139,7 @@ impl Resolver {
             lru_cache: Some(Arc::new(RwLock::new(
                 lru_time_cache::LruCache::with_expiry_duration_and_capacity(TTL, 4096),
             ))),
-            policy: if cfg.nameserver_policy.len() > 0 {
+            policy: if !cfg.nameserver_policy.is_empty() {
                 let mut p = trie::StringTrie::new();
                 for (domain, ns) in &cfg.nameserver_policy {
                     p.insert(
@@ -157,7 +157,7 @@ impl Resolver {
                 DNSMode::FakeIp => Some(Arc::new(RwLock::new(
                     fakeip::FakeDns::new(fakeip::Opts {
                         ipnet: cfg.fake_ip_range,
-                        skipped_hostnames: if cfg.fake_ip_filter.len() != 0 {
+                        skipped_hostnames: if !cfg.fake_ip_filter.is_empty() {
                             let mut host = trie::StringTrie::new();
                             for domain in cfg.fake_ip_filter.iter() {
                                 host.insert(domain.as_str(), Arc::new(true));
@@ -208,7 +208,7 @@ impl Resolver {
         tokio::select! {
             result = futures::future::select_ok(queries) => match result {
                 Ok(r) => Ok(r.0),
-                Err(e) => Err(e.into()),
+                Err(e) => Err(e),
             },
             _ = timeout => Err(Error::DNSError("DNS query timeout".into()).into())
         }
@@ -264,11 +264,11 @@ impl Resolver {
                 return self.ip_exchange(message).await;
             }
 
-            if let Some(matched) = self.match_policy(&message) {
-                return Resolver::batch_exchange(&matched, message).await;
+            if let Some(matched) = self.match_policy(message) {
+                return Resolver::batch_exchange(matched, message).await;
             }
 
-            return Resolver::batch_exchange(&self.main, message).await;
+            Resolver::batch_exchange(&self.main, message).await
         };
 
         let rv = query.await;
@@ -305,7 +305,7 @@ impl Resolver {
             }
         }
 
-        return rv;
+        rv
     }
 
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
@@ -320,13 +320,13 @@ impl Resolver {
     }
 
     async fn ip_exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        if let Some(mut matched) = self.match_policy(message) {
-            return Resolver::batch_exchange(&mut matched, message).await;
+        if let Some(matched) = self.match_policy(message) {
+            return Resolver::batch_exchange(matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return Resolver::batch_exchange(&self.fallback.as_ref().unwrap(), message).await;
+            return Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message).await;
         }
 
         let main_query = Resolver::batch_exchange(&self.main, message);
@@ -335,7 +335,7 @@ impl Resolver {
             return main_query.await;
         }
 
-        let fallback_query = Resolver::batch_exchange(&self.fallback.as_ref().unwrap(), message);
+        let fallback_query = Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message);
 
         if let Ok(main_result) = main_query.await {
             let ip_list = Resolver::ip_list_of_message(&main_result);
@@ -355,7 +355,7 @@ impl Resolver {
             (&self.fallback, &self.fallback_domain_filters)
         {
             if let Some(domain) = Resolver::domain_name_of_message(message) {
-                for f in fallback_domain_filters.into_iter() {
+                for f in fallback_domain_filters.iter() {
                     if f.apply(domain.as_str()) {
                         return true;
                     }
@@ -389,7 +389,7 @@ impl Resolver {
 
     pub(crate) fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
         m.answers()
-            .into_iter()
+            .iter()
             .filter(|r| {
                 r.record_type() == rr::RecordType::A || r.record_type() == rr::RecordType::AAAA
             })
@@ -413,10 +413,10 @@ impl ClashResolver for Resolver {
             true => {
                 let fut1 = self
                     .resolve_v6(host, enhanced)
-                    .map(|x| x.map(|v6| v6.map(|v6| net::IpAddr::from(v6))));
+                    .map(|x| x.map(|v6| v6.map(net::IpAddr::from)));
                 let fut2 = self
                     .resolve_v4(host, enhanced)
-                    .map(|x| x.map(|v4| v4.map(|v4| net::IpAddr::from(v4))));
+                    .map(|x| x.map(|v4| v4.map(net::IpAddr::from)));
 
                 let futs = vec![fut1.boxed(), fut2.boxed()];
                 let r = futures::future::select_ok(futs).await?;
@@ -429,7 +429,7 @@ impl ClashResolver for Resolver {
             false => self
                 .resolve_v4(host, enhanced)
                 .await
-                .map(|ip| ip.map(|v4| net::IpAddr::from(v4))),
+                .map(|ip| ip.map(net::IpAddr::from)),
         }
     }
     async fn resolve_v4(
@@ -469,7 +469,7 @@ impl ClashResolver for Resolver {
                 net::IpAddr::V4(v4) => Ok(Some(*v4)),
                 _ => unreachable!("invalid IP family"),
             },
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -503,7 +503,7 @@ impl ClashResolver for Resolver {
                 _ => unreachable!("invalid IP family"),
             },
 
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -600,11 +600,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_udp_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "114.114.114.114".to_string(),
             port: 53,
-            net: DNSNetMode::UDP,
+            net: DNSNetMode::Udp,
             iface: None,
         })
         .await
@@ -615,11 +615,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_tcp_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "1.1.1.1".to_string(),
             port: 53,
-            net: DNSNetMode::TCP,
+            net: DNSNetMode::Tcp,
             iface: None,
         })
         .await
@@ -631,7 +631,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "network unstable on CI"]
     async fn test_dot_resolve() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: Some(Arc::new(Resolver::new_default().await)),
             host: "dns.google".to_string(),
             port: 853,
@@ -649,7 +649,7 @@ mod tests {
     async fn test_doh_resolve() {
         let default_resolver = Arc::new(Resolver::new_default().await);
 
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: Some(default_resolver.clone()),
             host: "cloudflare-dns.com".to_string(),
             port: 443,
@@ -665,11 +665,11 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_dhcp_client() {
-        let c = DnsClient::new(Opts {
+        let c = DnsClient::new_client(Opts {
             r: None,
             host: "en0".to_string(),
             port: 0,
-            net: DNSNetMode::DHCP,
+            net: DNSNetMode::Dhcp,
             iface: None,
         })
         .await
@@ -678,7 +678,7 @@ mod tests {
         test_client(c).await;
     }
 
-    async fn test_client(c: ThreadSafeDNSClient) -> () {
+    async fn test_client(c: ThreadSafeDNSClient) {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
         q.set_name(rr::Name::from_utf8("www.google.com").unwrap());
@@ -691,7 +691,7 @@ mod tests {
 
         let ips = Resolver::ip_list_of_message(&r);
 
-        assert!(ips.len() > 0);
+        assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());
         assert!(ips[0].is_ipv4());
 
@@ -707,7 +707,7 @@ mod tests {
 
         let ips = Resolver::ip_list_of_message(&r);
 
-        assert!(ips.len() > 0);
+        assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());
         assert!(ips[0].is_ipv6());
     }
