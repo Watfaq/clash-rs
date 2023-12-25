@@ -208,7 +208,7 @@ impl Dispatcher {
 
                 // populate fake ip for route matching
                 let sess = if resolver.fake_ip_enabled() {
-                    trace!("fake ip enabled");
+                    trace!("looking up fake ip for {sess}");
                     match sess.destination {
                         crate::session::SocksAddr::Ip(addr) => {
                             let ip = addr.ip();

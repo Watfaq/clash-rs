@@ -9,6 +9,18 @@ pub struct IPCIDR {
     pub no_resolve: bool,
 }
 
+impl std::fmt::Display for IPCIDR {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} {}",
+            self.target,
+            if self.match_src { "src" } else { "dst" },
+            self.ipnet
+        )
+    }
+}
+
 impl RuleMatcher for IPCIDR {
     fn apply(&self, sess: &Session) -> bool {
         match self.match_src {

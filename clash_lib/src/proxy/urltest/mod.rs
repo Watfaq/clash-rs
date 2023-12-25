@@ -12,7 +12,6 @@ use crate::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
-    p_debug,
     session::{Session, SocksAddr},
 };
 
@@ -106,7 +105,7 @@ impl Handler {
             }
         }
 
-        p_debug!(
+        debug!(
             "{} fastest {} is {}",
             self.name(),
             fastest.name(),

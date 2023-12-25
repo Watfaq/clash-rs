@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
 use tracing::error;
+use tracing::warn;
 
 use tracing::info;
 
@@ -203,6 +204,11 @@ impl OutboundManager {
 
                 OutboundProxyProtocol::Trojan(v) => {
                     handlers.insert(v.name.clone(), v.try_into()?);
+                }
+
+                OutboundProxyProtocol::Wireguard(wg) => {
+                    warn!("wireguard is experimental");
+                    handlers.insert(wg.name.clone(), wg.try_into()?);
                 }
 
                 p => {
