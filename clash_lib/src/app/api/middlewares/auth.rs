@@ -2,6 +2,7 @@ use axum::extract::Query;
 use axum::http::Request;
 use axum::{body::Body, response::Response};
 use futures::future::BoxFuture;
+
 use serde::Deserialize;
 use tower::{Layer, Service};
 
@@ -73,7 +74,7 @@ where
 
         let unauthorised = Response::builder()
             .status(http::StatusCode::UNAUTHORIZED)
-            .body(axum::body::boxed("unauthorized".to_string()))
+            .body("unauthorized".to_string().into())
             .unwrap();
 
         if self.is_websocket(&req) {

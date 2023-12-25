@@ -12,7 +12,7 @@ use boring::ssl::{SslConnector, SslMethod};
 use chrono::{DateTime, Utc};
 
 use futures::{stream::FuturesUnordered, StreamExt};
-use http::{Request, Version};
+use hyper::Request;
 use hyper_boring::HttpsConnector;
 use serde::Serialize;
 use tokio::sync::RwLock;
@@ -179,7 +179,7 @@ impl ProxyManager {
 
             let req = Request::get(url)
                 .header("Connection", "Close")
-                .version(Version::HTTP_11)
+                .version(hyper::Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
 
@@ -209,7 +209,7 @@ impl ProxyManager {
 
             let req2 = Request::get(url)
                 .header("Connection", "Close")
-                .version(Version::HTTP_11)
+                .version(hyper::Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
             let resp2 = TimedFuture::new(client.request(req2), None);

@@ -1,13 +1,13 @@
 use base64::Engine;
-use http::{Request, Response};
-use hyper::Body;
+
+use hyper::{Body, Request, Response};
 use tracing::warn;
 
 use crate::common::auth::ThreadSafeAuthenticator;
 
 fn parse_basic_proxy_authorization(req: &Request<Body>) -> Option<&str> {
     req.headers()
-        .get(http::header::PROXY_AUTHORIZATION)
+        .get(hyper::header::PROXY_AUTHORIZATION)
         .map(|v| v.to_str().unwrap_or_default())
         .map(|v| {
             if v.starts_with("Basic ") {
@@ -36,8 +36,8 @@ pub fn authenticate_req(
     authenticator: ThreadSafeAuthenticator,
 ) -> Option<Response<Body>> {
     let auth_resp = Response::builder()
-        .status(http::StatusCode::PROXY_AUTHENTICATION_REQUIRED)
-        .header(http::header::PROXY_AUTHENTICATE, "Basic")
+        .status(hyper::StatusCode::PROXY_AUTHENTICATION_REQUIRED)
+        .header(hyper::header::PROXY_AUTHENTICATE, "Basic")
         .body("Proxy Auth Required".into())
         .unwrap();
     let cred = parse_basic_proxy_authorization(req);

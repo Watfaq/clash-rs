@@ -3,10 +3,8 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     extract::{ws::Message, ConnectInfo, State, WebSocketUpgrade},
     response::IntoResponse,
-    Json,
 };
 
-use hyper::body::HttpBody;
 use tracing::warn;
 
 use crate::app::api::AppState;
@@ -22,10 +20,10 @@ pub async fn handle(
     .on_upgrade(move |mut socket| async move {
         let mut rx = state.log_source_tx.subscribe();
         while let Ok(evt) = rx.recv().await {
-            let res = Json(evt).into_response().data().await.unwrap().unwrap();
+            let res = serde_json::to_vec(&evt).unwrap();
 
             if let Err(e) = socket
-                .send(Message::Text(String::from_utf8(res.to_vec()).unwrap()))
+                .send(Message::Text(String::from_utf8(res).unwrap()))
                 .await
             {
                 warn!("ws send error: {}", e);

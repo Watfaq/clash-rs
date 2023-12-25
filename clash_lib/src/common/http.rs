@@ -5,8 +5,11 @@ use std::{
 
 use boring::ssl::{SslConnector, SslMethod};
 use futures::Future;
-use http::Uri;
-use hyper::client::connect::{Connected, Connection};
+
+use hyper::{
+    client::connect::{Connected, Connection},
+    Uri,
+};
 use hyper_boring::HttpsConnector;
 use tower::Service;
 

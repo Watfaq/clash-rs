@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures::Future;
-use http::Uri;
+use hyper::Uri;
 
 use tower::Service;
 

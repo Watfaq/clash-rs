@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::Uri;
+use hyper::Uri;
 use tracing::{debug, error, info};
 
 use super::dns::ThreadSafeDNSResolver;
