@@ -7,6 +7,12 @@ pub struct DomainSuffix {
     pub target: String,
 }
 
+impl std::fmt::Display for DomainSuffix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} suffix {}", self.target, self.suffix)
+    }
+}
+
 impl RuleMatcher for DomainSuffix {
     fn apply(&self, sess: &Session) -> bool {
         match &sess.destination {

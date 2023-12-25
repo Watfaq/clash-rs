@@ -33,7 +33,7 @@ pub mod trojan;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
-//pub mod wg;
+pub mod wg;
 
 pub mod converters;
 
@@ -47,13 +47,6 @@ mod transport;
 
 #[cfg(test)]
 pub mod mocks;
-
-#[macro_export]
-macro_rules! p_debug {
-    ($($arg:tt)*) => {
-        debug!(target: "proxy", $($arg)*)
-    };
-}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {

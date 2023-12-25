@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use http::Uri;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use super::dns::ThreadSafeDNSResolver;
 use super::remote_content_manager::providers::rule_provider::{
@@ -78,6 +78,10 @@ impl Router {
 
         for r in self.rules.iter() {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
+                debug!(
+                    "rule {r} local resolving domain {}",
+                    sess.destination.domain().unwrap()
+                );
                 if let Ok(ip) = self
                     .dns_resolver
                     .resolve(sess.destination.domain().unwrap(), false)

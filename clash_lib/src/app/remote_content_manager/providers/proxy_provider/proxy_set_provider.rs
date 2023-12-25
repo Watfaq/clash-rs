@@ -105,6 +105,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
+                            OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)

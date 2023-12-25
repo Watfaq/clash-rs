@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use erased_serde::Serialize;
 
@@ -14,7 +14,7 @@ pub mod port;
 pub mod process;
 pub mod ruleset;
 
-pub trait RuleMatcher: Send + Sync + Unpin {
+pub trait RuleMatcher: Send + Sync + Unpin + Display {
     /// check if the rule should apply to the session
     fn apply(&self, sess: &Session) -> bool;
 

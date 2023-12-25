@@ -54,6 +54,8 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "vmess")]
     Vmess(OutboundVmess),
     Hysteria2(OutboundHysteria2),
+    #[serde(rename = "wireguard")]
+    Wireguard(OutboundWireguard),
 }
 
 impl OutboundProxyProtocol {
@@ -66,6 +68,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Hysteria2(hysteria) => &hysteria.name,
+            OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
         }
     }
 }
@@ -89,6 +92,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(_) => write!(f, "{}", "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "{}", "Vmess"),
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "{}", "Hysteria2"),
+            OutboundProxyProtocol::Wireguard(_) => write!(f, "{}", "Wireguard"),
         }
     }
 }
@@ -174,6 +178,24 @@ pub struct OutboundVmess {
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundWireguard {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub private_key: String,
+    pub public_key: String,
+    pub preshared_key: Option<String>,
+    pub mtu: Option<u16>,
+    pub udp: Option<bool>,
+    pub ip: String,
+    pub ipv6: Option<String>,
+    pub remote_dns_resolve: Option<bool>,
+    pub dns: Option<Vec<String>>,
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

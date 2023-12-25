@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::session;
 
 use super::RuleMatcher;
@@ -6,6 +8,12 @@ use super::RuleMatcher;
 pub struct DomainKeyword {
     pub keyword: String,
     pub target: String,
+}
+
+impl Display for DomainKeyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} keyword {}", self.target, self.keyword)
+    }
 }
 
 impl RuleMatcher for DomainKeyword {

@@ -14,6 +14,12 @@ pub struct GeoIP {
     pub mmdb: Arc<mmdb::MMDB>,
 }
 
+impl std::fmt::Display for GeoIP {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} geoip {}", self.target, self.country_code)
+    }
+}
+
 impl RuleMatcher for GeoIP {
     fn apply(&self, sess: &Session) -> bool {
         match sess.destination {
