@@ -107,7 +107,7 @@ async fn update_provider(
             format!(
                 "update proxy provider {} failed with error {}",
                 provider.name(),
-                err.to_string()
+                err
             ),
         )
             .into_response(),

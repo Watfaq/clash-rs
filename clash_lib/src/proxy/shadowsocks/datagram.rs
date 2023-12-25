@@ -26,6 +26,7 @@ pub struct OutboundDatagramShadowsocks {
 }
 
 impl OutboundDatagramShadowsocks {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         inner: ProxySocket,
         remote_addr: (String, u16),

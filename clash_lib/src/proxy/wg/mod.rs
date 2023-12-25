@@ -68,6 +68,7 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: HandlerOpts) -> AnyOutboundHandler {
         Arc::new(Self {
             opts,
@@ -216,7 +217,7 @@ impl OutboundHandler for Handler {
 
         let ip = if self.opts.remote_dns_resolve
             && sess.destination.is_domain()
-            && self.opts.dns.as_ref().is_some_and(|x| x.len() > 0)
+            && self.opts.dns.as_ref().is_some_and(|x| !x.is_empty())
         {
             debug!(
                 "use remote dns to resolve domain: {}",

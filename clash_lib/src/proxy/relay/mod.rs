@@ -34,6 +34,7 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
@@ -70,12 +71,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
         let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
-            .filter_map(|x| async {
-                match x.remote_addr().await {
-                    Some(_) => Some(x),
-                    None => None,
-                }
-            })
+            .filter_map(|x| async { x.remote_addr().await.map(|_| x) })
             .collect()
             .await;
 
@@ -102,8 +98,8 @@ impl OutboundHandler for Handler {
                 .await?;
 
                 let mut next_sess = sess.clone();
-                for i in 1..proxies.len() {
-                    let proxy = proxies[i].clone();
+                for proxy in proxies.iter().skip(1) {
+                    let proxy = proxy.clone();
                     next_sess.destination =
                         proxy.remote_addr().await.expect("must have remote addr");
                     s = first.proxy_stream(s, &next_sess, resolver.clone()).await?;
@@ -111,7 +107,7 @@ impl OutboundHandler for Handler {
                     first = proxy;
                 }
 
-                s = last.proxy_stream(s, &sess, resolver).await?;
+                s = last.proxy_stream(s, sess, resolver).await?;
                 let chained = ChainedStreamWrapper::new(s);
                 chained.append_to_chain(self.name()).await;
                 Ok(Box::new(chained))

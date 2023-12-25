@@ -2,11 +2,11 @@ mod grpc;
 mod h2;
 #[path = "tls.rs"]
 mod internal_tls;
-mod websocket;
+mod ws;
 
-pub use websocket::WebsocketConn;
-pub use websocket::WebsocketEarlyDataConn;
-pub use websocket::WebsocketStreamBuilder;
+pub use ws::WebsocketConn;
+pub use ws::WebsocketEarlyDataConn;
+pub use ws::WebsocketStreamBuilder;
 
 pub use grpc::GrpcStream;
 pub use grpc::GrpcStreamBuilder;

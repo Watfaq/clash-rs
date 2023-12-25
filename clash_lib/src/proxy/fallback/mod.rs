@@ -8,7 +8,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            providers::proxy_provider::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
+            providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
     session::{Session, SocksAddr},
@@ -58,7 +58,7 @@ impl Handler {
                 return proxy.clone();
             }
         }
-        return proxies[0].clone();
+        proxies[0].clone()
     }
 }
 

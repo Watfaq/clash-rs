@@ -42,7 +42,7 @@ pub async fn wrap_stream(
 
     let connector = TlsConnector::from(Arc::new(tls_config));
     let dns_name = ServerName::try_from(opt.sni.as_str())
-        .expect(format!("invalid server name: {}", opt.sni).as_str());
+        .unwrap_or_else(|_| panic!("invalid server name: {}", opt.sni));
 
     let c = connector.connect(dns_name, stream).await.and_then(|x| {
         if let Some(expected_alpn) = expected_alpn {

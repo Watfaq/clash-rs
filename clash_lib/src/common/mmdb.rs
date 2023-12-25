@@ -13,16 +13,16 @@ use crate::{
     Error,
 };
 
-pub struct MMDB {
+pub struct Mmdb {
     reader: maxminddb::Reader<Vec<u8>>,
 }
 
-impl MMDB {
+impl Mmdb {
     pub async fn new<P: AsRef<Path>>(
         path: P,
         download_url: Option<String>,
         http_client: HttpClient,
-    ) -> Result<MMDB, Error> {
+    ) -> Result<Mmdb, Error> {
         debug!("mmdb path: {}", path.as_ref().to_string_lossy());
         let reader = Self::load_mmdb(path, download_url, &http_client).await?;
         Ok(Self { reader })
@@ -38,15 +38,14 @@ impl MMDB {
         if !mmdb_file.exists() {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
-                Self::download(url, &mmdb_file, &http_client)
+                Self::download(url, &mmdb_file, http_client)
                     .await
                     .map_err(|x| Error::InvalidConfig(format!("mmdb download failed: {}", x)))?;
             } else {
                 return Err(Error::InvalidConfig(format!(
                     "mmdb `{}` not found and mmdb_download_url is not set",
                     path.as_ref().to_string_lossy()
-                ))
-                .into());
+                )));
             }
         }
 
@@ -65,7 +64,7 @@ impl MMDB {
                     fs::remove_file(&mmdb_file)?;
                     if let Some(url) = download_url.as_ref() {
                         info!("downloading mmdb from {}", url);
-                        Self::download(url, &mmdb_file, &http_client)
+                        Self::download(url, &mmdb_file, http_client)
                             .await
                             .map_err(|x| {
                                 Error::InvalidConfig(format!("mmdb download failed: {}", x))
@@ -74,23 +73,21 @@ impl MMDB {
                             Error::InvalidConfig(format!(
                                 "cant open mmdb `{}`: {}",
                                 path.as_ref().to_string_lossy(),
-                                x.to_string()
+                                x
                             ))
                         })?)
                     } else {
-                        return Err(Error::InvalidConfig(format!(
+                        Err(Error::InvalidConfig(format!(
                             "mmdb `{}` not found and mmdb_download_url is not set",
                             path.as_ref().to_string_lossy()
-                        ))
-                        .into());
+                        )))
                     }
                 }
                 _ => Err(Error::InvalidConfig(format!(
                     "cant open mmdb `{}`: {}",
                     path.as_ref().to_string_lossy(),
-                    e.to_string()
-                ))
-                .into()),
+                    e
+                ))),
             },
         }
     }

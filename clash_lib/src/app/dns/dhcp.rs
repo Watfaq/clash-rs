@@ -86,8 +86,8 @@ impl DhcpClient {
             inner.clients = make_clients(
                 dns.into_iter()
                     .map(|s| NameServer {
-                        net: DNSNetMode::UDP,
-                        address: format!("{}:53", s.to_string()),
+                        net: DNSNetMode::Udp,
+                        address: format!("{}:53", s),
                         interface: None,
                     })
                     .collect(),
@@ -200,7 +200,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
             io::ErrorKind::Other,
             format!("no MAC address on interface: {}", iface),
         ))?
-        .split(":")
+        .split(':')
         .map(|x| {
             u8::from_str_radix(x, 16)
                 .map_err(|_x| io::Error::new(io::ErrorKind::Other, "malformed MAC addr"))
@@ -290,7 +290,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
             dns_debug!("DHCP timeout after 10 secs");
-            return Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"));
+            Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
         }
     }
 }

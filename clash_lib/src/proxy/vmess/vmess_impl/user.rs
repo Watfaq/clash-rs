@@ -16,7 +16,7 @@ pub fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
         let new_id = next_id(&prev_id);
         alter_id_list.push(ID {
             uuid: new_id,
-            cmd_key: primary.cmd_key.clone(),
+            cmd_key: primary.cmd_key,
         });
         prev_id = new_id;
     }

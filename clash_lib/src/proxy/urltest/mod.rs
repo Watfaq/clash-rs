@@ -71,7 +71,7 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         let mut fastest = proxies
             .first()
-            .expect(format!("no proxy found for {}", self.name()).as_str());
+            .unwrap_or_else(|| panic!("no proxy found for {}", self.name()));
 
         let mut fastest_delay = proxy_manager.last_delay(fastest.name()).await;
         let mut fast_not_exist = true;

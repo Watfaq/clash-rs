@@ -93,7 +93,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
-        let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
         match proxy.connect_stream(sess, resolver).await {
             Ok(s) => {
@@ -112,7 +112,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<AnyStream> {
         let proxies = self.get_proxies(false).await;
-        let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.proxy_stream(s, sess, resolver).await
     }
@@ -124,7 +124,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         let proxies = self.get_proxies(false).await;
-        let proxy = (self.inner.lock().await.strategy_fn)(proxies, &sess).await?;
+        let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.connect_datagram(sess, resolver).await
     }

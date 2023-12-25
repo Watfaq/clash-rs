@@ -57,8 +57,10 @@ pub struct Snapshot {
     connections: Vec<TrackerInfo>,
 }
 
+type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
+
 pub struct Manager {
-    connections: Arc<Mutex<HashMap<uuid::Uuid, (Tracked, Sender<()>)>>>,
+    connections: Arc<Mutex<ConnectionMap>>,
     upload_temp: AtomicI64,
     download_temp: AtomicI64,
     upload_blip: AtomicI64,

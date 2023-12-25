@@ -1,5 +1,5 @@
 mod cidr_trie;
-mod rule_provider;
+mod provider;
 
-pub use rule_provider::ThreadSafeRuleProvider;
-pub use rule_provider::{RuleProvider, RuleProviderImpl, RuleSetBehavior};
+pub use provider::ThreadSafeRuleProvider;
+pub use provider::{RuleProvider, RuleProviderImpl, RuleSetBehavior};

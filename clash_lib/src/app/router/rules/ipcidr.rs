@@ -2,14 +2,14 @@ use crate::app::router::rules::RuleMatcher;
 use crate::session::{Session, SocksAddr};
 
 #[derive(Clone)]
-pub struct IPCIDR {
+pub struct IpCidr {
     pub ipnet: ipnet::IpNet,
     pub target: String,
     pub match_src: bool,
     pub no_resolve: bool,
 }
 
-impl std::fmt::Display for IPCIDR {
+impl std::fmt::Display for IpCidr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -21,7 +21,7 @@ impl std::fmt::Display for IPCIDR {
     }
 }
 
-impl RuleMatcher for IPCIDR {
+impl RuleMatcher for IpCidr {
     fn apply(&self, sess: &Session) -> bool {
         match self.match_src {
             true => self.ipnet.contains(&sess.source.ip()),

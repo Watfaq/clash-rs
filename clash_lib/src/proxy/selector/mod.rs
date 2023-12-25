@@ -91,8 +91,8 @@ impl SelectorControl for Handler {
     }
 
     async fn current(&self) -> String {
-        let inner = self.inner.read().await.current.to_owned();
-        inner
+        
+        self.inner.read().await.current.to_owned()
     }
 }
 

@@ -52,7 +52,7 @@ async fn proxy(
     let client = Client::builder()
         .http1_title_case_headers(true)
         .http1_preserve_header_case(true)
-        .build(Connector::new(src.clone(), dispatcher.clone()));
+        .build(Connector::new(src, dispatcher.clone()));
 
     // TODO: handle other upgrades: https://github.com/hyperium/hyper/blob/master/examples/upgrades.rs
     if req.method() == Method::CONNECT {
@@ -78,8 +78,8 @@ async fn proxy(
             Ok(Response::new(Body::empty()))
         } else {
             Ok(Response::builder()
-                .status(hyper::StatusCode::BAD_REQUEST)
-                .body(format!("invalid request uri: {}", req.uri().to_string()).into())
+                .status(http::StatusCode::BAD_REQUEST)
+                .body(format!("invalid request uri: {}", req.uri()).into())
                 .unwrap())
         }
     } else {

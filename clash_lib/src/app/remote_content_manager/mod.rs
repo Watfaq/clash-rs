@@ -90,7 +90,6 @@ impl ProxyManager {
         for proxy in proxies {
             let proxy = proxy.clone();
             let url = url.to_owned();
-            let timeout = timeout.clone();
             let manager = self.clone();
             futs.push(tokio::spawn(async move {
                 manager
@@ -286,7 +285,7 @@ mod tests {
 
         assert!(manager.alive(PROXY_DIRECT).await);
         assert!(manager.last_delay(PROXY_DIRECT).await > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() > 0);
+        assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
 
         manager.report_alive(PROXY_DIRECT, false).await;
         assert!(!manager.alive(PROXY_DIRECT).await);

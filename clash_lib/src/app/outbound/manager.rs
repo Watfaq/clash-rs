@@ -172,6 +172,7 @@ impl OutboundManager {
 
     // API handlers end
 
+    #[allow(clippy::too_many_arguments)]
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
@@ -220,54 +221,54 @@ impl OutboundManager {
         let mut outbound_groups = outbound_groups;
         proxy_groups_dag_sort(&mut outbound_groups)?;
 
-        for outbound_group in outbound_groups.iter() {
-            fn make_provider_from_proxies(
-                name: &str,
-                proxies: &Vec<String>,
-                interval: u64,
-                lazy: bool,
-                handlers: &HashMap<String, AnyOutboundHandler>,
-                proxy_manager: ProxyManager,
-                proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
-                provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
-            ) -> Result<ThreadSafeProxyProvider, Error> {
-                if name == PROXY_DIRECT || name == PROXY_REJECT {
-                    return Err(Error::InvalidConfig(format!(
-                        "proxy group {} is reserved",
-                        name
-                    )));
-                }
-                let proxies = proxies
-                    .into_iter()
-                    .map(|x| {
-                        handlers
-                            .get(x)
-                            .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
-                            .map(Clone::clone)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let hc = HealthCheck::new(
-                    proxies.clone(),
-                    DEFAULT_LATENCY_TEST_URL.to_owned(),
-                    interval,
-                    lazy,
-                    proxy_manager.clone(),
-                )
-                .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
-
-                let pd = Arc::new(RwLock::new(
-                    PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
-                        Error::InvalidConfig(format!("invalid provider config: {}", x))
-                    })?,
-                ));
-
-                proxy_providers.push(pd.clone());
-                provider_registry.insert(name.to_owned(), pd.clone());
-
-                Ok(pd)
+        #[allow(clippy::too_many_arguments)]
+        fn make_provider_from_proxies(
+            name: &str,
+            proxies: &[String],
+            interval: u64,
+            lazy: bool,
+            handlers: &HashMap<String, AnyOutboundHandler>,
+            proxy_manager: ProxyManager,
+            proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
+            provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
+        ) -> Result<ThreadSafeProxyProvider, Error> {
+            if name == PROXY_DIRECT || name == PROXY_REJECT {
+                return Err(Error::InvalidConfig(format!(
+                    "proxy group {} is reserved",
+                    name
+                )));
             }
+            let proxies = proxies
+                .iter()
+                .map(|x| {
+                    handlers
+                        .get(x)
+                        .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
+                        .map(Clone::clone)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
+            let hc = HealthCheck::new(
+                proxies.clone(),
+                DEFAULT_LATENCY_TEST_URL.to_owned(),
+                interval,
+                lazy,
+                proxy_manager.clone(),
+            )
+            .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+
+            let pd = Arc::new(RwLock::new(
+                PlainProvider::new(name.to_owned(), proxies, hc)
+                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
+            ));
+
+            proxy_providers.push(pd.clone());
+            provider_registry.insert(name.to_owned(), pd.clone());
+
+            Ok(pd)
+        }
+
+        for outbound_group in outbound_groups.iter() {
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
                     if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
@@ -302,7 +303,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -351,7 +352,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -402,7 +403,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -452,7 +453,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -501,7 +502,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
 
                             providers.push(provider);
@@ -576,7 +577,7 @@ impl OutboundManager {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url
                             .parse::<Uri>()
-                            .expect(format!("invalid provider url: {}", http.url).as_str()),
+                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),

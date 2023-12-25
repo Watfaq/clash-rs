@@ -155,7 +155,7 @@ impl TryFrom<def::Config> for Config {
                         )));
                     }
                     proxy_names.push(name.clone());
-                    rv.insert(String::from(name), proxy);
+                    rv.insert(name, proxy);
                     Ok(rv)
                 },
             )?,
@@ -168,14 +168,14 @@ impl TryFrom<def::Config> for Config {
                                 Error::InvalidConfig(format!(
                                     "proxy group: {}: {}",
                                     name.as_str().expect("proxy group name must be string"),
-                                    x.to_string()
+                                    x
                                 ))
                             } else {
                                 Error::InvalidConfig("proxy group name missing".to_string())
                             }
                         },
                     )?);
-                    proxy_names.push(group.name().into());
+                    proxy_names.push(group.name());
                     rv.insert(group.name().to_string(), group);
                     Ok::<HashMap<String, OutboundProxy>, Error>(rv)
                 },

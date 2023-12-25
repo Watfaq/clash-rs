@@ -77,7 +77,7 @@ impl FakeDns {
 
         let ip = self.get(host).await;
         self.store.pub_by_host(host, ip).await;
-        return ip;
+        ip
     }
 
     pub async fn reverse_lookup(&mut self, ip: net::IpAddr) -> Option<String> {
