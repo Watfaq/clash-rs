@@ -24,7 +24,15 @@ impl MMDB {
         http_client: HttpClient,
     ) -> Result<MMDB, Error> {
         debug!("mmdb path: {}", path.as_ref().to_string_lossy());
+        let reader = Self::load_mmdb(path, download_url, &http_client).await?;
+        Ok(Self { reader })
+    }
 
+    async fn load_mmdb<P: AsRef<Path>>(
+        path: P,
+        download_url: Option<String>,
+        http_client: &HttpClient,
+    ) -> Result<maxminddb::Reader<Vec<u8>>, Error> {
         let mmdb_file = path.as_ref().to_path_buf();
 
         if !mmdb_file.exists() {
@@ -43,7 +51,7 @@ impl MMDB {
         }
 
         match maxminddb::Reader::open_readfile(&path) {
-            Ok(r) => Ok(MMDB { reader: r }),
+            Ok(r) => Ok(r),
             Err(e) => match e {
                 maxminddb::MaxMindDBError::InvalidDatabaseError(_)
                 | maxminddb::MaxMindDBError::IoError(_) => {
@@ -62,15 +70,13 @@ impl MMDB {
                             .map_err(|x| {
                                 Error::InvalidConfig(format!("mmdb download failed: {}", x))
                             })?;
-                        Ok(MMDB {
-                            reader: maxminddb::Reader::open_readfile(&path).map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "cant open mmdb `{}`: {}",
-                                    path.as_ref().to_string_lossy(),
-                                    x.to_string()
-                                ))
-                            })?,
-                        })
+                        Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
+                            Error::InvalidConfig(format!(
+                                "cant open mmdb `{}`: {}",
+                                path.as_ref().to_string_lossy(),
+                                x.to_string()
+                            ))
+                        })?)
                     } else {
                         return Err(Error::InvalidConfig(format!(
                             "mmdb `{}` not found and mmdb_download_url is not set",
@@ -89,8 +95,8 @@ impl MMDB {
         }
     }
 
-    #[async_recursion(?Send)]
-    async fn download<P: AsRef<Path>>(
+    #[async_recursion]
+    async fn download<P: AsRef<Path> + std::marker::Send>(
         url: &str,
         path: P,
         http_client: &HttpClient,
@@ -129,10 +135,9 @@ impl MMDB {
         Ok(())
     }
 
-    pub fn lookup(&self, ip: IpAddr) -> anyhow::Result<geoip2::Country> {
+    pub fn lookup(&self, ip: IpAddr) -> std::io::Result<geoip2::Country> {
         self.reader
-            .lookup(ip)
+            .lookup::<geoip2::Country>(ip)
             .map_err(map_io_error)
-            .map_err(|x| x.into())
     }
 }
