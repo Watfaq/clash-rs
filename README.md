@@ -27,7 +27,7 @@ A custom protocol, rule based network proxy software.
 
 - Linux
 - macOS
-- Windows(Untested)
+- Windows
   - You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to the same directory as your executable and run you program as administrator.
 - iOS - [TestFlight](https://testflight.apple.com/join/cLy4Ub5C) 
 
