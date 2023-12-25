@@ -25,6 +25,7 @@ pub mod mixed;
 pub(crate) mod datagram;
 mod options;
 
+pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
@@ -109,6 +110,7 @@ pub enum OutboundType {
     Vmess,
     Trojan,
     WireGuard,
+    Hysteria2,
 
     #[serde(rename = "URLTest")]
     UrlTest,

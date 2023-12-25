@@ -1,7 +1,7 @@
 ---
-port: 8888
+port: 8891
 socks-port: 8889
-mixed-port: 8899
+mixed-port: 8888
 
 
 dns:
@@ -31,9 +31,9 @@ dns:
   nameserver:
     - 114.114.114.114 # default value
     - 8.8.8.8 # default value
-    - tls://dns.google:853 # DNS over TLS
-    - https://1.1.1.1/dns-query # DNS over HTTPS
-    - dhcp://en0 # dns from dhcp
+    # - tls://dns.google:853 # DNS over TLS
+    # - https://1.1.1.1/dns-query # DNS over HTTPS
+    # - dhcp://en0 # dns from dhcp
 
 allow-lan: true
 mode: rule
@@ -43,22 +43,17 @@ experimental:
   ignore-resolve-fail: true
 
 proxies:
-  - name: "ss-01"
-    type: ss
-    server: 10.0.0.13
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
-    udp: true
+  - name: "local"
+    type: Hysteria2
+    server: 127.0.0.1
+    port: 10086
+    password: "passwd"
+    sni: example.com
+    skip-cert-verify: true
+    obfs: salamander
+    obfs-password: "obfs"
 
-  - name: "ss-02"
-    type: ss
-    server: 10.0.0.13
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
-    udp: true
 
 rules:
-  - MATCH, ss-01
+  - MATCH, local
 ...
