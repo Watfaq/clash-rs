@@ -80,7 +80,7 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
         let name = queue.pop_front().unwrap().to_owned();
         let node = graph
             .get(&name)
-            .expect(format!("node {} not found", &name).as_str());
+            .unwrap_or_else(|| panic!("node {} not found", &name));
 
         if node.borrow().proto.is_some() {
             index += 1;
@@ -102,7 +102,7 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
         graph.remove(&name);
     }
 
-    if graph.len() == 0 {
+    if graph.is_empty() {
         return Ok(());
     }
 
@@ -142,7 +142,7 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
         }
     }
 
-    while queue.len() > 0 {
+    while !queue.is_empty() {
         let name = queue.first().unwrap().to_owned();
         let node = graph.get(&name).unwrap();
 
@@ -162,10 +162,10 @@ pub fn proxy_groups_dag_sort(groups: &mut Vec<OutboundGroupProtocol>) -> Result<
 
     let looped_groups: Vec<String> = graph.keys().map(|s| s.to_owned()).collect();
 
-    return Err(Error::InvalidConfig(format!(
+    Err(Error::InvalidConfig(format!(
         "loop detected in proxy groups: {:?}",
         looped_groups
-    )));
+    )))
 }
 
 #[cfg(test)]

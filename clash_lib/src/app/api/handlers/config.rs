@@ -99,7 +99,7 @@ async fn update_configs(
     let g = state.global_state.lock().await;
     match (req.path, req.payload) {
         (_, Some(payload)) => {
-            let msg = format!("config reloading from payload");
+            let msg = "config reloading from payload".to_string();
             let cfg = crate::Config::Str(payload);
             match g.reload_tx.send(cfg).await {
                 Ok(_) => (StatusCode::ACCEPTED, msg).into_response(),
@@ -208,10 +208,9 @@ async fn patch_configs(
 
         inbound_manager.rebuild_listeners(ports);
 
-        global_state
+        if let Some(h) = global_state
             .inbound_listener_handle
-            .take()
-            .map(|h| h.abort());
+            .take() { h.abort() }
 
         let r = inbound_manager.get_runner().unwrap();
 

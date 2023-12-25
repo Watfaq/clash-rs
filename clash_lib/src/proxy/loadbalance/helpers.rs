@@ -19,7 +19,7 @@ fn get_key(sess: &Session) -> String {
     match &sess.destination {
         crate::session::SocksAddr::Ip(addr) => addr.ip().to_string(),
         crate::session::SocksAddr::Domain(host, _) => DEFAULT_PROVIDER
-            .effective_tld_plus_one(&host)
+            .effective_tld_plus_one(host)
             .map(|s| s.to_string())
             .unwrap_or_default(),
     }
@@ -49,7 +49,7 @@ pub fn strategy_rr() -> StrategyFn {
 pub fn strategy_consistent_hashring() -> StrategyFn {
     let max_retry = 5;
     Box::new(move |proxies, sess| {
-        let key = murmur3_32(&mut Cursor::new(get_key(&sess)), 0).unwrap() as u64;
+        let key = murmur3_32(&mut Cursor::new(get_key(sess)), 0).unwrap() as u64;
         let buckets = proxies.len() as i32;
         for _ in 0..max_retry {
             let index = jump_hash(key, buckets);
@@ -57,9 +57,9 @@ pub fn strategy_consistent_hashring() -> StrategyFn {
                 return Box::pin(futures::future::ok(proxy.clone()));
             }
         }
-        return Box::pin(futures::future::err(std::io::Error::new(
+        Box::pin(futures::future::err(std::io::Error::new(
             std::io::ErrorKind::Other,
             "no proxy found",
-        )));
+        )))
     })
 }

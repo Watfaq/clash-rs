@@ -121,7 +121,7 @@ impl Router {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url
                             .parse::<Uri>()
-                            .expect(format!("invalid provider url: {}", http.url).as_str()),
+                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),
@@ -268,7 +268,7 @@ pub fn map_rule_type(
                 target,
                 rule_provider_registry
                     .get(&rule_set)
-                    .expect(format!("rule provider {} not found", rule_set).as_str())
+                    .unwrap_or_else(|| panic!("rule provider {} not found", rule_set))
                     .clone(),
             )),
             None => unreachable!("you shouldn't next rule-set within another rule-set"),

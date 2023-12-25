@@ -164,7 +164,7 @@ impl TrackedStream {
 impl Drop for TrackedStream {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
-        let _ = self.manager.untrack(self.id());
+        self.manager.untrack(self.id());
     }
 }
 
@@ -400,7 +400,7 @@ impl TrackedDatagram {
 impl Drop for TrackedDatagram {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
-        let _ = self.manager.untrack(self.id());
+        self.manager.untrack(self.id());
     }
 }
 

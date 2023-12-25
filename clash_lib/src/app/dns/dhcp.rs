@@ -87,7 +87,7 @@ impl DhcpClient {
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::UDP,
-                        address: format!("{}:53", s.to_string()),
+                        address: format!("{}:53", s),
                         interface: None,
                     })
                     .collect(),
@@ -200,7 +200,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
             io::ErrorKind::Other,
             format!("no MAC address on interface: {}", iface),
         ))?
-        .split(":")
+        .split(':')
         .map(|x| {
             u8::from_str_radix(x, 16)
                 .map_err(|_x| io::Error::new(io::ErrorKind::Other, "malformed MAC addr"))

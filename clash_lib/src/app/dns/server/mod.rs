@@ -72,8 +72,8 @@ impl DnsHandler {
         m.set_message_type(request.message_type());
         m.set_recursion_desired(request.recursion_desired());
         m.add_query(request.query().original().clone());
-        m.add_additionals(request.additionals().into_iter().map(Clone::clone));
-        m.add_name_servers(request.name_servers().into_iter().map(Clone::clone));
+        m.add_additionals(request.additionals().iter().map(Clone::clone));
+        m.add_name_servers(request.name_servers().iter().map(Clone::clone));
         for sig0 in request.sig0() {
             m.add_sig0(sig0.clone());
         }

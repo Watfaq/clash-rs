@@ -128,7 +128,7 @@ impl DnsClient {
                     opts.host.parse::<net::IpAddr>().map_err(|x| {
                         Error::DNSError(format!(
                             "resolve DNS hostname error: {}, {}",
-                            x.to_string(),
+                            x,
                             opts.host
                         ))
                     })?
@@ -282,7 +282,7 @@ async fn dns_stream_builder(
                 // TODO: simplify this match
                 match iface {
                     Some(iface) => match iface {
-                        Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                        Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
                         _ => None,
                     },
                     _ => None,
@@ -300,7 +300,7 @@ async fn dns_stream_builder(
                     net::SocketAddr::new(addr.ip(), addr.port()),
                     match iface {
                         Some(iface) => match iface {
-                            Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                            Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
                             _ => None,
                         },
                         _ => None,
@@ -325,7 +325,7 @@ async fn dns_stream_builder(
                     net::SocketAddr::new(addr.ip(), addr.port()),
                     match iface {
                         Some(iface) => match iface {
-                            Interface::IpAddr(ip) => Some(SocketAddr::new(ip.clone(), 0)),
+                            Interface::IpAddr(ip) => Some(SocketAddr::new(*ip, 0)),
                             _ => None,
                         },
                         _ => None,
@@ -357,7 +357,7 @@ async fn dns_stream_builder(
             if let Some(iface) = iface {
                 match iface {
                     Interface::IpAddr(ip) => {
-                        stream_builder.bind_addr(net::SocketAddr::new(ip.clone(), 0))
+                        stream_builder.bind_addr(net::SocketAddr::new(*ip, 0))
                     }
                     _ => {}
                 }

@@ -38,7 +38,7 @@ impl tower::Service<Uri> for Connector {
     }
 
     fn call(&mut self, url: Uri) -> Self::Future {
-        let src = self.src.clone();
+        let src = self.src;
         let dispatcher = self.dispatcher.clone();
 
         let destination = maybe_socks_addr(&url);

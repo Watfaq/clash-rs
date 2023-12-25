@@ -98,8 +98,7 @@ pub fn setup_logging(
         .with_default_directive(
             format!("clash={}", level)
                 .parse::<Directive>()
-                .unwrap()
-                .into(),
+                .unwrap(),
         )
         .from_env_lossy();
 

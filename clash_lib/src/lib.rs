@@ -152,7 +152,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         &cwd,
         opts.log_file,
     )
-    .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x.to_string())))?;
+    .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x)))?;
 
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -250,16 +250,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let inbound_listener_handle = tokio::spawn(inbound_runner);
 
     let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
-    let tun_runner_handle = if let Some(tun_runner) = tun_runner {
-        Some(tokio::spawn(tun_runner))
-    } else {
-        None
-    };
+    let tun_runner_handle = tun_runner.map(tokio::spawn);
 
     debug!("initializing dns listener");
     let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
         .await
-        .map(|l| tokio::spawn(l));
+        .map(tokio::spawn);
 
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
 
@@ -416,16 +412,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             let inbound_listener_handle = tokio::spawn(inbound_runner);
 
             let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
-            let tun_runner_handle = if let Some(tun_runner) = tun_runner {
-                Some(tokio::spawn(tun_runner))
-            } else {
-                None
-            };
+            let tun_runner_handle = tun_runner.map(tokio::spawn);
 
             debug!("initializing dns listener");
             let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
                 .await
-                .map(|l| tokio::spawn(l));
+                .map(tokio::spawn);
 
             g.inbound_listener_handle = Some(inbound_listener_handle);
             g.tunnel_listener_handle = tun_runner_handle;

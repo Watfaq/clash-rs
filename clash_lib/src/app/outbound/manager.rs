@@ -238,7 +238,7 @@ impl OutboundManager {
                     )));
                 }
                 let proxies = proxies
-                    .into_iter()
+                    .iter()
                     .map(|x| {
                         handlers
                             .get(x)
@@ -302,7 +302,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -351,7 +351,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -402,7 +402,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -452,7 +452,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
                             providers.push(provider);
                         }
@@ -501,7 +501,7 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .expect(format!("provider {} not found", provider_name).as_str())
+                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
                                 .clone();
 
                             providers.push(provider);
@@ -576,7 +576,7 @@ impl OutboundManager {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url
                             .parse::<Uri>()
-                            .expect(format!("invalid provider url: {}", http.url).as_str()),
+                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),

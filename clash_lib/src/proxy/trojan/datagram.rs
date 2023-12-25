@@ -94,7 +94,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             payload.put_slice(b"\r\n");
             payload.put_slice(&data);
 
-            while payload.len() != 0 {
+            while !payload.is_empty() {
                 let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
 
                 payload.advance(n);

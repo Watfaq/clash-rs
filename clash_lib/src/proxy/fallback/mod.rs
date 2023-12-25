@@ -58,7 +58,7 @@ impl Handler {
                 return proxy.clone();
             }
         }
-        return proxies[0].clone();
+        proxies[0].clone()
     }
 }
 

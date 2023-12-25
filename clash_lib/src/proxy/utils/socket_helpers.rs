@@ -26,7 +26,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
                 .with_interval(Duration::from_secs(1))
                 .with_retries(3),
         )?;
-        Ok(TcpStream::from_std(s.into())?)
+        TcpStream::from_std(s.into())
     }
     #[cfg(target_os = "windows")]
     {
@@ -43,7 +43,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
 fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
     match iface {
         // TODO: should this be ever used vs. calling .bind(2) from the caller side?
-        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(ip.clone(), 0).into()),
+        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(*ip, 0).into()),
         Interface::Name(name) => {
             #[cfg(target_vendor = "apple")]
             {
@@ -127,7 +127,7 @@ pub async fn new_udp_socket(
     };
 
     if let Some(src) = src {
-        socket.bind(&src.clone().into())?;
+        socket.bind(&(*src).into())?;
     }
 
     if let Some(iface) = iface {

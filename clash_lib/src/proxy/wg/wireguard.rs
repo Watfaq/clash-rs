@@ -67,8 +67,8 @@ impl WireguardTunnel {
     ) -> Result<Self, Error> {
         let source_peer_ip = config.source_peer_ip;
         let peer = Tunn::new(
-            config.private_key.into(),
-            config.endpoint_public_key.into(),
+            config.private_key,
+            config.endpoint_public_key,
             config.preshared_key.map(|x| x.to_bytes()),
             config.keepalive_seconds,
             0,
@@ -108,7 +108,7 @@ impl WireguardTunnel {
                 error!("failed to encapsulate packet: {e:?}");
             }
             boringtun::noise::TunnResult::WriteToNetwork(packet) => {
-                self.udp.send_to(&packet, self.endpoint).await?;
+                self.udp.send_to(packet, self.endpoint).await?;
             }
             _ => {
                 error!("unexpected result from encapsulate");
@@ -197,7 +197,7 @@ impl WireguardTunnel {
                 TunnResult::WriteToNetwork(packet) => {
                     match self
                         .udp
-                        .send_to(&packet, self.endpoint)
+                        .send_to(packet, self.endpoint)
                         .instrument(trace_span!(
                             "wg_send",
                             endpoint = %self.endpoint,
@@ -307,7 +307,7 @@ impl WireguardTunnel {
                 error!("wireguard error: {e:?}");
             }
             TunnResult::WriteToNetwork(packet) => {
-                match self.udp.send_to(&packet, self.endpoint).await {
+                match self.udp.send_to(packet, self.endpoint).await {
                     Ok(_) => {}
                     Err(e) => {
                         error!("failed to send packet: {}", e);

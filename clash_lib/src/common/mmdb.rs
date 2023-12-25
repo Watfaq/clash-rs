@@ -38,15 +38,14 @@ impl MMDB {
         if !mmdb_file.exists() {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
-                Self::download(url, &mmdb_file, &http_client)
+                Self::download(url, &mmdb_file, http_client)
                     .await
                     .map_err(|x| Error::InvalidConfig(format!("mmdb download failed: {}", x)))?;
             } else {
                 return Err(Error::InvalidConfig(format!(
                     "mmdb `{}` not found and mmdb_download_url is not set",
                     path.as_ref().to_string_lossy()
-                ))
-                .into());
+                )));
             }
         }
 
@@ -65,7 +64,7 @@ impl MMDB {
                     fs::remove_file(&mmdb_file)?;
                     if let Some(url) = download_url.as_ref() {
                         info!("downloading mmdb from {}", url);
-                        Self::download(url, &mmdb_file, &http_client)
+                        Self::download(url, &mmdb_file, http_client)
                             .await
                             .map_err(|x| {
                                 Error::InvalidConfig(format!("mmdb download failed: {}", x))
@@ -74,23 +73,21 @@ impl MMDB {
                             Error::InvalidConfig(format!(
                                 "cant open mmdb `{}`: {}",
                                 path.as_ref().to_string_lossy(),
-                                x.to_string()
+                                x
                             ))
                         })?)
                     } else {
-                        return Err(Error::InvalidConfig(format!(
+                        Err(Error::InvalidConfig(format!(
                             "mmdb `{}` not found and mmdb_download_url is not set",
                             path.as_ref().to_string_lossy()
-                        ))
-                        .into());
+                        )))
                     }
                 }
                 _ => Err(Error::InvalidConfig(format!(
                     "cant open mmdb `{}`: {}",
                     path.as_ref().to_string_lossy(),
-                    e.to_string()
-                ))
-                .into()),
+                    e
+                ))),
             },
         }
     }

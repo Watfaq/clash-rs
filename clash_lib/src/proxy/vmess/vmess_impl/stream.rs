@@ -419,8 +419,8 @@ where
                     )[..12];
 
                     let buf = crypto::aes_gcm_open(
-                        &aead_response_header_payload_encryption_key,
-                        &aead_response_header_payload_encryption_iv,
+                        aead_response_header_payload_encryption_key,
+                        aead_response_header_payload_encryption_iv,
                         this.read_buf.split().as_ref(),
                         None,
                     )

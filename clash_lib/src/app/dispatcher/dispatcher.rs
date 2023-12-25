@@ -299,7 +299,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = sess.destination.clone().into();
+                                packet.src_addr = sess.destination.clone();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!("UDP NAT for packet: {:?}, session: {}", packet, sess);
@@ -394,7 +394,7 @@ struct TimeoutUdpSessionManager {
 impl Drop for TimeoutUdpSessionManager {
     fn drop(&mut self) {
         trace!("dropping timeout udp session manager");
-        self.cleaner.take().map(|x| x.abort());
+        if let Some(x) = self.cleaner.take() { x.abort() }
     }
 }
 

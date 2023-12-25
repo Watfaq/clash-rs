@@ -143,13 +143,13 @@ impl RuleType {
                 target: target.to_string(),
                 port: payload
                     .parse()
-                    .expect(format!("invalid port: {}", payload).as_str()),
+                    .unwrap_or_else(|_| panic!("invalid port: {}", payload)),
             }),
             "DST-PORT" => Ok(RuleType::DSTPort {
                 target: target.to_string(),
                 port: payload
                     .parse()
-                    .expect(format!("invalid port: {}", payload).as_str()),
+                    .unwrap_or_else(|_| panic!("invalid port: {}", payload)),
             }),
             "PROCESS-NAME" => Ok(RuleType::ProcessName {
                 process_name: payload.to_string(),
@@ -178,7 +178,7 @@ impl TryFrom<String> for RuleType {
     type Error = crate::Error;
 
     fn try_from(line: String) -> Result<Self, Self::Error> {
-        let parts = line.split(",").map(str::trim).collect::<Vec<&str>>();
+        let parts = line.split(',').map(str::trim).collect::<Vec<&str>>();
 
         match parts.as_slice() {
             [proto, target] => RuleType::new(proto, "", target, None),

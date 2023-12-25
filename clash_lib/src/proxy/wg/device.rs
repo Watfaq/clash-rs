@@ -130,7 +130,7 @@ impl DeviceManager {
 
     pub async fn look_up_dns(&self, host: &str, server: SocketAddr) -> Option<IpAddr> {
         debug!("looking up {} on {}", host, server);
-        let mut socket = Self::new_udp_socket(&self).await;
+        let mut socket = Self::new_udp_socket(self).await;
         let mut msg = hickory_proto::op::Message::new();
 
         msg.add_query({
@@ -147,7 +147,7 @@ impl DeviceManager {
         msg.set_recursion_desired(true);
 
         let pkt = UdpPacket::new(
-            msg.to_vec().unwrap().into(),
+            msg.to_vec().unwrap(),
             SocksAddr::any_ipv4(),
             server.into(),
         );

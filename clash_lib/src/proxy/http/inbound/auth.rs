@@ -24,9 +24,9 @@ fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
         .ok()?;
     let s = std::str::from_utf8(&decoded).ok()?;
 
-    let mut parts = s.splitn(2, ":");
-    let user = parts.next()?;
-    let pass = parts.next()?;
+    let (user, pass) = s.split_once(':')?;
+    
+    
     Some((user.to_owned(), pass.to_owned()))
 }
 

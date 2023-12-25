@@ -33,7 +33,7 @@ impl Service<Uri> for LocalConnector {
     fn call(&mut self, remote: Uri) -> Self::Future {
         let host = remote
             .host()
-            .expect(format!("invalid url: {}", remote.to_string()).as_str())
+            .unwrap_or_else(|| panic!("invalid url: {}", remote))
             .to_owned();
 
         let dns = self.0.clone();

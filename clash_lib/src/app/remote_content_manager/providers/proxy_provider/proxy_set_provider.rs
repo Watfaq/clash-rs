@@ -109,12 +109,12 @@ impl ProxySetProvider {
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
                 } else {
-                    return Err(Error::InvalidConfig(format!("{}: proxies is empty", n)).into());
+                    Err(Error::InvalidConfig(format!("{}: proxies is empty", n)).into())
                 }
             },
         );
 
-        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater.into()));
+        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
         Ok(Self { fetcher, inner })
     }
 }
@@ -183,10 +183,7 @@ impl ProxyProvider for ProxySetProvider {
         self.inner
             .read()
             .await
-            .proxies
-            .iter()
-            .map(|x| x.clone())
-            .collect()
+            .proxies.to_vec()
     }
 
     async fn touch(&self) {

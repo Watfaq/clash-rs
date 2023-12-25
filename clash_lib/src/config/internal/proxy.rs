@@ -29,7 +29,7 @@ pub fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
     Error::InvalidConfig(if let Some(loc) = x.location() {
         format!(
             "{}, line, {}, column: {}",
-            x.to_string(),
+            x,
             loc.line(),
             loc.column()
         )
@@ -87,9 +87,9 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
-            OutboundProxyProtocol::Trojan(_) => write!(f, "{}", "Trojan"),
-            OutboundProxyProtocol::Vmess(_) => write!(f, "{}", "Vmess"),
-            OutboundProxyProtocol::Wireguard(_) => write!(f, "{}", "Wireguard"),
+            OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
+            OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
+            OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
         }
     }
 }

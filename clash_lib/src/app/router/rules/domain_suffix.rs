@@ -33,6 +33,6 @@ impl RuleMatcher for DomainSuffix {
     }
 
     fn type_name(&self) -> &str {
-        "DomainSuffix".into()
+        "DomainSuffix"
     }
 }

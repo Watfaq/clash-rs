@@ -100,7 +100,7 @@ impl Sink<UdpPacket> for TunDatagram {
                 Err(err) => Poll::Ready(Err(new_io_error(err.to_string().as_str()))),
             }
         } else {
-            Poll::Ready(Err(new_io_error("no packet to send".into())))
+            Poll::Ready(Err(new_io_error("no packet to send")))
         }
     }
 

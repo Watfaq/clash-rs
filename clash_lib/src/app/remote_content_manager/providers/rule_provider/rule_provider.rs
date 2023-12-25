@@ -247,7 +247,7 @@ fn make_classical_rules(
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
-        let parts = rule.split(",").map(str::trim).collect::<Vec<&str>>();
+        let parts = rule.split(',').map(str::trim).collect::<Vec<&str>>();
 
         // the rule inside RULE-SET is slightly different from the rule in config
         // the target is always empty as it's holded in the RULE-SET container
