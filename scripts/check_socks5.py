@@ -6,7 +6,7 @@ def check_socks5_tun():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     req = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x05\x62\x61\x69\x64\x75\x03\x63\x6f\x6d\x00\x00\x01\x00\x01"
-    s.sendto(req, ("8.8.8.8", 53))
+    s.sendto(req, ("dns.google.com", 53))
 
     print(s.getsockname())
 

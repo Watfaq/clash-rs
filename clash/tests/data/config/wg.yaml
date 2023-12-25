@@ -50,6 +50,9 @@ proxies:
     ip: 192.168.2.2
     public-key: MAZPwQBniuXmQf5w8BwM3owlO7Kw07rzyZUXxOvsF3w=
     allowed-ips: ['0.0.0.0/0']
+    remote-dns-resolve: true
+    dns:
+      - 1.1.1.1
     udp: true
 
 

@@ -6,6 +6,7 @@ use std::{
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
+use futures::{SinkExt, StreamExt};
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::Device,
@@ -20,9 +21,9 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
     Mutex,
 };
-use tracing::{error, trace, trace_span, warn, Instrument};
+use tracing::{debug, error, trace, trace_span, warn, Instrument};
 
-use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
+use crate::{app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr};
 
 use super::{
     events::PortProtocol,
@@ -40,12 +41,7 @@ enum Socket {
         Sender<Bytes>,
         Receiver<Bytes>,
     ),
-    Udp(
-        udp::Socket<'static>,
-        SocketAddr,
-        Sender<UdpPacket>,
-        Receiver<UdpPacket>,
-    ),
+    Udp(udp::Socket<'static>, Sender<UdpPacket>, Receiver<UdpPacket>),
 }
 
 enum Transfer {
@@ -59,7 +55,9 @@ enum SenderType {
 }
 
 pub struct DeviceManager {
-    addr: IpAddr,
+    addr: IpAddr, // TODO: support ipv6
+    resolver: ThreadSafeDNSResolver,
+    dns_servers: Vec<SocketAddr>,
 
     socket_set: Arc<Mutex<SocketSet<'static>>>,
     socket_pairs: Arc<Mutex<HashMap<SocketHandle, SenderType>>>,
@@ -74,7 +72,12 @@ pub struct DeviceManager {
 }
 
 impl DeviceManager {
-    pub fn new(addr: IpAddr, packet_notifier: Receiver<()>) -> Self {
+    pub fn new(
+        addr: IpAddr,
+        resolver: ThreadSafeDNSResolver,
+        dns_servers: Vec<SocketAddr>,
+        packet_notifier: Receiver<()>,
+    ) -> Self {
         let socket_set = Arc::new(Mutex::new(SocketSet::new(Vec::new())));
         let socket_pairs = Arc::new(Mutex::new(HashMap::new()));
 
@@ -85,6 +88,8 @@ impl DeviceManager {
 
         Self {
             addr,
+            resolver,
+            dns_servers,
 
             socket_set,
             socket_pairs,
@@ -111,16 +116,57 @@ impl DeviceManager {
         SocketPair::new(read_pair.1, write_pair.0)
     }
 
-    pub async fn new_udp_socket(&self, remote: SocketAddr) -> UdpPair {
+    pub async fn new_udp_socket(&self) -> UdpPair {
         let socket = Self::new_client_datagram();
         let read_pair = tokio::sync::mpsc::channel(1024);
         let write_pair = tokio::sync::mpsc::channel(1024);
 
         self.socket_notifier
-            .send(Socket::Udp(socket, remote, read_pair.0, write_pair.1))
+            .send(Socket::Udp(socket, read_pair.0, write_pair.1))
             .await
             .unwrap();
         UdpPair::new(read_pair.1, write_pair.0)
+    }
+
+    pub async fn look_up_dns(&self, host: &str, server: SocketAddr) -> Option<IpAddr> {
+        debug!("looking up {} on {}", host, server);
+        let mut socket = Self::new_udp_socket(&self).await;
+        let mut msg = hickory_proto::op::Message::new();
+
+        msg.add_query({
+            let mut q = hickory_proto::op::Query::new();
+            let name = hickory_proto::rr::Name::from_str_relaxed(host)
+                .unwrap()
+                .append_domain(&hickory_proto::rr::Name::root())
+                .unwrap();
+            q.set_name(name);
+            q.set_query_type(hickory_proto::rr::RecordType::A);
+            q
+        });
+
+        msg.set_recursion_desired(true);
+
+        let pkt = UdpPacket::new(
+            msg.to_vec().unwrap().into(),
+            (self.addr, self.get_ephemeral_udp_port().await).into(),
+            server.into(),
+        );
+
+        socket.feed(pkt).await.ok()?;
+        socket.close().await.ok()?;
+
+        let pkt = socket.next().await?;
+        let msg = hickory_proto::op::Message::from_vec(&pkt.data).ok()?;
+        trace!("got dns response: {:?}", msg);
+        msg.answers()
+            .iter()
+            .find_map(|ans| match ans.record_type() {
+                hickory_proto::rr::RecordType::A => ans.data().and_then(|data| match data {
+                    hickory_proto::rr::RData::A(addr) => Some(std::net::IpAddr::V4(addr.0)),
+                    _ => None,
+                }),
+                _ => None,
+            })
     }
 
     pub async fn poll_sockets(&self, mut device: VirtualIpDevice) {
@@ -183,7 +229,7 @@ impl DeviceManager {
                             socket_pairs.insert(handle, SenderType::Tcp(sender));
                             tcp_queue.insert(handle, VecDeque::new());
                         }
-                        Socket::Udp(mut socket, _remote, sender, mut receiver) => {
+                        Socket::Udp(mut socket, sender, mut receiver) => {
                             socket
                                 .bind(
                                     (self.addr, self.get_ephemeral_udp_port().await),
@@ -351,8 +397,33 @@ impl DeviceManager {
                                             } else {
                                                 let total = pkt.data.len();
                                                 trace!("socket {} sending {} bytes", handle, total);
-                                                // TODO: handle DNS
-                                                match socket.send_slice(&pkt.data, (pkt.dst_addr.ip().unwrap(), pkt.dst_addr.port())) {
+                                                let ip = match &pkt.dst_addr {
+                                                    SocksAddr::Ip(addr) => addr.ip(),
+                                                    SocksAddr::Domain(domain, _) => {
+                                                        if let Some(dns_server) = self.dns_servers.get(0) {
+                                                            let ip = self.look_up_dns(domain, *dns_server).await;
+                                                            if let Some(ip) = ip {
+                                                                debug!("host {} resolved to {} on wg stack", domain, ip);
+                                                                ip
+                                                            } else {
+                                                                warn!("failed to resolve domain on wireguard: {}", domain);
+                                                                continue;
+                                                            }
+                                                        } else {
+                                                            match self.resolver.resolve(domain, false).await {
+                                                                Ok(Some(ip)) => {
+                                                                    debug!("host {} resolved to {} on local", domain, ip);
+                                                                    ip
+                                                                }
+                                                                _ => {
+                                                                    warn!("failed to resolve domain on wireguard: {}", domain);
+                                                                    continue;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                };
+                                                match socket.send_slice(&pkt.data, (ip, pkt.dst_addr.port())) {
                                                     Ok(_) => {}
                                                     Err(e) => {
                                                         error!(

@@ -1,6 +1,6 @@
 use std::{
     io,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Arc,
 };
 
@@ -27,6 +27,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 
 use tokio::sync::OnceCell;
+use tracing::debug;
 
 mod device;
 mod events;
@@ -131,6 +132,21 @@ impl Handler {
 
                 let device_manager = Arc::new(device::DeviceManager::new(
                     self.opts.ip.into(),
+                    resolver,
+                    if self.opts.remote_dns_resolve {
+                        self.opts
+                            .dns
+                            .as_ref()
+                            .map(|server| {
+                                server
+                                    .iter()
+                                    .map(|s| (s.parse::<IpAddr>().unwrap(), 53).into())
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        vec![]
+                    },
                     packet_notifier.1,
                 ));
 
@@ -173,17 +189,47 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let ip = resolver
-            .resolve(&sess.destination.host(), false)
-            .map_err(map_io_error)
-            .await?
-            .ok_or(new_io_error("invalid remote address"))?;
-        let remote = (ip, sess.destination.port()).into();
-
         let inner = self
-            .initialize_inner(resolver)
+            .initialize_inner(resolver.clone())
             .await
             .map_err(map_io_error)?;
+
+        let ip = if self.opts.remote_dns_resolve
+            && sess.destination.is_domain()
+            && self.opts.dns.as_ref().is_some_and(|x| x.len() > 0)
+        {
+            debug!(
+                "use remote dns to resolve domain: {}",
+                sess.destination.host()
+            );
+            inner
+                .device_manager
+                .look_up_dns(
+                    &sess.destination.host(),
+                    (
+                        self.opts
+                            .dns
+                            .as_ref()
+                            .unwrap()
+                            .first()
+                            .unwrap()
+                            .parse::<IpAddr>()
+                            .unwrap(),
+                        53,
+                    )
+                        .into(),
+                )
+                .await
+                .ok_or(new_io_error("invalid remote address"))?
+        } else {
+            resolver
+                .resolve(&sess.destination.host(), false)
+                .map_err(map_io_error)
+                .await?
+                .ok_or(new_io_error("invalid remote address"))?
+        };
+
+        let remote = (ip, sess.destination.port()).into();
 
         let socket = inner.device_manager.new_tcp_socket(remote).await;
         let chained = ChainedStreamWrapper::new(socket);
@@ -204,23 +250,15 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session,
+        _sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let ip = resolver
-            .resolve(&sess.destination.host(), false)
-            .map_err(map_io_error)
-            .await?
-            .ok_or(new_io_error("invalid remote address"))?;
-
-        let remote = (ip, sess.destination.port()).into();
-
         let inner = self
             .initialize_inner(resolver)
             .await
             .map_err(map_io_error)?;
 
-        let socket = inner.device_manager.new_udp_socket(remote).await;
+        let socket = inner.device_manager.new_udp_socket().await;
         let chained = ChainedDatagramWrapper::new(socket);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))

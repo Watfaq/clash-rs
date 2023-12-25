@@ -19,6 +19,12 @@ impl RuleSet {
     }
 }
 
+impl std::fmt::Display for RuleSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} rule-set {}", self.target, self.rule_set)
+    }
+}
+
 impl RuleMatcher for RuleSet {
     fn apply(&self, sess: &Session) -> bool {
         self.rule_provider.search(sess)
