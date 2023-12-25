@@ -36,7 +36,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
                 .with_time(Duration::from_secs(10))
                 .with_interval(Duration::from_secs(1)),
         )?;
-        Ok(TcpStream::from_std(s.into())?)
+        TcpStream::from_std(s.into())
     }
 }
 
