@@ -78,7 +78,7 @@ async fn proxy(
             Ok(Response::new(Body::empty()))
         } else {
             Ok(Response::builder()
-                .status(http::StatusCode::BAD_REQUEST)
+                .status(hyper::StatusCode::BAD_REQUEST)
                 .body(format!("invalid request uri: {}", req.uri()).into())
                 .unwrap())
         }
