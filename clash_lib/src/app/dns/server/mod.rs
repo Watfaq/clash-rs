@@ -158,20 +158,18 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
     if let Some(addr) = cfg.listen.udp {
         UdpSocket::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on udp: {}", addr);
                 s.register_socket(x);
-                Ok(())
             })
             .ok()?;
     }
     if let Some(addr) = cfg.listen.tcp {
         TcpListener::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on tcp: {}", addr);
                 s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
-                Ok(())
             })
             .ok()?;
     }

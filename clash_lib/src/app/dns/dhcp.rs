@@ -290,7 +290,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
             dns_debug!("DHCP timeout after 10 secs");
-            return Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"));
+            Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
         }
     }
 }

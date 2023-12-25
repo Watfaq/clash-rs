@@ -320,8 +320,8 @@ impl Resolver {
     }
 
     async fn ip_exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        if let Some(mut matched) = self.match_policy(message) {
-            return Resolver::batch_exchange(&mut matched, message).await;
+        if let Some(matched) = self.match_policy(message) {
+            return Resolver::batch_exchange(&matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
