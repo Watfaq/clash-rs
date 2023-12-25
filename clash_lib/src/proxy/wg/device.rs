@@ -279,7 +279,6 @@ impl DeviceManager {
                     match transfer {
                         Transfer::Tcp(handle, data, active) => {
                             if let Some(queue) = tcp_queue.get_mut(&handle) {
-                                trace!("socket {} has {} data to send", handle, data.len());
                                 queue.push_back((data, active));
                                 next_poll = None;
                             }
@@ -287,7 +286,6 @@ impl DeviceManager {
 
                         Transfer::Udp(handle, data, active) => {
                             if let Some(queue) = udp_queue.get_mut(&handle) {
-                                trace!("socket {} has {} data to send", handle, data.data.len());
                                 queue.push_back((data, active));
                                 next_poll = None;
                             }
@@ -395,8 +393,6 @@ impl DeviceManager {
                                                 trace!("socket {} closed from local(?), aboring socket", handle);
                                                 socket.close();
                                             } else {
-                                                let total = pkt.data.len();
-                                                trace!("socket {} sending {} bytes", handle, total);
                                                 let ip = match &pkt.dst_addr {
                                                     SocksAddr::Ip(addr) => addr.ip(),
                                                     SocksAddr::Domain(domain, _) => {

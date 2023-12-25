@@ -12,6 +12,7 @@ use boringtun::{
 };
 
 use bytes::Bytes;
+use ipnet::IpNet;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
 use tokio::{
     net::UdpSocket,
@@ -31,6 +32,7 @@ pub struct WireguardTunnel {
     peer: Arc<Mutex<Tunn>>,
     udp: UdpSocket,
     pub(crate) endpoint: SocketAddr,
+    allowed_ips: Vec<IpNet>,
 
     // send side packet going out of the tunnel
     packet_writer: Sender<(PortProtocol, Bytes)>,
@@ -54,6 +56,7 @@ pub struct Config {
     pub remote_endpoint: SocketAddr,
     pub source_peer_ip: IpAddr,
     pub keepalive_seconds: Option<u16>,
+    pub allowed_ips: Vec<IpNet>,
 }
 
 impl WireguardTunnel {
@@ -88,6 +91,7 @@ impl WireguardTunnel {
             peer: Arc::new(Mutex::new(peer)),
             udp,
             endpoint: remote_endpoint,
+            allowed_ips: config.allowed_ips,
             packet_writer,
             packet_reader: Arc::new(Mutex::new(packet_reader)),
         })
@@ -105,6 +109,7 @@ impl WireguardTunnel {
             }
             boringtun::noise::TunnResult::WriteToNetwork(packet) => {
                 self.udp.send_to(&packet, self.endpoint).await?;
+                trace!("sent packet to {}", self.endpoint);
             }
             _ => {
                 error!("unexpected result from encapsulate");
@@ -229,7 +234,40 @@ impl WireguardTunnel {
                     }
                 }
 
-                TunnResult::WriteToTunnelV4(packet, _) | TunnResult::WriteToTunnelV6(packet, _) => {
+                TunnResult::WriteToTunnelV4(packet, addr) => {
+                    if !self.is_ip_allowed(addr.into()) {
+                        trace!(
+                            "received packet from {} which is not in allowed_ips",
+                            addr.to_string()
+                        );
+                        continue;
+                    }
+
+                    let _ =
+                        trace_span!("wg_write_stack", endpoint = %self.endpoint, size = packet.len())
+                            .entered();
+                    trace_ip_packet("Received IP packet", packet);
+                    if let Some(proto) = self.route_protocol(packet) {
+                        if let Err(e) = self
+                            .packet_writer
+                            .send((proto, packet.to_owned().into())) // TODO: avoid copy
+                            .await
+                        {
+                            error!("failed to send packet to virtual device: {}", e);
+                        }
+                    } else {
+                        trace!("wg stack recevied unkown data");
+                    }
+                }
+                TunnResult::WriteToTunnelV6(packet, addr) => {
+                    if !self.is_ip_allowed(addr.into()) {
+                        trace!(
+                            "received packet from {} which is not in allowed_ips",
+                            addr.to_string()
+                        );
+                        continue;
+                    }
+
                     let _ =
                         trace_span!("wg_write_stack", endpoint = %self.endpoint, size = packet.len())
                             .entered();
@@ -308,6 +346,11 @@ impl WireguardTunnel {
                 }),
             _ => None,
         }
+    }
+
+    fn is_ip_allowed(&self, ip: IpAddr) -> bool {
+        trace!("checking if {} is allowed in {:?}", ip, self.allowed_ips);
+        self.allowed_ips.is_empty() || self.allowed_ips.iter().any(|x| x.contains(&ip))
     }
 }
 

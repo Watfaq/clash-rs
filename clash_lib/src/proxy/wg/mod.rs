@@ -26,6 +26,7 @@ use super::{AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, Outbou
 use async_trait::async_trait;
 use futures::TryFutureExt;
 
+use ipnet::IpNet;
 use tokio::sync::OnceCell;
 use tracing::debug;
 
@@ -36,7 +37,7 @@ mod ports;
 mod stack;
 mod wireguard;
 
-pub struct Opts {
+pub struct HandlerOpts {
     pub name: String,
     pub common_opts: CommonOption,
     pub server: String,
@@ -50,6 +51,7 @@ pub struct Opts {
     pub dns: Option<Vec<String>>,
     pub mtu: Option<u16>,
     pub udp: bool,
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 struct Inner {
@@ -61,12 +63,12 @@ struct Inner {
 }
 
 pub struct Handler {
-    opts: Opts,
+    opts: HandlerOpts,
     inner: OnceCell<Inner>,
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> AnyOutboundHandler {
+    pub fn new(opts: HandlerOpts) -> AnyOutboundHandler {
         Arc::new(Self {
             opts,
             inner: OnceCell::new(),
@@ -85,6 +87,23 @@ impl Handler {
                     .ok_or(new_io_error(
                         format!("invalid remote server: {}", self.opts.server).as_str(),
                     ))?;
+                let allowed_ips = self
+                    .opts
+                    .allowed_ips
+                    .as_ref()
+                    .map(|ips| {
+                        ips.iter()
+                            .map(|ip| {
+                                ip.parse::<IpNet>().map_err(|e| {
+                                    new_io_error(format!("invalid allowed ip: {}", e).as_str())
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                    .transpose()?
+                    .unwrap_or_default();
+
+                debug!("allowed_ips: {:?}", allowed_ips);
 
                 // we shouldn't create a new tunnel for each connection
                 let wg = wireguard::WireguardTunnel::new(
@@ -109,6 +128,7 @@ impl Handler {
                             .map(|ip| ip.into())
                             .unwrap_or(self.opts.ip.into()),
                         keepalive_seconds: Some(10),
+                        allowed_ips,
                     },
                     recv_pair.0,
                     send_pair.1,

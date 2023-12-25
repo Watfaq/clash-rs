@@ -1,7 +1,7 @@
 use crate::{
     config::internal::proxy::OutboundWireguard,
     proxy::{
-        wg::{Handler, Opts},
+        wg::{Handler, HandlerOpts},
         AnyOutboundHandler,
     },
     Error,
@@ -19,7 +19,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
-        let h = Handler::new(Opts {
+        let h = Handler::new(HandlerOpts {
             name: s.name.to_owned(),
             common_opts: Default::default(),
             server: s.server.to_owned(),
@@ -43,6 +43,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
             dns: s.dns.as_ref().map(|x| x.to_owned()),
             mtu: s.mtu,
             udp: s.udp.unwrap_or_default(),
+            allowed_ips: s.allowed_ips.as_ref().map(|x| x.to_owned()),
         });
         Ok(h)
     }

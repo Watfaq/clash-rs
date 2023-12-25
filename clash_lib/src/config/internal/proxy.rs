@@ -192,6 +192,7 @@ pub struct OutboundWireguard {
     pub ipv6: Option<String>,
     pub remote_dns_resolve: Option<bool>,
     pub dns: Option<Vec<String>>,
+    pub allowed_ips: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
