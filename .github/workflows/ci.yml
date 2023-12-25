@@ -24,10 +24,12 @@ jobs:
       with:
         go-version: '1.20'
     - uses: ilammy/setup-nasm@v1
-    - uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
     - name: Run cargo check
       run: cargo check --all --all-features
     - name: Run cargo clippy

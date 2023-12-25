@@ -391,11 +391,7 @@ impl FromStr for Config {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_yaml::from_str(s).map_err(|x| {
-            Error::InvalidConfig(format!(
-                "cound not parse config content {}: {}",
-                s,
-                x
-            ))
+            Error::InvalidConfig(format!("cound not parse config content {}: {}", s, x))
         })
     }
 }

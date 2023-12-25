@@ -208,9 +208,9 @@ async fn patch_configs(
 
         inbound_manager.rebuild_listeners(ports);
 
-        if let Some(h) = global_state
-            .inbound_listener_handle
-            .take() { h.abort() }
+        if let Some(h) = global_state.inbound_listener_handle.take() {
+            h.abort()
+        }
 
         let r = inbound_manager.get_runner().unwrap();
 
