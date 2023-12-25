@@ -1,6 +1,6 @@
 use anyhow::Result;
 use erased_serde::Serialize;
-use http::Uri;
+use hyper::Uri;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

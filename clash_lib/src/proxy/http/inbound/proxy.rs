@@ -4,9 +4,8 @@ use std::{
 };
 
 use futures::{future::BoxFuture, TryFutureExt};
-use http::{uri::Scheme, Method, Request, Response, Uri};
 
-use hyper::{server::conn::Http, Body, Client};
+use hyper::{server::conn::Http, Body, Client, Method, Request, Response, Uri};
 
 use tower::Service;
 use tracing::{instrument, warn};
@@ -23,9 +22,9 @@ use super::{auth::authenticate_req, connector::Connector};
 pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
     let port = r
         .port_u16()
-        .unwrap_or(match r.scheme().unwrap_or(&Scheme::HTTP) {
-            s if s == &Scheme::HTTP => 80 as _,
-            s if s == &Scheme::HTTPS => 443 as _,
+        .unwrap_or(match r.scheme().map(|s| s.as_str()).unwrap_or_default() {
+            "http" => 80 as _,
+            "https" => 443 as _,
             _ => return None,
         });
 
@@ -79,7 +78,7 @@ async fn proxy(
             Ok(Response::new(Body::empty()))
         } else {
             Ok(Response::builder()
-                .status(http::StatusCode::BAD_REQUEST)
+                .status(hyper::StatusCode::BAD_REQUEST)
                 .body(format!("invalid request uri: {}", req.uri()).into())
                 .unwrap())
         }
@@ -93,7 +92,7 @@ async fn proxy(
             Err(e) => {
                 warn!("http proxy error: {}", e);
                 Ok(Response::builder()
-                    .status(http::StatusCode::BAD_GATEWAY)
+                    .status(hyper::StatusCode::BAD_GATEWAY)
                     .body(Body::empty())
                     .unwrap())
             }

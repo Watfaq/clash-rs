@@ -98,7 +98,7 @@ impl Mmdb {
         path: P,
         http_client: &HttpClient,
     ) -> anyhow::Result<()> {
-        let uri = url.parse::<http::Uri>()?;
+        let uri = url.parse::<hyper::Uri>()?;
         let mut out = std::fs::File::create(&path)?;
 
         let mut res = http_client.get(uri).await?;

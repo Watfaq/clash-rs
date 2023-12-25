@@ -65,7 +65,7 @@ mod tests {
     use std::str;
     use std::sync::Arc;
 
-    use http::Uri;
+    use hyper::Uri;
 
     use crate::app::dns::{Resolver, ThreadSafeDNSResolver};
 

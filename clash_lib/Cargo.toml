@@ -24,10 +24,10 @@ url = "2.5"
 regex = "1"
 byteorder = "1.5"
 lru_time_cache = "0.11"
-hyper = { version = "0.14", features = ["http1","http2","client", "server", "tcp"] }
-http = { version = "0.2.11" }
+hyper = { version = "0.14.28", features = ["http1","http2","client", "server", "tcp"] }
+http = { version = "1.0" }
 httparse = "1.8.0"
-h2 = "0.3.22"
+h2 = "0.4.0"
 prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
@@ -56,8 +56,8 @@ md-5 = "0.10.5"
 chacha20poly1305 = "0.10"
 aes-gcm = "0.10"
 filetime = "0.2"
-axum = { version = "0.6.20", features = ["ws"] }
-tower-http = { version = "0.4.0", features = ["fs", "trace", "cors"] }
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5.0", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4.26", features = ["serde"] }
 
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
@@ -69,6 +69,7 @@ smoltcp = { version = "0.10", default-features = false, features = ["std", "log"
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
+serde_json = "1.0"
 erased-serde = "0.3.30"
 
 hickory-client = "0.24"
@@ -85,7 +86,7 @@ dhcproto = "0.11"
 rand = "0.8"
 
 socket2 = { version = "0.5", features = ["all"] }
-tokio-tungstenite = "0.20.0"
+tokio-tungstenite = "0.21.0"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
