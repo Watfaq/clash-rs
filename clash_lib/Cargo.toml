@@ -64,7 +64,7 @@ tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
 
 boringtun = { version = "0.6.0" }
-smoltcp = { version = "0.10", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
+smoltcp = { path = "../../../gallery/smoltcp", version = "0.10", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
 
 serde = { version = "1.0", features=["derive"] }
