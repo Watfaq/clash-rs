@@ -102,7 +102,7 @@ async fn update_configs(
             let msg = "config reloading from payload".to_string();
             let cfg = crate::Config::Str(payload);
             match g.reload_tx.send(cfg).await {
-                Ok(_) => (StatusCode::ACCEPTED, msg).into_response(),
+                Ok(_) => (StatusCode::NO_CONTENT, msg).into_response(),
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "could not signal config reload",
@@ -128,7 +128,7 @@ async fn update_configs(
             let msg = format!("config reloading from file {}", path);
             let cfg: crate::Config = crate::Config::File(path);
             match g.reload_tx.send(cfg).await {
-                Ok(_) => (StatusCode::ACCEPTED, msg).into_response(),
+                Ok(_) => (StatusCode::NO_CONTENT, msg).into_response(),
 
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
