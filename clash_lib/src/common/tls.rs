@@ -1,63 +1,84 @@
 use once_cell::sync::Lazy;
+
 use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier},
-    OwnedTrustAnchor, RootCertStore,
+    client::{
+        danger::{ServerCertVerified, ServerCertVerifier},
+        WebPkiServerVerifier,
+    },
+    RootCertStore,
 };
 use tracing::warn;
 
-use rustls::{Certificate, ServerName};
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
 pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(global_root_store);
 
 fn global_root_store() -> Arc<RootCertStore> {
-    let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    let root_store = RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+    };
 
     Arc::new(root_store)
 }
 
 /// Warning: NO validation on certs.
+#[derive(Debug)]
 pub struct DummyTlsVerifier;
 
 impl ServerCertVerifier for DummyTlsVerifier {
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        unimplemented!()
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        unimplemented!()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        unimplemented!()
+    }
+
     fn verify_server_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
-        _server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: SystemTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
+        end_entity: &rustls::pki_types::CertificateDer<'_>,
+        intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        server_name: &rustls::pki_types::ServerName<'_>,
+        ocsp_response: &[u8],
+        now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
         Ok(ServerCertVerified::assertion())
     }
 }
 
+#[derive(Debug)]
 pub struct NoHostnameTlsVerifier;
 
 impl ServerCertVerifier for NoHostnameTlsVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
+        end_entity: &rustls::pki_types::CertificateDer<'_>,
+        intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        server_name: &rustls::pki_types::ServerName<'_>,
         ocsp_response: &[u8],
-        now: SystemTime,
+        now: rustls::pki_types::UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        let verifier = WebPkiVerifier::new(rustls::RootCertStore { roots: vec![] }, None);
+        let verifier = WebPkiServerVerifier::builder(global_root_store())
+            .build()
+            .unwrap();
         match verifier.verify_server_cert(
             end_entity,
             intermediates,
             server_name,
-            scts,
             ocsp_response,
             now,
         ) {
@@ -70,5 +91,27 @@ impl ServerCertVerifier for NoHostnameTlsVerifier {
             }
             other => other,
         }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        unimplemented!()
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        unimplemented!()
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        unimplemented!()
     }
 }

@@ -305,7 +305,6 @@ async fn dns_stream_builder(
         }
         DnsConfig::Tls(addr, host, iface) => {
             let mut tls_config = ClientConfig::builder()
-                .with_safe_defaults()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into()];
