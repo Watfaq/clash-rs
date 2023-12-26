@@ -269,7 +269,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let api_runner = app::api::get_api_runner(
         config.general.controller,
-        log_tx,
+        log_tx.clone(),
         inbound_manager.clone(),
         dispatcher,
         global_state.clone(),
@@ -405,6 +405,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             if let Some(h) = g.dns_listener_handle.take() {
                 h.abort();
             }
+            if let Some(h) = g.api_listener_handle.take() {
+                h.abort();
+            }
 
             let inbound_runner = inbound_manager.lock().await.get_runner()?;
             let inbound_listener_handle = tokio::spawn(inbound_runner);
@@ -412,14 +415,31 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
             let tun_runner_handle = tun_runner.map(tokio::spawn);
 
-            debug!("initializing dns listener");
+            debug!("reloading dns listener");
             let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
                 .await
                 .map(tokio::spawn);
 
+            debug!("reloading api listener");
+            let api_runner = app::api::get_api_runner(
+                config.general.controller,
+                log_tx.clone(),
+                inbound_manager.clone(),
+                dispatcher,
+                global_state.clone(),
+                dns_resolver,
+                outbound_manager,
+                statistics_manager,
+                cache_store,
+                router,
+                cwd.to_string_lossy().to_string(),
+            );
+            let api_listener_handle = api_runner.map(tokio::spawn);
+
             g.inbound_listener_handle = Some(inbound_listener_handle);
             g.tunnel_listener_handle = tun_runner_handle;
             g.dns_listener_handle = dns_listener_handle;
+            g.api_listener_handle = api_listener_handle
         }
         Ok(())
     }));
