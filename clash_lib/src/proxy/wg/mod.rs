@@ -27,6 +27,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 
 use ipnet::IpNet;
+use rand::seq::SliceRandom;
 use tokio::sync::OnceCell;
 use tracing::debug;
 
@@ -104,8 +105,6 @@ impl Handler {
                     .transpose()?
                     .unwrap_or_default();
 
-                debug!("allowed_ips: {:?}", allowed_ips);
-
                 // we shouldn't create a new tunnel for each connection
                 let wg = wireguard::WireguardTunnel::new(
                     Config {
@@ -123,11 +122,8 @@ impl Handler {
                             .as_ref()
                             .map(|s| s.parse::<KeyBytes>().unwrap().0.into()),
                         remote_endpoint: (server_ip, self.opts.port).into(),
-                        source_peer_ip: self
-                            .opts
-                            .ipv6
-                            .map(|ip| ip.into())
-                            .unwrap_or(self.opts.ip.into()),
+                        source_peer_ip: self.opts.ip.into(),
+                        source_peer_ipv6: self.opts.ipv6.map(Into::into),
                         keepalive_seconds: Some(10),
                         allowed_ips,
                     },
@@ -152,7 +148,8 @@ impl Handler {
                 );
 
                 let device_manager = Arc::new(device::DeviceManager::new(
-                    self.opts.ip.into(),
+                    self.opts.ip,
+                    self.opts.ipv6,
                     resolver,
                     if self.opts.remote_dns_resolve {
                         self.opts
@@ -223,22 +220,19 @@ impl OutboundHandler for Handler {
                 "use remote dns to resolve domain: {}",
                 sess.destination.host()
             );
+            let server = self
+                .opts
+                .dns
+                .as_ref()
+                .unwrap()
+                .choose(&mut rand::thread_rng())
+                .unwrap();
+
             inner
                 .device_manager
                 .look_up_dns(
                     &sess.destination.host(),
-                    (
-                        self.opts
-                            .dns
-                            .as_ref()
-                            .unwrap()
-                            .first()
-                            .unwrap()
-                            .parse::<IpAddr>()
-                            .unwrap(),
-                        53,
-                    )
-                        .into(),
+                    (server.parse::<IpAddr>().unwrap(), 53).into(),
                 )
                 .await
                 .ok_or(new_io_error("invalid remote address"))?
