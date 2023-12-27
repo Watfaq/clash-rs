@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use rustls::{
-    client::{ServerCertVerified, ServerCertVerifier, WebPkiVerifier},
-    OwnedTrustAnchor, RootCertStore,
+    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier},
+    DigitallySignedStruct, OwnedTrustAnchor, RootCertStore,
 };
 use tracing::warn;
 
@@ -37,6 +37,24 @@ impl ServerCertVerifier for DummyTlsVerifier {
         _now: SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 }
 
