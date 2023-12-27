@@ -28,7 +28,8 @@ use crate::{proxy::utils::new_udp_socket, Error};
 use super::events::PortProtocol;
 
 pub struct WireguardTunnel {
-    pub(crate) source_peer_ip: IpAddr,
+    pub(crate) source_peer_ip: Ipv4Addr,
+    pub(crate) source_peer_ipv6: Option<Ipv6Addr>,
     peer: Arc<Mutex<Tunn>>,
     udp: UdpSocket,
     pub(crate) endpoint: SocketAddr,
@@ -54,7 +55,8 @@ pub struct Config {
     pub endpoint_public_key: PublicKey,
     pub preshared_key: Option<StaticSecret>,
     pub remote_endpoint: SocketAddr,
-    pub source_peer_ip: IpAddr,
+    pub source_peer_ip: Ipv4Addr,
+    pub source_peer_ipv6: Option<Ipv6Addr>,
     pub keepalive_seconds: Option<u16>,
     pub allowed_ips: Vec<IpNet>,
 }
@@ -65,7 +67,6 @@ impl WireguardTunnel {
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
     ) -> Result<Self, Error> {
-        let source_peer_ip = config.source_peer_ip;
         let peer = Tunn::new(
             config.private_key,
             config.endpoint_public_key,
@@ -87,7 +88,8 @@ impl WireguardTunnel {
         .await?;
 
         Ok(Self {
-            source_peer_ip,
+            source_peer_ip: config.source_peer_ip,
+            source_peer_ipv6: config.source_peer_ipv6,
             peer: Arc::new(Mutex::new(peer)),
             udp,
             endpoint: remote_endpoint,
@@ -332,7 +334,7 @@ impl WireguardTunnel {
                 }),
             Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| Ipv6Addr::from(packet.dst_addr()) == self.source_peer_ip)
+                .filter(|packet| Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),
