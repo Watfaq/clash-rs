@@ -8,7 +8,8 @@ use std::{
 
 use ipnet::AddrParseError;
 use regex::Regex;
-use rustls::{Certificate, PrivateKey};
+
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use url::Url;
 
 use crate::{
@@ -50,13 +51,13 @@ pub struct FallbackFilter {
 
 #[derive(Clone, Debug)]
 pub struct DoHConfig {
-    pub certificate_and_key: (Vec<Certificate>, PrivateKey),
+    pub certificate_and_key: Arc<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)>,
     pub dns_hostname: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct DoTConfig {
-    pub certificate_and_key: (Vec<Certificate>, PrivateKey),
+    pub certificate_and_key: Arc<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -279,18 +280,19 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 "doh" => {
                                     let mut buf_read: Box<dyn std::io::BufRead> =
                                         Box::new(BufReader::new(TEST_CERT.as_bytes()));
-                                    let certs = rustls_pemfile::certs(&mut buf_read)
-                                        .unwrap()
-                                        .into_iter()
-                                        .map(Certificate)
-                                        .collect::<Vec<_>>();
+                                    let certs: Result<Vec<_>, _> =
+                                        rustls_pemfile::certs(&mut buf_read).collect();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
                                         Box::new(BufReader::new(TEST_KEY.as_bytes()));
-                                    let mut keys =
-                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                    let mut keys: Result<Vec<_>, _> =
+                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).collect();
+
                                     let c = DoHConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        certificate_and_key: Arc::new((
+                                            certs.unwrap(),
+                                            keys.unwrap().remove(0).into(),
+                                        )),
                                         dns_hostname: Some("dns.example.com".to_owned()),
                                     };
                                     doh = Some((addr, c))
@@ -298,18 +300,18 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 "dot" => {
                                     let mut buf_read: Box<dyn std::io::BufRead> =
                                         Box::new(BufReader::new(TEST_CERT.as_bytes()));
-                                    let certs = rustls_pemfile::certs(&mut buf_read)
-                                        .unwrap()
-                                        .into_iter()
-                                        .map(Certificate)
-                                        .collect::<Vec<_>>();
+                                    let certs: Result<Vec<_>, _> =
+                                        rustls_pemfile::certs(&mut buf_read).collect();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
                                         Box::new(BufReader::new(TEST_KEY.as_bytes()));
-                                    let mut keys =
-                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                    let mut keys: Result<Vec<_>, _> =
+                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).collect();
                                     let c = DoTConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        certificate_and_key: Arc::new((
+                                            certs.unwrap(),
+                                            keys.unwrap().remove(0).into(),
+                                        )),
                                     };
                                     dot = Some((addr, c))
                                 }

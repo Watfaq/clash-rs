@@ -12,7 +12,7 @@ bench = ["criterion"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
-tokio-rustls = "0.24"
+tokio-rustls = "0.25"
 thiserror = "1.0"
 async-trait = "0.1"
 anyhow = "1.0"
@@ -78,9 +78,9 @@ hickory-server = { version = "0.24", features = ["dns-over-rustls", "dns-over-ht
 hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 
 # DoH
-rustls = { version  = "0.21", features=["dangerous_configuration"] }
-rustls-pemfile = "1.0.4"
-webpki-roots = "0.25"
+rustls = { version  = "0.22" }
+rustls-pemfile = "2"
+webpki-roots = "0.26"
 dhcproto = "0.11"
 
 rand = "0.8"
