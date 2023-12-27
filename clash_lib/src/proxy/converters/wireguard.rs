@@ -41,7 +41,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
             ipv6: s
                 .ipv6
                 .as_ref()
-                .map(|x| {
+                .and_then(|x| {
                     x.parse::<IpNet>()
                         .map(|x| match x.addr() {
                             std::net::IpAddr::V4(_) => Err(Error::InvalidConfig(
@@ -54,7 +54,6 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
                         })
                         .ok()
                 })
-                .flatten()
                 .transpose()?,
             private_key: s.private_key.to_owned(),
             public_key: s.public_key.to_owned(),

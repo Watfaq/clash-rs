@@ -122,8 +122,8 @@ impl Handler {
                             .as_ref()
                             .map(|s| s.parse::<KeyBytes>().unwrap().0.into()),
                         remote_endpoint: (server_ip, self.opts.port).into(),
-                        source_peer_ip: self.opts.ip.into(),
-                        source_peer_ipv6: self.opts.ipv6.map(Into::into),
+                        source_peer_ip: self.opts.ip,
+                        source_peer_ipv6: self.opts.ipv6,
                         keepalive_seconds: Some(10),
                         allowed_ips,
                     },
