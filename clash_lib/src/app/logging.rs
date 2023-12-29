@@ -6,7 +6,6 @@ use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing::debug;
-use tracing::Level;
 use tracing_appender::non_blocking::NonBlocking;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
@@ -103,11 +102,6 @@ pub fn setup_logging(
                 .into(),
         )
         .from_env_lossy();
-
-    // let trace = tracing_subscriber::filter::targets::Targets::new()
-    //     .with_target("quinn", Level::TRACE)
-    //     .with_target("quinn_proto", Level::TRACE)
-    //     .with_target("clash", Level::TRACE);
 
     let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
         global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());

@@ -14,7 +14,24 @@ impl ControllerFactory for DynCongestion {
     }
 }
 
-struct Burtal;
+const SLOT_COUNT: u64 = 5;
+const MIN_SAMPLE_COUNT: u8 = 50;
+const MIN_ACKRATE: f64 = 0.8;
+const CONGESTION_WINDOW_MULTIPLIER: u8 = 2;
+
+#[derive(Copy, Clone)]
+struct SlotInfo {
+    time: u64,
+    lost: u64,
+    ack: u64,
+}
+
+struct Burtal {
+    mtu: u16,
+    slots: [SlotInfo; SLOT_COUNT as usize],
+    ack_rate: f64,
+    bps: u64,
+}
 
 impl Controller for Burtal {
     fn initial_window(&self) -> u64 {
@@ -41,10 +58,19 @@ impl Controller for Burtal {
     fn on_congestion_event(
         &mut self,
         _now: Instant,
-        _sent: Instant,
+        sent: Instant,
         _is_persistent_congestion: bool,
         _lost_bytes: u64,
     ) {
+        let t = sent.elapsed().as_secs();
+        let idx = (t % SLOT_COUNT) as usize;
+        if self.slots[idx].time != t {
+            self.slots[idx].time = t;
+            self.slots[idx].lost = 0;
+            self.slots[idx].ack = 0;
+        } else {
+            self.slots[idx].lost = 1
+        }
     }
 
     fn on_ack(
@@ -149,7 +175,16 @@ fn test_dyn() {
 
     println!("{:?}", r.0.read().unwrap().window());
 
-    let b = Box::new(Burtal);
+    let b = Box::new(Burtal {
+        bps: 0,
+        ack_rate: 0.0,
+        mtu: 0,
+        slots: [SlotInfo {
+            time: 0,
+            lost: 0,
+            ack: 0,
+        }; 5],
+    });
     *r.0.write().unwrap() = b;
 
     assert!(r.window() == 999);

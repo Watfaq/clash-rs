@@ -42,7 +42,6 @@ impl SalamanderObfs {
     fn encrpyt(&self, data: &mut [u8]) -> Bytes {
         let salt: [u8; 8] = rand::thread_rng().gen();
 
-        // tracing::info!("content {:?}", data);
         let mut res = BytesMut::with_capacity(8 + data.len());
         res.put_slice(&salt);
         self.obfs(&salt, data);
@@ -143,26 +142,21 @@ impl AsyncUdpSocket for Salamander {
 
 #[test]
 fn test_skip() {
-    for _ in 0..10 {
-        let mut data = b"12345678AA".to_vec();
+    let mut data = b"12345678AA".to_vec();
 
-        let obfs = SalamanderObfs::new(b"123456".to_vec());
+    let obfs = SalamanderObfs::new(b"123456".to_vec());
 
-        let bufs = &mut [IoSliceMut::new(&mut data)];
-        bufs.iter_mut().filter(|x| x.len() > 8).for_each(|v| {
-            obfs.decrpyt(v);
-            let data: &mut [u8] = v.as_mut();
-            let data = &mut data[8..];
-            unsafe {
-                let b: IoSliceMut<'_> = std::mem::transmute(data);
-                *v = b;
-            }
-            println!("{:?}", v);
-        });
-    }
-
-    println!("done");
-    // std::thread::sleep(std::time::Duration::from_secs(100000));
+    let bufs = &mut [IoSliceMut::new(&mut data)];
+    bufs.iter_mut().filter(|x| x.len() > 8).for_each(|v| {
+        obfs.decrpyt(v);
+        let data: &mut [u8] = v.as_mut();
+        let data = &mut data[8..];
+        unsafe {
+            let b: IoSliceMut<'_> = std::mem::transmute(data);
+            *v = b;
+        }
+        println!("{:?}", v);
+    });
 }
 
 #[test]

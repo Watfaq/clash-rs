@@ -8,17 +8,18 @@ use std::{
     sync::{Arc, RwLock},
     task::{Context, Poll},
 };
+mod codec;
 mod congestion;
 mod salamander;
 mod udp_hop;
 
-use bytes::{BufMut, Bytes};
+use bytes::Bytes;
+use futures::{SinkExt, StreamExt};
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
-use quinn::{ClientConfig, Connection, TokioRuntime, VarInt};
-use quinn_proto::{coding::Codec, TransportConfig};
+use quinn::{ClientConfig, Connection, TokioRuntime};
+use quinn_proto::TransportConfig;
 
-use rand::distributions::Alphanumeric;
 use rustls::{client::ServerCertVerifier, ClientConfig as RustlsClientConfig};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -35,6 +36,8 @@ use crate::{
     session::{Session, SocksAddr},
 };
 use tracing::debug;
+
+use self::codec::Hy2TcpCodec;
 
 use super::{converters::hysteria2::PortGenrateor, AnyStream, OutboundHandler, OutboundType};
 
@@ -195,7 +198,7 @@ impl HystClient {
             // )?;
 
             let port_gen = self.opts.ports.as_ref().unwrap().clone();
-            let udp_hop = udp_hop::UdpHop::new(server_socket_addr.port(), port_gen)?;
+            let udp_hop = udp_hop::UdpHop::new(server_socket_addr.port(), port_gen, None)?;
             quinn::Endpoint::new_with_abstract_socket(
                 self.ep_config.clone(),
                 None,
@@ -204,7 +207,7 @@ impl HystClient {
             )?
         } else {
             let udp = SocketAddr::from(([0, 0, 0, 0], 0));
-            // bind to port 0, so the OS will choose a random port for us, and specify the fix source ip
+            // bind to port 0, so the OS will choose a random port for us
             let udp_socket = std::net::UdpSocket::bind::<SocketAddr>(udp)?;
 
             quinn::Endpoint::new(
@@ -240,7 +243,7 @@ impl HystClient {
         let req = http::Request::post("https://hysteria/auth")
             .header("Hysteria-Auth", passwd)
             .header("Hysteria-CC-RX", "0")
-            .header("Hysteria-Padding", padding(64..=512))
+            .header("Hysteria-Padding", codec::padding(64..=512))
             .body(())
             .unwrap();
         let mut r = sender.send_request(req).await?;
@@ -322,32 +325,39 @@ impl OutboundHandler for HystClient {
             }
         };
 
-        // tracing::trace!("conn patch {} ", authed_conn.)
+        let (mut tx, mut rx) = authed_conn.open_bi().await?;
 
-        let (mut tx, mut rx) = authed_conn.open_bi().await.unwrap();
-        tx.write_all(&make_tcp_request(&sess.destination)).await?;
+        tokio_util::codec::FramedWrite::new(&mut tx, Hy2TcpCodec)
+            .send(&sess.destination)
+            .await?;
 
-        let mut buf = [0u8; 2000];
-        let n = rx.read(&mut buf).await?.ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "server response nothing after send tcp request: addr: {}",
+        match tokio_util::codec::FramedRead::new(&mut rx, Hy2TcpCodec)
+            .next()
+            .await
+        {
+            Some(Ok(resp)) => {
+                if resp.status != 0x00 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "server response error: addr: {}, msg: {:?}",
+                            self.opts.addr, resp.msg
+                        ),
+                    ));
+                } else {
+                    debug!(
+                        "hysteria2 tcp request success: status: {}, msg: {:?}",
+                        resp.status, resp.msg
+                    );
+                }
+            }
+            _ => {
+                return Err(std::io::Error::other(format!(
+                    "not receive hysteria2 response from server: {}",
                     self.opts.addr
-                ),
-            )
-        })?;
-
-        // todo read response
-        if n < 2 && buf[0] != 0x00 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "server response invalid tcp request: addr: {}",
-                    self.opts.addr
-                ),
-            ));
-        }
+                )));
+            }
+        };
 
         let hyster_client = HystStream { send: tx, recv: rx };
         Ok(Box::new(ChainedStreamWrapper::new(Box::new(hyster_client))))
@@ -409,57 +419,5 @@ impl AsyncWrite for HystStream {
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.get_mut().send).poll_shutdown(cx)
-    }
-}
-
-#[inline]
-fn padding(range: std::ops::RangeInclusive<u32>) -> Vec<u8> {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let len = rng.gen_range(range) as usize;
-    rng.sample_iter(Alphanumeric).take(len).collect()
-}
-
-/// hysteria2 TCPRequest format
-///
-/// varint is **quic-varint**
-/// ```text
-/// [varint] 0x401 (TCPRequest ID)
-/// [varint] Address length
-/// [bytes]  Address string (host:port)
-/// [varint] Padding length
-/// [bytes]  Random padding
-/// ```
-fn make_tcp_request(dst: &SocksAddr) -> Bytes {
-    let padding = padding(64..=512);
-
-    let dst = dst.to_string();
-    let addr = dst.as_bytes();
-    let mut buf = bytes::BytesMut::with_capacity(addr.len() + padding.len() + 20);
-
-    VarInt::from_u32(0x401).encode(&mut buf);
-    VarInt::from(addr.len() as u32).encode(&mut buf);
-    buf.put_slice(addr);
-    VarInt::from_u32(padding.len() as u32).encode(&mut buf);
-    buf.put_slice(&padding);
-
-    buf.freeze()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_quic_varint() {
-        let x = quinn::VarInt::from_u32(0x401);
-        let mut buf = bytes::BytesMut::with_capacity(1000);
-        x.encode(&mut buf);
-        println!("{:?}", buf.freeze());
-    }
-
-    #[test]
-    fn test_padding() {
-        let p = padding(100..=200);
-        println!("{:?}", std::str::from_utf8(&p));
     }
 }

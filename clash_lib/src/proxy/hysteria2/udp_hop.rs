@@ -10,7 +10,7 @@ use std::{
 
 use futures::ready;
 use quinn::{
-    udp::{Transmit, UdpSocketState, UdpState},
+    udp::{may_fragment, Transmit, UdpSocketState, UdpState},
     AsyncUdpSocket,
 };
 
@@ -18,6 +18,9 @@ use tokio::{io::Interest, net::UdpSocket};
 
 use crate::proxy::converters::hysteria2::PortGenrateor;
 
+/// A udp socket hopper, it can hop to a new port when the time interval is greater than interval
+///
+/// https://v2.hysteria.network/docs/advanced/Port-Hopping/
 pub struct UdpHop {
     /// (prev_conn, cur_conn, last, new_hop_port), here mybe we can use struct
     state: Mutex<(Option<Arc<UdpSocket>>, Arc<UdpSocket>, Instant, u16)>,
@@ -29,10 +32,17 @@ pub struct UdpHop {
     init_port: u16,
     /// generate new port used to hop
     port_range: PortGenrateor,
+    /// interval to hop
+    interval: Duration,
 }
 
 impl UdpHop {
-    pub fn new(port: u16, port_range: PortGenrateor) -> io::Result<Self> {
+    const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
+    pub fn new(
+        port: u16,
+        port_range: PortGenrateor,
+        interval: Option<Duration>,
+    ) -> io::Result<Self> {
         let sock = std::net::UdpSocket::bind(SocketAddr::new([0, 0, 0, 0].into(), 0))?;
         // Everytime we create a new udpsocket, and then MUST configure the socket, otherwise the socket will be block
         UdpSocketState::configure((&sock).into())?;
@@ -42,31 +52,35 @@ impl UdpHop {
             socket_rw: UdpSocketState::new(),
             init_port: port,
             port_range,
+            interval: interval.unwrap_or(Self::DEFAULT_INTERVAL),
         })
     }
 
-    fn hop(&self) -> io::Result<u16> {
+    fn hop(&self) -> u16 {
         let mut lock = self.state.lock().unwrap();
         let (prev_conn, cur_conn, last, port) = lock.deref_mut();
         let now = Instant::now();
-        let to_hop = now.sub(*last) > Duration::from_secs(3);
-        *last = now;
+        let to_hop = now.sub(*last) > self.interval;
 
-        if to_hop {
-            if prev_conn.is_none() {
-                tracing::trace!("port hopping");
-                let new_conn = {
-                    let sock = std::net::UdpSocket::bind(SocketAddr::new([0, 0, 0, 0].into(), 0))?;
-                    UdpSocketState::configure((&sock).into())?;
-                    UdpSocket::from_std(sock)?
-                };
+        if to_hop && prev_conn.is_none() {
+            *last = now;
+            tracing::trace!("port hopping");
 
-                *port = self.port_range.get();
-
-                *prev_conn = Some(std::mem::replace(cur_conn, Arc::new(new_conn)));
-            }
+            std::net::UdpSocket::bind(SocketAddr::new([0, 0, 0, 0].into(), 0))
+                .and_then(|udp| {
+                    UdpSocketState::configure((&udp).into())?;
+                    Ok(udp)
+                })
+                .and_then(|udp| UdpSocket::from_std(udp))
+                .map(|new_conn| {
+                    *port = self.port_range.get();
+                    *prev_conn = Some(std::mem::replace(cur_conn, Arc::new(new_conn)));
+                })
+                .unwrap_or_else(|e| {
+                    tracing::error!("port hopping err {}", e);
+                });
         }
-        Ok(*port)
+        *port
     }
 
     fn get_conn(&self) -> (Option<Arc<UdpSocket>>, Arc<UdpSocket>) {
@@ -98,7 +112,8 @@ impl AsyncUdpSocket for UdpHop {
         transmits: &[Transmit],
     ) -> Poll<Result<usize, io::Error>> {
         // try to hop when we send data
-        let port = self.hop()?;
+        let port = self.hop();
+
         let (_pre_conn, io) = self.get_conn();
 
         // here just need change send addr, it is not nessary to change send contents, so we can use unsafe
@@ -169,6 +184,7 @@ impl AsyncUdpSocket for UdpHop {
                 None => 0,
             };
 
+            //todo: poll prev conn
             ready!(io.poll_recv_ready(cx))?;
             if let Ok(res) = io.try_io(Interest::READABLE, || {
                 self.socket_rw.recv((&io).into(), bufs, &mut meta[len..])
@@ -195,6 +211,6 @@ impl AsyncUdpSocket for UdpHop {
     }
 
     fn may_fragment(&self) -> bool {
-        true
+        may_fragment()
     }
 }
