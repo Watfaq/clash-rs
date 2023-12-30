@@ -140,7 +140,8 @@ pub fn setup_logging(
         .with(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
-                .pretty()
+                .compact()
+                .with_target(false)
                 .with_file(true)
                 .with_line_number(true)
                 .with_writer(move || -> Box<dyn std::io::Write> { Box::new(W(appender.clone())) })
