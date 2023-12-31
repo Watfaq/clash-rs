@@ -446,6 +446,9 @@ impl DeviceManager {
                                             trace!("no more data");
                                             continue;
                                         }
+                                        Err(udp::RecvError::Truncated) => {
+                                            panic!("udp packet truncated - this should never happen");
+                                        }
                                     }
                                 }
 
