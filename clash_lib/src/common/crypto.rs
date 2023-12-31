@@ -9,7 +9,7 @@ use aes_gcm::{AeadInPlace, KeyInit};
 pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into()).encrypt(data);
+            cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into()).encrypt(data);
             Ok(())
         }
         24 => {
@@ -17,7 +17,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result
             Ok(())
         }
         32 => {
-            cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into()).encrypt(data);
+            cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into()).encrypt(data);
             Ok(())
         }
         _ => anyhow::bail!("invalid key length"),
@@ -27,7 +27,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result
 pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into()).decrypt(data);
+            cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into()).decrypt(data);
             Ok(())
         }
         24 => {
@@ -35,7 +35,7 @@ pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result
             Ok(())
         }
         32 => {
-            cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into()).decrypt(data);
+            cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into()).decrypt(data);
             Ok(())
         }
         _ => anyhow::bail!("invalid key length"),
