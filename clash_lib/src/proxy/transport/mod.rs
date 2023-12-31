@@ -4,11 +4,8 @@ mod h2;
 mod internal_tls;
 mod ws;
 
-pub use ws::WebsocketConn;
-pub use ws::WebsocketEarlyDataConn;
 pub use ws::WebsocketStreamBuilder;
 
-pub use grpc::GrpcStream;
 pub use grpc::GrpcStreamBuilder;
 
 pub use self::h2::Http2Config;

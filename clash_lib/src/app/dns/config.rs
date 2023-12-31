@@ -167,7 +167,7 @@ impl Config {
     pub fn parse_fallback_ip_cidr(ipcidr: &[String]) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
-        for (_i, ip) in ipcidr.iter().enumerate() {
+        for ip in ipcidr.iter() {
             let net: ipnet::IpNet = ip
                 .parse()
                 .map_err(|x: AddrParseError| Error::InvalidConfig(x.to_string()))?;
