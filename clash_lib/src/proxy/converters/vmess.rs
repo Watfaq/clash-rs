@@ -80,6 +80,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::Grpc(GrpcOption {
+                                host: s.server_name.as_ref().unwrap_or(&s.server).to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()

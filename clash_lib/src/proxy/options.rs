@@ -12,6 +12,7 @@ pub struct Http2Option {
 }
 
 pub struct GrpcOption {
+    pub host: String,
     pub service_name: String,
 }
 

@@ -100,7 +100,7 @@ impl Handler {
                 }
                 Transport::Grpc(grpc_opts) => {
                     let grpc_builder = transport::GrpcStreamBuilder::new(
-                        self.opts.server.clone(),
+                        grpc_opts.host.clone(),
                         grpc_opts
                             .service_name
                             .to_owned()

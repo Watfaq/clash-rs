@@ -72,6 +72,7 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             Transport::Grpc(GrpcOption {
+                                host: s.sni.as_ref().unwrap_or(&s.server).to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()
