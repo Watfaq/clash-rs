@@ -6,7 +6,7 @@ use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadInPlace, KeyInit};
 
-pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
+pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into()).encrypt(data);
@@ -24,7 +24,7 @@ pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Res
     }
 }
 
-pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
+pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into()).decrypt(data);
