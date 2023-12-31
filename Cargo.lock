@@ -517,8 +517,9 @@ dependencies = [
 
 [[package]]
 name = "boring"
-version = "4.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fed6dc629997e8c3c4d1dbd59cf748512b9b0e0fbc509cf9b0e2edca9d24d1a"
 dependencies = [
  "bitflags 2.4.1",
  "boring-sys",
@@ -529,8 +530,9 @@ dependencies = [
 
 [[package]]
 name = "boring-sys"
-version = "4.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91102749c3c99028f344c3bce1dc54b1aac49d52d03c60c75996f81ebdeaa41c"
 dependencies = [
  "bindgen 0.68.1",
  "cmake",
@@ -649,6 +651,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
 dependencies = [
  "nom",
+]
+
+[[package]]
+name = "cfb-mode"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "738b8d467867f80a71351933f70461f5b56f24d5c93e0cf216e59229c968d330"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
@@ -819,6 +830,7 @@ dependencies = [
 name = "clash_lib"
 version = "0.1.12"
 dependencies = [
+ "aes",
  "aes-gcm",
  "anyhow",
  "async-recursion",
@@ -832,6 +844,7 @@ dependencies = [
  "brotli",
  "byteorder",
  "bytes",
+ "cfb-mode",
  "chacha20poly1305",
  "chrono",
  "console-subscriber",
@@ -885,7 +898,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-boring",
- "tokio-rustls",
  "tokio-test",
  "tokio-tungstenite 0.21.0",
  "tokio-util",
@@ -2069,8 +2081,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-boring"
-version = "4.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b32387184f6bf1cfd826f1185cbe6b5e35eff4360725863beb101aa01406e5d"
 dependencies = [
  "antidote",
  "boring",
@@ -3967,8 +3980,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-boring"
-version = "4.1.0"
-source = "git+https://github.com/Watfaq/boring.git?rev=58d5e7c66b537989bde45d20ce54aff11de1bcea#58d5e7c66b537989bde45d20ce54aff11de1bcea"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "806b3972e90cd4633771ba91ec25f312a97192010fe4470061700f289524ae57"
 dependencies = [
  "boring",
  "boring-sys",
