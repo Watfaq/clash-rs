@@ -471,12 +471,11 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    #[ignore]
     fn start_and_stop() {
         let conf = r#"
         socks-port: 7891
         bind-address: 127.0.0.1
-        mmdb: "clash_lib/tests/data/Country.mmdb"
+        mmdb: "tests/data/Country.mmdb"
         "#;
 
         let handle = thread::spawn(|| {
