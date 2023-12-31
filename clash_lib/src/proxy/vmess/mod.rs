@@ -111,7 +111,7 @@ impl Handler {
                 };
 
                 let grpc_builder = transport::GrpcStreamBuilder::new(
-                    self.opts.server.clone(),
+                    opt.host.clone(),
                     opt.service_name
                         .to_owned()
                         .try_into()

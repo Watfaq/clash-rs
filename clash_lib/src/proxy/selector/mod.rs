@@ -70,7 +70,7 @@ impl Handler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         for proxy in proxies {
             if proxy.name() == self.inner.read().await.current {
-                debug!("{} selected {}", self.name(), proxy.name());
+                debug!("`{}` selected `{}`", self.name(), proxy.name());
                 return proxy;
             }
         }

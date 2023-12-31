@@ -54,7 +54,7 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         for proxy in proxies.iter() {
             if self.proxy_manager.alive(proxy.name()).await {
-                debug!("{} fastest {} is alive", self.name(), proxy.name());
+                debug!("`{}` fallback to `{}`", self.name(), proxy.name());
                 return proxy.clone();
             }
         }
