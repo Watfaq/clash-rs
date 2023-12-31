@@ -23,7 +23,7 @@ pub async fn wrap_stream(
 
     if let Some(alpns) = opt.alpn.as_ref() {
         let wire = alpns
-            .into_iter()
+            .iter()
             .map(|a| [&[a.len() as u8], a.as_bytes()].concat())
             .collect::<Vec<Vec<u8>>>()
             .concat();
