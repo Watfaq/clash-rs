@@ -28,6 +28,3 @@ const MAX_CHUNK_SIZE: usize = 17 * 1024;
 pub use client::Builder;
 pub use client::VmessOption;
 pub use datagram::OutboundDatagramVmess;
-
-
-

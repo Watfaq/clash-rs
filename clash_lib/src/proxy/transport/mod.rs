@@ -4,10 +4,7 @@ mod h2;
 mod internal_tls;
 mod ws;
 
-
-
 pub use ws::WebsocketStreamBuilder;
-
 
 pub use grpc::GrpcStreamBuilder;
 
