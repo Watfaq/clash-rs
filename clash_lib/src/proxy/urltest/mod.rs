@@ -2,7 +2,7 @@ use std::{collections::HashMap, io, sync::Arc};
 
 use erased_serde::Serialize;
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::trace;
 
 use crate::{
     app::{
@@ -105,8 +105,8 @@ impl Handler {
             }
         }
 
-        debug!(
-            "{} fastest {} is {}",
+        trace!(
+            "`{}` fastest is `{}` - delay {}",
             self.name(),
             fastest.name(),
             fastest_delay

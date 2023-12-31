@@ -22,7 +22,7 @@ use super::{auth::authenticate_req, connector::Connector};
 pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
     let port = r
         .port_u16()
-        .unwrap_or(match r.scheme().map(|s| s.as_str()).unwrap_or_default() {
+        .unwrap_or(match r.scheme().map(|s| s.as_str()).unwrap_or("http") {
             "http" => 80 as _,
             "https" => 443 as _,
             _ => return None,

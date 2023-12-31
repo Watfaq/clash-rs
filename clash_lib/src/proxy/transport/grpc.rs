@@ -10,7 +10,7 @@ use http::{Request, Uri, Version};
 use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
 use tokio::sync::{mpsc, Mutex};
-use tracing::{debug, warn};
+use tracing::warn;
 
 use std::fmt::Debug;
 use std::io;
@@ -77,7 +77,16 @@ impl GrpcStreamBuilder {
             tokio::spawn(async move {
                 match resp.await {
                     Ok(resp) => {
-                        debug!("grpc init stream resp: {:?}", resp);
+                        match resp.status() {
+                            http::StatusCode::OK => {}
+                            _ => {
+                                warn!(
+                                    "grpc handshake resp err: {:?}",
+                                    resp.into_body().data().await
+                                );
+                                return;
+                            }
+                        }
                         let stream = resp.into_body();
                         recv_stream.lock().await.replace(stream);
                     }

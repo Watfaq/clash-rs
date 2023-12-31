@@ -83,9 +83,19 @@ pub async fn new_tcp_stream<'a>(
             format!("can't resolve dns: {}", address),
         ))?;
 
-    let socket = match dial_addr {
-        IpAddr::V4(_) => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?,
-        IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,
+    let socket = match (dial_addr, resolver.ipv6()) {
+        (IpAddr::V4(_), _) => {
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), true) => {
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), false) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("ipv6 is disabled, can't dial {}", address),
+            ))
+        }
     };
 
     if let Some(iface) = iface {
