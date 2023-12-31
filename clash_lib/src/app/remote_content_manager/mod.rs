@@ -269,6 +269,7 @@ mod tests {
         mock_resolver
             .expect_resolve()
             .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67)))));
+        mock_resolver.expect_ipv6().return_const(false);
 
         let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
