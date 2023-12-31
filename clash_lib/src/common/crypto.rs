@@ -2,153 +2,25 @@ use std::ffi::CStr;
 
 use crate::Error;
 
+use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadInPlace, KeyInit};
 
 pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
-    unsafe {
-        data.reserve(boring_sys::EVP_MAX_BLOCK_LENGTH as _);
-        let ctx = boring_sys::EVP_CIPHER_CTX_new();
-        let rv = boring_sys::EVP_EncryptInit_ex(
-            ctx,
-            match key.len() {
-                16 => boring_sys::EVP_aes_128_cfb(),
-                24 => boring_sys::EVP_aes_192_cfb(),
-                32 => boring_sys::EVP_aes_256_cfb(),
-                _ => anyhow::bail!("invalid key length"),
-            },
-            std::ptr::null_mut(),
-            key.as_ptr(),
-            iv.as_ptr(),
-        );
-
-        if rv != 1 {
-            boring_sys::EVP_CIPHER_CTX_free(ctx);
-            return Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into());
-        }
-
-        let mut out_len = 0;
-        let rv = boring_sys::EVP_EncryptUpdate(
-            ctx,
-            data.as_mut_ptr(),
-            &mut out_len,
-            data.as_ptr(),
-            data.len() as _,
-        );
-
-        if rv != 1 {
-            boring_sys::EVP_CIPHER_CTX_free(ctx);
-            return Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into());
-        }
-
-        let rv = boring_sys::EVP_EncryptFinal_ex(
-            ctx,
-            data.as_mut_ptr().offset(out_len as _),
-            &mut out_len,
-        );
-        boring_sys::EVP_CIPHER_CTX_free(ctx);
-
-        return if rv != 1 {
-            Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into())
-        } else {
-            Ok(())
-        };
+    match key.len() {
+        16 => Ok(cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into()).encrypt(data)),
+        24 => Ok(cfb_mode::Encryptor::<aes::Aes192>::new(key.into(), iv.into()).encrypt(data)),
+        32 => Ok(cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into()).encrypt(data)),
+        _ => anyhow::bail!("invalid key length"),
     }
 }
 
 pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut Vec<u8>) -> anyhow::Result<()> {
-    unsafe {
-        let ctx = boring_sys::EVP_CIPHER_CTX_new();
-        let rv = boring_sys::EVP_DecryptInit_ex(
-            ctx,
-            match key.len() {
-                16 => boring_sys::EVP_aes_128_cfb(),
-                24 => boring_sys::EVP_aes_192_cfb(),
-                32 => boring_sys::EVP_aes_256_cfb(),
-                _ => anyhow::bail!("invalid key length"),
-            },
-            std::ptr::null_mut(),
-            key.as_ptr(),
-            iv.as_ptr(),
-        );
-
-        if rv != 1 {
-            return Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into());
-        }
-
-        let mut out_len = 0;
-        let rv = boring_sys::EVP_DecryptUpdate(
-            ctx,
-            data.as_mut_ptr(),
-            &mut out_len,
-            data.as_ptr(),
-            data.len() as _,
-        );
-
-        if rv != 1 {
-            return Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into());
-        }
-
-        let rv = boring_sys::EVP_DecryptFinal_ex(
-            ctx,
-            data.as_mut_ptr().offset(out_len as _),
-            &mut out_len,
-        );
-        boring_sys::EVP_CIPHER_CTX_free(ctx);
-
-        return if rv != 1 {
-            Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into())
-        } else {
-            Ok(())
-        };
+    match key.len() {
+        16 => Ok(cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into()).decrypt(data)),
+        24 => Ok(cfb_mode::Decryptor::<aes::Aes192>::new(key.into(), iv.into()).decrypt(data)),
+        32 => Ok(cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into()).decrypt(data)),
+        _ => anyhow::bail!("invalid key length"),
     }
 }
 
