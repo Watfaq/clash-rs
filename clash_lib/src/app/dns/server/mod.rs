@@ -1,10 +1,13 @@
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 
 use async_trait::async_trait;
 
 use hickory_proto::{
     op::{Header, Message, MessageType, OpCode, ResponseCode},
-    rr::RecordType,
+    rr::{
+        rdata::{A, AAAA},
+        RData, Record, RecordType,
+    },
 };
 use hickory_server::{
     authority::MessageResponseBuilder,
@@ -18,6 +21,8 @@ use tracing::{debug, info, warn};
 use crate::Runner;
 
 use super::{Config, ThreadSafeDNSResolver};
+
+static DEFAULT_DNS_SERVER_TTL: u32 = 60;
 
 struct DnsListener {
     server: ServerFuture<DnsHandler>,
@@ -65,6 +70,47 @@ impl DnsHandler {
 
             let resp = builder.build_no_records(header);
             return Ok(response_handle.send_response(resp).await?);
+        }
+
+        if self.resolver.fake_ip_enabled() {
+            let name = request.query().name();
+            let host = if name.is_fqdn() {
+                name.to_string().strip_suffix(".").unwrap().to_string()
+            } else {
+                name.to_string()
+            };
+
+            let builder = MessageResponseBuilder::from_message_request(request);
+            let mut header = Header::response_from_request(request.header());
+            header.set_authoritative(true);
+
+            match self.resolver.resolve(&host, true).await {
+                Ok(resp) => match resp {
+                    Some(ip) => {
+                        let rdata = match ip {
+                            IpAddr::V4(a) => RData::A(A(a)),
+                            IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
+                        };
+
+                        let records = vec![Record::from_rdata(
+                            name.into(),
+                            DEFAULT_DNS_SERVER_TTL,
+                            rdata,
+                        )];
+
+                        let resp = builder.build(header, records.iter(), &[], &[], &[]);
+                        return Ok(response_handle.send_response(resp).await?);
+                    }
+                    None => {
+                        let resp = builder.build_no_records(header);
+                        return Ok(response_handle.send_response(resp).await?);
+                    }
+                },
+                Err(e) => {
+                    debug!("dns resolve error: {}", e);
+                    return Err(DNSError::QueryFailed(e.to_string()));
+                }
+            }
         }
 
         let mut m = Message::new();
