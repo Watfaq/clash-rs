@@ -3,22 +3,18 @@ use std::{
     task::{Context, Poll},
 };
 
-use boring::ssl::{SslConnector, SslMethod};
 use futures::Future;
 
 use hyper::{
     client::connect::{Connected, Connection},
     Uri,
 };
-use hyper_boring::HttpsConnector;
 use tower::Service;
 
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     proxy::{utils::new_tcp_stream, AnyStream},
 };
-
-use super::errors::map_io_error;
 
 #[derive(Clone)]
 /// A LocalConnector that is generalised to connect to any url
@@ -68,17 +64,46 @@ impl Connection for AnyStream {
     }
 }
 
-pub type HttpClient = hyper::Client<HttpsConnector<LocalConnector>>;
+#[cfg(not(windows))]
+pub type HttpClient = hyper::Client<hyper_boring::HttpsConnector<LocalConnector>>;
+#[cfg(windows)]
+pub type HttpClient = hyper::Client<hyper_rustls::HttpsConnector<LocalConnector>>;
 
+#[cfg(not(windows))]
 pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<HttpClient> {
+    use super::errors::map_io_error;
+    use boring::ssl::{SslConnector, SslMethod};
+
     let connector = LocalConnector(dns_resolver);
 
     let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
     ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
         .map_err(map_io_error)?;
-    #[cfg(target_os = "windows")]
-    ssl.set_verify(boring::ssl::SslVerifyMode::NONE); // TODO: verify certificate
 
-    let connector = HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
+    let connector =
+        hyper_boring::HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
+    Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
+}
+
+#[cfg(windows)]
+pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<HttpClient> {
+    use std::sync::Arc;
+
+    use super::tls::GLOBAL_ROOT_STORE;
+
+    let connector = LocalConnector(dns_resolver);
+
+    let mut tls_config = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+        .with_no_client_auth();
+    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+    let connector = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_tls_config(tls_config)
+        .https_or_http()
+        .enable_all_versions()
+        .wrap_connector(connector);
+
     Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
 }
