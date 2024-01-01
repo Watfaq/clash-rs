@@ -1,19 +1,25 @@
 name: Build/Test/Release
 
 on:
-  push:
-    branches: [ "master" ]
-    tags:
-      - v*
+  push
   pull_request:
     branches: [ "master" ]
 
 jobs:
   test:
-    name: test on ${{ matrix.os }}
+    name: test ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
+        static: [true, false]
+        platforms: [
+          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
+          {os: macos-13, target: aarch64-apple-darwin},
+          {os: macos-13, target: x86_64-apple-darwin},
+          {os: windows-2022, target: x86_64-pc-windows-msvc},
+        ]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -36,6 +42,13 @@ jobs:
       run: cargo clippy --all --all-features -- -D warnings
     - name: Run cargo test
       run: cargo test --all --all-features
+    - name: Build artifacts
+      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
+    - name: Stash artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: clash-${{ matrix.platforms.os }}-${{ matrix.platforms.target }}-${{ matrix.static }}
+        path: target/artifacts/
     
   publish:
     name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
