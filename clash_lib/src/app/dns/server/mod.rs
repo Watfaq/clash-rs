@@ -75,7 +75,7 @@ impl DnsHandler {
         if self.resolver.fake_ip_enabled() {
             let name = request.query().name();
             let host = if name.is_fqdn() {
-                name.to_string().strip_suffix(".").unwrap().to_string()
+                name.to_string().strip_suffix('.').unwrap().to_string()
             } else {
                 name.to_string()
             };
