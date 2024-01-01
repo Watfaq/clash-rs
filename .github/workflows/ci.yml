@@ -2,7 +2,8 @@ name: Build/Test/Release
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ "*" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "master" ]
 
