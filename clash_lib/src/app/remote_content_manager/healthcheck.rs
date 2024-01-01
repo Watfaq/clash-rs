@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::time::Instant;
 use tracing::debug;
 
-use crate::{pm_debug, proxy::AnyOutboundHandler};
+use crate::proxy::AnyOutboundHandler;
 
 use super::ProxyManager;
 
@@ -65,7 +65,7 @@ impl HealthCheck {
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
-                        pm_debug!("healthcheck ticking: {}, lazy: {}", url, lazy);
+                        debug!("healthcheck ticking: {}, lazy: {}", url, lazy);
                         let now = tokio::time::Instant::now();
                         let last_check = inner.read().await.last_check;
                         if !lazy || now.duration_since(last_check).as_secs() >= interval {
