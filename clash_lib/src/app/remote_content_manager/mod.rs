@@ -162,6 +162,7 @@ impl ProxyManager {
             };
             #[cfg(not(windows))]
             let connector = {
+                use crate::common::errors::map_io_error;
                 use boring::ssl::{SslConnector, SslMethod};
 
                 let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
