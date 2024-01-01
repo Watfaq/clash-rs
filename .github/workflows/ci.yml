@@ -1,7 +1,8 @@
 name: Build/Test/Release
 
 on:
-  push
+  push:
+    branches: [ "**" ]
   pull_request:
     branches: [ "master" ]
 
