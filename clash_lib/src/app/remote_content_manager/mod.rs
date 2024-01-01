@@ -248,8 +248,6 @@ impl ProxyManager {
             state.delay_history.pop_front();
         }
 
-        debug!("{} alive: {}, delay: {:?}", name, result.is_ok(), result);
-
         result
     }
 }
