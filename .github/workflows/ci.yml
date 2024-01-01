@@ -22,7 +22,7 @@ jobs:
           {os: macos-13, target: x86_64-apple-darwin},
           {os: windows-2022, target: x86_64-pc-windows-msvc},
         ]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platforms.os }}
 
     steps:
     - uses: actions/checkout@v4
@@ -51,45 +51,16 @@ jobs:
       with:
         name: clash-${{ matrix.platforms.os }}-${{ matrix.platforms.target }}-${{ matrix.static }}
         path: target/artifacts/
-    
-  publish:
-    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
-    if: contains(github.ref, 'tags/v')
-    needs: [test]
-    runs-on: ${{ matrix.platforms.os }}
-    strategy:
-      matrix:
-        static: [true, false]
-        platforms: [
-          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
-          {os: macos-13, target: aarch64-apple-darwin},
-          {os: macos-13, target: x86_64-apple-darwin},
-          {os: windows-2022, target: x86_64-pc-windows-msvc},
-        ]   
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: actions/setup-go@v5
-      with:
-        go-version: '1.20'
-    - uses: ilammy/setup-nasm@v1
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-    - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
+
+
     - name: Create Release
+      if: contains(github.ref, 'tags/v')
       id: create_release
       uses: softprops/action-gh-release@v1        
       with:
         generate_release_notes: true
-
     - name: Upload Release Asset
+      if: contains(github.ref, 'tags/v')
       id: upload-release-asset 
       uses: dwenegar/upload-release-assets@v2
       env:
