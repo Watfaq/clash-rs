@@ -20,7 +20,7 @@ impl ProviderVehicle for Vehicle {
     }
 
     fn path(&self) -> &str {
-        &self.path.as_str()
+        self.path.as_str()
     }
 
     fn typ(&self) -> ProviderVehicleType {

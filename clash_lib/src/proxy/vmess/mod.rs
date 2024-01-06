@@ -26,17 +26,9 @@ use super::{
     AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
 };
 
-#[macro_export]
-macro_rules! vmess_debug {
-    ($($arg:tt)*) => {
-        debug!(target: "vmess", $($arg)*)
-    };
-}
-
 pub enum VmessTransport {
     Ws(WsOption),
     H2(Http2Option),
-    #[allow(dead_code)]
     Grpc(GrpcOption),
     #[allow(dead_code)]
     Http(HttpOption),
@@ -60,6 +52,7 @@ pub struct Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
@@ -85,20 +78,20 @@ impl Handler {
                 );
 
                 if let Some(tls_opt) = &self.opts.tls {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
                 }
 
                 ws_builder.proxy_stream(stream).await?
             }
             Some(VmessTransport::H2(ref opt)) => {
-                let mut tls_opt = self
-                    .opts
-                    .tls
-                    .as_ref()
-                    .expect("H2 conn must have tls opt")
-                    .clone();
-                tls_opt.alpn = Some(vec!["h2".to_string()]);
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                stream = match self.opts.tls.as_ref() {
+                    Some(tls_opt) => {
+                        let mut tls_opt = tls_opt.clone();
+                        tls_opt.alpn = Some(vec!["h2".to_string()]);
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                    }
+                    None => stream,
+                };
 
                 let h2_builder = Http2Config {
                     hosts: vec![self.opts.server.clone()],
@@ -110,10 +103,15 @@ impl Handler {
                 h2_builder.proxy_stream(stream).await?
             }
             Some(VmessTransport::Grpc(ref opt)) => {
-                let tls_opt = self.opts.tls.as_ref().expect("gRPC conn must have tls opt");
-                stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                stream = match self.opts.tls.as_ref() {
+                    Some(tls_opt) => {
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                    }
+                    None => stream,
+                };
+
                 let grpc_builder = transport::GrpcStreamBuilder::new(
-                    self.opts.server.clone(),
+                    opt.host.clone(),
                     opt.service_name
                         .to_owned()
                         .try_into()
@@ -126,7 +124,7 @@ impl Handler {
             }
             None => {
                 if let Some(tls_opt) = self.opts.tls.as_ref() {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned()).await?;
+                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
                 }
                 stream
             }

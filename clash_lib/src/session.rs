@@ -398,7 +398,7 @@ impl Session {
         );
         rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
 
-        return rv;
+        rv
     }
 }
 
@@ -420,9 +420,7 @@ impl Display for Session {
         write!(
             f,
             "[{}] {} -> {}",
-            self.network,
-            self.source,
-            self.destination.to_string(),
+            self.network, self.source, self.destination,
         )
     }
 }

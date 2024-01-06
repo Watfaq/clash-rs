@@ -11,7 +11,6 @@ use crate::{
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
-    p_debug,
     session::{Session, SocksAddr},
     Error,
 };
@@ -71,7 +70,7 @@ impl Handler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
         for proxy in proxies {
             if proxy.name() == self.inner.read().await.current {
-                p_debug!("{} selected {}", self.name(), proxy.name());
+                debug!("`{}` selected `{}`", self.name(), proxy.name());
                 return proxy;
             }
         }
@@ -92,8 +91,7 @@ impl SelectorControl for Handler {
     }
 
     async fn current(&self) -> String {
-        let inner = self.inner.read().await.current.to_owned();
-        inner
+        self.inner.read().await.current.to_owned()
     }
 }
 

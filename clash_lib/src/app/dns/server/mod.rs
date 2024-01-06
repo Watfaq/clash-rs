@@ -1,10 +1,13 @@
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 
 use async_trait::async_trait;
 
 use hickory_proto::{
     op::{Header, Message, MessageType, OpCode, ResponseCode},
-    rr::RecordType,
+    rr::{
+        rdata::{A, AAAA},
+        RData, Record, RecordType,
+    },
 };
 use hickory_server::{
     authority::MessageResponseBuilder,
@@ -18,6 +21,8 @@ use tracing::{debug, info, warn};
 use crate::Runner;
 
 use super::{Config, ThreadSafeDNSResolver};
+
+static DEFAULT_DNS_SERVER_TTL: u32 = 60;
 
 struct DnsListener {
     server: ServerFuture<DnsHandler>,
@@ -67,13 +72,54 @@ impl DnsHandler {
             return Ok(response_handle.send_response(resp).await?);
         }
 
+        if self.resolver.fake_ip_enabled() {
+            let name = request.query().name();
+            let host = if name.is_fqdn() {
+                name.to_string().strip_suffix('.').unwrap().to_string()
+            } else {
+                name.to_string()
+            };
+
+            let builder = MessageResponseBuilder::from_message_request(request);
+            let mut header = Header::response_from_request(request.header());
+            header.set_authoritative(true);
+
+            match self.resolver.resolve(&host, true).await {
+                Ok(resp) => match resp {
+                    Some(ip) => {
+                        let rdata = match ip {
+                            IpAddr::V4(a) => RData::A(A(a)),
+                            IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
+                        };
+
+                        let records = vec![Record::from_rdata(
+                            name.into(),
+                            DEFAULT_DNS_SERVER_TTL,
+                            rdata,
+                        )];
+
+                        let resp = builder.build(header, records.iter(), &[], &[], &[]);
+                        return Ok(response_handle.send_response(resp).await?);
+                    }
+                    None => {
+                        let resp = builder.build_no_records(header);
+                        return Ok(response_handle.send_response(resp).await?);
+                    }
+                },
+                Err(e) => {
+                    debug!("dns resolve error: {}", e);
+                    return Err(DNSError::QueryFailed(e.to_string()));
+                }
+            }
+        }
+
         let mut m = Message::new();
         m.set_op_code(request.op_code());
         m.set_message_type(request.message_type());
         m.set_recursion_desired(request.recursion_desired());
         m.add_query(request.query().original().clone());
-        m.add_additionals(request.additionals().into_iter().map(Clone::clone));
-        m.add_name_servers(request.name_servers().into_iter().map(Clone::clone));
+        m.add_additionals(request.additionals().iter().map(Clone::clone));
+        m.add_name_servers(request.name_servers().iter().map(Clone::clone));
         for sig0 in request.sig0() {
             m.add_sig0(sig0.clone());
         }
@@ -158,20 +204,18 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
     if let Some(addr) = cfg.listen.udp {
         UdpSocket::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on udp: {}", addr);
                 s.register_socket(x);
-                Ok(())
             })
             .ok()?;
     }
     if let Some(addr) = cfg.listen.tcp {
         TcpListener::bind(addr)
             .await
-            .and_then(|x| {
+            .map(|x| {
                 info!("dns server listening on tcp: {}", addr);
                 s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
-                Ok(())
             })
             .ok()?;
     }

@@ -57,11 +57,11 @@ async fn get_proxies(State(state): State<ProxyState>) -> impl IntoResponse {
     axum::response::Json(res)
 }
 
-async fn find_proxy_by_name<B>(
+async fn find_proxy_by_name(
     State(state): State<ProxyState>,
     Path(name): Path<String>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
     if let Some(proxy) = outbound_manager.get_outbound(&name) {

@@ -54,6 +54,7 @@ impl Drop for Listener {
 }
 
 impl Listener {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
@@ -83,7 +84,7 @@ impl InboundListener for Listener {
         loop {
             let (socket, _) = listener.accept().await?;
 
-            let mut socket = apply_tcp_options(socket).await?;
+            let mut socket = apply_tcp_options(socket)?;
 
             let mut sess = Session {
                 network: Network::Tcp,

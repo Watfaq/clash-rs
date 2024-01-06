@@ -20,6 +20,16 @@ pub struct UdpPacket {
     pub dst_addr: SocksAddr,
 }
 
+impl Default for UdpPacket {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+            src_addr: SocksAddr::any_ipv4(),
+            dst_addr: SocksAddr::any_ipv4(),
+        }
+    }
+}
+
 impl Debug for UdpPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UdpPacket")
@@ -132,6 +142,7 @@ pub struct OutboundDatagramImpl {
 }
 
 impl OutboundDatagramImpl {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> AnyOutboundDatagram {
         let s = Self {
             inner: udp,
@@ -183,7 +194,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let dst = match dst {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
-                    let port = *port as u16;
+                    let port = *port;
                     let mut fut = resolver.resolve(domain.as_str(), false);
                     let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
                         io::Error::new(io::ErrorKind::Other, "resolve domain failed")

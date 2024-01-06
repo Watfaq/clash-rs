@@ -29,5 +29,7 @@ venv/
 # don't check in this real config
 ignore*.yaml
 cache.db
+Country.mmdb
+ruleset/
 
 rust-project.json

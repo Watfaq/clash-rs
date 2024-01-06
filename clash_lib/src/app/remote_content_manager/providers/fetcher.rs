@@ -253,15 +253,15 @@ mod tests {
         let tx1 = tx.clone();
 
         let mut mock_vehicle = MockProviderVehicle::new();
-        let mock_file = "/tmp/mock_provider_vehicle";
-        if Path::new(mock_file).exists() {
-            std::fs::remove_file(mock_file).unwrap();
+        let mock_file = std::env::temp_dir().join("mock_provider_vehicle");
+        if Path::new(mock_file.to_str().unwrap()).exists() {
+            std::fs::remove_file(&mock_file).unwrap();
         }
-        std::fs::write(mock_file, vec![1, 2, 3]).unwrap();
+        std::fs::write(&mock_file, vec![1, 2, 3]).unwrap();
 
         mock_vehicle
             .expect_path()
-            .return_const(mock_file.to_owned());
+            .return_const(mock_file.to_str().unwrap().to_owned());
         mock_vehicle.expect_read().returning(|| Ok(vec![4, 5, 6]));
         mock_vehicle
             .expect_typ()

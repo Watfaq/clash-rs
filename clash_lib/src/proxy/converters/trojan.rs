@@ -72,6 +72,7 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             Transport::Grpc(GrpcOption {
+                                host: s.sni.as_ref().unwrap_or(&s.server).to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()
@@ -82,7 +83,10 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),
                         )),
-                    _ => return Err(Error::InvalidConfig(format!("unsupported network: {}", x))),
+                    _ => Err(Error::InvalidConfig(format!(
+                        "unsupported trojan network: {}",
+                        x
+                    ))),
                 })
                 .transpose()?,
         });

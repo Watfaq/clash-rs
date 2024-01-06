@@ -7,22 +7,16 @@ use std::{
     time::Duration,
 };
 
-use boring::ssl::{SslConnector, SslMethod};
-
 use chrono::{DateTime, Utc};
 
 use futures::{stream::FuturesUnordered, StreamExt};
-use http::{Request, Version};
-use hyper_boring::HttpsConnector;
+use hyper::Request;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use crate::{
-    common::{
-        errors::{map_io_error, new_io_error},
-        timed_future::TimedFuture,
-    },
+    common::{errors::new_io_error, timed_future::TimedFuture},
     proxy::AnyOutboundHandler,
 };
 
@@ -33,20 +27,6 @@ use super::dns::ThreadSafeDNSResolver;
 pub mod healthcheck;
 mod http_client;
 pub mod providers;
-
-#[macro_export]
-macro_rules! pm_debug {
-    ($($arg:tt)*) => ({
-        debug!(target: "proxy_manager", $($arg)*);
-    });
-}
-
-#[macro_export]
-macro_rules! pm_warn {
-    ($($arg:tt)*) => ({
-        warn!(target: "proxy_manager", $($arg)*);
-    });
-}
 
 #[derive(Clone, Serialize)]
 pub struct DelayHistory {
@@ -68,7 +48,10 @@ pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 
-    connector_map: Arc<RwLock<HashMap<String, HttpsConnector<LocalConnector>>>>,
+    #[cfg(windows)]
+    connector_map: Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
+    #[cfg(not(windows))]
+    connector_map: Arc<RwLock<HashMap<String, hyper_boring::HttpsConnector<LocalConnector>>>>,
 }
 
 impl ProxyManager {
@@ -90,7 +73,6 @@ impl ProxyManager {
         for proxy in proxies {
             let proxy = proxy.clone();
             let url = url.to_owned();
-            let timeout = timeout.clone();
             let manager = self.clone();
             futs.push(tokio::spawn(async move {
                 manager
@@ -148,12 +130,6 @@ impl ProxyManager {
         url: &str,
         timeout: Option<Duration>,
     ) -> std::io::Result<(u16, u16)> {
-        pm_debug!(
-            "testing {} with url {}, timeout {:?}",
-            proxy.name(),
-            url,
-            timeout
-        );
         let name = proxy.name().to_owned();
         let name_clone = name.clone();
         let default_timeout = Duration::from_secs(5);
@@ -163,23 +139,49 @@ impl ProxyManager {
             let name = name_clone;
             let connector = LocalConnector(proxy.clone(), dns_resolver);
 
-            let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
-            ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
-                .map_err(map_io_error)?;
+            #[cfg(windows)]
+            let connector = {
+                use crate::common::tls::GLOBAL_ROOT_STORE;
 
-            let mut g = self.connector_map.write().await;
-            let connector = g
-                .entry(name.clone())
-                .or_insert(HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?);
+                let mut tls_config = rustls::ClientConfig::builder()
+                    .with_safe_defaults()
+                    .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                    .with_no_client_auth();
 
-            let connector = connector.clone();
-            drop(g);
+                tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+                let connector = hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_tls_config(tls_config)
+                    .https_or_http()
+                    .enable_all_versions()
+                    .wrap_connector(connector);
+
+                let mut g = self.connector_map.write().await;
+                let connector = g.entry(name.clone()).or_insert(connector);
+                connector.clone()
+            };
+            #[cfg(not(windows))]
+            let connector = {
+                use crate::common::errors::map_io_error;
+                use boring::ssl::{SslConnector, SslMethod};
+
+                let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
+                ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
+                    .map_err(map_io_error)?;
+
+                let connector = hyper_boring::HttpsConnector::with_connector(connector, ssl)
+                    .map_err(map_io_error)?;
+
+                let mut g = self.connector_map.write().await;
+                let connector = g.entry(name.clone()).or_insert(connector);
+                connector.clone()
+            };
 
             let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
 
             let req = Request::get(url)
                 .header("Connection", "Close")
-                .version(Version::HTTP_11)
+                .version(hyper::Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
 
@@ -190,7 +192,7 @@ impl ProxyManager {
                     Ok((res, delay)) => match res {
                         Ok(res) => {
                             let delay = delay.as_millis().try_into().expect("delay is too large");
-                            pm_debug!(
+                            trace!(
                                 "urltest for proxy {} with url {} returned response {} in {}ms",
                                 &name,
                                 url,
@@ -200,7 +202,7 @@ impl ProxyManager {
                             Ok(delay)
                         }
                         Err(e) => {
-                            pm_debug!("urltest for proxy {} with url {} failed: {}", &name, url, e);
+                            debug!("urltest for proxy {} with url {} failed: {}", &name, url, e);
                             Err(new_io_error(format!("{}: {}", url, e).as_str()))
                         }
                     },
@@ -209,7 +211,7 @@ impl ProxyManager {
 
             let req2 = Request::get(url)
                 .header("Connection", "Close")
-                .version(Version::HTTP_11)
+                .version(hyper::Version::HTTP_11)
                 .body(hyper::Body::empty())
                 .unwrap();
             let resp2 = TimedFuture::new(client.request(req2), None);
@@ -246,8 +248,6 @@ impl ProxyManager {
             state.delay_history.pop_front();
         }
 
-        pm_debug!("{} alive: {}, delay: {:?}", name, result.is_ok(), result);
-
         result
     }
 }
@@ -270,6 +270,7 @@ mod tests {
         mock_resolver
             .expect_resolve()
             .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67)))));
+        mock_resolver.expect_ipv6().return_const(false);
 
         let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
@@ -286,7 +287,7 @@ mod tests {
 
         assert!(manager.alive(PROXY_DIRECT).await);
         assert!(manager.last_delay(PROXY_DIRECT).await > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() > 0);
+        assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
 
         manager.report_alive(PROXY_DIRECT, false).await;
         assert!(!manager.alive(PROXY_DIRECT).await);

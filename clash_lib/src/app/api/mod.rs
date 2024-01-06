@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use axum::{response::Redirect, routing::get, Router};
 
@@ -29,6 +29,7 @@ pub struct AppState {
     statistics_manager: Arc<StatisticsManager>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_api_runner(
     controller_cfg: Controller,
     log_source: Sender<LogEvent>,
@@ -48,15 +49,13 @@ pub fn get_api_runner(
             statistics_manager: statistics_manager.clone(),
         });
 
-        let addr = bind_addr.parse().unwrap();
-
         let cors = CorsLayer::new()
             .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH])
             .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
             .allow_origin(Any);
 
         let runner = async move {
-            info!("Starting API server at {}", addr);
+            info!("Starting API server at {}", bind_addr);
             let mut app = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
@@ -97,13 +96,12 @@ pub fn get_api_runner(
                     .nest_service("/ui/", ServeDir::new(PathBuf::from(cwd).join(external_ui)));
             }
 
-            axum::Server::bind(&addr)
-                .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-                .await
-                .map_err(|x| {
-                    error!("API server error: {}", x);
-                    crate::Error::Operation(format!("API server error: {}", x))
-                })
+            let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
+
+            axum::serve(listener, app).await.map_err(|x| {
+                error!("API server error: {}", x);
+                crate::Error::Operation(format!("API server error: {}", x))
+            })
         };
         Some(Box::pin(runner))
     } else {

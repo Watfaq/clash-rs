@@ -10,24 +10,40 @@ use tokio::{
     time::timeout,
 };
 
+#[cfg(target_os = "windows")]
+use tracing::warn;
+
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
-pub async fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
-    let s = socket2::Socket::from(s.into_std()?);
-    s.set_tcp_keepalive(
-        &TcpKeepalive::new()
-            .with_time(Duration::from_secs(10))
-            .with_interval(Duration::from_secs(1))
-            .with_retries(3),
-    )?;
-    Ok(TcpStream::from_std(s.into())?)
+pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let s = socket2::Socket::from(s.into_std()?);
+        s.set_tcp_keepalive(
+            &TcpKeepalive::new()
+                .with_time(Duration::from_secs(10))
+                .with_interval(Duration::from_secs(1))
+                .with_retries(3),
+        )?;
+        TcpStream::from_std(s.into())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let s = socket2::Socket::from(s.into_std()?);
+        s.set_tcp_keepalive(
+            &TcpKeepalive::new()
+                .with_time(Duration::from_secs(10))
+                .with_interval(Duration::from_secs(1)),
+        )?;
+        TcpStream::from_std(s.into())
+    }
 }
 
 fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
     match iface {
         // TODO: should this be ever used vs. calling .bind(2) from the caller side?
-        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(ip.clone(), 0).into()),
+        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(*ip, 0).into()),
         Interface::Name(name) => {
             #[cfg(target_vendor = "apple")]
             {
@@ -41,7 +57,11 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
             }
             #[cfg(target_os = "windows")]
             {
-                // TODO maybe fallback to IpAddr
+                warn!(
+                    "binding to interface[{}] by name is not supported on Windows",
+                    name
+                );
+                Ok(())
             }
         }
     }
@@ -63,9 +83,19 @@ pub async fn new_tcp_stream<'a>(
             format!("can't resolve dns: {}", address),
         ))?;
 
-    let socket = match dial_addr {
-        IpAddr::V4(_) => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?,
-        IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,
+    let socket = match (dial_addr, resolver.ipv6()) {
+        (IpAddr::V4(_), _) => {
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), true) => {
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), false) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("ipv6 is disabled, can't dial {}", address),
+            ))
+        }
     };
 
     if let Some(iface) = iface {
@@ -107,7 +137,7 @@ pub async fn new_udp_socket(
     };
 
     if let Some(src) = src {
-        socket.bind(&src.clone().into())?;
+        socket.bind(&(*src).into())?;
     }
 
     if let Some(iface) = iface {

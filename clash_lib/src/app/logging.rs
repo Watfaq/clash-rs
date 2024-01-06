@@ -55,12 +55,12 @@ where
         event.record(&mut EventVisitor(&mut strs));
 
         let event = LogEvent {
-            level: match event.metadata().level() {
-                &tracing::Level::ERROR => LogLevel::Error,
-                &tracing::Level::WARN => LogLevel::Warning,
-                &tracing::Level::INFO => LogLevel::Info,
-                &tracing::Level::DEBUG => LogLevel::Debug,
-                &tracing::Level::TRACE => LogLevel::Debug,
+            level: match *event.metadata().level() {
+                tracing::Level::ERROR => LogLevel::Error,
+                tracing::Level::WARN => LogLevel::Warning,
+                tracing::Level::INFO => LogLevel::Info,
+                tracing::Level::DEBUG => LogLevel::Debug,
+                tracing::Level::TRACE => LogLevel::Debug,
             },
             msg: strs.join(" "),
         };
@@ -94,76 +94,69 @@ pub fn setup_logging(
     cwd: &str,
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
-    #[cfg(feature = "tracing")]
-    {
-        console_subscriber::init();
-        Ok(None)
+    let filter = EnvFilter::builder()
+        .with_default_directive(format!("clash={}", level).parse::<Directive>().unwrap())
+        .from_env_lossy();
+
+    let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
+        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+
+        let tracer = opentelemetry_jaeger::new_collector_pipeline()
+            .with_service_name("clash-rs")
+            .with_endpoint(jager_endpoint)
+            .with_hyper()
+            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
+    };
+
+    let ios_os_log = if cfg!(target_os = "ios") {
+        Some(OsLogger::new("com.watfaq.clash", "default"))
+    } else {
+        None
+    };
+
+    let (appender, g) = if let Some(log_file) = log_file {
+        let file_appender = tracing_appender::rolling::daily(cwd, log_file);
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        (Some(non_blocking), Some(guard))
+    } else {
+        (None, None)
+    };
+
+    let console_layer = if cfg!(feature = "tracing") {
+        Some(console_subscriber::spawn())
+    } else {
+        None
+    };
+
+    let subscriber = tracing_subscriber::registry()
+        .with(jaeger)
+        .with(filter)
+        .with(collector)
+        .with(console_layer)
+        .with(
+            tracing_subscriber::fmt::Layer::new()
+                .with_ansi(std::io::stdout().is_terminal())
+                .compact()
+                .with_target(false)
+                .with_file(true)
+                .with_line_number(true)
+                .with_writer(move || -> Box<dyn std::io::Write> { Box::new(W(appender.clone())) })
+                .with_writer(std::io::stdout),
+        )
+        .with(ios_os_log);
+
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|x| anyhow!("setup logging error: {}", x))?;
+
+    if let Ok(jager_endpiont) = std::env::var("JAGER_ENDPOINT") {
+        debug!("jager endpoint: {}", jager_endpiont);
     }
-    #[cfg(not(feature = "tracing"))]
-    {
-        let filter = EnvFilter::builder()
-            .with_default_directive(
-                format!("clash={}", level)
-                    .parse::<Directive>()
-                    .unwrap()
-                    .into(),
-            )
-            .from_env_lossy();
 
-        let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
-            global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-
-            let tracer = opentelemetry_jaeger::new_collector_pipeline()
-                .with_service_name("clash-rs")
-                .with_endpoint(jager_endpoint)
-                .with_hyper()
-                .install_batch(opentelemetry::runtime::Tokio)?;
-
-            Some(tracing_opentelemetry::layer().with_tracer(tracer))
-        } else {
-            None
-        };
-
-        let ios_os_log = if cfg!(target_os = "ios") && cfg!(debug_assertions) {
-            Some(OsLogger::new("com.watfaq.clash", "default"))
-        } else {
-            None
-        };
-
-        let (appender, g) = if let Some(log_file) = log_file {
-            let file_appender = tracing_appender::rolling::daily(cwd, log_file);
-            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-            (Some(non_blocking), Some(guard))
-        } else {
-            (None, None)
-        };
-
-        let subscriber = tracing_subscriber::registry()
-            .with(jaeger)
-            .with(filter)
-            .with(collector)
-            .with(
-                tracing_subscriber::fmt::Layer::new()
-                    .with_ansi(std::io::stdout().is_terminal())
-                    .pretty()
-                    .with_file(true)
-                    .with_line_number(true)
-                    .with_writer(move || -> Box<dyn std::io::Write> {
-                        Box::new(W(appender.clone()))
-                    })
-                    .with_writer(std::io::stdout),
-            )
-            .with(ios_os_log);
-
-        tracing::subscriber::set_global_default(subscriber)
-            .map_err(|x| anyhow!("setup logging error: {}", x))?;
-
-        if let Ok(jager_endpiont) = std::env::var("JAGER_ENDPOINT") {
-            debug!("jager endpoint: {}", jager_endpiont);
-        }
-
-        Ok(g)
-    }
+    Ok(g)
 }
 
 struct EventVisitor<'a>(&'a mut Vec<String>);

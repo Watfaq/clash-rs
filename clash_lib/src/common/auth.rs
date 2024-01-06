@@ -46,6 +46,6 @@ impl Authenticator for PlainAuthenticator {
     }
 
     fn enabled(&self) -> bool {
-        self.usernames.len() > 0
+        !self.usernames.is_empty()
     }
 }

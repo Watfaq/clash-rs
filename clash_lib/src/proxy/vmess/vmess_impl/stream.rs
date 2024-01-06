@@ -5,7 +5,6 @@ use bytes::{BufMut, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tracing::debug;
 
 use crate::{
     common::{
@@ -15,7 +14,6 @@ use crate::{
     },
     proxy::vmess::vmess_impl::MAX_CHUNK_SIZE,
     session::SocksAddr,
-    vmess_debug,
 };
 
 use super::{
@@ -94,12 +92,6 @@ impl<S: AsyncRead + Unpin> ReadExt for VmessStream<S> {
     ) -> Poll<std::io::Result<()>> {
         self.read_buf.reserve(size);
         unsafe { self.read_buf.set_len(size) }
-        vmess_debug!(
-            "poll read exact: {}, read_pos: {}, buf: {}",
-            size,
-            self.read_pos,
-            self.read_buf.len()
-        );
         loop {
             if self.read_pos < size {
                 let dst = unsafe {
@@ -160,9 +152,9 @@ where
             )
         };
 
-        let (aead_read_cipher, aead_write_cipher) = match security {
-            &SECURITY_NONE => (None, None),
-            &SECURITY_AES_128_GCM => {
+        let (aead_read_cipher, aead_write_cipher) = match *security {
+            SECURITY_NONE => (None, None),
+            SECURITY_AES_128_GCM => {
                 let write_cipher =
                     VmessSecurity::Aes128Gcm(Aes128Gcm::new_with_slice(&req_body_key));
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
@@ -171,7 +163,7 @@ where
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);
                 (Some(read_cipher), Some(write_cipher))
             }
-            &SECURITY_CHACHA20_POLY1305 => {
+            SECURITY_CHACHA20_POLY1305 => {
                 let mut key = [0u8; 32];
                 let tmp = utils::md5(&req_body_key);
                 key.copy_from_slice(&tmp);
@@ -309,13 +301,10 @@ where
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
-            vmess_debug!("send non aead handshake request for user {}", id.uuid);
             stream.write_all(&out).await?;
         } else {
             let out = header::seal_vmess_aead_header(id.cmd_key, buf.freeze().to_vec(), now)
                 .map_err(map_io_error)?;
-            vmess_debug!("send aead handshake request for user {}", id.uuid);
-
             stream.write_all(&out).await?;
         }
 
@@ -334,12 +323,9 @@ where
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        vmess_debug!("poll read with aead");
-
         loop {
             match self.read_state {
                 ReadState::AeadWaitingHeaderSize => {
-                    vmess_debug!("recv handshake response header");
                     let this = &mut *self;
                     let resp_body_key = this.resp_body_key.clone();
                     let resp_body_iv = this.resp_body_iv.clone();
@@ -366,7 +352,6 @@ where
 
                         this.read_state = ReadState::StreamWaitingLength;
                     } else {
-                        vmess_debug!("recv handshake response header length");
                         ready!(this.poll_read_exact(cx, 18))?;
 
                         let aead_response_header_length_encryption_key = &kdf::vmess_kdf_1_one_shot(
@@ -402,8 +387,6 @@ where
                 }
 
                 ReadState::AeadWaitingHeader(header_size) => {
-                    vmess_debug!("recv handshake header body: {}", header_size);
-
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, header_size + 16))?;
 
@@ -420,8 +403,8 @@ where
                     )[..12];
 
                     let buf = crypto::aes_gcm_open(
-                        &aead_response_header_payload_encryption_key,
-                        &aead_response_header_payload_encryption_iv,
+                        aead_response_header_payload_encryption_key,
+                        aead_response_header_payload_encryption_iv,
                         this.read_buf.split().as_ref(),
                         None,
                     )
@@ -452,7 +435,6 @@ where
                 }
 
                 ReadState::StreamWaitingLength => {
-                    vmess_debug!("recv stream length");
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, 2))?;
                     let len = u16::from_be_bytes(this.read_buf.split().as_ref().try_into().unwrap())
@@ -469,7 +451,6 @@ where
                 }
 
                 ReadState::StreamWaitingData(size) => {
-                    vmess_debug!("recv stream data: {}", size);
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, size))?;
 
@@ -484,7 +465,6 @@ where
                 }
 
                 ReadState::StreamFlushingData(size) => {
-                    vmess_debug!("flush stream data: {}", size);
                     let to_read = std::cmp::min(buf.remaining(), size);
                     let payload = self.read_buf.split_to(to_read);
                     buf.put_slice(&payload);

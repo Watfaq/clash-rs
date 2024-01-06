@@ -62,7 +62,7 @@ async fn handle_inbound_datagram(
     let closer = dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
 
     // dispatcher -> tun
-    tokio::spawn(async move {
+    let fut1 = tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
             trace!("tun <- dispatcher: {:?}", pkt);
             // populate the correct src_addr, though is it necessary?
@@ -93,7 +93,7 @@ async fn handle_inbound_datagram(
     });
 
     // tun -> dispatcher
-    tokio::spawn(async move {
+    let fut2 = tokio::spawn(async move {
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
             let pkt = UdpPacket {
                 data,
@@ -113,6 +113,8 @@ async fn handle_inbound_datagram(
 
         closer.send(0).ok();
     });
+
+    let _ = futures::future::join(fut1, fut2).await;
 }
 
 pub fn get_runner(
@@ -158,7 +160,7 @@ pub fn get_runner(
 
     let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
 
-    let tun_name = tun.get_ref().name().to_owned();
+    let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
 
     let (stack, mut tcp_listener, udp_socket) =

@@ -2,7 +2,7 @@ use std::{collections::HashMap, io, sync::Arc};
 
 use erased_serde::Serialize;
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::trace;
 
 use crate::{
     app::{
@@ -12,7 +12,6 @@ use crate::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
-    p_debug,
     session::{Session, SocksAddr},
 };
 
@@ -72,7 +71,7 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         let mut fastest = proxies
             .first()
-            .expect(format!("no proxy found for {}", self.name()).as_str());
+            .unwrap_or_else(|| panic!("no proxy found for {}", self.name()));
 
         let mut fastest_delay = proxy_manager.last_delay(fastest.name()).await;
         let mut fast_not_exist = true;
@@ -106,8 +105,8 @@ impl Handler {
             }
         }
 
-        p_debug!(
-            "{} fastest {} is {}",
+        trace!(
+            "`{}` fastest is `{}` - delay {}",
             self.name(),
             fastest.name(),
             fastest_delay

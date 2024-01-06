@@ -19,7 +19,7 @@ A custom protocol, rule based network proxy software.
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
 - 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote.
 - 🛡 Run as a HTTP/Socks5 proxy, or utun device as a home network gateway.
-- ⚙️ Shadowsocks/Trojan/Vmess outbound support with different underlying trasports.
+- ⚙️ Shadowsocks/Trojan/Vmess/Wireguard(userspace) outbound support with different underlying trasports.
 - 🌍 Dynamic remote rule/proxy loader.
 - 🎵 Tracing with Jaeger
 
@@ -27,6 +27,9 @@ A custom protocol, rule based network proxy software.
 
 - Linux
 - macOS
+- Windows
+  - You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to the same directory as your executable and run you program as administrator.
+- iOS - [TestFlight](https://testflight.apple.com/join/cLy4Ub5C) 
 
 ## 📦 Install
 
@@ -37,7 +40,7 @@ Can be found at https://github.com/Watfaq/clash-rs/releases
 ### Local Build
 
 ```
-$ bazel build //clash
+$ cargo build
 ```
 
 ## 🔨 Usage
@@ -73,9 +76,6 @@ Options:
 - [Config Reference](https://watfaq.github.io/clash-rs/)
 - [Roadmap](https://github.com/Watfaq/clash-rs/issues/59)
 
-## ⌨️ Development
-
-We use *bazel* as our build system, however *cargo* is also supported.
 
 ### SSH
 
@@ -92,7 +92,8 @@ git config --add http.extraheader "cf-access-token: $(cloudflared access token -
 
 ## 🤝 Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [Telegram User Group](https://t.me/thisisnotclash)
 
 ## ❤️ Inspired By
 - [Dreamacro/clash](https://github.com/Dreamacro/clash)

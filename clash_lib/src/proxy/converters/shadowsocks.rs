@@ -35,7 +35,7 @@ impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
                             "plugin_opts is required for plugin obfs".to_owned(),
                         ))?
                         .try_into()
-                        .map(|x| OBFSOption::Simple(x))
+                        .map(OBFSOption::Simple)
                         .ok(),
                     "v2ray-plugin" => s
                         .plugin_opts
@@ -44,7 +44,7 @@ impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
                             "plugin_opts is required for plugin obfs".to_owned(),
                         ))?
                         .try_into()
-                        .map(|x| OBFSOption::V2Ray(x))
+                        .map(OBFSOption::V2Ray)
                         .ok(),
                     _ => {
                         return Err(Error::InvalidConfig(format!(

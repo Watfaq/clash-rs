@@ -20,6 +20,12 @@ pub struct Node<T: Sync + Send + Clone> {
     data: Option<Arc<T>>,
 }
 
+impl<T: Sync + Send + Clone> Default for Node<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Sync + Send + Clone> Node<T> {
     pub fn new() -> Self {
         Node {
@@ -49,6 +55,12 @@ impl<T: Sync + Send + Clone> Node<T> {
     }
 }
 
+impl<T: Sync + Send + Clone> Default for StringTrie<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Sync + Send + Clone> StringTrie<T> {
     pub fn new() -> Self {
         StringTrie {
@@ -74,7 +86,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
             _ => self.insert_inner(&parts, data),
         }
 
-        return true;
+        true
     }
 
     pub fn search(&self, domain: &str) -> Option<&Node<T>> {
@@ -84,11 +96,11 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         }
 
         let parts = parts.unwrap();
-        if parts[0] == "" {
+        if parts[0].is_empty() {
             return None;
         }
 
-        if let Some(n) = self.search_inner(&self.root, parts) {
+        if let Some(n) = Self::search_inner(&self.root, parts) {
             if n.data.is_some() {
                 return Some(n);
             }
@@ -106,45 +118,45 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
                 node.add_child(part, Node::new())
             }
 
-            node = node.get_child_mut(&part.to_owned()).unwrap();
+            node = node.get_child_mut(part).unwrap();
         }
 
         node.data = Some(data);
     }
 
-    fn search_inner<'a>(&'a self, node: &'a Node<T>, parts: Vec<&str>) -> Option<&Node<T>> {
-        if parts.len() == 0 {
+    fn search_inner<'a>(node: &'a Node<T>, parts: Vec<&str>) -> Option<&'a Node<T>> {
+        if parts.is_empty() {
             return Some(node);
         }
 
-        if let Some(c) = node.get_child(&parts.last().unwrap().to_owned()) {
-            if let Some(n) = self.search_inner(c, parts[0..parts.len() - 1].into()) {
+        if let Some(c) = node.get_child(parts.last().unwrap().to_owned()) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
                 if n.data.is_some() {
                     return Some(n);
                 }
             }
         }
 
-        if let Some(c) = node.get_child(&WILDCARD.to_owned()) {
-            if let Some(n) = self.search_inner(c, parts[0..parts.len() - 1].into()) {
+        if let Some(c) = node.get_child(WILDCARD) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
                 if n.data.is_some() {
                     return Some(n);
                 }
             }
         }
 
-        node.get_child(&DOT_WILDCARD.to_owned())
+        node.get_child(DOT_WILDCARD)
     }
 }
 
 pub fn valid_and_split_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
-    if domain != "" && domain.ends_with(".") {
+    if !domain.is_empty() && domain.ends_with('.') {
         return (None, false);
     }
 
     let parts: Vec<&str> = domain.split(DOMAIN_STEP).collect();
     if parts.len() == 1 {
-        if parts[0] == "" {
+        if parts[0].is_empty() {
             return (None, false);
         }
         return (Some(parts), true);
@@ -179,7 +191,7 @@ mod tests {
 
         let node = tree.search("example.com").expect("should be not nil");
         assert_eq!(node.data.as_ref().expect("data nil").as_ref(), &LOCAL_IP);
-        assert_eq!(tree.insert("", Arc::new(LOCAL_IP)), false);
+        assert!(!tree.insert("", Arc::new(LOCAL_IP)));
         assert!(tree.search("").is_none());
         assert!(tree.search("localhost").is_some());
         assert!(tree.search("www.google.com").is_none());
@@ -224,7 +236,7 @@ mod tests {
     fn test_priority() {
         let mut tree = StringTrie::new();
 
-        let domains = vec![".dev", "example.dev", "*.example.dev", "test.example.dev"];
+        let domains = [".dev", "example.dev", "*.example.dev", "test.example.dev"];
 
         for (idx, d) in domains.iter().enumerate() {
             tree.insert(d, Arc::new(idx));

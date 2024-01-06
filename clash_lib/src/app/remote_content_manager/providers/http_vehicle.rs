@@ -65,7 +65,7 @@ mod tests {
     use std::str;
     use std::sync::Arc;
 
-    use http::Uri;
+    use hyper::Uri;
 
     use crate::app::dns::{Resolver, ThreadSafeDNSResolver};
 
@@ -74,13 +74,9 @@ mod tests {
         let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
             .parse::<Uri>()
             .unwrap();
+        let p = std::env::temp_dir().join("test_http_vehicle");
         let r = Arc::new(Resolver::new_default().await);
-        let v = super::Vehicle::new(
-            u,
-            "/tmp/test_http_vehicle",
-            None,
-            r.clone() as ThreadSafeDNSResolver,
-        );
+        let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
 
         let data = v.read().await.unwrap();
         assert_eq!(str::from_utf8(&data).unwrap(), "HTTPBIN is awesome");

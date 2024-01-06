@@ -8,7 +8,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            providers::proxy_provider::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
+            providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
     session::{Session, SocksAddr},
@@ -54,11 +54,11 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         for proxy in proxies.iter() {
             if self.proxy_manager.alive(proxy.name()).await {
-                debug!("{} fastest {} is alive", self.name(), proxy.name());
+                debug!("`{}` fallback to `{}`", self.name(), proxy.name());
                 return proxy.clone();
             }
         }
-        return proxies[0].clone();
+        proxies[0].clone()
     }
 }
 

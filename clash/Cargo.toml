@@ -9,6 +9,6 @@ name = "clash"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.4.7", features = ["derive"] }
+clap = { version = "4.4.12", features = ["derive"] }
 
 clash_lib = { path = "../clash_lib", version = "0.1" }

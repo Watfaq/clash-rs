@@ -70,11 +70,11 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     axum::response::Json(res)
 }
 
-async fn find_proxy_provider_by_name<B>(
+async fn find_proxy_provider_by_name(
     State(state): State<ProviderState>,
     Path(name): Path<String>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
     if let Some(provider) = outbound_manager.get_proxy_provider(&name) {
@@ -107,7 +107,7 @@ async fn update_provider(
             format!(
                 "update proxy provider {} failed with error {}",
                 provider.name(),
-                err.to_string()
+                err
             ),
         )
             .into_response(),
@@ -123,11 +123,11 @@ async fn provider_healthcheck(
     (StatusCode::ACCEPTED, "provider healthcheck")
 }
 
-async fn find_provider_proxy_by_name<B>(
+async fn find_provider_proxy_by_name(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
     Path(params): Path<HashMap<String, String>>,
-    mut req: Request<B>,
-    next: Next<B>,
+    mut req: Request<axum::body::Body>,
+    next: Next,
 ) -> Response {
     let proxy = provider.read().await.proxies().await;
     let proxy = proxy

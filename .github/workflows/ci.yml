@@ -2,72 +2,65 @@ name: Build/Test/Release
 
 on:
   push:
-    branches: [ "master" ]
-    tags:
-      - v*
+    branches: [ "*" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "master" ]
 
 jobs:
   test:
-    name: test on ${{ matrix.os }}
+    name: test ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13]
-    runs-on: ${{ matrix.os }}
+        static: [true, false]
+        platforms: [
+          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
+          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
+          {os: macos-13, target: aarch64-apple-darwin},
+          {os: macos-13, target: x86_64-apple-darwin},
+          {os: windows-2022, target: x86_64-pc-windows-msvc},
+        ]
+    runs-on: ${{ matrix.platforms.os }}
 
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    - uses: actions/setup-go@v4
+    - uses: actions/setup-go@v5
       with:
         go-version: '1.20'
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-#    https://github.com/bazelbuild/rules_rust/issues/1966
-#    maybe we should not use bazel anymore
-#    - run: CARGO_BAZEL_ISOLATED=0 CARGO_BAZEL_REPIN=true bazelisk test --test_output=all //clash_lib/... //clash/...
-    - uses: Swatinem/rust-cache@v2
-    - run: cargo test --all --all-features
-    
-  publish:
-    if: contains(github.ref, 'tags/v')
-    needs: [test]
-    runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-13]
-        include:
-          - os: ubuntu-22.04
-            targets: >
-              x86_64-unknown-linux-gnu
-          - os: macos-13
-            targets: >
-              aarch64-apple-darwin
-              x86_64-apple-darwin
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: actions/setup-go@v4
-      with:
-        go-version: '1.20'
-    - uses: actions-rs/toolchain@v1
+    - uses: ilammy/setup-nasm@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
     - uses: Swatinem/rust-cache@v2
-    - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.targets }}"
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
+    - name: Run cargo check
+      run: cargo check --all --all-features
+    - name: Run cargo clippy
+      run: cargo clippy --all --all-features -- -D warnings
+    - name: Run cargo test
+      run: cargo test --all --all-features
+    - name: Build artifacts
+      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
+    - name: Stash artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: clash-${{ matrix.platforms.os }}-${{ matrix.platforms.target }}-${{ matrix.static }}
+        path: target/artifacts/
+
+
     - name: Create Release
+      if: contains(github.ref, 'tags/v')
       id: create_release
       uses: softprops/action-gh-release@v1        
       with:
         generate_release_notes: true
-
     - name: Upload Release Asset
+      if: contains(github.ref, 'tags/v')
       id: upload-release-asset 
       uses: dwenegar/upload-release-assets@v2
       env:

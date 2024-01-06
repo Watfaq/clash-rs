@@ -7,6 +7,12 @@ pub struct Process {
     pub name_only: bool,
 }
 
+impl std::fmt::Display for Process {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} process {}", self.target, self.name)
+    }
+}
+
 impl RuleMatcher for Process {
     fn apply(&self, _sess: &crate::session::Session) -> bool {
         // TODO: implement this

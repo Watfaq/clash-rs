@@ -30,6 +30,7 @@ impl Drop for Listener {
 }
 
 impl Listener {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
@@ -59,7 +60,7 @@ impl InboundListener for Listener {
         loop {
             let (socket, src_addr) = listener.accept().await?;
 
-            let socket = apply_tcp_options(socket).await?;
+            let socket = apply_tcp_options(socket)?;
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();

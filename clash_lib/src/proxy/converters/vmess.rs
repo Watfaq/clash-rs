@@ -3,7 +3,7 @@ use tracing::warn;
 use crate::{
     config::internal::proxy::OutboundVmess,
     proxy::{
-        options::{Http2Option, WsOption},
+        options::{GrpcOption, Http2Option, WsOption},
         transport::TLSOptions,
         vmess::{Handler, HandlerOptions, VmessTransport},
         AnyOutboundHandler, CommonOption,
@@ -75,9 +75,24 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .ok_or(Error::InvalidConfig(
                             "h2_opts is required for h2".to_owned(),
                         )),
-                    _ => {
-                        return Err(Error::InvalidConfig(format!("unsupported network: {}", x)));
-                    }
+                    "grpc" => s
+                        .grpc_opts
+                        .as_ref()
+                        .map(|x| {
+                            VmessTransport::Grpc(GrpcOption {
+                                host: s.server_name.as_ref().unwrap_or(&s.server).to_owned(),
+                                service_name: x
+                                    .grpc_service_name
+                                    .as_ref()
+                                    .to_owned()
+                                    .unwrap_or(&"GunService".to_owned())
+                                    .to_owned(),
+                            })
+                        })
+                        .ok_or(Error::InvalidConfig(
+                            "grpc_opts is required for grpc".to_owned(),
+                        )),
+                    _ => Err(Error::InvalidConfig(format!("unsupported network: {}", x))),
                 })
                 .transpose()?,
             tls: match s.tls.unwrap_or_default() {
@@ -86,17 +101,12 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                     sni: s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
                         s.ws_opts
                             .as_ref()
-                            .map(|x| {
-                                x.headers
-                                    .as_ref()
-                                    .map(Clone::clone)
-                                    .map(|x| {
-                                        let h = x.get("Host");
-                                        h.map(Clone::clone)
-                                    })
-                                    .flatten()
+                            .and_then(|x| {
+                                x.headers.as_ref().map(Clone::clone).and_then(|x| {
+                                    let h = x.get("Host");
+                                    h.map(Clone::clone)
+                                })
                             })
-                            .flatten()
                             .unwrap_or(s.server.to_owned())
                             .to_owned(),
                     ),
@@ -106,7 +116,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .map(|x| match x.as_str() {
                             "ws" => Ok(vec!["http/1.1".to_owned()]),
                             "http" => Ok(vec![]),
-                            "h2" => Ok(vec!["h2".to_owned()]),
+                            "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
                             _ => Err(Error::InvalidConfig(format!("unsupported network: {}", x))),
                         })
                         .transpose()?,
