@@ -337,7 +337,14 @@ impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "rule provider name is required".to_owned(),
+            ))?
+            .to_owned();
         RuleProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }
