@@ -26,7 +26,7 @@ lru_time_cache = "0.11"
 hyper = { version = "0.14.28", features = ["http1","http2","client", "server", "tcp"] }
 http = { version = "1.0" }
 httparse = "1.8.0"
-h2 = "0.4.0"
+h2 = "0.4.2"
 prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
