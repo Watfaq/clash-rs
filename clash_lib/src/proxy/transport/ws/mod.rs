@@ -13,14 +13,6 @@ pub use websocket_early_data::WebsocketEarlyDataConn;
 
 use crate::{common::errors::map_io_error, proxy::AnyStream};
 
-use tracing::debug;
-
-macro_rules! ws_debug {
-    ($($arg:tt)*) => {
-        debug!(target: "ws", $($arg)*)
-    };
-}
-
 pub struct WebsocketStreamBuilder {
     server: String,
     port: u16,
@@ -85,7 +77,7 @@ impl WebsocketStreamBuilder {
             let (stream, resp) = client_async_with_config(req, stream, self.ws_config)
                 .await
                 .map_err(map_io_error)?;
-            ws_debug!("response: {:?}", resp);
+
             if resp.status() != StatusCode::SWITCHING_PROTOCOLS {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,

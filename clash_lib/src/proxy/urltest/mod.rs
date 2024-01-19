@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io, sync::Arc};
 
+use async_trait::async_trait;
 use erased_serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::trace;
@@ -120,7 +121,7 @@ impl Handler {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl OutboundHandler for Handler {
     /// The name of the outbound handler
     fn name(&self) -> &str {

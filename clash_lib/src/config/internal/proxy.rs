@@ -26,12 +26,20 @@ impl OutboundProxy {
     }
 }
 
-pub fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
-    Error::InvalidConfig(if let Some(loc) = x.location() {
-        format!("{}, line, {}, column: {}", x, loc.line(), loc.column())
-    } else {
-        x.to_string()
-    })
+pub fn map_serde_error(name: String) -> impl FnOnce(serde_yaml::Error) -> crate::Error {
+    move |x| {
+        if let Some(loc) = x.location() {
+            Error::InvalidConfig(format!(
+                "invalid config for {} at line {}, column {} while parsing {}",
+                name,
+                loc.line(),
+                loc.column(),
+                name
+            ))
+        } else {
+            Error::InvalidConfig(format!("error while parsine {}: {}", name, x))
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -51,6 +59,8 @@ pub enum OutboundProxyProtocol {
     Vmess(OutboundVmess),
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
+    #[serde(rename = "tor")]
+    Tor(OutboundTor),
 }
 
 impl OutboundProxyProtocol {
@@ -63,6 +73,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
+            OutboundProxyProtocol::Tor(tor) => &tor.name,
         }
     }
 }
@@ -71,8 +82,15 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy protocol".to_owned(),
+            ))?
+            .to_owned();
         OutboundProxyProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }
 
@@ -86,6 +104,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
+            OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
         }
     }
 }
@@ -191,6 +210,12 @@ pub struct OutboundWireguard {
     pub allowed_ips: Option<Vec<String>>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTor {
+    pub name: String,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutboundGroupProtocol {
@@ -232,8 +257,15 @@ impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
     type Error = Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy grouop".to_owned(),
+            ))?
+            .to_owned();
         OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }
 
@@ -360,7 +392,14 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy provider".to_owned(),
+            ))?
+            .to_owned();
         OutboundProxyProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }

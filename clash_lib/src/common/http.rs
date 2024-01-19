@@ -64,28 +64,8 @@ impl Connection for AnyStream {
     }
 }
 
-#[cfg(not(windows))]
-pub type HttpClient = hyper::Client<hyper_boring::HttpsConnector<LocalConnector>>;
-#[cfg(windows)]
 pub type HttpClient = hyper::Client<hyper_rustls::HttpsConnector<LocalConnector>>;
 
-#[cfg(not(windows))]
-pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<HttpClient> {
-    use super::errors::map_io_error;
-    use boring::ssl::{SslConnector, SslMethod};
-
-    let connector = LocalConnector(dns_resolver);
-
-    let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
-    ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
-        .map_err(map_io_error)?;
-
-    let connector =
-        hyper_boring::HttpsConnector::with_connector(connector, ssl).map_err(map_io_error)?;
-    Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
-}
-
-#[cfg(windows)]
 pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<HttpClient> {
     use std::sync::Arc;
 

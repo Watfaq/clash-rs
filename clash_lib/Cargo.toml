@@ -8,6 +8,7 @@ edition = { workspace = true }
 default = ["shadowsocks"]
 tracing = []
 bench = ["criterion"]
+onion = ["arti-client/onion-service-client"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -63,9 +64,11 @@ chrono = { version = "0.4.26", features = ["serde"] }
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
 
-boringtun = { version = "0.6.0" }
+boringtun = { version = "0.6.0", git = "https://github.com/cloudflare/boringtun.git", rev = "f672bb6c1e1e371240a8d151f15854687eb740bb" }
 smoltcp = { version = "0.11", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
+tokio-rustls = "0.24"
+hyper-rustls = { version = "0.24", features = ["http1", "http2"] }
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
@@ -100,6 +103,9 @@ maxminddb = "0.23.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
+arti-client = { version = "0.13.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+tor-rtcompat = { version = "0.9" }
+
 console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
@@ -114,11 +120,3 @@ axum-macros = "0.4.0"
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "2.8.0"
-
-[target.'cfg(windows)'.dependencies]
-tokio-rustls = "0.24"
-hyper-rustls = { version = "0.24", features = ["http1", "http2"] }
-
-[target.'cfg(not(windows))'.dependencies]
-hyper-boring = "4.2.0"
-tokio-boring = "4.2.0"
