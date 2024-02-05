@@ -4711,9 +4711,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.17.1"
+version = "1.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f24d99bb979b3f559f5ff560e2e7347b5d531ccf72a2bcdaeadb8007ea96989d"
+checksum = "91c7ad4d8430f259c6399dff1db3f04fa4d69e6e60fd11febd430b153d5e9577"
 dependencies = [
  "aes",
  "arc-swap",
