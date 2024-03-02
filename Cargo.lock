@@ -281,7 +281,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
  "void",
 ]
@@ -1094,7 +1094,7 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",
- "tor-rtcompat 0.9.7",
+ "tor-rtcompat",
  "tower",
  "tower-http",
  "tracing",
@@ -5559,7 +5559,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdir",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tor-socksproto",
  "tor-units",
  "tracing",
@@ -5616,7 +5616,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-protover",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
  "void",
  "weak-table",
@@ -5688,7 +5688,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdoc",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5740,7 +5740,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5795,7 +5795,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tor-units",
  "tracing",
 ]
@@ -5838,7 +5838,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5967,7 +5967,7 @@ dependencies = [
  "once_cell",
  "thiserror",
  "tor-error",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
  "weak-table",
 ]
@@ -6109,7 +6109,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-log-ratelim",
  "tor-protover",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tor-rtmock",
  "tor-units",
  "tracing",
@@ -6126,20 +6126,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7ae613656401ef25efbb8d60767e399e719422d3408975190e4a9fc9faab0eb"
 dependencies = [
  "caret",
- "thiserror",
-]
-
-[[package]]
-name = "tor-rtcompat"
-version = "0.9.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be71f1a409ed38b64f11d4506407898daae2fab486a9cfc87d0d56fa783b22da"
-dependencies = [
- "async-trait",
- "async_executors",
- "educe",
- "futures",
- "pin-project",
  "thiserror",
 ]
 
@@ -6184,7 +6170,7 @@ dependencies = [
  "thiserror",
  "tor-async-utils",
  "tor-error",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tracing",
  "tracing-test",
  "void",

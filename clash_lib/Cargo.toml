@@ -104,7 +104,7 @@ public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
 arti-client = { version = "0.14.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.9" }
+tor-rtcompat = { version = "0.10.0" }
 
 console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }
