@@ -182,7 +182,8 @@ impl Provider for RuleProviderImpl {
         debug!("rule provider {} updated. same? {}", self.name(), same);
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                updater.lock().await(ele);
+                let f = updater.lock().await;
+                f(ele).await;
             }
         }
         Ok(())
