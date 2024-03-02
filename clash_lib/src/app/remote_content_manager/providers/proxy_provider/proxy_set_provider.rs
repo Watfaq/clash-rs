@@ -151,7 +151,8 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                updater.lock().await(ele);
+                let f = updater.lock().await;
+                f(ele).await;
             }
         }
         Ok(())
