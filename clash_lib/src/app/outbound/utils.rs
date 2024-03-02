@@ -220,9 +220,7 @@ mod tests {
             OutboundGroupProtocol::Fallback(g3),
             OutboundGroupProtocol::LoadBalance(g4),
             OutboundGroupProtocol::Select(g5),
-        ]
-        .into_iter()
-        .collect();
+        ];
 
         super::proxy_groups_dag_sort(&mut groups).unwrap();
 
@@ -263,9 +261,7 @@ mod tests {
             OutboundGroupProtocol::Relay(g1),
             OutboundGroupProtocol::UrlTest(g2),
             OutboundGroupProtocol::Fallback(g3),
-        ]
-        .into_iter()
-        .collect();
+        ];
 
         let e = super::proxy_groups_dag_sort(&mut groups).unwrap_err();
         assert!(e.to_string().contains("loop detected in proxy groups"));
