@@ -33,7 +33,7 @@ tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "1.1.1"
-base64 = "0.21"
+base64 = "0.22"
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = "4.2.0"
 boring-sys = "4.2.0"
