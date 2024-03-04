@@ -43,7 +43,7 @@ once_cell = "1.18.0"
 
 # opentelemetry
 opentelemetry = "0.21"
-opentelemetry_sdk = "0.21"
+opentelemetry_sdk = "0.22"
 tracing-opentelemetry = "0.22" 
 opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 
