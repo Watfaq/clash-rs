@@ -74,8 +74,7 @@ impl WireguardTunnel {
             config.keepalive_seconds,
             0,
             None,
-        )
-        .map_err(|x| Error::InvalidConfig(format!("failed to create wireguard tunnel: {}", x)))?;
+        );
 
         let remote_endpoint = config.remote_endpoint;
 

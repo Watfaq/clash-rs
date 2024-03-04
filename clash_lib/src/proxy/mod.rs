@@ -25,15 +25,16 @@ pub mod mixed;
 pub(crate) mod datagram;
 mod options;
 
+pub mod converters;
+#[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+pub mod tor;
 pub mod trojan;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
 pub mod wg;
-
-pub mod converters;
 
 pub mod fallback;
 pub mod loadbalance;
@@ -108,6 +109,7 @@ pub enum OutboundType {
     Vmess,
     Trojan,
     WireGuard,
+    Tor,
 
     #[serde(rename = "URLTest")]
     UrlTest,

@@ -103,6 +103,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
+                            OutboundProxyProtocol::Tor(tor) => tor.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
@@ -150,7 +151,8 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                updater.lock().await(ele);
+                let f = updater.lock().await;
+                f(ele).await;
             }
         }
         Ok(())

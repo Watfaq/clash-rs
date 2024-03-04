@@ -124,7 +124,7 @@ impl<S: AsyncRead + Unpin> ReadExt for VmessStream<S> {
 
 impl<S> VmessStream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     pub(crate) async fn new(
         stream: S,
@@ -222,7 +222,7 @@ where
 
 impl<S> VmessStream<S>
 where
-    S: AsyncWrite + Unpin + Send + Sync,
+    S: AsyncWrite + Unpin,
 {
     async fn send_handshake_request(&mut self) -> std::io::Result<()> {
         let Self {
@@ -316,7 +316,7 @@ where
 
 impl<S> AsyncRead for VmessStream<S>
 where
-    S: AsyncRead + Unpin + Send + Sync,
+    S: AsyncRead + Unpin + Send,
 {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
@@ -485,7 +485,7 @@ where
 
 impl<S> AsyncWrite for VmessStream<S>
 where
-    S: AsyncWrite + Unpin + Send + Sync,
+    S: AsyncWrite + Unpin + Send,
 {
     fn poll_write(
         mut self: Pin<&mut Self>,

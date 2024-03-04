@@ -48,10 +48,7 @@ pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 
-    #[cfg(windows)]
     connector_map: Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
-    #[cfg(not(windows))]
-    connector_map: Arc<RwLock<HashMap<String, hyper_boring::HttpsConnector<LocalConnector>>>>,
 }
 
 impl ProxyManager {
@@ -139,7 +136,6 @@ impl ProxyManager {
             let name = name_clone;
             let connector = LocalConnector(proxy.clone(), dns_resolver);
 
-            #[cfg(windows)]
             let connector = {
                 use crate::common::tls::GLOBAL_ROOT_STORE;
 
@@ -155,22 +151,6 @@ impl ProxyManager {
                     .https_or_http()
                     .enable_all_versions()
                     .wrap_connector(connector);
-
-                let mut g = self.connector_map.write().await;
-                let connector = g.entry(name.clone()).or_insert(connector);
-                connector.clone()
-            };
-            #[cfg(not(windows))]
-            let connector = {
-                use crate::common::errors::map_io_error;
-                use boring::ssl::{SslConnector, SslMethod};
-
-                let mut ssl = SslConnector::builder(SslMethod::tls()).map_err(map_io_error)?;
-                ssl.set_alpn_protos(b"\x02h2\x08http/1.1")
-                    .map_err(map_io_error)?;
-
-                let connector = hyper_boring::HttpsConnector::with_connector(connector, ssl)
-                    .map_err(map_io_error)?;
 
                 let mut g = self.connector_map.write().await;
                 let connector = g.entry(name.clone()).or_insert(connector);

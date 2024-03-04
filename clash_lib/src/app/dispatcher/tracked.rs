@@ -1,5 +1,6 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
 
+use async_trait::async_trait;
 use futures::{Sink, Stream};
 use hyper::client::connect::{Connected, Connection};
 use tokio::{
@@ -8,11 +9,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{
-    app::router::RuleMatcher,
-    proxy::{datagram::UdpPacket, OutboundDatagram, ProxyStream},
-    session::Session,
-};
+use crate::{app::router::RuleMatcher, proxy::datagram::UdpPacket, session::Session};
 
 use super::statistics_manager::{Manager, ProxyChain, TrackerInfo};
 
@@ -28,8 +25,8 @@ impl Tracked {
     }
 }
 
-#[async_trait::async_trait]
-pub trait ChainedStream: ProxyStream {
+#[async_trait]
+pub trait ChainedStream: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 }
@@ -40,7 +37,7 @@ impl Connection for BoxedChainedStream {
     }
 }
 
-pub type BoxedChainedStream = Box<dyn ChainedStream + Send + Sync>;
+pub type BoxedChainedStream = Box<dyn ChainedStream>;
 
 #[derive(Debug)]
 pub struct ChainedStreamWrapper<T> {
@@ -57,10 +54,10 @@ impl<T> ChainedStreamWrapper<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl<T> ChainedStream for ChainedStreamWrapper<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Debug + Sync + Send,
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync,
 {
     fn chain(&self) -> &ProxyChain {
         &self.chain
@@ -264,9 +261,9 @@ impl AsyncWrite for TrackedStream {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 pub trait ChainedDatagram:
-    OutboundDatagram<UdpPacket, Item = UdpPacket, Error = std::io::Error>
+    Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Unpin
 {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
@@ -274,7 +271,7 @@ pub trait ChainedDatagram:
 
 pub type BoxedChainedDatagram = Box<dyn ChainedDatagram + Send + Sync>;
 
-#[async_trait::async_trait]
+#[async_trait]
 impl<T> ChainedDatagram for ChainedDatagramWrapper<T>
 where
     T: Sink<UdpPacket, Error = std::io::Error> + Unpin + Send + Sync + 'static,
