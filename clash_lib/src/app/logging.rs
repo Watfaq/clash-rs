@@ -2,6 +2,10 @@ use std::io::IsTerminal;
 
 use crate::def::LogLevel;
 use opentelemetry::global;
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace;
+use opentelemetry_sdk::Resource;
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
@@ -99,13 +103,19 @@ pub fn setup_logging(
         .from_env_lossy();
 
     let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
-        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+        global::set_text_map_propagator(opentelemetry_jaeger_propagator::Propagator::new());
 
-        let tracer = opentelemetry_jaeger::new_collector_pipeline()
-            .with_service_name("clash-rs")
-            .with_endpoint(jager_endpoint)
-            .with_hyper()
-            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        let otlp_exporter = opentelemetry_otlp::new_exporter()
+            .http()
+            .with_endpoint(jager_endpoint);
+        let tracer =
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", "clash-rs"),
+                ])))
+                .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
     } else {
