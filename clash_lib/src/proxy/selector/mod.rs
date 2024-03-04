@@ -68,13 +68,16 @@ impl Handler {
 
     async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
-        for proxy in proxies {
-            if proxy.name() == self.inner.read().await.current {
+        let current = &self.inner.read().await.current;
+        for proxy in proxies.iter() {
+            if proxy.name() == current {
                 debug!("`{}` selected `{}`", self.name(), proxy.name());
-                return proxy;
+                return proxy.clone();
             }
         }
-        unreachable!("selected proxy not found")
+        debug!("selected proxy `{}` not found", current);
+        // in the case the selected proxy is not found(stale cache), return the first one
+        proxies.first().unwrap().clone()
     }
 }
 
