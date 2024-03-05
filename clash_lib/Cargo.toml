@@ -47,7 +47,7 @@ opentelemetry_sdk = "0.21"
 tracing-opentelemetry = "0.22" 
 opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 
-crc32fast = "1.3.2"
+crc32fast = "1.4.0"
 brotli = "3.4.0"
 hmac = "0.12.1"
 sha2 = "0.10.8"
