@@ -31,7 +31,7 @@ jobs:
     - uses: ilammy/setup-nasm@v1
     - uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
+        toolchain: 1.75.0
     - uses: Swatinem/rust-cache@v2
     - name: Run cargo fmt
       run: cargo fmt --all -- --check
