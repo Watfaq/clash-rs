@@ -697,9 +697,9 @@ dependencies = [
 
 [[package]]
 name = "boring"
-version = "4.4.0"
+version = "4.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15fabc62c27039b971303b808e3d2683863cc4bbcffbf1615f18d6190b20eaa6"
+checksum = "8259fc1ea91894a550190683fbcda307d1ef85f2875d93a2b1ab3cab58b62fea"
 dependencies = [
  "bitflags 2.4.2",
  "boring-sys",
@@ -1247,9 +1247,9 @@ dependencies = [
 
 [[package]]
 name = "crc32fast"
-version = "1.3.2"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
+checksum = "b3855a8a784b474f333699ef2bbca9db2c4a1f6d9088a90a2d25b1eb53111eaa"
 dependencies = [
  "cfg-if",
 ]
