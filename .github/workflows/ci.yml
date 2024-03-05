@@ -31,9 +31,8 @@ jobs:
     - uses: ilammy/setup-nasm@v1
     - uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: 1.75.0
+        toolchain: stable
         components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@v2
     - name: Run cargo fmt
       run: cargo fmt --all -- --check
     - name: Run cargo check
