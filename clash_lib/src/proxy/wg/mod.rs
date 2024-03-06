@@ -53,6 +53,7 @@ pub struct HandlerOpts {
     pub mtu: Option<u16>,
     pub udp: bool,
     pub allowed_ips: Option<Vec<String>>,
+    pub reserved_bits: Option<Vec<u8>>,
 }
 
 struct Inner {
@@ -126,6 +127,16 @@ impl Handler {
                         source_peer_ipv6: self.opts.ipv6,
                         keepalive_seconds: Some(10),
                         allowed_ips,
+                        reserved_bits: match &self.opts.reserved_bits {
+                            Some(bits) => {
+                                if bits.len() >= 3 {
+                                    [bits[0], bits[1], bits[2]]
+                                } else {
+                                    [0, 0, 0]
+                                }
+                            }
+                            None => [0, 0, 0],
+                        },
                     },
                     recv_pair.0,
                     send_pair.1,
