@@ -98,7 +98,7 @@ tracing-oslog = "0.1"
 tracing-appender = "0.2.3"
 
 
-shadowsocks = { version = "1.17.2", optional = true, features=["aead-cipher-2022"] }
+shadowsocks = { version = "1.18.1", optional = true, features=["aead-cipher-2022"] }
 maxminddb = "0.24.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
