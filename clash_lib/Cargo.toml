@@ -45,7 +45,7 @@ once_cell = "1.18.0"
 opentelemetry = "0.21"
 opentelemetry_sdk = "0.21"
 tracing-opentelemetry = "0.22" 
-opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
+opentelemetry-jaeger = { version = "0.21", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 
 crc32fast = "1.4.0"
 brotli = "3.4.0"
