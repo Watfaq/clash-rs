@@ -1076,11 +1076,11 @@ dependencies = [
  "netstack-lwip",
  "network-interface",
  "once_cell",
- "opentelemetry 0.22.0",
+ "opentelemetry",
  "opentelemetry-jaeger",
  "opentelemetry-jaeger-propagator",
  "opentelemetry-otlp",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk",
  "prost",
  "public-suffix",
  "rand",
@@ -3490,22 +3490,6 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "opentelemetry"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e32339a5dc40459130b3bd269e9892439f55b33e772d2a9d402a789baaf4e8a"
-dependencies = [
- "futures-core",
- "futures-sink",
- "indexmap 2.2.1",
- "js-sys",
- "once_cell",
- "pin-project-lite",
- "thiserror",
- "urlencoding",
-]
-
-[[package]]
-name = "opentelemetry"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900d57987be3f2aeb70d385fff9b27fb74c5723cc9a52d904d4f9c807a0667bf"
@@ -3529,7 +3513,7 @@ dependencies = [
  "bytes",
  "http 0.2.11",
  "hyper 0.14.28",
- "opentelemetry 0.22.0",
+ "opentelemetry",
  "tokio",
 ]
 
@@ -3545,10 +3529,10 @@ dependencies = [
  "headers",
  "http 0.2.11",
  "hyper 0.14.28",
- "opentelemetry 0.22.0",
+ "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-semantic-conventions",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk",
  "thrift",
  "tokio",
 ]
@@ -3559,7 +3543,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "beb4ec62efc537b60aaa89b92624f986f2523d3a609079f3511cc8ee73490826"
 dependencies = [
- "opentelemetry 0.22.0",
+ "opentelemetry",
 ]
 
 [[package]]
@@ -3571,11 +3555,11 @@ dependencies = [
  "async-trait",
  "futures-core",
  "http 0.2.11",
- "opentelemetry 0.22.0",
+ "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-proto",
  "opentelemetry-semantic-conventions",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk",
  "prost",
  "thiserror",
  "tokio",
@@ -3588,8 +3572,8 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a8fddc9b68f5b80dae9d6f510b88e02396f006ad48cac349411fbecc80caae4"
 dependencies = [
- "opentelemetry 0.22.0",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry",
+ "opentelemetry_sdk",
  "prost",
  "tonic 0.11.0",
 ]
@@ -3599,26 +3583,6 @@ name = "opentelemetry-semantic-conventions"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9ab5bd6c42fb9349dcf28af2ba9a0667f697f9bdcca045d39f2cec5543e2910"
-
-[[package]]
-name = "opentelemetry_sdk"
-version = "0.21.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f16aec8a98a457a52664d69e0091bac3a0abd18ead9b641cb00202ba4e0efe4"
-dependencies = [
- "async-trait",
- "crossbeam-channel",
- "futures-channel",
- "futures-executor",
- "futures-util",
- "glob",
- "once_cell",
- "opentelemetry 0.21.0",
- "ordered-float 4.2.0",
- "percent-encoding",
- "rand",
- "thiserror",
-]
 
 [[package]]
 name = "opentelemetry_sdk"
@@ -3633,7 +3597,7 @@ dependencies = [
  "futures-util",
  "glob",
  "once_cell",
- "opentelemetry 0.22.0",
+ "opentelemetry",
  "ordered-float 4.2.0",
  "percent-encoding",
  "rand",
@@ -6422,14 +6386,14 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c67ac25c5407e7b961fafc6f7e9aa5958fd297aada2d20fa2ae1737357e55596"
+checksum = "a9be14ba1bbe4ab79e9229f7f89fab8d120b865859f10527f31c033e599d2284"
 dependencies = [
  "js-sys",
  "once_cell",
- "opentelemetry 0.21.0",
- "opentelemetry_sdk 0.21.2",
+ "opentelemetry",
+ "opentelemetry_sdk",
  "smallvec",
  "tracing",
  "tracing-core",
@@ -6851,9 +6815,9 @@ dependencies = [
 
 [[package]]
 name = "web-time"
-version = "0.2.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
