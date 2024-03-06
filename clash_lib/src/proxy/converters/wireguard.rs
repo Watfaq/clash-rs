@@ -63,6 +63,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
             mtu: s.mtu,
             udp: s.udp.unwrap_or_default(),
             allowed_ips: s.allowed_ips.as_ref().map(|x| x.to_owned()),
+            reserved_bits: s.reserved_bits.as_ref().map(|x| x.to_owned()),
         });
         Ok(h)
     }
