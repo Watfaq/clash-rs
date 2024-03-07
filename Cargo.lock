@@ -1011,7 +1011,7 @@ checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clash"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "clap 4.5.2",
  "clash_lib",
@@ -1019,14 +1019,14 @@ dependencies = [
 
 [[package]]
 name = "clash_doc"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "clash_lib",
 ]
 
 [[package]]
 name = "clash_lib"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "aes",
  "aes-gcm",
