@@ -599,6 +599,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "network unstable on CI"]
     async fn test_udp_resolve() {
         let c = DnsClient::new_client(Opts {
             r: None,
@@ -614,6 +615,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "network unstable on CI"]
     async fn test_tcp_resolve() {
         let c = DnsClient::new_client(Opts {
             r: None,
@@ -663,7 +665,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "network unstable on CI"]
     async fn test_dhcp_client() {
         let c = DnsClient::new_client(Opts {
             r: None,
