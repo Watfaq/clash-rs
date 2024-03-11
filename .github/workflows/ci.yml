@@ -53,7 +53,7 @@ jobs:
     - name: Create Release
       if: contains(github.ref, 'tags/v')
       id: create_release
-      uses: softprops/action-gh-release@v1        
+      uses: softprops/action-gh-release@v2        
       with:
         generate_release_notes: true
     - name: Upload Release Asset
