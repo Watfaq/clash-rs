@@ -219,3 +219,174 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use std::collections::HashMap;
+
+    use crate::proxy::utils::test_utils::{
+        benchmark_proxy,
+        config_helper::test_config_base_dir,
+        consts::*,
+        docker_runner::{
+            default_export_ports, default_host_config, mount_config, DockerTestRunner,
+        },
+        latency_test_proxy, LatencyTestOption,
+    };
+
+    use super::*;
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        use bollard::{container::Config, image::CreateImageOptions};
+
+        let mut host_config = default_host_config();
+        let test_config_dir = test_config_base_dir();
+        let trojan_conf = test_config_dir.join("trojan-ws.json");
+        let trojan_cert = test_config_dir.join("example.org.pem");
+        let trojan_key = test_config_dir.join("example.org-key.pem");
+
+        host_config.mounts = Some(mount_config(&[
+            (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+            (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
+            (trojan_key.to_str().unwrap(), "/privkey.pem"),
+        ]));
+        let export_ports = default_export_ports();
+
+        DockerTestRunner::new(
+            Some(CreateImageOptions {
+                from_image: IMAGE_TROJAN_GO,
+                ..Default::default()
+            }),
+            Config {
+                image: Some(IMAGE_TROJAN_GO),
+                tty: Some(true),
+                exposed_ports: Some(export_ports),
+                host_config: Some(host_config),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tokio::test]
+    async fn test_trojan_ws() -> anyhow::Result<()> {
+        let opts = Opts {
+            name: "test-trojan-ws".to_owned(),
+            common_opts: Default::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            password: "example".to_owned(),
+            udp: true,
+            sni: "example.org".to_owned(),
+            alpn: None,
+            skip_cert_verify: true,
+            transport: Some(Transport::Ws(WsOption {
+                path: "".to_owned(),
+                headers: [("Host".to_owned(), "example.org".to_owned())]
+                    .into_iter()
+                    .collect::<HashMap<_, _>>(),
+                // ignore the rest by setting max_early_data to 0
+                max_early_data: 0,
+                early_data_header_name: "".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+
+        let runner = get_ws_runner().await?;
+
+        runner
+            .run_and_cleanup(async move {
+                benchmark_proxy(handler.clone(), 10001).await?;
+                latency_test_proxy(
+                    handler,
+                    LatencyTestOption {
+                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
+                        req: GOOGLE_REQ,
+                        expected_resp: GOOGLE_RESP_301,
+                        read_exact: true,
+                    },
+                )
+                .await?;
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        use bollard::{container::Config, image::CreateImageOptions};
+
+        let mut host_config = default_host_config();
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("trojan-grpc.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        host_config.mounts = Some(mount_config(&[
+            (conf.to_str().unwrap(), "/etc/xray/config.json"),
+            (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+            (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+        ]));
+        let export_ports = default_export_ports();
+
+        DockerTestRunner::new(
+            Some(CreateImageOptions {
+                from_image: IMAGE_XRAY,
+                ..Default::default()
+            }),
+            Config {
+                image: Some(IMAGE_XRAY),
+                tty: Some(true),
+                exposed_ports: Some(export_ports),
+                host_config: Some(host_config),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tokio::test]
+    async fn test_trojan_grpc() -> anyhow::Result<()> {
+        let opts = Opts {
+            name: "test-trojan-grpc".to_owned(),
+            common_opts: Default::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            password: "example".to_owned(),
+            udp: true,
+            sni: "example.org".to_owned(),
+            alpn: None,
+            skip_cert_verify: true,
+            transport: Some(Transport::Grpc(GrpcOption {
+                host: "example.org".to_owned(),
+                service_name: "example".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+
+        let runner = get_grpc_runner().await?;
+
+        runner
+            .run_and_cleanup(async move {
+                benchmark_proxy(handler.clone(), 10001).await?;
+                latency_test_proxy(
+                    handler,
+                    LatencyTestOption {
+                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
+                        req: GOOGLE_REQ,
+                        expected_resp: GOOGLE_RESP_301,
+                        read_exact: true,
+                    },
+                )
+                .await?;
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
+    }
+}

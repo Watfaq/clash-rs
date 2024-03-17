@@ -118,6 +118,7 @@ ctor = "0.2"
 mockall = "0.12.1"
 tokio-test = "0.4.4"
 axum-macros = "0.4.0"
+bollard = "0.16"
 
 
 [target.'cfg(macos)'.dependencies]

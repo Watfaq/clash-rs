@@ -287,3 +287,86 @@ impl OutboundHandler for Handler {
         Ok(Box::new(d))
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::super::utils::test_utils::{
+        benchmark_proxy,
+        consts::*,
+        docker_runner::{default_export_ports, default_host_config, DockerTestRunner},
+        latency_test_proxy, LatencyTestOption,
+    };
+
+    use super::*;
+
+    const PASSWORD: &str = "FzcLbKs2dY9mhL";
+    const CIPHER: &str = "aes-256-gcm";
+
+    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+        use bollard::{container::Config, image::CreateImageOptions};
+
+        let host_config = default_host_config();
+        let export_ports = default_export_ports();
+
+        DockerTestRunner::new(
+            Some(CreateImageOptions {
+                from_image: IMAGE_SS_RUST,
+                ..Default::default()
+            }),
+            Config {
+                image: Some(IMAGE_SS_RUST),
+                tty: Some(true),
+                entrypoint: Some(vec!["ssserver"]),
+                cmd: Some(vec![
+                    "-s",
+                    "0.0.0.0:10002",
+                    "-m",
+                    CIPHER,
+                    "-k",
+                    PASSWORD,
+                    "-U",
+                ]),
+                exposed_ports: Some(export_ports),
+                host_config: Some(host_config),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    #[tokio::test]
+    async fn test_ss() -> anyhow::Result<()> {
+        let opts = HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Default::default(),
+            udp: false,
+        };
+        let handler = Handler::new(opts);
+
+        let watch = get_runner().await?;
+
+        watch
+            .run_and_cleanup(async move {
+                benchmark_proxy(handler.clone(), 10001).await?;
+                latency_test_proxy(
+                    handler,
+                    LatencyTestOption {
+                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
+                        req: GOOGLE_REQ,
+                        expected_resp: GOOGLE_RESP_301,
+                        read_exact: true,
+                    },
+                )
+                .await?;
+                Ok(())
+            })
+            .await
+    }
+}

@@ -3,6 +3,9 @@ use std::{
     net::{IpAddr, SocketAddr},
 };
 
+#[cfg(test)]
+pub mod test_utils;
+
 pub mod provider_helper;
 mod socket_helpers;
 
