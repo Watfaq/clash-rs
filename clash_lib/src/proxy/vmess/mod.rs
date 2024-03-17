@@ -94,7 +94,7 @@ impl Handler {
                 };
 
                 let h2_builder = Http2Config {
-                    hosts: vec![self.opts.server.clone()],
+                    hosts: opt.host.clone(),
                     method: http::Method::GET,
                     headers: HashMap::new(),
                     path: opt.path.to_owned().try_into().expect("invalid H2 path"),
