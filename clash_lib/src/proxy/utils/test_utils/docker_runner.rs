@@ -13,7 +13,7 @@ use anyhow::Result;
 use futures::{Future, StreamExt, TryStreamExt};
 
 pub struct DockerTestRunner {
-    _instance: Docker,
+    instance: Docker,
     id: String,
 }
 
@@ -39,7 +39,7 @@ impl DockerTestRunner {
             .id;
         docker.start_container::<String>(&id, None).await?;
         Ok(Self {
-            _instance: docker,
+            instance: docker,
             id,
         })
     }
@@ -48,7 +48,7 @@ impl DockerTestRunner {
     pub async fn exec(&self, cmd: Vec<&str>) -> anyhow::Result<()> {
         // non interactive
         let exec = self
-            ._instance
+            .instance
             .create_exec(
                 &self.id,
                 CreateExecOptions {
@@ -61,7 +61,7 @@ impl DockerTestRunner {
             .await?
             .id;
         if let StartExecResults::Attached { mut output, .. } =
-            self._instance.start_exec(&exec, None).await?
+            self.instance.start_exec(&exec, None).await?
         {
             while let Some(Ok(msg)) = output.next().await {
                 print!("{msg}");
@@ -89,7 +89,7 @@ impl DockerTestRunner {
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
         let s = self
-            ._instance
+            .instance
             .remove_container(
                 &self.id,
                 Some(RemoveContainerOptions {

@@ -294,7 +294,7 @@ mod tests {
     use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
 
     use super::super::utils::test_utils::{
-        benchmark_proxy, consts::*, docker_runner::DockerTestRunner, latency_test_proxy,
+        ping_pong_test, consts::*, docker_runner::DockerTestRunner, latency_test,
         LatencyTestOption,
     };
 
@@ -331,8 +331,8 @@ mod tests {
 
         watch
             .run_and_cleanup(async move {
-                benchmark_proxy(handler.clone(), 10001).await?;
-                latency_test_proxy(
+                ping_pong_test(handler.clone(), 10001).await?;
+                latency_test(
                     handler,
                     LatencyTestOption {
                         dst: SocksAddr::Domain("google.com".to_owned(), 80),

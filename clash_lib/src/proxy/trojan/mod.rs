@@ -226,11 +226,11 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::proxy::utils::test_utils::{
-        benchmark_proxy,
+        ping_pong_test,
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        latency_test_proxy, LatencyTestOption,
+        latency_test, LatencyTestOption,
     };
 
     use super::*;
@@ -281,8 +281,8 @@ mod tests {
 
         runner
             .run_and_cleanup(async move {
-                benchmark_proxy(handler.clone(), 10001).await?;
-                latency_test_proxy(
+                ping_pong_test(handler.clone(), 10001).await?;
+                latency_test(
                     handler,
                     LatencyTestOption {
                         dst: SocksAddr::Domain("google.com".to_owned(), 80),
@@ -340,8 +340,8 @@ mod tests {
 
         runner
             .run_and_cleanup(async move {
-                benchmark_proxy(handler.clone(), 10001).await?;
-                latency_test_proxy(
+                ping_pong_test(handler.clone(), 10001).await?;
+                latency_test(
                     handler,
                     LatencyTestOption {
                         dst: SocksAddr::Domain("google.com".to_owned(), 80),

@@ -17,10 +17,9 @@ pub mod consts;
 pub mod docker_runner;
 
 // TODO: add the thoroughput metrics
-pub async fn benchmark_proxy(handler: Arc<dyn OutboundHandler>, port: u16) -> anyhow::Result<()> {
-    // proxy -> proxy-server -> destination(127.0.0.1:port)
+pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> anyhow::Result<()> {
+    // PATH: our proxy handler -> proxy-server(container) -> target local server(127.0.0.1:port)
 
-    // the destination is a local server
     let sess = Session {
         destination: ("127.0.0.1".to_owned(), port)
             .try_into()
@@ -57,11 +56,11 @@ pub async fn benchmark_proxy(handler: Arc<dyn OutboundHandler>, port: u16) -> an
         match listener.accept().await {
             Ok((stream, _)) => match destination_fn(stream).await {
                 Ok(_) => {}
-                Err(e) => eprintln!("Failed to serve: {}", e),
+                Err(e) => error!("Failed to serve: {}", e),
             },
             Err(e) => {
                 // Handle error e, log it, or ignore it
-                eprintln!("Failed to accept connection: {}", e);
+                error!("Failed to accept connection: {}", e);
             }
         }
         debug!("server task finished");
@@ -103,20 +102,25 @@ pub async fn benchmark_proxy(handler: Arc<dyn OutboundHandler>, port: u16) -> an
     Ok(())
 }
 
+/// Represents the options for a latency test.
 pub struct LatencyTestOption<'a> {
+    /// The destination address for the test.
     pub dst: SocksAddr,
+    /// The request data for the test.
     pub req: &'a [u8],
+    /// The expected response data for the test.
     pub expected_resp: &'a [u8],
+    /// Indicates whether to read the exact amount of data specified by `expected_resp`.
     pub read_exact: bool,
 }
 
-pub async fn latency_test_proxy(
+// latency test of the proxy
+pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
     option: LatencyTestOption<'_>,
 ) -> anyhow::Result<()> {
-    // proxy -> proxy-server -> destination(google.com)
+    // our proxy handler -> proxy-server -> destination(google.com)
 
-    // the destination is a local server
     let sess = Session {
         destination: option.dst,
         ..Default::default()
