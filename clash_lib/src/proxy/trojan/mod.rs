@@ -229,48 +229,31 @@ mod tests {
         benchmark_proxy,
         config_helper::test_config_base_dir,
         consts::*,
-        docker_runner::{
-            default_export_ports, default_host_config, mount_config, DockerTestRunner,
-        },
+        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
         latency_test_proxy, LatencyTestOption,
     };
 
     use super::*;
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
-        use bollard::{container::Config, image::CreateImageOptions};
-
-        let mut host_config = default_host_config();
         let test_config_dir = test_config_base_dir();
         let trojan_conf = test_config_dir.join("trojan-ws.json");
         let trojan_cert = test_config_dir.join("example.org.pem");
         let trojan_key = test_config_dir.join("example.org-key.pem");
 
-        host_config.mounts = Some(mount_config(&[
-            (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
-            (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
-            (trojan_key.to_str().unwrap(), "/privkey.pem"),
-        ]));
-        let export_ports = default_export_ports();
-
-        DockerTestRunner::new(
-            Some(CreateImageOptions {
-                from_image: IMAGE_TROJAN_GO,
-                ..Default::default()
-            }),
-            Config {
-                image: Some(IMAGE_TROJAN_GO),
-                tty: Some(true),
-                exposed_ports: Some(export_ports),
-                host_config: Some(host_config),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(Into::into)
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .mounts(&[
+                (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
+                (trojan_key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
         let opts = Opts {
             name: "test-trojan-ws".to_owned(),
@@ -317,39 +300,24 @@ mod tests {
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
-        use bollard::{container::Config, image::CreateImageOptions};
-
-        let mut host_config = default_host_config();
         let test_config_dir = test_config_base_dir();
         let conf = test_config_dir.join("trojan-grpc.json");
         let cert = test_config_dir.join("example.org.pem");
         let key = test_config_dir.join("example.org-key.pem");
 
-        host_config.mounts = Some(mount_config(&[
-            (conf.to_str().unwrap(), "/etc/xray/config.json"),
-            (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
-            (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
-        ]));
-        let export_ports = default_export_ports();
-
-        DockerTestRunner::new(
-            Some(CreateImageOptions {
-                from_image: IMAGE_XRAY,
-                ..Default::default()
-            }),
-            Config {
-                image: Some(IMAGE_XRAY),
-                tty: Some(true),
-                exposed_ports: Some(export_ports),
-                host_config: Some(host_config),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(Into::into)
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
         let opts = Opts {
             name: "test-trojan-grpc".to_owned(),

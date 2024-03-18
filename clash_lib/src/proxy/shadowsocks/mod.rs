@@ -291,11 +291,11 @@ impl OutboundHandler for Handler {
 #[cfg(test)]
 mod tests {
 
+    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
+
     use super::super::utils::test_utils::{
-        benchmark_proxy,
-        consts::*,
-        docker_runner::{default_export_ports, default_host_config, DockerTestRunner},
-        latency_test_proxy, LatencyTestOption,
+        benchmark_proxy, consts::*, docker_runner::DockerTestRunner, latency_test_proxy,
+        LatencyTestOption,
     };
 
     use super::*;
@@ -304,39 +304,16 @@ mod tests {
     const CIPHER: &str = "aes-256-gcm";
 
     async fn get_runner() -> anyhow::Result<DockerTestRunner> {
-        use bollard::{container::Config, image::CreateImageOptions};
-
-        let host_config = default_host_config();
-        let export_ports = default_export_ports();
-
-        DockerTestRunner::new(
-            Some(CreateImageOptions {
-                from_image: IMAGE_SS_RUST,
-                ..Default::default()
-            }),
-            Config {
-                image: Some(IMAGE_SS_RUST),
-                tty: Some(true),
-                entrypoint: Some(vec!["ssserver"]),
-                cmd: Some(vec![
-                    "-s",
-                    "0.0.0.0:10002",
-                    "-m",
-                    CIPHER,
-                    "-k",
-                    PASSWORD,
-                    "-U",
-                ]),
-                exposed_ports: Some(export_ports),
-                host_config: Some(host_config),
-                ..Default::default()
-            },
-        )
-        .await
-        .map_err(Into::into)
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .entrypoint(&["ssserver"])
+            .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .build()
+            .await
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn test_ss() -> anyhow::Result<()> {
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
