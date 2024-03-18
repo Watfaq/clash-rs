@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
+use crate::{
+    app::dispatcher::ChainedStream,
+    proxy::OutboundHandler,
+    session::{Session, SocksAddr},
+};
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     join,
     net::TcpListener,
 };
-use crate::{app::dispatcher::ChainedStream, proxy::OutboundHandler, session::{Session, SocksAddr}};
+use tracing::{debug, error};
 
 pub mod config_helper;
 pub mod consts;
@@ -59,7 +64,7 @@ pub async fn benchmark_proxy(handler: Arc<dyn OutboundHandler>, port: u16) -> an
                 eprintln!("Failed to accept connection: {}", e);
             }
         }
-        println!("server task finished");
+        debug!("server task finished");
     });
 
     async fn proxy_fn(stream: Box<dyn ChainedStream>) -> anyhow::Result<()> {
@@ -86,11 +91,11 @@ pub async fn benchmark_proxy(handler: Arc<dyn OutboundHandler>, port: u16) -> an
         match handler.connect_stream(&sess, resolver).await {
             Ok(stream) => match proxy_fn(stream).await {
                 Ok(_) => {}
-                Err(e) => eprintln!("Failed to to proxy: {}", e),
+                Err(e) => error!("Failed to to proxy: {}", e),
             },
-            Err(e) => eprintln!("Failed to accept connection: {}", e),
+            Err(e) => error!("Failed to accept connection: {}", e),
         }
-        println!("proxy task finished");
+        debug!("proxy task finished");
     });
 
     let _ = join!(proxy_task, target_local_server_handler);
@@ -132,16 +137,16 @@ pub async fn latency_test_proxy(
 
     if option.read_exact {
         read_half.read_exact(&mut response).await?;
-        println!("response:\n{}", String::from_utf8_lossy(&response));
+        debug!("response:\n{}", String::from_utf8_lossy(&response));
         assert_eq!(&response, option.expected_resp);
     } else {
         read_half.read_to_end(&mut response).await?;
-        println!("response:\n{}", String::from_utf8_lossy(&response));
+        debug!("response:\n{}", String::from_utf8_lossy(&response));
         assert_eq!(&response, option.expected_resp);
     }
 
     let end_time = std::time::SystemTime::now();
-    println!(
+    debug!(
         "time cost:{:?}",
         end_time.duration_since(start_time).unwrap()
     );
