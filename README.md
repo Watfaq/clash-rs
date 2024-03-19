@@ -42,7 +42,6 @@ Can be found at https://github.com/Watfaq/clash-rs/releases
 Dependencies
 
 * cmake (3.29 or newer)
-* Golang
 * libclang([LLVM](https://github.com/llvm/llvm-project/releases/tag/llvmorg-16.0.4))
 * [nasm](https://www.nasm.us/pub/nasm/releasebuilds/2.16/win64/) (Windows)
 ```
