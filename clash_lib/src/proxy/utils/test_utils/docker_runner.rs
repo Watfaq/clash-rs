@@ -6,11 +6,10 @@ use bollard::container::{Config, RemoveContainerOptions};
 use bollard::secret::{HostConfig, Mount, PortBinding};
 use bollard::Docker;
 
-use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::image::CreateImageOptions;
 
 use anyhow::Result;
-use futures::{Future, StreamExt, TryStreamExt};
+use futures::{Future, TryStreamExt};
 
 pub struct DockerTestRunner {
     instance: Docker,
@@ -38,34 +37,6 @@ impl DockerTestRunner {
             instance: docker,
             id,
         })
-    }
-
-    #[allow(unused)]
-    pub async fn exec(&self, cmd: Vec<&str>) -> anyhow::Result<()> {
-        // non interactive
-        let exec = self
-            .instance
-            .create_exec(
-                &self.id,
-                CreateExecOptions {
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    cmd: Some(cmd),
-                    ..Default::default()
-                },
-            )
-            .await?
-            .id;
-        if let StartExecResults::Attached { mut output, .. } =
-            self.instance.start_exec(&exec, None).await?
-        {
-            while let Some(Ok(msg)) = output.next().await {
-                print!("{msg}");
-            }
-            return Ok(());
-        } else {
-            anyhow::bail!("failed to execute cmd")
-        }
     }
 
     // will make sure the container is cleaned up after the future is finished
