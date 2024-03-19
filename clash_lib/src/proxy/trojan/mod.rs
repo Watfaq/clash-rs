@@ -226,11 +226,10 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::proxy::utils::test_utils::{
-        ping_pong_test,
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        latency_test, LatencyTestOption,
+        latency_test, ping_pong_test, LatencyTestOption,
     };
 
     use super::*;

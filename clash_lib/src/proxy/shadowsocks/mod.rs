@@ -294,8 +294,7 @@ mod tests {
     use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
 
     use super::super::utils::test_utils::{
-        ping_pong_test, consts::*, docker_runner::DockerTestRunner, latency_test,
-        LatencyTestOption,
+        consts::*, docker_runner::DockerTestRunner, latency_test, ping_pong_test, LatencyTestOption,
     };
 
     use super::*;
