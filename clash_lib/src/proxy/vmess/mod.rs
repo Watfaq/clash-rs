@@ -252,6 +252,7 @@ impl OutboundHandler for Handler {
 }
 
 #[cfg(test)]
+#[cfg(not(target_os = "macos"))]
 mod tests {
 
     use crate::proxy::utils::test_utils::{

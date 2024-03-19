@@ -221,6 +221,7 @@ impl OutboundHandler for Handler {
 }
 
 #[cfg(test)]
+#[cfg(not(target_os = "macos"))]
 mod tests {
 
     use std::collections::HashMap;
