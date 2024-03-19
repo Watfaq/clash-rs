@@ -18,13 +18,9 @@ pub struct DockerTestRunner {
 }
 
 impl DockerTestRunner {
-    pub async fn new<
-        'a,
-        T1: serde::ser::Serialize + Into<std::string::String> + std::fmt::Debug + Clone,
-        Z: Into<String> + std::hash::Hash + Eq + serde::Serialize,
-    >(
-        image_conf: Option<CreateImageOptions<'a, T1>>,
-        container_conf: Config<Z>,
+    pub async fn new<'a>(
+        image_conf: Option<CreateImageOptions<'a, String>>,
+        container_conf: Config<String>,
     ) -> Result<Self> {
         let docker: Docker = Docker::connect_with_socket_defaults()?;
 
@@ -34,7 +30,7 @@ impl DockerTestRunner {
             .await?;
 
         let id = docker
-            .create_container::<&str, Z>(None, container_conf)
+            .create_container::<&str, String>(None, container_conf)
             .await?
             .id;
         docker.start_container::<String>(&id, None).await?;
