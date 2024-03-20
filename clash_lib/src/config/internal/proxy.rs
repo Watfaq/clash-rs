@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use uuid::Uuid;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
 pub const PROXY_REJECT: &str = "REJECT";
@@ -61,6 +62,8 @@ pub enum OutboundProxyProtocol {
     Wireguard(OutboundWireguard),
     #[serde(rename = "tor")]
     Tor(OutboundTor),
+    #[serde(rename = "tuic")]
+    Tuic(OutboundTuic),
 }
 
 impl OutboundProxyProtocol {
@@ -74,6 +77,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
             OutboundProxyProtocol::Tor(tor) => &tor.name,
+            OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
         }
     }
 }
@@ -105,6 +109,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
+            OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
         }
     }
 }
@@ -215,6 +220,17 @@ pub struct OutboundWireguard {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTor {
     pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTuic {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub uuid: Uuid,
+    pub password: String,
+    pub udp_relay_mode: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

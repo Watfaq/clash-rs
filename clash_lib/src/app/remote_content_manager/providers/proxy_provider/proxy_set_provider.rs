@@ -104,6 +104,7 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
                             OutboundProxyProtocol::Tor(tor) => tor.try_into(),
+                            OutboundProxyProtocol::Tuic(tuic) => tuic.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
