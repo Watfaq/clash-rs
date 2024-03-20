@@ -44,7 +44,7 @@ once_cell = "1.18.0"
 # opentelemetry
 opentelemetry = "0.22"
 opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
-tracing-opentelemetry = "0.23" 
+tracing-opentelemetry = "0.23"
 opentelemetry-jaeger-propagator = "0.1.0"
 opentelemetry-jaeger = { version = "0.21", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.15.0", features = ["http-proto"] }
@@ -84,7 +84,7 @@ hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-htt
 
 # DoH
 # ideally we should make a CryptoProvider with boringssl and get rid of rings
-rustls = { version  = "0.21", features=["dangerous_configuration"] }
+rustls = { version  = "0.21", features=["dangerous_configuration", "quic"] }
 rustls-pemfile = "1.0.4"
 webpki-roots = "0.25"
 dhcproto = "0.11"
@@ -107,6 +107,12 @@ murmur3 = "0.5.2"
 
 arti-client = { version = "0.14.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
 tor-rtcompat = { version = "0.10.0" }
+
+# tuic
+tuic = { path = "/home/itsusinn/Workspace/Code/tuic/tuic" }
+tuic-quinn = { path = "/home/itsusinn/Workspace/Code/tuic/tuic-quinn" }
+quinn = { version = "0.10", default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
+register-count = "0.1.0"
 
 console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }

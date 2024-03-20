@@ -1083,8 +1083,10 @@ dependencies = [
  "opentelemetry_sdk",
  "prost",
  "public-suffix",
+ "quinn",
  "rand",
  "regex",
+ "register-count",
  "rustls 0.21.10",
  "rustls-pemfile",
  "security-framework",
@@ -1111,6 +1113,8 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-timing",
+ "tuic",
+ "tuic-quinn",
  "tun",
  "url",
  "uuid",
@@ -4141,6 +4145,54 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
+name = "quinn"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cc2c5017e4b43d5995dcea317bc46c1e09404c0a9664d2908f7f02dfe943d75"
+dependencies = [
+ "bytes",
+ "futures-io",
+ "pin-project-lite",
+ "quinn-proto",
+ "quinn-udp",
+ "rustc-hash",
+ "rustls 0.21.10",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "quinn-proto"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "141bf7dfde2fbc246bfd3fe12f2455aa24b0fbd9af535d8c86c7bd1381ff2b1a"
+dependencies = [
+ "bytes",
+ "rand",
+ "ring 0.16.20",
+ "rustc-hash",
+ "rustls 0.21.10",
+ "slab",
+ "thiserror",
+ "tinyvec",
+ "tracing",
+]
+
+[[package]]
+name = "quinn-udp"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "055b4e778e8feb9f93c4e439f71dc2156ef13360b432b799e179a8c4cdf0b1d7"
+dependencies = [
+ "bytes",
+ "libc",
+ "socket2",
+ "tracing",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4296,6 +4348,12 @@ name = "regex-syntax"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
+
+[[package]]
+name = "register-count"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6d8b2af7d3e6675306d6757f10b4cf0b218a9fa6a0b44d668f2132684ae4893"
 
 [[package]]
 name = "resolv-conf"
@@ -6516,6 +6574,30 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tuic"
+version = "5.0.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "parking_lot 0.12.1",
+ "register-count",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "tuic-quinn"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "quinn",
+ "thiserror",
+ "tuic",
+ "uuid",
+]
 
 [[package]]
 name = "tun"
