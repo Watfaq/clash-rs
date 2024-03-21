@@ -288,8 +288,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(test)]
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(test, docker))]
 mod tests {
 
     use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;

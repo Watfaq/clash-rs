@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, SocketAddr},
 };
 
-#[cfg(test)]
+#[cfg(all(test, docker))]
 pub mod test_utils;
 
 pub mod provider_helper;

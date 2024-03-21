@@ -5,9 +5,9 @@ use crate::{
     proxy::OutboundHandler,
     session::{Session, SocksAddr},
 };
+use futures::future::join_all;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    join,
     net::TcpListener,
 };
 use tracing::{debug, error};
@@ -54,16 +54,13 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
 
     let target_local_server_handler = tokio::spawn(async move {
         match listener.accept().await {
-            Ok((stream, _)) => match destination_fn(stream).await {
-                Ok(_) => {}
-                Err(e) => error!("Failed to serve: {}", e),
-            },
+            Ok((stream, _)) => destination_fn(stream).await,
             Err(e) => {
                 // Handle error e, log it, or ignore it
                 error!("Failed to accept connection: {}", e);
+                Err(anyhow!("Failed to accept connection: {}", e))
             }
         }
-        debug!("server task finished");
     });
 
     async fn proxy_fn(stream: Box<dyn ChainedStream>) -> anyhow::Result<()> {
@@ -88,18 +85,25 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
 
     let proxy_task = tokio::spawn(async move {
         match handler.connect_stream(&sess, resolver).await {
-            Ok(stream) => match proxy_fn(stream).await {
-                Ok(_) => {}
-                Err(e) => error!("Failed to to proxy: {}", e),
-            },
-            Err(e) => error!("Failed to accept connection: {}", e),
+            Ok(stream) => proxy_fn(stream).await,
+            Err(e) => {
+                error!("Failed to accept connection: {}", e);
+                Err(anyhow!("Failed to accept connection: {}", e))
+            }
         }
-        debug!("proxy task finished");
     });
 
-    let _ = join!(proxy_task, target_local_server_handler);
+    let futs = vec![proxy_task, target_local_server_handler];
 
-    Ok(())
+    match join_all(futs)
+        .await
+        .into_iter()
+        .filter_map(|x| x.err())
+        .next()
+    {
+        Some(e) => Err(anyhow!("Failed to run ping_pong_test: {}", e)),
+        None => Ok(()),
+    }
 }
 
 /// Represents the options for a latency test.
