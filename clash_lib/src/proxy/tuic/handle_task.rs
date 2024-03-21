@@ -13,34 +13,34 @@ impl TuicConnection {
     pub async fn authenticate(self, zero_rtt_accepted: Option<ZeroRttAccepted>) {
         if let Some(zero_rtt_accepted) = zero_rtt_accepted {
             tracing::debug!(
-                "[relay] [authenticate] waiting for connection to be fully established"
+                "[authenticate] waiting for connection to be fully established"
             );
             zero_rtt_accepted.await;
         }
 
-        tracing::debug!("[relay] [authenticate] sending authentication");
+        tracing::debug!("[authenticate] sending authentication");
 
         match self
             .inner
             .authenticate(self.uuid, self.password.clone())
             .await
         {
-            Ok(()) => tracing::info!("[relay] [authenticate] {uuid}", uuid = self.uuid),
+            Ok(()) => tracing::info!("[authenticate] {uuid}", uuid = self.uuid),
             Err(err) => {
-                tracing::warn!("[relay] [authenticate] authentication sending error: {err}")
+                tracing::warn!("[authenticate] authentication sending error: {err}")
             }
         }
     }
 
     pub async fn connect(&self, addr: Address) -> Result<Connect> {
         let addr_display = addr.to_string();
-        tracing::info!("[relay] [connect] {addr_display}");
+        tracing::info!("[connect] {addr_display}");
 
         match self.inner.connect(addr).await {
             Ok(conn) => Ok(conn),
             Err(err) => {
                 tracing::warn!(
-                    "[relay] [connect] failed initializing relay to {addr_display}: {err}"
+                    "[connect] failed initializing relay to {addr_display}: {err}"
                 );
                 Err(anyhow!(err))
             }
@@ -52,22 +52,22 @@ impl TuicConnection {
 
         match self.udp_relay_mode {
             UdpRelayMode::Native => {
-                tracing::info!("[relay] [packet] [{assoc_id:#06x}] [to-native] to {addr_display}");
+                tracing::info!("[packet] [{assoc_id:#06x}] [to-native] to {addr_display}");
                 match self.inner.packet_native(pkt, addr, assoc_id) {
                     Ok(()) => Ok(()),
                     Err(err) => {
-                        tracing::warn!("[relay] [packet] [{assoc_id:#06x}] [to-native] to {addr_display}: {err}");
+                        tracing::warn!("[packet] [{assoc_id:#06x}] [to-native] to {addr_display}: {err}");
                         Err(anyhow!(err))
                     }
                 }
             }
             UdpRelayMode::Quic => {
-                tracing::info!("[relay] [packet] [{assoc_id:#06x}] [to-quic] {addr_display}");
+                tracing::info!("[packet] [{assoc_id:#06x}] [to-quic] {addr_display}");
                 match self.inner.packet_quic(pkt, addr, assoc_id).await {
                     Ok(()) => Ok(()),
                     Err(err) => {
                         tracing::warn!(
-                            "[relay] [packet] [{assoc_id:#06x}] [to-quic] to {addr_display}: {err}"
+                            "[packet] [{assoc_id:#06x}] [to-quic] to {addr_display}: {err}"
                         );
                         Err(anyhow!(err))
                     }
@@ -77,11 +77,11 @@ impl TuicConnection {
     }
 
     pub async fn dissociate(&self, assoc_id: u16) -> anyhow::Result<()> {
-        tracing::info!("[relay] [dissociate] [{assoc_id:#06x}]");
+        tracing::info!("[dissociate] [{assoc_id:#06x}]");
         match self.inner.dissociate(assoc_id).await {
             Ok(()) => Ok(()),
             Err(err) => {
-                tracing::warn!("[relay] [dissociate] [{assoc_id:#06x}] {err}");
+                tracing::warn!("[dissociate] [{assoc_id:#06x}] {err}");
                 Err(anyhow!(err))
             }
         }
@@ -100,8 +100,8 @@ impl TuicConnection {
             }
 
             match self.inner.heartbeat().await {
-                Ok(()) => tracing::debug!("[relay] [heartbeat]"),
-                Err(err) => tracing::warn!("[relay] [heartbeat] {err}"),
+                Ok(()) => tracing::debug!("[heartbeat]"),
+                Err(err) => tracing::warn!("[heartbeat] {err}"),
             }
         }
     }
@@ -119,11 +119,11 @@ impl TuicConnection {
         };
 
         tracing::info!(
-            "[relay] [packet] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment {frag_id}/{frag_total}",
+            "[packet] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment {frag_id}/{frag_total}",
             frag_id = pkt.frag_id() + 1,
             frag_total = pkt.frag_total(),
         );
-        todo!("relay not yet impl")
+        todo!()
         // match pkt.accept().await {
         //     Ok(Some((pkt, addr, _))) => {
         //         tracing::info!("[relay] [packet] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] from {addr}");

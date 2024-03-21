@@ -47,7 +47,7 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             max_open_stream: VarInt::from_u64(s.max_open_stream.unwrap_or(32))
                 .unwrap_or(VarInt::MAX),
             ip: s.ip.clone(),
-            fast_open: s.fast_open.clone(),
+            fast_open: s.fast_open,
             skip_cert_verify: s.skip_cert_verify.unwrap_or(false),
             sni: s.sni.clone(),
             gc_interval: Duration::from_millis(s.gc_interval.unwrap_or(3000)),
@@ -55,10 +55,6 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             send_window: s.send_window.unwrap_or(8 * 1024 * 1024 * 2),
             receive_window: VarInt::from_u64(s.receive_window.unwrap_or(8 * 1024 * 1024))
                 .unwrap_or(VarInt::MAX),
-        })
-        .map_err(|e| {
-            // TODO find a better way
-            crate::Error::Operation(e.to_string())
         })
     }
 }

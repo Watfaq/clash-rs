@@ -106,7 +106,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
         self.do_connect_stream(sess, resolver).await.map_err(|e| {
-            tracing::error!("[tuic] {:?}", e);
+            tracing::error!("{:?}", e);
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
         })
     }
@@ -116,14 +116,14 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         self.do_connect_datagram(sess, resolver).await.map_err(|e| {
-            tracing::error!("[tuic] {:?}", e);
+            tracing::error!("{:?}", e);
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
         })
     }
 }
 
 impl Handler {
-    pub fn new(opts: HandlerOptions) -> anyhow::Result<AnyOutboundHandler> {
+    pub fn new(opts: HandlerOptions) -> Result<AnyOutboundHandler, crate::Error> {
         let mut crypto = TlsConfig::builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
@@ -146,11 +146,10 @@ impl Handler {
             .congestion_controller_factory(Arc::new(CubicConfig::default()));
         quinn_config.transport_config(Arc::new(quinn_transport_config));
         // Try to create an IPv4 socket as the placeholder first, if it fails, try IPv6.
-        let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))
-            .or_else(|err| {
+        let socket =
+            UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).or_else(|err| {
                 UdpSocket::bind(SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))).map_err(|_| err)
-            })
-            .map_err(|err| anyhow!("failed to create endpoint UDP socket {}", err))?;
+            })?;
 
         let mut endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
@@ -170,7 +169,7 @@ impl Handler {
             gc_interval: opts.gc_interval,
             gc_lifetime: opts.gc_lifetime,
         };
-        Ok(Arc::new(Handler {
+        Ok(Arc::new(Self {
             opts,
             ep: endpoint,
             conn: AsyncMutex::new(None),
@@ -190,7 +189,7 @@ impl Handler {
             } else {
                 conn
             };
-            // TODO TuicConnection is huge, is it necessary to clone it?
+            // TODO TuicConnection is huge, is it necessary to clone it? If it is, should we use Arc ?
             *guard = Some(conn.clone());
             Ok(conn)
         };

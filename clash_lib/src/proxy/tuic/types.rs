@@ -24,7 +24,6 @@ pub struct TuicEndpoint {
 }
 impl TuicEndpoint {
     pub async fn connect(&self) -> Result<TuicConnection> {
-        tracing::trace!("Connect Tuic");
         let mut last_err = None;
 
         for addr in self.server.resolve().await? {
@@ -117,6 +116,7 @@ impl TuicConnection {
             udp_relay_mode,
             remote_uni_stream_cnt: Counter::new(),
             remote_bi_stream_cnt: Counter::new(),
+            // TODO: seems tuic dynamicly adjust the size of max concurrent streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
         };
@@ -135,7 +135,7 @@ impl TuicConnection {
         gc_interval: Duration,
         gc_lifetime: Duration,
     ) {
-        tracing::info!("[relay] connection established");
+        tracing::info!("connection established");
 
         tokio::spawn(self.clone().authenticate(zero_rtt_accepted));
         tokio::spawn(self.clone().heartbeat(heartbeat));
@@ -158,7 +158,7 @@ impl TuicConnection {
             };
         };
 
-        tracing::warn!("[relay] connection error: {err}");
+        tracing::warn!("connection error: {err}");
     }
 
     async fn collect_garbage(self, gc_interval: Duration, gc_lifetime: Duration) {
@@ -170,7 +170,7 @@ impl TuicConnection {
                 break;
             }
 
-            tracing::debug!("[relay] packet fragment garbage collecting event");
+            tracing::debug!("[gc] packet fragment garbage collecting event");
             self.inner.collect_garbage(gc_lifetime);
         }
     }
@@ -237,8 +237,7 @@ impl From<&str> for CongestionControl {
         } else if s.eq_ignore_ascii_case("bbr") {
             Self::Bbr
         } else {
-            tracing::warn!("[tuic] todo");
-            // Err("invalid congestion control")
+            tracing::warn!("Unknown congestion controller {s}. Use default controller");
             Self::default()
         }
     }
