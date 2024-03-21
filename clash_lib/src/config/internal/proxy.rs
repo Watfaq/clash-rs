@@ -230,7 +230,29 @@ pub struct OutboundTuic {
     pub port: u16,
     pub uuid: Uuid,
     pub password: String,
+    /// override field 'server' dns record, not used for now
+    pub ip: Option<String>,
+    pub heartbeat_interval: Option<u64>,
+    /// h3
+    pub alpn: Option<Vec<String>>,
+    pub disable_sni: Option<bool>,
+    pub reduct_rtt: Option<bool>,
+    /// millis
+    pub request_timeout: Option<u64>,
     pub udp_relay_mode: Option<String>,
+    pub congestion_controller: Option<String>,
+    /// bytes
+    pub max_udp_relay_packet_size: Option<u64>,
+    pub fast_open: Option<bool>,
+    pub skip_cert_verify: Option<bool>,
+    pub max_open_stream: Option<u64>,
+    pub sni: Option<String>,
+    /// millis
+    pub gc_interval: Option<u64>,
+    /// millis
+    pub gc_lifetime: Option<u64>,
+    pub send_window: Option<u64>,
+    pub receive_window: Option<u64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

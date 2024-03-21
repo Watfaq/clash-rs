@@ -1,6 +1,6 @@
 mod handle_stream;
 mod handle_task;
-mod types;
+pub(crate) mod types;
 
 use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
@@ -34,7 +34,7 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use rustls::client::ClientConfig as TlsConfig;
 
-use self::types::TuicConnection;
+use self::types::{CongestionControl, TuicConnection};
 
 use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
 
@@ -47,6 +47,23 @@ pub struct HandlerOptions {
     pub password: String,
     pub udp_relay_mode: String,
     pub disable_sni: bool,
+    pub alpn: Vec<Vec<u8>>,
+    pub heartbeat_interval: Duration,
+    pub reduct_rtt: bool,
+    pub request_timeout: Duration,
+    pub congestion_controller: CongestionControl,
+    pub max_udp_relay_packet_size: u64,
+    pub max_open_stream: VarInt,
+    pub gc_interval: Duration,
+    pub gc_lifetime: Duration,
+    pub send_window: u64,
+    pub receive_window: VarInt,
+
+    /// not used
+    pub ip: Option<String>,
+    pub fast_open: Option<bool>,
+    pub skip_cert_verify: bool,
+    pub sni: Option<String>,
 }
 
 pub struct Handler {
@@ -115,19 +132,16 @@ impl Handler {
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
         // aborted by peer: the cryptographic handshake failed: error 120: peer doesn't support any known protocol
-        crypto.alpn_protocols = vec!["h3".to_string()]
-            .into_iter()
-            .map(|alpn| alpn.into_bytes())
-            .collect();
+        crypto.alpn_protocols = opts.alpn.clone();
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
         let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
         let mut quinn_transport_config = QuinnTransportConfig::default();
         quinn_transport_config
-            .max_concurrent_bidi_streams(VarInt::from_u32(32))
-            .max_concurrent_uni_streams(VarInt::from_u32(32))
-            .send_window(16777216)
-            .stream_receive_window(VarInt::from_u32(8388608))
+            .max_concurrent_bidi_streams(opts.max_open_stream)
+            .max_concurrent_uni_streams(opts.max_open_stream)
+            .send_window(opts.send_window)
+            .stream_receive_window(opts.receive_window)
             .max_idle_timeout(None)
             .congestion_controller_factory(Arc::new(CubicConfig::default()));
         quinn_config.transport_config(Arc::new(quinn_transport_config));
@@ -151,10 +165,10 @@ impl Handler {
             uuid: opts.uuid,
             password: Arc::from(opts.password.clone().into_bytes().into_boxed_slice()),
             udp_relay_mode: types::UdpRelayMode::Native,
-            zero_rtt_handshake: false,
-            heartbeat: Duration::from_secs(3),
-            gc_interval: Duration::from_secs(3),
-            gc_lifetime: Duration::from_secs(15),
+            zero_rtt_handshake: opts.reduct_rtt,
+            heartbeat: opts.heartbeat_interval,
+            gc_interval: opts.gc_interval,
+            gc_lifetime: opts.gc_lifetime,
         };
         Ok(Arc::new(Handler {
             opts,
@@ -180,7 +194,7 @@ impl Handler {
             *guard = Some(conn.clone());
             Ok(conn)
         };
-        tokio::time::timeout(Duration::from_secs(3), fut).await?
+        tokio::time::timeout(self.opts.request_timeout, fut).await?
     }
 
     async fn do_connect_stream(
@@ -202,7 +216,7 @@ impl Handler {
 
     async fn do_connect_datagram(
         &self,
-        sess: &Session,
+        _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         todo!()

@@ -162,8 +162,9 @@ impl TuicConnection {
     }
 
     async fn collect_garbage(self, gc_interval: Duration, gc_lifetime: Duration) {
+        let mut interval = tokio::time::interval(gc_interval);
         loop {
-            tokio::time::sleep(gc_interval).await;
+            interval.tick().await;
 
             if self.is_closed() {
                 break;
@@ -201,7 +202,7 @@ impl ServerAddr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum UdpRelayMode {
     Native,
     Quic,
@@ -218,5 +219,33 @@ impl FromStr for UdpRelayMode {
         } else {
             Err("invalid UDP relay mode")
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CongestionControl {
+    Cubic,
+    NewReno,
+    Bbr,
+}
+impl From<&str> for CongestionControl {
+    fn from(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("cubic") {
+            Self::Cubic
+        } else if s.eq_ignore_ascii_case("new_reno") || s.eq_ignore_ascii_case("newreno") {
+            Self::NewReno
+        } else if s.eq_ignore_ascii_case("bbr") {
+            Self::Bbr
+        } else {
+            tracing::warn!("[tuic] todo");
+            // Err("invalid congestion control")
+            Self::default()
+        }
+    }
+}
+
+impl Default for CongestionControl {
+    fn default() -> Self {
+        Self::Cubic
     }
 }
