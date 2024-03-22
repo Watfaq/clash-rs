@@ -109,8 +109,8 @@ arti-client = { version = "0.14.0", default-features = false, features = ["tokio
 tor-rtcompat = { version = "0.10.0" }
 
 # tuic
-tuic = { path = "/home/itsusinn/Workspace/Code/tuic/tuic" }
-tuic-quinn = { path = "/home/itsusinn/Workspace/Code/tuic/tuic-quinn" }
+tuic = { rev = "160cf9b", git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { rev = "160cf9b", git = "https://github.com/Itsusinn/tuic.git" }
 quinn = { version = "0.10", default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
 register-count = "0.1.0"
 
