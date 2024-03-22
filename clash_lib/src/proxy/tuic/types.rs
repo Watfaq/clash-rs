@@ -87,11 +87,17 @@ pub struct TuicConnection {
     pub inner: InnerConnection<tuic_quinn::side::Client>,
     pub uuid: Uuid,
     pub password: Arc<[u8]>,
-    pub udp_relay_mode: UdpRelayMode,
     pub remote_uni_stream_cnt: Counter,
     pub remote_bi_stream_cnt: Counter,
     pub max_concurrent_uni_streams: Arc<AtomicU32>,
     pub max_concurrent_bi_streams: Arc<AtomicU32>,
+    pub udp_relay_mode: UdpRelayMode,
+    pub udp_sessions: Arc<AsyncRwLock<HashMap<u16, UdpSession>>>,
+}
+
+pub struct UdpSession {
+    pub incoming: tokio::sync::mpsc::Sender<UdpPacket>,
+    pub local_addr: ClashSocksAddr,
 }
 
 impl TuicConnection {
@@ -119,6 +125,7 @@ impl TuicConnection {
             // TODO: seems tuic dynamicly adjust the size of max concurrent streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
+            udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
 
         tokio::spawn(

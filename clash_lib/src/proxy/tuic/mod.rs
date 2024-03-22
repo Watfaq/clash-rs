@@ -1,23 +1,29 @@
+mod compat;
 mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use std::{
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    sync::Arc,
-    time::Duration,
-};
-
+use crate::proxy::tuic::types::SocketAdderTrans;
 use anyhow::Result;
 use axum::async_trait;
 use quinn::{EndpointConfig, TokioRuntime};
+use std::net::SocketAddr;
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, UdpSocket},
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uuid::Uuid;
 
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
+            ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -26,6 +32,7 @@ use crate::{
     session::{Session, SocksAddr},
 };
 
+use crate::session::SocksAddr as ClashSocksAddr;
 use quinn::ClientConfig as QuinnConfig;
 use quinn::Endpoint as QuinnEndpoint;
 use quinn::TransportConfig as QuinnTransportConfig;
@@ -34,9 +41,12 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use rustls::client::ClientConfig as TlsConfig;
 
-use self::types::{CongestionControl, TuicConnection};
+use self::types::{CongestionControl, TuicConnection, UdpSession};
 
-use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{
+    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler,
+    OutboundType,
+};
 
 #[derive(Debug, Clone)]
 pub struct HandlerOptions {
@@ -70,6 +80,7 @@ pub struct Handler {
     opts: HandlerOptions,
     ep: TuicEndpoint,
     conn: AsyncMutex<Option<TuicConnection>>,
+    next_assoc_id: AtomicU16
 }
 
 #[async_trait]
@@ -123,6 +134,7 @@ impl OutboundHandler for Handler {
 }
 
 impl Handler {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: HandlerOptions) -> Result<AnyOutboundHandler, crate::Error> {
         let mut crypto = TlsConfig::builder()
             .with_safe_default_cipher_suites()
@@ -173,6 +185,7 @@ impl Handler {
             opts,
             ep: endpoint,
             conn: AsyncMutex::new(None),
+            next_assoc_id: AtomicU16::new(0)
         }))
     }
     async fn get_conn(&self) -> Result<TuicConnection> {
@@ -202,22 +215,82 @@ impl Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedStream> {
         let conn = self.get_conn().await?;
-        let dest = match sess.destination.clone() {
-            SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
-            SocksAddr::Domain(domain, port) => tuic::Address::DomainAddress(domain, port),
-        };
-        let relay = conn.connect(dest).await?.compat();
+        let dest = sess.destination.clone().into_tuic();
+        let tuic_tcp = conn.connect_tcp(dest).await?.compat();
 
-        let s = ChainedStreamWrapper::new(relay);
+        let s = ChainedStreamWrapper::new(tuic_tcp);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
 
     async fn do_connect_datagram(
         &self,
-        _sess: &Session,
+        sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
-        todo!()
+    ) -> Result<BoxedChainedDatagram> {
+        let conn = self.get_conn().await?;
+
+        let assos_id = self.next_assoc_id.fetch_add(1, Ordering::Relaxed);
+        let quic_udp = TuicDatagramOutbound::new(assos_id, conn, sess.source.into());
+        let s = ChainedDatagramWrapper::new(quic_udp);
+        s.append_to_chain(self.name()).await;
+        Ok(Box::new(s))
+    }
+}
+
+struct TuicDatagramOutbound {
+    assoc_id: u16,
+    // conn: TuicConnection,
+    // dest: tuic::Address,
+    handle: tokio::task::JoinHandle<Result<()>>,
+    send_tx: tokio_util::sync::PollSender<UdpPacket>,
+    recv_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
+}
+
+impl TuicDatagramOutbound {
+    pub fn new(
+        assoc_id: u16,
+        conn: TuicConnection,
+        local_addr: ClashSocksAddr,
+    ) -> AnyOutboundDatagram {
+        // TODO not sure about the size of buffer
+        let (send_tx, send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+        let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+        let udp_sessions = conn.udp_sessions.clone();
+        let handle = tokio::spawn(async move {
+            // capture vars
+            let (mut send_rx, recv_tx) = (send_rx, recv_tx);
+            udp_sessions.write().await.insert(
+                assoc_id,
+                UdpSession {
+                    incoming: recv_tx,
+                    local_addr,
+                },
+            );
+            loop {
+                if let Some(next_send) = send_rx.recv().await {
+                    conn.outgoing_udp(
+                        next_send.data.into(),
+                        next_send.dst_addr.into_tuic(),
+                        assoc_id,
+                    )
+                    .await?;
+                } else {
+                    break;
+                };
+            }
+            tracing::info!("[close] [udp] no more outgoing udp packet from [{assoc_id:#06x}]");
+            udp_sessions.write().await.remove(&assoc_id);
+            anyhow::Ok(())
+        });
+        let s = Self {
+            assoc_id,
+            // conn,
+            // dest,
+            handle,
+            send_tx: tokio_util::sync::PollSender::new(send_tx),
+            recv_rx,
+        };
+        Box::new(s)
     }
 }

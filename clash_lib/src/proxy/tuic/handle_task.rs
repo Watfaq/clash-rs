@@ -119,42 +119,31 @@ impl TuicConnection {
         };
 
         tracing::info!(
-            "[packet] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment {frag_id}/{frag_total}",
+            "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment {frag_id}/{frag_total}",
             frag_id = pkt.frag_id() + 1,
             frag_total = pkt.frag_total(),
         );
-        todo!()
-        // match pkt.accept().await {
-        //     Ok(Some((pkt, addr, _))) => {
-        //         tracing::info!("[relay] [packet] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] from {addr}");
-
-        //         let addr = match addr {
-        //             Address::None => unreachable!(),
-        //             Address::DomainAddress(domain, port) => {
-        //                 Socks5Address::DomainAddress(domain, port)
-        //             }
-        //             Address::SocketAddress(addr) => Socks5Address::SocketAddress(addr),
-        //         };
-
-        //         let session = SOCKS5_UDP_SESSIONS
-        //             .get()
-        //             .unwrap()
-        //             .lock()
-        //             .get(&assoc_id)
-        //             .cloned();
-
-        //         if let Some(session) = session {
-        //             if let Err(err) = session.send(pkt, addr).await {
-        //                 tracing::warn!(
-        //                     "[relay] [packet] [{assoc_id:#06x}] [from-native] [{pkt_id:#06x}] failed sending packet to socks5 client: {err}",
-        //                 );
-        //             }
-        //         } else {
-        //             tracing::warn!("[relay] [packet] [{assoc_id:#06x}] [from-native] [{pkt_id:#06x}] unable to find socks5 associate session");
-        //         }
-        //     }
-        //     Ok(None) => {}
-        //     Err(err) => tracing::warn!("[relay] [packet] [{assoc_id:#06x}] [from-native] [{pkt_id:#06x}] packet receiving error: {err}"),
-        // }
+        match pkt.accept().await {
+            Ok(Some((data, remote_addr, _))) => {
+                tracing::info!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] from {remote_addr}");
+                let (session, local_addr) = match self.udp_sessions.read().await.get(&assoc_id) {
+                    Some(v) => (v.incoming.clone(), v.local_addr.clone()),
+                    None => {
+                        tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] unable to find udp session");
+                        return;
+                    },
+                };
+                let remote_addr = match remote_addr {
+                    Address::None => unreachable!(),
+                    Address::DomainAddress(domain, port) => ClashSocksAddr::Domain(domain, port),
+                    Address::SocketAddress(socket) => ClashSocksAddr::Ip(socket),
+                };
+                if let Err(err) = session.send(UdpPacket::new(data.into(), remote_addr, local_addr)).await {
+                    tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] failed sending packet: {err}")
+                };
+            },
+            Ok(None) => {}
+            Err(err) => tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] packet receiving error: {err}"),
+        }
     }
 }
