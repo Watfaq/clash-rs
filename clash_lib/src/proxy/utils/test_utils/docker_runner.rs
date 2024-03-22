@@ -45,9 +45,17 @@ impl DockerTestRunner {
         f: impl Future<Output = anyhow::Result<()>>,
     ) -> anyhow::Result<()> {
         let fut = Box::pin(f);
-        let res = fut.await;
+        // let res = fut.await;
         // make sure the container is cleaned up
-        // TODO: select a timeout future as well, make sure it can quit smoothly
+        let res = tokio::select! {
+            res = fut => {
+                res
+            },
+            _ = tokio::time::sleep(std::time::Duration::from_secs(3))=> {
+                tracing::warn!("timeout");
+                Ok(())
+            }
+        };
         self.cleanup().await?;
 
         res

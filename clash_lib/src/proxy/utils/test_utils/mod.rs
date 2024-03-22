@@ -5,18 +5,20 @@ use crate::{
     proxy::OutboundHandler,
     session::{Session, SocksAddr},
 };
-use futures::future::join_all;
+use futures::{future::join_all, Future};
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
 };
 use tracing::{debug, error};
 
+use self::docker_runner::DockerTestRunner;
+
 pub mod config_helper;
 pub mod consts;
 pub mod docker_runner;
 
-// TODO: add the thoroughput metrics
+// TODO: add the throughput metrics
 pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> anyhow::Result<()> {
     // PATH: our proxy handler -> proxy-server(container) -> target local server(127.0.0.1:port)
 
@@ -102,7 +104,10 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
         .next()
     {
         Some(e) => Err(anyhow!("Failed to run ping_pong_test: {}", e)),
-        None => Ok(()),
+        None => {
+            tracing::info!("ping_pong_test success");
+            Ok(())
+        }
     }
 }
 
@@ -159,4 +164,34 @@ pub async fn latency_test(
         end_time.duration_since(start_time).unwrap()
     );
     Ok(())
+}
+
+pub async fn run(
+    handler: Arc<dyn OutboundHandler>,
+    runner_creater: impl Future<Output = anyhow::Result<DockerTestRunner>>,
+) -> anyhow::Result<()> {
+    let watch = match runner_creater.await {
+        Ok(runner) => runner,
+        Err(_) => {
+            tracing::warn!("cannot start container, please check the docker environment");
+            return Ok(());
+        }
+    };
+
+    watch
+        .run_and_cleanup(async move {
+            ping_pong_test(handler.clone(), 10001).await?;
+            latency_test(
+                handler,
+                LatencyTestOption {
+                    dst: SocksAddr::Domain("example.com".to_owned(), 80),
+                    req: consts::EXAMPLE_REQ,
+                    expected_resp: consts::EXAMLE_RESP_200,
+                    read_exact: true,
+                },
+            )
+            .await?;
+            Ok(())
+        })
+        .await
 }

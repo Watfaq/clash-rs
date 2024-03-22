@@ -288,14 +288,12 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, docker))]
+#[cfg(all(test, not(ci)))]
 mod tests {
 
     use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner, latency_test, ping_pong_test, LatencyTestOption,
-    };
+    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner, run};
 
     use super::*;
 
@@ -325,24 +323,6 @@ mod tests {
             udp: false,
         };
         let handler = Handler::new(opts);
-
-        let watch = get_runner().await?;
-
-        watch
-            .run_and_cleanup(async move {
-                ping_pong_test(handler.clone(), 10001).await?;
-                latency_test(
-                    handler,
-                    LatencyTestOption {
-                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
-                        req: GOOGLE_REQ,
-                        expected_resp: GOOGLE_RESP_301,
-                        read_exact: true,
-                    },
-                )
-                .await?;
-                Ok(())
-            })
-            .await
+        run(handler, get_runner()).await
     }
 }

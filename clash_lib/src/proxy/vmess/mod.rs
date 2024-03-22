@@ -251,14 +251,14 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, docker))]
+#[cfg(all(test, not(ci)))]
 mod tests {
 
     use crate::proxy::utils::test_utils::{
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        latency_test, ping_pong_test, LatencyTestOption,
+        run,
     };
 
     use super::*;
@@ -298,27 +298,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-
-        let runner = get_ws_runner().await?;
-
-        runner
-            .run_and_cleanup(async move {
-                ping_pong_test(handler.clone(), 10001).await?;
-                latency_test(
-                    handler,
-                    LatencyTestOption {
-                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
-                        req: GOOGLE_REQ,
-                        expected_resp: GOOGLE_RESP_301,
-                        read_exact: true,
-                    },
-                )
-                .await?;
-                Ok(())
-            })
-            .await?;
-
-        Ok(())
+        run(handler, get_ws_runner()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -361,27 +341,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-
-        let runner = get_grpc_runner().await?;
-
-        runner
-            .run_and_cleanup(async move {
-                ping_pong_test(handler.clone(), 10001).await?;
-                latency_test(
-                    handler,
-                    LatencyTestOption {
-                        dst: SocksAddr::Domain("example.org".to_owned(), 80),
-                        req: EXAMPLE_REQ,
-                        expected_resp: EXAMLE_RESP_200,
-                        read_exact: true,
-                    },
-                )
-                .await?;
-                Ok(())
-            })
-            .await?;
-
-        Ok(())
+        run(handler, get_grpc_runner()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -424,26 +384,6 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-
-        let runner = get_h2_runner().await?;
-
-        runner
-            .run_and_cleanup(async move {
-                ping_pong_test(handler.clone(), 10001).await?;
-                latency_test(
-                    handler,
-                    LatencyTestOption {
-                        dst: SocksAddr::Domain("google.com".to_owned(), 80),
-                        req: GOOGLE_REQ,
-                        expected_resp: GOOGLE_RESP_301,
-                        read_exact: true,
-                    },
-                )
-                .await?;
-                Ok(())
-            })
-            .await?;
-
-        Ok(())
+        run(handler, get_h2_runner()).await
     }
 }

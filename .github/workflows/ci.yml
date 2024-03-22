@@ -41,7 +41,7 @@ jobs:
       run: cargo clippy --all --all-features -- -D warnings
     - name: Run cargo test on macOS
       if: ${{ matrix.os }} != 'macos-13''
-      run: cargo --config 'build.rustflags=["--cfg", "docker"]' test --all --all-features
+      run: CLASH_RS_CI=true cargo test --all --all-features
     - name: Run cargo test on other platforms
       if: ${{ matrix.os }} == 'macos-13''
       run: cargo test --all --all-features
