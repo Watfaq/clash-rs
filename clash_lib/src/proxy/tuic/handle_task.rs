@@ -7,67 +7,73 @@ use tokio::time;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
 
+use crate::session::SocksAddr as ClashSocksAddr;
+use crate::proxy::datagram::UdpPacket;
+
 use super::types::{TuicConnection, UdpRelayMode};
 
 impl TuicConnection {
-    pub async fn authenticate(self, zero_rtt_accepted: Option<ZeroRttAccepted>) {
+    pub async fn tuic_auth(self, zero_rtt_accepted: Option<ZeroRttAccepted>) {
         if let Some(zero_rtt_accepted) = zero_rtt_accepted {
-            tracing::debug!(
-                "[authenticate] waiting for connection to be fully established"
-            );
+            tracing::debug!("[auth] waiting for connection to be fully established");
             zero_rtt_accepted.await;
         }
 
-        tracing::debug!("[authenticate] sending authentication");
+        tracing::debug!("[auth] sending authentication");
 
         match self
             .inner
             .authenticate(self.uuid, self.password.clone())
             .await
         {
-            Ok(()) => tracing::info!("[authenticate] {uuid}", uuid = self.uuid),
+            Ok(()) => tracing::info!("[auth] {uuid}", uuid = self.uuid),
             Err(err) => {
-                tracing::warn!("[authenticate] authentication sending error: {err}")
+                tracing::warn!("[auth] authentication sending error: {err}")
             }
         }
     }
 
-    pub async fn connect(&self, addr: Address) -> Result<Connect> {
+    pub async fn connect_tcp(&self, addr: Address) -> Result<Connect> {
         let addr_display = addr.to_string();
-        tracing::info!("[connect] {addr_display}");
+        tracing::info!("[tcp] {addr_display}");
 
         match self.inner.connect(addr).await {
             Ok(conn) => Ok(conn),
             Err(err) => {
-                tracing::warn!(
-                    "[connect] failed initializing relay to {addr_display}: {err}"
-                );
+                tracing::warn!("[tcp] failed initializing relay to {addr_display}: {err}");
                 Err(anyhow!(err))
             }
         }
     }
 
-    pub async fn packet(&self, pkt: Bytes, addr: Address, assoc_id: u16) -> anyhow::Result<()> {
+    pub async fn outgoing_udp(
+        &self,
+        pkt: Bytes,
+        addr: Address,
+        assoc_id: u16,
+    ) -> anyhow::Result<()> {
         let addr_display = addr.to_string();
 
         match self.udp_relay_mode {
             UdpRelayMode::Native => {
-                tracing::info!("[packet] [{assoc_id:#06x}] [to-native] to {addr_display}");
+                tracing::info!("[udp] [{assoc_id:#06x}] [to-native] to {addr_display}");
                 match self.inner.packet_native(pkt, addr, assoc_id) {
                     Ok(()) => Ok(()),
                     Err(err) => {
-                        tracing::warn!("[packet] [{assoc_id:#06x}] [to-native] to {addr_display}: {err}");
+                        tracing::warn!(
+                            "[udp] [{assoc_id:#06x}] [to-native] to {addr_display}: {err}"
+                        );
                         Err(anyhow!(err))
                     }
                 }
             }
             UdpRelayMode::Quic => {
-                tracing::info!("[packet] [{assoc_id:#06x}] [to-quic] {addr_display}");
+                tracing::info!("[udp] [{assoc_id:#06x}] [to-quic] {addr_display}");
                 match self.inner.packet_quic(pkt, addr, assoc_id).await {
                     Ok(()) => Ok(()),
                     Err(err) => {
                         tracing::warn!(
-                            "[packet] [{assoc_id:#06x}] [to-quic] to {addr_display}: {err}"
+                            "[udp] [{assoc_id:#06x}] [to-quic] to {addr_display}: {err}"
                         );
                         Err(anyhow!(err))
                     }
@@ -77,11 +83,11 @@ impl TuicConnection {
     }
 
     pub async fn dissociate(&self, assoc_id: u16) -> anyhow::Result<()> {
-        tracing::info!("[dissociate] [{assoc_id:#06x}]");
+        tracing::info!("[udp] [dissociate] [{assoc_id:#06x}]");
         match self.inner.dissociate(assoc_id).await {
             Ok(()) => Ok(()),
             Err(err) => {
-                tracing::warn!("[dissociate] [{assoc_id:#06x}] {err}");
+                tracing::warn!("[udp] [dissociate] [{assoc_id:#06x}] {err}");
                 Err(anyhow!(err))
             }
         }
@@ -100,13 +106,13 @@ impl TuicConnection {
             }
 
             match self.inner.heartbeat().await {
-                Ok(()) => tracing::debug!("[heartbeat]"),
-                Err(err) => tracing::warn!("[heartbeat] {err}"),
+                Ok(()) => tracing::trace!("[heartbeat]"),
+                Err(err) => tracing::error!("[heartbeat] {err}"),
             }
         }
     }
 
-    pub async fn handle_packet(pkt: Packet) {
+    pub async fn incoming_udp(&self, pkt: Packet) {
         let assoc_id = pkt.assoc_id();
         let pkt_id = pkt.pkt_id();
 

@@ -53,7 +53,7 @@ impl TuicConnection {
             Err(err) => Err(anyhow!(err)),
             Ok(Task::Packet(pkt)) => match self.udp_relay_mode {
                 UdpRelayMode::Quic => {
-                    Self::handle_packet(pkt).await;
+                    self.incoming_udp(pkt).await;
                     Ok(())
                 }
                 UdpRelayMode::Native => Err(anyhow!("wrong packet source")),
@@ -86,7 +86,7 @@ impl TuicConnection {
             Err(err) => Err(anyhow!(err)),
             Ok(Task::Packet(pkt)) => match self.udp_relay_mode {
                 UdpRelayMode::Native => {
-                    Self::handle_packet(pkt).await;
+                    self.incoming_udp(pkt).await;
                     Ok(())
                 }
                 UdpRelayMode::Quic => Err(anyhow!("wrong packet source")),

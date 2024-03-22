@@ -1,15 +1,20 @@
+use crate::session::SocksAddr as ClashSocksAddr;
 use anyhow::Result;
 use quinn::Connection as QuinnConnection;
 use quinn::{Endpoint as QuinnEndpoint, ZeroRttAccepted};
 use register_count::Counter;
+use std::collections::HashMap;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     str::FromStr,
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
+use tokio::sync::RwLock as AsyncRwLock;
 use tuic_quinn::Connection as InnerConnection;
 use uuid::Uuid;
+
+use crate::proxy::datagram::UdpPacket;
 
 pub struct TuicEndpoint {
     pub ep: QuinnEndpoint,
@@ -144,7 +149,8 @@ impl TuicConnection {
     ) {
         tracing::info!("connection established");
 
-        tokio::spawn(self.clone().authenticate(zero_rtt_accepted));
+        // TODO reduct spawn
+        tokio::spawn(self.clone().tuic_auth(zero_rtt_accepted));
         tokio::spawn(self.clone().heartbeat(heartbeat));
         tokio::spawn(self.clone().collect_garbage(gc_interval, gc_lifetime));
 
@@ -172,12 +178,10 @@ impl TuicConnection {
         let mut interval = tokio::time::interval(gc_interval);
         loop {
             interval.tick().await;
-
             if self.is_closed() {
                 break;
             }
-
-            tracing::debug!("[gc] packet fragment garbage collecting event");
+            tracing::trace!("[gc]");
             self.inner.collect_garbage(gc_lifetime);
         }
     }
@@ -253,5 +257,18 @@ impl From<&str> for CongestionControl {
 impl Default for CongestionControl {
     fn default() -> Self {
         Self::Cubic
+    }
+}
+
+pub trait SocketAdderTrans {
+    fn into_tuic(self) -> tuic::Address;
+}
+impl SocketAdderTrans for crate::session::SocksAddr {
+    fn into_tuic(self) -> tuic::Address {
+        use crate::session::SocksAddr;
+        match self {
+            SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
+            SocksAddr::Domain(domain, port) => tuic::Address::DomainAddress(domain, port),
+        }
     }
 }
