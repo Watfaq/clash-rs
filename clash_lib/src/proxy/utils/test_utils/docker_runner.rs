@@ -1,5 +1,3 @@
-//! This example will run a non-interactive command inside the container using `docker exec`
-
 use std::collections::HashMap;
 
 use bollard::container::{Config, RemoveContainerOptions};
@@ -10,6 +8,8 @@ use bollard::image::CreateImageOptions;
 
 use anyhow::Result;
 use futures::{Future, TryStreamExt};
+
+const TIMEOUT_DURATION: u64 = 3;
 
 pub struct DockerTestRunner {
     instance: Docker,
@@ -51,7 +51,7 @@ impl DockerTestRunner {
             res = fut => {
                 res
             },
-            _ = tokio::time::sleep(std::time::Duration::from_secs(3))=> {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(TIMEOUT_DURATION))=> {
                 tracing::warn!("timeout");
                 Ok(())
             }
