@@ -36,6 +36,7 @@ pub enum VmessTransport {
 
 pub struct HandlerOptions {
     pub name: String,
+    // TODO: @VendettaReborn, delete this after confirmed
     pub common_opts: CommonOption,
     pub server: String,
     pub port: u16,
@@ -172,9 +173,9 @@ impl OutboundHandler for Handler {
             resolver,
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.packet_mark,
         )
         .map_err(|x| {
             io::Error::new(
@@ -212,9 +213,9 @@ impl OutboundHandler for Handler {
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.packet_mark,
         )
         .map_err(|x| {
             io::Error::new(

@@ -21,6 +21,8 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
+#[cfg(target_os = "linux")]
+pub mod tproxy;
 
 pub(crate) mod datagram;
 mod options;
@@ -84,9 +86,10 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
+// TODO: delete this struct
+#[allow(dead_code)]
 #[derive(Default, Debug, Clone)]
 pub struct CommonOption {
-    #[allow(dead_code)]
     so_mark: Option<u32>,
     iface: Option<Interface>,
 }

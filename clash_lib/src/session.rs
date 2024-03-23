@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::sync::atomic::AtomicU32;
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -11,6 +12,13 @@ use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use erased_serde::Serialize as ESerialize;
+
+// mark of the packet from clash-rs
+static DEFAULT_PACKET_MARK: AtomicU32 = AtomicU32::new(0xff);
+
+pub(crate) fn get_packet_mark() -> u32 {
+    DEFAULT_PACKET_MARK.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
@@ -353,6 +361,7 @@ pub enum Type {
     Http,
     HttpConnect,
     Socks5,
+    TProxy,
     Tun,
 }
 
@@ -409,7 +418,7 @@ impl Default for Session {
             typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            packet_mark: None,
+            packet_mark: Some(get_packet_mark()),
             iface: None,
         }
     }

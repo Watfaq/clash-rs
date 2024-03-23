@@ -125,6 +125,23 @@ pub async fn new_udp_socket(
     iface: Option<&Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
+    new_udp_socket_inner(false, src, iface, packet_mark).await
+}
+
+pub async fn new_transparent_udp_socket(
+    src: Option<&SocketAddr>,
+    iface: Option<&Interface>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+) -> io::Result<UdpSocket> {
+    new_udp_socket_inner(true, src, iface, packet_mark).await
+}
+
+pub async fn new_udp_socket_inner(
+    transparent: bool,
+    src: Option<&SocketAddr>,
+    iface: Option<&Interface>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+) -> io::Result<UdpSocket> {
     let socket = match src {
         Some(src) => {
             if src.is_ipv4() {
@@ -135,6 +152,19 @@ pub async fn new_udp_socket(
         }
         None => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
     };
+
+
+    // see: https://docs.kernel.org/networking/tproxy.html#making-non-local-sockets-work
+    // **All you have to do is enable the (SOL_IP, IP_TRANSPARENT) socket option before calling bind**
+    // for tcp and udp, situations are slightly different:
+    // 1. for tcp, all you need to do is to create a listener with IP_TRANSPARENT enabled, since the packet flow 
+    //    is based on the stream, the ingress and egress of the stream will be handled by system stack properly
+    // 2, for udp, the socket that binds the tproxy-port shall have IP_TRANSPARENT enabled,
+    //    and the response socket should also have IP_TRANSPARENT enabled, in order to sink a packet that 
+    //    have any (src, sport), which is the (dst, sport) of the inbound packet
+    if transparent {
+        socket.set_ip_transparent(true)?;
+    }
 
     if let Some(src) = src {
         socket.bind(&(*src).into())?;

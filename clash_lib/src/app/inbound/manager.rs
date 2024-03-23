@@ -88,7 +88,7 @@ impl InboundManager {
         };
         self.network_listeners
             .values()
-            .for_each(|x| match x.listener_type {
+            .for_each(|x: &NetworkInboundListener| match x.listener_type {
                 ListenerType::Http => {
                     ports.port = Some(x.port);
                 }
@@ -97,6 +97,9 @@ impl InboundManager {
                 }
                 ListenerType::Mixed => {
                     ports.mixed_port = Some(x.port);
+                }
+                ListenerType::TProxy => {
+                    ports.tproxy_port = Some(x.port);
                 }
             });
 
@@ -141,6 +144,21 @@ impl InboundManager {
                     bind_addr: self.bind_address.clone(),
                     port: mixed_port,
                     listener_type: ListenerType::Mixed,
+                    dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
+                },
+            );
+        }
+
+
+        if let Some(tproxy_port) = ports.tproxy_port {
+            network_listeners.insert(
+                ListenerType::TProxy,
+                NetworkInboundListener {
+                    name: "TProxy".to_string(),
+                    bind_addr: self.bind_address.clone(),
+                    port: tproxy_port,
+                    listener_type: ListenerType::TProxy,
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                 },

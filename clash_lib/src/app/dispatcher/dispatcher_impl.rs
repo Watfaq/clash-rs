@@ -181,6 +181,7 @@ impl Dispatcher {
 
     /// Dispatch a UDP packet to outbound handler
     /// returns the close sender
+    /// will ignore the source and destination in `Session`
     #[instrument]
     pub fn dispatch_datagram(
         &self,
