@@ -236,7 +236,7 @@ pub struct OutboundTuic {
     /// h3
     pub alpn: Option<Vec<String>>,
     pub disable_sni: Option<bool>,
-    pub reduct_rtt: Option<bool>,
+    pub reduce_rtt: Option<bool>,
     /// millis
     pub request_timeout: Option<u64>,
     pub udp_relay_mode: Option<String>,

@@ -59,7 +59,7 @@ pub struct HandlerOptions {
     pub disable_sni: bool,
     pub alpn: Vec<Vec<u8>>,
     pub heartbeat_interval: Duration,
-    pub reduct_rtt: bool,
+    pub reduce_rtt: bool,
     pub request_timeout: Duration,
     pub congestion_controller: CongestionControl,
     pub max_udp_relay_packet_size: u64,
@@ -71,7 +71,6 @@ pub struct HandlerOptions {
 
     /// not used
     pub ip: Option<String>,
-    pub fast_open: Option<bool>,
     pub skip_cert_verify: bool,
     pub sni: Option<String>,
 }
@@ -176,7 +175,7 @@ impl Handler {
             uuid: opts.uuid,
             password: Arc::from(opts.password.clone().into_bytes().into_boxed_slice()),
             udp_relay_mode: types::UdpRelayMode::Native,
-            zero_rtt_handshake: opts.reduct_rtt,
+            zero_rtt_handshake: opts.reduce_rtt,
             heartbeat: opts.heartbeat_interval,
             gc_interval: opts.gc_interval,
             gc_lifetime: opts.gc_lifetime,

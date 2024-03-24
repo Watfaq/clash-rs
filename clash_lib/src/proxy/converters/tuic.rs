@@ -36,7 +36,7 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
                 .map(|v| v.into_iter().map(|alpn| alpn.into_bytes()).collect())
                 .unwrap_or_default(),
             heartbeat_interval: Duration::from_millis(s.heartbeat_interval.unwrap_or(3000)),
-            reduct_rtt: s.reduct_rtt.unwrap_or(false),
+            reduce_rtt: s.reduce_rtt.unwrap_or(false) || s.fast_open.unwrap_or(false),
             request_timeout: Duration::from_millis(s.request_timeout.unwrap_or(8000)),
             congestion_controller: s
                 .congestion_controller
@@ -47,7 +47,6 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             max_open_stream: VarInt::from_u64(s.max_open_stream.unwrap_or(32))
                 .unwrap_or(VarInt::MAX),
             ip: s.ip.clone(),
-            fast_open: s.fast_open,
             skip_cert_verify: s.skip_cert_verify.unwrap_or(false),
             sni: s.sni.clone(),
             gc_interval: Duration::from_millis(s.gc_interval.unwrap_or(3000)),
