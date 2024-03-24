@@ -80,7 +80,7 @@ pub struct Handler {
     opts: HandlerOptions,
     ep: TuicEndpoint,
     conn: AsyncMutex<Option<TuicConnection>>,
-    next_assoc_id: AtomicU16
+    next_assoc_id: AtomicU16,
 }
 
 #[async_trait]
@@ -185,7 +185,7 @@ impl Handler {
             opts,
             ep: endpoint,
             conn: AsyncMutex::new(None),
-            next_assoc_id: AtomicU16::new(0)
+            next_assoc_id: AtomicU16::new(0),
         }))
     }
     async fn get_conn(&self) -> Result<TuicConnection> {

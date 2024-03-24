@@ -7,8 +7,8 @@ use tokio::time;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
 
-use crate::session::SocksAddr as ClashSocksAddr;
 use crate::proxy::datagram::UdpPacket;
+use crate::session::SocksAddr as ClashSocksAddr;
 
 use super::types::{TuicConnection, UdpRelayMode};
 
