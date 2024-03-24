@@ -237,9 +237,8 @@ impl Handler {
     }
 }
 
+#[derive(Debug)]
 struct TuicDatagramOutbound {
-    assoc_id: u16,
-    handle: tokio::task::JoinHandle<Result<()>>,
     send_tx: tokio_util::sync::PollSender<UdpPacket>,
     recv_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
 }
@@ -255,7 +254,7 @@ impl TuicDatagramOutbound {
         let (send_tx, send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let udp_sessions = conn.udp_sessions.clone();
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             // capture vars
             let (mut send_rx, recv_tx) = (send_rx, recv_tx);
             udp_sessions.write().await.insert(
@@ -266,20 +265,24 @@ impl TuicDatagramOutbound {
                 },
             );
             while let Some(next_send) = send_rx.recv().await {
-                conn.outgoing_udp(
-                    next_send.data.into(),
-                    next_send.dst_addr.into_tuic(),
-                    assoc_id,
-                )
-                .await?;
+                let res = conn
+                    .outgoing_udp(
+                        next_send.data.into(),
+                        next_send.dst_addr.into_tuic(),
+                        assoc_id,
+                    )
+                    .await;
+                if res.is_err() {
+                    break;
+                }
             }
-            tracing::info!("[close] [udp] no more outgoing udp packet from [{assoc_id:#06x}]");
+            // TuicDatagramOutbound dropped or outgoing_udp occurs error
+            tracing::info!("[udp] [dissociate] closing UDP session [{assoc_id:#06x}]");
+            _ = conn.dissociate(assoc_id).await;
             udp_sessions.write().await.remove(&assoc_id);
             anyhow::Ok(())
         });
         let s = Self {
-            assoc_id,
-            handle,
             send_tx: tokio_util::sync::PollSender::new(send_tx),
             recv_rx,
         };
