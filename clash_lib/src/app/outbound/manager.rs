@@ -99,17 +99,17 @@ impl OutboundManager {
     }
 
     pub fn get_outbound(&self, name: &str) -> Option<AnyOutboundHandler> {
-        self.handlers.get(name).map(Clone::clone)
+        self.handlers.get(name).cloned()
     }
 
     /// this doesn't populate history/liveness information
     pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
-        self.proxy_providers.get(name).map(Clone::clone)
+        self.proxy_providers.get(name).cloned()
     }
 
     // API handles start
     pub fn get_selector_control(&self, name: &str) -> Option<ThreadSafeSelectorControl> {
-        self.selector_control.get(name).map(Clone::clone)
+        self.selector_control.get(name).cloned()
     }
 
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
@@ -248,7 +248,7 @@ impl OutboundManager {
                     handlers
                         .get(x)
                         .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
-                        .map(Clone::clone)
+                        .cloned()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
