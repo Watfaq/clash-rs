@@ -245,6 +245,7 @@ struct TuicDatagramOutbound {
 }
 
 impl TuicDatagramOutbound {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         assoc_id: u16,
         conn: Arc<TuicConnection>,
@@ -264,17 +265,13 @@ impl TuicDatagramOutbound {
                     local_addr,
                 },
             );
-            loop {
-                if let Some(next_send) = send_rx.recv().await {
-                    conn.outgoing_udp(
-                        next_send.data.into(),
-                        next_send.dst_addr.into_tuic(),
-                        assoc_id,
-                    )
-                    .await?;
-                } else {
-                    break;
-                };
+            while let Some(next_send) = send_rx.recv().await {
+                conn.outgoing_udp(
+                    next_send.data.into(),
+                    next_send.dst_addr.into_tuic(),
+                    assoc_id,
+                )
+                .await?;
             }
             tracing::info!("[close] [udp] no more outgoing udp packet from [{assoc_id:#06x}]");
             udp_sessions.write().await.remove(&assoc_id);

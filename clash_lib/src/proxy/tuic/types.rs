@@ -112,6 +112,7 @@ impl TuicConnection {
             None => Ok(()),
         }
     }
+    #[allow(clippy::too_many_arguments)]
     fn new(
         conn: QuinnConnection,
         zero_rtt_accepted: Option<ZeroRttAccepted>,
