@@ -247,7 +247,8 @@ impl OutboundManager {
                 .map(|x| {
                     handlers
                         .get(x)
-                        .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x))).cloned()
+                        .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
+                        .cloned()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 

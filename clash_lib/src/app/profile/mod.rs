@@ -154,7 +154,8 @@ impl CacheFile {
         self.db
             .ip_to_host
             .get(ip_or_host)
-            .or_else(|| self.db.host_to_ip.get(ip_or_host)).cloned()
+            .or_else(|| self.db.host_to_ip.get(ip_or_host))
+            .cloned()
     }
 
     pub fn delete_fake_ip_pair(&mut self, ip: &str, host: &str) {
