@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use bytes::Bytes;
 use quinn::{RecvStream, SendStream, VarInt};
@@ -46,7 +47,7 @@ impl TuicConnection {
         Ok(self.conn.read_datagram().await?)
     }
 
-    pub async fn handle_uni_stream(self, recv: RecvStream, _reg: Register) {
+    pub async fn handle_uni_stream(self: Arc<Self>, recv: RecvStream, _reg: Register) {
         tracing::debug!("[relay] incoming unidirectional stream");
 
         let res = match self.inner.accept_uni_stream(recv).await {
@@ -66,20 +67,23 @@ impl TuicConnection {
         }
     }
 
-    pub async fn handle_bi_stream(self, send: SendStream, recv: RecvStream, _reg: Register) {
+    pub async fn handle_bi_stream(
+        self: Arc<Self>,
+        send: SendStream,
+        recv: RecvStream,
+        _reg: Register,
+    ) {
         tracing::debug!("[relay] incoming bidirectional stream");
 
-        let res = match self.inner.accept_bi_stream(send, recv).await {
-            Err(err) => Err::<(), _>(anyhow!(err)),
-            _ => unreachable!(), // already filtered in `tuic_quinn`
+        let err = match self.inner.accept_bi_stream(send, recv).await {
+            Err(err) => anyhow!(err),
+            _ => anyhow!("A client shouldn't receive bi stream"),
         };
 
-        if let Err(err) = res {
-            tracing::warn!("[relay] incoming bidirectional stream error: {err}");
-        }
+        tracing::warn!("[relay] incoming bidirectional stream error: {err}");
     }
 
-    pub async fn handle_datagram(self, dg: Bytes) {
+    pub async fn handle_datagram(self: Arc<Self>, dg: Bytes) {
         tracing::debug!("[relay] incoming datagram");
 
         let res = match self.inner.accept_datagram(dg) {
@@ -91,7 +95,9 @@ impl TuicConnection {
                 }
                 UdpRelayMode::Quic => Err(anyhow!("wrong packet source")),
             },
-            _ => unreachable!(), // already filtered in `tuic_quinn`
+            _ => Err(anyhow!(
+                "Datagram shouldn't receive any data expect UDP packet"
+            )),
         };
 
         if let Err(err) = res {

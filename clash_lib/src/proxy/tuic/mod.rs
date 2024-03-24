@@ -79,7 +79,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
     ep: TuicEndpoint,
-    conn: AsyncMutex<Option<TuicConnection>>,
+    conn: AsyncMutex<Option<Arc<TuicConnection>>>,
     next_assoc_id: AtomicU16,
 }
 
@@ -188,7 +188,7 @@ impl Handler {
             next_assoc_id: AtomicU16::new(0),
         }))
     }
-    async fn get_conn(&self) -> Result<TuicConnection> {
+    async fn get_conn(&self) -> Result<Arc<TuicConnection>> {
         let fut = async {
             let mut guard = self.conn.lock().await;
             if guard.is_none() {
@@ -202,7 +202,6 @@ impl Handler {
             } else {
                 conn
             };
-            // TODO TuicConnection is huge, is it necessary to clone it? If it is, should we use Arc ?
             *guard = Some(conn.clone());
             Ok(conn)
         };
@@ -248,7 +247,7 @@ struct TuicDatagramOutbound {
 impl TuicDatagramOutbound {
     pub fn new(
         assoc_id: u16,
-        conn: TuicConnection,
+        conn: Arc<TuicConnection>,
         local_addr: ClashSocksAddr,
     ) -> AnyOutboundDatagram {
         // TODO not sure about the size of buffer

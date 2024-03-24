@@ -28,7 +28,7 @@ pub struct TuicEndpoint {
     pub gc_lifetime: Duration,
 }
 impl TuicEndpoint {
-    pub async fn connect(&self) -> Result<TuicConnection> {
+    pub async fn connect(&self) -> Result<Arc<TuicConnection>> {
         let mut last_err = None;
 
         for addr in self.server.resolve().await? {
@@ -121,7 +121,7 @@ impl TuicConnection {
         heartbeat: Duration,
         gc_interval: Duration,
         gc_lifetime: Duration,
-    ) -> Self {
+    ) -> Arc<Self> {
         let conn = Self {
             conn: conn.clone(),
             inner: InnerConnection::<tuic_quinn::side::Client>::new(conn),
@@ -135,7 +135,7 @@ impl TuicConnection {
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
             udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
-
+        let conn = Arc::new(conn);
         tokio::spawn(
             conn.clone()
                 .init(zero_rtt_accepted, heartbeat, gc_interval, gc_lifetime),
@@ -144,7 +144,7 @@ impl TuicConnection {
         conn
     }
     async fn init(
-        self,
+        self: Arc<Self>,
         zero_rtt_accepted: Option<ZeroRttAccepted>,
         heartbeat: Duration,
         gc_interval: Duration,

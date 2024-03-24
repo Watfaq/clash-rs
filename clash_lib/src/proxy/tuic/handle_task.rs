@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use quinn::ZeroRttAccepted;
@@ -13,7 +13,7 @@ use crate::session::SocksAddr as ClashSocksAddr;
 use super::types::{TuicConnection, UdpRelayMode};
 
 impl TuicConnection {
-    pub async fn tuic_auth(self, zero_rtt_accepted: Option<ZeroRttAccepted>) {
+    pub async fn tuic_auth(self: Arc<Self>, zero_rtt_accepted: Option<ZeroRttAccepted>) {
         if let Some(zero_rtt_accepted) = zero_rtt_accepted {
             tracing::debug!("[auth] waiting for connection to be fully established");
             zero_rtt_accepted.await;
@@ -156,7 +156,7 @@ impl TuicConnection {
     /// Tasks triggered by timer
     /// Won't return unless occurs error
     pub async fn cyclical_tasks(
-        self,
+        self: Arc<Self>,
         heartbeat_interval: Duration,
         gc_interval: Duration,
         gc_lifetime: Duration,
