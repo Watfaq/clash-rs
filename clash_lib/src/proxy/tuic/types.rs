@@ -106,8 +106,11 @@ pub struct UdpSession {
 }
 
 impl TuicConnection {
-    pub fn is_closed(&self) -> bool {
-        self.conn.close_reason().is_some()
+    pub fn check_open(&self) -> Result<()> {
+        match self.conn.close_reason() {
+            Some(err) => Err(err)?,
+            None => Ok(()),
+        }
     }
     fn new(
         conn: QuinnConnection,
@@ -149,10 +152,12 @@ impl TuicConnection {
     ) {
         tracing::info!("connection established");
 
-        // TODO reduct spawn
+        // TODO check the cancellation safety of tuic_auth
         tokio::spawn(self.clone().tuic_auth(zero_rtt_accepted));
-        tokio::spawn(self.clone().heartbeat(heartbeat));
-        tokio::spawn(self.clone().collect_garbage(gc_interval, gc_lifetime));
+        tokio::spawn(
+            self.clone()
+                .cyclical_tasks(heartbeat, gc_interval, gc_lifetime),
+        );
 
         let err = loop {
             tokio::select! {
@@ -172,18 +177,6 @@ impl TuicConnection {
         };
 
         tracing::warn!("connection error: {err}");
-    }
-
-    async fn collect_garbage(self, gc_interval: Duration, gc_lifetime: Duration) {
-        let mut interval = tokio::time::interval(gc_interval);
-        loop {
-            interval.tick().await;
-            if self.is_closed() {
-                break;
-            }
-            tracing::trace!("[gc]");
-            self.inner.collect_garbage(gc_lifetime);
-        }
     }
 }
 

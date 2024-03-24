@@ -1,9 +1,9 @@
+use std::time::Duration;
+
 use bytes::Bytes;
 use quinn::ZeroRttAccepted;
 
 use anyhow::Result;
-use std::time::Duration;
-use tokio::time;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
 
@@ -82,36 +82,6 @@ impl TuicConnection {
         }
     }
 
-    pub async fn dissociate(&self, assoc_id: u16) -> anyhow::Result<()> {
-        tracing::info!("[udp] [dissociate] [{assoc_id:#06x}]");
-        match self.inner.dissociate(assoc_id).await {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                tracing::warn!("[udp] [dissociate] [{assoc_id:#06x}] {err}");
-                Err(anyhow!(err))
-            }
-        }
-    }
-
-    pub async fn heartbeat(self, heartbeat: Duration) {
-        loop {
-            time::sleep(heartbeat).await;
-
-            if self.is_closed() {
-                break;
-            }
-
-            if self.inner.task_connect_count() + self.inner.task_associate_count() == 0 {
-                continue;
-            }
-
-            match self.inner.heartbeat().await {
-                Ok(()) => tracing::trace!("[heartbeat]"),
-                Err(err) => tracing::error!("[heartbeat] {err}"),
-            }
-        }
-    }
-
     pub async fn incoming_udp(&self, pkt: Packet) {
         let assoc_id = pkt.assoc_id();
         let pkt_id = pkt.pkt_id();
@@ -150,6 +120,60 @@ impl TuicConnection {
             },
             Ok(None) => {}
             Err(err) => tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] packet receiving error: {err}"),
+        }
+    }
+
+    pub async fn dissociate(&self, assoc_id: u16) -> Result<()> {
+        tracing::info!("[udp] [dissociate] [{assoc_id:#06x}]");
+        match self.inner.dissociate(assoc_id).await {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                tracing::warn!("[udp] [dissociate] [{assoc_id:#06x}] {err}");
+                Err(err)?
+            }
+        }
+    }
+
+    async fn heartbeat(&self) -> Result<()> {
+        self.check_open()?;
+        if self.inner.task_connect_count() + self.inner.task_associate_count() == 0 {
+            return Ok(());
+        }
+
+        match self.inner.heartbeat().await {
+            Ok(()) => tracing::trace!("[heartbeat]"),
+            Err(err) => tracing::error!("[heartbeat] {err}"),
+        }
+        Ok(())
+    }
+
+    fn collect_garbage(&self, gc_lifetime: Duration) -> Result<()> {
+        self.check_open()?;
+        tracing::trace!("[gc]");
+        self.inner.collect_garbage(gc_lifetime);
+        Ok(())
+    }
+    /// Tasks triggered by timer
+    /// Won't return unless occurs error
+    pub async fn cyclical_tasks(
+        self,
+        heartbeat_interval: Duration,
+        gc_interval: Duration,
+        gc_lifetime: Duration,
+    ) -> anyhow::Error {
+        let mut heartbeat_interval = tokio::time::interval(heartbeat_interval);
+        let mut gc_interval = tokio::time::interval(gc_interval);
+        loop {
+            tokio::select! {
+                _ = heartbeat_interval.tick() => match self.heartbeat().await {
+                    Ok(_) => { },
+                    Err(err) => break err,
+                },
+                _ = gc_interval.tick() => match self.collect_garbage(gc_lifetime) {
+                    Ok(_) => { },
+                    Err(err) => break err,
+                },
+            }
         }
     }
 }

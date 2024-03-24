@@ -143,7 +143,7 @@ impl Handler {
             .unwrap()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
-        // aborted by peer: the cryptographic handshake failed: error 120: peer doesn't support any known protocol
+        // TODO(error-handling) if alpn not match the following error will be throw: aborted by peer: the cryptographic handshake failed: error 120: peer doesn't support any known protocol
         crypto.alpn_protocols = opts.alpn.clone();
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
@@ -196,7 +196,7 @@ impl Handler {
                 *guard = Some(self.ep.connect().await?);
             }
             let conn = guard.take().unwrap();
-            let conn = if conn.is_closed() {
+            let conn = if conn.check_open().is_err() {
                 // reconnect
                 self.ep.connect().await?
             } else {
@@ -240,8 +240,6 @@ impl Handler {
 
 struct TuicDatagramOutbound {
     assoc_id: u16,
-    // conn: TuicConnection,
-    // dest: tuic::Address,
     handle: tokio::task::JoinHandle<Result<()>>,
     send_tx: tokio_util::sync::PollSender<UdpPacket>,
     recv_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
@@ -285,8 +283,6 @@ impl TuicDatagramOutbound {
         });
         let s = Self {
             assoc_id,
-            // conn,
-            // dest,
             handle,
             send_tx: tokio_util::sync::PollSender::new(send_tx),
             recv_rx,
