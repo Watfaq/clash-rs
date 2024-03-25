@@ -215,7 +215,9 @@ impl OutboundManager {
                 OutboundProxyProtocol::Tor(tor) => {
                     handlers.insert(tor.name.clone(), tor.try_into()?);
                 }
-
+                OutboundProxyProtocol::Tuic(tuic) => {
+                    handlers.insert(tuic.name.clone(), tuic.try_into()?);
+                }
                 p => {
                     unimplemented!("proto {} not supported yet", p);
                 }
