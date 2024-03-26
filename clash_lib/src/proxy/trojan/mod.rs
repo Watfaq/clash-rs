@@ -225,6 +225,8 @@ mod tests {
 
     use std::collections::HashMap;
 
+    use tracing_test::traced_test;
+
     use crate::proxy::utils::test_utils::{
         config_helper::test_config_base_dir,
         consts::*,
@@ -252,6 +254,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
         let opts = Opts {

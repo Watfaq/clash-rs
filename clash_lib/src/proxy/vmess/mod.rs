@@ -2,6 +2,7 @@ use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
+use tracing::debug;
 
 mod vmess_impl;
 
@@ -168,6 +169,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
+        debug!("Connecting to {} via VMess", sess);
         let stream = new_tcp_stream(
             resolver,
             self.opts.server.as_str(),
@@ -254,6 +256,8 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
+    use tracing_test::traced_test;
+
     use crate::proxy::utils::test_utils::{
         config_helper::test_config_base_dir,
         consts::*,
@@ -265,16 +269,17 @@ mod tests {
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let trojan_conf = test_config_dir.join("vmess-ws.json");
+        let vmess_ws_conf = test_config_dir.join("vmess-ws.json");
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VMESS)
-            .mounts(&[(trojan_conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .mounts(&[(vmess_ws_conf.to_str().unwrap(), "/etc/v2ray/config.json")])
             .build()
             .await
     }
 
     #[tokio::test]
+    #[traced_test]
     #[serial_test::serial]
     async fn test_vmess_ws() -> anyhow::Result<()> {
         let opts = HandlerOptions {

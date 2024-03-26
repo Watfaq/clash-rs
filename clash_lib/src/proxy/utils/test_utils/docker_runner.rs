@@ -9,7 +9,7 @@ use bollard::image::CreateImageOptions;
 use anyhow::Result;
 use futures::{Future, TryStreamExt};
 
-const TIMEOUT_DURATION: u64 = 3;
+const TIMEOUT_DURATION: u64 = 30;
 
 pub struct DockerTestRunner {
     instance: Docker,
@@ -53,9 +53,10 @@ impl DockerTestRunner {
             },
             _ = tokio::time::sleep(std::time::Duration::from_secs(TIMEOUT_DURATION))=> {
                 tracing::warn!("timeout");
-                Ok(())
+                Err(anyhow::anyhow!("timeout"))
             }
         };
+
         self.cleanup().await?;
 
         res

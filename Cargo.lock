@@ -1156,6 +1156,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-oslog",
  "tracing-subscriber",
+ "tracing-test",
  "tracing-timing",
  "tun",
  "url",

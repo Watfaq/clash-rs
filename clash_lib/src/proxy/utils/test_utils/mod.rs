@@ -1,16 +1,19 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::{
     app::dispatcher::ChainedStream,
     proxy::OutboundHandler,
     session::{Session, SocksAddr},
 };
-use futures::{future::join_all, Future};
+use futures::{future::select_all, Future};
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
 };
-use tracing::{debug, error};
+use tracing::info;
 
 use self::docker_runner::DockerTestRunner;
 
@@ -33,6 +36,8 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port).as_str()).await?;
 
+    info!("target local server started at: {}", listener.local_addr()?);
+
     async fn destination_fn<T>(incoming: T) -> anyhow::Result<()>
     where
         T: AsyncRead + AsyncWrite,
@@ -42,26 +47,30 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
         let chunk = "world";
         let mut buf = vec![0; 5];
 
+        tracing::info!("destination_fn start read");
+
         for _ in 0..100 {
             read_half.read_exact(&mut buf).await?;
             assert_eq!(&buf, b"hello");
         }
 
+        tracing::info!("destination_fn start write");
+
         for _ in 0..100 {
             write_half.write_all(chunk.as_bytes()).await?;
             write_half.flush().await?;
         }
+
+        tracing::info!("destination_fn end");
         Ok(())
     }
 
     let target_local_server_handler = tokio::spawn(async move {
-        match listener.accept().await {
-            Ok((stream, _)) => destination_fn(stream).await,
-            Err(e) => {
-                // Handle error e, log it, or ignore it
-                error!("Failed to accept connection: {}", e);
-                Err(anyhow!("Failed to accept connection: {}", e))
-            }
+        loop {
+            let (stream, _) = listener.accept().await?;
+
+            tracing::info!("Accepted connection from: {}", stream.peer_addr().unwrap());
+            destination_fn(stream).await?
         }
     });
 
@@ -71,44 +80,48 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
         let chunk = "hello";
         let mut buf = vec![0; 5];
 
-        for _ in 0..100 {
-            write_half.write_all(chunk.as_bytes()).await?;
-        }
-        write_half.flush().await?;
-        drop(write_half);
+        tracing::info!("proxy_fn start write");
 
         for _ in 0..100 {
-            read_half.read_exact(&mut buf).await?;
+            write_half
+                .write_all(chunk.as_bytes())
+                .await
+                .inspect_err(|x| {
+                    tracing::error!("proxy_fn write error: {}", x);
+                })?;
+        }
+        write_half.flush().await?;
+
+        tracing::info!("proxy_fn start read");
+
+        for _ in 0..100 {
+            read_half.read_exact(&mut buf).await.inspect_err(|x| {
+                tracing::error!("proxy_fn read error: {}", x);
+            })?;
             assert_eq!(buf, "world".as_bytes().to_owned());
         }
-        drop(read_half);
+
+        tracing::info!("proxy_fn end");
+
         Ok(())
     }
 
     let proxy_task = tokio::spawn(async move {
+        // give some time for the target local server to start
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
         match handler.connect_stream(&sess, resolver).await {
             Ok(stream) => proxy_fn(stream).await,
             Err(e) => {
-                error!("Failed to accept connection: {}", e);
-                Err(anyhow!("Failed to accept connection: {}", e))
+                tracing::error!("Failed to proxy connection: {}", e);
+                Err(anyhow!("Failed to proxy connection: {}", e))
             }
         }
     });
 
     let futs = vec![proxy_task, target_local_server_handler];
 
-    match join_all(futs)
-        .await
-        .into_iter()
-        .filter_map(|x| x.err())
-        .next()
-    {
-        Some(e) => Err(anyhow!("Failed to run ping_pong_test: {}", e)),
-        None => {
-            tracing::info!("ping_pong_test success");
-            Ok(())
-        }
-    }
+    select_all(futs).await.0?
 }
 
 /// Represents the options for a latency test.
@@ -127,7 +140,7 @@ pub struct LatencyTestOption<'a> {
 pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
     option: LatencyTestOption<'_>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Duration> {
     // our proxy handler -> proxy-server -> destination(google.com)
 
     let sess = Session {
@@ -145,25 +158,22 @@ pub async fn latency_test(
     write_half.flush().await?;
     drop(write_half);
 
-    let start_time = std::time::SystemTime::now();
+    let start_time = Instant::now();
     let mut response = vec![0; option.expected_resp.len()];
 
     if option.read_exact {
         read_half.read_exact(&mut response).await?;
-        debug!("response:\n{}", String::from_utf8_lossy(&response));
+        tracing::debug!("response:\n{}", String::from_utf8_lossy(&response));
         assert_eq!(&response, option.expected_resp);
     } else {
         read_half.read_to_end(&mut response).await?;
-        debug!("response:\n{}", String::from_utf8_lossy(&response));
+        tracing::debug!("response:\n{}", String::from_utf8_lossy(&response));
         assert_eq!(&response, option.expected_resp);
     }
 
-    let end_time = std::time::SystemTime::now();
-    debug!(
-        "time cost:{:?}",
-        end_time.duration_since(start_time).unwrap()
-    );
-    Ok(())
+    let end_time = Instant::now();
+    tracing::debug!("time cost:{:?}", end_time.duration_since(start_time));
+    Ok(end_time.duration_since(start_time))
 }
 
 pub async fn run(
@@ -172,16 +182,23 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     let watch = match runner_creater.await {
         Ok(runner) => runner,
-        Err(_) => {
+        Err(e) => {
             tracing::warn!("cannot start container, please check the docker environment");
-            return Ok(());
+            return Err(e);
         }
     };
 
     watch
         .run_and_cleanup(async move {
-            ping_pong_test(handler.clone(), 10001).await?;
-            latency_test(
+            let rv = ping_pong_test(handler.clone(), 10001).await;
+            if rv.is_err() {
+                tracing::error!("ping_pong_test failed: {:?}", rv);
+                return rv;
+            } else {
+                tracing::info!("ping_pong_test success");
+            }
+
+            let rv = latency_test(
                 handler,
                 LatencyTestOption {
                     dst: SocksAddr::Domain("example.com".to_owned(), 80),
@@ -190,8 +207,14 @@ pub async fn run(
                     read_exact: true,
                 },
             )
-            .await?;
-            Ok(())
+            .await;
+            if rv.is_err() {
+                return Err(rv.unwrap_err());
+            } else {
+                tracing::info!("latency test success: {}", rv.unwrap().as_millis());
+            }
+
+            return Ok(());
         })
         .await
 }
