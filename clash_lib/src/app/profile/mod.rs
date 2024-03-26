@@ -62,7 +62,7 @@ impl ThreadSafeCacheFile {
     pub async fn get_selected(&self, group: &str) -> Option<String> {
         let g = self.0.read().await;
         if g.store_selected() {
-            g.db.selected.get(group).map(Clone::clone)
+            g.db.selected.get(group).cloned()
         } else {
             None
         }
@@ -155,7 +155,7 @@ impl CacheFile {
             .ip_to_host
             .get(ip_or_host)
             .or_else(|| self.db.host_to_ip.get(ip_or_host))
-            .map(Clone::clone)
+            .cloned()
     }
 
     pub fn delete_fake_ip_pair(&mut self, ip: &str, host: &str) {
