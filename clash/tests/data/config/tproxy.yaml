@@ -1,0 +1,4 @@
+tproxy-port: 7893
+external-controller: 127.0.0.1:9090
+mode: global
+log-level: debug
