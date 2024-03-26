@@ -126,7 +126,7 @@ pub fn setup_iptables_tproxy(
     let prerouting_chain_name = prerouting_chain_name.unwrap_or(DEFAULT_PREROUTING_CHAIN);
 
     debug!(
-        "clean iptables tproxy, policy_routing_table_num: {}, tproxy_mark: {}, output_chain_name: {}, prerouting_chain_name: {}",
+        "setup tproxy via iptables, policy_routing_table_num: {}, tproxy_mark: {}, output_chain_name: {}, prerouting_chain_name: {}",
         POLICY_ROUTING_TABLE_NUM, DEFAULT_TPROXY_MARK, output_chain_name, prerouting_chain_name
     );
 
@@ -169,7 +169,7 @@ pub fn clean_iptables_tproxy(output_chain_name: Option<&str>, prerouting_chain_n
     let output_chain_name = output_chain_name.unwrap_or(DEFAULT_OUTPUT_CHAIN);
     let prerouting_chain_name = prerouting_chain_name.unwrap_or(DEFAULT_PREROUTING_CHAIN);
     debug!(
-        "clean iptables tproxy, policy_routing_table_num: {}, tproxy_mark: {}, output_chain_name: {}, prerouting_chain_name: {}",
+        "clean tproxy via iptables, policy_routing_table_num: {}, tproxy_mark: {}, output_chain_name: {}, prerouting_chain_name: {}",
         POLICY_ROUTING_TABLE_NUM, DEFAULT_TPROXY_MARK, output_chain_name, prerouting_chain_name
     );
     run_cmd!(ip rule del fwmark $DEFAULT_TPROXY_MARK lookup $POLICY_ROUTING_TABLE_NUM);
