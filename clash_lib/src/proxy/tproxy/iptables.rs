@@ -28,10 +28,7 @@ impl TProxyStrategy {
     ) {
         match self {
             TProxyStrategy::Iptables => {
-                clean_iptables_tproxy(
-                    output_chain_name,
-                    prerouting_chain_name,
-                );
+                clean_iptables_tproxy(output_chain_name, prerouting_chain_name);
                 setup_iptables_tproxy(
                     skip_mark,
                     tproxy_port,
@@ -114,6 +111,19 @@ const POLICY_ROUTING_TABLE_NUM: u32 = 400;
 const DEFAULT_TPROXY_MARK: u32 = 0x1;
 const DEFAULT_TPROXY_MARK_MUSK: &str = "0x1/0x1";
 
+// TODO: add a cli to mamange these reserved addresses more easily?
+const RESERVED_ADDRS: &[&str] = &[
+    "0/8",
+    "10/8",
+    "127/8",
+    "172.16/12",
+    "169.254/16",
+    "192.168/16",
+    "224/4",
+    "240/4",
+    "255.255.255.255/32",
+];
+
 // TODO: handle corner cases in iptables' rules
 pub fn setup_iptables_tproxy(
     skip_mark: u32,
@@ -137,6 +147,9 @@ pub fn setup_iptables_tproxy(
     // to avoid the infinite loop
     run_cmd!(iptables "-t" mangle "-N" $output_chain_name);
     run_cmd!(iptables "-t" mangle "-F" $output_chain_name);
+    for addr in RESERVED_ADDRS {
+        run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-d" $addr "-j" RETURN);
+    }
     run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-j" RETURN "-m" mark "--mark" $skip_mark);
     run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-m" addrtype "--dst-type" LOCAL "-j" RETURN);
     run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-m" addrtype "--dst-type" BROADCAST "-j" RETURN);
@@ -155,6 +168,10 @@ pub fn setup_iptables_tproxy(
     // to catch the output socket to the listening socket on tproxy-port
     run_cmd!(iptables "-t" mangle "-N" $prerouting_chain_name);
     run_cmd!(iptables "-t" mangle "-F" $prerouting_chain_name);
+    for addr in RESERVED_ADDRS {
+        run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-d" $addr "-j" RETURN);
+    }
+    run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-m" addrtype "--dst-type" LOCAL "-j" LOG "--log-prefix" "\"LOCAL IN\"");
     run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-m" addrtype "--dst-type" LOCAL "-j" RETURN);
     run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-m" mark "--mark" $skip_mark "-j" RETURN);
     run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" tcp "-m" socket "-j" divert_chain_name);
@@ -187,7 +204,6 @@ pub fn clean_iptables_tproxy(output_chain_name: Option<&str>, prerouting_chain_n
     run_cmd!(iptables "-t" mangle "-F" $prerouting_chain_name);
     run_cmd!(iptables "-t" mangle "-X" $prerouting_chain_name);
 }
-
 
 #[test]
 #[ignore = "only for cleanup after manual testing"]
