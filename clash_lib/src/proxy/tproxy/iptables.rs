@@ -141,8 +141,8 @@ pub fn setup_iptables_tproxy(
     run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-m" addrtype "--dst-type" LOCAL "-j" RETURN);
     run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-m" addrtype "--dst-type" BROADCAST "-j" RETURN);
     // dig example.com => 93.184.216.34
-    run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-p" tcp "--dst" "192.168.2.6" "-j" MARK "--set-mark" $DEFAULT_TPROXY_MARK);
-    run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-p" udp "--dst" "192.168.2.6" "-j" MARK "--set-mark" $DEFAULT_TPROXY_MARK);
+    run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-p" tcp "-j" MARK "--set-mark" $DEFAULT_TPROXY_MARK);
+    run_cmd!(iptables "-t" mangle "-A" $output_chain_name "-p" udp "-j" MARK "--set-mark" $DEFAULT_TPROXY_MARK);
     run_cmd!(iptables "-t" mangle "-A" OUTPUT -p tcp "-j" $output_chain_name);
     run_cmd!(iptables "-t" mangle "-A" OUTPUT -p udp "-j" $output_chain_name);
 
@@ -159,8 +159,8 @@ pub fn setup_iptables_tproxy(
     run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-m" mark "--mark" $skip_mark "-j" RETURN);
     run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" tcp "-m" socket "-j" divert_chain_name);
 
-    run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" tcp "--dst" "192.168.2.6" "-j" TPROXY "--tproxy-mark" $DEFAULT_TPROXY_MARK_MUSK "--on-port" $tproxy_port);
-    run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" udp "--dst" "192.168.2.6" "-j" TPROXY "--tproxy-mark" $DEFAULT_TPROXY_MARK_MUSK "--on-port" $tproxy_port);
+    run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" tcp "-j" TPROXY "--tproxy-mark" $DEFAULT_TPROXY_MARK_MUSK "--on-port" $tproxy_port);
+    run_cmd!(iptables "-t" mangle "-A" $prerouting_chain_name "-p" udp "-j" TPROXY "--tproxy-mark" $DEFAULT_TPROXY_MARK_MUSK "--on-port" $tproxy_port);
     run_cmd!(iptables "-t" mangle "-A" PREROUTING "-p" tcp "-j" $prerouting_chain_name);
     run_cmd!(iptables "-t" mangle "-A" PREROUTING "-p" udp "-j" $prerouting_chain_name);
 }
