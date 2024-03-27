@@ -37,7 +37,7 @@ base64 = "0.22"
 uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 boring = "4.5.0"
 boring-sys = "4.5.0"
-unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git"}
+unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18"}
 cmd_lib = "1.9.3"
 
 ip_network_table-deps-treebitmap = "0.5.0"
