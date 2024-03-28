@@ -150,7 +150,6 @@ impl InboundManager {
             );
         }
 
-
         if let Some(tproxy_port) = ports.tproxy_port {
             network_listeners.insert(
                 ListenerType::TProxy,
