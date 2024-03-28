@@ -287,3 +287,42 @@ impl OutboundHandler for Handler {
         Ok(Box::new(d))
     }
 }
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+
+    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
+
+    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner, run};
+
+    use super::*;
+
+    const PASSWORD: &str = "FzcLbKs2dY9mhL";
+    const CIPHER: &str = "aes-256-gcm";
+
+    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .entrypoint(&["ssserver"])
+            .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_ss() -> anyhow::Result<()> {
+        let opts = HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Default::default(),
+            udp: false,
+        };
+        let handler = Handler::new(opts);
+        run(handler, get_runner()).await
+    }
+}

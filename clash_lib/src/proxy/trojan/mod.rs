@@ -219,3 +219,104 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 }
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+
+    use std::collections::HashMap;
+
+    use tracing_test::traced_test;
+
+    use crate::proxy::utils::test_utils::{
+        config_helper::test_config_base_dir,
+        consts::*,
+        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+        run,
+    };
+
+    use super::*;
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let trojan_conf = test_config_dir.join("trojan-ws.json");
+        let trojan_cert = test_config_dir.join("example.org.pem");
+        let trojan_key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .mounts(&[
+                (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
+                (trojan_key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    #[serial_test::serial]
+    async fn test_trojan_ws() -> anyhow::Result<()> {
+        let opts = Opts {
+            name: "test-trojan-ws".to_owned(),
+            common_opts: Default::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            password: "example".to_owned(),
+            udp: true,
+            sni: "example.org".to_owned(),
+            alpn: None,
+            skip_cert_verify: true,
+            transport: Some(Transport::Ws(WsOption {
+                path: "".to_owned(),
+                headers: [("Host".to_owned(), "example.org".to_owned())]
+                    .into_iter()
+                    .collect::<HashMap<_, _>>(),
+                // ignore the rest by setting max_early_data to 0
+                max_early_data: 0,
+                early_data_header_name: "".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+        run(handler, get_ws_runner()).await
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("trojan-grpc.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_trojan_grpc() -> anyhow::Result<()> {
+        let opts = Opts {
+            name: "test-trojan-grpc".to_owned(),
+            common_opts: Default::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            password: "example".to_owned(),
+            udp: true,
+            sni: "example.org".to_owned(),
+            alpn: None,
+            skip_cert_verify: true,
+            transport: Some(Transport::Grpc(GrpcOption {
+                host: "example.org".to_owned(),
+                service_name: "example".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+        run(handler, get_grpc_runner()).await
+    }
+}
