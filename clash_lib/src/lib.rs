@@ -149,7 +149,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let _g =
         app::logging::setup_logging(config.general.log_level, log_collector, &cwd, opts.log_file)
-            .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x)))?;
+            .map_err(|x| eprintln!("failed to setup logging: {}", x))
+            .unwrap_or_default();
 
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
