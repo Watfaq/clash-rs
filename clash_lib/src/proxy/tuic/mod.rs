@@ -8,6 +8,7 @@ use anyhow::Result;
 use axum::async_trait;
 use quinn::{EndpointConfig, TokioRuntime};
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicU32;
 use std::{
     net::{Ipv4Addr, Ipv6Addr, UdpSocket},
     sync::{
@@ -68,6 +69,7 @@ pub struct HandlerOptions {
     pub gc_lifetime: Duration,
     pub send_window: u64,
     pub receive_window: VarInt,
+    pub mark: Arc<AtomicU32>,
 
     /// not used
     pub ip: Option<String>,
@@ -168,6 +170,7 @@ impl Handler {
             socket,
             Arc::new(TokioRuntime),
         )?;
+
         endpoint.set_default_client_config(quinn_config);
         let endpoint = TuicEndpoint {
             ep: endpoint,
@@ -179,6 +182,7 @@ impl Handler {
             heartbeat: opts.heartbeat_interval,
             gc_interval: opts.gc_interval,
             gc_lifetime: opts.gc_lifetime,
+            mark: opts.mark.clone(),
         };
         Ok(Arc::new(Self {
             opts,
@@ -187,17 +191,27 @@ impl Handler {
             next_assoc_id: AtomicU16::new(0),
         }))
     }
-    async fn get_conn(&self) -> Result<Arc<TuicConnection>> {
+    async fn get_conn(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+        mark: Option<u32>,
+    ) -> Result<Arc<TuicConnection>> {
+        let mark = mark.unwrap_or(self.opts.mark.load(Ordering::Relaxed));
+        let mut rebind = false;
+        // if mark not match the one current used, then rebind
+        if mark != self.opts.mark.swap(mark, Ordering::Relaxed) {
+            rebind = true;
+        }
         let fut = async {
             let mut guard = self.conn.lock().await;
             if guard.is_none() {
                 // init
-                *guard = Some(self.ep.connect().await?);
+                *guard = Some(self.ep.connect(resolver, rebind).await?);
             }
             let conn = guard.take().unwrap();
-            let conn = if conn.check_open().is_err() {
+            let conn = if conn.check_open().is_err() || rebind {
                 // reconnect
-                self.ep.connect().await?
+                self.ep.connect(resolver, rebind).await?
             } else {
                 conn
             };
@@ -210,9 +224,9 @@ impl Handler {
     async fn do_connect_stream(
         &self,
         sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
+        resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedStream> {
-        let conn = self.get_conn().await?;
+        let conn = self.get_conn(&resolver, sess.packet_mark).await?;
         let dest = sess.destination.clone().into_tuic();
         let tuic_tcp = conn.connect_tcp(dest).await?.compat();
 
@@ -224,9 +238,9 @@ impl Handler {
     async fn do_connect_datagram(
         &self,
         sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
+        resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedDatagram> {
-        let conn = self.get_conn().await?;
+        let conn = self.get_conn(&resolver, sess.packet_mark).await?;
 
         let assos_id = self.next_assoc_id.fetch_add(1, Ordering::Relaxed);
         let quic_udp = TuicDatagramOutbound::new(assos_id, conn, sess.source.into());

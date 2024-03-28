@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::{atomic::AtomicU32, Arc},
+    time::Duration,
+};
 
 use quinn::VarInt;
 
@@ -54,6 +57,7 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             send_window: s.send_window.unwrap_or(8 * 1024 * 1024 * 2),
             receive_window: VarInt::from_u64(s.receive_window.unwrap_or(8 * 1024 * 1024))
                 .unwrap_or(VarInt::MAX),
+            mark: Arc::new(AtomicU32::new(s.mark.unwrap_or(0))),
         })
     }
 }
