@@ -28,6 +28,7 @@ jobs:
       with:
         submodules: recursive
     - uses: ilammy/setup-nasm@v1
+      if : ${{ matrix.platforms.os }} == 'windows-2022'
     - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
@@ -39,12 +40,12 @@ jobs:
     - name: Run cargo clippy
       run: cargo clippy --all --all-features -- -D warnings
     - name: Run cargo test on non-macos
-      if: ${{ matrix.os }} != 'macos-13'
+      if: ${{ matrix.platform.os }} != 'macos-13'
       run: cargo test --all --all-features
       env:
         CLASH_RS_CI: 'true'
     - name: Run cargo test on macos
-      if: ${{ matrix.os }} == 'macos-13'
+      if: ${{ matrix.platform.os }} == 'macos-13'
       run: cargo test --all --all-features
     - name: Build artifacts
       run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
