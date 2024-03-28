@@ -822,9 +822,9 @@ checksum = "7ff69b9dd49fd426c69a0db9fc04dd934cdb6645ff000864d98f7e2af8830eaa"
 
 [[package]]
 name = "by_address"
-version = "1.1.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf8dba2868114ed769a1f2590fc9ae5eb331175b44313b6c9b922f8f7ca813d0"
+checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
 
 [[package]]
 name = "byte_string"
@@ -1132,13 +1132,14 @@ dependencies = [
  "rand",
  "regex",
  "register-count",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "rustls-pemfile",
  "security-framework",
  "serde",
  "serde_json",
  "serde_yaml",
  "serial_test",
+ "sha1",
  "sha2",
  "shadowsocks",
  "smoltcp",
@@ -1629,11 +1630,11 @@ dependencies = [
 
 [[package]]
 name = "derive-adhoc"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fc3f185a1a0d933e54447b3492fe9880db2c3ad37c04b3a3bf9b24a73b7bd02"
+checksum = "0c768757217a40364c3af0b732d10bf9ed8af1e4f80b32fd5eeed94f375304b8"
 dependencies = [
- "derive-adhoc-macros 0.8.3",
+ "derive-adhoc-macros 0.8.4",
  "heck 0.4.1",
 ]
 
@@ -1656,9 +1657,9 @@ dependencies = [
 
 [[package]]
 name = "derive-adhoc-macros"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f1a082460419acefc6a66ff74c6e15c460d9b95530697f5d10892ee624aa60"
+checksum = "3b41d3d974cda1ce7e9b40f7ec5160a099f20345bc3137447e526e3ba9d63245"
 dependencies = [
  "heck 0.4.1",
  "itertools 0.12.1",
@@ -2515,7 +2516,7 @@ dependencies = [
  "once_cell",
  "rand",
  "ring 0.16.20",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "rustls-pemfile",
  "serde",
  "thiserror",
@@ -2541,7 +2542,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "rand",
  "resolv-conf",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "serde",
  "smallvec",
  "thiserror",
@@ -2565,7 +2566,7 @@ dependencies = [
  "hickory-proto",
  "hickory-resolver",
  "http 0.2.12",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "serde",
  "thiserror",
  "time",
@@ -2778,7 +2779,7 @@ dependencies = [
  "http 0.2.12",
  "hyper 0.14.28",
  "log",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "rustls-native-certs",
  "tokio",
  "tokio-rustls",
@@ -3288,9 +3289,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "523dc4f511e55ab87b694dc30d0f820d60906ef06413f93d4d7a1385599cc149"
+checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
 
 [[package]]
 name = "memmap2"
@@ -3980,9 +3981,9 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "platforms"
-version = "3.3.0"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626dec3cac7cc0e1577a2ec3fc496277ec2baa084bebad95bb6fdbfae235f84c"
+checksum = "db23d408679286588f4d4644f965003d056e3dd5abcaaa938116871d7ce2fee7"
 
 [[package]]
 name = "plotters"
@@ -4262,7 +4263,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "thiserror",
  "tokio",
  "tracing",
@@ -4278,7 +4279,7 @@ dependencies = [
  "rand",
  "ring 0.16.20",
  "rustc-hash",
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4420,7 +4421,7 @@ dependencies = [
  "aho-corasick",
  "memchr",
  "regex-automata 0.4.6",
- "regex-syntax 0.8.2",
+ "regex-syntax 0.8.3",
 ]
 
 [[package]]
@@ -4440,7 +4441,7 @@ checksum = "86b83b8b9847f9bf95ef68afb0b8e6cdb80f498442f5179a29fad448fcc1eaea"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.2",
+ "regex-syntax 0.8.3",
 ]
 
 [[package]]
@@ -4451,9 +4452,9 @@ checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
+checksum = "adad44e29e4c806119491a7f06f03de4d1af22c3a680dd47f1e6e179439d1f56"
 
 [[package]]
 name = "register-count"
@@ -4608,9 +4609,8 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9d5a6813c0759e4609cd494e8e725babae6a2ca7b62a5536a13daaec6fcb7ba"
+version = "0.21.8"
+source = "git+https://github.com/Watfaq/rustls.git?rev=43ecd5c610741668488e6d57857f9900a2087a5b#43ecd5c610741668488e6d57857f9900a2087a5b"
 dependencies = [
  "log",
  "ring 0.17.8",
@@ -4654,9 +4654,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "868e20fada228fefaf6b652e00cc73623d54f8171e7352c18bb281571f2d92da"
+checksum = "ecd36cc4259e3e4514335c4a138c6b43171a8d61d8f5c9348f9fc7529416f247"
 
 [[package]]
 name = "rustls-webpki"
@@ -5543,10 +5543,9 @@ dependencies = [
 [[package]]
 name = "tokio-rustls"
 version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=fcda89f6348c1e696b239bc7e0b168015cfb8c08#fcda89f6348c1e696b239bc7e0b168015cfb8c08"
 dependencies = [
- "rustls 0.21.10",
+ "rustls 0.21.8",
  "tokio",
 ]
 
@@ -5918,7 +5917,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c579e92f3b9e419e68cd317d33f567491365b81f943b063d30f32e4a2f072c5"
 dependencies = [
  "config",
- "derive-adhoc 0.8.3",
+ "derive-adhoc 0.8.4",
  "derive_builder_fork_arti",
  "directories",
  "educe",
@@ -6096,7 +6095,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4613dfe9d946db3b5769b860a16598a9c4a0f85df21653d0765b1238106d297"
 dependencies = [
  "async-trait",
- "derive-adhoc 0.8.3",
+ "derive-adhoc 0.8.4",
  "derive_more",
  "educe",
  "either",
@@ -6164,7 +6163,7 @@ checksum = "365c02c66f2f0159078714dd44947fb06c76956a3621fc102783119e5093be96"
 dependencies = [
  "amplify",
  "arrayvec",
- "derive-adhoc 0.8.3",
+ "derive-adhoc 0.8.4",
  "derive_builder_fork_arti",
  "derive_more",
  "downcast-rs",
@@ -6346,7 +6345,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4bbf6c0a786daab669a75ec7380ae57f9aba91f2c4ea05a12e596d9bc6b49a0"
 dependencies = [
- "derive-adhoc 0.8.3",
+ "derive-adhoc 0.8.4",
  "derive_more",
  "filetime",
  "fs-mistrust",
@@ -6448,7 +6447,7 @@ dependencies = [
  "amplify",
  "async-trait",
  "backtrace",
- "derive-adhoc 0.8.3",
+ "derive-adhoc 0.8.4",
  "derive_more",
  "educe",
  "futures",
@@ -7415,27 +7414,27 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.13.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bffb3309596d527cfcba7dfc6ed6052f1d39dfbd7c867aa2e865e4a449c10110"
+checksum = "2d789b1514203a1120ad2429eae43a7bd32b90976a7bb8a05f7ec02fa88cc23a"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "7.0.0"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
+checksum = "1cd99b45c6bc03a018c8b8a86025678c87e55526064e38f9df301989dce7ec0a"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.9+zstd.1.5.5"
+version = "2.0.10+zstd.1.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e16efa8a874a0481a574084d34cc26fdb3b99627480f785888deb6386506656"
+checksum = "c253a4914af5bafc8fa8c86ee400827e83cf6ec01195ec1f1ed8441bf00d65aa"
 dependencies = [
  "cc",
  "pkg-config",

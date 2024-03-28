@@ -1,4 +1,5 @@
 mod datagram;
+mod shadow_tls;
 mod simple_obfs;
 mod stream;
 mod v2ray;
@@ -129,9 +130,42 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
     }
 }
 
+#[derive(Debug)]
+pub struct ShadowTlsOption {
+    pub host: String,
+    pub password: String,
+    pub strict: bool,
+}
+
+impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
+    type Error = crate::Error;
+
+    fn try_from(value: HashMap<String, serde_yaml::Value>) -> Result<Self, Self::Error> {
+        let host = value
+            .get("host")
+            .and_then(|x| x.as_str())
+            .unwrap_or("bing.com");
+        let password = value
+            .get("password")
+            .and_then(|x| x.as_str().to_owned())
+            .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
+        let strict = value
+            .get("strict")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(true);
+
+        Ok(Self {
+            host: host.to_string(),
+            password: password.to_string(),
+            strict,
+        })
+    }
+}
+
 pub enum OBFSOption {
     Simple(SimpleOBFSOption),
     V2Ray(V2RayOBFSOption),
+    ShadowTls(ShadowTlsOption),
 }
 
 pub struct HandlerOptions {
@@ -226,6 +260,11 @@ impl OutboundHandler for Handler {
                 }
                 OBFSOption::V2Ray(_opt) => {
                     todo!("v2ray-plugin is not implemented yet")
+                }
+                OBFSOption::ShadowTls(opts) => {
+                    tracing::debug!("using shadow-tls with option: {:?}", opts);
+                    let res = shadow_tls::Connector::wrap(opts, s).await?;
+                    res
                 }
             },
             None => s,

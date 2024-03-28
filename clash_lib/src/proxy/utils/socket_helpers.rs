@@ -82,6 +82,7 @@ pub async fn new_tcp_stream<'a>(
             io::ErrorKind::Other,
             format!("can't resolve dns: {}", address),
         ))?;
+    tracing::debug!("resolved addr of {:?}:{:?}", address, dial_addr);
 
     let socket = match (dial_addr, resolver.ipv6()) {
         (IpAddr::V4(_), _) => {
