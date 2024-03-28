@@ -10,7 +10,7 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::map_io_error,
     config::internal::config::TunConfig,
-    proxy::datagram::UdpPacket,
+    proxy::{datagram::UdpPacket, tun::auto_route},
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -121,7 +121,7 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
-pub fn get_runner(
+pub async fn get_runner(
     mut cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
@@ -130,18 +130,11 @@ pub fn get_runner(
         trace!("tun is disabled");
         return Ok(None);
     }
-    if cfg.auto_route.unwrap_or(false)
-        && cfg.mark.is_none()
-        && cfg!(any(target_os = "android", target_os = "linux"))
-    {
-        cfg.mark = Some(6969);
-        tracing::info!("tun.mark not set, using default {}", cfg.mark.unwrap());
-    }
 
-    let device_id = cfg.device_id;
+    let device_id = &cfg.device_id;
 
     let u =
-        Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+        Url::parse(device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
 
@@ -173,6 +166,11 @@ pub fn get_runner(
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
+
+    // Configuare auto-route when tun is ready
+    if cfg.auto_route.unwrap_or(false) {
+        auto_route::setup(&mut cfg, &tun_name).await.map_err(|e| Error::Operation(e.to_string()))?;
+    }
 
     let (stack, mut tcp_listener, udp_socket) =
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;

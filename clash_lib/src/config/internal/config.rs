@@ -258,6 +258,8 @@ pub struct TunConfig {
     pub auto_route: Option<bool>,
     /// fwmark for preveting loop
     pub mark: Option<u32>,
+    /// ip rule table name
+    pub table: Option<String>
 }
 
 #[derive(Clone, Default)]
