@@ -243,9 +243,9 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "arti-client"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ffd8cfa3b2bdbeefd4a8d8656a3763b53275fdd61e5aaf77821e3fec05f11b4"
+checksum = "e1e5ce0af09766442f95df8b66e26498a9270ba613f2a31cb30dc79d301bdae6"
 dependencies = [
  "cfg-if",
  "derive_builder_fork_arti",
@@ -268,7 +268,7 @@ dependencies = [
  "tor-chanmgr",
  "tor-checkable",
  "tor-circmgr",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-dirmgr",
  "tor-error",
  "tor-guardmgr",
@@ -1172,6 +1172,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7328b20597b53c2454f0b1919720c25c7339051c02b72b7e05409e00b14132be"
+dependencies = [
+ "lazy_static",
+ "nom",
+ "pathdiff",
+ "serde",
+ "toml 0.8.8",
+]
+
+[[package]]
 name = "console-api"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1759,7 +1772,7 @@ dependencies = [
  "digest",
  "elliptic-curve",
  "rfc6979",
- "signature 2.2.0",
+ "signature",
  "spki",
 ]
 
@@ -1770,7 +1783,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
- "signature 2.2.0",
+ "signature",
 ]
 
 [[package]]
@@ -1909,9 +1922,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "4.0.3"
+version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b215c49b2b248c855fb73579eb1f4f26c38ffdc12973e20e07b91d78d5646e"
+checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -2319,9 +2332,9 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.8.4"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8094feaf31ff591f651a2664fb9cfd92bba7a60ce3197265e9482ebe753c8f7"
+checksum = "692eaaf7f7607518dd3cef090f1474b61edc5301d8012f09579920df68b725ee"
 dependencies = [
  "hashbrown 0.14.3",
 ]
@@ -3055,9 +3068,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf4e226dcd58b4be396f7bd3c20da8fdee2911400705297ba7d2d7cc2c30f716"
+checksum = "0c10584274047cb335c23d3e61bcef8e323adae7c5c8c760540f73610177fc3f"
 dependencies = [
  "cc",
  "pkg-config",
@@ -4423,7 +4436,7 @@ dependencies = [
  "pkcs8",
  "rand_core",
  "ring 0.17.7",
- "signature 2.2.0",
+ "signature",
 ]
 
 [[package]]
@@ -4441,7 +4454,7 @@ dependencies = [
  "pkcs8",
  "rand_core",
  "sha2",
- "signature 2.2.0",
+ "signature",
  "spki",
  "subtle",
  "zeroize",
@@ -4449,9 +4462,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78046161564f5e7cd9008aff3b2990b3850dc8e0349119b98e8f251e099f24d"
+checksum = "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
 dependencies = [
  "bitflags 2.4.2",
  "fallible-iterator",
@@ -4938,12 +4951,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
@@ -5078,7 +5085,7 @@ dependencies = [
  "rsa",
  "sec1",
  "sha2",
- "signature 2.2.0",
+ "signature",
  "ssh-cipher",
  "ssh-encoding",
  "subtle",
@@ -5632,7 +5639,7 @@ dependencies = [
  "digest",
  "educe",
  "getrandom",
- "signature 2.2.0",
+ "signature",
  "thiserror",
  "tor-error",
  "tor-llcrypto",
@@ -5641,9 +5648,9 @@ dependencies = [
 
 [[package]]
 name = "tor-cell"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73626b412faf75c304486db20498e8085a40b9561f09e1bf919b5a176c858daa"
+checksum = "f45c5af2f3ce5597a1ad90a8978fab6d43dcfe098b3f246c5ed573fe97f6beb9"
 dependencies = [
  "bitflags 2.4.2",
  "bytes",
@@ -5665,9 +5672,9 @@ dependencies = [
 
 [[package]]
 name = "tor-cert"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ff2f1019c15bfadb8ad0f0b30f870b072b2cbecd8bf89be4bedca45543a6922"
+checksum = "b059aa8271220dc38c39e0aab52366f83b86adac71d687a91a56fc99ff7b0640"
 dependencies = [
  "caret",
  "derive_more",
@@ -5697,7 +5704,7 @@ dependencies = [
  "tor-async-utils",
  "tor-basic-utils",
  "tor-cell",
- "tor-config",
+ "tor-config 0.10.0",
  "tor-error",
  "tor-linkspec",
  "tor-llcrypto",
@@ -5712,21 +5719,21 @@ dependencies = [
 
 [[package]]
 name = "tor-checkable"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6d1a0fb1e4b9a863c114164ed1250f4ac48ec02bbdf0bae2c2c598d04c762f4"
+checksum = "96ac8ef9db89e16af3e674c8bb915b6e780d72e1c7f408388d610441f8a5578b"
 dependencies = [
  "humantime",
- "signature 1.6.4",
+ "signature",
  "thiserror",
  "tor-llcrypto",
 ]
 
 [[package]]
 name = "tor-circmgr"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6e95044caa70e9fdbe8713498d223dd13e7f18b51de6bba18360ec8516f2b07"
+checksum = "b19089ab29f56b5b40cecb01ceb297593472885c0d2b0f9a0cb0a5a5635600b5"
 dependencies = [
  "amplify",
  "async-trait",
@@ -5750,7 +5757,7 @@ dependencies = [
  "tor-async-utils",
  "tor-basic-utils",
  "tor-chanmgr",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-error",
  "tor-guardmgr",
  "tor-hscrypto",
@@ -5772,7 +5779,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc84217b53ee8f13986e9d5c634e12ba9bdf996b4da87d974ef43f5ac5c3eeef"
 dependencies = [
- "config",
+ "config 0.13.4",
  "derive-adhoc 0.8.1",
  "derive_builder_fork_arti",
  "directories",
@@ -5797,6 +5804,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "tor-config"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c579e92f3b9e419e68cd317d33f567491365b81f943b063d30f32e4a2f072c5"
+dependencies = [
+ "config 0.14.0",
+ "derive-adhoc 0.8.1",
+ "derive_builder_fork_arti",
+ "directories",
+ "educe",
+ "either",
+ "fs-mistrust",
+ "itertools 0.12.0",
+ "once_cell",
+ "paste",
+ "regex",
+ "serde",
+ "serde-value",
+ "serde_ignored",
+ "shellexpand",
+ "strum 0.26.1",
+ "thiserror",
+ "toml 0.8.8",
+ "tor-basic-utils",
+ "tor-error",
+ "tracing",
+ "void",
+]
+
+[[package]]
 name = "tor-consdiff"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5810,9 +5847,9 @@ dependencies = [
 
 [[package]]
 name = "tor-dirclient"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3f34a5b4450d0069ff71a741d0c27b6797d167b928a3b092acd46fb5540d4ef"
+checksum = "31fff143aba287f7a209a65a69a7e573f45aeb826737e3f43944054b8d743968"
 dependencies = [
  "async-compression",
  "base64ct",
@@ -5838,9 +5875,9 @@ dependencies = [
 
 [[package]]
 name = "tor-dirmgr"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b721cae86dacab3594da27020bb50a937f7f635a224412e04f831f7999c24b8"
+checksum = "44bdc21d916be66bbe7afeff45303a751196daa1211df645abfe03f2cf3186ed"
 dependencies = [
  "async-trait",
  "base64ct",
@@ -5866,7 +5903,7 @@ dependencies = [
  "safelog",
  "scopeguard",
  "serde",
- "signature 1.6.4",
+ "signature",
  "strum 0.26.1",
  "thiserror",
  "time",
@@ -5874,7 +5911,7 @@ dependencies = [
  "tor-basic-utils",
  "tor-checkable",
  "tor-circmgr",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-consdiff",
  "tor-dirclient",
  "tor-error",
@@ -5908,9 +5945,9 @@ dependencies = [
 
 [[package]]
 name = "tor-guardmgr"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "264599ff5335136b66f3c95bf44223b27f96bf966cbf0e1946d925e3582ffe40"
+checksum = "08065540dc88a8fd7117627d6e94a3f0d63c45d135ac7fdac7bd3b9f702dc1ee"
 dependencies = [
  "base64ct",
  "derive_builder_fork_arti",
@@ -5931,7 +5968,7 @@ dependencies = [
  "thiserror",
  "tor-async-utils",
  "tor-basic-utils",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-error",
  "tor-linkspec",
  "tor-llcrypto",
@@ -5946,9 +5983,9 @@ dependencies = [
 
 [[package]]
 name = "tor-hsclient"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59272ecf50203618930066de733c46119b126ea9cab0b24101ef21f051285f96"
+checksum = "b4613dfe9d946db3b5769b860a16598a9c4a0f85df21653d0765b1238106d297"
 dependencies = [
  "async-trait",
  "derive-adhoc 0.8.1",
@@ -5971,7 +6008,7 @@ dependencies = [
  "tor-cell",
  "tor-checkable",
  "tor-circmgr",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-dirclient",
  "tor-error",
  "tor-hscrypto",
@@ -6001,7 +6038,7 @@ dependencies = [
  "rand_core",
  "safelog",
  "serde",
- "signature 2.2.0",
+ "signature",
  "subtle",
  "thiserror",
  "tor-basic-utils",
@@ -6013,10 +6050,11 @@ dependencies = [
 
 [[package]]
 name = "tor-keymgr"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc4091cbfafa3720b726d76b57c89397769c8ecaa197c516c466f02d30414f2"
+checksum = "365c02c66f2f0159078714dd44947fb06c76956a3621fc102783119e5093be96"
 dependencies = [
+ "amplify",
  "arrayvec",
  "derive-adhoc 0.8.1",
  "derive_builder_fork_arti",
@@ -6033,7 +6071,7 @@ dependencies = [
  "serde",
  "ssh-key",
  "thiserror",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-error",
  "tor-hscrypto",
  "tor-llcrypto",
@@ -6064,7 +6102,7 @@ dependencies = [
  "thiserror",
  "tor-basic-utils",
  "tor-bytes",
- "tor-config",
+ "tor-config 0.10.0",
  "tor-llcrypto",
  "tor-protover",
 ]
@@ -6092,7 +6130,7 @@ dependencies = [
  "sha1",
  "sha2",
  "sha3",
- "signature 2.2.0",
+ "signature",
  "simple_asn1",
  "subtle",
  "thiserror",
@@ -6118,9 +6156,9 @@ dependencies = [
 
 [[package]]
 name = "tor-netdir"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcaf8d3f55cf5cbc612208f865cb4496d18d81ddc88831f818e0c4696bdc90ff"
+checksum = "88d507e621e12c5e958d81d3feee176a0b810874921d68b013a33fff6fc44f9f"
 dependencies = [
  "bitflags 2.4.2",
  "derive_builder_fork_arti",
@@ -6133,14 +6171,13 @@ dependencies = [
  "num_enum",
  "rand",
  "serde",
- "signature 1.6.4",
  "static_assertions",
  "strum 0.26.1",
  "thiserror",
  "time",
  "tor-basic-utils",
  "tor-checkable",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-error",
  "tor-hscrypto",
  "tor-linkspec",
@@ -6154,9 +6191,9 @@ dependencies = [
 
 [[package]]
 name = "tor-netdoc"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "475d08276779da7ef03ccc46aebdf1e97055005abc3e466e478b67dcf608150b"
+checksum = "5146c812701abc039ff41349e7cf25c63949f9a2528fe0a0f6b3976ccf5cb5ab"
 dependencies = [
  "amplify",
  "base64ct",
@@ -6174,7 +6211,7 @@ dependencies = [
  "rand",
  "serde",
  "serde_with",
- "signature 1.6.4",
+ "signature",
  "smallvec",
  "subtle",
  "thiserror",
@@ -6197,14 +6234,16 @@ dependencies = [
 
 [[package]]
 name = "tor-persist"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc9f09541bd38f71fd7cdec6476ef079aa216910c2170b5b6fe55dbc0aec6720"
+checksum = "e4bbf6c0a786daab669a75ec7380ae57f9aba91f2c4ea05a12e596d9bc6b49a0"
 dependencies = [
  "derive-adhoc 0.8.1",
  "derive_more",
+ "filetime",
  "fs-mistrust",
  "fslock",
+ "itertools 0.12.0",
  "paste",
  "sanitize-filename",
  "serde",
@@ -6216,9 +6255,9 @@ dependencies = [
 
 [[package]]
 name = "tor-proto"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa251ae0dcfb233a14a140c71837579afeb9228825bb098d69415d3c3d081bd5"
+checksum = "dbe3037f1f08ac19a59f2ebe5acdcb0c79fd6f2286773051cb730146596359e6"
 dependencies = [
  "asynchronous-codec",
  "bitvec",
@@ -6246,7 +6285,7 @@ dependencies = [
  "tor-cell",
  "tor-cert",
  "tor-checkable",
- "tor-config",
+ "tor-config 0.11.0",
  "tor-error",
  "tor-hscrypto",
  "tor-linkspec",
@@ -6335,9 +6374,9 @@ dependencies = [
 
 [[package]]
 name = "tor-units"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a924669b39fa305ccb42190abcc4ea623b596b48948429bc4d62f03c5ecf0dbe"
+checksum = "0d59226676dc7633b813f92c781f7b637c5258234de27be4196740de2b4c946a"
 dependencies = [
  "derive_more",
  "thiserror",
