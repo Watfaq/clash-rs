@@ -104,6 +104,8 @@ pub async fn new_tcp_stream<'a>(
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if let Some(packet_mark) = packet_mark {
+        // TODO: on android, setting the fwmark need root or CAP_NET_ADMIN.
+        // We should allow users disable it in some way eg. configuration.
         socket.set_mark(packet_mark)?;
     }
 
@@ -153,6 +155,27 @@ pub async fn new_udp_socket(
     socket.set_nonblocking(true)?;
 
     UdpSocket::from_std(socket.into())
+}
+/// An extension to std::net::{UdpSocket, TcpStream}
+pub trait StdSocketExt {
+    fn set_mark(&self, mark: u32) -> io::Result<()>;
+}
+impl StdSocketExt for std::net::UdpSocket {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+impl StdSocketExt for std::net::TcpStream {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+
+fn set_mark<'a>(socket: socket2::SockRef<'a>, mark: u32) -> io::Result<()> {
+    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    return socket.set_mark(mark);
+    #[cfg(not(any(target_os = "android", target_os = "fuchsia", target_os = "linux")))]
+    return Ok(());
 }
 
 #[cfg(test)]
