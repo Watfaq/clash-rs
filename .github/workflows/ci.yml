@@ -39,12 +39,14 @@ jobs:
       run: cargo check --all --all-features
     - name: Run cargo clippy
       run: cargo clippy --all --all-features -- -D warnings
-    - name: Run cargo test on macOS
-      if: ${{ matrix.os }} != 'macos-13''
-      run: CLASH_RS_CI=true cargo test --all --all-features
-    - name: Run cargo test on other platforms
-      if: ${{ matrix.os }} == 'macos-13''
-      run: cargo test --all --all-features
+    - name: Run cargo test
+      run: |
+        if [ "${{ matrix.platforms.os }}" = "windows-2022" ]; then
+          $env:CLASH_RS_CI="true"; cargo test --all --all-features
+        else if [ "${{ matrix.platforms.os }}" = "ubuntu-22.04" ]; then
+          CLASH_RS_CI=true cargo test --all --all-features
+        fi
+      shell: bash
     - name: Build artifacts
       run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
     - name: Stash artifacts
