@@ -140,9 +140,9 @@ pub async fn handle_tcp<'a>(
             let udp_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
             let udp_inbound = new_udp_socket(
                 Some(&udp_addr),
-                None,
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.packet_mark,
             )
             .await?;
 
@@ -166,8 +166,6 @@ pub async fn handle_tcp<'a>(
             let sess = Session {
                 network: Network::Udp,
                 typ: Type::Socks5,
-                packet_mark: None,
-                iface: None,
                 ..Default::default()
             };
 
