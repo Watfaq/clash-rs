@@ -12,7 +12,7 @@ use tracing::{info, warn};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum ListenerType {
     Http,
     Socks5,
@@ -114,13 +114,14 @@ impl NetworkInboundListener {
         };
 
         if listener.handle_tcp() {
+            let listener_type = self.listener_type.clone();
             info!("{} TCP listening at: {}:{}", self.name, ip, self.port);
 
             let tcp_listener = listener.clone();
             runners.push(
                 async move {
                     tcp_listener.listen_tcp().await.map_err(|e| {
-                        warn!("handler tcp listen failed: {}", e);
+                        warn!("handler of {:?} tcp listen failed: {}", listener_type, e);
                         e.into()
                     })
                 }

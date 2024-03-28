@@ -46,6 +46,15 @@ impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
                         .try_into()
                         .map(OBFSOption::V2Ray)
                         .ok(),
+                    "shadow-tls" => s
+                        .plugin_opts
+                        .clone()
+                        .ok_or(Error::InvalidConfig(
+                            "plugin_opts is required for plugin obfs".to_owned(),
+                        ))?
+                        .try_into()
+                        .map(OBFSOption::ShadowTls)
+                        .ok(),
                     _ => {
                         return Err(Error::InvalidConfig(format!(
                             "unsupported plugin: {}",
