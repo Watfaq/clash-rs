@@ -76,13 +76,9 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let d = new_udp_socket(
-            None,
-            sess.iface.as_ref(),
-            sess.packet_mark,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
+        let d = new_udp_socket(None, sess.iface.as_ref(), sess.packet_mark)
+            .await
+            .map(|x| OutboundDatagramImpl::new(x, resolver))?;
 
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;

@@ -20,12 +20,14 @@ async fn handle_inbound_stream(
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    packet_mark: Option<u32>,
 ) {
     let sess = Session {
         network: Network::Tcp,
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
+        packet_mark,
         ..Default::default()
     };
 
@@ -36,6 +38,7 @@ async fn handle_inbound_datagram(
     socket: Box<netstack::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
+    packet_mark: Option<u32>,
 ) {
     let local_addr = socket.local_addr();
     // tun i/o
@@ -56,6 +59,7 @@ async fn handle_inbound_datagram(
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
+        packet_mark,
         ..Default::default()
     };
 
@@ -118,13 +122,20 @@ async fn handle_inbound_datagram(
 }
 
 pub fn get_runner(
-    cfg: TunConfig,
+    mut cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) -> Result<Option<Runner>, Error> {
     if !cfg.enable {
         trace!("tun is disabled");
         return Ok(None);
+    }
+    if cfg.auto_route.unwrap_or(false)
+        && cfg.mark.is_none()
+        && cfg!(any(target_os = "android", target_os = "linux"))
+    {
+        cfg.mark = Some(6969);
+        tracing::info!("tun.mark not set, using default {}", cfg.mark.unwrap());
     }
 
     let device_id = cfg.device_id;
@@ -215,6 +226,14 @@ pub fn get_runner(
         }));
 
         let dsp = dispatcher.clone();
+
+        let mark = if cfg.auto_route.unwrap_or(false)
+            && cfg!(any(target_os = "android", target_os = "linux"))
+        {
+            cfg.mark
+        } else {
+            None
+        };
         futs.push(Box::pin(async move {
             while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
                 tokio::spawn(handle_inbound_stream(
@@ -222,6 +241,7 @@ pub fn get_runner(
                     local_addr,
                     remote_addr,
                     dsp.clone(),
+                    mark,
                 ));
             }
 
@@ -229,7 +249,7 @@ pub fn get_runner(
         }));
 
         futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket, dispatcher, resolver).await;
+            handle_inbound_datagram(udp_socket, dispatcher, resolver, mark).await;
             Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
         }));
 

@@ -44,7 +44,6 @@ use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpSession};
 
-
 use super::{
     datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler,
     OutboundType,
