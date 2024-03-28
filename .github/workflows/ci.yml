@@ -42,9 +42,9 @@ jobs:
     - name: Run cargo test on non-macos
       if: ${{ matrix.platforms.os != 'macos-13' }}
       run: cargo test --all --all-features
-      env:
-        CLASH_RS_CI: 'true'
     - name: Run cargo test on macos
+      env: # this is a bit counter intuitive - some tests relies on Docker to run and are marked not(ci), but macos runner doesn't have Docker installed, so we make it "ci" to bypass those tests 
+        CLASH_RS_CI: 'true'
       if: ${{ matrix.platforms.os == 'macos-13' }}
       run: cargo test --all --all-features
     - name: Build artifacts
