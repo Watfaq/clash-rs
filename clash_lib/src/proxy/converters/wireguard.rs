@@ -23,7 +23,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOpts {
             name: s.name.to_owned(),
-            common_opts: Default::default(),
+            common_opts: s.common_opts.clone(),
             server: s.server.to_owned(),
             port: s.port,
             ip: s

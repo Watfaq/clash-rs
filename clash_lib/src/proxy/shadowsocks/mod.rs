@@ -179,13 +179,14 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
+        let (packet_mark, iface) = self.opts.common_opts.merge(sess);
         let stream = new_tcp_stream(
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            sess.iface.as_ref(),
+            iface,
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            sess.packet_mark,
+            packet_mark,
         )
         .map_err(|x| {
             io::Error::new(
@@ -269,11 +270,12 @@ impl OutboundHandler for Handler {
                 _ => return Err(io::Error::new(io::ErrorKind::Other, "unsupported cipher")),
             },
         );
+        let (packet_mark, iface) = self.opts.common_opts.merge(sess);
         let socket = new_udp_socket(
             None,
-            sess.iface.as_ref(),
+            iface,
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            sess.packet_mark,
+            packet_mark,
         )
         .await?;
         let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);

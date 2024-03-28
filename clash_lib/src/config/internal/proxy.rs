@@ -1,5 +1,6 @@
 use crate::common::utils::default_bool_true;
 use crate::config::utils;
+use crate::proxy::CommonOption;
 use crate::Error;
 use serde::de::value::MapDeserializer;
 use serde::Deserialize;
@@ -111,6 +112,8 @@ impl Display for OutboundProxyProtocol {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundShadowsocks {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -125,6 +128,8 @@ pub struct OutboundShadowsocks {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct OutboundSocks5 {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -137,6 +142,8 @@ pub struct OutboundSocks5 {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct WsOpt {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,
     pub max_early_data: Option<i32>,
@@ -158,6 +165,8 @@ pub struct GrpcOpt {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -174,6 +183,8 @@ pub struct OutboundTrojan {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundVmess {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -195,6 +206,8 @@ pub struct OutboundVmess {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundWireguard {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub name: String,
     pub server: String,
     pub port: u16,
