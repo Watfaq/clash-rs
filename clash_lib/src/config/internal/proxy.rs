@@ -253,6 +253,8 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+    /// fwmark
+    pub mark: Option<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
