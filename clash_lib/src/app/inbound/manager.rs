@@ -88,7 +88,7 @@ impl InboundManager {
         };
         self.network_listeners
             .values()
-            .for_each(|x: &NetworkInboundListener| match x.listener_type {
+            .for_each(|x| match x.listener_type {
                 ListenerType::Http => {
                     ports.port = Some(x.port);
                 }

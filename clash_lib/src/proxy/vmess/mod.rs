@@ -36,7 +36,6 @@ pub enum VmessTransport {
 
 pub struct HandlerOptions {
     pub name: String,
-    // TODO: @VendettaReborn, delete this after confirmed
     pub common_opts: CommonOption,
     pub server: String,
     pub port: u16,

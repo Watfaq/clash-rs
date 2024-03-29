@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::sync::atomic::AtomicU32;
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -14,10 +13,10 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use erased_serde::Serialize as ESerialize;
 
 // mark of the packet from clash-rs
-static DEFAULT_PACKET_MARK: AtomicU32 = AtomicU32::new(0xff);
+static DEFAULT_PACKET_MARK: u32 = 0xff;
 
 pub(crate) fn get_packet_mark() -> u32 {
-    DEFAULT_PACKET_MARK.load(std::sync::atomic::Ordering::Relaxed)
+    DEFAULT_PACKET_MARK
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]

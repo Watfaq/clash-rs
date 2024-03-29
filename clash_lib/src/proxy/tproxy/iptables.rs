@@ -1,12 +1,24 @@
 use cmd_lib::run_cmd;
 use std::process::Command;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 // TODO: support nftables
 #[derive(Debug, Clone, Copy)]
 pub enum TProxyStrategy {
     Iptables,
     None,
+}
+
+impl Default for TProxyStrategy {
+    // auto detect command in system
+    fn default() -> Self {
+        if command_exists("iptables") {
+            TProxyStrategy::Iptables
+        } else {
+            warn!("iptables command not found, tproxy is disabled");
+            TProxyStrategy::None
+        }
+    }
 }
 
 impl From<&str> for TProxyStrategy {
@@ -39,17 +51,6 @@ impl TProxyStrategy {
             TProxyStrategy::None => {
                 error!("No tproxy command found");
             }
-        }
-    }
-}
-
-impl Default for TProxyStrategy {
-    // auto detect command in system
-    fn default() -> Self {
-        if command_exists("iptables") {
-            TProxyStrategy::Iptables
-        } else {
-            TProxyStrategy::None
         }
     }
 }
