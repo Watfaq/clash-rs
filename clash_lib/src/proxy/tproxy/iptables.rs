@@ -53,6 +53,7 @@ impl Default for TProxyStrategy {
         }
     }
 }
+
 #[derive(Debug)]
 pub struct TProxyGuard {
     strategy: TProxyStrategy,
