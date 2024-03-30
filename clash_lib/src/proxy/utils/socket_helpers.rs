@@ -72,7 +72,7 @@ pub async fn new_tcp_stream<'a>(
     address: &'a str,
     port: u16,
     iface: Option<&'a Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
         .resolve(address, false)
@@ -125,7 +125,7 @@ pub async fn new_tcp_stream<'a>(
 pub async fn new_udp_socket(
     src: Option<&SocketAddr>,
     iface: Option<&Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = match src {
         Some(src) => {
@@ -172,9 +172,9 @@ impl StdSocketExt for std::net::TcpStream {
 }
 
 fn set_mark<'a>(socket: socket2::SockRef<'a>, mark: u32) -> io::Result<()> {
-    #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     return socket.set_mark(mark);
-    #[cfg(not(any(target_os = "android", target_os = "fuchsia", target_os = "linux")))]
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     return Ok(());
 }
 

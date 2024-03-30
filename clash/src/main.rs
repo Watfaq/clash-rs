@@ -59,6 +59,7 @@ fn main() {
             }
         }
     }
+    std::env::set_var("RUST_BACKTRACE", "1");
     match clash::start(clash::Options {
         config: clash::Config::File(file),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),

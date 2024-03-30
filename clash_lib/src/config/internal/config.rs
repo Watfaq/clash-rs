@@ -254,6 +254,12 @@ pub struct TunConfig {
     /// default: 198.18.0.0/16
     pub network: Option<String>,
     pub gateway: Option<IpAddr>,
+    /// auto manage route
+    pub auto_route: Option<bool>,
+    /// fwmark for preveting loop
+    pub mark: Option<u32>,
+    /// ip rule table name
+    pub table: Option<String>
 }
 
 #[derive(Clone, Default)]

@@ -247,7 +247,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let inbound_runner = inbound_manager.lock().await.get_runner()?;
     let inbound_listener_handle = tokio::spawn(inbound_runner);
 
-    let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
+    let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone()).await?;
     let tun_runner_handle = tun_runner.map(tokio::spawn);
 
     debug!("initializing dns listener");
@@ -419,7 +419,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 .map(tokio::spawn)?;
 
             let tun_runner_handle =
-                get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?
+                get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone()).await?
                     .map(tokio::spawn);
 
             debug!("reloading dns listener");
