@@ -39,7 +39,13 @@ jobs:
       run: cargo check --all --all-features
     - name: Run cargo clippy
       run: cargo clippy --all --all-features -- -D warnings
-    - name: Run cargo test
+    - name: Run cargo test on non-macos
+      if: ${{ matrix.os }} != 'macos-13'
+      run: cargo test --all --all-features
+      env:
+        CLASH_RS_CI: 'true'
+    - name: Run cargo test on macos
+      if: ${{ matrix.os }} == 'macos-13'
       run: cargo test --all --all-features
     - name: Build artifacts
       run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"

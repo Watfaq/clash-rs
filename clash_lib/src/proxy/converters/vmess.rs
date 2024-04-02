@@ -35,7 +35,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
             port: s.port,
             uuid: s.uuid.clone(),
             alter_id: s.alter_id,
-            security: s.cipher.as_ref().map(Clone::clone).unwrap_or_default(),
+            security: s.cipher.clone().unwrap_or_default(),
             udp: s.udp.unwrap_or(true),
             transport: s
                 .network
@@ -102,9 +102,9 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         s.ws_opts
                             .as_ref()
                             .and_then(|x| {
-                                x.headers.as_ref().map(Clone::clone).and_then(|x| {
+                                x.headers.clone().and_then(|x| {
                                     let h = x.get("Host");
-                                    h.map(Clone::clone)
+                                    h.cloned()
                                 })
                             })
                             .unwrap_or(s.server.to_owned())

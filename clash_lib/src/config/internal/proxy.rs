@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use uuid::Uuid;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
 pub const PROXY_REJECT: &str = "REJECT";
@@ -62,6 +63,8 @@ pub enum OutboundProxyProtocol {
     Wireguard(OutboundWireguard),
     #[serde(rename = "tor")]
     Tor(OutboundTor),
+    #[serde(rename = "tuic")]
+    Tuic(OutboundTuic),
 }
 
 impl OutboundProxyProtocol {
@@ -75,6 +78,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
             OutboundProxyProtocol::Tor(tor) => &tor.name,
+            OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
         }
     }
 }
@@ -106,6 +110,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
+            OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
         }
     }
 }
@@ -228,6 +233,39 @@ pub struct OutboundWireguard {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTor {
     pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTuic {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub uuid: Uuid,
+    pub password: String,
+    /// override field 'server' dns record, not used for now
+    pub ip: Option<String>,
+    pub heartbeat_interval: Option<u64>,
+    /// h3
+    pub alpn: Option<Vec<String>>,
+    pub disable_sni: Option<bool>,
+    pub reduce_rtt: Option<bool>,
+    /// millis
+    pub request_timeout: Option<u64>,
+    pub udp_relay_mode: Option<String>,
+    pub congestion_controller: Option<String>,
+    /// bytes
+    pub max_udp_relay_packet_size: Option<u64>,
+    pub fast_open: Option<bool>,
+    pub skip_cert_verify: Option<bool>,
+    pub max_open_stream: Option<u64>,
+    pub sni: Option<String>,
+    /// millis
+    pub gc_interval: Option<u64>,
+    /// millis
+    pub gc_lifetime: Option<u64>,
+    pub send_window: Option<u64>,
+    pub receive_window: Option<u64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
