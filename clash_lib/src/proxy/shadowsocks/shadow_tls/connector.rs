@@ -71,7 +71,12 @@ impl Connector {
             tls.get_mut().0.fake_request = true;
             fake_request(tls).await?;
 
-            return Err(io::Error::new(io::ErrorKind::Other, format!("V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request")));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request"
+                ),
+            ));
         }
 
         let (server_random, hmac_nop) = match maybe_server_random_and_hamc {

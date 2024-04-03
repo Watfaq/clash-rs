@@ -441,8 +441,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for VerifiedStream<S> {
                     };
 
                     this.write_buf.put_slice(&header_body);
-                    this.write_state =
-                        WriteState::FlushingData(buf.len(), header_body.len(), 0);
+                    this.write_state = WriteState::FlushingData(buf.len(), header_body.len(), 0);
                 }
                 WriteState::FlushingData(consume, total, written) => {
                     let nw = ready!(tokio_util::io::poll_write_buf(
