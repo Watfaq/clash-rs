@@ -330,7 +330,10 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
+    use crate::proxy::utils::test_utils::docker_runner::{
+        MultiDockerTestRunner, DockerTestRunnerBuilder,
+    };
+    use crate::proxy::utils::test_utils::run_chained;
 
     use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner, run};
 
@@ -338,12 +341,14 @@ mod tests {
 
     const PASSWORD: &str = "FzcLbKs2dY9mhL";
     const CIPHER: &str = "aes-256-gcm";
+    const SHADOW_TLS_PASSWORD: &str = "password";
 
-    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
+        let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
             .entrypoint(&["ssserver"])
-            .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
             .build()
             .await
     }
@@ -361,7 +366,63 @@ mod tests {
             plugin_opts: Default::default(),
             udp: false,
         };
+        let port = opts.port;
         let handler = Handler::new(opts);
-        run(handler, get_runner()).await
+        run(handler, get_ss_runner(port)).await
+    }
+
+    async fn get_shadowtls_runner(
+        ss_port: u16,
+        stls_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let ss_server_env = format!("SERVER=127.0.0.1:{}", ss_port);
+        let listen_env = format!("LISTEN=0.0.0.0:{}", stls_port);
+        let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOW_TLS)
+            .env(&[
+                "MODE=server",
+                // the port that we need to fill in the config
+                &listen_env,
+                // shadowsocks server addr
+                &ss_server_env,
+                "TLS=www.feishu.cn:443",
+                &password,
+                "V3=1",
+            ])
+            // .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_shadowtls() -> anyhow::Result<()> {
+        // the real port that used for communication
+        let shadow_tls_port = 10002;
+        // not important, you can assign any port that is not conflict with others
+        let ss_port = 10004;
+        let opts = HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: shadow_tls_port,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Some(OBFSOption::ShadowTls(ShadowTlsOption {
+                host: "www.feishu.cn".to_owned(),
+                password: "password".to_owned(),
+                strict: true,
+            })),
+            udp: false,
+        };
+        let handler = Handler::new(opts);
+        // we need to store all the runners in a container, to make sure all of them can be destroyed after the test
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add(get_ss_runner(ss_port)).await;
+        chained
+            .add(get_shadowtls_runner(ss_port, shadow_tls_port))
+            .await;
+        run_chained(handler, chained).await
     }
 }

@@ -15,7 +15,7 @@ use tokio::{
 };
 use tracing::info;
 
-use self::docker_runner::DockerTestRunner;
+use self::docker_runner::{MultiDockerTestRunner, DockerTest, DockerTestRunner};
 
 pub mod config_helper;
 pub mod consts;
@@ -187,7 +187,20 @@ pub async fn run(
             return Err(e);
         }
     };
+    run_inner(handler, watch).await
+}
 
+pub async fn run_chained(
+    handler: Arc<dyn OutboundHandler>,
+    chained: MultiDockerTestRunner,
+) -> anyhow::Result<()> {
+    run_inner(handler, chained).await
+}
+
+pub async fn run_inner(
+    handler: Arc<dyn OutboundHandler>,
+    watch: impl DockerTest,
+) -> anyhow::Result<()> {
     watch
         .run_and_cleanup(async move {
             let rv = ping_pong_test(handler.clone(), 10001).await;
