@@ -2,7 +2,6 @@ name: Build/Test/Release
 
 on:
   push:
-    branches: [ "*" ]
     tags: [ "v*" ]
   pull_request:
     branches: [ "master" ]
@@ -29,6 +28,7 @@ jobs:
       with:
         submodules: recursive
     - uses: ilammy/setup-nasm@v1
+      if : ${{ matrix.platforms.os == 'windows-2022' }}
     - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: stable
@@ -39,13 +39,13 @@ jobs:
       run: cargo check --all --all-features
     - name: Run cargo clippy
       run: cargo clippy --all --all-features -- -D warnings
-    - name: Run cargo test on non-macos
-      if: ${{ matrix.os }} != 'macos-13'
+    - name: Run cargo test on Linux
+      if: ${{ matrix.platforms.os == 'ubuntu-22.04' }}
       run: cargo test --all --all-features
-      env:
+    - name: Run cargo test on non LInux
+      env: # this is a bit counter intuitive - some tests relies on Docker to run and are marked not(ci), but macos runner doesn't have Docker installed, so we make it "ci" to bypass those tests 
         CLASH_RS_CI: 'true'
-    - name: Run cargo test on macos
-      if: ${{ matrix.os }} == 'macos-13'
+      if: ${{ matrix.platforms.os != 'ubuntu-22.04' }}
       run: cargo test --all --all-features
     - name: Build artifacts
       run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
