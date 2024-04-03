@@ -330,12 +330,10 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use crate::proxy::utils::test_utils::docker_runner::{
-        MultiDockerTestRunner, DockerTestRunnerBuilder,
-    };
-    use crate::proxy::utils::test_utils::run_chained;
-
     use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner, run};
+    use crate::proxy::utils::test_utils::docker_runner::{
+        DockerTestRunnerBuilder, MultiDockerTestRunner,
+    };
 
     use super::*;
 
@@ -368,7 +366,7 @@ mod tests {
         };
         let port = opts.port;
         let handler = Handler::new(opts);
-        run(handler, get_ss_runner(port)).await
+        run(handler, get_ss_runner(port).await?).await
     }
 
     async fn get_shadowtls_runner(
@@ -423,6 +421,6 @@ mod tests {
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
             .await;
-        run_chained(handler, chained).await
+        run(handler, chained).await
     }
 }
