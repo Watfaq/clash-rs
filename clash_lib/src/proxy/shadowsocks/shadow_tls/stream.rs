@@ -225,7 +225,6 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                                             body.set_len(body.len() - HMAC_SIZE);
                                         }
                                         // 4. put the header and body into our own read buf
-                                        tracing::debug!("shadowtls authorization sucess");
                                     } else {
                                         tracing::debug!("shadowtls verification failed");
                                     }
@@ -373,7 +372,6 @@ impl<S: AsyncRead + Unpin> AsyncRead for VerifiedStream<S> {
                             // we need to verfiy and removec the hmac(4 bytes)
                             if verify_appdata(&header, &mut data, &mut this.server_cert, true) {
                                 // modify data, reuse the read buf
-                                tracing::trace!("shadowtls verify appdata success, strip the hmac");
                                 this.read_buf.clear();
                                 this.read_buf.put(&data[HMAC_SIZE..]);
                                 this.read_state = ReadState::FlushingData;

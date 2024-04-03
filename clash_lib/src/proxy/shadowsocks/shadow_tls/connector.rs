@@ -48,8 +48,6 @@ impl Connector {
     pub async fn wrap(opts: &ShadowTlsOption, stream: AnyStream) -> std::io::Result<AnyStream> {
         let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
 
-        tracing::trace!("tcp connected, start handshaking");
-
         let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
         let sni_name = rustls::ServerName::try_from(opts.host.as_str())
             .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
@@ -58,9 +56,6 @@ impl Connector {
         let mut tls = connector
             .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
             .await?;
-        // perform a fake request, will do the handshake
-        tracing::trace!("handshake done");
-
         let authorized = tls.get_mut().0.authorized();
         let maybe_server_random_and_hamc = tls
             .get_mut()
@@ -69,14 +64,14 @@ impl Connector {
             .as_ref()
             .map(|s| (s.server_random, s.hmac.to_owned()));
 
+        // whatever the fake_request is successful or not, we should return an error when strict mode is enabled
         if (!authorized || maybe_server_random_and_hamc.is_none()) && opts.strict {
-            tracing::warn!("V3 strict enabled: traffic hijacked or TLS1.3 is not supported, perform fake request");
+            tracing::warn!("shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not supported, perform fake request");
 
             tls.get_mut().0.fake_request = true;
+            fake_request(tls).await?;
 
-            let r = fake_request(tls).await;
-
-            return Err(io::Error::new(io::ErrorKind::Other, format!("V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request, res:{:?}", r)));
+            return Err(io::Error::new(io::ErrorKind::Other, format!("V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request")));
         }
 
         let (server_random, hmac_nop) = match maybe_server_random_and_hamc {
