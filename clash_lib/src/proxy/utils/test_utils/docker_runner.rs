@@ -17,7 +17,7 @@ pub struct DockerTestRunner {
 }
 
 impl DockerTestRunner {
-    pub async fn new<'a>(
+    pub async fn try_new<'a>(
         image_conf: Option<CreateImageOptions<'a, String>>,
         container_conf: Config<String>,
     ) -> Result<Self> {
@@ -39,10 +39,61 @@ impl DockerTestRunner {
         })
     }
 
-    // will make sure the container is cleaned up after the future is finished
-    pub async fn run_and_cleanup(
+    // you can run the cleanup manually
+    pub async fn cleanup(self) -> anyhow::Result<()> {
+        let s = self
+            .instance
+            .remove_container(
+                &self.id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await?;
+        Ok(s)
+    }
+}
+
+#[derive(Default)]
+pub struct MultiDockerTestRunner {
+    runners: Vec<DockerTestRunner>,
+}
+
+impl MultiDockerTestRunner {
+    #[allow(unused)]
+    pub fn new(runners: Vec<DockerTestRunner>) -> Self {
+        Self { runners }
+    }
+
+    pub async fn add(&mut self, creator: impl Future<Output = anyhow::Result<DockerTestRunner>>) {
+        match creator.await {
+            Ok(runner) => {
+                self.runners.push(runner);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "cannot start container, please check the docker environment, error: {:?}",
+                    e
+                );
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+pub trait DockerTest {
+    async fn run_and_cleanup(
         self,
-        f: impl Future<Output = anyhow::Result<()>>,
+        f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
+    ) -> anyhow::Result<()>;
+}
+
+#[async_trait::async_trait]
+impl DockerTest for DockerTestRunner {
+    async fn run_and_cleanup(
+        self,
+        f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
     ) -> anyhow::Result<()> {
         let fut = Box::pin(f);
         // let res = fut.await;
@@ -61,20 +112,33 @@ impl DockerTestRunner {
 
         res
     }
+}
 
-    // you can run the cleanup manually
-    pub async fn cleanup(self) -> anyhow::Result<()> {
-        let s = self
-            .instance
-            .remove_container(
-                &self.id,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    ..Default::default()
-                }),
-            )
-            .await?;
-        Ok(s)
+#[async_trait::async_trait]
+impl DockerTest for MultiDockerTestRunner {
+    async fn run_and_cleanup(
+        self,
+        f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
+    ) -> anyhow::Result<()> {
+        let fut = Box::pin(f);
+        // let res = fut.await;
+        // make sure the container is cleaned up
+        let res = tokio::select! {
+            res = fut => {
+                res
+            },
+            _ = tokio::time::sleep(std::time::Duration::from_secs(TIMEOUT_DURATION))=> {
+                tracing::warn!("timeout");
+                Err(anyhow::anyhow!("timeout"))
+            }
+        };
+
+        // cleanup all the docker containers
+        for runner in self.runners {
+            runner.cleanup().await?;
+        }
+
+        res
     }
 }
 
@@ -89,6 +153,7 @@ pub struct DockerTestRunnerBuilder {
     host_config: HostConfig,
     exposed_ports: Vec<String>,
     cmd: Option<Vec<String>>,
+    env: Option<Vec<String>>,
     entrypoint: Option<Vec<String>>,
     _server_port: u16,
 }
@@ -103,6 +168,7 @@ impl Default for DockerTestRunnerBuilder {
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>(),
             cmd: None,
+            env: None,
             entrypoint: None,
             _server_port: PORT,
         }
@@ -132,6 +198,11 @@ impl DockerTestRunnerBuilder {
 
     pub fn cmd(mut self, cmd: &[&str]) -> Self {
         self.cmd = Some(cmd.iter().map(|x| x.to_string()).collect());
+        self
+    }
+
+    pub fn env(mut self, env: &[&str]) -> Self {
+        self.env = Some(env.iter().map(|x| x.to_string()).collect());
         self
     }
 
@@ -165,7 +236,7 @@ impl DockerTestRunnerBuilder {
             .map(|x| (x, Default::default()))
             .collect::<HashMap<_, _>>();
 
-        DockerTestRunner::new(
+        DockerTestRunner::try_new(
             Some(CreateImageOptions {
                 from_image: self.image.clone(),
                 ..Default::default()
@@ -175,6 +246,7 @@ impl DockerTestRunnerBuilder {
                 tty: Some(true),
                 entrypoint: self.entrypoint,
                 cmd: self.cmd,
+                env: self.env,
                 exposed_ports: Some(exposed),
                 host_config: Some(self.host_config),
                 ..Default::default()
