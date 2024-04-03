@@ -278,7 +278,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run(handler, get_ws_runner()).await
+        run(handler, get_ws_runner().await?).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -317,6 +317,6 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run(handler, get_grpc_runner()).await
+        run(handler, get_grpc_runner().await?).await
     }
 }
