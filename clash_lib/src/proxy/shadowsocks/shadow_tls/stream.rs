@@ -356,34 +356,31 @@ impl<S: AsyncRead + Unpin> AsyncRead for VerifiedStream<S> {
                     // now the data is ready with the required size
                     let mut data = this.read_buf.split().freeze().to_vec();
 
-                    match header[0] {
-                        APPLICATION_DATA => {
-                            // ignore the rest useless data
-                            if let Some(ref mut nop_cert) = this.nop_cert {
-                                if verify_appdata(&header, &mut data, nop_cert, false) {
-                                    this.read_state = ReadState::WaitingHeader;
-                                    continue;
-                                } else {
-                                    this.nop_cert.take();
-                                }
-                            }
-
-                            // the application data from the data server
-                            // we need to verfiy and removec the hmac(4 bytes)
-                            if verify_appdata(&header, &mut data, &mut this.server_cert, true) {
-                                // modify data, reuse the read buf
-                                this.read_buf.clear();
-                                this.read_buf.put(&data[HMAC_SIZE..]);
-                                this.read_state = ReadState::FlushingData;
+                    if header[0] == APPLICATION_DATA {
+                        // ignore the rest useless data
+                        if let Some(ref mut nop_cert) = this.nop_cert {
+                            if verify_appdata(&header, &mut data, nop_cert, false) {
+                                this.read_state = ReadState::WaitingHeader;
+                                continue;
                             } else {
-                                tracing::error!("shadowtls appdata verify failed");
-                                return Poll::Ready(Err(std::io::Error::new(
-                                    std::io::ErrorKind::InvalidData,
-                                    "appdata verify failed",
-                                )));
+                                this.nop_cert.take();
                             }
                         }
-                        _ => {}
+
+                        // the application data from the data server
+                        // we need to verfiy and removec the hmac(4 bytes)
+                        if verify_appdata(&header, &mut data, &mut this.server_cert, true) {
+                            // modify data, reuse the read buf
+                            this.read_buf.clear();
+                            this.read_buf.put(&data[HMAC_SIZE..]);
+                            this.read_state = ReadState::FlushingData;
+                        } else {
+                            tracing::error!("shadowtls appdata verify failed");
+                            return Poll::Ready(Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "appdata verify failed",
+                            )));
+                        }
                     }
                 }
                 ReadState::FlushingData => {

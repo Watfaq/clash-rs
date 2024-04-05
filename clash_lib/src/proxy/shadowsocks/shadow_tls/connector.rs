@@ -41,8 +41,8 @@ impl Connector {
             .with_safe_defaults()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
-        let connector = TlsConnector::from(Arc::new(tls_config.clone()));
-        connector
+        
+        TlsConnector::from(Arc::new(tls_config.clone()))
     }
 
     pub async fn wrap(opts: &ShadowTlsOption, stream: AnyStream) -> std::io::Result<AnyStream> {
@@ -73,9 +73,7 @@ impl Connector {
 
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!(
-                    "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request"
-                ),
+                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request".to_string(),
             ));
         }
 
@@ -84,7 +82,7 @@ impl Connector {
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
-                    format!("server random and hmac not extracted from handshake, fail to connect"),
+                    "server random and hmac not extracted from handshake, fail to connect".to_string(),
                 ));
             }
         };
@@ -99,7 +97,7 @@ impl Connector {
             Some(hmac_nop),
         );
 
-        return Ok(Box::new(verified_stream));
+        Ok(Box::new(verified_stream))
     }
 }
 

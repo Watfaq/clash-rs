@@ -197,13 +197,13 @@ pub async fn run(handler: Arc<dyn OutboundHandler>, watch: impl DockerTest) -> a
                 },
             )
             .await;
-            if rv.is_err() {
-                return Err(rv.unwrap_err());
+            if let Err(e) = rv {
+                return Err(e);
             } else {
                 tracing::info!("latency test success: {}", rv.unwrap().as_millis());
             }
 
-            return Ok(());
+            Ok(())
         })
         .await
 }

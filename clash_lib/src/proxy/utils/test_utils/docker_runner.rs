@@ -17,8 +17,8 @@ pub struct DockerTestRunner {
 }
 
 impl DockerTestRunner {
-    pub async fn try_new<'a>(
-        image_conf: Option<CreateImageOptions<'a, String>>,
+    pub async fn try_new(
+        image_conf: Option<CreateImageOptions<'_, String>>,
         container_conf: Config<String>,
     ) -> Result<Self> {
         let docker: Docker = Docker::connect_with_socket_defaults()?;
@@ -41,8 +41,7 @@ impl DockerTestRunner {
 
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
-        let s = self
-            .instance
+        self.instance
             .remove_container(
                 &self.id,
                 Some(RemoveContainerOptions {
@@ -51,7 +50,7 @@ impl DockerTestRunner {
                 }),
             )
             .await?;
-        Ok(s)
+        Ok(())
     }
 }
 
@@ -214,7 +213,7 @@ impl DockerTestRunnerBuilder {
     pub fn mounts(mut self, pairs: &[(&str, &str)]) -> Self {
         self.host_config.mounts = Some(
             pairs
-                .into_iter()
+                .iter()
                 .map(|(src, dst)| Mount {
                     target: Some(dst.to_string()),
                     source: Some(src.to_string()),

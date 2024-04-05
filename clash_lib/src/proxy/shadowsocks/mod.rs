@@ -263,8 +263,8 @@ impl OutboundHandler for Handler {
                 }
                 OBFSOption::ShadowTls(opts) => {
                     tracing::debug!("using shadow-tls with option: {:?}", opts);
-                    let res = shadow_tls::Connector::wrap(opts, s).await?;
-                    res
+                    
+                    (shadow_tls::Connector::wrap(opts, s).await?) as _
                 }
             },
             None => s,
