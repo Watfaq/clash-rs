@@ -41,7 +41,7 @@ impl Connector {
             .with_safe_defaults()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
-        
+
         TlsConnector::from(Arc::new(tls_config.clone()))
     }
 
@@ -73,7 +73,8 @@ impl Connector {
 
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request".to_string(),
+                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request"
+                    .to_string(),
             ));
         }
 
@@ -82,7 +83,8 @@ impl Connector {
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
-                    "server random and hmac not extracted from handshake, fail to connect".to_string(),
+                    "server random and hmac not extracted from handshake, fail to connect"
+                        .to_string(),
                 ));
             }
         };

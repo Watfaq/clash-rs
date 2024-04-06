@@ -84,6 +84,7 @@ pub(crate) fn xor_slice(data: &mut [u8], key: &[u8]) {
         .for_each(|(d, k)| *d ^= k);
 }
 
+#[allow(unused)]
 pub(crate) trait CursorExt {
     fn read_by_u16(&mut self) -> std::io::Result<Vec<u8>>;
     fn skip(&mut self, n: usize) -> std::io::Result<()>;

@@ -9,7 +9,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use super::utils::{prelude::*, Hmac, *};
+use super::utils::{prelude::*, *};
 
 #[derive(Default, Debug)]
 pub enum ReadState {

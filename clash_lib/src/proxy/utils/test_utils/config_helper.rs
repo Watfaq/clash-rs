@@ -44,11 +44,7 @@ pub async fn load_config() -> anyhow::Result<(
 
     debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
-        root
-            .join("cache.db")
-            .as_path()
-            .to_str()
-            .unwrap(),
+        root.join("cache.db").as_path().to_str().unwrap(),
         config.profile.store_selected,
     );
 
