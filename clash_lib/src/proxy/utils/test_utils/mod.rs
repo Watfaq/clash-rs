@@ -15,7 +15,7 @@ use tokio::{
 };
 use tracing::info;
 
-use self::docker_runner::DockerTest;
+use self::docker_runner::RunAndCleanup;
 
 pub mod config_helper;
 pub mod consts;
@@ -176,7 +176,10 @@ pub async fn latency_test(
     Ok(end_time.duration_since(start_time))
 }
 
-pub async fn run(handler: Arc<dyn OutboundHandler>, watch: impl DockerTest) -> anyhow::Result<()> {
+pub async fn run_default_test_suites_and_cleanup(
+    handler: Arc<dyn OutboundHandler>,
+    watch: impl RunAndCleanup,
+) -> anyhow::Result<()> {
     watch
         .run_and_cleanup(async move {
             let rv = ping_pong_test(handler.clone(), 10001).await;
