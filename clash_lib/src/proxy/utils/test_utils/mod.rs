@@ -178,9 +178,9 @@ pub async fn latency_test(
 
 pub async fn run_default_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
-    watch: impl RunAndCleanup,
+    docker_test_runner: impl RunAndCleanup,
 ) -> anyhow::Result<()> {
-    watch
+    docker_test_runner
         .run_and_cleanup(async move {
             let rv = ping_pong_test(handler.clone(), 10001).await;
             if rv.is_err() {
