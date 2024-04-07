@@ -302,16 +302,20 @@ mod tests {
 
     use super::*;
 
+    // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
+    // we shouldn't run the wireguard server with host mode, or 
+    // the sysctl of `net.ipv4.conf.all.src_valid_mark` will fail
     async fn get_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let wg_config = test_config_dir.join("wg_config");
+        // the following configs is in accordance with the config in `wg_config` dir
         DockerTestRunnerBuilder::new()
             .image(IMAGE_WG)
             .env(&[
                 "PUID=1000",
                 "PGID=1000",
                 "TZ=Etc/UTC",
-                "SERVERPORT=51820",
+                "SERVERPORT=10002",
                 "PEERS=1",
                 "PEERDNS=auto",
                 "INTERNAL_SUBNET=10.13.13.0",
@@ -347,6 +351,9 @@ mod tests {
         };
         let handler = Handler::new(opts);
 
+        // cannot run the ping pong test, since the wireguard server is running on bridge network mode
+        // and the `net.ipv4.conf.all.src_valid_mark` is not supported in the host network mode
+        // the latency test should be enough
         run_test_suites_and_cleanup(handler, get_runner().await?, &[Suite::Latency]).await
     }
 }
