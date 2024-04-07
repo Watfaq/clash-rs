@@ -227,6 +227,27 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    pub fn sysctls(mut self, sysctls: &[(&str, &str)]) -> Self {
+        self.host_config.sysctls = Some(
+            sysctls
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<_, _>>(),
+        );
+
+        self
+    }
+
+    pub fn cap_add(mut self, caps: &[&str]) -> Self {
+        self.host_config.cap_add = Some(caps.iter().map(|x| x.to_string()).collect());
+        self
+    }
+
+    pub fn net_mode(mut self, mode: &str) -> Self {
+        self.host_config.network_mode = Some(mode.to_string());
+        self
+    }
+
     pub async fn build(self) -> anyhow::Result<DockerTestRunner> {
         tracing::trace!("building docker test runner: {:?}", &self);
         let exposed = self

@@ -290,3 +290,63 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 }
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+
+    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
+    use crate::proxy::utils::test_utils::{config_helper::test_config_base_dir, Suite};
+
+    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
+    use crate::proxy::utils::test_utils::run_test_suites_and_cleanup;
+
+    use super::*;
+
+    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let wg_config = test_config_dir.join("wg_config");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_WG)
+            .env(&[
+                "PUID=1000",
+                "PGID=1000",
+                "TZ=Etc/UTC",
+                "SERVERPORT=51820",
+                "PEERS=1",
+                "PEERDNS=auto",
+                "INTERNAL_SUBNET=10.13.13.0",
+                "ALLOWEDIPS=0.0.0.0/0",
+            ])
+            .mounts(&[(wg_config.to_str().unwrap(), "/config")])
+            .sysctls(&[("net.ipv4.conf.all.src_valid_mark", "1")])
+            .cap_add(&["NET_ADMIN"])
+            .net_mode("bridge") // the default network mode for testing is `host`
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_wg() -> anyhow::Result<()> {
+        let opts = HandlerOpts {
+            name: "wg".to_owned(),
+            common_opts: CommonOption::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            ip: Ipv4Addr::new(10, 13, 13, 2),
+            ipv6: None,
+            private_key: "KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=".to_owned(),
+            public_key: "INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=".to_owned(),
+            preshared_key: Some("+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=".to_owned()),
+            remote_dns_resolve: false,
+            dns: None,
+            mtu: Some(1000),
+            udp: true,
+            allowed_ips: Some(vec!["0.0.0.0/0".to_owned()]),
+            reserved_bits: None,
+        };
+        let handler = Handler::new(opts);
+
+        run_test_suites_and_cleanup(handler, get_runner().await?, &[Suite::Latency]).await
+    }
+}
