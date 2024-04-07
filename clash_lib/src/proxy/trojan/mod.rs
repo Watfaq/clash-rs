@@ -231,7 +231,7 @@ mod tests {
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run,
+        run_default_test_suites_and_cleanup,
     };
 
     use super::*;
@@ -278,7 +278,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run(handler, get_ws_runner()).await
+        run_default_test_suites_and_cleanup(handler, get_ws_runner().await?).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -317,6 +317,6 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run(handler, get_grpc_runner()).await
+        run_default_test_suites_and_cleanup(handler, get_grpc_runner().await?).await
     }
 }

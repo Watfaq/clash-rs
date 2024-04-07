@@ -291,20 +291,22 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner, run_default_test_suites_and_cleanup,
+    };
     use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
-
-    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner, run};
 
     use super::*;
 
     const PASSWORD: &str = "FzcLbKs2dY9mhL";
     const CIPHER: &str = "aes-256-gcm";
 
-    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
+        let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
             .entrypoint(&["ssserver"])
-            .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
             .build()
             .await
     }
@@ -322,7 +324,8 @@ mod tests {
             plugin_opts: Default::default(),
             udp: false,
         };
+        let port = opts.port;
         let handler = Handler::new(opts);
-        run(handler, get_runner()).await
+        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
     }
 }

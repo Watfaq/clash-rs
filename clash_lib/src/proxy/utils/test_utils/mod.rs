@@ -8,14 +8,14 @@ use crate::{
     proxy::OutboundHandler,
     session::{Session, SocksAddr},
 };
-use futures::{future::select_all, Future};
+use futures::future::select_all;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
 };
 use tracing::info;
 
-use self::docker_runner::DockerTestRunner;
+use self::docker_runner::RunAndCleanup;
 
 pub mod config_helper;
 pub mod consts;
@@ -176,19 +176,11 @@ pub async fn latency_test(
     Ok(end_time.duration_since(start_time))
 }
 
-pub async fn run(
+pub async fn run_default_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
-    runner_creater: impl Future<Output = anyhow::Result<DockerTestRunner>>,
+    docker_test_runner: impl RunAndCleanup,
 ) -> anyhow::Result<()> {
-    let watch = match runner_creater.await {
-        Ok(runner) => runner,
-        Err(e) => {
-            tracing::warn!("cannot start container, please check the docker environment");
-            return Err(e);
-        }
-    };
-
-    watch
+    docker_test_runner
         .run_and_cleanup(async move {
             let rv = ping_pong_test(handler.clone(), 10001).await;
             if rv.is_err() {
