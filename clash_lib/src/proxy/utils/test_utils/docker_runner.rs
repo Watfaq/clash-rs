@@ -81,7 +81,7 @@ impl MultiDockerTestRunner {
 }
 
 #[async_trait::async_trait]
-pub trait DockerTest {
+pub trait RunAndCleanup {
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -89,7 +89,7 @@ pub trait DockerTest {
 }
 
 #[async_trait::async_trait]
-impl DockerTest for DockerTestRunner {
+impl RunAndCleanup for DockerTestRunner {
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -114,7 +114,7 @@ impl DockerTest for DockerTestRunner {
 }
 
 #[async_trait::async_trait]
-impl DockerTest for MultiDockerTestRunner {
+impl RunAndCleanup for MultiDockerTestRunner {
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
