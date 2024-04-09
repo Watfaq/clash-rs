@@ -176,37 +176,61 @@ pub async fn latency_test(
     Ok(end_time.duration_since(start_time))
 }
 
-pub async fn run_default_test_suites_and_cleanup(
+#[derive(Clone, Copy)]
+pub enum Suite {
+    PingPong,
+    Latency,
+}
+
+pub const DEFAULT_TEST_SUITES: &[Suite] = &[Suite::PingPong, Suite::Latency];
+
+pub async fn run_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
     docker_test_runner: impl RunAndCleanup,
+    suites: &[Suite],
 ) -> anyhow::Result<()> {
+    let suites = suites.to_owned();
     docker_test_runner
         .run_and_cleanup(async move {
-            let rv = ping_pong_test(handler.clone(), 10001).await;
-            if rv.is_err() {
-                tracing::error!("ping_pong_test failed: {:?}", rv);
-                return rv;
-            } else {
-                tracing::info!("ping_pong_test success");
-            }
-
-            let rv = latency_test(
-                handler,
-                LatencyTestOption {
-                    dst: SocksAddr::Domain("example.com".to_owned(), 80),
-                    req: consts::EXAMPLE_REQ,
-                    expected_resp: consts::EXAMLE_RESP_200,
-                    read_exact: true,
-                },
-            )
-            .await;
-            if let Err(e) = rv {
-                return Err(e);
-            } else {
-                tracing::info!("latency test success: {}", rv.unwrap().as_millis());
+            for suite in suites {
+                match suite {
+                    Suite::PingPong => {
+                        let rv = ping_pong_test(handler.clone(), 10001).await;
+                        if rv.is_err() {
+                            tracing::error!("ping_pong_test failed: {:?}", rv);
+                            return rv;
+                        } else {
+                            tracing::info!("ping_pong_test success");
+                        }
+                    }
+                    Suite::Latency => {
+                        let rv = latency_test(
+                            handler.clone(),
+                            LatencyTestOption {
+                                dst: SocksAddr::Domain("example.com".to_owned(), 80),
+                                req: consts::EXAMPLE_REQ,
+                                expected_resp: consts::EXAMLE_RESP_200,
+                                read_exact: true,
+                            },
+                        )
+                        .await;
+                        if rv.is_err() {
+                            return Err(rv.unwrap_err());
+                        } else {
+                            tracing::info!("latency test success: {}", rv.unwrap().as_millis());
+                        }
+                    }
+                }
             }
 
             Ok(())
         })
         .await
+}
+
+pub async fn run_default_test_suites_and_cleanup(
+    handler: Arc<dyn OutboundHandler>,
+    docker_test_runner: impl RunAndCleanup,
+) -> anyhow::Result<()> {
+    run_test_suites_and_cleanup(handler, docker_test_runner, DEFAULT_TEST_SUITES).await
 }
