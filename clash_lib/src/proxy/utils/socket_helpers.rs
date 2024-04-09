@@ -14,7 +14,7 @@ use tokio::{
 use tracing::warn;
 
 use super::Interface;
-use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
+use crate::{app::dns::ThreadSafeDNSResolver, get_iface, proxy::AnyStream, session::get_somark};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
@@ -71,8 +71,8 @@ pub async fn new_tcp_stream<'a>(
     resolver: ThreadSafeDNSResolver,
     address: &'a str,
     port: u16,
-    iface: Option<&'a Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    iface: Option<&Interface>,
+    packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
         .resolve(address, false)
@@ -99,12 +99,13 @@ pub async fn new_tcp_stream<'a>(
         }
     };
 
-    if let Some(iface) = iface {
-        must_bind_socket_on_interface(&socket, iface)?;
+    let global_iface = get_iface();
+    if let Some(iface) = iface.or_else(|| global_iface.as_ref()) {
+        must_bind_socket_on_interface(&socket, &iface)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
+    #[cfg(target_os = "linux")]
+    if let Some(packet_mark) = packet_mark.or_else(|| get_somark()) {
         socket.set_mark(packet_mark)?;
     }
 
@@ -124,7 +125,7 @@ pub async fn new_tcp_stream<'a>(
 pub async fn new_udp_socket(
     src: Option<&SocketAddr>,
     iface: Option<&Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = match src {
         Some(src) => {
@@ -141,12 +142,13 @@ pub async fn new_udp_socket(
         socket.bind(&(*src).into())?;
     }
 
-    if let Some(iface) = iface {
-        must_bind_socket_on_interface(&socket, iface)?;
+    let global_iface = get_iface();
+    if let Some(iface) = iface.or_else(|| global_iface.as_ref()) {
+        must_bind_socket_on_interface(&socket, &iface)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
+    #[cfg(target_os = "linux")]
+    if let Some(packet_mark) = packet_mark.or_else(|| get_somark()) {
         socket.set_mark(packet_mark)?;
     }
 

@@ -88,32 +88,10 @@ pub type AnyOutboundDatagram =
 #[allow(dead_code)]
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CommonOption {
-    #[serde(rename = "interface-name")]
-    so_mark: Option<u32>,
     #[serde(rename = "routing-mark")]
+    so_mark: Option<u32>,
+    #[serde(rename = "interface-name")]
     iface: Option<Interface>,
-}
-
-impl CommonOption {
-    pub fn merge<'a>(&'a self, sess: &'a Session) -> (Option<u32>, Option<&'a Interface>) {
-        let so_mark = if let Some(so_mark) = self.so_mark {
-            Some(so_mark)
-        } else if let Some(so_mark) = sess.packet_mark {
-            Some(so_mark)
-        } else {
-            None
-        };
-
-        let iface = if let Some(iface) = self.iface.as_ref() {
-            Some(iface)
-        } else if let Some(iface) = sess.iface.as_ref() {
-            Some(iface)
-        } else {
-            None
-        };
-
-        (so_mark, iface)
-    }
 }
 
 #[async_trait]

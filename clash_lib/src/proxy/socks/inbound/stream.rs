@@ -166,8 +166,6 @@ pub async fn handle_tcp<'a>(
             let sess = Session {
                 network: Network::Udp,
                 typ: Type::Socks5,
-                packet_mark: None,
-                iface: None,
                 ..Default::default()
             };
 
