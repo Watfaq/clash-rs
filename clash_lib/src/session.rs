@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::RwLock;
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -376,8 +378,6 @@ pub struct Session {
     pub source: SocketAddr,
     /// The proxy target address of a proxy connection.
     pub destination: SocksAddr,
-    /// The bind interface
-    pub iface: Option<Interface>,
 }
 
 impl Session {
@@ -408,7 +408,6 @@ impl Default for Session {
             typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            iface: None,
         }
     }
 }
@@ -429,7 +428,6 @@ impl Debug for Session {
             .field("network", &self.network)
             .field("source", &self.source)
             .field("destination", &self.destination)
-            .field("iface", &self.iface)
             .finish()
     }
 }
@@ -441,7 +439,6 @@ impl Clone for Session {
             typ: self.typ,
             source: self.source,
             destination: self.destination.clone(),
-            iface: self.iface.as_ref().cloned(),
         }
     }
 }
@@ -458,13 +455,49 @@ fn insuff_bytes() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "insufficient bytes")
 }
 
-
 static GLOBAL_MARK: AtomicU32 = AtomicU32::new(0);
 static ENABLE_MARK: AtomicBool = AtomicBool::new(false);
+pub fn set_somark(mark: Option<u32>) {
+    match mark {
+        Some(mark) => {
+            GLOBAL_MARK.store(mark, Ordering::SeqCst);
+            ENABLE_MARK.store(true, Ordering::SeqCst);
+        }
+        None => ENABLE_MARK.store(false, Ordering::SeqCst),
+    }
+}
 /// get socket SO_MARK that outgoing socket should use
 pub fn get_somark() -> Option<u32> {
     if ENABLE_MARK.load(Ordering::Relaxed) {
         Some(GLOBAL_MARK.load(Ordering::Relaxed))
+    } else {
+        None
+    }
+}
+
+static GLOBAL_IFACE: RwLock<Option<Interface>> = RwLock::new(None);
+static ENABLE_IFACE: AtomicBool = AtomicBool::new(false);
+pub fn set_iface(iface: Option<Interface>) {
+    match iface {
+        Some(iface) => match GLOBAL_IFACE.write() {
+            Ok(mut guard) => {
+                *guard = Some(iface);
+                ENABLE_IFACE.store(true, Ordering::SeqCst);
+            }
+            // fail if the `RwLock` is poisoned. which only happens when writer holds lock and panics
+            Err(_) => ENABLE_IFACE.store(false, Ordering::SeqCst),
+        },
+        None => ENABLE_IFACE.store(false, Ordering::SeqCst),
+    }
+}
+/// get iface that outgoing socket should use
+pub fn get_iface() -> Option<Interface> {
+    if ENABLE_IFACE.load(Ordering::Relaxed) {
+        match GLOBAL_IFACE.read() {
+            Ok(guard) => guard.deref().to_owned(),
+            // fail if the `RwLock` is poisoned. which only happens when writer holds lock and panics
+            _ => None,
+        }
     } else {
         None
     }
