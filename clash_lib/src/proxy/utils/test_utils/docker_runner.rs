@@ -188,9 +188,9 @@ impl DockerTestRunnerBuilder {
     pub fn port(mut self, port: u16) -> Self {
         self._server_port = port;
         self.exposed_ports = vec![format!("{}/tcp", port), format!("{}/udp", port)];
-        let mounts = self.host_config.mounts.take();
-        self.host_config = get_host_config(port);
-        self.host_config.mounts = mounts;
+        let new_host_config = get_host_config(port);
+        self.host_config.network_mode = new_host_config.network_mode;
+        self.host_config.port_bindings = new_host_config.port_bindings;
 
         self
     }
@@ -224,6 +224,27 @@ impl DockerTestRunnerBuilder {
                 .collect::<Vec<_>>(),
         );
 
+        self
+    }
+
+    pub fn sysctls(mut self, sysctls: &[(&str, &str)]) -> Self {
+        self.host_config.sysctls = Some(
+            sysctls
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<_, _>>(),
+        );
+
+        self
+    }
+
+    pub fn cap_add(mut self, caps: &[&str]) -> Self {
+        self.host_config.cap_add = Some(caps.iter().map(|x| x.to_string()).collect());
+        self
+    }
+
+    pub fn net_mode(mut self, mode: &str) -> Self {
+        self.host_config.network_mode = Some(mode.to_string());
         self
     }
 
