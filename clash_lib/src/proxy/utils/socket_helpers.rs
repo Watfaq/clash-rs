@@ -157,6 +157,28 @@ pub async fn new_udp_socket(
 
     UdpSocket::from_std(socket.into())
 }
+/// An extension to std::net::{UdpSocket, TcpStream}
+pub trait StdSocketExt {
+    fn set_mark(&self, mark: u32) -> io::Result<()>;
+}
+impl StdSocketExt for std::net::UdpSocket {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+impl StdSocketExt for std::net::TcpStream {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+
+#[allow(unused_variables)]
+fn set_mark(socket: socket2::SockRef<'_>, mark: u32) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    return socket.set_mark(mark);
+    #[cfg(not(target_os = "linux"))]
+    return Ok(());
+}
 
 #[cfg(test)]
 mod tests {
