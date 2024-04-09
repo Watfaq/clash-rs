@@ -303,7 +303,7 @@ mod tests {
     use super::*;
 
     // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
-    // we shouldn't run the wireguard server with host mode, or 
+    // we shouldn't run the wireguard server with host mode, or
     // the sysctl of `net.ipv4.conf.all.src_valid_mark` will fail
     async fn get_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
