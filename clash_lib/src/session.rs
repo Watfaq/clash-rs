@@ -455,7 +455,7 @@ fn insuff_bytes() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "insufficient bytes")
 }
 
-static GLOBAL_MARK: AtomicU32 = AtomicU32::new(0);
+static GLOBAL_MARK: AtomicU32 = AtomicU32::new(0xff);
 static ENABLE_MARK: AtomicBool = AtomicBool::new(false);
 pub fn set_somark(mark: Option<u32>) {
     match mark {
