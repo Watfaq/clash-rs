@@ -14,7 +14,7 @@ use tokio::{
 use tracing::warn;
 
 use super::Interface;
-use crate::{app::dns::ThreadSafeDNSResolver, get_iface, proxy::AnyStream, session::get_somark};
+use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
@@ -67,12 +67,12 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
     }
 }
 
-pub async fn new_tcp_stream<'a>(
+pub async fn new_tcp_stream(
     resolver: ThreadSafeDNSResolver,
-    address: &'a str,
+    address: &str,
     port: u16,
     iface: Option<&Interface>,
-    packet_mark: Option<u32>,
+    #[allow(unused_variables)] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
         .resolve(address, false)
@@ -99,13 +99,13 @@ pub async fn new_tcp_stream<'a>(
         }
     };
 
-    let global_iface = get_iface();
-    if let Some(iface) = iface.or_else(|| global_iface.as_ref()) {
-        must_bind_socket_on_interface(&socket, &iface)?;
+    let global_iface = crate::get_iface();
+    if let Some(iface) = iface.or(global_iface.as_ref()) {
+        must_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(target_os = "linux")]
-    if let Some(packet_mark) = packet_mark.or_else(|| get_somark()) {
+    if let Some(packet_mark) = packet_mark.or_else(crate::get_somark) {
         socket.set_mark(packet_mark)?;
     }
 
@@ -125,7 +125,7 @@ pub async fn new_tcp_stream<'a>(
 pub async fn new_udp_socket(
     src: Option<&SocketAddr>,
     iface: Option<&Interface>,
-    packet_mark: Option<u32>,
+    #[allow(unused_variables)] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = match src {
         Some(src) => {
@@ -142,13 +142,13 @@ pub async fn new_udp_socket(
         socket.bind(&(*src).into())?;
     }
 
-    let global_iface = get_iface();
-    if let Some(iface) = iface.or_else(|| global_iface.as_ref()) {
-        must_bind_socket_on_interface(&socket, &iface)?;
+    let global_iface = crate::get_iface();
+    if let Some(iface) = iface.or(global_iface.as_ref()) {
+        must_bind_socket_on_interface(&socket, iface)?;
     }
 
     #[cfg(target_os = "linux")]
-    if let Some(packet_mark) = packet_mark.or_else(|| get_somark()) {
+    if let Some(packet_mark) = packet_mark.or_else(crate::get_somark) {
         socket.set_mark(packet_mark)?;
     }
 

@@ -92,7 +92,6 @@ impl OutboundHandler for Handler {
                     remote_addr.host().as_str(),
                     remote_addr.port(),
                     None,
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
                     None,
                 )
                 .await?;
