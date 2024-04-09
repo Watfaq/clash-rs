@@ -91,9 +91,9 @@ impl OutboundHandler for Handler {
                     resolver.clone(),
                     remote_addr.host().as_str(),
                     remote_addr.port(),
-                    None,
+                    sess.iface.as_ref(),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
+                    sess.packet_mark,
                 )
                 .await?;
 

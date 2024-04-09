@@ -1,4 +1,4 @@
-use super::{datagram::TunDatagram, netstack};
+use super::netstack;
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
@@ -8,7 +8,7 @@ use url::Url;
 
 use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
-    common::errors::map_io_error,
+    common::{errors::map_io_error, tunnel_datagram::TunnelDatagram},
     config::internal::config::TunConfig,
     proxy::datagram::UdpPacket,
     session::{Network, Session, SocksAddr, Type},
@@ -37,9 +37,6 @@ async fn handle_inbound_datagram(
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) {
-    let local_addr = socket.local_addr();
-    // tun i/o
-
     let (ls, mut lr) = socket.split();
     let ls = Arc::new(ls);
 
@@ -51,7 +48,7 @@ async fn handle_inbound_datagram(
 
     // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
     // and send back packets to this channel, which is to the tun
-    let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
+    let udp_stream = TunnelDatagram::new(l_tx, d_rx);
 
     let sess = Session {
         network: Network::Udp,
@@ -66,7 +63,7 @@ async fn handle_inbound_datagram(
         while let Some(pkt) = l_rx.recv().await {
             trace!("tun <- dispatcher: {:?}", pkt);
             // populate the correct src_addr, though is it necessary?
-            let src_addr = match pkt.src_addr {
+            let src_addr: SocketAddr = match pkt.src_addr {
                 SocksAddr::Ip(ip) => ip,
                 SocksAddr::Domain(host, port) => {
                     match resolver.resolve(&host, resolver.fake_ip_enabled()).await {

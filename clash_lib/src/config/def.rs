@@ -374,6 +374,7 @@ pub struct Config {
     ///   device-id: "dev://utun1989"
     /// ```
     pub tun: Option<HashMap<String, Value>>,
+    pub iptables: Iptables,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -431,6 +432,7 @@ impl Default for Config {
                     .to_owned(),
             ),
             tun: Default::default(),
+            iptables: Default::default(),
         }
     }
 }
@@ -555,6 +557,25 @@ impl Default for Profile {
         Self {
             store_selected: true,
             store_fake_ip: false,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(default)]
+#[serde(rename_all = "kebab-case")]
+pub struct Iptables {
+    enable: bool,
+    inbound_interface: String,
+    bypass: Vec<String>,
+}
+
+impl Default for Iptables {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            inbound_interface: "lo".to_owned(),
+            bypass: vec![],
         }
     }
 }

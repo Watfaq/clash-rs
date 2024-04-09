@@ -1,7 +1,7 @@
 use crate::common::auth::ThreadSafeAuthenticator;
 use crate::config::internal::config::BindAddress;
 
-use crate::proxy::{http, mixed, socks, AnyInboundListener};
+use crate::proxy::{http, mixed, socks, tproxy, AnyInboundListener};
 
 use crate::proxy::utils::Interface;
 use crate::{Dispatcher, Error, Runner};
@@ -17,6 +17,7 @@ pub enum ListenerType {
     Http,
     Socks5,
     Mixed,
+    TProxy,
 }
 
 pub struct NetworkInboundListener {
@@ -111,6 +112,17 @@ impl NetworkInboundListener {
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             ),
+
+            ListenerType::TProxy => {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                {
+                    tproxy::TProxyListener::new((ip, self.port).into(), self.dispatcher.clone())
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    warn!("tproxy only support linux and android, ignore this config");
+                }
+            }
         };
 
         if listener.handle_tcp() {

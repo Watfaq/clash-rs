@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod cmd;
 pub mod crypto;
 pub mod errors;
 pub mod http;
@@ -7,4 +8,5 @@ pub mod mmdb;
 pub mod timed_future;
 pub mod tls;
 pub mod trie;
+pub mod tunnel_datagram;
 pub mod utils;

@@ -52,9 +52,9 @@ impl OutboundHandler for Handler {
             resolver,
             sess.destination.host().as_str(),
             sess.destination.port(),
-            None,
+            sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.packet_mark,
         )
         .await?;
 
@@ -81,7 +81,7 @@ impl OutboundHandler for Handler {
             None,
             sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.packet_mark,
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;

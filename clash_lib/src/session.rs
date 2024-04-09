@@ -12,6 +12,13 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use erased_serde::Serialize as ESerialize;
 
+// mark of the packet from clash-rs
+static DEFAULT_PACKET_MARK: u32 = 0xff;
+
+pub(crate) fn get_packet_mark() -> u32 {
+    DEFAULT_PACKET_MARK
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
     Ip(SocketAddr),
@@ -353,6 +360,7 @@ pub enum Type {
     Http,
     HttpConnect,
     Socks5,
+    TProxy,
     Tun,
 }
 
@@ -409,7 +417,7 @@ impl Default for Session {
             typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            packet_mark: None,
+            packet_mark: Some(get_packet_mark()),
             iface: None,
         }
     }
