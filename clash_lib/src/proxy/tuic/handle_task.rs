@@ -26,9 +26,12 @@ impl TuicConnection {
             .authenticate(self.uuid, self.password.clone())
             .await
         {
-            Ok(()) => tracing::info!("[auth] {uuid}", uuid = self.uuid),
+            Ok(()) => tracing::info!("[auth] success {uuid}", uuid = self.uuid),
             Err(err) => {
-                tracing::warn!("[auth] authentication sending error: {err}")
+                tracing::warn!(
+                    "[auth] authentication sending error: {:?}",
+                    anyhow::anyhow!(err)
+                )
             }
         }
     }
@@ -141,7 +144,7 @@ impl TuicConnection {
         }
 
         match self.inner.heartbeat().await {
-            Ok(()) => tracing::trace!("[heartbeat]"),
+            Ok(()) => tracing::debug!("[heartbeat]"),
             Err(err) => tracing::error!("[heartbeat] {err}"),
         }
         Ok(())
