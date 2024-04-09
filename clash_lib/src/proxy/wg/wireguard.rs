@@ -69,8 +69,6 @@ impl WireguardTunnel {
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
     ) -> Result<Self, Error> {
-        tracing::debug!("config: private key: {:x?}, endpoint public key: {:x?}, remote endpoint: {}, source peer ip: {}, source peer ipv6: {:?}, keepalive seconds: {:?}, allowed ips: {:?}, reserved bits: {:?}",
-            config.private_key.to_bytes(), config.endpoint_public_key.to_bytes(), config.remote_endpoint, config.source_peer_ip, config.source_peer_ipv6, config.keepalive_seconds, config.allowed_ips, config.reserved_bits);
         let peer = Tunn::new(
             config.private_key,
             config.endpoint_public_key,
