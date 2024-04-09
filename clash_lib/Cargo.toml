@@ -127,7 +127,6 @@ tokio-test = "0.4.4"
 axum-macros = "0.4.0"
 bollard = "0.16"
 serial_test = "3.0.0"
-tracing-test = "0.2.4"
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "2.10.0"

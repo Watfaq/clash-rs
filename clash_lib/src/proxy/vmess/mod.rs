@@ -255,9 +255,6 @@ impl OutboundHandler for Handler {
 
 #[cfg(all(test, not(ci)))]
 mod tests {
-
-    use tracing_test::traced_test;
-
     use crate::proxy::utils::test_utils::{
         config_helper::test_config_base_dir,
         consts::*,
@@ -279,9 +276,15 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     #[serial_test::serial]
     async fn test_vmess_ws() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt()
+            // any additional configuration of the subscriber you might want here..
+            .try_init();
+
+        let span = tracing::info_span!("test_vmess_ws");
+        let _enter = span.enter();
+
         let opts = HandlerOptions {
             name: "test-vmess-ws".into(),
             common_opts: Default::default(),
