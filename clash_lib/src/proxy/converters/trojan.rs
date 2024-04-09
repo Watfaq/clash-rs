@@ -5,7 +5,7 @@ use crate::{
     proxy::{
         options::{GrpcOption, WsOption},
         trojan::{Handler, Opts, Transport},
-        AnyOutboundHandler, CommonOption,
+        AnyOutboundHandler,
     },
     Error,
 };
@@ -29,7 +29,7 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
 
         let h = Handler::new(Opts {
             name: s.name.to_owned(),
-            common_opts: CommonOption::default(),
+            common_opts: s.common_opts.clone(),
             server: s.server.to_owned(),
             port: s.port,
             password: s.password.clone(),
