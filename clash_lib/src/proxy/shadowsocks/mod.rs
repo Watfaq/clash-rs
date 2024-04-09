@@ -1,4 +1,5 @@
 mod datagram;
+mod shadow_tls;
 mod simple_obfs;
 mod stream;
 mod v2ray;
@@ -129,9 +130,42 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
     }
 }
 
+#[derive(Debug)]
+pub struct ShadowTlsOption {
+    pub host: String,
+    pub password: String,
+    pub strict: bool,
+}
+
+impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
+    type Error = crate::Error;
+
+    fn try_from(value: HashMap<String, serde_yaml::Value>) -> Result<Self, Self::Error> {
+        let host = value
+            .get("host")
+            .and_then(|x| x.as_str())
+            .unwrap_or("bing.com");
+        let password = value
+            .get("password")
+            .and_then(|x| x.as_str().to_owned())
+            .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
+        let strict = value
+            .get("strict")
+            .and_then(|x| x.as_bool())
+            .unwrap_or(true);
+
+        Ok(Self {
+            host: host.to_string(),
+            password: password.to_string(),
+            strict,
+        })
+    }
+}
+
 pub enum OBFSOption {
     Simple(SimpleOBFSOption),
     V2Ray(V2RayOBFSOption),
+    ShadowTls(ShadowTlsOption),
 }
 
 pub struct HandlerOptions {
@@ -227,6 +261,11 @@ impl OutboundHandler for Handler {
                 OBFSOption::V2Ray(_opt) => {
                     todo!("v2ray-plugin is not implemented yet")
                 }
+                OBFSOption::ShadowTls(opts) => {
+                    tracing::debug!("using shadow-tls with option: {:?}", opts);
+
+                    (shadow_tls::Connector::wrap(opts, s).await?) as _
+                }
             },
             None => s,
         };
@@ -291,15 +330,17 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner, run_default_test_suites_and_cleanup,
+    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
+    use crate::proxy::utils::test_utils::{
+        docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
+        run_default_test_suites_and_cleanup,
     };
-    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
 
     use super::*;
 
     const PASSWORD: &str = "FzcLbKs2dY9mhL";
     const CIPHER: &str = "aes-256-gcm";
+    const SHADOW_TLS_PASSWORD: &str = "password";
 
     async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
         let host = format!("0.0.0.0:{}", port);
@@ -327,5 +368,60 @@ mod tests {
         let port = opts.port;
         let handler = Handler::new(opts);
         run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+    }
+
+    async fn get_shadowtls_runner(
+        ss_port: u16,
+        stls_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let ss_server_env = format!("SERVER=127.0.0.1:{}", ss_port);
+        let listen_env = format!("LISTEN=0.0.0.0:{}", stls_port);
+        let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOW_TLS)
+            .env(&[
+                "MODE=server",
+                // the port that we need to fill in the config
+                &listen_env,
+                // shadowsocks server addr
+                &ss_server_env,
+                "TLS=www.feishu.cn:443",
+                &password,
+                "V3=1",
+            ])
+            // .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_shadowtls() -> anyhow::Result<()> {
+        // the real port that used for communication
+        let shadow_tls_port = 10002;
+        // not important, you can assign any port that is not conflict with others
+        let ss_port = 10004;
+        let opts = HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: shadow_tls_port,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Some(OBFSOption::ShadowTls(ShadowTlsOption {
+                host: "www.feishu.cn".to_owned(),
+                password: "password".to_owned(),
+                strict: true,
+            })),
+            udp: false,
+        };
+        let handler = Handler::new(opts);
+        // we need to store all the runners in a container, to make sure all of them can be destroyed after the test
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add(get_ss_runner(ss_port)).await;
+        chained
+            .add(get_shadowtls_runner(ss_port, shadow_tls_port))
+            .await;
+        run_default_test_suites_and_cleanup(handler, chained).await
     }
 }
