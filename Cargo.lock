@@ -588,26 +588,6 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.68.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
-dependencies = [
- "bitflags 2.5.0",
- "cexpr",
- "clang-sys",
- "lazy_static",
- "lazycell",
- "peeking_take_while",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex",
- "syn 2.0.55",
-]
-
-[[package]]
-name = "bindgen"
 version = "0.69.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
@@ -737,31 +717,6 @@ dependencies = [
  "serde",
  "serde_repr",
  "serde_with",
-]
-
-[[package]]
-name = "boring"
-version = "4.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8259fc1ea91894a550190683fbcda307d1ef85f2875d93a2b1ab3cab58b62fea"
-dependencies = [
- "bitflags 2.5.0",
- "boring-sys",
- "foreign-types",
- "libc",
- "once_cell",
-]
-
-[[package]]
-name = "boring-sys"
-version = "4.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ace69f2e0d89d2c5e0874efe47f46259ff794fe8cbddfca72132c817611ad471"
-dependencies = [
- "bindgen 0.68.1",
- "cmake",
- "fs_extra",
- "fslock",
 ]
 
 [[package]]
@@ -1072,6 +1027,7 @@ dependencies = [
 name = "clash_lib"
 version = "0.1.15"
 dependencies = [
+ "aead",
  "aes",
  "aes-gcm",
  "anyhow",
@@ -1082,8 +1038,6 @@ dependencies = [
  "axum-macros",
  "base64 0.22.0",
  "bollard",
- "boring",
- "boring-sys",
  "boringtun",
  "brotli",
  "byteorder",
@@ -1092,6 +1046,7 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "console-subscriber",
+ "const-fnv1a-hash",
  "crc32fast",
  "criterion",
  "ctor",
@@ -1132,6 +1087,7 @@ dependencies = [
  "rand",
  "regex",
  "register-count",
+ "ring-compat",
  "rustls 0.21.8",
  "rustls-pemfile",
  "security-framework",
@@ -1166,15 +1122,6 @@ dependencies = [
  "url",
  "uuid",
  "webpki-roots",
-]
-
-[[package]]
-name = "cmake"
-version = "0.1.50"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -1252,6 +1199,12 @@ dependencies = [
  "tracing-core",
  "tracing-subscriber",
 ]
+
+[[package]]
+name = "const-fnv1a-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32b13ea120a812beba79e34316b3942a857c86ec1593cb34f27bb28272ce2cca"
 
 [[package]]
 name = "const-oid"
@@ -2051,27 +2004,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
-name = "foreign-types"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
-dependencies = [
- "foreign-types-macros",
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-macros"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a5c6c585bc94aaf2c7b51dd4c2ba22680844aba4c687be581871a6f518c5742"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.55",
-]
-
-[[package]]
 name = "foreign-types-shared"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2108,12 +2040,6 @@ dependencies = [
  "thiserror",
  "walkdir",
 ]
-
-[[package]]
-name = "fs_extra"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fsevent-sys"
