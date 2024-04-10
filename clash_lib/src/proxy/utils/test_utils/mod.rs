@@ -266,7 +266,7 @@ pub async fn latency_test(
 
 pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
     let src = SocksAddr::Ip("127.0.0.1:0".parse().unwrap());
-    let dst = SocksAddr::Ip("1.1.1.1:53".parse().unwrap());
+    let dst = SocksAddr::Ip("1.0.0.1:53".parse().unwrap());
 
     let sess = Session {
         destination: dst.clone(),
