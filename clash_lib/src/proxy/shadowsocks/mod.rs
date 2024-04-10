@@ -423,6 +423,8 @@ mod tests {
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
             .await;
-        run_test_suites_and_cleanup(handler, chained, Suite::all()).await
+        // currently, shadow-tls does't support udp proxy
+        // see: https://github.com/ihciah/shadow-tls/issues/54
+        run_test_suites_and_cleanup(handler, chained, Suite::defaults()).await
     }
 }
