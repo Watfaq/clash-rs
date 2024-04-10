@@ -35,8 +35,6 @@ foreign-types-shared = "0.3.1"
 network-interface = "1.1.3"
 base64 = "0.22"
 uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
-# boring = "4.5.0"
-# boring-sys = "4.5.0"
 
 ip_network_table-deps-treebitmap = "0.5.0"
 once_cell = "1.18.0"
