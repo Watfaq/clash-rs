@@ -259,7 +259,7 @@ mod tests {
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_default_test_suites_and_cleanup,
+        run_test_suites_and_cleanup, Suite,
     };
 
     use super::*;
@@ -306,7 +306,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_ws_runner().await?).await
+        run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::defaults()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -349,7 +349,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_grpc_runner().await?).await
+        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -392,6 +392,6 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_h2_runner().await?).await
+        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all()).await
     }
 }

@@ -75,7 +75,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
+        if let Some(pkt) = pkt_container {
             if &pkt.dst_addr != remote_addr {
                 debug!(
                     "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: {}",
@@ -86,16 +86,15 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                     "udp packet dst_addr not match",
                 )));
             }
-            let data = pkt.data;
 
-            let n = ready!(inner.as_mut().poll_write(cx, data.as_ref()))?;
+            let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
 
             debug!(
                 "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
                 n, remote_addr, pkt.dst_addr
             );
 
-            let wrote_all = n == data.len();
+            let wrote_all = n == pkt.data.len();
             *pkt_container = None;
             *flushed = true;
 

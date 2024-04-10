@@ -105,12 +105,12 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
-            let data = pkt.data;
+        if let Some(pkt) = pkt_container {
+            let data = pkt.data.as_ref();
             let addr: shadowsocks::relay::Address =
                 (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
-            let n = ready!(inner.poll_send_to(dst, &addr, data.as_ref(), cx))?;
+            let n = ready!(inner.poll_send_to(dst, &addr, data, cx))?;
 
             debug!(
                 "send udp packet to remote ss server, len: {}, remote_addr: {}, dst_addr: {}",

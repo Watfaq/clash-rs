@@ -85,8 +85,8 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
-            let data = pkt.data;
+        if let Some(pkt) = pkt_container {
+            let data = &pkt.data;
 
             let mut payload = BytesMut::new();
             pkt.dst_addr.write_buf(&mut payload);
@@ -106,6 +106,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
                     data.len()
                 );
             }
+            *pkt_container = None;
 
             *flushed = true;
 

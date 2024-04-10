@@ -4,14 +4,14 @@ use std::{
 };
 
 use crate::{
-    app::dispatcher::ChainedStream,
-    proxy::OutboundHandler,
+    app::dispatcher::{BoxedChainedDatagram, ChainedStream},
+    proxy::{datagram::UdpPacket, OutboundHandler},
     session::{Session, SocksAddr},
 };
-use futures::future::select_all;
+use futures::{future::select_all, SinkExt, StreamExt};
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::TcpListener,
+    net::{TcpListener, UdpSocket},
 };
 use tracing::info;
 
@@ -124,6 +124,94 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
     select_all(futs).await.0?
 }
 
+pub async fn ping_pong_udp_test(
+    handler: Arc<dyn OutboundHandler>,
+    port: u16,
+) -> anyhow::Result<()> {
+    // PATH: our proxy handler -> proxy-server(container) -> target local server(127.0.0.1:port)
+
+    let src = ("127.0.0.1".to_owned(), 10005)
+        .try_into()
+        .unwrap_or_else(|_| panic!(""));
+    let dst: SocksAddr = ("127.0.0.1".to_owned(), port)
+        .try_into()
+        .unwrap_or_else(|_| panic!(""));
+
+    let sess = Session {
+        destination: dst.clone(),
+        ..Default::default()
+    };
+
+    let (_, resolver) = config_helper::load_config().await?;
+
+    let listener = UdpSocket::bind(format!("0.0.0.0:{}", port).as_str()).await?;
+    info!("target local server started at: {}", listener.local_addr()?);
+
+    async fn destination_fn(listener: UdpSocket) -> anyhow::Result<()> {
+        // Use inbound_stream here
+        let chunk = "world";
+        let mut buf = vec![0; 5];
+
+        tracing::trace!("destination_fn start read");
+
+        let (_, src) = listener.recv_from(&mut buf).await?;
+        assert_eq!(&buf, b"hello");
+
+        tracing::trace!("destination_fn start write");
+
+        listener.send_to(chunk.as_bytes(), src).await?;
+
+        tracing::trace!("destination_fn end");
+        Ok(())
+    }
+
+    let target_local_server_handler: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
+        tokio::spawn(async move { destination_fn(listener).await });
+
+    async fn proxy_fn(
+        mut datagram: BoxedChainedDatagram,
+        src_addr: SocksAddr,
+        dst_addr: SocksAddr,
+    ) -> anyhow::Result<()> {
+        // let (mut sink, mut stream) = datagram.split();
+        let packet = UdpPacket::new(b"hello".to_vec(), src_addr, dst_addr);
+
+        tracing::trace!("proxy_fn start write");
+
+        datagram.send(packet.clone()).await.map_err(|x| {
+            tracing::error!("proxy_fn write error: {}", x);
+            anyhow::Error::new(x)
+        })?;
+
+        tracing::trace!("proxy_fn start read");
+
+        let pkt = datagram.next().await;
+        let pkt = pkt.ok_or_else(|| anyhow!("no packet received"))?;
+        assert_eq!(pkt.data, b"world");
+
+        tracing::trace!("proxy_fn end");
+
+        Ok(())
+    }
+
+    let proxy_task = tokio::spawn(async move {
+        // give some time for the target local server to start
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
+        match handler.connect_datagram(&sess, resolver).await {
+            Ok(stream) => proxy_fn(stream, src, dst).await,
+            Err(e) => {
+                tracing::error!("Failed to proxy connection: {}", e);
+                Err(anyhow!("Failed to proxy connection: {}", e))
+            }
+        }
+    });
+
+    let futs = vec![proxy_task, target_local_server_handler];
+
+    select_all(futs).await.0?
+}
+
 /// Represents the options for a latency test.
 pub struct LatencyTestOption<'a> {
     /// The destination address for the test.
@@ -179,10 +267,19 @@ pub async fn latency_test(
 #[derive(Clone, Copy)]
 pub enum Suite {
     PingPong,
+    PingPongUdp,
     Latency,
 }
 
-pub const DEFAULT_TEST_SUITES: &[Suite] = &[Suite::PingPong, Suite::Latency];
+impl Suite {
+    pub const fn all() -> &'static [Suite] {
+        &[Suite::PingPong, Suite::PingPongUdp, Suite::Latency]
+    }
+
+    pub const fn defaults() -> &'static [Suite] {
+        &[Suite::PingPong, Suite::Latency]
+    }
+}
 
 pub async fn run_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
@@ -201,6 +298,15 @@ pub async fn run_test_suites_and_cleanup(
                             return rv;
                         } else {
                             tracing::info!("ping_pong_test success");
+                        }
+                    }
+                    Suite::PingPongUdp => {
+                        let rv = ping_pong_udp_test(handler.clone(), 10001).await;
+                        if rv.is_err() {
+                            tracing::error!("ping_pong_udp_test failed: {:?}", rv);
+                            return rv;
+                        } else {
+                            tracing::info!("ping_pong_udp_test success");
                         }
                     }
                     Suite::Latency => {
@@ -232,5 +338,5 @@ pub async fn run_default_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
     docker_test_runner: impl RunAndCleanup,
 ) -> anyhow::Result<()> {
-    run_test_suites_and_cleanup(handler, docker_test_runner, DEFAULT_TEST_SUITES).await
+    run_test_suites_and_cleanup(handler, docker_test_runner, Suite::defaults()).await
 }
