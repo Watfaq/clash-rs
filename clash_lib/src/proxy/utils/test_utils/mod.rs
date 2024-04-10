@@ -264,9 +264,9 @@ pub async fn latency_test(
     Ok(end_time.duration_since(start_time))
 }
 
-pub async fn dns_test(handler: Arc<dyn OutboundHandler>, domain: &str) -> anyhow::Result<()> {
+pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
     let src = SocksAddr::Ip("127.0.0.1:0".parse().unwrap());
-    let dst = SocksAddr::Domain(domain.to_owned(), 53);
+    let dst = SocksAddr::Ip("1.1.1.1:53".parse().unwrap());
 
     let sess = Session {
         destination: dst.clone(),
@@ -285,20 +285,19 @@ pub async fn dns_test(handler: Arc<dyn OutboundHandler>, domain: &str) -> anyhow
     let udp_packet: UdpPacket = UdpPacket::new(dns_req.to_vec(), src, dst);
 
     let start_time = Instant::now();
+    let max_retry = 3;
 
-    sink.send(udp_packet).await?;
-    let max_retry = 10;
-    for i in 0..max_retry {
+    for _ in 0..max_retry {
+        sink.send(udp_packet.clone()).await?;
         let pkt = stream.next().await;
         if pkt.is_none() {
-            tracing::debug!("no packet received, retry: {}", i);
             continue;
         }
         let pkt = pkt.unwrap();
         assert!(pkt.data.len() > 0);
         let end_time = Instant::now();
         tracing::debug!(
-            "udp test time cost:{:?}",
+            "dns test time cost:{:?}",
             end_time.duration_since(start_time)
         );
         return Ok(());
@@ -376,7 +375,7 @@ pub async fn run_test_suites_and_cleanup(
                         }
                     }
                     Suite::DnsUdp => {
-                        let rv = dns_test(handler.clone(), "1.1.1.1").await;
+                        let rv = dns_test(handler.clone()).await;
                         if rv.is_err() {
                             return Err(rv.unwrap_err());
                         } else {
