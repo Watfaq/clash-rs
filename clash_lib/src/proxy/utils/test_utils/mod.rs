@@ -264,20 +264,69 @@ pub async fn latency_test(
     Ok(end_time.duration_since(start_time))
 }
 
+pub async fn dns_test(handler: Arc<dyn OutboundHandler>, domain: &str) -> anyhow::Result<()> {
+    let src = SocksAddr::Ip("127.0.0.1:0".parse().unwrap());
+    let dst = SocksAddr::Domain(domain.to_owned(), 53);
+
+    let sess = Session {
+        destination: dst.clone(),
+        ..Default::default()
+    };
+
+    let (_, resolver) = config_helper::load_config().await?;
+
+    // we don't need the resolver, so it doesn't matter to create a casual one
+    let stream = handler.connect_datagram(&sess, resolver).await?;
+
+    let (mut sink, mut stream) = stream.split();
+
+    // send dns request to domain
+    let dns_req = b"\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x03www\x06google\x03com\x00\x00\x01\x00\x01";
+    let udp_packet: UdpPacket = UdpPacket::new(dns_req.to_vec(), src, dst);
+
+    let start_time = Instant::now();
+
+    sink.send(udp_packet).await?;
+    let max_retry = 10;
+    for i in 0..max_retry {
+        let pkt = stream.next().await;
+        if pkt.is_none() {
+            tracing::debug!("no packet received, retry: {}", i);
+            continue;
+        }
+        let pkt = pkt.unwrap();
+        assert!(pkt.data.len() > 0);
+        let end_time = Instant::now();
+        tracing::debug!(
+            "udp test time cost:{:?}",
+            end_time.duration_since(start_time)
+        );
+        return Ok(());
+    }
+    bail!("fail to receive dns response");
+}
+
 #[derive(Clone, Copy)]
 pub enum Suite {
-    PingPong,
+    PingPongTcp,
     PingPongUdp,
-    Latency,
+    LatencyTcp,
+    DnsUdp,
 }
 
 impl Suite {
     pub const fn all() -> &'static [Suite] {
-        &[Suite::PingPong, Suite::PingPongUdp, Suite::Latency]
+        &[
+            Suite::PingPongTcp,
+            Suite::PingPongUdp,
+            Suite::LatencyTcp,
+            Suite::DnsUdp,
+        ]
     }
 
+    // ignore the udp, since may outbound handler doesn't support udp
     pub const fn defaults() -> &'static [Suite] {
-        &[Suite::PingPong, Suite::Latency]
+        &[Suite::PingPongTcp, Suite::LatencyTcp]
     }
 }
 
@@ -291,7 +340,7 @@ pub async fn run_test_suites_and_cleanup(
         .run_and_cleanup(async move {
             for suite in suites {
                 match suite {
-                    Suite::PingPong => {
+                    Suite::PingPongTcp => {
                         let rv = ping_pong_test(handler.clone(), 10001).await;
                         if rv.is_err() {
                             tracing::error!("ping_pong_test failed: {:?}", rv);
@@ -309,7 +358,7 @@ pub async fn run_test_suites_and_cleanup(
                             tracing::info!("ping_pong_udp_test success");
                         }
                     }
-                    Suite::Latency => {
+                    Suite::LatencyTcp => {
                         let rv = latency_test(
                             handler.clone(),
                             LatencyTestOption {
@@ -326,17 +375,18 @@ pub async fn run_test_suites_and_cleanup(
                             tracing::info!("latency test success: {}", rv.unwrap().as_millis());
                         }
                     }
+                    Suite::DnsUdp => {
+                        let rv = dns_test(handler.clone(), "1.1.1.1").await;
+                        if rv.is_err() {
+                            return Err(rv.unwrap_err());
+                        } else {
+                            tracing::info!("dns_test success");
+                        }
+                    }
                 }
             }
 
             Ok(())
         })
         .await
-}
-
-pub async fn run_default_test_suites_and_cleanup(
-    handler: Arc<dyn OutboundHandler>,
-    docker_test_runner: impl RunAndCleanup,
-) -> anyhow::Result<()> {
-    run_test_suites_and_cleanup(handler, docker_test_runner, Suite::defaults()).await
 }

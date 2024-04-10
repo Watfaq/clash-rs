@@ -282,6 +282,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
+        // ignore the udp test
         run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::defaults()).await
     }
 

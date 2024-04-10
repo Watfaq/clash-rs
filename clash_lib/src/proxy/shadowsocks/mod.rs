@@ -333,7 +333,7 @@ mod tests {
     use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
     use crate::proxy::utils::test_utils::{
         docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_default_test_suites_and_cleanup, run_test_suites_and_cleanup, Suite,
+        run_test_suites_and_cleanup, Suite,
     };
 
     use super::*;
@@ -355,6 +355,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -422,6 +423,6 @@ mod tests {
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
             .await;
-        run_default_test_suites_and_cleanup(handler, chained).await
+        run_test_suites_and_cleanup(handler, chained, Suite::all()).await
     }
 }
