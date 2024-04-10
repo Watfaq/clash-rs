@@ -306,6 +306,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
+        //
         run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::defaults()).await
     }
 
