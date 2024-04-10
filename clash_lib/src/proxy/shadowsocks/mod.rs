@@ -333,7 +333,7 @@ mod tests {
     use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
     use crate::proxy::utils::test_utils::{
         docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_default_test_suites_and_cleanup,
+        run_default_test_suites_and_cleanup, run_test_suites_and_cleanup, Suite,
     };
 
     use super::*;
@@ -367,7 +367,7 @@ mod tests {
         };
         let port = opts.port;
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::all()).await
     }
 
     async fn get_shadowtls_runner(
@@ -415,7 +415,7 @@ mod tests {
             })),
             udp: false,
         };
-        let handler = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
         // we need to store all the runners in a container, to make sure all of them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
