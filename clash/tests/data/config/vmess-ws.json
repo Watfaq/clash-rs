@@ -13,7 +13,15 @@
             },
             "streamSettings": {
                 "network": "ws",
-                "security": "none"
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                }
             }
         }
     ],

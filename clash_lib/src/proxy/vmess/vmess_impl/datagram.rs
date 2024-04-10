@@ -14,6 +14,7 @@ pub struct OutboundDatagramVmess {
     inner: AnyStream,
     remote_addr: SocksAddr,
 
+    written: Option<usize>,
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
@@ -24,6 +25,7 @@ impl OutboundDatagramVmess {
         Self {
             inner,
             remote_addr,
+            written: None,
             flushed: true,
             pkt: None,
             buf: vec![0u8; 65535],
@@ -68,6 +70,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
+            ref mut written,
             ..
         } = *self;
 
@@ -87,18 +90,27 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                 )));
             }
 
-            let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
+            if written.is_none() {
+                let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
+                debug!(
+                    "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
+                    n, remote_addr, pkt.dst_addr
+                );
+                *written = Some(n);
+            }
+            if !*flushed {
+                let r = inner.as_mut().poll_flush(cx)?;
+                if r.is_pending() {
+                    return Poll::Pending;
+                }
+                *flushed = true;
+            }
+            let total_len = pkt.data.len();
 
-            debug!(
-                "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
-                n, remote_addr, pkt.dst_addr
-            );
-
-            let wrote_all = n == pkt.data.len();
             *pkt_container = None;
-            *flushed = true;
+            *written = None;
 
-            let res = if wrote_all {
+            let res = if written.unwrap() == total_len {
                 Ok(())
             } else {
                 Err(io::Error::new(
