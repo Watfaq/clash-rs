@@ -7,6 +7,7 @@ use std::{
 pub mod test_utils;
 
 pub mod provider_helper;
+mod proxy_connector;
 mod socket_helpers;
 
 use serde::{Deserialize, Serialize};

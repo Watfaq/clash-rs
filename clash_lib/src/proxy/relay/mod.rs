@@ -126,10 +126,52 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        Err(new_io_error("not implemented for Relay"))
+        let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
+            .filter_map(|x| async { x.remote_addr().await.map(|_| x) })
+            .collect()
+            .await;
+
+        match proxies.len() {
+            0 => Err(new_io_error("no proxy available")),
+            1 => {
+                let proxy = proxies[0].clone();
+                proxy.connect_datagram(sess, resolver).await
+            }
+            _ => {
+                let mut first = proxies[0].clone();
+                let last = proxies[proxies.len() - 1].clone();
+
+                let remote_addr = first.remote_addr().await.unwrap();
+
+                let mut s = new_tcp_stream(
+                    resolver.clone(),
+                    remote_addr.host().as_str(),
+                    remote_addr.port(),
+                    None,
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    None,
+                )
+                .await?;
+
+                let mut next_sess = sess.clone();
+                for proxy in proxies.iter().skip(1) {
+                    let proxy = proxy.clone();
+                    next_sess.destination =
+                        proxy.remote_addr().await.expect("must have remote addr");
+                    s = first.connect_datagram(&next_sess, resolver.clone()).await?;
+
+                    first = proxy;
+                }
+
+                s = last.proxy_stream(s, sess, resolver).await?;
+                let chained = ChainedStreamWrapper::new(s);
+                chained.append_to_chain(self.name()).await;
+                Ok(Box::new(chained))
+            }
+        }
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
