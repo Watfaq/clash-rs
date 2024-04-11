@@ -16,7 +16,7 @@ env:
 
 jobs:
   compile:
-    name: ${{ matrix.release-name || 'Unknown' }}
+    name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
     permissions:
       contents: write
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
@@ -34,16 +34,11 @@ jobs:
           #   postfix: ""
           #   extra-args: ""
           #   components: ""
+          #   rustflags: ""
 
           # Linux x86
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            release-name: x86_64-linux
-            cross: true
-            extra-args: "--all-features"
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            release-name: x86_64-linux-musl
             cross: true
             extra-args: "--all-features"
           - os: ubuntu-latest
@@ -51,21 +46,23 @@ jobs:
             release-name: i686-linux
             cross: true
             extra-args: "--all-features"
+          # Linux x86 static-crt
           - os: ubuntu-latest
-            target: i686-unknown-linux-musl
-            release-name: i686-linux-musl
+            target: x86_64-unknown-linux-gnu
+            release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
-
+            rustflags: "-Ctarget-feature=+crt-static"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            release-name: i686-unknown-linux-gnu-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
           # Linux arm
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-linux
-            cross: true
-            extra-args: "--all-features"
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            release-name: aarch64-linux-musl
             cross: true
             extra-args: "--all-features"
           - os: ubuntu-latest
@@ -78,107 +75,81 @@ jobs:
             release-name: armv7-linux-hf
             cross: true
             extra-args: "--all-features"
+          # Linux arm static-crt
           - os: ubuntu-latest
-            target: armv7-unknown-linux-musleabi
-            release-name: armv7-linux-musl
+            target: aarch64-unknown-linux-gnu
+            release-name: aarch64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
           - os: ubuntu-latest
-            target: armv7-unknown-linux-musleabihf
-            release-name: armv7-linux-muslhf
+            target: armv7-unknown-linux-gnueabi
+            release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
             extra-args: "--all-features"
-          # Linux mips tier-3, pity
-          # - os: ubuntu-latest
-          #   target: mips-unknown-linux-gnu
-          #   release-name: mips-linux
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mips-unknown-linux-musl
-          #   release-name: mips-linux-musl
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mips64-unknown-linux-gnuabi64
-          #   release-name: mips64-linux
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mips64-unknown-linux-muslabi64
-          #   release-name: mips64-linux-musl
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # Linux mipsel
-          # - os: ubuntu-latest
-          #   target: mipsel-unknown-linux-gnu
-          #   release-name: mipsel-linux
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mipsel-unknown-linux-musl
-          #   release-name: mipsel-linux-musl
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mips64el-unknown-linux-gnuabi64
-          #   release-name: mips64el-linux
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-          # - os: ubuntu-latest
-          #   target: mips64el-unknown-linux-muslabi64
-          #   release-name: mips64el-linux-musl
-          #   toolchain: nightly
-          #   components: rust-src
-          #   extra-args: "-Zbuild-std"
-
-          # Need update rustls
-          # # Linux risc-v
-          # - os: ubuntu-latest
-          #   target: riscv64gc-unknown-linux-gnu
-          #   release-name: riscv64gc-linux
-          #   toolchain: nightly
-
+            rustflags: "-Ctarget-feature=+crt-static"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            release-name: armv7-unknown-linux-gnueabihf-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            release-name: x86_64-windows
+            release-name: x86_64-pc-windows-msvc
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
           - os: windows-latest
             target: i686-pc-windows-msvc
-            release-name: i686-windows
+            release-name: i686-pc-windows-msvc
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-
-          # Windows GNU TODO: wine has bug now (
-          # - os: ubuntu-latest
-          #   target: x86_64-pc-windows-gnu
-          #   release-name: x86_64-windows-gnu
-          #   cross: true
-          #   postfix: ".exe"
-          #   extra-args: "--all-features"
-
+          # Windows static-crt
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            release-name: x86_64-pc-windows-msvc-static-crt
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            release-name: i686-pc-windows-msvc-static-crt
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
           # MacOSX
           - os: macos-12
             target: x86_64-apple-darwin
-            release-name: x86_64-darwin
+            release-name: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
           - os: macos-14
             target: aarch64-apple-darwin
-            release-name: aarch64-darwin
+            release-name: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
+          # MacOSX static-crt
+          - os: macos-12
+            target: x86_64-apple-darwin
+            release-name: x86_64-apple-darwin
+            cross: false
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            release-name: x86_64-apple-darwin
+            cross: false
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static"
+          # Linux mips: tier-3, pity
+          # Linux risc-v: needs update rustls
+          # Windows gnu: tokio dont work
+          # Windows aarch: todo
 
     steps:
       - uses: actions/checkout@v4
@@ -223,6 +194,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
+          RUSTFLAGS: ${{ matrix.rustflags }}
 
       - name: Cargo test (no docker test)
         uses: clechasseur/rs-cargo@v2
@@ -233,6 +205,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CLASH_RS_CI: "true"
+          RUSTFLAGS: ${{ matrix.rustflags }}
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v2
@@ -242,13 +215,13 @@ jobs:
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
 
       - name: Rename binary
-        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name }}${{ matrix.postfix }}
+        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: binary-${{ matrix.target }}-${{ env.PACKAGE }}
-          path: ${{ env.PACKAGE }}-${{ matrix.release-name }}${{ matrix.postfix }}
+          name: ${{ matrix.release-name || matrix.target }}
+          path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
   release:
     name: Release
@@ -264,7 +237,7 @@ jobs:
         uses: actions/upload-artifact/merge@v4
         with:
           name: binaries
-          pattern: binary-*
+          pattern: *
 
       - name: Download binaries
         uses: actions/download-artifact@v4
