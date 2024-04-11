@@ -16,7 +16,7 @@ env:
 
 jobs:
   compile:
-    name: Compile
+    name: ${{ matrix.release-name || 'Unknown' }}
     permissions:
       contents: write
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
