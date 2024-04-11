@@ -108,7 +108,6 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             let total_len = pkt.data.len();
 
             *pkt_container = None;
-            *written = None;
 
             let res = if written.unwrap() == total_len {
                 Ok(())
@@ -118,6 +117,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                     "failed to write entire datagram",
                 ))
             };
+            *written = None;
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
