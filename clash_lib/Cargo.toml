@@ -15,7 +15,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
 thiserror = "1.0"
 async-trait = "0.1"
-anyhow = { version = "0.6", package = "eyre" }
+anyhow = "1"
 futures = "0.3"
 bytes = "1.6"
 async-recursion = "1"

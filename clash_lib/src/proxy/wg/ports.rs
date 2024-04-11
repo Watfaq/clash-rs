@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, ops::Range, sync::Arc};
 
-use anyhow::ContextCompat;
+use anyhow::Context;
 use rand::{seq::SliceRandom, thread_rng};
 
 const MIN_PORT: u16 = 1025;
