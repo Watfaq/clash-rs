@@ -83,7 +83,7 @@ jobs:
             release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             release-name: armv7-unknown-linux-gnueabihf-static-crt
@@ -134,7 +134,7 @@ jobs:
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
-            release-name: x86_64-apple-darwin-static-crt
+            release-name: aarch64-apple-darwin-static-crt
             cross: false
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
@@ -176,6 +176,8 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test
         uses: clechasseur/rs-cargo@v2
@@ -205,6 +207,8 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: build
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
