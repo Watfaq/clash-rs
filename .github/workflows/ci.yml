@@ -3,71 +3,292 @@ name: Build/Test/Release
 on:
   push:
     tags: [ "v*" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE: "clash"
+
 jobs:
-  test:
-    name: test ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
+  compile:
+    name: Compile
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
+      fail-fast: false
       matrix:
-        static: [true, false]
-        platforms: [
-          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
-          {os: macos-13, target: aarch64-apple-darwin},
-          {os: macos-13, target: x86_64-apple-darwin},
-          {os: windows-2022, target: x86_64-pc-windows-msvc},
-        ]
-    runs-on: ${{ matrix.platforms.os }}
+        include:
+          # Example
+          # when not set, default will be used (except target, cross)
+          # - os: ubuntu-latest
+          #   target: x86_64-unknown-linux-gnu
+          #   release-name: x86_64-linux
+          #   toolchain: stable
+          #   cross: true
+          #   postfix: ""
+          #   extra-args: ""
+          #   components: ""
+
+          # Linux x86
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            release-name: x86_64-linux
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            release-name: x86_64-linux-musl
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            release-name: i686-linux
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            release-name: i686-linux-musl
+            cross: true
+            extra-args: "--all-features"
+
+          # Linux arm
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            release-name: aarch64-linux
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            release-name: aarch64-linux-musl
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabi
+            release-name: armv7-linux
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            release-name: armv7-linux-hf
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabi
+            release-name: armv7-linux-musl
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            release-name: armv7-linux-muslhf
+            cross: true
+            extra-args: "--all-features"
+          # Linux mips tier-3, pity
+          # - os: ubuntu-latest
+          #   target: mips-unknown-linux-gnu
+          #   release-name: mips-linux
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mips-unknown-linux-musl
+          #   release-name: mips-linux-musl
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mips64-unknown-linux-gnuabi64
+          #   release-name: mips64-linux
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mips64-unknown-linux-muslabi64
+          #   release-name: mips64-linux-musl
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # Linux mipsel
+          # - os: ubuntu-latest
+          #   target: mipsel-unknown-linux-gnu
+          #   release-name: mipsel-linux
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mipsel-unknown-linux-musl
+          #   release-name: mipsel-linux-musl
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mips64el-unknown-linux-gnuabi64
+          #   release-name: mips64el-linux
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+          # - os: ubuntu-latest
+          #   target: mips64el-unknown-linux-muslabi64
+          #   release-name: mips64el-linux-musl
+          #   toolchain: nightly
+          #   components: rust-src
+          #   extra-args: "-Zbuild-std"
+
+          # Need update rustls
+          # # Linux risc-v
+          # - os: ubuntu-latest
+          #   target: riscv64gc-unknown-linux-gnu
+          #   release-name: riscv64gc-linux
+          #   toolchain: nightly
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            release-name: x86_64-windows
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            release-name: i686-windows
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+
+          # Windows GNU TODO: wine has bug now (
+          # - os: ubuntu-latest
+          #   target: x86_64-pc-windows-gnu
+          #   release-name: x86_64-windows-gnu
+          #   cross: true
+          #   postfix: ".exe"
+          #   extra-args: "--all-features"
+
+          # MacOSX
+          - os: macos-12
+            target: x86_64-apple-darwin
+            release-name: x86_64-darwin
+            cross: false
+            extra-args: "--all-features"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            release-name: aarch64-darwin
+            cross: false
+            extra-args: "--all-features"
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: ilammy/setup-nasm@v1
-      if : ${{ matrix.platforms.os == 'windows-2022' }}
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-        components: rustfmt, clippy
-    - name: Run cargo fmt
-      run: cargo fmt --all -- --check
-    - name: Run cargo check
-      run: cargo check --all --all-features
-    - name: Run cargo clippy
-      run: cargo clippy --all --all-features -- -D warnings
-    - name: Run cargo test on Linux
-      if: ${{ matrix.platforms.os == 'ubuntu-22.04' }}
-      run: cargo test --all --all-features
-    - name: Run cargo test on non LInux
-      env: # this is a bit counter intuitive - some tests relies on Docker to run and are marked not(ci), but macos runner doesn't have Docker installed, so we make it "ci" to bypass those tests 
-        CLASH_RS_CI: 'true'
-      if: ${{ matrix.platforms.os != 'ubuntu-22.04' }}
-      run: cargo test --all --all-features
-    - name: Build artifacts
-      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
-    - name: Stash artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: clash-${{ matrix.platforms.os }}-${{ matrix.platforms.target }}-${{ matrix.static }}
-        path: target/artifacts/
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ matrix.target }}
 
-    - name: Create Release
-      if: contains(github.ref, 'tags/v')
-      id: create_release
-      uses: softprops/action-gh-release@v2        
-      with:
-        generate_release_notes: true
-    - name: Upload Release Asset
-      if: contains(github.ref, 'tags/v')
-      id: upload-release-asset 
-      uses: dwenegar/upload-release-assets@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        release_id: ${{ steps.create_release.outputs.id }}
-        assets_path: target/artifacts
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain || 'stable' }}
+          target: ${{ matrix.target }}
+          components: ${{ matrix.components || 'rustfmt, clippy' }}
+
+      - name: Cargo fmt
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: fmt
+          args: --all -- --check
+
+      - name: Cargo clippy
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: clippy
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+
+      - name: Cargo test
+        uses: clechasseur/rs-cargo@v2
+        if: startsWith(matrix.os, 'ubuntu')
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: test
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          CROSS_CONTAINER_OPTS: "--network host"
+
+      - name: Cargo test (no docker test)
+        uses: clechasseur/rs-cargo@v2
+        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: test
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          CLASH_RS_CI: "true"
+
+      - name: Cargo build
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: build
+          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+
+      - name: Rename binary
+        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name }}${{ matrix.postfix }}
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}-${{ env.PACKAGE }}
+          path: ${{ env.PACKAGE }}-${{ matrix.release-name }}${{ matrix.postfix }}
+
+  release:
+    name: Release
+
+    needs: [compile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Merge binaries
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: binaries
+          pattern: binary-*
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: ./packages
+
+      - name: Github stable release
+        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            packages/*
+            LICENSE
+
+      - name: Github nightly release
+        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        if: startsWith(github.ref, 'refs/heads/master')
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: true
+          automatic_release_tag: "latest"
+          files: |
+            packages/*
+            LICENSE

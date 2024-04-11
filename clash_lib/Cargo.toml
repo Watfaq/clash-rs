@@ -15,7 +15,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
 thiserror = "1.0"
 async-trait = "0.1"
-anyhow = "1.0"
+anyhow = { version = "0.6", package = "eyre" }
 futures = "0.3"
 bytes = "1.6"
 async-recursion = "1"
@@ -35,6 +35,9 @@ foreign-types-shared = "0.3.1"
 network-interface = "1.1.3"
 base64 = "0.22"
 uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+
+# boring = "4.5.0"
+# boring-sys = "4.5.0"
 
 ip_network_table-deps-treebitmap = "0.5.0"
 once_cell = "1.18.0"
@@ -99,7 +102,7 @@ tokio-tungstenite = "0.21.0"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-oslog = "0.1"
+tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2.3"
 
 
