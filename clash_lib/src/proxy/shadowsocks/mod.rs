@@ -425,6 +425,6 @@ mod tests {
             .await;
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
-        run_test_suites_and_cleanup(handler, chained, Suite::defaults()).await
+        run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 }
