@@ -43,7 +43,6 @@ jobs:
             extra-args: "--all-features"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            release-name: i686-linux
             cross: true
             extra-args: "--all-features"
           # Linux x86 static-crt
@@ -52,27 +51,24 @@ jobs:
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            release-name: aarch64-linux
             cross: true
             extra-args: "--all-features"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
-            release-name: armv7-linux
             cross: true
             extra-args: "--all-features"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            release-name: armv7-linux-hf
             cross: true
             extra-args: "--all-features"
           # Linux arm static-crt
@@ -81,7 +77,7 @@ jobs:
             release-name: aarch64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
@@ -93,17 +89,15 @@ jobs:
             release-name: armv7-unknown-linux-gnueabihf-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            release-name: x86_64-pc-windows-msvc
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
           - os: windows-latest
             target: i686-pc-windows-msvc
-            release-name: i686-pc-windows-msvc
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
@@ -114,38 +108,36 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-12
             target: x86_64-apple-darwin
-            release-name: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
           - os: macos-14
             target: aarch64-apple-darwin
-            release-name: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
           # MacOSX static-crt
           - os: macos-12
             target: x86_64-apple-darwin
-            release-name: x86_64-apple-darwin
+            release-name: x86_64-apple-darwin-static-crt
             cross: false
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
-            release-name: x86_64-apple-darwin
+            release-name: x86_64-apple-darwin-static-crt
             cross: false
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux mips: tier-3, pity
           # Linux risc-v: needs update rustls
           # Windows gnu: tokio dont work
@@ -194,7 +186,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          RUSTFLAGS: ${{ matrix.rustflags }}
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (no docker test)
         uses: clechasseur/rs-cargo@v2
@@ -205,7 +197,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CLASH_RS_CI: "true"
-          RUSTFLAGS: ${{ matrix.rustflags }}
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v2
@@ -237,7 +229,8 @@ jobs:
         uses: actions/upload-artifact/merge@v4
         with:
           name: binaries
-          pattern: *
+          pattern: '*'
+          retention-days: 1
 
       - name: Download binaries
         uses: actions/download-artifact@v4
