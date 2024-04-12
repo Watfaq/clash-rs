@@ -33,6 +33,10 @@ A custom protocol, rule based network proxy software.
 
 ## 📦 Install
 
+### Use With GUI
+
+https://github.com/LibNyanpasu/clash-nyanpasu
+
 ### Download Prebuilt Binary
 
 Can be found at https://github.com/Watfaq/clash-rs/releases
