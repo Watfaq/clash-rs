@@ -152,9 +152,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
-            ${{ matrix.target }}
+            ${{ matrix.release-name || matrix.target }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
