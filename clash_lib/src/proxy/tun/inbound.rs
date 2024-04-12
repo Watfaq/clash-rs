@@ -1,6 +1,10 @@
 use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::{self, SocketAddr},
+    sync::Arc,
+};
 
+use byteorder::{BigEndian, ByteOrder};
 use futures::{SinkExt, StreamExt};
 use tracing::{error, info, trace, warn};
 use tun::{Device, TunPacket};
@@ -118,6 +122,7 @@ async fn handle_inbound_datagram(
 }
 
 pub fn get_runner(
+    fake_ip_range: &ipnet::IpNet,
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
@@ -127,12 +132,25 @@ pub fn get_runner(
         return Ok(None);
     }
 
+    if fake_ip_range == &ipnet::IpNet::default() {
+        error!("fake ip mode should be set to enable tun");
+    }
+
+    let gateway = match fake_ip_range.addr() {
+        net::IpAddr::V4(ip) => 1 + BigEndian::read_u32(&ip.octets()),
+        net::IpAddr::V6(_) => panic!("fake ip range must be ipv4"),
+    };
+    let gateway_ip = net::Ipv4Addr::from(gateway);
+
     let device_id = cfg.device_id;
 
     let u =
         Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
+    tun_cfg.address(gateway_ip);
+    tun_cfg.netmask(fake_ip_range.netmask());
+    tun_cfg.broadcast(fake_ip_range.broadcast());
 
     match u.scheme() {
         "fd" => {
@@ -141,7 +159,9 @@ pub fn get_runner(
                 .expect("tun fd must be provided")
                 .to_string()
                 .parse()
-                .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
+                .map_err(|x: std::num::ParseIntError| {
+                    Error::InvalidConfig(format!("tun fd {}", x))
+                })?;
             tun_cfg.raw_fd(fd);
         }
         "dev" => {

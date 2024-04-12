@@ -99,6 +99,8 @@ pub async fn new_tcp_stream<'a>(
         }
     };
 
+    let i = Interface::Name("wlo1".to_owned());
+    let iface = Some(&i);
     if let Some(iface) = iface {
         must_bind_socket_on_interface(&socket, iface)?;
     }
@@ -141,6 +143,8 @@ pub async fn new_udp_socket(
         socket.bind(&(*src).into())?;
     }
 
+    let i = Interface::Name("wlo1".to_owned());
+    let iface = Some(&i);
     if let Some(iface) = iface {
         must_bind_socket_on_interface(&socket, iface)?;
     }

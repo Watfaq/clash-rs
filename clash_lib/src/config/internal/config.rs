@@ -250,7 +250,7 @@ pub struct TunConfig {
     /// fd://3 # file descriptor
     #[serde(alias = "device-url")]
     pub device_id: String,
-    /// tun device address
+    /// tun device address, parsed from fake_ip addr
     /// default: 198.18.0.0/16
     pub network: Option<String>,
     pub gateway: Option<IpAddr>,
