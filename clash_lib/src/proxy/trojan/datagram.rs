@@ -113,7 +113,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
                     data.len()
                 );
             }
-            
+
             if !*flushed {
                 ready!(inner.as_mut().poll_flush(cx))?;
                 *flushed = true;
