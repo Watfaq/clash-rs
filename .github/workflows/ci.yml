@@ -85,11 +85,10 @@ jobs:
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
-            target: armv7-unknown-linux-gnueabihf
-            release-name: armv7-unknown-linux-gnueabihf-static-crt
+            target: armv7-unknown-linux-musleabihf
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            rustflags: "--cfg tokio_unstable"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
