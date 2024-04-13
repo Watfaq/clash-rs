@@ -1,4 +1,6 @@
-use bytes::{BufMut, BytesMut};
+use aead::{generic_array::GenericArray, KeyInit};
+use aes::cipher::BlockEncrypt;
+use bytes::{Buf, BufMut, BytesMut};
 
 use crate::common::{crypto, errors::map_io_error, utils};
 
@@ -20,14 +22,15 @@ fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
     let zero = crc32fast::hash(buf.as_ref());
     buf.put_u32(zero);
 
-    let mut aes_key = boring_sys::AES_KEY::default();
     let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
-    unsafe {
-        boring_sys::AES_set_encrypt_key(pk.as_ptr() as _, 128, &mut aes_key);
-        boring_sys::AES_encrypt(buf.as_mut_ptr() as _, buf.as_mut_ptr() as _, &aes_key);
-    }
-
-    buf.freeze()[..16].try_into().unwrap()
+    let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
+    let key = GenericArray::from(pk);
+    let cipher = aes::Aes128::new(&key);
+    let mut block = [0u8; 16];
+    buf.copy_to_slice(&mut block);
+    let mut block = GenericArray::from(block);
+    cipher.encrypt_block(&mut block);
+    block.as_slice()[..16].try_into().unwrap()
 }
 
 pub(crate) fn seal_vmess_aead_header(
@@ -52,7 +55,7 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let header_len_encrypted = crypto::aes_gcm_seal(
+    let header_len_encrypted = crypto::aes_gcm_encrypt(
         payload_header_length_aead_key,
         payload_header_length_aead_nonce,
         (data.len() as u16).to_be_bytes().as_ref(),
@@ -73,7 +76,7 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let payload_encrypted = crypto::aes_gcm_seal(
+    let payload_encrypted = crypto::aes_gcm_encrypt(
         payload_header_aead_key,
         payload_header_aead_nonce,
         &data,
@@ -92,8 +95,6 @@ pub(crate) fn seal_vmess_aead_header(
 
 #[cfg(test)]
 mod tests {
-    use bytes::{BufMut, BytesMut};
-
     use crate::{
         common::crypto,
         proxy::vmess::vmess_impl::kdf::{
@@ -104,6 +105,9 @@ mod tests {
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
         },
     };
+    use aead::{generic_array::GenericArray, KeyInit};
+    use aes::cipher::BlockEncrypt;
+    use bytes::{Buf, BufMut, BytesMut};
 
     #[test]
     fn test_create_auth_id() {
@@ -119,15 +123,18 @@ mod tests {
         buf.put_u32(zero);
 
         let cmd_key = "1234567890123456".as_bytes();
-        let mut aes_key = boring_sys::AES_KEY::default();
-        let pk = kdf::vmess_kdf_1_one_shot(cmd_key, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
-        unsafe {
-            boring_sys::AES_set_encrypt_key(pk.as_ptr() as _, 128, &mut aes_key);
-            boring_sys::AES_encrypt(buf.as_mut_ptr() as _, buf.as_mut_ptr() as _, &aes_key);
-        }
 
+        let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+        let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
+        let key = GenericArray::from(pk);
+        let cipher = aes::Aes128::new(&key);
+        let mut block = [0u8; 16];
+        buf.copy_to_slice(&mut block);
+        let mut block = GenericArray::from(block);
+        cipher.encrypt_block(&mut block);
+        let block: [u8; 16] = block.as_slice()[..16].try_into().unwrap();
         assert_eq!(
-            buf.freeze()[..16],
+            block.to_vec(),
             vec![55, 189, 144, 149, 192, 213, 241, 57, 37, 21, 179, 197, 135, 54, 86, 79]
         );
     }
@@ -152,7 +159,7 @@ mod tests {
             &connection_nonce[..],
         )[..12];
 
-        let header_len_encrypted = crypto::aes_gcm_seal(
+        let header_len_encrypted = crypto::aes_gcm_encrypt(
             payload_header_length_aead_key,
             payload_header_length_aead_nonce,
             (data.len() as u16).to_be_bytes().as_ref(),
@@ -173,7 +180,7 @@ mod tests {
             &connection_nonce[..],
         )[..12];
 
-        let payload_encrypted = crypto::aes_gcm_seal(
+        let payload_encrypted = crypto::aes_gcm_encrypt(
             payload_header_aead_key,
             payload_header_aead_nonce,
             &data,
