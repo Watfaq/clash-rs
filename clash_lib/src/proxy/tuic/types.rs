@@ -4,9 +4,9 @@ use quinn::Connection as QuinnConnection;
 use quinn::{Endpoint as QuinnEndpoint, ZeroRttAccepted};
 use register_count::Counter;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    str::FromStr,
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
@@ -177,7 +177,7 @@ impl TuicConnection {
             };
         };
 
-        tracing::warn!("connection error: {err}");
+        tracing::warn!("connection error: {err:?}");
     }
 }
 

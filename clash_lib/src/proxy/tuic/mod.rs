@@ -6,6 +6,7 @@ pub(crate) mod types;
 use crate::proxy::tuic::types::SocketAdderTrans;
 use anyhow::Result;
 use axum::async_trait;
+use quinn::congestion::{BbrConfig, NewRenoConfig};
 use quinn::{EndpointConfig, TokioRuntime};
 use std::net::SocketAddr;
 use std::{
@@ -61,6 +62,7 @@ pub struct HandlerOptions {
     pub heartbeat_interval: Duration,
     pub reduce_rtt: bool,
     pub request_timeout: Duration,
+    pub idle_timeout: VarInt,
     pub congestion_controller: CongestionControl,
     pub max_udp_relay_packet_size: u64,
     pub max_open_stream: VarInt,
@@ -147,15 +149,26 @@ impl Handler {
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
         let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
-        let mut quinn_transport_config = QuinnTransportConfig::default();
-        quinn_transport_config
+        let mut transport_config = QuinnTransportConfig::default();
+        transport_config
             .max_concurrent_bidi_streams(opts.max_open_stream)
             .max_concurrent_uni_streams(opts.max_open_stream)
             .send_window(opts.send_window)
             .stream_receive_window(opts.receive_window)
-            .max_idle_timeout(None)
-            .congestion_controller_factory(Arc::new(CubicConfig::default()));
-        quinn_config.transport_config(Arc::new(quinn_transport_config));
+            .max_idle_timeout(Some(VarInt::from_u32(3_000).into()));
+        match opts.congestion_controller {
+            CongestionControl::Cubic => {
+                transport_config.congestion_controller_factory(Arc::new(CubicConfig::default()))
+            }
+            CongestionControl::NewReno => {
+                transport_config.congestion_controller_factory(Arc::new(NewRenoConfig::default()))
+            }
+            CongestionControl::Bbr => {
+                transport_config.congestion_controller_factory(Arc::new(BbrConfig::default()))
+            }
+        };
+
+        quinn_config.transport_config(Arc::new(transport_config));
         // Try to create an IPv4 socket as the placeholder first, if it fails, try IPv6.
         let socket =
             UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).or_else(|err| {

@@ -16,11 +16,12 @@ use common::auth;
 use common::http::new_http_client;
 use common::mmdb;
 use config::def::LogLevel;
+use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
 
 use std::io;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
@@ -102,9 +103,10 @@ pub struct GlobalState {
 
 pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
+    broadcast_shutdown: broadcast::Sender<()>
 }
 
-static RUNTIME_CONTROLLER: OnceLock<std::sync::RwLock<RuntimeController>> = OnceLock::new();
+static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
@@ -127,17 +129,32 @@ pub fn start(opts: Options) -> Result<(), Error> {
     })
 }
 
-pub fn shutdown() -> bool {
-    match RUNTIME_CONTROLLER.get().unwrap().write() {
-        Ok(rt) => rt.shutdown_tx.blocking_send(()).is_ok(),
-        _ => false,
+pub fn shutdown() -> anyhow::Result<()> {
+    match RUNTIME_CONTROLLER.get() {
+        Some(rt) => {
+            _ = rt.broadcast_shutdown.send(()); // fail when there is no receiver
+            rt.shutdown_tx.blocking_send(())?;
+            Ok(())
+        },
+        _ => Err(anyhow::anyhow!("Empty RUNTIME_CONTROLLER")),
+    }
+}
+
+pub async fn listen_shutdown()-> anyhow::Result<()> {
+    match RUNTIME_CONTROLLER.get() {
+        Some(rt) => {
+            _ = rt.broadcast_shutdown.subscribe().recv().await; // fail when there is no sender or buffer is full
+            Ok(())
+        },
+        _ => Err(anyhow::anyhow!("Empty RUNTIME_CONTROLLER")),
     }
 }
 
 async fn start_async(opts: Options) -> Result<(), Error> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+    let (broadcast_shutdown, _) = broadcast::channel(1);
 
-    let _ = RUNTIME_CONTROLLER.set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
+    let _ = RUNTIME_CONTROLLER.set(RuntimeController { shutdown_tx, broadcast_shutdown });
 
     let config: InternalConfig = opts.config.try_parse()?;
 
