@@ -195,16 +195,6 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        _: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, false).await
-    }
-
     async fn connect_datagram(
         &self,
         sess: &Session,

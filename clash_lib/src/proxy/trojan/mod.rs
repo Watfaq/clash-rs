@@ -170,20 +170,11 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.proxy_stream(stream, sess, resolver).await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         let chained = ChainedStreamWrapper::new(stream);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
-    }
-
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        _: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, true).await
     }
 
     async fn connect_datagram(

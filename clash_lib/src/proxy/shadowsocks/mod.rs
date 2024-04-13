@@ -188,55 +188,6 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
-}
-
-#[async_trait]
-impl OutboundHandler for Handler {
-    fn name(&self) -> &str {
-        self.opts.name.as_str()
-    }
-
-    fn proto(&self) -> OutboundType {
-        OutboundType::Shadowsocks
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
-    async fn support_udp(&self) -> bool {
-        self.opts.udp
-    }
-
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
-
-        let s = self.proxy_stream(stream, sess, resolver).await?;
-        let chained = ChainedStreamWrapper::new(s);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
-    }
 
     async fn proxy_stream(
         &self,
@@ -290,6 +241,55 @@ impl OutboundHandler for Handler {
         );
 
         Ok(Box::new(ShadowSocksStream(stream)))
+    }
+}
+
+#[async_trait]
+impl OutboundHandler for Handler {
+    fn name(&self) -> &str {
+        self.opts.name.as_str()
+    }
+
+    fn proto(&self) -> OutboundType {
+        OutboundType::Shadowsocks
+    }
+
+    async fn remote_addr(&self) -> Option<SocksAddr> {
+        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
+    }
+
+    async fn support_udp(&self) -> bool {
+        self.opts.udp
+    }
+
+    async fn connect_stream(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = new_tcp_stream(
+            resolver.clone(),
+            self.opts.server.as_str(),
+            self.opts.port,
+            self.opts.common_opts.iface.as_ref(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            None,
+        )
+        .map_err(|x| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "dial outbound {}:{}: {}",
+                    self.opts.server, self.opts.port, x
+                ),
+            )
+        })
+        .await?;
+
+        let s = self.proxy_stream(stream, sess, resolver).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 
     async fn connect_datagram(

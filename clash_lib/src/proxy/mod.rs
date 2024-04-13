@@ -16,6 +16,8 @@ use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
 
+use self::utils::RemoteConnector;
+
 pub mod direct;
 pub mod reject;
 
@@ -124,6 +126,13 @@ pub enum OutboundType {
     Reject,
 }
 
+pub enum ConnectorType {
+    Tcp,
+    Udp,
+    All,
+    None,
+}
+
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin {
     /// The name of the outbound handler
@@ -146,20 +155,35 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream>;
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream>;
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram>;
+
+    /// relay related
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
+        _connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        Err(io::Error::new(io::ErrorKind::Other, "not supported"))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
+        _connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        Err(io::Error::new(io::ErrorKind::Other, "not supported"))
+    }
 
     /// for API
     /// the map only contains basic information

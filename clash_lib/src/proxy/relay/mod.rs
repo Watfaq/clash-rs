@@ -7,19 +7,22 @@ use futures::stream::{self, StreamExt};
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
+            ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
-    proxy::utils::new_tcp_stream,
     session::{Session, SocksAddr},
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{
+        provider_helper::get_proxies_from_providers, DirectConnector, ProxyConnector,
+        RemoteConnector,
+    },
+    AnyOutboundHandler, CommonOption, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -82,46 +85,20 @@ impl OutboundHandler for Handler {
                 proxy.connect_stream(sess, resolver).await
             }
             _ => {
-                let mut first = proxies[0].clone();
-                let last = proxies[proxies.len() - 1].clone();
-
-                let remote_addr = first.remote_addr().await.unwrap();
-
-                let mut s = new_tcp_stream(
-                    resolver.clone(),
-                    remote_addr.host().as_str(),
-                    remote_addr.port(),
-                    None,
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
-                )
-                .await?;
-
-                let mut next_sess = sess.clone();
-                for proxy in proxies.iter().skip(1) {
-                    let proxy = proxy.clone();
-                    next_sess.destination =
-                        proxy.remote_addr().await.expect("must have remote addr");
-                    s = first.proxy_stream(s, &next_sess, resolver.clone()).await?;
-
-                    first = proxy;
+                let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
+                let (proxies, last) = proxies.split_at(proxies.len() - 1);
+                for proxy in proxies {
+                    connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+                let s = last[0]
+                    .connect_stream_with_connector(sess, resolver, connector.as_ref())
+                    .await?;
 
-                s = last.proxy_stream(s, sess, resolver).await?;
                 let chained = ChainedStreamWrapper::new(s);
                 chained.append_to_chain(self.name()).await;
                 Ok(Box::new(chained))
             }
         }
-    }
-
-    async fn proxy_stream(
-        &self,
-        #[allow(unused_variables)] _s: AnyStream,
-        #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        Err(new_io_error("not implemented for Relay"))
     }
 
     async fn connect_datagram(
@@ -141,33 +118,16 @@ impl OutboundHandler for Handler {
                 proxy.connect_datagram(sess, resolver).await
             }
             _ => {
-                let mut first = proxies[0].clone();
-                let last = proxies[proxies.len() - 1].clone();
-
-                let remote_addr = first.remote_addr().await.unwrap();
-
-                let mut s = new_tcp_stream(
-                    resolver.clone(),
-                    remote_addr.host().as_str(),
-                    remote_addr.port(),
-                    None,
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
-                )
-                .await?;
-
-                let mut next_sess = sess.clone();
-                for proxy in proxies.iter().skip(1) {
-                    let proxy = proxy.clone();
-                    next_sess.destination =
-                        proxy.remote_addr().await.expect("must have remote addr");
-                    s = first.connect_datagram(&next_sess, resolver.clone()).await?;
-
-                    first = proxy;
+                let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
+                let (proxies, last) = proxies.split_at(proxies.len() - 1);
+                for proxy in proxies {
+                    connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+                let d = last[0]
+                    .connect_datagram_with_connector(sess, resolver, connector.as_ref())
+                    .await?;
 
-                s = last.proxy_stream(s, sess, resolver).await?;
-                let chained = ChainedStreamWrapper::new(s);
+                let chained = ChainedDatagramWrapper::new(d);
                 chained.append_to_chain(self.name()).await;
                 Ok(Box::new(chained))
             }

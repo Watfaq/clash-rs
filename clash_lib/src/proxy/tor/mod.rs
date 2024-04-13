@@ -84,15 +84,6 @@ impl OutboundHandler for Handler {
         Ok(Box::new(s))
     }
 
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        Ok(s)
-    }
-
     async fn connect_datagram(
         &self,
         _sess: &Session,

@@ -158,19 +158,6 @@ impl OutboundHandler for Handler {
         Ok(s)
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.fastest(true)
-            .await
-            .proxy_stream(s, sess, resolver)
-            .await
-    }
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,

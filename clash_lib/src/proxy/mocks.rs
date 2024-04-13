@@ -14,7 +14,7 @@ use crate::{
     session::{Session, SocksAddr},
 };
 
-use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}
@@ -64,13 +64,6 @@ mock! {
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedStream>;
 
-        /// wraps a stream with outbound handler
-        async fn proxy_stream(
-            &self,
-            s: AnyStream,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<AnyStream>;
 
         /// connect to remote target via UDP
         async fn connect_datagram(
@@ -78,8 +71,5 @@ mock! {
             sess: &Session,
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedDatagram>;
-
-        /// for API
-        async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
     }
 }

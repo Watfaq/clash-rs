@@ -15,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, CommonOption,
+    OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -99,17 +99,6 @@ impl OutboundHandler for Handler {
             }
             Err(e) => Err(e),
         }
-    }
-
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        let proxy = self.find_alive_proxy(true).await;
-        proxy.proxy_stream(s, sess, resolver).await
     }
 
     /// connect to remote target via UDP

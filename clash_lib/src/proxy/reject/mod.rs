@@ -47,15 +47,6 @@ impl OutboundHandler for Handler {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 
-    async fn proxy_stream(
-        &self,
-        _s: AnyStream,
-        #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
-    }
-
     async fn connect_datagram(
         &self,
         #[allow(unused_variables)] sess: &Session,

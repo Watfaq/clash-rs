@@ -10,6 +10,8 @@ pub mod provider_helper;
 mod proxy_connector;
 mod socket_helpers;
 
+pub use proxy_connector::*;
+
 use serde::{Deserialize, Serialize};
 pub use socket_helpers::*;
 

@@ -263,16 +263,6 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        _s: AnyStream,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        Err(new_io_error("not supported"))
-    }
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,

@@ -10,21 +10,22 @@ use crate::{
 
 use super::{new_tcp_stream, new_udp_socket, Interface};
 
+/// allows a proxy to get a connection to a remote server
 #[async_trait]
-pub trait RemoteConnector<'a> {
+pub trait RemoteConnector: Send + Sync {
     async fn connect_stream(
-        &'a self,
+        &self,
         resolver: ThreadSafeDNSResolver,
-        address: &'a str,
+        address: &str,
         port: u16,
-        iface: Option<&'a Interface>,
+        iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyStream>;
 
     async fn connect_datagram(
-        &'a self,
+        &self,
         src: Option<&SocketAddr>,
-        iface: Option<&'a Interface>,
+        iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<UdpSocket>;
 }
@@ -38,13 +39,13 @@ impl DirectConnector {
 }
 
 #[async_trait]
-impl<'a> RemoteConnector<'a> for DirectConnector {
+impl RemoteConnector for DirectConnector {
     async fn connect_stream(
-        &'a self,
+        &self,
         resolver: ThreadSafeDNSResolver,
-        address: &'a str,
+        address: &str,
         port: u16,
-        iface: Option<&'a Interface>,
+        iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         new_tcp_stream(
@@ -59,9 +60,9 @@ impl<'a> RemoteConnector<'a> for DirectConnector {
     }
 
     async fn connect_datagram(
-        &'a self,
+        &self,
         src: Option<&SocketAddr>,
-        iface: Option<&'a Interface>,
+        iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<UdpSocket> {
         new_udp_socket(
@@ -74,13 +75,52 @@ impl<'a> RemoteConnector<'a> for DirectConnector {
     }
 }
 
-pub struct ProxyConnector<'a> {
+pub struct ProxyConnector {
     proxy: AnyOutboundHandler,
-    connector: Box<dyn RemoteConnector<'a>>,
+    connector: Box<dyn RemoteConnector>,
 }
 
-impl ProxyConnector<'_> {
-    pub fn new<'a>(proxy: AnyOutboundHandler, connector: Box<dyn RemoteConnector<'a>>) -> Self {
+impl ProxyConnector {
+    pub fn new(proxy: AnyOutboundHandler, connector: Box<dyn RemoteConnector>) -> Self {
         Self { proxy, connector }
+    }
+}
+
+#[async_trait]
+impl RemoteConnector for ProxyConnector {
+    async fn connect_stream(
+        &self,
+        resolver: ThreadSafeDNSResolver,
+        address: &str,
+        port: u16,
+        iface: Option<&Interface>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    ) -> std::io::Result<AnyStream> {
+        self.connector
+            .connect_stream(
+                resolver,
+                &address.to_owned(),
+                port,
+                iface,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                packet_mark,
+            )
+            .await
+    }
+
+    async fn connect_datagram(
+        &self,
+        src: Option<&SocketAddr>,
+        iface: Option<&Interface>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    ) -> std::io::Result<UdpSocket> {
+        self.connector
+            .connect_datagram(
+                src,
+                iface,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                packet_mark,
+            )
+            .await
     }
 }
