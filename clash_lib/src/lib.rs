@@ -103,7 +103,7 @@ pub struct GlobalState {
 
 pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
-    broadcast_shutdown: broadcast::Sender<()>
+    broadcast_shutdown: broadcast::Sender<()>,
 }
 
 static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
@@ -135,17 +135,17 @@ pub fn shutdown() -> anyhow::Result<()> {
             _ = rt.broadcast_shutdown.send(()); // fail when there is no receiver
             rt.shutdown_tx.blocking_send(())?;
             Ok(())
-        },
+        }
         _ => Err(anyhow::anyhow!("Empty RUNTIME_CONTROLLER")),
     }
 }
 
-pub async fn listen_shutdown()-> anyhow::Result<()> {
+pub async fn listen_shutdown() -> anyhow::Result<()> {
     match RUNTIME_CONTROLLER.get() {
         Some(rt) => {
             _ = rt.broadcast_shutdown.subscribe().recv().await; // fail when there is no sender or buffer is full
             Ok(())
-        },
+        }
         _ => Err(anyhow::anyhow!("Empty RUNTIME_CONTROLLER")),
     }
 }
@@ -154,7 +154,10 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
     let (broadcast_shutdown, _) = broadcast::channel(1);
 
-    let _ = RUNTIME_CONTROLLER.set(RuntimeController { shutdown_tx, broadcast_shutdown });
+    let _ = RUNTIME_CONTROLLER.set(RuntimeController {
+        shutdown_tx,
+        broadcast_shutdown,
+    });
 
     let config: InternalConfig = opts.config.try_parse()?;
 
