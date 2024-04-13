@@ -6,7 +6,7 @@ use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_DIRECT;
 use crate::proxy::datagram::OutboundDatagramImpl;
 use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
-use crate::proxy::{AnyOutboundHandler, AnyStream, OutboundHandler};
+use crate::proxy::{AnyOutboundHandler, OutboundHandler};
 use crate::session::{Session, SocksAddr};
 
 use async_trait::async_trait;

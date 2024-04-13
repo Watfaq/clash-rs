@@ -99,7 +99,7 @@ impl RemoteConnector for ProxyConnector {
         self.connector
             .connect_stream(
                 resolver,
-                &address.to_owned(),
+                address,
                 port,
                 iface,
                 #[cfg(any(target_os = "linux", target_os = "android"))]

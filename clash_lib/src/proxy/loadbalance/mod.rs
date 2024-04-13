@@ -19,7 +19,7 @@ use crate::{
 use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler,
     CommonOption, OutboundHandler, OutboundType,
 };
 

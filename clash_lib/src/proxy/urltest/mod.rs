@@ -17,7 +17,7 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler,
     CommonOption, OutboundHandler, OutboundType,
 };
 

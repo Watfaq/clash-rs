@@ -21,7 +21,7 @@ use crate::{
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, CommonOption, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;

@@ -18,7 +18,7 @@ use crate::{
 
 use self::stream::StreamWrapper;
 
-use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
 
 pub struct HandlerOptions {
     pub name: String,
