@@ -254,6 +254,7 @@ pub struct TunConfig {
     /// default: 198.18.0.0/16
     pub network: Option<String>,
     pub gateway: Option<IpAddr>,
+    pub auto_route: Option<bool>,
 }
 
 #[derive(Clone, Default)]

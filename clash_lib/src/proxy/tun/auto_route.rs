@@ -1,7 +1,7 @@
 use crate::config::internal::config::TunConfig;
 
 #[cfg(target_os = "linux")]
-pub async fn setup(cfg: &mut TunConfig, tun_name: &str) -> anyhow::Result<()> {
+pub fn setup(cfg: &TunConfig, tun_name: &str) -> anyhow::Result<()> {
     use cmd_lib::run_cmd;
 
     use crate::listen_shutdown;
@@ -9,10 +9,8 @@ pub async fn setup(cfg: &mut TunConfig, tun_name: &str) -> anyhow::Result<()> {
     if !cfg.auto_route.unwrap_or(false) {
         return Ok(());
     }
-    let mark = cfg.mark.unwrap_or(6969);
-    cfg.mark = Some(mark);
-    let table = cfg.table.take().unwrap_or("2233".into());
-    cfg.table = Some(table.clone());
+    let mark = 6969;
+    let table = "2233";
 
     let ipv6 = false; // TODO read from conf
     // TODO chen perm
