@@ -80,13 +80,7 @@ impl WireguardTunnel {
 
         let remote_endpoint = config.remote_endpoint;
 
-        let udp = new_udp_socket(
-            None,
-            None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await?;
+        let udp = new_udp_socket(None, None, None).await?;
 
         Ok(Self {
             source_peer_ip: config.source_peer_ip,

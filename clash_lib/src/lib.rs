@@ -34,11 +34,11 @@ mod common;
 mod config;
 mod proxy;
 mod session;
-
 pub use config::def::Config as ClashConfigDef;
 pub use config::def::DNS as ClashDNSConfigDef;
 pub use config::DNSListen as ClashDNSListen;
 pub use config::RuntimeConfig as ClashRuntimeConfig;
+pub use session::{get_iface, get_somark, set_iface, set_somark};
 
 #[derive(Error, Debug)]
 pub enum Error {

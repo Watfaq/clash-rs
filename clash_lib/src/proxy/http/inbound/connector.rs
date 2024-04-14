@@ -51,7 +51,6 @@ impl tower::Service<Uri> for Connector {
                 typ: Type::Http,
                 source: src,
                 destination: destination.ok_or(ProxyError::InvalidUrl(url.to_string()))?,
-                ..Default::default()
             };
 
             tokio::spawn(async move {
