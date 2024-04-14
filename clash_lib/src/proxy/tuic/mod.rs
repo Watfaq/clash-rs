@@ -3,6 +3,7 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
+use crate::get_somark;
 use crate::proxy::tuic::types::SocketAdderTrans;
 use anyhow::Result;
 use axum::async_trait;
@@ -45,6 +46,7 @@ use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
+use super::utils::StdSocketExt;
 use super::{
     datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler,
     OutboundType,
@@ -177,7 +179,9 @@ impl Handler {
             UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).or_else(|err| {
                 UdpSocket::bind(SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))).map_err(|_| err)
             })?;
-        // TODO #362 socket.set_mark(6969)?;
+        if let Some(mark) = get_somark() {
+            socket.set_mark(mark)?;
+        }
         let mut endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
             None,
@@ -209,7 +213,7 @@ impl Handler {
         &self,
         resolver: &ThreadSafeDNSResolver,
     ) -> Result<Arc<TuicConnection>> {
-        let mark = 6969; // TODO #362
+        let mark = get_somark().unwrap_or_default(); // TODO #362
         let mut rebind = false;
         // if mark not match the one current used, then rebind
         if mark != self.opts.mark.swap(mark, Ordering::SeqCst) {

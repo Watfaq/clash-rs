@@ -63,7 +63,7 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             send_window: s.send_window.unwrap_or(8 * 1024 * 1024 * 2),
             receive_window: VarInt::from_u64(s.receive_window.unwrap_or(8 * 1024 * 1024))
                 .unwrap_or(VarInt::MAX),
-            mark: Arc::new(AtomicU32::new(s.mark.unwrap_or(6969))),
+            mark: Arc::new(AtomicU32::new(0)),
         })
     }
 }

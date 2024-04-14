@@ -4,12 +4,13 @@ use crate::config::internal::config::TunConfig;
 pub fn setup(cfg: &TunConfig, tun_name: &str) -> anyhow::Result<()> {
     use cmd_lib::run_cmd;
 
-    use crate::listen_shutdown;
+    use crate::{listen_shutdown, set_somark};
 
     if !cfg.auto_route.unwrap_or(false) {
         return Ok(());
     }
-    let mark = 6969;
+    let mark = 6969u32;
+    set_somark(Some(mark));
     let table = "2233";
 
     let ipv6 = false; // TODO read from conf

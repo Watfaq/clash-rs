@@ -1,4 +1,5 @@
 use crate::app::dns::ThreadSafeDNSResolver;
+use crate::proxy::utils::StdSocketExt;
 use crate::session::SocksAddr as ClashSocksAddr;
 use anyhow::Result;
 use quinn::Connection as QuinnConnection;
@@ -60,7 +61,7 @@ impl TuicEndpoint {
                 let mark = self.mark.load(Ordering::Relaxed);
                 // ignore mark == 0, just for convenient
                 if mark != 0 {
-                    // TODO #362 socket.set_mark(mark)?;
+                    socket.set_mark(mark)?;
                 }
                 self.ep
                     .rebind(socket)
