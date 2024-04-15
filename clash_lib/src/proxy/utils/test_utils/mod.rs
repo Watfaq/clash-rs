@@ -4,10 +4,7 @@ use std::{
 };
 
 use crate::{
-    app::{
-        dispatcher::{BoxedChainedDatagram, ChainedStream},
-        remote_content_manager::ProxyManager,
-    },
+    app::dispatcher::{BoxedChainedDatagram, ChainedStream},
     proxy::{datagram::UdpPacket, OutboundHandler},
     session::{Session, SocksAddr},
 };
@@ -215,14 +212,56 @@ pub async fn ping_pong_udp_test(
     select_all(futs).await.0?
 }
 
+/// Represents the options for a latency test.
+pub struct LatencyTestOption<'a> {
+    /// The destination address for the test.
+    pub dst: SocksAddr,
+    /// The request data for the test.
+    pub req: &'a [u8],
+    /// The expected response data for the test.
+    pub expected_resp: &'a [u8],
+    /// Indicates whether to read the exact amount of data specified by `expected_resp`.
+    pub read_exact: bool,
+}
+
 // latency test of the proxy, will reuse the `url_test` ability
-pub async fn latency_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<(u16, u16)> {
+pub async fn latency_test(
+    handler: Arc<dyn OutboundHandler>,
+    option: LatencyTestOption<'_>,
+) -> anyhow::Result<Duration> {
+    // our proxy handler -> proxy-server -> destination(google.com)
+
+    let sess = Session {
+        destination: option.dst,
+        ..Default::default()
+    };
+
     let (_, resolver) = config_helper::load_config().await?;
-    let proxy_manager = ProxyManager::new(resolver.clone());
-    proxy_manager
-        .url_test(handler, "https://example.com", None)
-        .await
-        .map_err(Into::into)
+
+    let stream = handler.connect_stream(&sess, resolver).await?;
+
+    let (mut read_half, mut write_half) = split(stream);
+
+    write_half.write_all(option.req).await?;
+    write_half.flush().await?;
+    drop(write_half);
+
+    let start_time = Instant::now();
+    let mut response = vec![0; option.expected_resp.len()];
+
+    if option.read_exact {
+        read_half.read_exact(&mut response).await?;
+        tracing::debug!("response:\n{}", String::from_utf8_lossy(&response));
+        assert_eq!(&response, option.expected_resp);
+    } else {
+        read_half.read_to_end(&mut response).await?;
+        tracing::debug!("response:\n{}", String::from_utf8_lossy(&response));
+        assert_eq!(&response, option.expected_resp);
+    }
+
+    let end_time = Instant::now();
+    tracing::debug!("time cost:{:?}", end_time.duration_since(start_time));
+    Ok(end_time.duration_since(start_time))
 }
 
 pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
@@ -319,7 +358,16 @@ pub async fn run_test_suites_and_cleanup(
                         }
                     }
                     Suite::LatencyTcp => {
-                        let rv = latency_test(handler.clone()).await;
+                        let rv = latency_test(
+                            handler.clone(),
+                            LatencyTestOption {
+                                dst: SocksAddr::Domain("example.com".to_owned(), 80),
+                                req: consts::EXAMPLE_REQ,
+                                expected_resp: consts::EXAMLE_RESP_200,
+                                read_exact: true,
+                            },
+                        )
+                        .await;
                         match rv {
                             Ok(_) => {
                                 tracing::info!("url test success: ",);
