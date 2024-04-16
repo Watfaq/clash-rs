@@ -9,7 +9,7 @@ use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io;
 use std::sync::Arc;
 
@@ -126,6 +126,26 @@ pub enum OutboundType {
     Reject,
 }
 
+impl Display for OutboundType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OutboundType::Shadowsocks => write!(f, "Shadowsocks"),
+            OutboundType::Vmess => write!(f, "Vmess"),
+            OutboundType::Trojan => write!(f, "Trojan"),
+            OutboundType::WireGuard => write!(f, "WireGuard"),
+            OutboundType::Tor => write!(f, "Tor"),
+            OutboundType::Tuic => write!(f, "Tuic"),
+            OutboundType::UrlTest => write!(f, "URLTest"),
+            OutboundType::Selector => write!(f, "Selector"),
+            OutboundType::Relay => write!(f, "Relay"),
+            OutboundType::LoadBalance => write!(f, "LoadBalance"),
+            OutboundType::Fallback => write!(f, "Fallback"),
+            OutboundType::Direct => write!(f, "Direct"),
+            OutboundType::Reject => write!(f, "Reject"),
+        }
+    }
+}
+
 pub enum ConnectorType {
     Tcp,
     Udp,
@@ -163,26 +183,30 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     ) -> io::Result<BoxedChainedDatagram>;
 
     /// relay related
-    async fn support_connector(&self) -> ConnectorType {
-        ConnectorType::None
-    }
+    async fn support_connector(&self) -> ConnectorType;
 
     async fn connect_stream_with_connector(
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-        _connector: &dyn RemoteConnector,
+        _connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
     ) -> io::Result<BoxedChainedStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "not supported"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("tcp relay not supported for {}", self.proto()),
+        ))
     }
 
     async fn connect_datagram_with_connector(
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-        _connector: &dyn RemoteConnector,
+        _connector: &Box<dyn RemoteConnector>,
     ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(io::ErrorKind::Other, "not supported"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("udp relay not supported for {}", self.proto()),
+        ))
     }
 
     /// for API

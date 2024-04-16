@@ -19,8 +19,8 @@ use crate::{
 use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, CommonOption,
+    ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -114,6 +114,10 @@ impl OutboundHandler for Handler {
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
         proxy.connect_datagram(sess, resolver).await
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

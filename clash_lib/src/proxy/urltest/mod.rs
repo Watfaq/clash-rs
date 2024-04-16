@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -171,6 +171,26 @@ impl OutboundHandler for Handler {
             .await?;
         d.append_to_chain(self.name()).await;
         Ok(d)
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        self.fastest(false).await.support_connector().await
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .fastest(true)
+            .await
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await?;
+
+        s.append_to_chain(self.name()).await;
+        Ok(s)
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

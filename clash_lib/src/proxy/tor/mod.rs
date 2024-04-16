@@ -18,7 +18,7 @@ use crate::{
 
 use self::stream::StreamWrapper;
 
-use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
 
 pub struct HandlerOptions {
     pub name: String,
@@ -90,5 +90,9 @@ impl OutboundHandler for Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         Err(new_io_error("Tor outbound handler does not support UDP"))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }

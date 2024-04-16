@@ -43,9 +43,9 @@ use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpSession};
 
+use super::ConnectorType;
 use super::{
-    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, OutboundHandler,
-    OutboundType,
+    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -119,6 +119,10 @@ impl OutboundHandler for Handler {
             tracing::error!("{:?}", e);
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
         })
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }
 

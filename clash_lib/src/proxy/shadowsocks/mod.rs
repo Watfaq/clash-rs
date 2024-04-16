@@ -28,8 +28,8 @@ use std::{collections::HashMap, io, sync::Arc};
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 
 use super::{
-    utils::{new_tcp_stream, new_udp_socket},
-    AnyOutboundHandler, AnyStream, OutboundType,
+    utils::{new_tcp_stream, new_udp_socket, RemoteConnector},
+    AnyOutboundHandler, AnyStream, ConnectorType, OutboundType,
 };
 
 pub enum SimpleOBFSMode {
@@ -315,6 +315,7 @@ impl OutboundHandler for Handler {
             None,
         )
         .await?;
+
         let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
         let d = OutboundDatagramShadowsocks::new(
             socket,
@@ -324,6 +325,40 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::Tcp
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = connector
+            .connect_stream(
+                resolver.clone(),
+                sess.destination.host().as_str(),
+                sess.destination.port(),
+                None,
+            )
+            .await?;
+
+        let s = self.proxy_stream(stream, sess, resolver).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
+        _connector: &Box<dyn RemoteConnector>,
+    ) -> io::Result<BoxedChainedDatagram> {
+        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
     }
 }
 

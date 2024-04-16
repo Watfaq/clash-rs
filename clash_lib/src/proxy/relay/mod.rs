@@ -22,7 +22,7 @@ use super::{
         provider_helper::get_proxies_from_providers, DirectConnector, ProxyConnector,
         RemoteConnector,
     },
-    AnyOutboundHandler, CommonOption, OutboundHandler, OutboundType,
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -91,7 +91,7 @@ impl OutboundHandler for Handler {
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
                 let s = last[0]
-                    .connect_stream_with_connector(sess, resolver, connector.as_ref())
+                    .connect_stream_with_connector(sess, resolver, &connector)
                     .await?;
 
                 let chained = ChainedStreamWrapper::new(s);
@@ -124,7 +124,7 @@ impl OutboundHandler for Handler {
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
                 let d = last[0]
-                    .connect_datagram_with_connector(sess, resolver, connector.as_ref())
+                    .connect_datagram_with_connector(sess, resolver, &connector)
                     .await?;
 
                 let chained = ChainedDatagramWrapper::new(d);
@@ -132,6 +132,10 @@ impl OutboundHandler for Handler {
                 Ok(Box::new(chained))
             }
         }
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
@@ -145,5 +149,89 @@ impl OutboundHandler for Handler {
         );
 
         m
+    }
+}
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+
+    use tokio::sync::RwLock;
+
+    use crate::proxy::mocks::MockDummyProxyProvider;
+    use crate::proxy::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
+    use crate::proxy::utils::test_utils::{
+        docker_runner::DockerTestRunnerBuilder, run_default_test_suites_and_cleanup,
+    };
+
+    use super::*;
+
+    const PASSWORD: &str = "FzcLbKs2dY9mhL";
+    const CIPHER: &str = "aes-256-gcm";
+
+    async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
+        let host = format!("0.0.0.0:{}", port);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .entrypoint(&["ssserver"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_relay_1_tcp() -> anyhow::Result<()> {
+        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Default::default(),
+            udp: false,
+        };
+        let port = ss_opts.port;
+        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+
+        let mut provider = MockDummyProxyProvider::new();
+
+        provider.expect_proxies().returning(move || {
+            let mut proxies = Vec::new();
+            proxies.push(ss_handler.clone());
+            proxies
+        });
+
+        let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_relay_2_tcp() -> anyhow::Result<()> {
+        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Default::default(),
+            udp: false,
+        };
+        let port = ss_opts.port;
+        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+
+        let mut provider = MockDummyProxyProvider::new();
+
+        provider.expect_proxies().returning(move || {
+            let mut proxies = Vec::new();
+            proxies.push(ss_handler.clone());
+            proxies.push(ss_handler.clone());
+            proxies
+        });
+
+        let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
     }
 }

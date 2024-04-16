@@ -21,7 +21,7 @@ use crate::{
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, CommonOption, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -278,6 +278,10 @@ impl OutboundHandler for Handler {
         let chained = ChainedDatagramWrapper::new(socket);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }
 

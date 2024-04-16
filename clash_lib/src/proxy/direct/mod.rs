@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 use std::sync::Arc;
 
-use super::OutboundType;
+use super::{ConnectorType, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -80,5 +80,9 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
     }
 }

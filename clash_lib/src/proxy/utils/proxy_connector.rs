@@ -1,11 +1,16 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tokio::net::UdpSocket;
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    proxy::{AnyOutboundHandler, AnyStream},
+    app::{
+        dispatcher::{
+            ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+        },
+        dns::ThreadSafeDNSResolver,
+    },
+    proxy::{datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler, AnyStream},
+    session::{Network, Session, Type},
 };
 
 use super::{new_tcp_stream, new_udp_socket, Interface};
@@ -24,10 +29,11 @@ pub trait RemoteConnector: Send + Sync {
 
     async fn connect_datagram(
         &self,
+        resolver: ThreadSafeDNSResolver,
         src: Option<&SocketAddr>,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-    ) -> std::io::Result<UdpSocket>;
+    ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
 pub struct DirectConnector;
@@ -61,17 +67,22 @@ impl RemoteConnector for DirectConnector {
 
     async fn connect_datagram(
         &self,
+        resolver: ThreadSafeDNSResolver,
         src: Option<&SocketAddr>,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-    ) -> std::io::Result<UdpSocket> {
-        new_udp_socket(
+    ) -> std::io::Result<AnyOutboundDatagram> {
+        let dgram = new_udp_socket(
             src,
             iface,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
         )
         .await
+        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
+
+        let dgram = ChainedDatagramWrapper::new(dgram);
+        Ok(Box::new(dgram))
     }
 }
 
@@ -96,31 +107,47 @@ impl RemoteConnector for ProxyConnector {
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
-        self.connector
-            .connect_stream(
-                resolver,
-                address,
-                port,
-                iface,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                packet_mark,
-            )
-            .await
+        let sess = Session {
+            network: Network::Tcp,
+            typ: Type::Ignore,
+            destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
+            iface: iface.cloned(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            packet_mark,
+            ..Default::default()
+        };
+        let s = self
+            .proxy
+            .connect_stream_with_connector(&sess, resolver, &self.connector)
+            .await?;
+
+        let stream = ChainedStreamWrapper::new(s);
+        stream.append_to_chain(self.proxy.name()).await;
+        Ok(Box::new(stream))
     }
 
     async fn connect_datagram(
         &self,
-        src: Option<&SocketAddr>,
+        resolver: ThreadSafeDNSResolver,
+        _src: Option<&SocketAddr>,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-    ) -> std::io::Result<UdpSocket> {
-        self.connector
-            .connect_datagram(
-                src,
-                iface,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                packet_mark,
-            )
-            .await
+    ) -> std::io::Result<AnyOutboundDatagram> {
+        let sess = Session {
+            network: Network::Udp,
+            typ: Type::Ignore,
+            iface: iface.cloned(),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            packet_mark,
+            ..Default::default()
+        };
+        let s = self
+            .proxy
+            .connect_datagram_with_connector(&sess, resolver, &self.connector)
+            .await?;
+
+        let stream = ChainedDatagramWrapper::new(s);
+        stream.append_to_chain(self.proxy.name()).await;
+        Ok(Box::new(stream))
     }
 }

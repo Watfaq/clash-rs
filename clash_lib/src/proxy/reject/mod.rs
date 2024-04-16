@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::io;
 use std::sync::Arc;
 
-use super::OutboundType;
+use super::{ConnectorType, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -53,5 +53,9 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
     }
 }

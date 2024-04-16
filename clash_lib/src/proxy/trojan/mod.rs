@@ -23,6 +23,8 @@ use self::datagram::OutboundDatagramTrojan;
 
 use super::transport;
 use super::transport::TLSOptions;
+use super::utils::RemoteConnector;
+use super::ConnectorType;
 use super::{
     options::{GrpcOption, WsOption},
     utils::new_tcp_stream,
@@ -200,6 +202,55 @@ impl OutboundHandler for Handler {
             )
         })
         .await?;
+
+        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+
+        let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                sess.destination.host().as_str(),
+                sess.destination.port(),
+                None,
+            )
+            .await?;
+
+        let s = self.inner_proxy_stream(stream, sess, true).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>,
+    ) -> io::Result<BoxedChainedDatagram> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                sess.destination.host().as_str(),
+                sess.destination.port(),
+                None,
+            )
+            .await?;
 
         let stream = self.inner_proxy_stream(stream, sess, false).await?;
 
