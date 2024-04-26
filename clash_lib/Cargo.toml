@@ -128,7 +128,7 @@ mockall = "0.12.1"
 tokio-test = "0.4.4"
 axum-macros = "0.4.0"
 bollard = "0.16"
-serial_test = "3.0.0"
+serial_test = "3.1.0"
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "2.10.0"
