@@ -26,7 +26,6 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        ..Default::default()
     };
 
     dispatcher.dispatch_stream(sess, stream).await;

@@ -65,8 +65,6 @@ async fn proxy(
                             typ: Type::HttpConnect,
                             source: src,
                             destination: addr,
-
-                            ..Default::default()
                         };
 
                         dispatcher.dispatch_stream(sess, upgraded).await

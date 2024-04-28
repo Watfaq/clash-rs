@@ -2,7 +2,6 @@ use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use tracing::debug;
 
 mod vmess_impl;
 
@@ -169,14 +168,12 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        debug!("Connecting to {} via VMess", sess);
         let stream = new_tcp_stream(
             resolver,
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            self.opts.common_opts.so_mark,
         )
         .map_err(|x| {
             io::Error::new(
@@ -215,8 +212,7 @@ impl OutboundHandler for Handler {
             self.opts.server.as_str(),
             self.opts.port,
             self.opts.common_opts.iface.as_ref(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            self.opts.common_opts.so_mark,
         )
         .map_err(|x| {
             io::Error::new(

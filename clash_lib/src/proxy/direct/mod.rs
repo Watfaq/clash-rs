@@ -53,7 +53,6 @@ impl OutboundHandler for Handler {
             sess.destination.host().as_str(),
             sess.destination.port(),
             None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
         .await?;
@@ -66,25 +65,20 @@ impl OutboundHandler for Handler {
     async fn proxy_stream(
         &self,
         s: AnyStream,
-        #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         Ok(s)
     }
 
     async fn connect_datagram(
         &self,
-        sess: &Session,
+        _sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let d = new_udp_socket(
-            None,
-            sess.iface.as_ref(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
+        let d = new_udp_socket(None, None, None)
+            .await
+            .map(|x| OutboundDatagramImpl::new(x, resolver))?;
 
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;

@@ -50,7 +50,6 @@ impl Service<Uri> for LocalConnector {
                     },
                 }),
                 None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
             .await
