@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use tracing::debug;
 
 use crate::{
     app::{
@@ -116,6 +117,14 @@ impl RemoteConnector for ProxyConnector {
             packet_mark,
             ..Default::default()
         };
+
+        debug!(
+            "proxy connector `{}` connecting to {}:{}",
+            self.proxy.name(),
+            address,
+            port
+        );
+
         let s = self
             .proxy
             .connect_stream_with_connector(&sess, resolver, &self.connector)

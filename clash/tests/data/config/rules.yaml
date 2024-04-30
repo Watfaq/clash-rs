@@ -64,11 +64,11 @@ proxy-groups:
     type: relay
     proxies:
       - "plain-vmess"
-      - "ws-vmess"
-      - "auto"
-      - "fallback-auto"
-      - "load-balance"
-      - "select"
+      # - "ws-vmess"
+      # - "auto"
+      # - "fallback-auto"
+      # - "load-balance"
+      # - "select"
       - DIRECT
   
   - name: "relay-one"

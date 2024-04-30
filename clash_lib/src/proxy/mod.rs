@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -191,6 +192,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         _resolver: ThreadSafeDNSResolver,
         _connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
     ) -> io::Result<BoxedChainedStream> {
+        error!("tcp relay not supported for {}", self.proto());
         Err(io::Error::new(
             io::ErrorKind::Other,
             format!("tcp relay not supported for {}", self.proto()),

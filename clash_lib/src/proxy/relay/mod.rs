@@ -3,6 +3,7 @@ use std::{collections::HashMap, io, sync::Arc};
 use async_trait::async_trait;
 use erased_serde::Serialize;
 use futures::stream::{self, StreamExt};
+use tracing::debug;
 
 use crate::{
     app::{
@@ -82,14 +83,18 @@ impl OutboundHandler for Handler {
             0 => Err(new_io_error("no proxy available")),
             1 => {
                 let proxy = proxies[0].clone();
+                debug!("relay `{}` via proxy `{}`", self.name(), proxy.name());
                 proxy.connect_stream(sess, resolver).await
             }
             _ => {
                 let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
                 let (proxies, last) = proxies.split_at(proxies.len() - 1);
                 for proxy in proxies {
+                    debug!("relay `{}` via proxy `{}`", self.name(), proxy.name());
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+
+                debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let s = last[0]
                     .connect_stream_with_connector(sess, resolver, &connector)
                     .await?;

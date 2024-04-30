@@ -79,7 +79,7 @@ impl Router {
         for r in self.rules.iter() {
             if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
                 debug!(
-                    "rule {r} local resolving domain {}",
+                    "rule `{r}` resolving domain {} locally",
                     sess.destination.domain().unwrap()
                 );
                 if let Ok(Some(ip)) = self
