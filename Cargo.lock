@@ -272,7 +272,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
  "void",
 ]
@@ -1071,7 +1071,7 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",
- "tor-rtcompat",
+ "tor-rtcompat 0.17.0",
  "tower",
  "tower-http",
  "tracing",
@@ -5647,7 +5647,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdir",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tor-socksproto",
  "tor-units",
  "tracing",
@@ -5704,7 +5704,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
  "void",
  "weak-table",
@@ -5776,7 +5776,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdoc",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
 ]
 
@@ -5828,7 +5828,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
 ]
 
@@ -5883,7 +5883,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tor-units",
  "tracing",
 ]
@@ -5926,7 +5926,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
 ]
 
@@ -6056,7 +6056,7 @@ dependencies = [
  "once_cell",
  "thiserror",
  "tor-error",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
  "weak-table",
 ]
@@ -6199,7 +6199,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-log-ratelim",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tor-rtmock",
  "tor-units",
  "tracing",
@@ -6239,6 +6239,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tor-rtcompat"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9974851ee6b7ba68a955cb67b56ac2164b4c7b520feb81533745f7ca119ed898"
+dependencies = [
+ "async-trait",
+ "async_executors",
+ "coarsetime",
+ "derive_more",
+ "educe",
+ "futures",
+ "paste",
+ "pin-project",
+ "thiserror",
+]
+
+[[package]]
 name = "tor-rtmock"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6260,7 +6277,7 @@ dependencies = [
  "thiserror",
  "tor-async-utils",
  "tor-error",
- "tor-rtcompat",
+ "tor-rtcompat 0.10.0",
  "tracing",
  "tracing-test",
  "void",

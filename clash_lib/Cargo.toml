@@ -109,7 +109,7 @@ public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
 arti-client = { version = "0.14.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.10.0" }
+tor-rtcompat = { version = "0.17.0" }
 
 # tuic
 tuic = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
