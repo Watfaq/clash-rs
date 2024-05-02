@@ -87,7 +87,7 @@ hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-htt
 # DoH
 # ideally we should make a CryptoProvider with boringssl and get rid of rings
 rustls = { version  = "0.21", features=["dangerous_configuration", "quic"] }
-rustls-pemfile = "1.0.4"
+rustls-pemfile = "2.1.2"
 webpki-roots = "0.25"
 dhcproto = "0.11"
 ring-compat = { version = "0.8", features = ["aead"] }
