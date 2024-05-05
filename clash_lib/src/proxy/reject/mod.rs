@@ -2,7 +2,7 @@ use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_REJECT;
 use crate::proxy::{AnyOutboundHandler, OutboundHandler};
-use crate::session::{Session, SocksAddr};
+use crate::session::Session;
 use async_trait::async_trait;
 use serde::Serialize;
 use std::io;
@@ -29,10 +29,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Reject
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
     }
 
     async fn support_udp(&self) -> bool {

@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tracing::debug;
+use tracing::trace;
 
 use crate::{
     app::{
@@ -11,7 +11,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     proxy::{datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler, AnyStream},
-    session::{Network, Session, Type},
+    session::{Network, Session, SocksAddr, Type},
 };
 
 use super::{new_tcp_stream, new_udp_socket, Interface};
@@ -32,6 +32,7 @@ pub trait RemoteConnector: Send + Sync {
         &self,
         resolver: ThreadSafeDNSResolver,
         src: Option<&SocketAddr>,
+        destination: &SocksAddr,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram>;
@@ -70,6 +71,7 @@ impl RemoteConnector for DirectConnector {
         &self,
         resolver: ThreadSafeDNSResolver,
         src: Option<&SocketAddr>,
+        _destination: &SocksAddr,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
@@ -118,7 +120,7 @@ impl RemoteConnector for ProxyConnector {
             ..Default::default()
         };
 
-        debug!(
+        trace!(
             "proxy connector `{}` connecting to {}:{}",
             self.proxy.name(),
             address,
@@ -139,6 +141,7 @@ impl RemoteConnector for ProxyConnector {
         &self,
         resolver: ThreadSafeDNSResolver,
         _src: Option<&SocketAddr>,
+        destination: &SocksAddr,
         iface: Option<&Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
@@ -146,6 +149,7 @@ impl RemoteConnector for ProxyConnector {
             network: Network::Udp,
             typ: Type::Ignore,
             iface: iface.cloned(),
+            destination: destination.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
             ..Default::default()

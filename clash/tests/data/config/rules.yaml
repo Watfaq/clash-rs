@@ -64,12 +64,29 @@ proxy-groups:
     type: relay
     proxies:
       - "plain-vmess"
+      - "ws-vmess"
+      - "ss-simple"
+      - "auto"
+      - "fallback-auto"
+      - "load-balance"
+      - "select"
+      - "wg"
+      - DIRECT
+
+  - name: "udp-relay"
+    type: relay
+    proxies:
+      # - "plain-vmess"
       # - "ws-vmess"
+      # - "ss-simple"
+      - "trojan"
       # - "auto"
       # - "fallback-auto"
       # - "load-balance"
       # - "select"
+      # - "wg"
       - DIRECT
+  
   
   - name: "relay-one"
     type: relay
@@ -79,7 +96,7 @@ proxy-groups:
   - name: "auto"
     type: url-test
     use:
-      - "file-provider"
+      - "file-provider-uot"
     proxies:
       - DIRECT
     url: "http://www.gstatic.com/generate_204"
@@ -88,7 +105,7 @@ proxy-groups:
   - name: "fallback-auto"
     type: fallback
     use:
-      - "file-provider"
+      - "file-provider-uot"
     proxies:
       - DIRECT
     url: "http://www.gstatic.com/generate_204"
@@ -97,7 +114,7 @@ proxy-groups:
   - name: "load-balance"
     type: load-balance
     use:
-      - "file-provider"
+      - "file-provider-uot"
     proxies:
       - DIRECT
     strategy: round-robin
@@ -107,7 +124,7 @@ proxy-groups:
   - name: select
     type: select
     use:
-      - "file-provider"
+      - "file-provider-uot"
 
   - name: test 🌏
     type: select
@@ -215,10 +232,33 @@ proxies:
     grpc-opts:
       grpc-service-name: def
 
+  - name: "wg"
+    type: wireguard
+    server: engage.cloudflareclient.com
+    port: 2408
+    private-key: uIwDn4c7656E/1pHkJu23ZOe/4SuCnL+vL+jE2s4MHE=
+    ip: 172.16.0.2/32
+    ipv6: 2606:4700:110:8e5e:fa1:3f30:c077:e17c/128
+    public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+    allowed-ips: ['0.0.0.0/0', '::/0']
+    remote-dns-resolve: true
+    dns:
+      - 1.1.1.1
+    udp: true
+
 proxy-providers:
   file-provider:
     type: file
     path: ./ss.yaml
+    interval: 300
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+
+  file-provider-uot:
+    type: file
+    path: ./uot.yaml
     interval: 300
     health-check:
       enable: true
@@ -244,7 +284,7 @@ rules:
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
   - IP-CIDR,10.0.0.11/32,select
-  - DST-PORT,53,trojan
+  - DST-PORT,53,udp-relay
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
 ...

@@ -11,7 +11,7 @@ use crate::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
         },
     },
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
@@ -50,9 +50,6 @@ mock! {
         /// The protocol of the outbound handler
         /// only contains Type information, do not rely on the underlying value
         fn proto(&self) -> OutboundType;
-
-        /// The proxy remote address
-        async fn remote_addr(&self) -> Option<SocksAddr>;
 
         /// whether the outbound handler support UDP
         async fn support_udp(&self) -> bool;

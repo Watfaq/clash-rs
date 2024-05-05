@@ -16,7 +16,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
@@ -202,10 +202,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::WireGuard
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
     }
 
     async fn support_udp(&self) -> bool {

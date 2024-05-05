@@ -11,7 +11,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
-    session::{Session, SocksAddr},
+    session::Session,
     Error,
 };
 
@@ -108,10 +108,6 @@ impl OutboundHandler for Handler {
         OutboundType::Selector
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.selected_proxy(false).await.remote_addr().await
-    }
-
     async fn support_udp(&self) -> bool {
         self.opts.udp && self.selected_proxy(false).await.support_udp().await
     }
@@ -155,7 +151,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+        connector: &Box<dyn RemoteConnector>,
     ) -> io::Result<BoxedChainedStream> {
         let s = self
             .selected_proxy(true)
@@ -165,6 +161,18 @@ impl OutboundHandler for Handler {
 
         s.append_to_chain(self.name()).await;
         Ok(s)
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>,
+    ) -> io::Result<BoxedChainedDatagram> {
+        self.selected_proxy(true)
+            .await
+            .connect_datagram_with_connector(sess, resolver, connector)
+            .await
     }
 
     /// for API

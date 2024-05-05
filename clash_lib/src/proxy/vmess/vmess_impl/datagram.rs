@@ -1,7 +1,7 @@
 use std::{io, pin::Pin, task::Poll};
 
 use futures::{ready, Sink, Stream};
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -75,9 +75,9 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
+        if let Some(pkt) = pkt_container.as_ref() {
             if &pkt.dst_addr != remote_addr {
-                debug!(
+                error!(
                     "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: {}",
                     pkt.dst_addr, remote_addr
                 );
@@ -86,7 +86,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                     "udp packet dst_addr not match",
                 )));
             }
-            let data = pkt.data;
+            let data = &pkt.data;
 
             let n = ready!(inner.as_mut().poll_write(cx, data.as_ref()))?;
 

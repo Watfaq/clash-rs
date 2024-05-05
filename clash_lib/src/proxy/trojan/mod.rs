@@ -16,7 +16,7 @@ use crate::app::dispatcher::ChainedStreamWrapper;
 use crate::common::utils;
 use crate::{
     app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::datagram::OutboundDatagramTrojan;
@@ -69,7 +69,7 @@ impl Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        tcp: bool,
+        udp: bool,
     ) -> io::Result<AnyStream> {
         let tls_opt = TLSOptions {
             skip_cert_verify: self.opts.skip_cert_verify,
@@ -121,7 +121,7 @@ impl Handler {
         let password = utils::encode_hex(&password[..]);
         buf.put_slice(password.as_bytes());
         buf.put_slice(b"\r\n");
-        buf.put_u8(if tcp { 0x01 } else { 0x03 }); // tcp
+        buf.put_u8(if udp { 0x03 } else { 0x01 });
         sess.destination.write_buf(&mut buf);
         buf.put_slice(b"\r\n");
         s.write_all(&buf).await?;
@@ -138,10 +138,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Trojan
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
     }
 
     async fn support_udp(&self) -> bool {
@@ -172,7 +168,7 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.inner_proxy_stream(stream, sess, true).await?;
+        let stream = self.inner_proxy_stream(stream, sess, false).await?;
 
         let chained = ChainedStreamWrapper::new(stream);
         chained.append_to_chain(self.name()).await;
@@ -203,7 +199,7 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
 
@@ -231,7 +227,7 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let s = self.inner_proxy_stream(stream, sess, true).await?;
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
@@ -252,7 +248,7 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
 

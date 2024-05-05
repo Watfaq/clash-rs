@@ -29,7 +29,7 @@ use crate::{
     },
     common::tls::GLOBAL_ROOT_STORE,
     proxy::tuic::types::{ServerAddr, TuicEndpoint},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
@@ -90,10 +90,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Tuic
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
     }
 
     async fn support_udp(&self) -> bool {

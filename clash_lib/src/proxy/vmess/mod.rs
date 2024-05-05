@@ -154,11 +154,6 @@ impl OutboundHandler for Handler {
         OutboundType::Vmess
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp
@@ -263,7 +258,7 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let s = self.inner_proxy_stream(stream, sess, true).await?;
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
@@ -286,7 +281,7 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         let d = OutboundDatagramVmess::new(stream, sess.destination.clone());
 

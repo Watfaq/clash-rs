@@ -13,14 +13,14 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     config::internal::proxy::LoadBalanceStrategy,
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, CommonOption,
-    ConnectorType, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -76,11 +76,6 @@ impl OutboundHandler for Handler {
         OutboundType::LoadBalance
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp
@@ -117,7 +112,21 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_connector(&self) -> ConnectorType {
-        ConnectorType::None
+        ConnectorType::Tcp
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>,
+    ) -> io::Result<BoxedChainedStream> {
+        let proxies = self.get_proxies(false).await;
+        let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
+        debug!("{} use proxy {}", self.name(), proxy.name());
+        proxy
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

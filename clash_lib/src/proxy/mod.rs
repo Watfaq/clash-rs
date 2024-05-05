@@ -2,7 +2,7 @@ use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
-use crate::session::{Session, SocksAddr};
+use crate::session::Session;
 use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
@@ -162,9 +162,6 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
     fn proto(&self) -> OutboundType;
-
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr>;
 
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool;

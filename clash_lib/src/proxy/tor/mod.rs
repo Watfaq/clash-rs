@@ -13,7 +13,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::stream::StreamWrapper;
@@ -51,10 +51,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Tor
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
     }
 
     async fn support_udp(&self) -> bool {

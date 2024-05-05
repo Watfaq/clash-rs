@@ -15,7 +15,7 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use super::{
@@ -61,10 +61,6 @@ impl OutboundHandler for Handler {
         OutboundType::Relay
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
-    }
-
     async fn support_udp(&self) -> bool {
         false
     }
@@ -74,10 +70,8 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
-            .filter_map(|x| async { x.remote_addr().await.map(|_| x) })
-            .collect()
-            .await;
+        let proxies: Vec<AnyOutboundHandler> =
+            stream::iter(self.get_proxies(true).await).collect().await;
 
         match proxies.len() {
             0 => Err(new_io_error("no proxy available")),
@@ -111,10 +105,8 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let proxies: Vec<AnyOutboundHandler> = stream::iter(self.get_proxies(true).await)
-            .filter_map(|x| async { x.remote_addr().await.map(|_| x) })
-            .collect()
-            .await;
+        let proxies: Vec<AnyOutboundHandler> =
+            stream::iter(self.get_proxies(true).await).collect().await;
 
         match proxies.len() {
             0 => Err(new_io_error("no proxy available")),

@@ -74,7 +74,7 @@ impl Dispatcher {
         *self.mode.lock().unwrap()
     }
 
-    #[instrument(skip(lhs))]
+    #[instrument(skip(self, sess, lhs))]
     pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: S)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -124,11 +124,7 @@ impl Dispatcher {
 
         match handler
             .connect_stream(&sess, self.resolver.clone())
-            .instrument(info_span!(
-                "connect_stream",
-                outbound_name = outbound_name,
-                session = %sess,
-            ))
+            .instrument(info_span!("connect_stream", outbound_name = outbound_name,))
             .await
         {
             Ok(rhs) => {
@@ -145,7 +141,6 @@ impl Dispatcher {
                 .instrument(info_span!(
                     "copy_bidirectional",
                     outbound_name = outbound_name,
-                    session = %sess,
                 ))
                 .await
                 {

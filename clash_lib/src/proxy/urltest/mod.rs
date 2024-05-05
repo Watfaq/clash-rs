@@ -13,7 +13,7 @@ use crate::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use super::{
@@ -133,11 +133,6 @@ impl OutboundHandler for Handler {
         OutboundType::UrlTest
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.fastest(false).await.remote_addr().await
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp || self.fastest(false).await.support_udp().await
@@ -181,7 +176,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+        connector: &Box<dyn RemoteConnector>,
     ) -> io::Result<BoxedChainedStream> {
         let s = self
             .fastest(true)
@@ -191,6 +186,18 @@ impl OutboundHandler for Handler {
 
         s.append_to_chain(self.name()).await;
         Ok(s)
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &Box<dyn RemoteConnector>,
+    ) -> io::Result<BoxedChainedDatagram> {
+        self.fastest(true)
+            .await
+            .connect_datagram_with_connector(sess, resolver, connector)
+            .await
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

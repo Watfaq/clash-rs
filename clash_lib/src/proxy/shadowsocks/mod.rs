@@ -20,7 +20,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     proxy::{CommonOption, OutboundHandler},
-    session::{Session, SocksAddr},
+    session::Session,
     Error,
 };
 use std::{collections::HashMap, io, sync::Arc};
@@ -254,10 +254,6 @@ impl OutboundHandler for Handler {
         OutboundType::Shadowsocks
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
     async fn support_udp(&self) -> bool {
         self.opts.udp
     }
@@ -340,8 +336,10 @@ impl OutboundHandler for Handler {
         let stream = connector
             .connect_stream(
                 resolver.clone(),
-                sess.destination.host().as_str(),
-                sess.destination.port(),
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
             .await?;
@@ -350,15 +348,6 @@ impl OutboundHandler for Handler {
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
-    }
-
-    async fn connect_datagram_with_connector(
-        &self,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-        _connector: &Box<dyn RemoteConnector>,
-    ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
     }
 }
 
