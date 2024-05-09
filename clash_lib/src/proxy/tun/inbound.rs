@@ -10,7 +10,7 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::map_io_error,
     config::internal::config::TunConfig,
-    proxy::datagram::UdpPacket,
+    proxy::{datagram::UdpPacket, tun::auto_route},
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -26,7 +26,6 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        ..Default::default()
     };
 
     dispatcher.dispatch_stream(sess, stream).await;
@@ -127,7 +126,7 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = cfg.device_id;
+    let device_id = &cfg.device_id;
 
     let u =
         Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
@@ -162,6 +161,7 @@ pub fn get_runner(
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
+    auto_route::setup(&cfg, &tun_name).unwrap();
 
     let (stack, mut tcp_listener, udp_socket) =
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;

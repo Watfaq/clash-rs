@@ -121,6 +121,8 @@ console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 
+cmd_lib = "1"
+
 [dev-dependencies]
 tempfile = "3.10"
 ctor = "0.2"

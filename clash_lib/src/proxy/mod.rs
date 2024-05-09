@@ -85,10 +85,12 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[derive(Default, Debug, Clone)]
+#[allow(dead_code)]
+#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CommonOption {
-    #[allow(dead_code)]
+    #[serde(rename = "routing-mark")]
     so_mark: Option<u32>,
+    #[serde(rename = "interface-name")]
     iface: Option<Interface>,
 }
 

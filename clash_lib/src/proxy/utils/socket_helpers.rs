@@ -67,12 +67,12 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
     }
 }
 
-pub async fn new_tcp_stream<'a>(
+pub async fn new_tcp_stream(
     resolver: ThreadSafeDNSResolver,
-    address: &'a str,
+    address: &str,
     port: u16,
-    iface: Option<&'a Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    iface: Option<&Interface>,
+    #[allow(unused_variables)] packet_mark: Option<u32>,
 ) -> io::Result<AnyStream> {
     let dial_addr = resolver
         .resolve(address, false)
@@ -99,12 +99,13 @@ pub async fn new_tcp_stream<'a>(
         }
     };
 
-    if let Some(iface) = iface {
+    let global_iface = crate::get_iface();
+    if let Some(iface) = iface.or(global_iface.as_ref()) {
         must_bind_socket_on_interface(&socket, iface)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
+    #[cfg(target_os = "linux")]
+    if let Some(packet_mark) = packet_mark.or_else(crate::get_somark) {
         socket.set_mark(packet_mark)?;
     }
 
@@ -124,7 +125,7 @@ pub async fn new_tcp_stream<'a>(
 pub async fn new_udp_socket(
     src: Option<&SocketAddr>,
     iface: Option<&Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    #[allow(unused_variables)] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let socket = match src {
         Some(src) => {
@@ -141,12 +142,13 @@ pub async fn new_udp_socket(
         socket.bind(&(*src).into())?;
     }
 
-    if let Some(iface) = iface {
+    let global_iface = crate::get_iface();
+    if let Some(iface) = iface.or(global_iface.as_ref()) {
         must_bind_socket_on_interface(&socket, iface)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
+    #[cfg(target_os = "linux")]
+    if let Some(packet_mark) = packet_mark.or_else(crate::get_somark) {
         socket.set_mark(packet_mark)?;
     }
 
@@ -154,6 +156,28 @@ pub async fn new_udp_socket(
     socket.set_nonblocking(true)?;
 
     UdpSocket::from_std(socket.into())
+}
+/// An extension to std::net::{UdpSocket, TcpStream}
+pub trait StdSocketExt {
+    fn set_mark(&self, mark: u32) -> io::Result<()>;
+}
+impl StdSocketExt for std::net::UdpSocket {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+impl StdSocketExt for std::net::TcpStream {
+    fn set_mark(&self, mark: u32) -> io::Result<()> {
+        set_mark(socket2::SockRef::from(self), mark)
+    }
+}
+
+#[allow(unused_variables)]
+fn set_mark(socket: socket2::SockRef<'_>, mark: u32) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    return socket.set_mark(mark);
+    #[cfg(not(target_os = "linux"))]
+    return Ok(());
 }
 
 #[cfg(test)]
