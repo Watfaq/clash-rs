@@ -85,6 +85,7 @@ impl AsyncWrite for WebsocketConn {
         Pin::new(&mut self.inner)
             .start_send(message)
             .map_err(map_io_error)?;
+        ready!(self.poll_flush(cx)?);
         std::task::Poll::Ready(Ok(buf.len()))
     }
 
