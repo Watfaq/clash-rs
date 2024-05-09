@@ -66,6 +66,7 @@ proxy-groups:
       - "plain-vmess"
       - "ws-vmess"
       - "ss-simple"
+      - "trojan"
       - "auto"
       - "fallback-auto"
       - "load-balance"
@@ -77,15 +78,18 @@ proxy-groups:
     type: relay
     proxies:
       # - "plain-vmess"
-      # - "ws-vmess"
+      - "ws-vmess"
+      # - "h2-vmess"
+      # - "tls-vmess"
+      # - "grpc-vmess"
       # - "ss-simple"
-      - "trojan"
+      # - "trojan"
       # - "auto"
       # - "fallback-auto"
       # - "load-balance"
       # - "select"
       # - "wg"
-      - DIRECT
+      # - DIRECT
   
   
   - name: "relay-one"
@@ -273,7 +277,7 @@ rule-providers:
     behavior: domain
 
 rules:
-  - DOMAIN,google.com,relay
+  - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,trojan-grpc
 #  - RULE-SET,file-provider,trojan
@@ -284,7 +288,7 @@ rules:
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT
   - IP-CIDR,10.0.0.11/32,select
-  - DST-PORT,53,udp-relay
+  - DST-PORT,53,ws-vmess
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
 ...

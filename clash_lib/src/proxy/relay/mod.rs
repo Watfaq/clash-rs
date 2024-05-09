@@ -77,14 +77,14 @@ impl OutboundHandler for Handler {
             0 => Err(new_io_error("no proxy available")),
             1 => {
                 let proxy = proxies[0].clone();
-                debug!("relay `{}` via proxy `{}`", self.name(), proxy.name());
+                debug!("tcp relay `{}` via proxy `{}`", self.name(), proxy.name());
                 proxy.connect_stream(sess, resolver).await
             }
             _ => {
                 let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
                 let (proxies, last) = proxies.split_at(proxies.len() - 1);
                 for proxy in proxies {
-                    debug!("relay `{}` via proxy `{}`", self.name(), proxy.name());
+                    debug!("tcp relay `{}` via proxy `{}`", self.name(), proxy.name());
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
 
@@ -112,12 +112,14 @@ impl OutboundHandler for Handler {
             0 => Err(new_io_error("no proxy available")),
             1 => {
                 let proxy = proxies[0].clone();
+                debug!("udp relay `{}` via proxy `{}`", self.name(), proxy.name());
                 proxy.connect_datagram(sess, resolver).await
             }
             _ => {
                 let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
                 let (proxies, last) = proxies.split_at(proxies.len() - 1);
                 for proxy in proxies {
+                    debug!("udp relay `{}` via proxy `{}`", self.name(), proxy.name());
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
                 let d = last[0]

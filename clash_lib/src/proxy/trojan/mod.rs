@@ -221,8 +221,10 @@ impl OutboundHandler for Handler {
         let stream = connector
             .connect_stream(
                 resolver,
-                sess.destination.host().as_str(),
-                sess.destination.port(),
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
             .await?;
@@ -242,8 +244,10 @@ impl OutboundHandler for Handler {
         let stream = connector
             .connect_stream(
                 resolver,
-                sess.destination.host().as_str(),
-                sess.destination.port(),
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
             .await?;
