@@ -82,6 +82,7 @@ pub trait ReadExt {
         cx: &mut std::task::Context,
         size: usize,
     ) -> Poll<std::io::Result<()>>;
+    #[allow(unused)]
     fn get_data(&self) -> &[u8];
 }
 

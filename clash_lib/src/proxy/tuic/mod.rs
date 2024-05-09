@@ -143,7 +143,7 @@ impl Handler {
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be throw: aborted by peer: the cryptographic handshake failed: error 120: peer doesn't support any known protocol
-        crypto.alpn_protocols = opts.alpn.clone();
+        crypto.alpn_protocols.clone_from(&opts.alpn);
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
         let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
