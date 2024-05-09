@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 pub trait Authenticator {
     fn authenticate(&self, username: &str, password: &str) -> bool;
+    #[allow(unused)]
     fn users(&self) -> Vec<String>;
     fn enabled(&self) -> bool;
 }

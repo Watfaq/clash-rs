@@ -86,7 +86,7 @@ impl SelectorControl for Handler {
     async fn select(&mut self, name: &str) -> Result<(), Error> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
-            self.inner.write().await.current = name.to_owned();
+            name.clone_into(&mut self.inner.write().await.current);
             Ok(())
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
@@ -165,10 +165,7 @@ impl OutboundHandler for Handler {
 
         let mut m = HashMap::new();
         m.insert("type".to_string(), Box::new(self.proto()) as _);
-        m.insert(
-            "now".to_string(),
-            Box::new(self.inner.read().await.current.clone()) as _,
-        );
+        m.insert("now".to_string(), Box::new(self.current().await) as _);
         m.insert(
             "all".to_string(),
             Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
