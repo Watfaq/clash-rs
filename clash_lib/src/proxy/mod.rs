@@ -2,19 +2,22 @@ use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::proxy::datagram::UdpPacket;
 use crate::proxy::utils::Interface;
-use crate::session::{Session, SocksAddr};
+use crate::session::Session;
 use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io;
 use std::sync::Arc;
 
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
+
+use self::utils::RemoteConnector;
 
 pub mod direct;
 pub mod reject;
@@ -31,6 +34,7 @@ pub mod shadowsocks;
 pub mod socks;
 pub mod tor;
 pub mod trojan;
+pub mod tuic;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
@@ -110,6 +114,7 @@ pub enum OutboundType {
     Trojan,
     WireGuard,
     Tor,
+    Tuic,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -122,6 +127,33 @@ pub enum OutboundType {
     Reject,
 }
 
+impl Display for OutboundType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OutboundType::Shadowsocks => write!(f, "Shadowsocks"),
+            OutboundType::Vmess => write!(f, "Vmess"),
+            OutboundType::Trojan => write!(f, "Trojan"),
+            OutboundType::WireGuard => write!(f, "WireGuard"),
+            OutboundType::Tor => write!(f, "Tor"),
+            OutboundType::Tuic => write!(f, "Tuic"),
+            OutboundType::UrlTest => write!(f, "URLTest"),
+            OutboundType::Selector => write!(f, "Selector"),
+            OutboundType::Relay => write!(f, "Relay"),
+            OutboundType::LoadBalance => write!(f, "LoadBalance"),
+            OutboundType::Fallback => write!(f, "Fallback"),
+            OutboundType::Direct => write!(f, "Direct"),
+            OutboundType::Reject => write!(f, "Reject"),
+        }
+    }
+}
+
+pub enum ConnectorType {
+    Tcp,
+    Udp,
+    All,
+    None,
+}
+
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin {
     /// The name of the outbound handler
@@ -130,9 +162,6 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
     fn proto(&self) -> OutboundType;
-
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr>;
 
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool;
@@ -144,20 +173,40 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream>;
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream>;
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram>;
+
+    /// relay related
+    async fn support_connector(&self) -> ConnectorType;
+
+    async fn connect_stream_with_connector(
+        &self,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
+        _connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        error!("tcp relay not supported for {}", self.proto());
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("tcp relay not supported for {}", self.proto()),
+        ))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        _sess: &Session,
+        _resolver: ThreadSafeDNSResolver,
+        _connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("udp relay not supported for {}", self.proto()),
+        ))
+    }
 
     /// for API
     /// the map only contains basic information

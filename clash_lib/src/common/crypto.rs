@@ -1,10 +1,7 @@
-use std::ffi::CStr;
-
-use crate::Error;
-
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use aes_gcm::aes::cipher::Unsigned;
 use aes_gcm::{AeadInPlace, KeyInit};
+use anyhow::Ok;
 
 pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
     match key.len() {
@@ -42,126 +39,65 @@ pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result
     }
 }
 
-pub fn aes_gcm_seal(
+pub fn aes_gcm_encrypt(
     key: &[u8],
     nonce: &[u8],
-    data: &[u8],
-    ad: Option<&[u8]>,
+    plaintext: &[u8],
+    associated_data: Option<&[u8]>,
 ) -> anyhow::Result<Vec<u8>> {
-    unsafe {
-        let ctx = boring_sys::EVP_AEAD_CTX_new(
-            match key.len() {
-                16 => boring_sys::EVP_aead_aes_128_gcm(),
-                24 => boring_sys::EVP_aead_aes_192_gcm(),
-                32 => boring_sys::EVP_aead_aes_256_gcm(),
-                _ => anyhow::bail!("invalid key length"),
-            },
-            key.as_ptr(),
-            key.len(),
-            boring_sys::EVP_AEAD_DEFAULT_TAG_LENGTH as _,
-        );
-
-        let mut out = vec![0u8; data.len() + boring_sys::EVP_AEAD_MAX_OVERHEAD as usize];
-
-        let mut out_len = 0;
-
-        let rv = boring_sys::EVP_AEAD_CTX_seal(
-            ctx,
-            out.as_mut_ptr(),
-            &mut out_len,
-            out.len(),
-            nonce.as_ptr(),
-            nonce.len(),
-            data.as_ptr(),
-            data.len(),
-            match ad {
-                Some(ad) => ad.as_ptr(),
-                None => std::ptr::null(),
-            },
-            match ad {
-                Some(ad) => ad.len(),
-                None => 0,
-            },
-        );
-
-        boring_sys::EVP_AEAD_CTX_free(ctx);
-
-        return if rv != 1 {
-            Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into())
-        } else {
-            out.truncate(out_len);
-            Ok(out)
-        };
+    let mut buffer = Vec::with_capacity(plaintext.len() + 16);
+    buffer.append(&mut plaintext.to_vec());
+    match key.len() {
+        16 => {
+            let cipher = ring_compat::aead::Aes128Gcm::new_from_slice(key)?;
+            cipher.encrypt_in_place(
+                nonce.into(),
+                associated_data.unwrap_or_default(),
+                &mut buffer,
+            )?;
+        }
+        32 => {
+            let cipher = ring_compat::aead::Aes256Gcm::new_from_slice(key)?;
+            cipher.encrypt_in_place(
+                nonce.into(),
+                associated_data.unwrap_or_default(),
+                &mut buffer,
+            )?;
+        }
+        _ => return Err(anyhow!("Illegal key size {}", key.len())),
     }
+    Ok(buffer)
 }
 
-pub fn aes_gcm_open(
+/// TODO
+pub fn aes_gcm_decrypt(
     key: &[u8],
     nonce: &[u8],
-    data: &[u8],
-    ad: Option<&[u8]>,
+    ciphertext: &[u8],
+    associated_data: Option<&[u8]>,
 ) -> anyhow::Result<Vec<u8>> {
-    unsafe {
-        let ctx = boring_sys::EVP_AEAD_CTX_new(
-            match key.len() {
-                16 => boring_sys::EVP_aead_aes_128_gcm(),
-                24 => boring_sys::EVP_aead_aes_192_gcm(),
-                32 => boring_sys::EVP_aead_aes_256_gcm(),
-                _ => anyhow::bail!("invalid key length"),
-            },
-            key.as_ptr(),
-            key.len(),
-            boring_sys::EVP_AEAD_DEFAULT_TAG_LENGTH as _,
-        );
-
-        let mut out = vec![0u8; data.len()];
-
-        let mut out_len = 0;
-
-        let rv = boring_sys::EVP_AEAD_CTX_open(
-            ctx,
-            out.as_mut_ptr(),
-            &mut out_len,
-            out.len(),
-            nonce.as_ptr(),
-            nonce.len(),
-            data.as_ptr(),
-            data.len(),
-            match ad {
-                Some(ad) => ad.as_ptr(),
-                None => std::ptr::null(),
-            },
-            match ad {
-                Some(ad) => ad.len(),
-                None => 0,
-            },
-        );
-
-        boring_sys::EVP_AEAD_CTX_free(ctx);
-
-        return if rv != 1 {
-            Err(Error::Crypto(
-                CStr::from_ptr(
-                    boring_sys::ERR_reason_error_string(boring_sys::ERR_get_error()) as _,
-                )
-                .to_str()
-                .expect("openssl error string is not utf8")
-                .to_owned(),
-            )
-            .into())
-        } else {
-            out.truncate(out_len);
-            Ok(out)
-        };
+    let mut buffer = ciphertext.to_vec();
+    match key.len() {
+        16 => {
+            let cipher = ring_compat::aead::Aes128Gcm::new_from_slice(key)?;
+            cipher.decrypt_in_place(
+                nonce.into(),
+                associated_data.unwrap_or_default(),
+                &mut buffer,
+            )?;
+        }
+        32 => {
+            let cipher = ring_compat::aead::Aes256Gcm::new_from_slice(key)?;
+            cipher.decrypt_in_place(
+                nonce.into(),
+                associated_data.unwrap_or_default(),
+                &mut buffer,
+            )?;
+        }
+        _ => return Err(anyhow!("Illegal key size {}", key.len())),
     }
+    buffer.shrink_to_fit();
+    Ok(buffer)
 }
 
 pub trait AeadCipherHelper: AeadInPlace {
@@ -214,9 +150,9 @@ impl AeadCipherHelper for chacha20poly1305::ChaCha20Poly1305 {
 #[cfg(test)]
 mod tests {
 
-    use crate::common::{crypto::aes_gcm_open, utils};
+    use crate::common::{crypto::aes_gcm_decrypt, utils};
 
-    use super::{aes_cfb_encrypt, aes_gcm_seal};
+    use super::{aes_cfb_encrypt, aes_gcm_encrypt};
 
     #[test]
     fn test_aes_cfb_256() {
@@ -242,30 +178,26 @@ mod tests {
     #[test]
     fn test_aes_gcm_seal_ok() {
         let key = "1234567890123456".as_bytes();
-        let nonce = "456".as_bytes();
+        let nonce = "456456456456".as_bytes(); // it has to be 12 bytes
         let data = "789".as_bytes();
         let ad = "abc".as_bytes();
-        let encrypted = aes_gcm_seal(key, nonce, data, Some(ad)).expect("sealed");
+        let encrypted = aes_gcm_encrypt(key, nonce, data, Some(ad)).expect("sealed");
 
-        let decrypted = aes_gcm_open(key, nonce, &encrypted, Some(ad)).expect("opened");
+        let decrypted = aes_gcm_decrypt(key, nonce, &encrypted, Some(ad)).expect("opened");
         assert_eq!(decrypted, data);
     }
 
     #[test]
     fn test_aes_gcm_seal_fail() {
         let key = "1234567890123456".as_bytes();
-        let nonce = "456".as_bytes();
+        let nonce = "456456456456".as_bytes(); // it has to be 12 bytes
         let data = "789".as_bytes();
         let ad = "abc".as_bytes();
-        let encrypted = aes_gcm_seal(key, nonce, data, Some(ad)).expect("sealed");
+        let encrypted = aes_gcm_encrypt(key, nonce, data, Some(ad)).expect("sealed");
 
         let key2 = "1234567890123457".as_bytes();
-        let decrypted = aes_gcm_open(key2, nonce, &encrypted, Some(ad));
+        let decrypted = aes_gcm_decrypt(key2, nonce, &encrypted, Some(ad));
 
         assert!(decrypted.is_err());
-        assert_eq!(
-            decrypted.unwrap_err().to_string(),
-            "crypto error: BAD_DECRYPT"
-        );
     }
 }

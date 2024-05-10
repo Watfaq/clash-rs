@@ -354,6 +354,8 @@ pub enum Type {
     HttpConnect,
     Socks5,
     Tun,
+
+    Ignore,
 }
 
 impl Display for Network {

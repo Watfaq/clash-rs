@@ -19,7 +19,7 @@ A custom protocol, rule based network proxy software.
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
 - 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote.
 - 🛡 Run as an HTTP/Socks5 proxy, or utun device as a home network gateway.
-- ⚙️ Shadowsocks/Trojan/Vmess/Wireguard(userspace)/Tor outbound support with different underlying trasports(gRPC/TLS/H2/WebSocket/etc.).
+- ⚙️ Shadowsocks/Trojan/Vmess/Wireguard(userspace)/Tor/Tuic outbound support with different underlying trasports(gRPC/TLS/H2/WebSocket/etc.).
 - 🌍 Dynamic remote rule/proxy loader.
 - 🎵 Tracing with Jaeger
 
@@ -33,6 +33,10 @@ A custom protocol, rule based network proxy software.
 
 ## 📦 Install
 
+### Use With GUI
+
+https://github.com/LibNyanpasu/clash-nyanpasu
+
 ### Download Prebuilt Binary
 
 Can be found at https://github.com/Watfaq/clash-rs/releases
@@ -42,7 +46,6 @@ Can be found at https://github.com/Watfaq/clash-rs/releases
 Dependencies
 
 * cmake (3.29 or newer)
-* Golang
 * libclang([LLVM](https://github.com/llvm/llvm-project/releases/tag/llvmorg-16.0.4))
 * [nasm](https://www.nasm.us/pub/nasm/releasebuilds/2.16/win64/) (Windows)
 ```

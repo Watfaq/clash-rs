@@ -1,0 +1,9 @@
+
+[build]
+# zig = "2.17"
+# pre-build = "./.github/prebuild.sh"
+
+[build.env]
+# Docker in docker
+volumes = ["/var/run/docker.sock=/var/run/docker.sock"]
+# passthrough = ["VAR1_ARG", "VAR2_ARG=VALUE"]

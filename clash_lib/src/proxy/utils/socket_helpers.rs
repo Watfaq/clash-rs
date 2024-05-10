@@ -10,6 +10,7 @@ use tokio::{
     time::timeout,
 };
 
+use tracing::debug;
 #[cfg(target_os = "windows")]
 use tracing::warn;
 
@@ -83,6 +84,11 @@ pub async fn new_tcp_stream<'a>(
             format!("can't resolve dns: {}", address),
         ))?;
 
+    debug!(
+        "dialing {}[{}]:{} via {:?}",
+        address, dial_addr, port, iface
+    );
+
     let socket = match (dial_addr, resolver.ipv6()) {
         (IpAddr::V4(_), _) => {
             socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
@@ -117,6 +123,7 @@ pub async fn new_tcp_stream<'a>(
     )
     .await??;
 
+    debug!("connected to {}[{}]:{}", address, dial_addr, port);
     Ok(Box::new(stream))
 }
 

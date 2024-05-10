@@ -1,11 +1,9 @@
-use boring_sys::MD5_DIGEST_LENGTH;
-
-pub const ID_BYTES_LEN: usize = 16;
+use md5::Digest;
 
 #[derive(Clone)]
 pub struct ID {
     pub uuid: uuid::Uuid,
-    pub cmd_key: [u8; MD5_DIGEST_LENGTH as _],
+    pub cmd_key: [u8; 16],
 }
 
 pub fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
@@ -25,61 +23,23 @@ pub fn new_alter_id_list(primary: &ID, alter_id_count: u16) -> Vec<ID> {
     alter_id_list
 }
 
+/// TODO docs
 pub fn new_id(uuid: &uuid::Uuid) -> ID {
     let uuid = uuid.to_owned();
-    let mut cmd_key = [0u8; MD5_DIGEST_LENGTH as _];
-
-    let mut ctx = boring_sys::MD5_CTX::default();
-    unsafe {
-        boring_sys::MD5_Init(&mut ctx as _);
-        boring_sys::MD5_Update(
-            &mut ctx as _,
-            uuid.as_bytes().as_ptr() as _,
-            uuid.as_bytes().len(),
-        );
-        boring_sys::MD5_Update(
-            &mut ctx as _,
-            b"c48619fe-8f02-49e0-b9e9-edf763e17e21".as_ptr() as _,
-            36,
-        );
-        boring_sys::MD5_Final(cmd_key.as_mut_ptr() as _, &mut ctx as _);
-    }
-
+    let mut hasher = md5::Md5::new();
+    hasher.update(uuid.as_bytes());
+    hasher.update(b"c48619fe-8f02-49e0-b9e9-edf763e17e21"); // What?
+    let cmd_key: [u8; 16] = hasher.finalize().into();
     ID { uuid, cmd_key }
 }
 
+/// TODO docs
 fn next_id(i: &uuid::Uuid) -> uuid::Uuid {
-    let mut ctx = boring_sys::MD5_CTX::default();
-    unsafe {
-        boring_sys::MD5_Init(&mut ctx as _);
-        boring_sys::MD5_Update(
-            &mut ctx as _,
-            i.as_bytes().as_ptr() as _,
-            i.as_bytes().len(),
-        );
-        boring_sys::MD5_Update(
-            &mut ctx as _,
-            b"16167dc8-16b6-4e6d-b8bb-65dd68113a81".as_ptr() as _,
-            36,
-        );
-        let mut buf = [0u8; MD5_DIGEST_LENGTH as _];
-        /*
-        loop {
-            boring_sys::MD5_Final(buf.as_mut_ptr() as _, &mut ctx as _);
-            if i.as_bytes() != buf.as_slice() {
-                return uuid::Uuid::from_bytes(buf);
-            }
-
-            boring_sys::MD5_Update(
-                &mut ctx as _,
-                b"533eff8a-4113-4b10-b5ce-0f5d76b98cd2".as_ptr() as _,
-                36,
-            );
-        }
-        */
-        boring_sys::MD5_Final(buf.as_mut_ptr() as _, &mut ctx as _);
-        uuid::Uuid::from_bytes(buf)
-    }
+    let mut hasher = md5::Md5::new();
+    hasher.update(i.as_bytes());
+    hasher.update(b"16167dc8-16b6-4e6d-b8bb-65dd68113a81"); // Why?
+    let buf: [u8; 16] = hasher.finalize().into();
+    uuid::Uuid::from_bytes(buf)
 }
 
 #[cfg(test)]

@@ -1,3 +1,0 @@
-set(CMAKE_SYSTEM_NAME Linux)
-set(CMAKE_SYSTEM_PROCESSOR armv7)
-set(CMAKE_LINKER ld.ldd)

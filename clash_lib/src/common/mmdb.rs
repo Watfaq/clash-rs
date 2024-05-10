@@ -93,11 +93,10 @@ impl Mmdb {
     }
 
     #[async_recursion]
-    async fn download<P: AsRef<Path> + std::marker::Send>(
-        url: &str,
-        path: P,
-        http_client: &HttpClient,
-    ) -> anyhow::Result<()> {
+    async fn download<P>(url: &str, path: P, http_client: &HttpClient) -> anyhow::Result<()>
+    where
+        P: AsRef<Path> + std::marker::Send,
+    {
         let uri = url.parse::<hyper::Uri>()?;
         let mut out = std::fs::File::create(&path)?;
 

@@ -13,12 +13,12 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::stream::StreamWrapper;
 
-use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
 
 pub struct HandlerOptions {
     pub name: String,
@@ -53,10 +53,6 @@ impl OutboundHandler for Handler {
         OutboundType::Tor
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
-    }
-
     async fn support_udp(&self) -> bool {
         false
     }
@@ -84,20 +80,15 @@ impl OutboundHandler for Handler {
         Ok(Box::new(s))
     }
 
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        Ok(s)
-    }
-
     async fn connect_datagram(
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         Err(new_io_error("Tor outbound handler does not support UDP"))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }
