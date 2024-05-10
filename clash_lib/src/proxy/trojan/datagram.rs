@@ -23,6 +23,7 @@ pub struct OutboundDatagramTrojan {
     state: ReadState,
     read_buf: BytesMut,
 
+    written: Option<usize>,
     flushed: bool,
     pkt: Option<UdpPacket>,
 }
@@ -36,6 +37,7 @@ impl OutboundDatagramTrojan {
             read_buf: BytesMut::new(),
             state: ReadState::Atyp,
 
+            written: None,
             flushed: true,
             pkt: None,
         }
@@ -77,6 +79,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
         let Self {
             ref mut inner,
             ref mut pkt,
+            ref mut written,
             ref mut flushed,
             ..
         } = *self;
@@ -85,18 +88,22 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
-            let data = pkt.data;
+        if let Some(pkt) = pkt_container {
+            let data = &pkt.data;
 
             let mut payload = BytesMut::new();
             pkt.dst_addr.write_buf(&mut payload);
             payload.put_u16(data.len() as u16);
             payload.put_slice(b"\r\n");
-            payload.put_slice(&data);
+            payload.put_slice(data);
+
+            if written.is_none() {
+                *written = Some(0);
+            }
 
             while !payload.is_empty() {
                 let n = ready!(inner.as_mut().poll_write(cx, payload.as_ref()))?;
-
+                *written.as_mut().unwrap() += n;
                 payload.advance(n);
 
                 trace!(
@@ -107,7 +114,12 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
                 );
             }
 
-            *flushed = true;
+            if !*flushed {
+                ready!(inner.as_mut().poll_flush(cx))?;
+                *flushed = true;
+            }
+            *written = None;
+            *pkt_container = None;
 
             Poll::Ready(Ok(()))
         } else {

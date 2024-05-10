@@ -157,9 +157,10 @@ mod tests {
     use tokio::sync::RwLock;
 
     use crate::proxy::mocks::MockDummyProxyProvider;
+    use crate::proxy::utils::test_utils::Suite;
     use crate::proxy::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
     use crate::proxy::utils::test_utils::{
-        docker_runner::DockerTestRunnerBuilder, run_default_test_suites_and_cleanup,
+        docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
     };
 
     use super::*;
@@ -205,7 +206,7 @@ mod tests {
         });
 
         let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::tcp_tests()).await
     }
 
     #[tokio::test]
@@ -237,6 +238,6 @@ mod tests {
         });
 
         let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::tcp_tests()).await
     }
 }

@@ -297,18 +297,24 @@ mod tests {
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_default_test_suites_and_cleanup,
+        run_test_suites_and_cleanup, Suite,
     };
 
     use super::*;
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let vmess_ws_conf = test_config_dir.join("vmess-ws.json");
+        let conf = test_config_dir.join("vmess-ws.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VMESS)
-            .mounts(&[(vmess_ws_conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
             .build()
             .await
     }
@@ -330,9 +336,13 @@ mod tests {
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
-            security: "none".into(),
+            security: "auto".into(),
             udp: true,
-            tls: None,
+            tls: Some(transport::TLSOptions {
+                skip_cert_verify: true,
+                sni: "example.org".into(),
+                alpn: None,
+            }),
             transport: Some(VmessTransport::Ws(WsOption {
                 path: "".to_owned(),
                 headers: [("Host".to_owned(), "example.org".to_owned())]
@@ -344,7 +354,8 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_ws_runner().await?).await
+        let runner = get_ws_runner().await?;
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -387,7 +398,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_grpc_runner().await?).await
+        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -430,6 +441,6 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_h2_runner().await?).await
+        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all()).await
     }
 }

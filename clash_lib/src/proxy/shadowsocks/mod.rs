@@ -357,7 +357,7 @@ mod tests {
     use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
     use crate::proxy::utils::test_utils::{
         docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_default_test_suites_and_cleanup,
+        run_test_suites_and_cleanup, Suite,
     };
 
     use super::*;
@@ -379,6 +379,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -391,7 +392,7 @@ mod tests {
         };
         let port = opts.port;
         let handler = Handler::new(opts);
-        run_default_test_suites_and_cleanup(handler, get_ss_runner(port).await?).await
+        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::all()).await
     }
 
     async fn get_shadowtls_runner(
@@ -439,13 +440,15 @@ mod tests {
             })),
             udp: false,
         };
-        let handler = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
         // we need to store all the runners in a container, to make sure all of them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
             .await;
-        run_default_test_suites_and_cleanup(handler, chained).await
+        // currently, shadow-tls does't support udp proxy
+        // see: https://github.com/ihciah/shadow-tls/issues/54
+        run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 }

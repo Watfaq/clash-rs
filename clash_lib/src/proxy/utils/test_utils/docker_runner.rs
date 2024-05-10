@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use bollard::container::{Config, RemoveContainerOptions};
+use bollard::container::{Config, LogsOptions, RemoveContainerOptions};
 use bollard::secret::{HostConfig, Mount, PortBinding};
 use bollard::Docker;
 
@@ -41,6 +41,24 @@ impl DockerTestRunner {
 
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
+        let logs = self
+            .instance
+            .logs::<String>(
+                &self.id,
+                Some(LogsOptions {
+                    follow: false,
+                    stdout: true,
+                    stderr: true,
+                    ..Default::default()
+                }),
+            )
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        for log in logs {
+            eprintln!("{}", log);
+        }
+
         self.instance
             .remove_container(
                 &self.id,
