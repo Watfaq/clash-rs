@@ -195,6 +195,9 @@ mod tests {
 
         let mut provider = MockDummyProxyProvider::new();
 
+        provider.expect_touch().returning(|| ());
+        provider.expect_healthcheck().returning(|| ());
+
         provider.expect_proxies().returning(move || {
             let mut proxies = Vec::new();
             proxies.push(ss_handler.clone());
