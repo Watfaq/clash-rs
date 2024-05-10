@@ -111,7 +111,8 @@ impl TryFrom<def::Config> for Config {
                 .rule_provider
                 .map(|m| {
                     m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
                             let provider = RuleProviderDef::try_from(body).map_err(|x| {
                                 Error::InvalidConfig(format!(
                                     "invalid rule provider {}: {}",
@@ -186,7 +187,8 @@ impl TryFrom<def::Config> for Config {
                 .proxy_provider
                 .map(|m| {
                     m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
                             let provider =
                                 OutboundProxyProviderDef::try_from(body).map_err(|x| {
                                     Error::InvalidConfig(format!(

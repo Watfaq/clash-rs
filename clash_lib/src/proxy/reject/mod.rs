@@ -1,14 +1,14 @@
 use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
 use crate::app::dns::ThreadSafeDNSResolver;
 use crate::config::internal::proxy::PROXY_REJECT;
-use crate::proxy::{AnyOutboundHandler, AnyStream, OutboundHandler};
-use crate::session::{Session, SocksAddr};
+use crate::proxy::{AnyOutboundHandler, OutboundHandler};
+use crate::session::Session;
 use async_trait::async_trait;
 use serde::Serialize;
 use std::io;
 use std::sync::Arc;
 
-use super::OutboundType;
+use super::{ConnectorType, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -31,10 +31,6 @@ impl OutboundHandler for Handler {
         OutboundType::Reject
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
-    }
-
     async fn support_udp(&self) -> bool {
         false
     }
@@ -47,20 +43,15 @@ impl OutboundHandler for Handler {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
     }
 
-    async fn proxy_stream(
-        &self,
-        _s: AnyStream,
-        #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
-    }
-
     async fn connect_datagram(
         &self,
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
     }
 }

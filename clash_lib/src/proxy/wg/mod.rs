@@ -16,12 +16,12 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -204,10 +204,6 @@ impl OutboundHandler for Handler {
         OutboundType::WireGuard
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
     async fn support_udp(&self) -> bool {
         self.opts.udp
     }
@@ -263,16 +259,6 @@ impl OutboundHandler for Handler {
         Ok(Box::new(chained))
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        _s: AnyStream,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        Err(new_io_error("not supported"))
-    }
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
@@ -288,6 +274,10 @@ impl OutboundHandler for Handler {
         let chained = ChainedDatagramWrapper::new(socket);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }
 

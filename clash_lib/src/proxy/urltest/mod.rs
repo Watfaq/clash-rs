@@ -13,12 +13,12 @@ use crate::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
@@ -133,11 +133,6 @@ impl OutboundHandler for Handler {
         OutboundType::UrlTest
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.fastest(false).await.remote_addr().await
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp || self.fastest(false).await.support_udp().await
@@ -158,19 +153,6 @@ impl OutboundHandler for Handler {
         Ok(s)
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.fastest(true)
-            .await
-            .proxy_stream(s, sess, resolver)
-            .await
-    }
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
@@ -184,6 +166,38 @@ impl OutboundHandler for Handler {
             .await?;
         d.append_to_chain(self.name()).await;
         Ok(d)
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        self.fastest(false).await.support_connector().await
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .fastest(true)
+            .await
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await?;
+
+        s.append_to_chain(self.name()).await;
+        Ok(s)
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        self.fastest(true)
+            .await
+            .connect_datagram_with_connector(sess, resolver, connector)
+            .await
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

@@ -11,13 +11,13 @@ use crate::{
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
-    session::{Session, SocksAddr},
+    session::Session,
     Error,
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[async_trait]
@@ -108,10 +108,6 @@ impl OutboundHandler for Handler {
         OutboundType::Selector
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.selected_proxy(false).await.remote_addr().await
-    }
-
     async fn support_udp(&self) -> bool {
         self.opts.udp && self.selected_proxy(false).await.support_udp().await
     }
@@ -136,18 +132,6 @@ impl OutboundHandler for Handler {
         }
     }
 
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.selected_proxy(true)
-            .await
-            .proxy_stream(s, sess, resolver)
-            .await
-    }
-
     async fn connect_datagram(
         &self,
         sess: &Session,
@@ -156,6 +140,38 @@ impl OutboundHandler for Handler {
         self.selected_proxy(true)
             .await
             .connect_datagram(sess, resolver)
+            .await
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::Tcp
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .selected_proxy(true)
+            .await
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await?;
+
+        s.append_to_chain(self.name()).await;
+        Ok(s)
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        self.selected_proxy(true)
+            .await
+            .connect_datagram_with_connector(sess, resolver, connector)
             .await
     }
 

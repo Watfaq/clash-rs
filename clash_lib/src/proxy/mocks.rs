@@ -11,10 +11,10 @@ use crate::{
             proxy_provider::ProxyProvider, Provider, ProviderType, ProviderVehicleType,
         },
     },
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
-use super::{AnyOutboundHandler, AnyStream, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}
@@ -51,9 +51,6 @@ mock! {
         /// only contains Type information, do not rely on the underlying value
         fn proto(&self) -> OutboundType;
 
-        /// The proxy remote address
-        async fn remote_addr(&self) -> Option<SocksAddr>;
-
         /// whether the outbound handler support UDP
         async fn support_udp(&self) -> bool;
 
@@ -64,13 +61,6 @@ mock! {
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedStream>;
 
-        /// wraps a stream with outbound handler
-        async fn proxy_stream(
-            &self,
-            s: AnyStream,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<AnyStream>;
 
         /// connect to remote target via UDP
         async fn connect_datagram(
@@ -79,7 +69,7 @@ mock! {
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedDatagram>;
 
-        /// for API
-        async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>>;
+        /// relay related
+        async fn support_connector(&self) -> crate::proxy::ConnectorType;
     }
 }

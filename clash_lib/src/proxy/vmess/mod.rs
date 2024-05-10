@@ -23,8 +23,8 @@ use self::vmess_impl::OutboundDatagramVmess;
 use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
-    utils::new_tcp_stream,
-    AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
+    utils::{new_tcp_stream, RemoteConnector},
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 pub enum VmessTransport {
@@ -154,11 +154,6 @@ impl OutboundHandler for Handler {
         OutboundType::Vmess
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp
@@ -193,16 +188,6 @@ impl OutboundHandler for Handler {
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
-    }
-
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        _: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, false).await
     }
 
     async fn connect_datagram(
@@ -246,6 +231,59 @@ impl OutboundHandler for Handler {
                 sess.destination.port(),
             )),
         );
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
+
+        let d = OutboundDatagramVmess::new(stream, sess.destination.clone());
 
         let chained = ChainedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;
