@@ -245,7 +245,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         let stream = connector
             .connect_stream(
@@ -268,7 +268,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
         let stream = connector
             .connect_stream(

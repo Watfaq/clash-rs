@@ -176,7 +176,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         let s = self
             .fastest(true)
@@ -192,7 +192,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
         self.fastest(true)
             .await

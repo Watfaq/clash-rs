@@ -187,7 +187,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-        _connector: &Box<dyn RemoteConnector>, // could've been a &dyn RemoteConnector, but mockall doesn't support that
+        _connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         error!("tcp relay not supported for {}", self.proto());
         Err(io::Error::new(
@@ -200,7 +200,7 @@ pub trait OutboundHandler: Sync + Send + Unpin {
         &self,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
-        _connector: &Box<dyn RemoteConnector>,
+        _connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
         Err(io::Error::new(
             io::ErrorKind::Other,

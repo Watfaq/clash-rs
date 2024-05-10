@@ -151,7 +151,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         let s = self
             .selected_proxy(true)
@@ -167,7 +167,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await

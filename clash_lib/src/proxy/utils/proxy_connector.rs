@@ -129,7 +129,7 @@ impl RemoteConnector for ProxyConnector {
 
         let s = self
             .proxy
-            .connect_stream_with_connector(&sess, resolver, &self.connector)
+            .connect_stream_with_connector(&sess, resolver, self.connector.as_ref())
             .await?;
 
         let stream = ChainedStreamWrapper::new(s);
@@ -156,7 +156,7 @@ impl RemoteConnector for ProxyConnector {
         };
         let s = self
             .proxy
-            .connect_datagram_with_connector(&sess, resolver, &self.connector)
+            .connect_datagram_with_connector(&sess, resolver, self.connector.as_ref())
             .await?;
 
         let stream = ChainedDatagramWrapper::new(s);

@@ -71,19 +71,5 @@ mock! {
 
         /// relay related
         async fn support_connector(&self) -> crate::proxy::ConnectorType;
-
-        async fn connect_stream_with_connector(
-            &self,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-            connector: &Box<dyn crate::proxy::utils::RemoteConnector>,
-        ) -> io::Result<BoxedChainedStream>;
-
-        async fn connect_datagram_with_connector(
-            &self,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-            connector: &Box<dyn crate::proxy::utils::RemoteConnector>,
-        ) -> io::Result<BoxedChainedDatagram>;
     }
 }

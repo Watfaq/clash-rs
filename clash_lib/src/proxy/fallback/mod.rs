@@ -114,7 +114,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         let proxy = self.find_alive_proxy(true).await;
         proxy

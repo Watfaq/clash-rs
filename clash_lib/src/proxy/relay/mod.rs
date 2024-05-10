@@ -90,7 +90,7 @@ impl OutboundHandler for Handler {
 
                 debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let s = last[0]
-                    .connect_stream_with_connector(sess, resolver, &connector)
+                    .connect_stream_with_connector(sess, resolver, connector.as_ref())
                     .await?;
 
                 let chained = ChainedStreamWrapper::new(s);
@@ -123,7 +123,7 @@ impl OutboundHandler for Handler {
                     connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
                 let d = last[0]
-                    .connect_datagram_with_connector(sess, resolver, &connector)
+                    .connect_datagram_with_connector(sess, resolver, connector.as_ref())
                     .await?;
 
                 let chained = ChainedDatagramWrapper::new(d);

@@ -87,7 +87,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> std::io::Result<BoxedChainedStream> {
         let s = connector
             .connect_stream(
@@ -108,7 +108,7 @@ impl OutboundHandler for Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-        connector: &Box<dyn RemoteConnector>,
+        connector: &dyn RemoteConnector,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let d = connector
             .connect_datagram(
