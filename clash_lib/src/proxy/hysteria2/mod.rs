@@ -37,7 +37,10 @@ use crate::{
 };
 use tracing::debug;
 
-use self::codec::Hy2TcpCodec;
+use self::{
+    codec::Hy2TcpCodec,
+    congestion::{Burtal, DynController},
+};
 
 use super::{converters::hysteria2::PortGenrateor, AnyStream, OutboundHandler, OutboundType};
 
@@ -229,6 +232,14 @@ impl HystClient {
         let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         //todo set congestion controller according to cc_rx
+
+        let any = session
+            .congestion_state()
+            .into_any()
+            .downcast::<DynController>()
+            .unwrap();
+        any.set_controller(Box::new(Burtal::new(0, session.clone())));
+
         anyhow::Ok((session, h3_conn))
     }
 
