@@ -72,7 +72,7 @@ boringtun = { version = "0.6.0", git = "https://github.com/cloudflare/boringtun.
 smoltcp = { version = "0.11", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
 tokio-rustls = "0.24"
-hyper-rustls = { version = "0.24", features = ["http1", "http2"] }
+hyper-rustls = { version = "0.27", features = ["http1", "http2"] }
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
