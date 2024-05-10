@@ -90,7 +90,7 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
                 .write_all(chunk.as_bytes())
                 .await
                 .inspect_err(|x| {
-                    tracing::error!("proxy_fn write error: {}", x);
+                    tracing::error!("proxy_fn write error: {x:?}");
                 })?;
         }
         write_half.flush().await?;
@@ -99,7 +99,7 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
 
         for _ in 0..100 {
             read_half.read_exact(&mut buf).await.inspect_err(|x| {
-                tracing::error!("proxy_fn read error: {}", x);
+                tracing::error!("proxy_fn read error: {x:?}");
             })?;
             assert_eq!(buf, "world".as_bytes().to_owned());
         }

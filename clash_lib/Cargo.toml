@@ -15,7 +15,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
 thiserror = "1.0"
 async-trait = "0.1"
-anyhow = "1.0"
+anyhow = "1"
 futures = "0.3"
 bytes = "1.6"
 async-recursion = "1"
@@ -32,7 +32,7 @@ prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
-network-interface = "1.1.3"
+network-interface = "2.0.0"
 base64 = "0.22"
 uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 
@@ -48,7 +48,7 @@ opentelemetry-jaeger = { version = "0.21", features = ["collector_client", "hype
 opentelemetry-otlp = { version = "0.15.0", features = ["http-proto"] }
 
 crc32fast = "1.4.0"
-brotli = "4.0.0"
+brotli = "6.0.0"
 hmac = "0.12.1"
 sha1 = "0.10"
 sha2 = "0.10.8"
@@ -63,7 +63,7 @@ const-fnv1a-hash = "1"
 filetime = "0.2"
 axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5.2", features = ["fs", "trace", "cors"] }
-chrono = { version = "0.4.37", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
@@ -99,17 +99,17 @@ tokio-tungstenite = "0.21.0"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-oslog = "0.1"
+tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2.3"
 
 
-shadowsocks = { version = "1.18.1", optional = true, features=["aead-cipher-2022"] }
+shadowsocks = { version = "1.18.2", optional = true, features=["aead-cipher-2022"] }
 maxminddb = "0.24.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
-arti-client = { version = "0.14.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.10.0" }
+arti-client = { version = "0.18.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+tor-rtcompat = { version = "0.18.0" }
 
 # tuic
 tuic = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
@@ -128,7 +128,7 @@ mockall = "0.12.1"
 tokio-test = "0.4.4"
 axum-macros = "0.4.0"
 bollard = "0.16"
-serial_test = "3.0.0"
+serial_test = "3.1.1"
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "2.10.0"
+security-framework = "2.11.0"

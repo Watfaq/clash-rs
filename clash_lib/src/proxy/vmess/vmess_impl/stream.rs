@@ -82,6 +82,7 @@ pub trait ReadExt {
         cx: &mut std::task::Context,
         size: usize,
     ) -> Poll<std::io::Result<()>>;
+    #[allow(unused)]
     fn get_data(&self) -> &[u8];
 }
 
@@ -167,18 +168,19 @@ where
             }
             SECURITY_CHACHA20_POLY1305 => {
                 let mut key = [0u8; 32];
-                let tmp = utils::md5(&req_body_key);
-                key.copy_from_slice(&tmp);
+                key[..16].copy_from_slice(&utils::md5(&req_body_key));
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
+
                 let write_cipher =
                     VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
 
-                let tmp = utils::md5(&req_body_key);
-                key.copy_from_slice(&tmp);
+                let mut key = [0u8; 32];
+                key[..16].copy_from_slice(&utils::md5(&resp_body_key));
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
+
                 let reader_cipher =
                     VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);

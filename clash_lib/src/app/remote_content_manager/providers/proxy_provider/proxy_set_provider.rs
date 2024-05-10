@@ -74,7 +74,7 @@ impl ProxySetProvider {
                 Box::pin(async move {
                     let mut inner = inner.write().await;
                     debug!("updating {} proxies for: {}", n, input.len());
-                    inner.proxies = input.clone();
+                    inner.proxies.clone_from(&input);
                     hc.update(input).await;
                     // check once after update
                     tokio::spawn(async move {
