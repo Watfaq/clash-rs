@@ -269,7 +269,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
  "void",
 ]
@@ -1083,7 +1083,7 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",
- "tor-rtcompat 0.10.0",
+ "tor-rtcompat",
  "tower",
  "tower-http",
  "tracing",
@@ -5635,7 +5635,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdir",
  "tor-proto",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tor-socksproto",
  "tor-units",
  "tracing",
@@ -5693,7 +5693,7 @@ dependencies = [
  "tor-proto",
  "tor-protover",
  "tor-relay-selection",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
  "void",
  "weak-table",
@@ -5765,7 +5765,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdoc",
  "tor-proto",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5816,7 +5816,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5874,7 +5874,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-relay-selection",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tor-units",
  "tracing",
 ]
@@ -5916,7 +5916,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -6043,7 +6043,7 @@ dependencies = [
  "once_cell",
  "thiserror",
  "tor-error",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
  "weak-table",
 ]
@@ -6183,7 +6183,7 @@ dependencies = [
  "tor-linkspec",
  "tor-llcrypto",
  "tor-log-ratelim",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tor-rtmock",
  "tor-units",
  "tracing",
@@ -6215,20 +6215,6 @@ dependencies = [
  "tor-linkspec",
  "tor-netdir",
  "tor-netdoc",
-]
-
-[[package]]
-name = "tor-rtcompat"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa56047926b8da823720654bbdccd7afaa68d635e4341193701d29005818c348"
-dependencies = [
- "async-trait",
- "async_executors",
- "educe",
- "futures",
- "pin-project",
- "thiserror",
 ]
 
 [[package]]
@@ -6276,7 +6262,7 @@ dependencies = [
  "thiserror",
  "tor-async-utils",
  "tor-error",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tracing",
  "tracing-test",
  "void",
