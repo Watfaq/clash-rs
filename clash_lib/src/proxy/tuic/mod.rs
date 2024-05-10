@@ -29,7 +29,7 @@ use crate::{
     },
     common::tls::GLOBAL_ROOT_STORE,
     proxy::tuic::types::{ServerAddr, TuicEndpoint},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
@@ -43,9 +43,9 @@ use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpSession};
 
+use super::ConnectorType;
 use super::{
-    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, AnyStream, OutboundHandler,
-    OutboundType,
+    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -92,22 +92,8 @@ impl OutboundHandler for Handler {
         OutboundType::Tuic
     }
 
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        None
-    }
-
     async fn support_udp(&self) -> bool {
         true
-    }
-
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<AnyStream> {
-        tracing::warn!("Proxy stream currently is direcrt connect");
-        Ok(s)
     }
 
     async fn connect_stream(
@@ -129,6 +115,10 @@ impl OutboundHandler for Handler {
             tracing::error!("{:?}", e);
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
         })
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::None
     }
 }
 

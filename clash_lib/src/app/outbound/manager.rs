@@ -240,7 +240,7 @@ impl OutboundManager {
         ) -> Result<ThreadSafeProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
                 return Err(Error::InvalidConfig(format!(
-                    "proxy group {} is reserved",
+                    "proxy group name `{}` is reserved",
                     name
                 )));
             }

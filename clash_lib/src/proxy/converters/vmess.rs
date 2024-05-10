@@ -68,7 +68,11 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::H2(Http2Option {
-                                host: x.host.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                host: x
+                                    .host
+                                    .as_ref()
+                                    .map(|x| x.to_owned())
+                                    .unwrap_or(vec![s.server.to_owned()]),
                                 path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
                             })
                         })

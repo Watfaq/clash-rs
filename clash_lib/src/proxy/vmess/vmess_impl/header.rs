@@ -124,7 +124,7 @@ mod tests {
 
         let cmd_key = "1234567890123456".as_bytes();
 
-        let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+        let pk = kdf::vmess_kdf_1_one_shot(cmd_key, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
         let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
         let key = GenericArray::from(pk);
         let cipher = aes::Aes128::new(&key);

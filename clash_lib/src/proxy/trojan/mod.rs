@@ -16,13 +16,15 @@ use crate::app::dispatcher::ChainedStreamWrapper;
 use crate::common::utils;
 use crate::{
     app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::datagram::OutboundDatagramTrojan;
 
 use super::transport;
 use super::transport::TLSOptions;
+use super::utils::RemoteConnector;
+use super::ConnectorType;
 use super::{
     options::{GrpcOption, WsOption},
     utils::new_tcp_stream,
@@ -67,7 +69,7 @@ impl Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        tcp: bool,
+        udp: bool,
     ) -> io::Result<AnyStream> {
         let tls_opt = TLSOptions {
             skip_cert_verify: self.opts.skip_cert_verify,
@@ -119,7 +121,7 @@ impl Handler {
         let password = utils::encode_hex(&password[..]);
         buf.put_slice(password.as_bytes());
         buf.put_slice(b"\r\n");
-        buf.put_u8(if tcp { 0x01 } else { 0x03 }); // tcp
+        buf.put_u8(if udp { 0x03 } else { 0x01 });
         sess.destination.write_buf(&mut buf);
         buf.put_slice(b"\r\n");
         s.write_all(&buf).await?;
@@ -136,10 +138,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Trojan
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
     }
 
     async fn support_udp(&self) -> bool {
@@ -170,20 +168,11 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.proxy_stream(stream, sess, resolver).await?;
+        let stream = self.inner_proxy_stream(stream, sess, false).await?;
 
         let chained = ChainedStreamWrapper::new(stream);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
-    }
-
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        _: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, true).await
     }
 
     async fn connect_datagram(
@@ -210,7 +199,60 @@ impl OutboundHandler for Handler {
         })
         .await?;
 
-        let stream = self.inner_proxy_stream(stream, sess, false).await?;
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
+
+        let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
         let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
 
