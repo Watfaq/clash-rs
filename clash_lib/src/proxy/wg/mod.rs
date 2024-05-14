@@ -306,6 +306,7 @@ mod tests {
                 "PGID=1000",
                 "TZ=Etc/UTC",
                 "SERVERPORT=10002",
+                "SERVERURL=127.0.0.1",
                 "PEERS=1",
                 "PEERDNS=auto",
                 "INTERNAL_SUBNET=10.13.13.0",
@@ -321,7 +322,6 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "TODO: fix me please"]
     async fn test_wg() -> anyhow::Result<()> {
         let opts = HandlerOpts {
             name: "wg".to_owned(),
@@ -345,11 +345,9 @@ mod tests {
         // cannot run the ping pong test, since the wireguard server is running on bridge network mode
         // and the `net.ipv4.conf.all.src_valid_mark` is not supported in the host network mode
         // the latency test should be enough
-        run_test_suites_and_cleanup(
-            handler,
-            get_runner().await?,
-            &[Suite::LatencyTcp, Suite::DnsUdp],
-        )
-        .await
+        let runner = get_runner().await?;
+        // FIXME: wait for the startup of the test runner in a more elegant way
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        run_test_suites_and_cleanup(handler, runner, &[Suite::LatencyTcp, Suite::DnsUdp]).await
     }
 }
