@@ -45,7 +45,7 @@ opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
 tracing-opentelemetry = "0.23"
 opentelemetry-jaeger-propagator = "0.1.0"
 opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.15.0", features = ["http-proto"] }
+opentelemetry-otlp = { version = "0.15.0", features = ["grpc-tonic"] }
 
 crc32fast = "1.4.0"
 brotli = "6.0.0"
