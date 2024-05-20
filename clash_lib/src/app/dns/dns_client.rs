@@ -13,7 +13,7 @@ use hickory_proto::error::ProtoError;
 use rustls::ClientConfig;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::common::tls::{self, GLOBAL_ROOT_STORE};
 use crate::dns::dhcp::DhcpClient;
@@ -85,8 +85,43 @@ enum DnsConfig {
     Https(net::SocketAddr, String, Option<Interface>),
 }
 
+impl Display for DnsConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            DnsConfig::Udp(addr, iface) => {
+                write!(f, "UDP: {}:{} ", addr.ip(), addr.port())?;
+                if let Some(iface) = iface {
+                    write!(f, "bind: {}", iface)?;
+                }
+                Ok(())
+            }
+            DnsConfig::Tcp(addr, iface) => {
+                write!(f, "TCP: {}:{} ", addr.ip(), addr.port())?;
+                if let Some(iface) = iface {
+                    write!(f, "bind: {}", iface)?;
+                }
+                Ok(())
+            }
+            DnsConfig::Tls(addr, host, iface) => {
+                write!(f, "TLS: {}:{} ", addr.ip(), addr.port())?;
+                if let Some(iface) = iface {
+                    write!(f, "bind: {}", iface)?;
+                }
+                write!(f, "host: {}", host)
+            }
+            DnsConfig::Https(addr, host, iface) => {
+                write!(f, "HTTPS: {}:{} ", addr.ip(), addr.port())?;
+                if let Some(iface) = iface {
+                    write!(f, "bind: {}", iface)?;
+                }
+                write!(f, "host: {}", host)
+            }
+        }
+    }
+}
+
 struct Inner {
-    c: client::AsyncClient,
+    c: Option<client::AsyncClient>,
     bg_handle: Option<JoinHandle<Result<(), ProtoError>>>,
 }
 
@@ -134,12 +169,11 @@ impl DnsClient {
                     DNSNetMode::Udp => {
                         let cfg =
                             DnsConfig::Udp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
-                        let (client, bg) = dns_stream_builder(&cfg).await?;
 
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
-                                c: client,
-                                bg_handle: Some(bg),
+                                c: None,
+                                bg_handle: None,
                             })),
 
                             cfg,
@@ -154,12 +188,10 @@ impl DnsClient {
                         let cfg =
                             DnsConfig::Tcp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
 
-                        let (client, bg) = dns_stream_builder(&cfg).await?;
-
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
-                                c: client,
-                                bg_handle: Some(bg),
+                                c: None,
+                                bg_handle: None,
                             })),
 
                             cfg,
@@ -177,12 +209,10 @@ impl DnsClient {
                             opts.iface.clone(),
                         );
 
-                        let (client, bg) = dns_stream_builder(&cfg).await?;
-
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
-                                c: client,
-                                bg_handle: Some(bg),
+                                c: None,
+                                bg_handle: None,
                             })),
 
                             cfg,
@@ -200,12 +230,10 @@ impl DnsClient {
                             opts.iface.clone(),
                         );
 
-                        let (client, bg) = dns_stream_builder(&cfg).await?;
-
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
-                                c: client,
-                                bg_handle: Some(bg),
+                                c: None,
+                                bg_handle: None,
                             })),
 
                             cfg,
@@ -241,25 +269,29 @@ impl Client for DnsClient {
 
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let mut inner = self.inner.write().await;
+
         if let Some(bg) = &inner.bg_handle {
             if bg.is_finished() {
                 warn!("dns client background task is finished, likely connection closed, restarting a new one");
                 let (client, bg) = dns_stream_builder(&self.cfg).await?;
-                inner.c = client;
+                inner.c.replace(client);
                 inner.bg_handle.replace(bg);
             }
         } else {
-            unreachable!("dns bg task handle dangling");
+            // initializing client
+            info!("initializing dns client: {}", &self.cfg);
+            let (client, bg) = dns_stream_builder(&self.cfg).await?;
+            inner.c.replace(client);
+            inner.bg_handle.replace(bg);
         }
-
-        drop(inner);
 
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
         req.set_id(rand::random::<u16>());
-        self.inner
-            .read()
-            .await
+
+        inner
             .c
+            .as_ref()
+            .unwrap()
             .send(req)
             .first_answer()
             .await
@@ -327,7 +359,6 @@ async fn dns_stream_builder(
         }
         DnsConfig::Https(addr, host, iface) => {
             let mut tls_config = ClientConfig::builder()
-                .with_safe_defaults()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["h2".into()];

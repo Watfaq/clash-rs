@@ -28,11 +28,13 @@ use crate::{proxy::utils::new_udp_socket, Error};
 use super::events::PortProtocol;
 
 pub struct WireguardTunnel {
-    pub(crate) source_peer_ip: IpAddr,
+    pub(crate) source_peer_ip: Ipv4Addr,
+    pub(crate) source_peer_ipv6: Option<Ipv6Addr>,
     peer: Arc<Mutex<Tunn>>,
     udp: UdpSocket,
     pub(crate) endpoint: SocketAddr,
     allowed_ips: Vec<IpNet>,
+    reserved_bits: [u8; 3],
 
     // send side packet going out of the tunnel
     packet_writer: Sender<(PortProtocol, Bytes)>,
@@ -54,9 +56,11 @@ pub struct Config {
     pub endpoint_public_key: PublicKey,
     pub preshared_key: Option<StaticSecret>,
     pub remote_endpoint: SocketAddr,
-    pub source_peer_ip: IpAddr,
+    pub source_peer_ip: Ipv4Addr,
+    pub source_peer_ipv6: Option<Ipv6Addr>,
     pub keepalive_seconds: Option<u16>,
     pub allowed_ips: Vec<IpNet>,
+    pub reserved_bits: [u8; 3],
 }
 
 impl WireguardTunnel {
@@ -65,7 +69,6 @@ impl WireguardTunnel {
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
     ) -> Result<Self, Error> {
-        let source_peer_ip = config.source_peer_ip;
         let peer = Tunn::new(
             config.private_key,
             config.endpoint_public_key,
@@ -73,8 +76,7 @@ impl WireguardTunnel {
             config.keepalive_seconds,
             0,
             None,
-        )
-        .map_err(|x| Error::InvalidConfig(format!("failed to create wireguard tunnel: {}", x)))?;
+        );
 
         let remote_endpoint = config.remote_endpoint;
 
@@ -87,14 +89,26 @@ impl WireguardTunnel {
         .await?;
 
         Ok(Self {
-            source_peer_ip,
+            source_peer_ip: config.source_peer_ip,
+            source_peer_ipv6: config.source_peer_ipv6,
             peer: Arc::new(Mutex::new(peer)),
             udp,
             endpoint: remote_endpoint,
             allowed_ips: config.allowed_ips,
+            reserved_bits: config.reserved_bits,
             packet_writer,
             packet_reader: Arc::new(Mutex::new(packet_reader)),
         })
+    }
+
+    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), Error> {
+        if packet.len() > 3 {
+            packet[1] = self.reserved_bits[0];
+            packet[2] = self.reserved_bits[1];
+            packet[3] = self.reserved_bits[2];
+        }
+        self.udp.send_to(packet, self.endpoint).await?;
+        Ok(())
     }
 
     pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
@@ -108,7 +122,7 @@ impl WireguardTunnel {
                 error!("failed to encapsulate packet: {e:?}");
             }
             boringtun::noise::TunnResult::WriteToNetwork(packet) => {
-                self.udp.send_to(packet, self.endpoint).await?;
+                self.udp_send(packet).await?;
             }
             _ => {
                 error!("unexpected result from encapsulate");
@@ -183,7 +197,12 @@ impl WireguardTunnel {
             };
 
             let mut peer = self.peer.lock().await;
-            let data = &recv_buf[..size];
+            let data = &mut recv_buf[..size];
+            if data.len() > 3 {
+                data[1] = 0;
+                data[2] = 0;
+                data[3] = 0;
+            }
 
             let _ = trace_span!("wg_decapsulate", endpoint = %self.endpoint, size = data.len())
                 .entered();
@@ -195,13 +214,13 @@ impl WireguardTunnel {
                     continue;
                 }
                 TunnResult::WriteToNetwork(packet) => {
+                    let size = packet.len();
                     match self
-                        .udp
-                        .send_to(packet, self.endpoint)
+                        .udp_send(packet)
                         .instrument(trace_span!(
                             "wg_send",
                             endpoint = %self.endpoint,
-                            size = packet.len(),
+                            size = size,
                         ))
                         .await
                     {
@@ -216,7 +235,7 @@ impl WireguardTunnel {
                     while let TunnResult::WriteToNetwork(packet) =
                         peer.decapsulate(None, &[], &mut send_buf)
                     {
-                        match self.udp.send_to(packet, self.endpoint).await {
+                        match self.udp_send(packet).await {
                             Ok(_) => {}
                             Err(e) => {
                                 error!("Failed to send decapsulation-instructed packet to WireGuard endpoint: {:?}", e);
@@ -301,14 +320,12 @@ impl WireguardTunnel {
             TunnResult::Err(e) => {
                 error!("wireguard error: {e:?}");
             }
-            TunnResult::WriteToNetwork(packet) => {
-                match self.udp.send_to(packet, self.endpoint).await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("failed to send packet: {}", e);
-                    }
+            TunnResult::WriteToNetwork(packet) => match self.udp_send(packet).await {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("failed to send packet: {}", e);
                 }
-            }
+            },
             _ => {
                 error!("unexpected result from wireguard");
             }
@@ -332,7 +349,7 @@ impl WireguardTunnel {
                 }),
             Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| Ipv6Addr::from(packet.dst_addr()) == self.source_peer_ip)
+                .filter(|packet| Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),

@@ -111,7 +111,8 @@ impl TryFrom<def::Config> for Config {
                 .rule_provider
                 .map(|m| {
                     m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
                             let provider = RuleProviderDef::try_from(body).map_err(|x| {
                                 Error::InvalidConfig(format!(
                                     "invalid rule provider {}: {}",
@@ -186,7 +187,8 @@ impl TryFrom<def::Config> for Config {
                 .proxy_provider
                 .map(|m| {
                     m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, body)| {
+                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
                             let provider =
                                 OutboundProxyProviderDef::try_from(body).map_err(|x| {
                                     Error::InvalidConfig(format!(
@@ -337,7 +339,14 @@ impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "rule provider name is required".to_owned(),
+            ))?
+            .to_owned();
         RuleProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }

@@ -22,7 +22,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use thiserror::Error;
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tracing::debug;
 use tracing::error;
@@ -96,7 +96,7 @@ pub struct GlobalState {
     tunnel_listener_handle: Option<JoinHandle<Result<(), Error>>>,
     api_listener_handle: Option<JoinHandle<Result<(), Error>>>,
     dns_listener_handle: Option<JoinHandle<Result<(), Error>>>,
-    reload_tx: mpsc::Sender<Config>,
+    reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
 }
 
@@ -149,7 +149,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let _g =
         app::logging::setup_logging(config.general.log_level, log_collector, &cwd, opts.log_file)
-            .map_err(|x| Error::InvalidConfig(format!("failed to setup logging: {}", x)))?;
+            .map_err(|x| eprintln!("failed to setup logging: {}", x))
+            .unwrap_or_default();
 
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -269,7 +270,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let api_runner = app::api::get_api_runner(
         config.general.controller,
-        log_tx,
+        log_tx.clone(),
         inbound_manager.clone(),
         dispatcher,
         global_state.clone(),
@@ -286,8 +287,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }
 
     runners.push(Box::pin(async move {
-        info!("receiving shutdown signal");
         shutdown_rx.recv().await;
+        info!("receiving shutdown signal");
         Ok(())
     }));
 
@@ -301,7 +302,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }));
 
     tasks.push(Box::pin(async move {
-        while let Some(config) = reload_rx.recv().await {
+        while let Some((config, done)) = reload_rx.recv().await {
             info!("reloading config");
             let config = match config.try_parse() {
                 Ok(c) => c,
@@ -395,6 +396,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 authenticator,
             )?));
 
+            done.send(()).unwrap();
+
+            debug!("stopping listeners");
             let mut g = global_state.lock().await;
             if let Some(h) = g.inbound_listener_handle.take() {
                 h.abort();
@@ -405,21 +409,45 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             if let Some(h) = g.dns_listener_handle.take() {
                 h.abort();
             }
+            if let Some(h) = g.api_listener_handle.take() {
+                h.abort();
+            }
 
-            let inbound_runner = inbound_manager.lock().await.get_runner()?;
-            let inbound_listener_handle = tokio::spawn(inbound_runner);
+            let inbound_listener_handle = inbound_manager
+                .lock()
+                .await
+                .get_runner()
+                .map(tokio::spawn)?;
 
-            let tun_runner = get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
-            let tun_runner_handle = tun_runner.map(tokio::spawn);
+            let tun_runner_handle =
+                get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?
+                    .map(tokio::spawn);
 
-            debug!("initializing dns listener");
+            debug!("reloading dns listener");
             let dns_listener_handle = dns::get_dns_listener(config.dns, dns_resolver.clone())
                 .await
                 .map(tokio::spawn);
 
+            debug!("reloading api listener");
+            let api_listener_handle = app::api::get_api_runner(
+                config.general.controller,
+                log_tx.clone(),
+                inbound_manager.clone(),
+                dispatcher,
+                global_state.clone(),
+                dns_resolver,
+                outbound_manager,
+                statistics_manager,
+                cache_store,
+                router,
+                cwd.to_string_lossy().to_string(),
+            )
+            .map(tokio::spawn);
+
             g.inbound_listener_handle = Some(inbound_listener_handle);
             g.tunnel_listener_handle = tun_runner_handle;
             g.dns_listener_handle = dns_listener_handle;
+            g.api_listener_handle = api_listener_handle;
         }
         Ok(())
     }));
@@ -444,12 +472,11 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    #[ignore]
     fn start_and_stop() {
         let conf = r#"
         socks-port: 7891
         bind-address: 127.0.0.1
-        mmdb: "clash_lib/tests/data/Country.mmdb"
+        mmdb: "tests/data/Country.mmdb"
         "#;
 
         let handle = thread::spawn(|| {

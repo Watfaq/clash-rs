@@ -8,16 +8,17 @@ edition = { workspace = true }
 default = ["shadowsocks"]
 tracing = []
 bench = ["criterion"]
+onion = ["arti-client/onion-service-client"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
-tokio-rustls = "0.25"
+
 thiserror = "1.0"
 async-trait = "0.1"
-anyhow = "1.0"
+anyhow = "1"
 futures = "0.3"
-bytes = "1.5"
+bytes = "1.6"
 async-recursion = "1"
 ipnet = "2.9"
 url = "2.5"
@@ -25,52 +26,59 @@ regex = "1"
 byteorder = "1.5"
 lru_time_cache = "0.11"
 hyper = { version = "0.14.28", features = ["http1","http2","client", "server", "tcp"] }
-http = { version = "1.0" }
+http = { version = "1.1" }
 httparse = "1.8.0"
-h2 = "0.4.0"
+h2 = "0.4.4"
 prost = "0.12"
 tower = { version = "0.4", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
-network-interface = "1.1.1"
-base64 = "0.21"
-uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
-boring = { git = "https://github.com/Watfaq/boring.git", rev = "58d5e7c66b537989bde45d20ce54aff11de1bcea" }
-boring-sys = { git = "https://github.com/Watfaq/boring.git", rev = "58d5e7c66b537989bde45d20ce54aff11de1bcea" }
-hyper-boring = { git = "https://github.com/Watfaq/boring.git", rev = "58d5e7c66b537989bde45d20ce54aff11de1bcea" }
-tokio-boring = { git = "https://github.com/Watfaq/boring.git", rev = "58d5e7c66b537989bde45d20ce54aff11de1bcea" }
+network-interface = "2.0.0"
+base64 = "0.22"
+uuid = { version = "1.8.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+
 ip_network_table-deps-treebitmap = "0.5.0"
 once_cell = "1.18.0"
 
 # opentelemetry
-opentelemetry = "0.21"
-opentelemetry_sdk = "0.21"
-tracing-opentelemetry = "0.22" 
-opentelemetry-jaeger = { version = "0.20", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
+opentelemetry = "0.22"
+opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
+tracing-opentelemetry = "0.23"
+opentelemetry-jaeger-propagator = "0.1.0"
+opentelemetry-jaeger = { version = "0.21", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.15.0", features = ["http-proto"] }
 
-crc32fast = "1.3.2"
-brotli = "3.4.0"
+crc32fast = "1.4.0"
+brotli = "6.0.0"
 hmac = "0.12.1"
+sha1 = "0.10"
 sha2 = "0.10.8"
-md-5 = "0.10.5"
+md-5 = "0.10"
 chacha20poly1305 = "0.10"
+aead = { version = "0.5.2", features = ["std"] }
+aes = "0.8.4"
 aes-gcm = "0.10"
+cfb-mode = "0.8.2"
+const-fnv1a-hash = "1"
+
 filetime = "0.2"
 axum = { version = "0.7", features = ["ws"] }
-tower-http = { version = "0.5.0", features = ["fs", "trace", "cors"] }
-chrono = { version = "0.4.26", features = ["serde"] }
+tower-http = { version = "0.5.2", features = ["fs", "trace", "cors"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
 netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
 
-boringtun = { version = "0.6.0" }
-smoltcp = { version = "0.10", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
+boringtun = { version = "0.6.0", git = "https://github.com/cloudflare/boringtun.git", rev = "f672bb6c1e1e371240a8d151f15854687eb740bb" }
+smoltcp = { version = "0.11", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
+tokio-rustls = "0.25"
+hyper-rustls = { version = "0.27", features = ["http1", "http2"] }
 
 serde = { version = "1.0", features=["derive"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
-erased-serde = "0.4.1"
+erased-serde = "0.4.4"
 
 hickory-client = "0.24"
 hickory-resolver = "0.24"
@@ -78,10 +86,12 @@ hickory-server = { version = "0.24", features = ["dns-over-rustls", "dns-over-ht
 hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 
 # DoH
-rustls = { version  = "0.22" }
+rustls = { version  = "0.23" }
 rustls-pemfile = "2"
 webpki-roots = "0.26"
+
 dhcproto = "0.11"
+ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.8"
 
@@ -90,26 +100,36 @@ tokio-tungstenite = "0.21.0"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-oslog = "0.1"
+tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2.3"
 
 
-shadowsocks = { version = "1.17.1", optional = true, features=["aead-cipher-2022"] }
-maxminddb = "0.23.0"
+shadowsocks = { version = "1.18.2", optional = true, features=["aead-cipher-2022"] }
+maxminddb = "0.24.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
+
+arti-client = { version = "0.18.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+tor-rtcompat = { version = "0.18.0" }
+
+# tuic
+tuic = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
+quinn = { version = "0.10", default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
+register-count = "0.1.0"
 
 console-subscriber = { version = "0.2.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.10"
 ctor = "0.2"
 mockall = "0.12.1"
-tokio-test = "0.4.3"
+tokio-test = "0.4.4"
 axum-macros = "0.4.0"
+bollard = "0.16"
+serial_test = "3.1.1"
 
-
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2.8.0"
+[target.'cfg(macos)'.dependencies]
+security-framework = "2.11.0"

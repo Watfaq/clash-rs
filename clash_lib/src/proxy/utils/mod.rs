@@ -1,7 +1,16 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    fmt::Display,
+    net::{IpAddr, SocketAddr},
+};
+
+#[cfg(all(test, not(ci)))]
+pub mod test_utils;
 
 pub mod provider_helper;
+mod proxy_connector;
 mod socket_helpers;
+
+pub use proxy_connector::*;
 
 use serde::{Deserialize, Serialize};
 pub use socket_helpers::*;
@@ -10,6 +19,15 @@ pub use socket_helpers::*;
 pub enum Interface {
     IpAddr(IpAddr),
     Name(String),
+}
+
+impl Display for Interface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Interface::IpAddr(ip) => write!(f, "{}", ip),
+            Interface::Name(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 impl Interface {

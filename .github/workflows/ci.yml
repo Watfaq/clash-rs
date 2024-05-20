@@ -2,83 +2,262 @@ name: Build/Test/Release
 
 on:
   push:
+    tags: [ "v*" ]
     branches: [ "master" ]
-    tags:
-      - v*
   pull_request:
     branches: [ "master" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE: "clash"
+
 jobs:
-  test:
-    name: test on ${{ matrix.os }}
+  compile:
+    name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
-    runs-on: ${{ matrix.os }}
+        include:
+          # Example
+          # when not set, default will be used (except target, cross)
+          # - os: ubuntu-latest
+          #   target: x86_64-unknown-linux-gnu
+          #   release-name: x86_64-linux
+          #   toolchain: stable
+          #   cross: true
+          #   postfix: ""
+          #   extra-args: ""
+          #   components: ""
+          #   rustflags: ""
+
+          # Linux x86
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            cross: true
+            extra-args: "--all-features"
+          # Linux x86 static-crt
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            release-name: x86_64-unknown-linux-gnu-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-gnu
+            release-name: i686-unknown-linux-gnu-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Linux arm
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabi
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            cross: true
+            extra-args: "--all-features"
+          # Linux arm static-crt
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            release-name: aarch64-unknown-linux-gnu-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabi
+            release-name: armv7-unknown-linux-gnueabi-static-crt
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            cross: true
+            extra-args: "--all-features"
+            rustflags: "--cfg tokio_unstable"
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+          # Windows static-crt
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            release-name: x86_64-pc-windows-msvc-static-crt
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            release-name: i686-pc-windows-msvc-static-crt
+            cross: false
+            postfix: ".exe"
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # MacOSX
+          - os: macos-12
+            target: x86_64-apple-darwin
+            cross: false
+            extra-args: "--all-features"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            cross: false
+            extra-args: "--all-features"
+          # MacOSX static-crt
+          - os: macos-12
+            target: x86_64-apple-darwin
+            release-name: x86_64-apple-darwin-static-crt
+            cross: false
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            release-name: aarch64-apple-darwin-static-crt
+            cross: false
+            extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Linux mips: tier-3, pity
+          # Linux risc-v: needs update rustls
+          # Windows gnu: tokio dont work
+          # Windows aarch: todo
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: actions/setup-go@v5
-      with:
-        go-version: '1.20'
-    - uses: ilammy/setup-nasm@v1
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-    - name: Run cargo fmt
-      run: cargo fmt --all -- --check
-    - name: Run cargo check
-      run: cargo check --all --all-features
-    - name: Run cargo clippy
-      run: cargo clippy --all --all-features -- -D warnings
-    - name: Run cargo test
-      run: cargo test --all --all-features
-    
-  publish:
-    name: publish ${{ matrix.platforms.target }} on ${{ matrix.platforms.os }} static - ${{ matrix.static }}
-    if: contains(github.ref, 'tags/v')
-    needs: [test]
-    runs-on: ${{ matrix.platforms.os }}
-    strategy:
-      matrix:
-        static: [true, false]
-        platforms: [
-          {os: ubuntu-22.04, target: x86_64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: aarch64-unknown-linux-gnu},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabihf},
-          {os: ubuntu-22.04, target: armv7-unknown-linux-gnueabi},
-          {os: macos-13, target: aarch64-apple-darwin},
-          {os: macos-13, target: x86_64-apple-darwin},
-          {os: windows-2022, target: x86_64-pc-windows-msvc},
-        ]   
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - uses: actions/setup-go@v5
-      with:
-        go-version: '1.20'
-    - uses: ilammy/setup-nasm@v1
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v2
-    - name: Build
-      run: sh ./scripts/build.sh "${{ matrix.platforms.target }}" "${{ matrix.static }}"
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v1        
-      with:
-        generate_release_notes: true
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-    - name: Upload Release Asset
-      id: upload-release-asset 
-      uses: dwenegar/upload-release-assets@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        release_id: ${{ steps.create_release.outputs.id }}
-        assets_path: target/artifacts
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ matrix.release-name || matrix.target }}
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain || 'stable' }}
+          target: ${{ matrix.target }}
+          components: ${{ matrix.components || 'rustfmt, clippy' }}
+
+      - name: Cargo fmt
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: fmt
+          args: --all -- --check
+
+      - name: Cargo clippy
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: clippy
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Cargo test
+        uses: clechasseur/rs-cargo@v2
+        if: startsWith(matrix.os, 'ubuntu')
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: test
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          CROSS_CONTAINER_OPTS: "--network host"
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Cargo test (no docker test)
+        uses: clechasseur/rs-cargo@v2
+        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: test
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          CLASH_RS_CI: "true"
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Cargo build
+        uses: clechasseur/rs-cargo@v2
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: build
+          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Rename binary
+        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.release-name || matrix.target }}
+          path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
+
+  release:
+    name: Release
+
+    needs: [compile]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Merge binaries
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: binaries
+          pattern: '*'
+          retention-days: 1
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: ./packages
+
+      - name: Github stable release
+        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            packages/*
+            LICENSE
+
+      - name: Github nightly release
+        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        if: startsWith(github.ref, 'refs/heads/master')
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: true
+          automatic_release_tag: "latest"
+          files: |
+            packages/*
+            LICENSE

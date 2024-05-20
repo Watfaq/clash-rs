@@ -1,13 +1,8 @@
-use std::{io, sync::Arc};
+use std::io;
 
-use rustls::{ClientConfig, ServerName};
 use serde::Serialize;
-use tokio_rustls::TlsConnector;
 
-use crate::{
-    common::tls::{self, GLOBAL_ROOT_STORE},
-    proxy::AnyStream,
-};
+use crate::proxy::AnyStream;
 
 #[derive(Serialize, Clone)]
 pub struct TLSOptions {
@@ -21,7 +16,11 @@ pub async fn wrap_stream(
     opt: TLSOptions,
     expected_alpn: Option<&str>,
 ) -> io::Result<AnyStream> {
-    let mut tls_config = ClientConfig::builder()
+    use std::sync::Arc;
+
+    use crate::common::tls::{self, GLOBAL_ROOT_STORE};
+
+    let mut tls_config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
@@ -40,8 +39,8 @@ pub async fn wrap_stream(
 
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    let connector = TlsConnector::from(Arc::new(tls_config));
-    let dns_name = ServerName::try_from(opt.sni.as_str())
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+    let dns_name = rustls::ServerName::try_from(opt.sni.as_str())
         .unwrap_or_else(|_| panic!("invalid server name: {}", opt.sni));
 
     let c = connector.connect(dns_name, stream).await.and_then(|x| {

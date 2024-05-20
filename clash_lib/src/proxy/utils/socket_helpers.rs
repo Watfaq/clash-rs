@@ -10,6 +10,7 @@ use tokio::{
     time::timeout,
 };
 
+use tracing::debug;
 #[cfg(target_os = "windows")]
 use tracing::warn;
 
@@ -83,9 +84,24 @@ pub async fn new_tcp_stream<'a>(
             format!("can't resolve dns: {}", address),
         ))?;
 
-    let socket = match dial_addr {
-        IpAddr::V4(_) => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?,
-        IpAddr::V6(_) => socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?,
+    debug!(
+        "dialing {}[{}]:{} via {:?}",
+        address, dial_addr, port, iface
+    );
+
+    let socket = match (dial_addr, resolver.ipv6()) {
+        (IpAddr::V4(_), _) => {
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), true) => {
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?
+        }
+        (IpAddr::V6(_), false) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("ipv6 is disabled, can't dial {}", address),
+            ))
+        }
     };
 
     if let Some(iface) = iface {
@@ -107,6 +123,7 @@ pub async fn new_tcp_stream<'a>(
     )
     .await??;
 
+    debug!("connected to {}[{}]:{}", address, dial_addr, port);
     Ok(Box::new(stream))
 }
 

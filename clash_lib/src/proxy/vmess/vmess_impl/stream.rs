@@ -4,8 +4,9 @@ use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
 use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
+
+use md5::Md5;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
-use tracing::debug;
 
 use crate::{
     common::{
@@ -24,7 +25,7 @@ use super::{
         self, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
-    user::{ID, ID_BYTES_LEN},
+    user::ID,
     Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
     SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
@@ -81,6 +82,7 @@ pub trait ReadExt {
         cx: &mut std::task::Context,
         size: usize,
     ) -> Poll<std::io::Result<()>>;
+    #[allow(unused)]
     fn get_data(&self) -> &[u8];
 }
 
@@ -93,12 +95,6 @@ impl<S: AsyncRead + Unpin> ReadExt for VmessStream<S> {
     ) -> Poll<std::io::Result<()>> {
         self.read_buf.reserve(size);
         unsafe { self.read_buf.set_len(size) }
-        debug!(
-            "poll read exact: {}, read_pos: {}, buf: {}",
-            size,
-            self.read_pos,
-            self.read_buf.len()
-        );
         loop {
             if self.read_pos < size {
                 let dst = unsafe {
@@ -131,7 +127,7 @@ impl<S: AsyncRead + Unpin> ReadExt for VmessStream<S> {
 
 impl<S> VmessStream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + Sync,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     pub(crate) async fn new(
         stream: S,
@@ -172,18 +168,19 @@ where
             }
             SECURITY_CHACHA20_POLY1305 => {
                 let mut key = [0u8; 32];
-                let tmp = utils::md5(&req_body_key);
-                key.copy_from_slice(&tmp);
+                key[..16].copy_from_slice(&utils::md5(&req_body_key));
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
+
                 let write_cipher =
                     VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
 
-                let tmp = utils::md5(&req_body_key);
-                key.copy_from_slice(&tmp);
+                let mut key = [0u8; 32];
+                key[..16].copy_from_slice(&utils::md5(&resp_body_key));
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
+
                 let reader_cipher =
                     VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);
@@ -229,9 +226,11 @@ where
 
 impl<S> VmessStream<S>
 where
-    S: AsyncWrite + Unpin + Send + Sync,
+    S: AsyncWrite + Unpin,
 {
     async fn send_handshake_request(&mut self) -> std::io::Result<()> {
+        use hmac::{Hmac, Mac};
+        type HmacMd5 = Hmac<Md5>;
         let Self {
             ref mut stream,
             ref req_body_key,
@@ -253,21 +252,10 @@ where
         let mut mbuf = BytesMut::new();
 
         if !is_aead {
-            let mut hash = [0u8; boring_sys::EVP_MAX_MD_SIZE as usize];
-            let mut out_len: u32 = 0;
-
-            unsafe {
-                boring_sys::HMAC(
-                    boring_sys::EVP_md5(),
-                    id.uuid.as_bytes().as_ptr() as _,
-                    ID_BYTES_LEN,
-                    now.to_be_bytes().as_mut_ptr() as _,
-                    8,
-                    &mut hash as _,
-                    &mut out_len as _,
-                );
-            }
-            mbuf.put_slice(&hash[..out_len as _])
+            let mut mac =
+                HmacMd5::new_from_slice(id.uuid.as_bytes()).expect("key len expected to be 16");
+            mac.update(now.to_be_bytes().as_slice());
+            mbuf.put_slice(&mac.finalize().into_bytes());
         }
 
         let mut buf = BytesMut::new();
@@ -296,10 +284,8 @@ where
             buf.put_slice(&padding);
         }
 
-        unsafe {
-            let sum = boring_sys::OPENSSL_hash32(buf.as_mut_ptr() as _, buf.len());
-            buf.put_slice(sum.to_be_bytes().as_ref());
-        }
+        let sum = const_fnv1a_hash::fnv1a_hash_32(&buf, None);
+        buf.put_slice(&sum.to_be_bytes());
 
         if !is_aead {
             let mut data = buf.to_vec();
@@ -308,13 +294,10 @@ where
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
-            debug!("send non aead handshake request for user {}", id.uuid);
             stream.write_all(&out).await?;
         } else {
             let out = header::seal_vmess_aead_header(id.cmd_key, buf.freeze().to_vec(), now)
                 .map_err(map_io_error)?;
-            debug!("send aead handshake request for user {}", id.uuid);
-
             stream.write_all(&out).await?;
         }
 
@@ -326,19 +309,16 @@ where
 
 impl<S> AsyncRead for VmessStream<S>
 where
-    S: AsyncRead + Unpin + Send + Sync,
+    S: AsyncRead + Unpin + Send,
 {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        debug!("poll read with aead");
-
         loop {
             match self.read_state {
                 ReadState::AeadWaitingHeaderSize => {
-                    debug!("recv handshake response header");
                     let this = &mut *self;
                     let resp_body_key = this.resp_body_key.clone();
                     let resp_body_iv = this.resp_body_iv.clone();
@@ -365,7 +345,6 @@ where
 
                         this.read_state = ReadState::StreamWaitingLength;
                     } else {
-                        debug!("recv handshake response header length");
                         ready!(this.poll_read_exact(cx, 18))?;
 
                         let aead_response_header_length_encryption_key = &kdf::vmess_kdf_1_one_shot(
@@ -377,7 +356,7 @@ where
                             KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
                         )[..12];
 
-                        let decrypted_response_header_len = crypto::aes_gcm_open(
+                        let decrypted_response_header_len = crypto::aes_gcm_decrypt(
                             aead_response_header_length_encryption_key,
                             aead_response_header_length_encryption_iv,
                             this.read_buf.split().as_ref(),
@@ -401,8 +380,6 @@ where
                 }
 
                 ReadState::AeadWaitingHeader(header_size) => {
-                    debug!("recv handshake header body: {}", header_size);
-
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, header_size + 16))?;
 
@@ -418,7 +395,7 @@ where
                         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
                     )[..12];
 
-                    let buf = crypto::aes_gcm_open(
+                    let buf = crypto::aes_gcm_decrypt(
                         aead_response_header_payload_encryption_key,
                         aead_response_header_payload_encryption_iv,
                         this.read_buf.split().as_ref(),
@@ -451,7 +428,6 @@ where
                 }
 
                 ReadState::StreamWaitingLength => {
-                    debug!("checking recv stream data length");
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, 2))?;
                     let len = u16::from_be_bytes(this.read_buf.split().as_ref().try_into().unwrap())
@@ -468,7 +444,6 @@ where
                 }
 
                 ReadState::StreamWaitingData(size) => {
-                    debug!("got recv stream data length: {}", size);
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, size))?;
 
@@ -483,7 +458,6 @@ where
                 }
 
                 ReadState::StreamFlushingData(size) => {
-                    debug!("chunking stream data: {}", size);
                     let to_read = std::cmp::min(buf.remaining(), size);
                     let payload = self.read_buf.split_to(to_read);
                     buf.put_slice(&payload);
@@ -504,7 +478,7 @@ where
 
 impl<S> AsyncWrite for VmessStream<S>
 where
-    S: AsyncWrite + Unpin + Send + Sync,
+    S: AsyncWrite + Unpin + Send,
 {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -595,17 +569,12 @@ where
 }
 
 fn hash_timestamp(timestamp: u64) -> [u8; 16] {
-    unsafe {
-        let mut ctx = boring_sys::MD5_CTX::default();
-        boring_sys::MD5_Init(&mut ctx);
-
-        boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
-        boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
-        boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
-        boring_sys::MD5_Update(&mut ctx, timestamp.to_be_bytes().as_ptr() as _, 8);
-
-        let mut hash = [0u8; 16];
-        boring_sys::MD5_Final(hash.as_mut_ptr() as _, &mut ctx);
-        hash
-    }
+    use md5::Digest;
+    let mut hasher = md5::Md5::new();
+    // TODO Why four times?
+    hasher.update(timestamp.to_be_bytes());
+    hasher.update(timestamp.to_be_bytes());
+    hasher.update(timestamp.to_be_bytes());
+    hasher.update(timestamp.to_be_bytes());
+    hasher.finalize().into()
 }

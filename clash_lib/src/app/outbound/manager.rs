@@ -99,17 +99,17 @@ impl OutboundManager {
     }
 
     pub fn get_outbound(&self, name: &str) -> Option<AnyOutboundHandler> {
-        self.handlers.get(name).map(Clone::clone)
+        self.handlers.get(name).cloned()
     }
 
     /// this doesn't populate history/liveness information
     pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
-        self.proxy_providers.get(name).map(Clone::clone)
+        self.proxy_providers.get(name).cloned()
     }
 
     // API handles start
     pub fn get_selector_control(&self, name: &str) -> Option<ThreadSafeSelectorControl> {
-        self.selector_control.get(name).map(Clone::clone)
+        self.selector_control.get(name).cloned()
     }
 
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
@@ -212,6 +212,12 @@ impl OutboundManager {
                     handlers.insert(wg.name.clone(), wg.try_into()?);
                 }
 
+                OutboundProxyProtocol::Tor(tor) => {
+                    handlers.insert(tor.name.clone(), tor.try_into()?);
+                }
+                OutboundProxyProtocol::Tuic(tuic) => {
+                    handlers.insert(tuic.name.clone(), tuic.try_into()?);
+                }
                 p => {
                     unimplemented!("proto {} not supported yet", p);
                 }
@@ -234,7 +240,7 @@ impl OutboundManager {
         ) -> Result<ThreadSafeProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
                 return Err(Error::InvalidConfig(format!(
-                    "proxy group {} is reserved",
+                    "proxy group name `{}` is reserved",
                     name
                 )));
             }
@@ -244,7 +250,7 @@ impl OutboundManager {
                     handlers
                         .get(x)
                         .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
-                        .map(Clone::clone)
+                        .cloned()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 

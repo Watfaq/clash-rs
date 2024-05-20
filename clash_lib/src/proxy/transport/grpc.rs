@@ -11,7 +11,6 @@ use prost::encoding::decode_varint;
 use prost::encoding::encode_varint;
 use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
-use tracing::{debug, trace};
 
 use std::fmt::Debug;
 use std::io;
@@ -76,16 +75,23 @@ impl GrpcStreamBuilder {
         {
             let recv_stream = recv_stream.clone();
             tokio::spawn(async move {
-                trace!("initiating grpc recv stream");
                 match resp.await {
                     Ok(resp) => {
-                        debug!("grpc resp: {:?}", resp);
+                        match resp.status() {
+                            http::StatusCode::OK => {}
+                            _ => {
+                                warn!(
+                                    "grpc handshake resp err: {:?}",
+                                    resp.into_body().data().await
+                                );
+                                return;
+                            }
+                        }
                         let stream = resp.into_body();
-
                         recv_stream.lock().await.replace(stream);
                     }
                     Err(e) => {
-                        debug!("grpc resp err: {:?}", e);
+                        warn!("grpc resp err: {:?}", e);
                     }
                 }
                 let _ = init_sender.send(()).await;
@@ -180,37 +186,24 @@ impl AsyncRead for GrpcStream {
                 self.payload_len = payload_len as usize;
             }
 
-            trace!("grpc poll_read data left payload_len: {}", self.payload_len);
             let to_read = std::cmp::min(buf.remaining(), self.payload_len);
             let to_read = std::cmp::min(to_read, self.buffer.len());
 
             if to_read == 0 {
                 assert!(buf.remaining() > 0);
-                trace!("no data left in buffer");
+
                 return Poll::Pending;
             }
 
             let data = self.buffer.split_to(to_read);
-            trace!(
-                "consuming {} data, payload left: {}, buffer left: {}",
-                to_read,
-                self.payload_len - to_read,
-                self.buffer.len()
-            );
+
             self.payload_len -= to_read;
             buf.put_slice(&data[..]);
             return Poll::Ready(Ok(()));
         }
 
-        trace!(
-            "no more data left, polling recv stream, current capacity: {}",
-            recv.as_mut().unwrap().flow_control().available_capacity()
-        );
-
         match ready!(Pin::new(&mut recv.as_mut().unwrap()).poll_data(cx)) {
             Some(Ok(b)) => {
-                trace!("got data from recv stream: {}", b.len());
-
                 self.buffer.reserve(b.len());
                 self.buffer.extend_from_slice(&b[..]);
 
@@ -225,37 +218,25 @@ impl AsyncRead for GrpcStream {
                     if to_read == 0 {
                         break;
                     }
-                    trace!(
-                        "consuming {} data, payload left: {}, buffer left: {}",
-                        to_read,
-                        self.payload_len - to_read,
-                        self.buffer.len() - to_read
-                    );
 
                     buf.put_slice(self.buffer.split_to(to_read).freeze().as_ref());
                     self.payload_len -= to_read;
                 }
 
-                trace!("releasing grpc flow control capacity: {}", b.len());
                 recv.as_mut()
                     .unwrap()
                     .flow_control()
                     .release_capacity(b.len())
                     .map_or_else(
-                        |e| {
-                            debug!("grpc flow control error: {}", e);
-                            Poll::Ready(Err(Error::new(ErrorKind::ConnectionReset, e)))
-                        },
+                        |e| Poll::Ready(Err(Error::new(ErrorKind::ConnectionReset, e))),
                         |_| Poll::Ready(Ok(())),
                     )
             }
             _ => {
                 assert_eq!(self.payload_len, 0);
                 if recv.as_mut().unwrap().is_end_stream() {
-                    trace!("no more data left, recv stream closed");
                     Poll::Ready(Ok(()))
                 } else {
-                    trace!("no more data left, recv stream pending");
                     Poll::Pending
                 }
             }
@@ -271,35 +252,22 @@ impl AsyncWrite for GrpcStream {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let encoded_buf = self.encode_buf(buf);
-        trace!("requesting capacity: {} bytes", encoded_buf.len());
+
         self.send.reserve_capacity(encoded_buf.len());
 
         Poll::Ready(match ready!(self.send.poll_capacity(cx)) {
-            Some(Ok(cap)) => {
-                trace!(
-                    "grpc got capacity: {} bytes, payload size: {}",
-                    cap,
-                    encoded_buf.len()
-                );
-                self.send.send_data(encoded_buf, false).map_or_else(
-                    |e| {
-                        debug!("grpc write error: {}", e);
-                        Err(Error::new(ErrorKind::BrokenPipe, e))
-                    },
-                    |_| {
-                        debug!("grpc wrote {} bytes", buf.len());
-                        Ok(buf.len())
-                    },
-                )
-            }
+            Some(Ok(_)) => self.send.send_data(encoded_buf, false).map_or_else(
+                |e| {
+                    warn!("grpc write error: {}", e);
+                    Err(Error::new(ErrorKind::BrokenPipe, e))
+                },
+                |_| Ok(buf.len()),
+            ),
             Some(Err(e)) => {
                 warn!("grpc poll_capacity error: {}", e);
                 Err(Error::new(ErrorKind::BrokenPipe, e))
             }
-            _ => {
-                debug!("grpc poll_capacity conn closed");
-                Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
-            }
+            _ => Err(Error::new(ErrorKind::BrokenPipe, "broken pipe")),
         })
     }
 

@@ -74,7 +74,7 @@ impl ProxySetProvider {
                 Box::pin(async move {
                     let mut inner = inner.write().await;
                     debug!("updating {} proxies for: {}", n, input.len());
-                    inner.proxies = input.clone();
+                    inner.proxies.clone_from(&input);
                     hc.update(input).await;
                     // check once after update
                     tokio::spawn(async move {
@@ -103,6 +103,8 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
+                            OutboundProxyProtocol::Tor(tor) => tor.try_into(),
+                            OutboundProxyProtocol::Tuic(tuic) => tuic.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
@@ -150,7 +152,8 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                updater.lock().await(ele);
+                let f = updater.lock().await;
+                f(ele).await;
             }
         }
         Ok(())

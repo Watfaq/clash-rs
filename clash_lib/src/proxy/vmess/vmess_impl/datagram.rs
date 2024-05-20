@@ -1,7 +1,7 @@
 use std::{io, pin::Pin, task::Poll};
 
 use futures::{ready, Sink, Stream};
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -14,6 +14,7 @@ pub struct OutboundDatagramVmess {
     inner: AnyStream,
     remote_addr: SocksAddr,
 
+    written: Option<usize>,
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
@@ -24,6 +25,7 @@ impl OutboundDatagramVmess {
         Self {
             inner,
             remote_addr,
+            written: None,
             flushed: true,
             pkt: None,
             buf: vec![0u8; 65535],
@@ -68,6 +70,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
+            ref mut written,
             ..
         } = *self;
 
@@ -75,9 +78,9 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
 
         let pkt_container = pkt;
 
-        if let Some(pkt) = pkt_container.take() {
+        if let Some(pkt) = pkt_container {
             if &pkt.dst_addr != remote_addr {
-                debug!(
+                error!(
                     "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: {}",
                     pkt.dst_addr, remote_addr
                 );
@@ -86,20 +89,27 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                     "udp packet dst_addr not match",
                 )));
             }
-            let data = pkt.data;
 
-            let n = ready!(inner.as_mut().poll_write(cx, data.as_ref()))?;
+            if written.is_none() {
+                let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
+                debug!(
+                    "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
+                    n, remote_addr, pkt.dst_addr
+                );
+                *written = Some(n);
+            }
+            if !*flushed {
+                let r = inner.as_mut().poll_flush(cx)?;
+                if r.is_pending() {
+                    return Poll::Pending;
+                }
+                *flushed = true;
+            }
+            let total_len = pkt.data.len();
 
-            debug!(
-                "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
-                n, remote_addr, pkt.dst_addr
-            );
-
-            let wrote_all = n == data.len();
             *pkt_container = None;
-            *flushed = true;
 
-            let res = if wrote_all {
+            let res = if written.unwrap() == total_len {
                 Ok(())
             } else {
                 Err(io::Error::new(
@@ -107,6 +117,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                     "failed to write entire datagram",
                 ))
             };
+            *written = None;
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");

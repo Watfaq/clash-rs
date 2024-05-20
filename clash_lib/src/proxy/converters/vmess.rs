@@ -35,7 +35,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
             port: s.port,
             uuid: s.uuid.clone(),
             alter_id: s.alter_id,
-            security: s.cipher.as_ref().map(Clone::clone).unwrap_or_default(),
+            security: s.cipher.clone().unwrap_or_default(),
             udp: s.udp.unwrap_or(true),
             transport: s
                 .network
@@ -68,7 +68,11 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::H2(Http2Option {
-                                host: x.host.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                host: x
+                                    .host
+                                    .as_ref()
+                                    .map(|x| x.to_owned())
+                                    .unwrap_or(vec![s.server.to_owned()]),
                                 path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
                             })
                         })
@@ -80,6 +84,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::Grpc(GrpcOption {
+                                host: s.server_name.as_ref().unwrap_or(&s.server).to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()
@@ -101,9 +106,9 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         s.ws_opts
                             .as_ref()
                             .and_then(|x| {
-                                x.headers.as_ref().map(Clone::clone).and_then(|x| {
+                                x.headers.clone().and_then(|x| {
                                     let h = x.get("Host");
-                                    h.map(Clone::clone)
+                                    h.cloned()
                                 })
                             })
                             .unwrap_or(s.server.to_owned())

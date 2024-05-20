@@ -11,13 +11,13 @@ use crate::{
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
-    session::{Session, SocksAddr},
+    session::Session,
     Error,
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[async_trait]
@@ -68,13 +68,16 @@ impl Handler {
 
     async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
-        for proxy in proxies {
-            if proxy.name() == self.inner.read().await.current {
-                debug!("{} selected {}", self.name(), proxy.name());
-                return proxy;
+        let current = &self.inner.read().await.current;
+        for proxy in proxies.iter() {
+            if proxy.name() == current {
+                debug!("`{}` selected `{}`", self.name(), proxy.name());
+                return proxy.clone();
             }
         }
-        unreachable!("selected proxy not found")
+        debug!("selected proxy `{}` not found", current);
+        // in the case the selected proxy is not found(stale cache), return the first one
+        proxies.first().unwrap().clone()
     }
 }
 
@@ -83,7 +86,7 @@ impl SelectorControl for Handler {
     async fn select(&mut self, name: &str) -> Result<(), Error> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
-            self.inner.write().await.current = name.to_owned();
+            name.clone_into(&mut self.inner.write().await.current);
             Ok(())
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
@@ -103,10 +106,6 @@ impl OutboundHandler for Handler {
 
     fn proto(&self) -> OutboundType {
         OutboundType::Selector
-    }
-
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.selected_proxy(false).await.remote_addr().await
     }
 
     async fn support_udp(&self) -> bool {
@@ -133,18 +132,6 @@ impl OutboundHandler for Handler {
         }
     }
 
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.selected_proxy(true)
-            .await
-            .proxy_stream(s, sess, resolver)
-            .await
-    }
-
     async fn connect_datagram(
         &self,
         sess: &Session,
@@ -156,16 +143,45 @@ impl OutboundHandler for Handler {
             .await
     }
 
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::Tcp
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let s = self
+            .selected_proxy(true)
+            .await
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await?;
+
+        s.append_to_chain(self.name()).await;
+        Ok(s)
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        self.selected_proxy(true)
+            .await
+            .connect_datagram_with_connector(sess, resolver, connector)
+            .await
+    }
+
     /// for API
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let all = get_proxies_from_providers(&self.providers, false).await;
 
         let mut m = HashMap::new();
         m.insert("type".to_string(), Box::new(self.proto()) as _);
-        m.insert(
-            "now".to_string(),
-            Box::new(self.inner.read().await.current.clone()) as _,
-        );
+        m.insert("now".to_string(), Box::new(self.current().await) as _);
         m.insert(
             "all".to_string(),
             Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,

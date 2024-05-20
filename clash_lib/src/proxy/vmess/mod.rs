@@ -2,6 +2,7 @@ use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
+use tracing::debug;
 
 mod vmess_impl;
 
@@ -22,8 +23,8 @@ use self::vmess_impl::OutboundDatagramVmess;
 use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
-    utils::new_tcp_stream,
-    AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
+    utils::{new_tcp_stream, RemoteConnector},
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 pub enum VmessTransport {
@@ -94,7 +95,7 @@ impl Handler {
                 };
 
                 let h2_builder = Http2Config {
-                    hosts: vec![self.opts.server.clone()],
+                    hosts: opt.host.clone(),
                     method: http::Method::GET,
                     headers: HashMap::new(),
                     path: opt.path.to_owned().try_into().expect("invalid H2 path"),
@@ -111,7 +112,7 @@ impl Handler {
                 };
 
                 let grpc_builder = transport::GrpcStreamBuilder::new(
-                    self.opts.server.clone(),
+                    opt.host.clone(),
                     opt.service_name
                         .to_owned()
                         .try_into()
@@ -153,11 +154,6 @@ impl OutboundHandler for Handler {
         OutboundType::Vmess
     }
 
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        Some(SocksAddr::Domain(self.opts.server.clone(), self.opts.port))
-    }
-
     /// whether the outbound handler support UDP
     async fn support_udp(&self) -> bool {
         self.opts.udp
@@ -168,6 +164,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
+        debug!("Connecting to {} via VMess", sess);
         let stream = new_tcp_stream(
             resolver,
             self.opts.server.as_str(),
@@ -191,16 +188,6 @@ impl OutboundHandler for Handler {
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
-    }
-
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        _: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        self.inner_proxy_stream(s, sess, false).await
     }
 
     async fn connect_datagram(
@@ -248,5 +235,212 @@ impl OutboundHandler for Handler {
         let chained = ChainedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::All
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let s = self.inner_proxy_stream(stream, sess, false).await?;
+        let chained = ChainedStreamWrapper::new(s);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                self.opts.common_opts.iface.as_ref(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let stream = self.inner_proxy_stream(stream, sess, true).await?;
+
+        let d = OutboundDatagramVmess::new(stream, sess.destination.clone());
+
+        let chained = ChainedDatagramWrapper::new(d);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
+    }
+}
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+    use crate::proxy::utils::test_utils::{
+        config_helper::test_config_base_dir,
+        consts::*,
+        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+        run_test_suites_and_cleanup, Suite,
+    };
+
+    use super::*;
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("vmess-ws.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_vmess_ws() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt()
+            // any additional configuration of the subscriber you might want here..
+            .try_init();
+
+        let span = tracing::info_span!("test_vmess_ws");
+        let _enter = span.enter();
+
+        let opts = HandlerOptions {
+            name: "test-vmess-ws".into(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.into(),
+            port: 10002,
+            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
+            alter_id: 0,
+            security: "auto".into(),
+            udp: true,
+            tls: Some(transport::TLSOptions {
+                skip_cert_verify: true,
+                sni: "example.org".into(),
+                alpn: None,
+            }),
+            transport: Some(VmessTransport::Ws(WsOption {
+                path: "".to_owned(),
+                headers: [("Host".to_owned(), "example.org".to_owned())]
+                    .into_iter()
+                    .collect::<HashMap<_, _>>(),
+                // ignore the rest by setting max_early_data to 0
+                max_early_data: 0,
+                early_data_header_name: "".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+        let runner = get_ws_runner().await?;
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("vmess-grpc.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_vmess_grpc() -> anyhow::Result<()> {
+        let opts = HandlerOptions {
+            name: "test-vmess-grpc".into(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.into(),
+            port: 10002,
+            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
+            alter_id: 0,
+            security: "auto".into(),
+            udp: true,
+            tls: Some(transport::TLSOptions {
+                skip_cert_verify: true,
+                sni: "example.org".into(),
+                alpn: None,
+            }),
+            transport: Some(VmessTransport::Grpc(GrpcOption {
+                host: "example.org".to_owned(),
+                service_name: "example!".to_owned(),
+            })),
+        };
+        let handler = Handler::new(opts);
+        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all()).await
+    }
+
+    async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("vmess-http2.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_vmess_h2() -> anyhow::Result<()> {
+        let opts = HandlerOptions {
+            name: "test-vmess-h2".into(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.into(),
+            port: 10002,
+            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
+            alter_id: 0,
+            security: "auto".into(),
+            udp: false,
+            tls: Some(transport::TLSOptions {
+                skip_cert_verify: true,
+                sni: "example.org".into(),
+                alpn: None,
+            }),
+            transport: Some(VmessTransport::H2(Http2Option {
+                host: vec!["example.org".into()],
+                path: "/testlollol".into(),
+            })),
+        };
+        let handler = Handler::new(opts);
+        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all()).await
     }
 }

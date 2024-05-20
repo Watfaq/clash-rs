@@ -11,12 +11,12 @@ use crate::{
             providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
         },
     },
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use super::{
-    utils::provider_helper::get_proxies_from_providers, AnyOutboundHandler, AnyStream,
-    CommonOption, OutboundHandler, OutboundType,
+    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -54,7 +54,7 @@ impl Handler {
         let proxies = self.get_proxies(touch).await;
         for proxy in proxies.iter() {
             if self.proxy_manager.alive(proxy.name()).await {
-                debug!("{} fastest {} is alive", self.name(), proxy.name());
+                debug!("`{}` fallback to `{}`", self.name(), proxy.name());
                 return proxy.clone();
             }
         }
@@ -73,11 +73,6 @@ impl OutboundHandler for Handler {
     /// only contains Type information, do not rely on the underlying value
     fn proto(&self) -> OutboundType {
         OutboundType::Fallback
-    }
-
-    /// The proxy remote address
-    async fn remote_addr(&self) -> Option<SocksAddr> {
-        self.find_alive_proxy(false).await.remote_addr().await
     }
 
     /// whether the outbound handler support UDP
@@ -101,17 +96,6 @@ impl OutboundHandler for Handler {
         }
     }
 
-    /// wraps a stream with outbound handler
-    async fn proxy_stream(
-        &self,
-        s: AnyStream,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<AnyStream> {
-        let proxy = self.find_alive_proxy(true).await;
-        proxy.proxy_stream(s, sess, resolver).await
-    }
-
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
@@ -120,6 +104,22 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedDatagram> {
         let proxy = self.find_alive_proxy(true).await;
         proxy.connect_datagram(sess, resolver).await
+    }
+
+    async fn support_connector(&self) -> ConnectorType {
+        ConnectorType::Tcp
+    }
+
+    async fn connect_stream_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedStream> {
+        let proxy = self.find_alive_proxy(true).await;
+        proxy
+            .connect_stream_with_connector(sess, resolver, connector)
+            .await
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

@@ -28,8 +28,13 @@ venv/
 
 # don't check in this real config
 ignore*.yaml
+config.yaml
 cache.db
 Country.mmdb
 ruleset/
 
 rust-project.json
+
+# for NixOS direnv
+.envrc
+shell.nix

@@ -1,12 +1,14 @@
 use std::{
     collections::{HashMap, VecDeque},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
+
+use rand::seq::SliceRandom;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::Device,
@@ -56,7 +58,8 @@ enum SenderType {
 }
 
 pub struct DeviceManager {
-    addr: IpAddr, // TODO: support ipv6
+    addr: Ipv4Addr,
+    addr_v6: Option<Ipv6Addr>,
     resolver: ThreadSafeDNSResolver,
     dns_servers: Vec<SocketAddr>,
 
@@ -74,7 +77,8 @@ pub struct DeviceManager {
 
 impl DeviceManager {
     pub fn new(
-        addr: IpAddr,
+        addr: Ipv4Addr,
+        addr_v6: Option<Ipv6Addr>,
         resolver: ThreadSafeDNSResolver,
         dns_servers: Vec<SocketAddr>,
         packet_notifier: Receiver<()>,
@@ -89,6 +93,8 @@ impl DeviceManager {
 
         Self {
             addr,
+            addr_v6,
+
             resolver,
             dns_servers,
 
@@ -131,47 +137,99 @@ impl DeviceManager {
 
     pub async fn look_up_dns(&self, host: &str, server: SocketAddr) -> Option<IpAddr> {
         debug!("looking up {} on {}", host, server);
-        let mut socket = Self::new_udp_socket(self).await;
-        let mut msg = hickory_proto::op::Message::new();
 
-        msg.add_query({
-            let mut q = hickory_proto::op::Query::new();
-            let name = hickory_proto::rr::Name::from_str_relaxed(host)
-                .unwrap()
-                .append_domain(&hickory_proto::rr::Name::root())
-                .unwrap();
-            q.set_name(name);
-            q.set_query_type(hickory_proto::rr::RecordType::A);
-            q
-        });
+        #[async_recursion::async_recursion]
+        async fn query(
+            rtype: hickory_proto::rr::RecordType,
+            host: &str,
+            server: SocketAddr,
+            mut socket: UdpPair,
+        ) -> Option<IpAddr> {
+            let mut msg = hickory_proto::op::Message::new();
 
-        msg.set_recursion_desired(true);
+            msg.add_query({
+                let mut q = hickory_proto::op::Query::new();
+                let name = hickory_proto::rr::Name::from_str_relaxed(host)
+                    .unwrap()
+                    .append_domain(&hickory_proto::rr::Name::root())
+                    .unwrap();
+                q.set_name(name);
+                q.set_query_type(rtype);
+                q
+            });
 
-        let pkt = UdpPacket::new(msg.to_vec().unwrap(), SocksAddr::any_ipv4(), server.into());
+            msg.set_recursion_desired(true);
 
-        socket.feed(pkt).await.ok()?;
-        socket.flush().await.ok()?;
-        trace!("sent dns query: {:?}", msg);
+            let pkt = UdpPacket::new(msg.to_vec().unwrap(), SocksAddr::any_ipv4(), server.into());
 
-        let pkt = match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
-            Ok(Some(pkt)) => pkt,
-            _ => {
-                warn!("wg dns query timed out with server {server}");
-                return None;
+            socket.feed(pkt).await.ok()?;
+            socket.flush().await.ok()?;
+            trace!("sent dns query: {:?}", msg);
+
+            let pkt = match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
+                Ok(Some(pkt)) => pkt,
+                _ => {
+                    warn!("wg dns query timed out with server {server}");
+                    return None;
+                }
+            };
+
+            let msg = hickory_proto::op::Message::from_vec(&pkt.data).ok()?;
+            trace!("got dns response: {:?}", msg);
+            for ans in msg.answers().iter() {
+                if ans.record_type() == rtype {
+                    if let Some(data) = ans.data() {
+                        match (rtype, data) {
+                            (_, hickory_proto::rr::RData::CNAME(cname)) => {
+                                debug!(
+                                    "{} resolved to CNAME {}, asking recursively",
+                                    host, cname.0
+                                );
+                                return query(rtype, &cname.0.to_ascii(), server, socket).await;
+                            }
+                            (
+                                hickory_proto::rr::RecordType::A,
+                                hickory_proto::rr::RData::A(addr),
+                            ) => {
+                                return Some(std::net::IpAddr::V4(addr.0));
+                            }
+                            (
+                                hickory_proto::rr::RecordType::AAAA,
+                                hickory_proto::rr::RData::AAAA(addr),
+                            ) => {
+                                return Some(std::net::IpAddr::V6(addr.0));
+                            }
+                            _ => return None,
+                        }
+                    };
+                }
             }
-        };
+            None
+        }
 
-        let msg = hickory_proto::op::Message::from_vec(&pkt.data).ok()?;
-        trace!("got dns response: {:?}", msg);
-        msg.answers()
-            .iter()
-            .find_map(|ans| match ans.record_type() {
-                hickory_proto::rr::RecordType::A => ans.data().and_then(|data| match data {
-                    hickory_proto::rr::RData::A(addr) => Some(std::net::IpAddr::V4(addr.0)),
-                    _ => None,
-                }),
-                _ => None,
-            })
+        let socket = self.new_udp_socket().await;
+        let v4_query = query(hickory_proto::rr::RecordType::A, host, server, socket);
+        if self.addr_v6.is_some() {
+            let socket = self.new_udp_socket().await;
+            let v6_query = query(hickory_proto::rr::RecordType::AAAA, host, server, socket);
+            match tokio::time::timeout(
+                Duration::from_secs(5),
+                futures::future::join(v4_query, v6_query),
+            )
+            .await
+            {
+                Ok((_, Some(v6))) => Some(v6),
+                Ok((v4, _)) => v4,
+                _ => {
+                    warn!("wg dns query timed out with server {server}");
+                    None
+                }
+            }
+        } else {
+            tokio::time::timeout(Duration::from_secs(5), v4_query)
+                .await
+                .ok()?
+        }
     }
 
     pub async fn poll_sockets(&self, mut device: VirtualIpDevice) {
@@ -181,6 +239,10 @@ impl DeviceManager {
         let mut iface = Interface::new(config, &mut device, Instant::now());
         iface.update_ip_addrs(|addrs| {
             addrs.push(IpCidr::new(self.addr.into(), 32)).unwrap();
+
+            if let Some(addr_v6) = self.addr_v6 {
+                addrs.push(IpCidr::new(addr_v6.into(), 128)).unwrap();
+            }
         });
 
         let (device_sender, mut device_receiver) = tokio::sync::mpsc::channel(1024);
@@ -206,7 +268,10 @@ impl DeviceManager {
                             .connect(
                                 iface.context(),
                                 remote,
-                                (self.addr, self.get_ephemeral_tcp_port().await),
+                                (match remote {
+                                    SocketAddr::V4(_) => IpAddr::V4(self.addr),
+                                    SocketAddr::V6(_) => IpAddr::V6(self.addr_v6.unwrap()),
+                                }, self.get_ephemeral_tcp_port().await),
                             )
                             .unwrap();
 
@@ -234,13 +299,7 @@ impl DeviceManager {
                             socket_pairs.insert(handle, SenderType::Tcp(sender));
                             tcp_queue.insert(handle, VecDeque::new());
                         }
-                        Socket::Udp(mut socket, sender, mut receiver) => {
-                            socket
-                                .bind(
-                                    (self.addr, self.get_ephemeral_udp_port().await),
-                                )
-                                .unwrap();
-
+                        Socket::Udp(socket, sender, mut receiver) => {
                             let handle = sockets.add(socket);
 
                             let device_sender = device_sender.clone();
@@ -387,6 +446,9 @@ impl DeviceManager {
                                             trace!("no more data");
                                             continue;
                                         }
+                                        Err(udp::RecvError::Truncated) => {
+                                            panic!("udp packet truncated - this should never happen");
+                                        }
                                     }
                                 }
 
@@ -401,29 +463,47 @@ impl DeviceManager {
                                                 let ip = match &pkt.dst_addr {
                                                     SocksAddr::Ip(addr) => addr.ip(),
                                                     SocksAddr::Domain(domain, _) => {
-                                                        if let Some(dns_server) = self.dns_servers.get(0) {
-                                                            let ip = self.look_up_dns(domain, *dns_server).await;
-                                                            if let Some(ip) = ip {
-                                                                debug!("host {} resolved to {} on wg stack", domain, ip);
-                                                                ip
-                                                            } else {
-                                                                warn!("failed to resolve domain on wireguard: {}", domain);
-                                                                continue;
-                                                            }
+                                                        if let Ok(ip) = domain.parse::<IpAddr>() {
+                                                            ip
                                                         } else {
-                                                            match self.resolver.resolve(domain, false).await {
-                                                                Ok(Some(ip)) => {
-                                                                    debug!("host {} resolved to {} on local", domain, ip);
+                                                            let dns_server = self.dns_servers.choose(&mut rand::thread_rng());
+                                                            if let Some(dns_server) = dns_server {
+                                                                let ip = self.look_up_dns(domain, *dns_server).await;
+                                                                if let Some(ip) = ip {
+                                                                    debug!("host {} resolved to {} on wg stack", domain, ip);
                                                                     ip
-                                                                }
-                                                                _ => {
+                                                                } else {
                                                                     warn!("failed to resolve domain on wireguard: {}", domain);
                                                                     continue;
+                                                                }
+                                                            } else {
+                                                                match self.resolver.resolve(domain, false).await {
+                                                                    Ok(Some(ip)) => {
+                                                                        debug!("host {} resolved to {} on local", domain, ip);
+                                                                        ip
+                                                                    }
+                                                                    _ => {
+                                                                        warn!("failed to resolve domain on wireguard: {}", domain);
+                                                                        continue;
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 };
+
+                                                if !socket.is_open() {
+                                                    let local_addr: IpAddr = match ip {
+                                                        IpAddr::V4(_) => self.addr.into(),
+                                                        IpAddr::V6(_) => self.addr_v6.unwrap().into(),
+                                                    };
+                                                    socket
+                                                        .bind(
+                                                            (local_addr, self.get_ephemeral_udp_port().await),
+                                                        )
+                                                    .unwrap();
+                                                }
+
                                                 match socket.send_slice(&pkt.data, (ip, pkt.dst_addr.port())) {
                                                     Ok(_) => {}
                                                     Err(e) => {

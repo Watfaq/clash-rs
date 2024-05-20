@@ -79,7 +79,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
 
         match parts[0] {
             p if p == COMPLEX_WILDCARD => {
-                self.insert_inner(&parts[1..].into(), data.clone());
+                self.insert_inner(&parts[1..], data.clone());
                 parts[0] = DOT_WILDCARD;
                 self.insert_inner(&parts, data.clone());
             }
@@ -109,7 +109,7 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         None
     }
 
-    fn insert_inner(&mut self, parts: &Vec<&str>, data: Arc<T>) {
+    fn insert_inner(&mut self, parts: &[&str], data: Arc<T>) {
         let mut node = &mut self.root;
 
         for i in (0..parts.len()).rev() {

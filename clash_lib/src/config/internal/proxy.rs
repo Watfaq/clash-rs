@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use uuid::Uuid;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
 pub const PROXY_REJECT: &str = "REJECT";
@@ -26,12 +27,20 @@ impl OutboundProxy {
     }
 }
 
-pub fn map_serde_error(x: serde_yaml::Error) -> crate::Error {
-    Error::InvalidConfig(if let Some(loc) = x.location() {
-        format!("{}, line, {}, column: {}", x, loc.line(), loc.column())
-    } else {
-        x.to_string()
-    })
+pub fn map_serde_error(name: String) -> impl FnOnce(serde_yaml::Error) -> crate::Error {
+    move |x| {
+        if let Some(loc) = x.location() {
+            Error::InvalidConfig(format!(
+                "invalid config for {} at line {}, column {} while parsing {}",
+                name,
+                loc.line(),
+                loc.column(),
+                name
+            ))
+        } else {
+            Error::InvalidConfig(format!("error while parsine {}: {}", name, x))
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -51,6 +60,10 @@ pub enum OutboundProxyProtocol {
     Vmess(OutboundVmess),
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
+    #[serde(rename = "tor")]
+    Tor(OutboundTor),
+    #[serde(rename = "tuic")]
+    Tuic(OutboundTuic),
 }
 
 impl OutboundProxyProtocol {
@@ -63,6 +76,8 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
+            OutboundProxyProtocol::Tor(tor) => &tor.name,
+            OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
         }
     }
 }
@@ -71,8 +86,15 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy protocol".to_owned(),
+            ))?
+            .to_owned();
         OutboundProxyProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }
 
@@ -86,6 +108,8 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
+            OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
+            OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
         }
     }
 }
@@ -189,6 +213,46 @@ pub struct OutboundWireguard {
     pub remote_dns_resolve: Option<bool>,
     pub dns: Option<Vec<String>>,
     pub allowed_ips: Option<Vec<String>>,
+    pub reserved_bits: Option<Vec<u8>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTor {
+    pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTuic {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    pub uuid: Uuid,
+    pub password: String,
+    /// override field 'server' dns record, not used for now
+    pub ip: Option<String>,
+    pub heartbeat_interval: Option<u64>,
+    /// h3
+    pub alpn: Option<Vec<String>>,
+    pub disable_sni: Option<bool>,
+    pub reduce_rtt: Option<bool>,
+    /// millis
+    pub request_timeout: Option<u64>,
+    pub udp_relay_mode: Option<String>,
+    pub congestion_controller: Option<String>,
+    /// bytes
+    pub max_udp_relay_packet_size: Option<u64>,
+    pub fast_open: Option<bool>,
+    pub skip_cert_verify: Option<bool>,
+    pub max_open_stream: Option<u64>,
+    pub sni: Option<String>,
+    /// millis
+    pub gc_interval: Option<u64>,
+    /// millis
+    pub gc_lifetime: Option<u64>,
+    pub send_window: Option<u64>,
+    pub receive_window: Option<u64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -232,8 +296,15 @@ impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
     type Error = Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy grouop".to_owned(),
+            ))?
+            .to_owned();
         OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }
 
@@ -360,7 +431,14 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
     type Error = crate::Error;
 
     fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or(Error::InvalidConfig(
+                "missing field `name` in outbound proxy provider".to_owned(),
+            ))?
+            .to_owned();
         OutboundProxyProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error)
+            .map_err(map_serde_error(name))
     }
 }

@@ -1,0 +1,6 @@
+[build]
+target-dir = "target"
+rustflags = ["--cfg", "tokio_unstable"]
+
+[env]
+RUST_LOG = { value = "clash=trace" }
