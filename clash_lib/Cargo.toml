@@ -47,7 +47,7 @@ opentelemetry-jaeger-propagator = "0.1.0"
 opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "hyper_collector_client", "rt-tokio"] }
 opentelemetry-otlp = { version = "0.15.0", features = ["http-proto"] }
 
-crc32fast = "1.4.0"
+crc32fast = "1.4.2"
 brotli = "6.0.0"
 hmac = "0.12.1"
 sha1 = "0.10"
