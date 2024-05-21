@@ -213,7 +213,7 @@ impl Handler {
                     todo!("v2ray-plugin is not implemented yet")
                 }
                 OBFSOption::ShadowTls(opts) => {
-                    tracing::debug!("using shadow-tls with option: {:?}", opts);
+                    tracing::trace!("using shadow-tls");
 
                     (shadow_tls::Connector::wrap(opts, s).await?) as _
                 }
