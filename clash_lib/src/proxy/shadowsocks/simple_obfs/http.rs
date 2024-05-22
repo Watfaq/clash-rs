@@ -2,7 +2,7 @@ use std::pin::Pin;
 
 use crate::proxy::AnyStream;
 use base64::Engine;
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug)]
@@ -13,6 +13,7 @@ pub struct HTTPObfs {
 
     first_request: bool,
     first_response: bool,
+    read_buf: BytesMut,
 }
 
 impl AsyncWrite for HTTPObfs {
@@ -91,6 +92,19 @@ impl AsyncRead for HTTPObfs {
         let pin = self.get_mut();
 
         if pin.first_response {
+            // as long as the buffer is not empty, we should return the data in the buffer first
+            if !pin.read_buf.is_empty() {
+                let to_read = std::cmp::min(buf.remaining(), pin.read_buf.len());
+                if to_read == 0 {
+                    assert!(buf.remaining() > 0);
+                    return std::task::Poll::Pending;
+                }
+
+                let data = pin.read_buf.split_to(to_read);
+                buf.put_slice(&data[..]);
+                return std::task::Poll::Ready(Ok(()));
+            }
+
             // TODO: move this static buffer size to global constant
             // maximum packet size of vmess/shadowsocks is about 16 KiB so define a buffer of 20 KiB to reduce the memory of each TCP relay
             let mut b = [0; 20 * 1024];
@@ -106,8 +120,16 @@ impl AsyncRead for HTTPObfs {
 
                         if let Some(idx) = idx {
                             pin.first_response = false;
-                            buf.put_slice(&b.filled()[idx + 4..b.filled().len()]);
-                            std::task::Poll::Ready(Ok(()))
+                            let body = &b.filled()[idx + 4..b.filled().len()];
+                            if body.len() < buf.remaining() {
+                                buf.put_slice(body);
+                                return std::task::Poll::Ready(Ok(()));
+                            } else {
+                                buf.put_slice(&body[..buf.remaining()]);
+                                pin.read_buf.reserve(body.len() - buf.remaining());
+                                pin.read_buf.clone_from_slice(&body[buf.remaining()..]);
+                                return std::task::Poll::Ready(Ok(()));
+                            }
                         } else {
                             std::task::Poll::Ready(Err(std::io::Error::new(
                                 std::io::ErrorKind::Other,
@@ -134,6 +156,7 @@ impl HTTPObfs {
 
             first_request: true,
             first_response: true,
+            read_buf: BytesMut::new(),
         }
     }
 }
