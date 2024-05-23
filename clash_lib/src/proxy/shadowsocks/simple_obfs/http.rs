@@ -123,12 +123,12 @@ impl AsyncRead for HTTPObfs {
                             let body = &b.filled()[idx + 4..b.filled().len()];
                             if body.len() < buf.remaining() {
                                 buf.put_slice(body);
-                                return std::task::Poll::Ready(Ok(()));
+                                std::task::Poll::Ready(Ok(()))
                             } else {
                                 buf.put_slice(&body[..buf.remaining()]);
                                 pin.read_buf.reserve(body.len() - buf.remaining());
                                 pin.read_buf.clone_from_slice(&body[buf.remaining()..]);
-                                return std::task::Poll::Ready(Ok(()));
+                                std::task::Poll::Ready(Ok(()))
                             }
                         } else {
                             std::task::Poll::Ready(Err(std::io::Error::new(
