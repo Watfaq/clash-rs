@@ -106,7 +106,7 @@ pub fn setup_logging(
         global::set_text_map_propagator(opentelemetry_jaeger_propagator::Propagator::new());
 
         let otlp_exporter = opentelemetry_otlp::new_exporter()
-            .http()
+            .tonic()
             .with_endpoint(jager_endpoint);
         let tracer =
             opentelemetry_otlp::new_pipeline()
