@@ -160,7 +160,7 @@ pub(crate) fn support_tls13(frame: &[u8]) -> bool {
         let ext_len = read_ok!(cursor.read_u16::<BigEndian>());
         let ext_val = read_ok!(cursor.read_u16::<BigEndian>());
         let use_tls13 = ext_len == 2 && ext_val == TLS_13;
-        tracing::debug!("found supported_versions extension, tls1.3: {use_tls13}");
+        tracing::trace!("found supported_versions extension, tls1.3: {use_tls13}");
         return use_tls13;
     }
     false
