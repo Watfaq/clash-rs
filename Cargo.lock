@@ -1062,7 +1062,7 @@ dependencies = [
  "opentelemetry-jaeger",
  "opentelemetry-jaeger-propagator",
  "opentelemetry-otlp",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk 0.23.0",
  "prost",
  "public-suffix",
  "quinn",
@@ -3593,8 +3593,6 @@ dependencies = [
  "percent-encoding",
  "rand",
  "thiserror",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
