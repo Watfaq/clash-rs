@@ -48,7 +48,7 @@ dns:
 allow-lan: true
 mode: rule
 log-level: debug
-external-controller: 127.0.0.1:9090
+external-controller: :9090
 external-ui: "public"
 # secret: "clash-rs"
 experimental:
