@@ -1058,11 +1058,11 @@ dependencies = [
  "netstack-lwip",
  "network-interface",
  "once_cell",
- "opentelemetry 0.22.0",
+ "opentelemetry 0.23.0",
  "opentelemetry-jaeger",
  "opentelemetry-jaeger-propagator",
  "opentelemetry-otlp",
- "opentelemetry_sdk 0.22.1",
+ "opentelemetry_sdk 0.23.0",
  "prost",
  "public-suffix",
  "quinn",
@@ -3525,11 +3525,11 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-jaeger-propagator"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beb4ec62efc537b60aaa89b92624f986f2523d3a609079f3511cc8ee73490826"
+checksum = "c190755e0aeec909343896f94670446ac686dd1eaf5e2beb4149a7148cfe1d6c"
 dependencies = [
- "opentelemetry 0.22.0",
+ "opentelemetry 0.23.0",
 ]
 
 [[package]]
@@ -3586,8 +3586,6 @@ dependencies = [
  "percent-encoding",
  "rand",
  "thiserror",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
