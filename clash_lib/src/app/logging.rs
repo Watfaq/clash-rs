@@ -5,6 +5,7 @@ use opentelemetry::global;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace;
+use opentelemetry_sdk::trace::Sampler;
 use opentelemetry_sdk::Resource;
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
@@ -108,14 +109,18 @@ pub fn setup_logging(
         let otlp_exporter = opentelemetry_otlp::new_exporter()
             .tonic()
             .with_endpoint(jager_endpoint);
-        let tracer =
-            opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_exporter(otlp_exporter)
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", "clash-rs"),
-                ])))
-                .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(otlp_exporter)
+            .with_trace_config(
+                trace::config()
+                    .with_sampler(Sampler::AlwaysOn)
+                    .with_resource(Resource::new(vec![KeyValue::new(
+                        "service.name",
+                        "clash-rs",
+                    )])),
+            )
+            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
     } else {
