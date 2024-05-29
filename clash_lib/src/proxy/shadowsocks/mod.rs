@@ -503,12 +503,14 @@ mod tests {
         run_test_suites_and_cleanup(handler, chained, &Suite::tcp_tests()).await
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
         test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
