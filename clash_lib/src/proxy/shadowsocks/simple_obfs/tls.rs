@@ -88,7 +88,6 @@ impl AsyncRead for TLSObfs {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        tracing::debug!("poll read");
         let this = self.get_mut();
         let mut inner = Pin::new(&mut this.inner);
         if this.remain > 0 {
@@ -98,7 +97,6 @@ impl AsyncRead for TLSObfs {
             return Poll::Ready(Ok(()));
         }
         if this.first_response {
-            tracing::debug!("poll read first response");
             // type + ver + lensize + 91 = 96
             // type + ver + lensize + 1 = 6
             // type + ver = 3
@@ -109,7 +107,6 @@ impl AsyncRead for TLSObfs {
 
         // type + ver = 3
         ready!(reading(Pin::new(this), buf, cx, 3))?;
-        tracing::debug!("poll read type and version");
         Poll::Ready(Ok(()))
     }
 }
@@ -151,14 +148,12 @@ fn reading(
         match this.read_state {
             ReadState::Idle => {
                 // 1. discard n bytes
-                tracing::debug!("ReadState Idle");
                 let mut buffer = vec![0; discard_n];
                 let fut = inner.read_exact(&mut buffer);
                 pin_mut!(fut);
                 match ready!(fut.poll(cx)) {
                     Ok(_) => {
                         this.read_state = ReadState::Parsing;
-                        tracing::debug!("ReadState Idle end");
                         continue;
                     }
                     Err(e) => return Poll::Ready(Err(e)),
@@ -166,7 +161,6 @@ fn reading(
             }
             ReadState::Parsing => {
                 // 2. read 2 bytes as length
-                tracing::debug!("ReadState Parsing");
                 let mut buffer = vec![0; 2];
                 let fut = inner.read_exact(&mut buffer);
                 pin_mut!(fut);
@@ -174,14 +168,12 @@ fn reading(
                     Ok(_) => {
                         let length = BigEndian::read_u16(&buffer[..2]) as usize;
                         this.read_state = ReadState::Reading(length);
-                        tracing::debug!("ReadState Parsing end");
                         continue;
                     }
                     Err(e) => return Poll::Ready(Err(e)),
                 }
             }
             ReadState::Reading(length) => {
-                tracing::debug!("ReadState Reading");
                 // 3. read length bytes
                 let remaining = buf.remaining();
                 let len = length.min(remaining);
@@ -195,8 +187,7 @@ fn reading(
                             this.remain = length - remaining;
                         }
                         this.read_state = ReadState::Idle;
-                        tracing::debug!("ReadState Reading end");
-                        return Poll::Ready(Ok(()))
+                        return Poll::Ready(Ok(()));
                     }
                     Err(e) => return Poll::Ready(Err(e)),
                 }
