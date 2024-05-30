@@ -32,6 +32,7 @@ use super::{
     AnyOutboundHandler, AnyStream, ConnectorType, OutboundType,
 };
 
+#[derive(Clone, Copy)]
 pub enum SimpleOBFSMode {
     Http,
     Tls,
@@ -450,5 +451,72 @@ mod tests {
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
+    }
+
+    async fn get_obfs_runner(
+        ss_port: u16,
+        obfs_port: u16,
+        mode: SimpleOBFSMode,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let ss_server_env = format!("127.0.0.1:{}", ss_port);
+        let port = format!("{}", obfs_port);
+        let mode = match mode {
+            SimpleOBFSMode::Http => "http",
+            SimpleOBFSMode::Tls => "tls",
+        };
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_OBFS)
+            .cmd(&[
+                "obfs-server",
+                "-p",
+                &port,
+                "--obfs",
+                &mode,
+                "-r",
+                &ss_server_env,
+            ])
+            .build()
+            .await
+    }
+
+    async fn test_ss_obfs_inner(mode: SimpleOBFSMode) -> anyhow::Result<()> {
+        let obfs_port = 10002;
+        let ss_port = 10004;
+        let opts = HandlerOptions {
+            name: "test-ss".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: obfs_port,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin_opts: Some(OBFSOption::Simple(SimpleOBFSOption {
+                host: "www.bing.com".to_owned(),
+                mode,
+            })),
+            udp: false,
+        };
+
+        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add(get_ss_runner(ss_port)).await;
+        chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;
+        run_test_suites_and_cleanup(handler, chained, &Suite::tcp_tests()).await
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_ss_obfs_http() -> anyhow::Result<()> {
+        test_ss_obfs_inner(SimpleOBFSMode::Http).await
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_ss_obfs_tls() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init();
+        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
     }
 }

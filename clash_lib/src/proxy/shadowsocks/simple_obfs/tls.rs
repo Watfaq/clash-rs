@@ -144,51 +144,53 @@ fn reading(
     let this = this.get_mut();
     let mut inner = Pin::new(&mut this.inner);
 
-    match this.read_state {
-        ReadState::Idle => {
-            // 1. discard n bytes
-            let mut buffer = vec![0; discard_n];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    this.read_state = ReadState::Parsing;
-                    Poll::Pending // do next step
-                }
-                Err(e) => Poll::Ready(Err(e)),
-            }
-        }
-        ReadState::Parsing => {
-            // 2. read 2 bytes as length
-            let mut buffer = vec![0; 2];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    let length = BigEndian::read_u16(&buffer[..2]) as usize;
-                    this.read_state = ReadState::Reading(length);
-                    Poll::Pending // do next step
-                }
-                Err(e) => Poll::Ready(Err(e)),
-            }
-        }
-        ReadState::Reading(length) => {
-            // 3. read length bytes
-            let remaining = buf.remaining();
-            let len = length.min(remaining);
-            let mut buffer = vec![0; len];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    buf.put_slice(&buffer);
-                    if length > remaining {
-                        this.remain = length - remaining;
+    loop {
+        match this.read_state {
+            ReadState::Idle => {
+                // 1. discard n bytes
+                let mut buffer = vec![0; discard_n];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        this.read_state = ReadState::Parsing;
+                        continue;
                     }
-                    this.read_state = ReadState::Idle;
-                    Poll::Ready(Ok(()))
+                    Err(e) => return Poll::Ready(Err(e)),
                 }
-                Err(e) => Poll::Ready(Err(e)),
+            }
+            ReadState::Parsing => {
+                // 2. read 2 bytes as length
+                let mut buffer = vec![0; 2];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        let length = BigEndian::read_u16(&buffer[..2]) as usize;
+                        this.read_state = ReadState::Reading(length);
+                        continue;
+                    }
+                    Err(e) => return Poll::Ready(Err(e)),
+                }
+            }
+            ReadState::Reading(length) => {
+                // 3. read length bytes
+                let remaining = buf.remaining();
+                let len = length.min(remaining);
+                let mut buffer = vec![0; len];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        buf.put_slice(&buffer);
+                        if length > remaining {
+                            this.remain = length - remaining;
+                        }
+                        this.read_state = ReadState::Idle;
+                        return Poll::Ready(Ok(()));
+                    }
+                    Err(e) => return Poll::Ready(Err(e)),
+                }
             }
         }
     }
