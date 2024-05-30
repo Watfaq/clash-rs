@@ -54,7 +54,7 @@ pub fn get_api_runner(
             .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
             .allow_origin(Any);
 
-        let bind_addr = if bind_addr.starts_with(":") {
+        let bind_addr = if bind_addr.starts_with(':') {
             info!("hostname not provided, listening on localhost");
             format!("localhost{}", bind_addr)
         } else {
