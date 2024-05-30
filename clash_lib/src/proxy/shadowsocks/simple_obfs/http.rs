@@ -90,21 +90,20 @@ impl AsyncRead for HTTPObfs {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         let pin = self.get_mut();
-
-        if pin.first_response {
-            // as long as the buffer is not empty, we should return the data in the buffer first
-            if !pin.read_buf.is_empty() {
-                let to_read = std::cmp::min(buf.remaining(), pin.read_buf.len());
-                if to_read == 0 {
-                    assert!(buf.remaining() > 0);
-                    return std::task::Poll::Pending;
-                }
-
-                let data = pin.read_buf.split_to(to_read);
-                buf.put_slice(&data[..]);
-                return std::task::Poll::Ready(Ok(()));
+        // as long as the buffer is not empty, we should return the data in the buffer first
+        if !pin.read_buf.is_empty() {
+            let to_read = std::cmp::min(buf.remaining(), pin.read_buf.len());
+            if to_read == 0 {
+                assert!(buf.remaining() > 0);
+                return std::task::Poll::Pending;
             }
 
+            let data = pin.read_buf.split_to(to_read);
+            buf.put_slice(&data[..]);
+            return std::task::Poll::Ready(Ok(()));
+        }
+
+        if pin.first_response {
             // TODO: move this static buffer size to global constant
             // maximum packet size of vmess/shadowsocks is about 16 KiB so define a buffer of 20 KiB to reduce the memory of each TCP relay
             let mut b = [0; 20 * 1024];
@@ -125,9 +124,11 @@ impl AsyncRead for HTTPObfs {
                                 buf.put_slice(body);
                                 std::task::Poll::Ready(Ok(()))
                             } else {
-                                buf.put_slice(&body[..buf.remaining()]);
-                                pin.read_buf.reserve(body.len() - buf.remaining());
-                                pin.read_buf.clone_from_slice(&body[buf.remaining()..]);
+                                let to_read = &body[..buf.remaining()];
+                                let to_buf = &body[buf.remaining()..];
+                                buf.put_slice(to_read);
+                                // use put_slice instead of clone_from_slice
+                                pin.read_buf.put_slice(to_buf);
                                 std::task::Poll::Ready(Ok(()))
                             }
                         } else {
