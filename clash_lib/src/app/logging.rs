@@ -3,14 +3,13 @@ use std::io::IsTerminal;
 use crate::def::LogLevel;
 use opentelemetry::global;
 use opentelemetry::KeyValue;
-use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace;
-use opentelemetry_sdk::trace::Sampler;
 use opentelemetry_sdk::Resource;
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing::debug;
+use tracing::error;
 use tracing_appender::non_blocking::NonBlocking;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
@@ -103,28 +102,27 @@ pub fn setup_logging(
         .with_default_directive(format!("clash={}", level).parse::<Directive>().unwrap())
         .from_env_lossy();
 
-    let jaeger = if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
+    let jaeger = if std::env::var("JAEGER_DISABLED").is_ok() {
+        None
+    } else {
         global::set_text_map_propagator(opentelemetry_jaeger_propagator::Propagator::new());
+        global::set_error_handler(|e| {
+            error!("OpenTelemetry error: {:?}", e);
+        })
+        .unwrap();
 
-        let otlp_exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint(jager_endpoint);
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(otlp_exporter)
-            .with_trace_config(
-                trace::config()
-                    .with_sampler(Sampler::AlwaysOn)
-                    .with_resource(Resource::new(vec![KeyValue::new(
-                        "service.name",
-                        "clash-rs",
-                    )])),
-            )
-            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        let otlp_exporter = opentelemetry_otlp::new_exporter().tonic();
+
+        let tracer =
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", "clash-rs"),
+                ])))
+                .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
-    } else {
-        None
     };
 
     let ios_os_log = if cfg!(target_os = "ios") {
