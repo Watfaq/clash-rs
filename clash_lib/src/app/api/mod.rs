@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -6,8 +7,10 @@ use axum::{response::Redirect, routing::get, Router};
 use http::header;
 use http::Method;
 use tokio::sync::{broadcast::Sender, Mutex};
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
@@ -95,7 +98,8 @@ pub fn get_api_runner(
                     controller_cfg.secret.unwrap_or_default(),
                 ))
                 .route_layer(cors)
-                .with_state(app_state);
+                .with_state(app_state)
+                .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
             if let Some(external_ui) = controller_cfg.external_ui {
                 app = app
@@ -105,7 +109,12 @@ pub fn get_api_runner(
 
             let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
 
-            axum::serve(listener, app).await.map_err(|x| {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .map_err(|x| {
                 error!("API server error: {}", x);
                 crate::Error::Operation(format!("API server error: {}", x))
             })
