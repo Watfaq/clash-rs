@@ -9,7 +9,7 @@ members = [
 
 
 [workspace.package]
-version = "0.1.17"
+version = "0.1.18"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2021"
 
