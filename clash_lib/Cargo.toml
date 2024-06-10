@@ -89,7 +89,7 @@ hickory-proto = { version = "0.24", features = ["dns-over-rustls", "dns-over-htt
 rustls = { version  = "0.21", features=["dangerous_configuration", "quic"] }
 rustls-pemfile = "1.0.4"
 webpki-roots = "0.25"
-dhcproto = "0.11"
+dhcproto = "0.12"
 ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.8"
