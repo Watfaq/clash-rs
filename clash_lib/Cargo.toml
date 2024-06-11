@@ -117,7 +117,7 @@ tuic-quinn = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
 quinn = { version = "0.10", default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
 register-count = "0.1.0"
 
-console-subscriber = { version = "0.2.0" }
+console-subscriber = { version = "0.3.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 
