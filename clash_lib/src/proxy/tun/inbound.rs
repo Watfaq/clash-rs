@@ -1,14 +1,12 @@
-use super::{datagram::TunDatagram, netstack};
+use super::datagram::TunDatagram;
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use tracing::{error, info, trace, warn};
-use tun::{Device, TunPacket};
+use tracing::{info, trace, warn};
 use url::Url;
 
 use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
-    common::errors::map_io_error,
     config::internal::config::TunConfig,
     proxy::datagram::UdpPacket,
     session::{Network, Session, SocksAddr, Type},
@@ -16,7 +14,7 @@ use crate::{
 };
 
 async fn handle_inbound_stream(
-    stream: netstack::TcpStream,
+    stream: libtun::TcpStream,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
@@ -33,88 +31,74 @@ async fn handle_inbound_stream(
 }
 
 async fn handle_inbound_datagram(
-    socket: Box<netstack::UdpSocket>,
+    socket: libtun::UdpSocket,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
 ) {
-    let local_addr = socket.local_addr();
-    // tun i/o
+    let (mut read_half, mut write_half) = socket.split();
 
-    let (ls, mut lr) = socket.split();
-    let ls = Arc::new(ls);
-
-    // dispatcher <-> tun communications
-    let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
-
-    // forward packets from tun to dispatcher
-    let (d_tx, d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
-
-    // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
-    // and send back packets to this channel, which is to the tun
-    let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
+    let (d2tun_tx, mut d2tun_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+    let (tun2d_tx, tun2d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+    
+    let udp_stream = TunDatagram::new(d2tun_tx, tun2d_rx);
 
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
         ..Default::default()
     };
-
+    // TODO refactor `closer`
     let closer = dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
 
-    // dispatcher -> tun
-    let fut1 = tokio::spawn(async move {
-        while let Some(pkt) = l_rx.recv().await {
-            trace!("tun <- dispatcher: {:?}", pkt);
-            // populate the correct src_addr, though is it necessary?
-            let src_addr = match pkt.src_addr {
-                SocksAddr::Ip(ip) => ip,
-                SocksAddr::Domain(host, port) => {
-                    match resolver.resolve(&host, resolver.fake_ip_enabled()).await {
-                        Ok(Some(ip)) => (ip, port).into(),
-                        Ok(None) => {
-                            warn!("failed to resolve domain: {}", host);
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!("failed to resolve domain: {}", e);
-                            continue;
+    loop {
+        // !!! Cancellation safety **must** be guaranteed.
+        tokio::select! {
+            // dispatcher -> tun
+            Some(pkt) = d2tun_rx.recv() => {
+                trace!("tun <- dispatcher: {:?}", pkt);
+                // populate the correct src_addr, though is it necessary?
+                let src_addr = match pkt.src_addr {
+                    SocksAddr::Ip(ip) => ip,
+                    SocksAddr::Domain(host, port) => {
+                        match resolver.resolve(&host, resolver.fake_ip_enabled()).await {
+                            Ok(Some(ip)) => (ip, port).into(),
+                            Ok(None) => {
+                                warn!("failed to resolve domain: {}", host);
+                                continue;
+                            }
+                            Err(e) => {
+                                warn!("failed to resolve domain: {}", e);
+                                continue;
+                            }
                         }
                     }
+                };
+                if let Err(e) = write_half.send((
+                    pkt.data,
+                    src_addr,
+                    pkt.dst_addr.must_into_socket_addr(),
+                )).await {
+                    warn!("failed to send udp packet to netstack: {}", e);
                 }
-            };
-            if let Err(e) = ls.send_to(
-                &pkt.data[..],
-                &src_addr,
-                &pkt.dst_addr.must_into_socket_addr(),
-            ) {
-                warn!("failed to send udp packet to netstack: {}", e);
             }
-        }
-    });
-
-    // tun -> dispatcher
-    let fut2 = tokio::spawn(async move {
-        while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
-            let pkt = UdpPacket {
-                data,
-                src_addr: src_addr.into(),
-                dst_addr: dst_addr.into(),
-            };
-
-            trace!("tun -> dispatcher: {:?}", pkt);
-
-            match d_tx.send(pkt).await {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("failed to send udp packet to proxy: {}", e);
+            Some((data, src_addr, dst_addr)) = read_half.next() => {
+                let pkt = UdpPacket {
+                    data,
+                    src_addr: src_addr.into(),
+                    dst_addr: dst_addr.into(),
+                };
+    
+                trace!("tun -> dispatcher: {:?}", pkt);
+    
+                match tun2d_tx.send(pkt).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!("failed to send udp packet to proxy: {}", e);
+                    }
                 }
             }
         }
-
-        closer.send(0).ok();
-    });
-
-    let _ = futures::future::join(fut1, fut2).await;
+    }
 }
 
 pub fn get_runner(
@@ -132,8 +116,7 @@ pub fn get_runner(
     let u =
         Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
-    let mut tun_cfg = tun::Configuration::default();
-
+    let device_id: libtun::DeviceID;
     match u.scheme() {
         "fd" => {
             let fd = u
@@ -142,100 +125,47 @@ pub fn get_runner(
                 .to_string()
                 .parse()
                 .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
-            tun_cfg.raw_fd(fd);
+            device_id = libtun::DeviceID::Fd(fd);
         }
         "dev" => {
             let dev = u.host().expect("tun dev must be provided").to_string();
-            tun_cfg.name(dev);
+            device_id = libtun::DeviceID::Dev(dev);
         }
         _ => {
-            return Err(Error::InvalidConfig(format!(
-                "invalid device id: {}",
-                device_id
-            )));
+            // TODO Warning
+            device_id = libtun::DeviceID::default();
         }
     }
+    let mut tun_system = libtun::TunSystem::new(device_id, true);
+    tun_system.create_device();
 
-    tun_cfg.up();
+    info!("tun started at {}", tun_system.device_name());
+    let (mut tcp_listener, udp_socket) = tun_system.create_netstack();
 
-    let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
+    let dispatcher_clone = dispatcher.clone();
+    let tcp_task = tokio::spawn(async move{
+        
+        while let Some((
+            stream, 
+            local_addr, 
+            remote_addr
+        )) = tcp_listener.next().await {
+            tokio::spawn(handle_inbound_stream(
+                stream,
+                local_addr,
+                remote_addr,
+                dispatcher_clone.clone(),
+            ));
+        }
+    });
 
-    let tun_name = tun.get_ref().name().map_err(map_io_error)?;
-    info!("tun started at {}", tun_name);
+    let dispatcher_clone = dispatcher.clone();
+    let udp_task = tokio::spawn(async move{
+        handle_inbound_datagram(udp_socket, dispatcher_clone, resolver).await;
+    });
 
-    let (stack, mut tcp_listener, udp_socket) =
-        netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
-
-    Ok(Some(Box::pin(async move {
-        let framed = tun.into_framed();
-
-        let (mut tun_sink, mut tun_stream) = framed.split();
-        let (mut stack_sink, mut stack_stream) = stack.split();
-
-        let mut futs: Vec<Runner> = vec![];
-
-        // dispatcher -> stack -> tun
-        futs.push(Box::pin(async move {
-            while let Some(pkt) = stack_stream.next().await {
-                match pkt {
-                    Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(TunPacket::new(pkt)).await {
-                            error!("failed to send pkt to tun: {}", e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("tun stack error: {}", e);
-                        break;
-                    }
-                }
-            }
-
-            Err(Error::Operation("tun stopped unexpectedly 0".to_string()))
-        }));
-
-        // tun -> stack -> dispatcher
-        futs.push(Box::pin(async move {
-            while let Some(pkt) = tun_stream.next().await {
-                match pkt {
-                    Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt.into_bytes().into()).await {
-                            error!("failed to send pkt to stack: {}", e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("tun stream error: {}", e);
-                        break;
-                    }
-                }
-            }
-
-            Err(Error::Operation("tun stopped unexpectedly 1".to_string()))
-        }));
-
-        let dsp = dispatcher.clone();
-        futs.push(Box::pin(async move {
-            while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
-                tokio::spawn(handle_inbound_stream(
-                    stream,
-                    local_addr,
-                    remote_addr,
-                    dsp.clone(),
-                ));
-            }
-
-            Err(Error::Operation("tun stopped unexpectedly 2".to_string()))
-        }));
-
-        futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket, dispatcher, resolver).await;
-            Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
-        }));
-
-        futures::future::select_all(futs).await.0.map_err(|x| {
-            error!("tun error: {}. stopped", x);
-            x
-        })
+    Ok(Some(Box::pin(async move { 
+        _ = futures::future::join(tcp_task, udp_task).await;
+        Ok(())
     })))
 }

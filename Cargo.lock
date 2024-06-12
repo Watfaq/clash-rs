@@ -578,29 +578,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bindgen"
-version = "0.69.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
-dependencies = [
- "bitflags 2.5.0",
- "cexpr",
- "clang-sys",
- "itertools 0.12.1",
- "lazy_static",
- "lazycell",
- "log",
- "prettyplease",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex",
- "syn 2.0.55",
- "which",
-]
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,7 +701,7 @@ dependencies = [
  "ip_network",
  "ip_network_table",
  "libc",
- "nix",
+ "nix 0.25.1",
  "parking_lot",
  "rand_core",
  "ring 0.17.8",
@@ -861,6 +838,12 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chacha20"
@@ -1050,12 +1033,12 @@ dependencies = [
  "ip_network_table-deps-treebitmap",
  "ipnet",
  "libc",
+ "libtun",
  "lru_time_cache",
  "maxminddb",
  "md-5",
  "mockall",
  "murmur3",
- "netstack-lwip",
  "network-interface",
  "once_cell",
  "opentelemetry",
@@ -1100,7 +1083,6 @@ dependencies = [
  "tracing-timing",
  "tuic",
  "tuic-quinn",
- "tun",
  "url",
  "uuid",
  "webpki-roots",
@@ -1870,6 +1852,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "etherparse"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "827292ea592108849932ad8e30218f8b1f21c0dfd0696698a18b5d0aed62d990"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "event-listener"
 version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1878,6 +1869,16 @@ dependencies = [
  "concurrent-queue",
  "parking",
  "pin-project-lite",
+]
+
+[[package]]
+name = "eyre"
+version = "0.6.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cd915d99f24784cdc19fd37ef22b97e3ff0ae756c7e492e9fbfe897d61e2aec"
+dependencies = [
+ "indenter",
+ "once_cell",
 ]
 
 [[package]]
@@ -2742,6 +2743,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "indenter"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2803,12 +2810,6 @@ name = "inventory"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f958d3d68f4167080a18141e10381e7634563984a537f2a49a30fd8e53ac5767"
-
-[[package]]
-name = "ioctl-sys"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bd11f3a29434026f5ff98c730b668ba74b1033637b8817940b54d040696133c"
 
 [[package]]
 name = "ip_network"
@@ -2998,6 +2999,18 @@ dependencies = [
  "cc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "libtun"
+version = "0.1.0"
+source = "git+https://github.com/Itsusinn/libtun.git?rev=e8db488#e8db4880bd5cca35930602222e7cfa549533f1f1"
+dependencies = [
+ "eyre",
+ "futures-util",
+ "netstack-smoltcp",
+ "tokio",
+ "tun2",
 ]
 
 [[package]]
@@ -3222,18 +3235,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 
 [[package]]
-name = "netstack-lwip"
-version = "0.3.4"
-source = "git+https://github.com/Watfaq/netstack-lwip.git?rev=2817bf82740e04bbee6b7bf1165f55657a6ed163#2817bf82740e04bbee6b7bf1165f55657a6ed163"
+name = "netstack-smoltcp"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622853611e43f6e1ecfff61af1d47cc4a3797c153c940331985dc3fb1fe37072"
 dependencies = [
- "anyhow",
- "bindgen 0.69.4",
- "bytes",
- "cc",
+ "etherparse",
  "futures",
- "log",
- "thiserror",
+ "rand",
+ "smoltcp",
+ "spin 0.9.8",
  "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -3266,6 +3280,18 @@ dependencies = [
  "autocfg",
  "bitflags 1.3.2",
  "cfg-if",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.5.0",
+ "cfg-if",
+ "cfg_aliases",
  "libc",
 ]
 
@@ -3866,16 +3892,6 @@ checksum = "368ba315fb8c5052ab692e68a0eefec6ec57b23a36959c14496f0b0df2c0cecf"
 dependencies = [
  "predicates-core",
  "termtree",
-]
-
-[[package]]
-name = "prettyplease"
-version = "0.2.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d3928fb5db768cb86f891ff014f0144589297e3c6a1aba6ed7cecfdace270c7"
-dependencies = [
- "proc-macro2",
- "syn 2.0.55",
 ]
 
 [[package]]
@@ -6392,7 +6408,7 @@ name = "tracing-oslog"
 version = "0.1.2"
 source = "git+https://github.com/Absolucy/tracing-oslog.git?branch=main#2207764b7edd3a5c059f4c3e8837fe72127067f9"
 dependencies = [
- "bindgen 0.64.0",
+ "bindgen",
  "cc",
  "cfg-if",
  "fnv",
@@ -6517,16 +6533,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "tun"
-version = "0.6.1"
-source = "git+https://github.com/Watfaq/rust-tun.git?rev=8f7568190f1200d3e272ca534baf8d1578147e18#8f7568190f1200d3e272ca534baf8d1578147e18"
+name = "tun2"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5af6b725dd317dd689d1e37f559e70cfbe6e87effdaf5f62c80d919bfc9eda95"
 dependencies = [
- "byteorder",
  "bytes",
+ "cfg-if",
  "futures-core",
- "ioctl-sys",
+ "ipnet",
  "libc",
  "log",
+ "nix 0.29.0",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -6914,21 +6932,21 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows"
-version = "0.51.1"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca229916c5ee38c2f2bc1e9d8f04df975b4bd93f9955dc69fabb5d91270045c9"
+checksum = "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be"
 dependencies = [
  "windows-core",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.4",
 ]
 
 [[package]]
 name = "windows-core"
-version = "0.51.1"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1f8cf84f35d2db49a46868f947758c7a1138116f7fac3bc844f43ade1292e64"
+checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
 dependencies = [
- "windows-targets 0.48.5",
+ "windows-targets 0.52.4",
 ]
 
 [[package]]
@@ -7093,9 +7111,9 @@ dependencies = [
 
 [[package]]
 name = "wintun"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29b83b0eca06dd125dbcd48a45327c708a6da8aada3d95a3f06db0ce4b17e0d4"
+checksum = "1b3c8c8876c686f8a2d6376999ac1c9a24c74d2968551c9394f7e89127783685"
 dependencies = [
  "c2rust-bitfields",
  "libloading",
