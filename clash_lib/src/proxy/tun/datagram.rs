@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, task::Poll};
+use std::task::Poll;
 
 use futures::{ready, Sink, Stream};
 
@@ -14,8 +14,6 @@ pub struct TunDatagram {
 
     pkt: Option<UdpPacket>,
     flushed: bool,
-    #[allow(unused)]
-    local_addr: SocketAddr,
 }
 
 impl TunDatagram {
@@ -24,15 +22,12 @@ impl TunDatagram {
         tx: tokio::sync::mpsc::Sender<UdpPacket>,
         // receive from tun
         rx: tokio::sync::mpsc::Receiver<UdpPacket>,
-        // the address of the tun udp socket
-        local_addr: SocketAddr,
     ) -> Self {
         Self {
             rx,
             tx,
             pkt: None,
             flushed: true,
-            local_addr,
         }
     }
 }
