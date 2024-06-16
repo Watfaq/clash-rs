@@ -20,7 +20,7 @@ use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -28,8 +28,6 @@ pub struct HandlerOptions {
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,
-
-    pub common_option: CommonOption,
 }
 
 struct HandlerInner {

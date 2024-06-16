@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[async_trait]
@@ -36,8 +36,6 @@ struct HandlerInner {
 pub struct HandlerOptions {
     pub name: String,
     pub udp: bool,
-
-    pub common_option: CommonOption,
 }
 
 #[derive(Clone)]
@@ -220,7 +218,6 @@ mod tests {
             super::HandlerOptions {
                 name: "test".to_owned(),
                 udp: false,
-                common_option: super::CommonOption::default(),
             },
             vec![Arc::new(RwLock::new(mock_provider))],
             None,

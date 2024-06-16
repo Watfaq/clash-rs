@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 pub struct HttpOption {
     pub method: String,
     pub path: Vec<String>,

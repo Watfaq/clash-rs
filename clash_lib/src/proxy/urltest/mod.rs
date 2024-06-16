@@ -18,15 +18,13 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
     pub udp: bool,
-
-    pub common_option: CommonOption,
 }
 
 struct HandlerInner {

@@ -70,6 +70,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for SimpleOBFSOption {
     }
 }
 
+#[allow(dead_code)]
 pub struct V2RayOBFSOption {
     pub mode: String,
     pub host: String,

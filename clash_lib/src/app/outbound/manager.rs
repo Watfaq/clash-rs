@@ -318,7 +318,6 @@ impl OutboundManager {
                     let relay = relay::Handler::new(
                         relay::HandlerOptions {
                             name: proto.name.clone(),
-                            ..Default::default()
                         },
                         providers,
                     );
@@ -521,7 +520,6 @@ impl OutboundManager {
                         selector::HandlerOptions {
                             name: proto.name.clone(),
                             udp: proto.udp.unwrap_or(true),
-                            ..Default::default()
                         },
                         providers,
                         stored_selection,
@@ -556,7 +554,6 @@ impl OutboundManager {
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
                 udp: true,
-                ..Default::default()
             },
             vec![pd.clone()],
             stored_selection,
