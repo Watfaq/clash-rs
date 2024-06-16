@@ -9,6 +9,45 @@ use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 #[derive(Debug)]
+pub enum CopyBidirectionalError {
+    LeftClosed(std::io::Error),
+    RightClosed(std::io::Error),
+    Other(std::io::Error),
+}
+
+impl std::fmt::Display for CopyBidirectionalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            CopyBidirectionalError::LeftClosed(e) => {
+                write!(f, "left side closed with error: {}", e)
+            }
+            CopyBidirectionalError::RightClosed(e) => {
+                write!(f, "right side closed with error: {}", e)
+            }
+            CopyBidirectionalError::Other(e) => {
+                write!(f, "error: {}", e)
+            }
+        }
+    }
+}
+
+impl std::error::Error for CopyBidirectionalError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CopyBidirectionalError::LeftClosed(e) => Some(e),
+            CopyBidirectionalError::RightClosed(e) => Some(e),
+            CopyBidirectionalError::Other(e) => Some(e),
+        }
+    }
+}
+
+impl From<std::io::Error> for CopyBidirectionalError {
+    fn from(e: std::io::Error) -> Self {
+        CopyBidirectionalError::Other(e)
+    }
+}
+
+#[derive(Debug)]
 pub struct CopyBuffer {
     read_done: bool,
     need_flush: bool,
@@ -153,7 +192,7 @@ where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
 {
-    type Output = io::Result<(u64, u64)>;
+    type Output = Result<(u64, u64), CopyBidirectionalError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Unpack self into mut refs to each field to avoid borrow check issues.
@@ -182,7 +221,9 @@ where
                             *a_to_b = TransferState::ShuttingDown(count);
                             continue;
                         }
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(CopyBidirectionalError::LeftClosed(err)))
+                        }
                         Poll::Pending => {
                             if let Some(delay) = a_to_b_delay {
                                 match delay.as_mut().poll(cx) {
@@ -207,7 +248,9 @@ where
                                 .replace(Box::pin(tokio::time::sleep(*b_to_a_timeout_duration)));
                             continue;
                         }
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(CopyBidirectionalError::LeftClosed(err)))
+                        }
                         Poll::Pending => (),
                     }
                 }
@@ -222,7 +265,9 @@ where
                             *b_to_a = TransferState::ShuttingDown(count);
                             continue;
                         }
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(CopyBidirectionalError::RightClosed(err)))
+                        }
                         Poll::Pending => {
                             if let Some(delay) = b_to_a_delay {
                                 match delay.as_mut().poll(cx) {
@@ -247,7 +292,9 @@ where
                                 .replace(Box::pin(tokio::time::sleep(*a_to_b_timeout_duration)));
                             continue;
                         }
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(CopyBidirectionalError::RightClosed(err)))
+                        }
                         Poll::Pending => (),
                     }
                 }
@@ -270,7 +317,7 @@ pub async fn copy_buf_bidirectional_with_timeout<A, B>(
     size: usize,
     a_to_b_timeout_duration: Duration,
     b_to_a_timeout_duration: Duration,
-) -> Result<(u64, u64), std::io::Error>
+) -> Result<(u64, u64), CopyBidirectionalError>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,

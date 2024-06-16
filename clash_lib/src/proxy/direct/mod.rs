@@ -49,7 +49,7 @@ impl OutboundHandler for Handler {
             resolver,
             sess.destination.host().as_str(),
             sess.destination.port(),
-            None,
+            sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -94,7 +94,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 sess.destination.host().as_str(),
                 sess.destination.port(),
-                None,
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
