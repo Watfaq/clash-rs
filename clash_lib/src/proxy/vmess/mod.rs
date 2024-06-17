@@ -169,7 +169,7 @@ impl OutboundHandler for Handler {
             resolver,
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -199,7 +199,7 @@ impl OutboundHandler for Handler {
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -252,7 +252,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref(),
+                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
@@ -275,7 +275,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref(),
+                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

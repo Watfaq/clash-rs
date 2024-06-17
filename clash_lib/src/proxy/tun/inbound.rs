@@ -2,7 +2,7 @@ use super::{datagram::TunDatagram, netstack};
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use tun::{Device, TunPacket};
 use url::Url;
 
@@ -10,7 +10,7 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::map_io_error,
     config::internal::config::TunConfig,
-    proxy::datagram::UdpPacket,
+    proxy::{datagram::UdpPacket, utils::Interface},
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -26,6 +26,15 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
+        iface: netdev::get_default_interface()
+            .map(|x| Interface::Name(x.name))
+            .inspect(|x| {
+                debug!(
+                    "selecting outbound interface: {:?} for tun TCP connection",
+                    x
+                );
+            })
+            .ok(),
         ..Default::default()
     };
 
@@ -56,6 +65,12 @@ async fn handle_inbound_datagram(
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
+        iface: netdev::get_default_interface()
+            .map(|x| Interface::Name(x.name))
+            .inspect(|x| {
+                debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
+            })
+            .ok(),
         ..Default::default()
     };
 

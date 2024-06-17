@@ -55,14 +55,12 @@ pub struct HandlerOptions {
     pub port: u16,
     pub uuid: Uuid,
     pub password: String,
-    pub udp_relay_mode: String,
     pub disable_sni: bool,
     pub alpn: Vec<Vec<u8>>,
     pub heartbeat_interval: Duration,
     pub reduce_rtt: bool,
     pub request_timeout: Duration,
-    pub congestion_controller: CongestionControl,
-    pub max_udp_relay_packet_size: u64,
+
     pub max_open_stream: VarInt,
     pub gc_interval: Duration,
     pub gc_lifetime: Duration,
@@ -70,8 +68,17 @@ pub struct HandlerOptions {
     pub receive_window: VarInt,
 
     /// not used
+    #[allow(dead_code)]
+    pub udp_relay_mode: String,
+    #[allow(dead_code)]
+    pub congestion_controller: CongestionControl,
+    #[allow(dead_code)]
+    pub max_udp_relay_packet_size: u64,
+    #[allow(dead_code)]
     pub ip: Option<String>,
+    #[allow(dead_code)]
     pub skip_cert_verify: bool,
+    #[allow(dead_code)]
     pub sni: Option<String>,
 }
 

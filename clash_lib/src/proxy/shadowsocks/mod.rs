@@ -70,6 +70,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for SimpleOBFSOption {
     }
 }
 
+#[allow(dead_code)]
 pub struct V2RayOBFSOption {
     pub mode: String,
     pub host: String,
@@ -268,7 +269,7 @@ impl OutboundHandler for Handler {
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -307,7 +308,7 @@ impl OutboundHandler for Handler {
         );
         let socket = new_udp_socket(
             None,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -339,7 +340,7 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref(),
+                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

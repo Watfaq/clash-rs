@@ -23,13 +23,12 @@ use super::{
         provider_helper::get_proxies_from_providers, DirectConnector, ProxyConnector,
         RemoteConnector,
     },
-    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
 }
 
 pub struct Handler {

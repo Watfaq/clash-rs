@@ -7,7 +7,6 @@ use rand::Rng;
 use rand::distributions::Distribution;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_rustls::client::TlsStream;
-use tokio_rustls::rustls::ClientConfig;
 use tokio_rustls::TlsConnector;
 
 use crate::proxy::shadowsocks::ShadowTlsOption;
@@ -26,12 +25,7 @@ pub struct Opts {
     pub strict: bool,
 }
 
-pub struct Connector {
-    pub password: String,
-    pub server_addr: String,
-    pub tls_config: ClientConfig,
-    pub connector: TlsConnector,
-}
+pub struct Connector;
 
 impl Connector {
     fn connector() -> TlsConnector {

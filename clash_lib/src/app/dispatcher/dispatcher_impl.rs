@@ -150,15 +150,50 @@ impl Dispatcher {
                             sess, up, down
                         );
                     }
-                    Err(err) => match err.kind() {
-                        std::io::ErrorKind::UnexpectedEof
-                        | std::io::ErrorKind::ConnectionReset
-                        | std::io::ErrorKind::BrokenPipe => {
-                            debug!("connection {} closed with error {}", sess, err);
+                    Err(err) => match err {
+                        crate::common::io::CopyBidirectionalError::LeftClosed(err) => {
+                            match err.kind() {
+                                std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::BrokenPipe => {
+                                    debug!(
+                                        "connection {} closed with error {} by local",
+                                        sess, err
+                                    );
+                                }
+                                _ => {
+                                    warn!("connection {} closed with error {} by local", sess, err);
+                                }
+                            }
                         }
-                        _ => {
-                            warn!("connection {} closed with error {}", sess, err);
+                        crate::common::io::CopyBidirectionalError::RightClosed(err) => {
+                            match err.kind() {
+                                std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::BrokenPipe => {
+                                    debug!(
+                                        "connection {} closed with error {} by remote",
+                                        sess, err
+                                    );
+                                }
+                                _ => {
+                                    warn!(
+                                        "connection {} closed with error {} by remote",
+                                        sess, err
+                                    );
+                                }
+                            }
                         }
+                        crate::common::io::CopyBidirectionalError::Other(err) => match err.kind() {
+                            std::io::ErrorKind::UnexpectedEof
+                            | std::io::ErrorKind::ConnectionReset
+                            | std::io::ErrorKind::BrokenPipe => {
+                                debug!("connection {} closed with error {}", sess, err);
+                            }
+                            _ => {
+                                warn!("connection {} closed with error {}", sess, err);
+                            }
+                        },
                     },
                 }
             }
