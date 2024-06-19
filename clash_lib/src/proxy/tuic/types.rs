@@ -1,3 +1,4 @@
+use crate::app::dns::ThreadSafeDNSResolver;
 use crate::session::SocksAddr as ClashSocksAddr;
 use anyhow::Result;
 use quinn::Connection as QuinnConnection;
@@ -6,7 +7,6 @@ use register_count::Counter;
 use std::collections::HashMap;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    str::FromStr,
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
@@ -28,61 +28,65 @@ pub struct TuicEndpoint {
     pub gc_lifetime: Duration,
 }
 impl TuicEndpoint {
-    pub async fn connect(&self) -> Result<Arc<TuicConnection>> {
-        let mut last_err = None;
+    pub async fn connect(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+        rebind: bool,
+    ) -> Result<Arc<TuicConnection>> {
+        let remote_addr = self.server.resolve(resolver).await?;
+        let connect_to = async {
+            let match_ipv4 = remote_addr.is_ipv4()
+                && self
+                    .ep
+                    .local_addr()
+                    .map_or(false, |local_addr| local_addr.is_ipv4());
+            let match_ipv6 = remote_addr.is_ipv6()
+                && self
+                    .ep
+                    .local_addr()
+                    .map_or(false, |local_addr| local_addr.is_ipv6());
 
-        for addr in self.server.resolve().await? {
-            let connect_to = async {
-                let match_ipv4 =
-                    addr.is_ipv4() && self.ep.local_addr().map_or(false, |addr| addr.is_ipv4());
-                let match_ipv6 =
-                    addr.is_ipv6() && self.ep.local_addr().map_or(false, |addr| addr.is_ipv6());
-
-                if !match_ipv4 && !match_ipv6 {
-                    let bind_addr = if addr.is_ipv4() {
-                        SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))
-                    } else {
-                        SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))
-                    };
-
-                    self.ep
-                        .rebind(UdpSocket::bind(bind_addr).map_err(|err| {
-                            anyhow!("failed to create endpoint UDP socket {}", err)
-                        })?)
-                        .map_err(|err| anyhow!("failed to rebind endpoint UDP socket {}", err))?;
-                }
-
-                tracing::trace!("Connect to {} {}", addr, self.server.server_name());
-                let conn = self.ep.connect(addr, self.server.server_name())?;
-                let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
-                    match conn.into_0rtt() {
-                        Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
-                        Err(conn) => (conn.await?, None),
-                    }
+            // if client and server don't match each other or forced to rebind, then rebind local socket
+            if (!match_ipv4 && !match_ipv6) || rebind {
+                let bind_addr = if remote_addr.is_ipv4() {
+                    SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))
                 } else {
-                    (conn.await?, None)
+                    SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))
                 };
+                let socket = UdpSocket::bind(bind_addr)
+                    .map_err(|err| anyhow!("failed to bind local socket: {}", err))?;
+                self.ep
+                    .rebind(socket)
+                    .map_err(|err| anyhow!("failed to rebind endpoint UDP socket {}", err))?;
+            }
 
-                Ok((conn, zero_rtt_accepted))
+            tracing::trace!("Connect to {} {}", remote_addr, self.server.server_name());
+            let conn = self.ep.connect(remote_addr, self.server.server_name())?;
+            let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
+                match conn.into_0rtt() {
+                    Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
+                    Err(conn) => (conn.await?, None),
+                }
+            } else {
+                (conn.await?, None)
             };
 
-            match connect_to.await {
-                Ok((conn, zero_rtt_accepted)) => {
-                    return Ok(TuicConnection::new(
-                        conn,
-                        zero_rtt_accepted,
-                        self.udp_relay_mode,
-                        self.uuid,
-                        self.password.clone(),
-                        self.heartbeat,
-                        self.gc_interval,
-                        self.gc_lifetime,
-                    ));
-                }
-                Err(err) => last_err = Some(err),
-            }
+            Ok((conn, zero_rtt_accepted))
+        };
+
+        match connect_to.await {
+            Ok((conn, zero_rtt_accepted)) => Ok(TuicConnection::new(
+                conn,
+                zero_rtt_accepted,
+                self.udp_relay_mode,
+                self.uuid,
+                self.password.clone(),
+                self.heartbeat,
+                self.gc_interval,
+                self.gc_lifetime,
+            )),
+            Err(err) => Err(err),
         }
-        Err(last_err.unwrap_or(anyhow!("dns resolve")))
     }
 }
 
@@ -177,7 +181,7 @@ impl TuicConnection {
             };
         };
 
-        tracing::warn!("connection error: {err}");
+        tracing::warn!("connection error: {err:?}");
     }
 }
 
@@ -194,15 +198,16 @@ impl ServerAddr {
     pub fn server_name(&self) -> &str {
         &self.domain
     }
-    // TODO change to clash dns?
-    pub async fn resolve(&self) -> Result<impl Iterator<Item = SocketAddr>> {
+
+    pub async fn resolve(&self, resolver: &ThreadSafeDNSResolver) -> Result<SocketAddr> {
         if let Some(ip) = self.ip {
-            Ok(vec![SocketAddr::from((ip, self.port))].into_iter())
+            Ok(SocketAddr::from((ip, self.port)))
         } else {
-            Ok(tokio::net::lookup_host((self.domain.as_str(), self.port))
+            let ip = resolver
+                .resolve(self.domain.as_str(), false)
                 .await?
-                .collect::<Vec<_>>()
-                .into_iter())
+                .ok_or(anyhow!("Resolve failed: unknown hostname"))?;
+            Ok(SocketAddr::from((ip, self.port)))
         }
     }
 }
@@ -212,17 +217,15 @@ pub enum UdpRelayMode {
     Native,
     Quic,
 }
-
-impl FromStr for UdpRelayMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl From<&str> for UdpRelayMode {
+    fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("native") {
-            Ok(Self::Native)
+            Self::Native
         } else if s.eq_ignore_ascii_case("quic") {
-            Ok(Self::Quic)
+            Self::Quic
         } else {
-            Err("invalid UDP relay mode")
+            // TODO logging
+            Self::Quic
         }
     }
 }
