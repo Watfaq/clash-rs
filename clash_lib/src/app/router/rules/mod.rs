@@ -9,6 +9,7 @@ pub mod domain_keyword;
 pub mod domain_suffix;
 pub mod final_;
 pub mod geoip;
+pub mod geodata;
 pub mod ipcidr;
 pub mod port;
 pub mod process;
