@@ -26,6 +26,8 @@ use super::remote_content_manager::providers::rule_provider::{
 use super::remote_content_manager::providers::{file_vehicle, http_vehicle};
 
 mod rules;
+
+use crate::common::geodata::GeoData;
 pub use rules::RuleMatcher;
 
 pub struct Router {
@@ -45,6 +47,7 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
         mmdb: Arc<Mmdb>,
+        geodata: Arc<GeoData>,
         cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
@@ -54,6 +57,7 @@ impl Router {
             &mut rule_provider_registry,
             dns_resolver.clone(),
             mmdb.clone(),
+            geodata.clone(),
             cwd,
         )
         .await
@@ -62,7 +66,14 @@ impl Router {
         Self {
             rules: rules
                 .into_iter()
-                .map(|r| map_rule_type(r, mmdb.clone(), Some(&rule_provider_registry)))
+                .map(|r| {
+                    map_rule_type(
+                        r,
+                        mmdb.clone(),
+                        geodata.clone(),
+                        Some(&rule_provider_registry),
+                    )
+                })
                 .collect(),
             dns_resolver,
             rule_provider_registry,
@@ -111,6 +122,7 @@ impl Router {
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
         mmdb: Arc<Mmdb>,
+        geodata: Arc<GeoData>,
         cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
@@ -131,6 +143,7 @@ impl Router {
                         Duration::from_secs(http.interval),
                         Arc::new(vehicle),
                         mmdb.clone(),
+                        geodata.clone(),
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -149,6 +162,7 @@ impl Router {
                         Duration::from_secs(file.interval.unwrap_or_default()),
                         Arc::new(vehicle),
                         mmdb.clone(),
+                        geodata.clone(),
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -183,6 +197,7 @@ impl Router {
 pub fn map_rule_type(
     rule_type: RuleType,
     mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
     match rule_type {
@@ -234,6 +249,14 @@ pub fn map_rule_type(
             no_resolve,
             mmdb: mmdb.clone(),
         }),
+        RuleType::GeoSite {
+            target,
+            country_code,
+        } => {
+            let res = rules::geodata::GeoSiteMatcher::new(country_code, target, geodata.as_ref())
+                .unwrap();
+            Box::new(res) as _
+        }
         RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
             port,
             target,

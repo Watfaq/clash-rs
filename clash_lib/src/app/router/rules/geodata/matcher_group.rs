@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use crate::app::router::rules::geodata::strmatcher::{Matcher, try_new_matcher};
+use crate::app::router::rules::geodata::str_matcher::{try_new_matcher, Matcher};
+use crate::common::geodata::geodata_proto::{domain::Type, Domain};
 use crate::common::trie;
-use super::geodata_proto::{Domain, domain::Type};
+use std::sync::Arc;
 
 pub trait DomainGroupMatcher: Send + Sync {
     fn apply(&self, domain: &str) -> bool;
@@ -14,7 +14,7 @@ pub struct SuccinctMatcherGroup {
 }
 
 impl SuccinctMatcherGroup {
-    pub fn try_new(domains: Vec<Domain>, not: bool) -> Result<Self, anyhow::Error> {
+    pub fn try_new(domains: Vec<Domain>, not: bool) -> Result<Self, crate::Error> {
         let mut set = trie::StringTrie::new();
         let mut other_matchers = Vec::new();
         for domain in domains {

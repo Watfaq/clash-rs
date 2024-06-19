@@ -1,7 +1,7 @@
-pub trait Matcher: Send + Sync{
-    fn matches(&self, url: &str) -> bool;
+use crate::common::geodata::geodata_proto::domain::Type;
 
-    fn to_string(&self) -> String;
+pub trait Matcher: Send + Sync {
+    fn matches(&self, url: &str) -> bool;
 }
 
 pub struct FullMatcher(pub String);
@@ -10,10 +10,6 @@ impl Matcher for FullMatcher {
     fn matches(&self, url: &str) -> bool {
         self.0 == url
     }
-
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
 }
 
 pub struct SubStrMatcher(pub String);
@@ -21,10 +17,6 @@ pub struct SubStrMatcher(pub String);
 impl Matcher for SubStrMatcher {
     fn matches(&self, url: &str) -> bool {
         url.contains(&self.0)
-    }
-
-    fn to_string(&self) -> String {
-        self.0.clone()
     }
 }
 
@@ -45,10 +37,6 @@ impl Matcher for DomainMatcher {
         }
         url.as_bytes()[prefix_idx_end as usize] == b'.'
     }
-
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
 }
 
 pub struct RegexMatcher(regex::Regex);
@@ -57,15 +45,9 @@ impl Matcher for RegexMatcher {
     fn matches(&self, url: &str) -> bool {
         self.0.is_match(url)
     }
-
-    fn to_string(&self) -> String {
-        self.0.as_str().to_string()
-    }
 }
 
-use super::geodata_proto::domain::Type;
-
-pub fn try_new_matcher(domain: String, t: Type) -> Result<Box<dyn Matcher>, anyhow::Error> {
+pub fn try_new_matcher(domain: String, t: Type) -> Result<Box<dyn Matcher>, crate::Error> {
     Ok(match t {
         Type::Plain => Box::new(SubStrMatcher(domain)),
         Type::Regex => Box::new(RegexMatcher(regex::Regex::new(&domain)?)),

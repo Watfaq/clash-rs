@@ -1,4 +1,4 @@
-use super::geodata_proto;
+use crate::common::geodata::geodata_proto;
 
 pub trait AttrMatcher {
     fn matches(&self, domain: &geodata_proto::Domain) -> bool;
@@ -31,7 +31,10 @@ pub struct AndAttrMatcher {
 impl From<Vec<String>> for AndAttrMatcher {
     fn from(list: Vec<String>) -> Self {
         AndAttrMatcher {
-            list: list.into_iter().map(|s| Box::new(BooleanAttrMatcher(s)) as Box<dyn AttrMatcher>).collect()
+            list: list
+                .into_iter()
+                .map(|s| Box::new(BooleanAttrMatcher(s)) as Box<dyn AttrMatcher>)
+                .collect(),
         }
     }
 }

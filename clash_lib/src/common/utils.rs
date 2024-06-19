@@ -1,10 +1,17 @@
+use async_recursion::async_recursion;
+use hyper::body::HttpBody;
+use std::path::Path;
 use std::{fmt::Write, num::ParseIntError};
 
+use crate::common::errors::new_io_error;
+use crate::common::http::HttpClient;
+use crate::Error;
 use rand::{
     distributions::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
 };
 use sha2::Digest;
+use tracing::debug;
 
 pub fn rand_range<T, R>(range: R) -> T
 where
@@ -53,4 +60,43 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
 
 pub fn default_bool_true() -> bool {
     true
+}
+
+#[async_recursion]
+pub async fn download<P>(url: &str, path: P, http_client: &HttpClient) -> anyhow::Result<()>
+where
+    P: AsRef<Path> + std::marker::Send,
+{
+    use std::io::Write;
+
+    let uri = url.parse::<hyper::Uri>()?;
+    let mut out = std::fs::File::create(&path)?;
+
+    let mut res = http_client.get(uri).await?;
+
+    if res.status().is_redirection() {
+        return download(
+            res.headers()
+                .get("Location")
+                .ok_or(new_io_error(
+                    format!("failed to download from {}", url).as_str(),
+                ))?
+                .to_str()?,
+            path,
+            http_client,
+        )
+        .await;
+    }
+
+    if !res.status().is_success() {
+        return Err(Error::InvalidConfig(format!("mmdb download failed: {}", res.status())).into());
+    }
+
+    debug!("downloading mmdb to {}", path.as_ref().to_string_lossy());
+
+    while let Some(chunk) = res.body_mut().data().await {
+        out.write_all(&chunk?)?;
+    }
+
+    Ok(())
 }

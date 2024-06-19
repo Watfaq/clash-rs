@@ -337,6 +337,10 @@ pub struct Config {
     pub mmdb: String,
     /// Country database download url
     pub mmdb_download_url: Option<String>,
+    /// Geosite database path relative to the $CWD
+    pub geosite: String,
+    /// Geosite database download url
+    pub geosite_download_url: Option<String>,
 
     /// these options has default vals,
     /// and needs extra processing
@@ -430,6 +434,8 @@ impl Default for Config {
                 "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb"
                     .to_owned(),
             ),
+            geosite: "geosite.dat".to_string(),
+            geosite_download_url: Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".to_owned()),
             tun: Default::default(),
         }
     }
