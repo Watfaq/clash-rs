@@ -107,36 +107,25 @@ mod tests {
     const GEOSITE_URL: &str =
         "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
 
-    async fn prepare_geodata() -> anyhow::Result<String> {
-        std::env::set_var("GEOSITE_FILE", "/tmp/geosite.dat");
-        let local_file = std::env::var("GEOSITE_FILE");
-
-        Ok(match local_file {
-            Ok(path) => path,
-            Err(_) => {
-                let system_resolver = Arc::new(
-                    SystemResolver::new()
-                        .map_err(|x| Error::DNSError(x.to_string()))
-                        .unwrap(),
-                );
-                let client = new_http_client(system_resolver)
-                    .map_err(|x| Error::DNSError(x.to_string()))
-                    .unwrap();
-                let out = tempfile::Builder::new().append(true).tempfile()?;
-                let _ = download(GEOSITE_URL, out.as_ref(), &client).await?;
-                out.path().to_str().unwrap().to_owned()
-            }
-        })
-    }
-
     struct TestSuite<'a> {
         country_code: &'a str,
         expected_results: Vec<(&'a str, bool)>,
     }
 
     #[tokio::test]
-    async fn test_read_from_url() -> anyhow::Result<()> {
-        let path = prepare_geodata().await?;
+    async fn test_download_and_apply() -> anyhow::Result<()> {
+        let system_resolver = Arc::new(
+            SystemResolver::new()
+                .map_err(|x| Error::DNSError(x.to_string()))
+                .unwrap(),
+        );
+        let client = new_http_client(system_resolver)
+            .map_err(|x| Error::DNSError(x.to_string()))
+            .unwrap();
+        let out = tempfile::Builder::new().append(true).tempfile()?;
+        download(GEOSITE_URL, out.as_ref(), &client).await?;
+        let path = out.path().to_str().unwrap().to_owned();
+
         let loader = GeoData::from_file(path).await?;
 
         let suites = [
