@@ -110,6 +110,7 @@ impl Router {
                     r.target(),
                     r.type_name()
                 );
+                debug!("matched rule details: {}", r);
                 return (r.target(), Some(r));
             }
         }
