@@ -43,8 +43,7 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             heartbeat_interval: Duration::from_millis(s.heartbeat_interval.unwrap_or(3000)),
             reduce_rtt: s.reduce_rtt.unwrap_or(false) || s.fast_open.unwrap_or(false),
             request_timeout: Duration::from_millis(s.request_timeout.unwrap_or(4000)),
-            idle_timeout: VarInt::from_u64(s.request_timeout.unwrap_or(4000))
-                .unwrap_or(VarInt::MAX),
+            idle_timeout: Duration::from_millis(s.request_timeout.unwrap_or(4000)),
             congestion_controller: s
                 .congestion_controller
                 .clone()

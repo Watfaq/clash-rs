@@ -144,8 +144,8 @@ impl TuicConnection {
         }
 
         match self.inner.heartbeat().await {
-            Ok(()) => tracing::debug!("[heartbeat]"),
-            Err(err) => tracing::error!("[heartbeat] {err}"),
+            Ok(()) => tracing::debug!("[tuic heartbeat] - {}", self.conn.remote_address()),
+            Err(err) => tracing::error!("[tuic heartbeat] - {err}"),
         }
         Ok(())
     }

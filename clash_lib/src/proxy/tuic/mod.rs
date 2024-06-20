@@ -62,7 +62,7 @@ pub struct HandlerOptions {
     pub heartbeat_interval: Duration,
     pub reduce_rtt: bool,
     pub request_timeout: Duration,
-    pub idle_timeout: VarInt,
+    pub idle_timeout: Duration,
     pub congestion_controller: CongestionControl,
     pub max_open_stream: VarInt,
     pub gc_interval: Duration,
@@ -149,7 +149,7 @@ impl Handler {
             .max_concurrent_uni_streams(opts.max_open_stream)
             .send_window(opts.send_window)
             .stream_receive_window(opts.receive_window)
-            .max_idle_timeout(Some(opts.idle_timeout.into()));
+            .max_idle_timeout(Some(opts.idle_timeout.try_into().unwrap()));
         match opts.congestion_controller {
             CongestionControl::Cubic => {
                 transport_config.congestion_controller_factory(Arc::new(CubicConfig::default()))
