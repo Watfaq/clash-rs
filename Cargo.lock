@@ -3250,9 +3250,9 @@ checksum = "9252111cf132ba0929b6f8e030cac2a24b507f3a4d6db6fb2896f27b354c714b"
 
 [[package]]
 name = "netdev"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db2efc0a21a3025c876092d3f122fabb1f0e21bc1d90465e0c980bad40fd753d"
+checksum = "e6b7a18d9c482b774500c660991da545bac1259fe4dfd40981870e5832aedffc"
 dependencies = [
  "dlopen2",
  "libc",
