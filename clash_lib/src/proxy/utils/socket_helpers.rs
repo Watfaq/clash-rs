@@ -10,9 +10,9 @@ use tokio::{
     time::timeout,
 };
 
-use tracing::debug;
 #[cfg(target_os = "windows")]
 use tracing::warn;
+use tracing::{debug, error};
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
@@ -143,12 +143,26 @@ pub async fn new_udp_socket(
         None => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
     };
 
-    if let Some(src) = src {
-        socket.bind(&(*src).into())?;
-    }
-
-    if let Some(iface) = iface {
-        must_bind_socket_on_interface(&socket, iface)?;
+    match (src, iface) {
+        (Some(_), Some(iface)) => {
+            debug!("both src and iface are set, iface will be used: {:?}", src);
+            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
+                error!("failed to bind socket to interface: {}", x);
+            })?;
+        }
+        (Some(src), None) => {
+            debug!("binding socket to: {:?}", src);
+            socket.bind(&(*src).into())?;
+        }
+        (None, Some(iface)) => {
+            debug!("binding socket to interface: {:?}", iface);
+            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
+                error!("failed to bind socket to interface: {}", x);
+            })?;
+        }
+        (None, None) => {
+            debug!("not binding socket to any address or interface");
+        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

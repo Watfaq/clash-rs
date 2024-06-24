@@ -8,9 +8,9 @@ use url::Url;
 
 use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
-    common::errors::map_io_error,
+    common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, utils::Interface},
+    proxy::{datagram::UdpPacket, utils::get_outbound_interface},
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -26,18 +26,18 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: netdev::get_default_interface()
-            .map(|x| Interface::Name(x.name))
+        iface: get_outbound_interface()
+            .map(|x| crate::proxy::utils::Interface::Name(x.name))
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
                     x
                 );
-            })
-            .ok(),
+            }),
         ..Default::default()
     };
 
+    debug!("new tun TCP connection: {}", sess);
     dispatcher.dispatch_stream(sess, stream).await;
 }
 
@@ -65,12 +65,12 @@ async fn handle_inbound_datagram(
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
-        iface: netdev::get_default_interface()
-            .map(|x| Interface::Name(x.name))
+        iface: get_outbound_interface()
+            .map(|x| crate::proxy::utils::Interface::Name(x.name))
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
-            })
-            .ok(),
+            }),
+
         ..Default::default()
     };
 
@@ -129,6 +129,8 @@ async fn handle_inbound_datagram(
         closer.send(0).ok();
     });
 
+    debug!("tun UDP ready");
+
     let _ = futures::future::join(fut1, fut2).await;
 }
 
@@ -173,7 +175,8 @@ pub fn get_runner(
 
     tun_cfg.up();
 
-    let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
+    let tun = tun::create_as_async(&tun_cfg)
+        .map_err(|x| new_io_error(&format!("failed to create tun device: {}", x)))?;
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);

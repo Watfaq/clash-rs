@@ -1,3 +1,5 @@
+#![feature(ip)]
+
 #[macro_use]
 extern crate anyhow;
 

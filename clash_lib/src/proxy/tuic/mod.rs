@@ -4,19 +4,23 @@ mod handle_task;
 pub(crate) mod types;
 
 use crate::proxy::tuic::types::SocketAdderTrans;
+use crate::proxy::utils::new_udp_socket;
 use anyhow::Result;
 use axum::async_trait;
+
 use quinn::congestion::{BbrConfig, NewRenoConfig};
 use quinn::{EndpointConfig, TokioRuntime};
-use std::net::SocketAddr;
+use tracing::debug;
+
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    net::{Ipv4Addr, Ipv6Addr, UdpSocket},
     sync::{
         atomic::{AtomicU16, Ordering},
         Arc,
     },
     time::Duration,
 };
+
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uuid::Uuid;
 
@@ -38,12 +42,13 @@ use quinn::ClientConfig as QuinnConfig;
 use quinn::Endpoint as QuinnEndpoint;
 use quinn::TransportConfig as QuinnTransportConfig;
 use quinn::{congestion::CubicConfig, VarInt};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
+use super::utils::{get_outbound_interface, Interface};
 use super::ConnectorType;
 use super::{
     datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, OutboundHandler, OutboundType,
@@ -83,7 +88,7 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
-    ep: TuicEndpoint,
+    ep: OnceCell<TuicEndpoint>,
     conn: AsyncMutex<Option<Arc<TuicConnection>>>,
     next_assoc_id: AtomicU16,
 }
@@ -131,6 +136,18 @@ impl OutboundHandler for Handler {
 impl Handler {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(opts: HandlerOptions) -> Result<AnyOutboundHandler, crate::Error> {
+        Ok(Arc::new(Self {
+            opts,
+            ep: OnceCell::new(),
+            conn: AsyncMutex::new(None),
+            next_assoc_id: AtomicU16::new(0),
+        }))
+    }
+
+    async fn init_endpoint(
+        opts: HandlerOptions,
+        resolver: ThreadSafeDNSResolver,
+    ) -> Result<TuicEndpoint> {
         let mut crypto = TlsConfig::builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
@@ -163,16 +180,31 @@ impl Handler {
         };
 
         quinn_config.transport_config(Arc::new(transport_config));
-        // Try to create an IPv4 socket as the placeholder first, if it fails, try IPv6.
-        // If it dont match server's ipv4/ipv6, rebind is needed
-        let socket =
-            UdpSocket::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))).or_else(|err| {
-                UdpSocket::bind(SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))).map_err(|_| err)
-            })?;
+
+        let socket = {
+            let iface = get_outbound_interface();
+
+            if resolver.ipv6() {
+                new_udp_socket(
+                    Some((Ipv6Addr::UNSPECIFIED, 0).into()).as_ref(),
+                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                )
+                .await?
+            } else {
+                new_udp_socket(
+                    Some((Ipv4Addr::UNSPECIFIED, 0).into()).as_ref(),
+                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                )
+                .await?
+            }
+        };
+
+        debug!("binding socket to: {:?}", socket.local_addr()?);
+
         let mut endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
             None,
-            socket,
+            socket.into_std()?,
             Arc::new(TokioRuntime),
         )?;
 
@@ -188,32 +220,33 @@ impl Handler {
             gc_interval: opts.gc_interval,
             gc_lifetime: opts.gc_lifetime,
         };
-        Ok(Arc::new(Self {
-            opts,
-            ep: endpoint,
-            conn: AsyncMutex::new(None),
-            next_assoc_id: AtomicU16::new(0),
-        }))
+
+        Ok(endpoint)
     }
+
     async fn get_conn(&self, resolver: &ThreadSafeDNSResolver) -> Result<Arc<TuicConnection>> {
-        let rebind = false;
-        // if mark not match the one current used, then rebind
+        let endpoint = self
+            .ep
+            .get_or_try_init(|| Self::init_endpoint(self.opts.clone(), resolver.clone()))
+            .await?;
+
         let fut = async {
             let mut guard = self.conn.lock().await;
             if guard.is_none() {
                 // init
-                *guard = Some(self.ep.connect(resolver, rebind).await?);
+                *guard = Some(endpoint.connect(resolver, false).await?);
             }
             let conn = guard.take().unwrap();
-            let conn = if conn.check_open().is_err() || rebind {
+            let conn = if conn.check_open().is_err() {
                 // reconnect
-                self.ep.connect(resolver, rebind).await?
+                endpoint.connect(resolver, true).await?
             } else {
                 conn
             };
             *guard = Some(conn.clone());
             Ok(conn)
         };
+
         tokio::time::timeout(self.opts.request_timeout, fut).await?
     }
 

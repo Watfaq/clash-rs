@@ -371,6 +371,7 @@ impl Dispatcher {
                         };
                     }
                     Some(handle) => match handle.send(packet).await {
+                        // TODO: need to reset when GLOBAL select is changed
                         Ok(_) => {
                             debug!("reusing {} sent to remote", sess);
                         }

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
+use tracing::warn;
 
 use super::{ClashResolver, ResolverKind};
 
@@ -8,6 +9,7 @@ pub struct SystemResolver;
 /// SystemResolver is a resolver that uses libc getaddrinfo to resolve hostnames.
 impl SystemResolver {
     pub fn new() -> anyhow::Result<Self> {
+        warn!("Default dns resolver doesn't support ipv6, please enable clash dns resolver if you need ipv6 support.");
         Ok(Self)
     }
 }
@@ -59,7 +61,7 @@ impl ClashResolver for SystemResolver {
     }
 
     fn ipv6(&self) -> bool {
-        true
+        false
     }
 
     fn set_ipv6(&self, _: bool) {

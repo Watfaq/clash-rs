@@ -158,7 +158,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || 'stable' }}
+          toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
 
