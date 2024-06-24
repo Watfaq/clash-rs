@@ -81,7 +81,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         })
         .collect::<Vec<_>>();
 
-    let priority = vec!["eth", "en", "pdp_ip"];
+    let priority = ["eth", "en", "pdp_ip"];
 
     all_outbounds.sort_by(|left, right| {
         let left = priority
