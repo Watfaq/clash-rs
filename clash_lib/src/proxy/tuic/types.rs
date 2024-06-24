@@ -44,7 +44,13 @@ impl TuicEndpoint {
 
                 let socket = {
                     let iface = get_outbound_interface();
-                    new_udp_socket(None, iface.map(|x| Interface::Name(x.name)).as_ref()).await?
+                    new_udp_socket(
+                        None,
+                        iface.map(|x| Interface::Name(x.name)).as_ref(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        None,
+                    )
+                    .await?
                 };
 
                 debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);
