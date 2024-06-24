@@ -30,6 +30,7 @@ pub struct GeneralConfig {
 #[repr(C)]
 pub struct ConfigOverride {
     pub tun_fd: i32,
+    pub http_port: u16,
     pub dns_server: *const c_char,
     pub bind_address: *const c_char,
     pub external_controller: *const c_char,
@@ -92,6 +93,10 @@ pub extern "C" fn start_clash_with_config(
                             .to_string_lossy()
                             .to_string();
                     cfg_def.external_controller = Some(external_controller);
+                }
+
+                if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
+                    cfg_def.port = Some(cfg_override.http_port);
                 }
             }
 
@@ -291,6 +296,7 @@ mod tests {
 
         let cfg_override = Some(super::ConfigOverride {
             tun_fd: 1989,
+            http_port: 7891,
             dns_server: "127.0.0.1:53\0".as_ptr() as _,
             bind_address: "240.0.0.2\0".as_ptr() as _,
             external_controller: ptr::null(),

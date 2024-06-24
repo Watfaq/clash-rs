@@ -11,6 +11,7 @@
 
 typedef struct ConfigOverride {
   int32_t tun_fd;
+  uint16_t http_port;
   const char *dns_server;
   const char *bind_address;
   const char *external_controller;
