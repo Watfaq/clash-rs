@@ -12,6 +12,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
+use crate::common::geodata::GeoData;
 use crate::{
     app::{
         remote_content_manager::providers::{
@@ -84,6 +85,7 @@ impl RuleProviderImpl {
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
         mmdb: Arc<Mmdb>,
+        geodata: Arc<GeoData>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behovior {
@@ -111,7 +113,7 @@ impl RuleProviderImpl {
             let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
                 Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
             })?;
-            let rules = make_rules(behovior, scheme.payload, mmdb.clone())?;
+            let rules = make_rules(behovior, scheme.payload, mmdb.clone(), geodata.clone())?;
             Ok(rules)
         });
 
@@ -214,13 +216,14 @@ fn make_rules(
     behavior: RuleSetBehavior,
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => Ok(RuleContent::Domain(make_domain_rules(rules)?)),
         RuleSetBehavior::Ipcidr => Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?))),
-        RuleSetBehavior::Classical => {
-            Ok(RuleContent::Classical(make_classical_rules(rules, mmdb)?))
-        }
+        RuleSetBehavior::Classical => Ok(RuleContent::Classical(make_classical_rules(
+            rules, mmdb, geodata,
+        )?)),
     }
 }
 
@@ -243,6 +246,7 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
 fn make_classical_rules(
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
@@ -259,7 +263,7 @@ fn make_classical_rules(
             _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", rule))),
         }?;
 
-        let rule_matcher = map_rule_type(rule_type, mmdb.clone(), None);
+        let rule_matcher = map_rule_type(rule_type, mmdb.clone(), geodata.clone(), None);
         rv.push(rule_matcher);
     }
     Ok(rv)

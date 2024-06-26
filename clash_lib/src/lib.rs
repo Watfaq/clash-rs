@@ -36,6 +36,7 @@ mod config;
 mod proxy;
 mod session;
 
+use crate::common::geodata;
 pub use config::def::Config as ClashConfigDef;
 pub use config::def::DNS as ClashDNSConfigDef;
 pub use config::DNSListen as ClashDNSListen;
@@ -47,6 +48,10 @@ pub enum Error {
     IpNet(#[from] ipnet::AddrParseError),
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    Decode(#[from] prost::DecodeError),
+    #[error(transparent)]
+    Regex(#[from] regex::Error),
     #[error("invalid config: {0}")]
     InvalidConfig(String),
     #[error("profile error: {0}")]
@@ -166,7 +171,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     debug!("initializing dns resolver");
     let system_resolver =
         Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
-    let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+    let client =
+        new_http_client(system_resolver.clone()).map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
     let cwd = PathBuf::from(cwd);
@@ -174,6 +180,16 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         mmdb::Mmdb::new(
             cwd.join(&config.general.mmdb),
             config.general.mmdb_download_url,
+            client,
+        )
+        .await?,
+    );
+
+    let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+    let geodata = Arc::new(
+        geodata::GeoData::new(
+            cwd.join(&config.general.geosite),
+            config.general.geosite_download_url,
             client,
         )
         .await?,
@@ -223,6 +239,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             config.rule_providers,
             dns_resolver.clone(),
             mmdb,
+            geodata,
             cwd.to_string_lossy().to_string(),
         )
         .await,
@@ -317,14 +334,25 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             debug!("reloading dns resolver");
             let system_resolver =
                 Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
-            let client =
-                new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+            let client = new_http_client(system_resolver.clone())
+                .map_err(|x| Error::DNSError(x.to_string()))?;
 
             debug!("reloading mmdb");
             let mmdb = Arc::new(
                 mmdb::Mmdb::new(
                     cwd.join(&config.general.mmdb),
                     config.general.mmdb_download_url,
+                    client,
+                )
+                .await?,
+            );
+
+            let client =
+                new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+            let geodata = Arc::new(
+                geodata::GeoData::new(
+                    cwd.join(&config.general.geosite),
+                    config.general.geosite_download_url,
                     client,
                 )
                 .await?,
@@ -374,6 +402,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                     config.rule_providers,
                     dns_resolver.clone(),
                     mmdb,
+                    geodata,
                     cwd.to_string_lossy().to_string(),
                 )
                 .await,
