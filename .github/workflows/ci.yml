@@ -158,7 +158,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || 'nightly-2024-06-24' }} # https://github.com/rust-lang/rust/pull/126888/files remove this date tomorrow after new nightly release is out (2024-06-25)
+          toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
 
