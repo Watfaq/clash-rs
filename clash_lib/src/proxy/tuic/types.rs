@@ -1,16 +1,19 @@
 use crate::app::dns::ThreadSafeDNSResolver;
+use crate::proxy::utils::{get_outbound_interface, new_udp_socket, Interface};
 use crate::session::SocksAddr as ClashSocksAddr;
+
 use anyhow::Result;
 use quinn::Connection as QuinnConnection;
 use quinn::{Endpoint as QuinnEndpoint, ZeroRttAccepted};
 use register_count::Counter;
 use std::collections::HashMap;
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr},
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
 use tokio::sync::RwLock as AsyncRwLock;
+use tracing::debug;
 use tuic_quinn::Connection as InnerConnection;
 use uuid::Uuid;
 
@@ -35,32 +38,35 @@ impl TuicEndpoint {
     ) -> Result<Arc<TuicConnection>> {
         let remote_addr = self.server.resolve(resolver).await?;
         let connect_to = async {
-            let match_ipv4 = remote_addr.is_ipv4()
-                && self
-                    .ep
-                    .local_addr()
-                    .map_or(false, |local_addr| local_addr.is_ipv4());
-            let match_ipv6 = remote_addr.is_ipv6()
-                && self
-                    .ep
-                    .local_addr()
-                    .map_or(false, |local_addr| local_addr.is_ipv6());
-
             // if client and server don't match each other or forced to rebind, then rebind local socket
-            if (!match_ipv4 && !match_ipv6) || rebind {
-                let bind_addr = if remote_addr.is_ipv4() {
-                    SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))
-                } else {
-                    SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))
+            if rebind {
+                debug!("rebinding endpoint UDP socket");
+
+                let socket = {
+                    let iface = get_outbound_interface();
+                    new_udp_socket(
+                        None,
+                        iface.map(|x| Interface::Name(x.name)).as_ref(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        None,
+                    )
+                    .await?
                 };
-                let socket = UdpSocket::bind(bind_addr)
-                    .map_err(|err| anyhow!("failed to bind local socket: {}", err))?;
+
+                debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);
+
                 self.ep
-                    .rebind(socket)
+                    .rebind(socket.into_std()?)
                     .map_err(|err| anyhow!("failed to rebind endpoint UDP socket {}", err))?;
             }
 
-            tracing::trace!("Connect to {} {}", remote_addr, self.server.server_name());
+            tracing::trace!(
+                "connecting to {} {} from {}",
+                remote_addr,
+                self.server.server_name(),
+                self.ep.local_addr().unwrap()
+            );
+
             let conn = self.ep.connect(remote_addr, self.server.server_name())?;
             let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
                 match conn.into_0rtt() {

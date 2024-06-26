@@ -102,9 +102,7 @@ pub fn setup_logging(
         .with_default_directive(format!("clash={}", level).parse::<Directive>().unwrap())
         .from_env_lossy();
 
-    let jaeger = if std::env::var("JAEGER_DISABLED").is_ok() {
-        None
-    } else {
+    let jaeger = if std::env::var("JAEGER_ENABLED").is_ok() {
         global::set_text_map_propagator(opentelemetry_jaeger_propagator::Propagator::new());
         global::set_error_handler(|e| {
             error!("OpenTelemetry error: {:?}", e);
@@ -123,6 +121,8 @@ pub fn setup_logging(
                 .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
     };
 
     let ios_os_log = if cfg!(target_os = "ios") {
@@ -154,9 +154,11 @@ pub fn setup_logging(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
-                .with_target(false)
+                .with_target(true)
                 .with_file(true)
                 .with_line_number(true)
+                .with_level(true)
+                .with_thread_ids(true)
                 .with_writer(move || -> Box<dyn std::io::Write> { Box::new(W(appender.clone())) })
                 .with_writer(std::io::stdout),
         )

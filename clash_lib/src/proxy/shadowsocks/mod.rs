@@ -504,20 +504,28 @@ mod tests {
         run_test_suites_and_cleanup(handler, chained, &Suite::tcp_tests()).await
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
-        test_ss_obfs_inner(SimpleOBFSMode::Http).await
+        if cfg!(target_arch = "x86_64") {
+            test_ss_obfs_inner(SimpleOBFSMode::Http).await
+        } else {
+            eprintln!("test_ss_obfs_http is ignored on non-x86_64 platform");
+            Ok(())
+        }
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .try_init();
-        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+        if cfg!(target_arch = "x86_64") {
+            let _ = tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::DEBUG)
+                .try_init();
+            test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+        } else {
+            eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");
+            Ok(())
+        }
     }
 }
