@@ -483,13 +483,6 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 }
 
 #[cfg(test)]
-#[allow(non_snake_case)]
-#[ctor::ctor]
-fn setup_tests() {
-    println!("setup tests");
-}
-
-#[cfg(test)]
 mod tests {
     use crate::{shutdown, start, Config, Options};
     use std::{thread, time::Duration};
