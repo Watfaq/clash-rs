@@ -479,6 +479,7 @@ impl ClashResolver for Resolver {
                 .map(|ip| ip.map(net::IpAddr::from)),
         }
     }
+
     async fn resolve_v4(
         &self,
         host: &str,

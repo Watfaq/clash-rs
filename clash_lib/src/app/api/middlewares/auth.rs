@@ -52,11 +52,9 @@ where
     S: Service<Request<Body>, Response = Response> + Send + 'static,
     S::Future: Send + 'static,
 {
-    type Response = S::Response;
-
     type Error = S::Error;
-
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Response = S::Response;
 
     fn poll_ready(
         &mut self,

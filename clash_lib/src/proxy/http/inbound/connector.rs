@@ -30,10 +30,10 @@ impl Connector {
 }
 
 impl tower::Service<Uri> for Connector {
-    type Response = AnyStream;
     type Error = ProxyError;
     type Future =
         Pin<Box<dyn Future<Output = Result<AnyStream, Self::Error>> + Send>>;
+    type Response = AnyStream;
 
     fn poll_ready(
         &mut self,

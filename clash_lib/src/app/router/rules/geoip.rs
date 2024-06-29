@@ -38,9 +38,10 @@ impl RuleMatcher for GeoIP {
                     false
                 }
             },
-            crate::session::SocksAddr::Domain(_, _) => false,
+            crate::session::SocksAddr::Domain(..) => false,
         }
     }
+
     fn target(&self) -> &str {
         self.target.as_str()
     }

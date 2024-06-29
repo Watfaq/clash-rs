@@ -15,6 +15,7 @@ impl VmessSecurity {
     pub fn overhead_len(&self) -> usize {
         16
     }
+
     #[inline(always)]
     pub fn nonce_len(&self) -> usize {
         12

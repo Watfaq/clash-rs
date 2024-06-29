@@ -51,6 +51,7 @@ impl ClashResolver for SystemResolver {
             })
             .choose(&mut rand::thread_rng()))
     }
+
     async fn resolve_v6(
         &self,
         host: &str,

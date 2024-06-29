@@ -185,6 +185,7 @@ impl TuicConnection {
         self.inner.collect_garbage(gc_lifetime);
         Ok(())
     }
+
     /// Tasks triggered by timer
     /// Won't return unless occurs error
     pub async fn cyclical_tasks(

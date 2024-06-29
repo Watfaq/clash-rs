@@ -126,6 +126,7 @@ impl TuicConnection {
             None => Ok(()),
         }
     }
+
     #[allow(clippy::too_many_arguments)]
     fn new(
         conn: QuinnConnection,
@@ -161,6 +162,7 @@ impl TuicConnection {
 
         conn
     }
+
     async fn init(
         self: Arc<Self>,
         zero_rtt_accepted: Option<ZeroRttAccepted>,

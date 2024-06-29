@@ -325,6 +325,7 @@ where
     T: Sink<UdpPacket, Error = std::io::Error> + Unpin,
 {
     type Error = std::io::Error;
+
     fn poll_ready(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

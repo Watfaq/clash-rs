@@ -119,6 +119,7 @@ impl OutboundHandler for Handler {
             std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
         })
     }
+
     async fn connect_datagram(
         &self,
         sess: &Session,

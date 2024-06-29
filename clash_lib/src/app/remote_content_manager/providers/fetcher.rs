@@ -58,6 +58,7 @@ where
             on_update: on_update.map(|f| Arc::new(Mutex::new(f))),
         }
     }
+
     pub fn name(&self) -> &str {
         self.name.as_str()
     }

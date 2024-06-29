@@ -167,6 +167,7 @@ impl RuleProvider for RuleProviderImpl {
             }
         }
     }
+
     fn behavior(&self) -> RuleSetBehavior {
         self.behavior
     }
@@ -177,12 +178,15 @@ impl Provider for RuleProviderImpl {
     fn name(&self) -> &str {
         self.fetcher.name()
     }
+
     fn vehicle_type(&self) -> ProviderVehicleType {
         self.fetcher.vehicle_type()
     }
+
     fn typ(&self) -> ProviderType {
         ProviderType::Rule
     }
+
     async fn initialize(&self) -> std::io::Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
@@ -191,6 +195,7 @@ impl Provider for RuleProviderImpl {
         }
         Ok(())
     }
+
     async fn update(&self) -> std::io::Result<()> {
         let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
         debug!("rule provider {} updated. same? {}", self.name(), same);

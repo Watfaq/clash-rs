@@ -175,7 +175,7 @@ impl Stream for OutboundDatagramShadowsocks {
         debug!("recv udp packet from remote ss server: {:?}", rv);
 
         match rv {
-            Ok((n, src, _, _)) => Poll::Ready(Some(UdpPacket {
+            Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled()[..n].to_vec(),
                 src_addr: src.into(),
                 dst_addr: SocksAddr::any_ipv4(),

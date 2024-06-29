@@ -103,7 +103,7 @@ impl Dispatcher {
                         sess
                     }
                 }
-                crate::session::SocksAddr::Domain(_, _) => sess,
+                crate::session::SocksAddr::Domain(..) => sess,
             }
         } else {
             sess
@@ -287,7 +287,7 @@ impl Dispatcher {
                                 sess
                             }
                         }
-                        crate::session::SocksAddr::Domain(_, _) => sess,
+                        crate::session::SocksAddr::Domain(..) => sess,
                     }
                 } else {
                     sess
@@ -597,7 +597,7 @@ impl Drop for OutboundHandleMap {
             "dropping inner outbound handle map that has {} sessions",
             self.0.len()
         );
-        for (_, (recv_handle, send_handle, _, _)) in self.0.drain() {
+        for (_, (recv_handle, send_handle, ..)) in self.0.drain() {
             recv_handle.abort();
             send_handle.abort();
         }

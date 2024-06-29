@@ -40,8 +40,8 @@ impl Encoder<(Bytes, SocksAddr)> for Socks5UDPCodec {
 }
 
 impl Decoder for Socks5UDPCodec {
-    type Item = (SocksAddr, BytesMut);
     type Error = std::io::Error;
+    type Item = (SocksAddr, BytesMut);
 
     fn decode(
         &mut self,

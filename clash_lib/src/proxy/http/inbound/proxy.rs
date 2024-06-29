@@ -107,11 +107,9 @@ struct ProxyService {
 }
 
 impl Service<Request<Body>> for ProxyService {
-    type Response = Response<Body>;
-
     type Error = ProxyError;
-
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Response = Response<Body>;
 
     fn poll_ready(
         &mut self,

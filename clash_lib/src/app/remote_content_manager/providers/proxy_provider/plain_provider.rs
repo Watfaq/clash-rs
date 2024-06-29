@@ -52,15 +52,19 @@ impl Provider for PlainProvider {
     fn name(&self) -> &str {
         &self.name
     }
+
     fn vehicle_type(&self) -> ProviderVehicleType {
         ProviderVehicleType::Compatible
     }
+
     fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
+
     async fn initialize(&self) -> std::io::Result<()> {
         Ok(())
     }
+
     async fn update(&self) -> std::io::Result<()> {
         Ok(())
     }

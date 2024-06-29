@@ -34,8 +34,8 @@ impl Display for SocksAddr {
 pub struct SocksAddrType;
 
 impl SocksAddrType {
-    pub const V4: u8 = 0x1;
     pub const DOMAIN: u8 = 0x3;
+    pub const V4: u8 = 0x1;
     pub const V6: u8 = 0x4;
 }
 
@@ -97,7 +97,7 @@ impl SocksAddr {
     pub fn is_domain(&self) -> bool {
         match self {
             SocksAddr::Ip(_) => false,
-            SocksAddr::Domain(_, _) => true,
+            SocksAddr::Domain(..) => true,
         }
     }
 
@@ -111,7 +111,7 @@ impl SocksAddr {
     pub fn must_into_socket_addr(self) -> SocketAddr {
         match self {
             SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(_, _) => panic!("not a socket address"),
+            SocksAddr::Domain(..) => panic!("not a socket address"),
         }
     }
 
@@ -344,7 +344,7 @@ impl TryFrom<SocksAddr> for SocketAddr {
     fn try_from(s: SocksAddr) -> Result<Self, Self::Error> {
         match s {
             SocksAddr::Ip(ip) => Ok(ip),
-            SocksAddr::Domain(_, _) => {
+            SocksAddr::Domain(..) => {
                 Err(io::Error::new(io::ErrorKind::Other, "cannot convert"))
             }
         }
