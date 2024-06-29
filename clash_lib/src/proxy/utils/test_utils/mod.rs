@@ -25,8 +25,12 @@ pub mod consts;
 pub mod docker_runner;
 
 // TODO: add the throughput metrics
-pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> anyhow::Result<()> {
-    // PATH: our proxy handler -> proxy-server(container) -> target local server(127.0.0.1:port)
+pub async fn ping_pong_test(
+    handler: Arc<dyn OutboundHandler>,
+    port: u16,
+) -> anyhow::Result<()> {
+    // PATH: our proxy handler -> proxy-server(container) -> target local
+    // server(127.0.0.1:port)
 
     let sess = Session {
         destination: ("127.0.0.1".to_owned(), port)
@@ -72,7 +76,10 @@ pub async fn ping_pong_test(handler: Arc<dyn OutboundHandler>, port: u16) -> any
         loop {
             let (stream, _) = listener.accept().await?;
 
-            tracing::info!("Accepted connection from: {}", stream.peer_addr().unwrap());
+            tracing::info!(
+                "Accepted connection from: {}",
+                stream.peer_addr().unwrap()
+            );
             destination_fn(stream).await?
         }
     });
@@ -131,7 +138,8 @@ pub async fn ping_pong_udp_test(
     handler: Arc<dyn OutboundHandler>,
     port: u16,
 ) -> anyhow::Result<()> {
-    // PATH: our proxy handler -> proxy-server(container) -> target local server(127.0.0.1:port)
+    // PATH: our proxy handler -> proxy-server(container) -> target local
+    // server(127.0.0.1:port)
 
     let src = ("127.0.0.1".to_owned(), 10005)
         .try_into()
@@ -168,8 +176,9 @@ pub async fn ping_pong_udp_test(
         Ok(())
     }
 
-    let target_local_server_handler: tokio::task::JoinHandle<Result<(), anyhow::Error>> =
-        tokio::spawn(async move { destination_fn(listener).await });
+    let target_local_server_handler: tokio::task::JoinHandle<
+        Result<(), anyhow::Error>,
+    > = tokio::spawn(async move { destination_fn(listener).await });
 
     async fn proxy_fn(
         mut datagram: BoxedChainedDatagram,
@@ -216,7 +225,9 @@ pub async fn ping_pong_udp_test(
 }
 
 // latency test of the proxy, will reuse the `url_test` ability
-pub async fn latency_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<(u16, u16)> {
+pub async fn latency_test(
+    handler: Arc<dyn OutboundHandler>,
+) -> anyhow::Result<(u16, u16)> {
     let (_, resolver) = config_helper::load_config().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
     proxy_manager

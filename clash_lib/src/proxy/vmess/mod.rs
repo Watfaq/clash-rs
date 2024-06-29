@@ -9,8 +9,8 @@ mod vmess_impl;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
-            ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -24,7 +24,8 @@ use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
     utils::{new_tcp_stream, RemoteConnector},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
+    OutboundType,
 };
 
 pub enum VmessTransport {
@@ -79,7 +80,12 @@ impl Handler {
                 );
 
                 if let Some(tls_opt) = &self.opts.tls {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
+                    stream = transport::tls::wrap_stream(
+                        stream,
+                        tls_opt.to_owned(),
+                        None,
+                    )
+                    .await?;
                 }
 
                 ws_builder.proxy_stream(stream).await?
@@ -89,7 +95,8 @@ impl Handler {
                     Some(tls_opt) => {
                         let mut tls_opt = tls_opt.clone();
                         tls_opt.alpn = Some(vec!["h2".to_string()]);
-                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None)
+                            .await?
                     }
                     None => stream,
                 };
@@ -106,7 +113,8 @@ impl Handler {
             Some(VmessTransport::Grpc(ref opt)) => {
                 stream = match self.opts.tls.as_ref() {
                     Some(tls_opt) => {
-                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?
+                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None)
+                            .await?
                     }
                     None => stream,
                 };
@@ -125,7 +133,12 @@ impl Handler {
             }
             None => {
                 if let Some(tls_opt) = self.opts.tls.as_ref() {
-                    stream = transport::tls::wrap_stream(stream, tls_opt.to_owned(), None).await?;
+                    stream = transport::tls::wrap_stream(
+                        stream,
+                        tls_opt.to_owned(),
+                        None,
+                    )
+                    .await?;
                 }
                 stream
             }
@@ -398,7 +411,8 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all()).await
+        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
+            .await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -441,6 +455,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all()).await
+        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all())
+            .await
     }
 }

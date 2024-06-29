@@ -2,8 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
     extract::{Path, Query, State},
-    http::Request,
-    http::StatusCode,
+    http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -11,11 +10,13 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::app::{
-    api::AppState, outbound::manager::ThreadSafeOutboundManager,
-    remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+use crate::{
+    app::{
+        api::AppState, outbound::manager::ThreadSafeOutboundManager,
+        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+    },
+    proxy::AnyOutboundHandler,
 };
-use crate::proxy::AnyOutboundHandler;
 #[derive(Clone)]
 struct ProviderState {
     outbound_manager: ThreadSafeOutboundManager,
@@ -59,8 +60,9 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     for (name, p) in outbound_manager.get_proxy_providers() {
         let p = p.read().await;
         let proxies = p.proxies().await;
-        let proxies =
-            futures::future::join_all(proxies.iter().map(|x| outbound_manager.get_proxy(x)));
+        let proxies = futures::future::join_all(
+            proxies.iter().map(|x| outbound_manager.get_proxy(x)),
+        );
         let mut m = p.as_map().await;
         m.insert("proxies".to_owned(), Box::new(proxies.await));
         providers.insert(name, m);

@@ -67,7 +67,10 @@ impl Sink<UdpPacket> for TunDatagram {
         Poll::Ready(Ok(()))
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        self: std::pin::Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         let pin = self.get_mut();
         pin.pkt = Some(item);
         pin.flushed = false;

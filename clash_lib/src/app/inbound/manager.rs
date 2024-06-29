@@ -1,13 +1,16 @@
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::app::dispatcher::Dispatcher;
-use crate::app::inbound::network_listener::{ListenerType, NetworkInboundListener};
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::config::internal::config::{BindAddress, Inbound};
-use crate::{Error, Runner};
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::{
+    app::{
+        dispatcher::Dispatcher,
+        inbound::network_listener::{ListenerType, NetworkInboundListener},
+    },
+    common::auth::ThreadSafeAuthenticator,
+    config::internal::config::{BindAddress, Inbound},
+    Error, Runner,
+};
+use std::{collections::HashMap, sync::Arc};
 
 pub struct InboundManager {
     network_listeners: HashMap<ListenerType, NetworkInboundListener>,

@@ -1,21 +1,25 @@
-use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::proxy::datagram::UdpPacket;
-use crate::proxy::utils::Interface;
-use crate::session::Session;
+use crate::{
+    app::{
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dns::ThreadSafeDNSResolver,
+    },
+    proxy::{datagram::UdpPacket, utils::Interface},
+    session::Session,
+};
 use async_trait::async_trait;
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use std::collections::HashMap;
-use std::fmt::{Debug, Display};
-use std::io;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+    io,
+    sync::Arc,
+};
 
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use self::utils::RemoteConnector;
 
@@ -65,7 +69,10 @@ pub enum ProxyError {
 }
 
 pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin + Debug {}
-impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin + Debug {}
+impl<T> ProxyStream for T where
+    T: AsyncRead + AsyncWrite + Send + Sync + Unpin + Debug
+{
+}
 pub type AnyStream = Box<dyn ProxyStream>;
 
 pub trait InboundDatagram<Item>:

@@ -1,5 +1,4 @@
-use crate::app::router::rules::RuleMatcher;
-use crate::session::Session;
+use crate::{app::router::rules::RuleMatcher, session::Session};
 
 #[derive(Clone)]
 pub struct Port {

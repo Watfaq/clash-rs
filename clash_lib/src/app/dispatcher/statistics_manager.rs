@@ -138,7 +138,7 @@ impl Manager {
             .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
     }
 
-    //TODO: make this u64
+    // TODO: make this u64
     pub fn now(&self) -> (i64, i64) {
         (
             self.upload_blip.load(std::sync::atomic::Ordering::Relaxed),
@@ -156,7 +156,9 @@ impl Manager {
             connections.push(TrackerInfo {
                 uuid: t.uuid,
                 upload_total: AtomicU64::new(t.upload_total.load(Ordering::Acquire)),
-                download_total: AtomicU64::new(t.download_total.load(Ordering::Acquire)),
+                download_total: AtomicU64::new(
+                    t.download_total.load(Ordering::Acquire),
+                ),
                 start_time: t.start_time,
                 proxy_chain: chain.clone(),
                 rule: t.rule.clone(),
@@ -170,7 +172,9 @@ impl Manager {
             download_total: self
                 .download_total
                 .load(std::sync::atomic::Ordering::Relaxed),
-            upload_total: self.upload_total.load(std::sync::atomic::Ordering::Relaxed),
+            upload_total: self
+                .upload_total
+                .load(std::sync::atomic::Ordering::Relaxed),
             connections,
         }
     }

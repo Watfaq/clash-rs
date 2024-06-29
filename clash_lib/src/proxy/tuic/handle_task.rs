@@ -7,13 +7,15 @@ use anyhow::Result;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
 
-use crate::proxy::datagram::UdpPacket;
-use crate::session::SocksAddr as ClashSocksAddr;
+use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
 
 use super::types::{TuicConnection, UdpRelayMode};
 
 impl TuicConnection {
-    pub async fn tuic_auth(self: Arc<Self>, zero_rtt_accepted: Option<ZeroRttAccepted>) {
+    pub async fn tuic_auth(
+        self: Arc<Self>,
+        zero_rtt_accepted: Option<ZeroRttAccepted>,
+    ) {
         if let Some(zero_rtt_accepted) = zero_rtt_accepted {
             tracing::debug!("[auth] waiting for connection to be fully established");
             zero_rtt_accepted.await;
@@ -43,7 +45,9 @@ impl TuicConnection {
         match self.inner.connect(addr).await {
             Ok(conn) => Ok(conn),
             Err(err) => {
-                tracing::warn!("[tcp] failed initializing relay to {addr_display}: {err}");
+                tracing::warn!(
+                    "[tcp] failed initializing relay to {addr_display}: {err}"
+                );
                 Err(anyhow!(err))
             }
         }
@@ -59,12 +63,15 @@ impl TuicConnection {
 
         match self.udp_relay_mode {
             UdpRelayMode::Native => {
-                tracing::info!("[udp] [{assoc_id:#06x}] [to-native] to {addr_display}");
+                tracing::info!(
+                    "[udp] [{assoc_id:#06x}] [to-native] to {addr_display}"
+                );
                 match self.inner.packet_native(pkt, addr, assoc_id) {
                     Ok(()) => Ok(()),
                     Err(err) => {
                         tracing::warn!(
-                            "[udp] [{assoc_id:#06x}] [to-native] to {addr_display}: {err}"
+                            "[udp] [{assoc_id:#06x}] [to-native] to \
+                             {addr_display}: {err}"
                         );
                         Err(anyhow!(err))
                     }
@@ -76,7 +83,8 @@ impl TuicConnection {
                     Ok(()) => Ok(()),
                     Err(err) => {
                         tracing::warn!(
-                            "[udp] [{assoc_id:#06x}] [to-quic] to {addr_display}: {err}"
+                            "[udp] [{assoc_id:#06x}] [to-quic] to {addr_display}: \
+                             {err}"
                         );
                         Err(anyhow!(err))
                     }
@@ -98,31 +106,50 @@ impl TuicConnection {
         };
 
         tracing::info!(
-            "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment {frag_id}/{frag_total}",
+            "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] fragment \
+             {frag_id}/{frag_total}",
             frag_id = pkt.frag_id() + 1,
             frag_total = pkt.frag_total(),
         );
         match pkt.accept().await {
             Ok(Some((data, remote_addr, _))) => {
-                tracing::info!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] from {remote_addr}");
-                let (session, local_addr) = match self.udp_sessions.read().await.get(&assoc_id) {
-                    Some(v) => (v.incoming.clone(), v.local_addr.clone()),
-                    None => {
-                        tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] unable to find udp session");
-                        return;
-                    },
-                };
+                tracing::info!(
+                    "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] from \
+                     {remote_addr}"
+                );
+                let (session, local_addr) =
+                    match self.udp_sessions.read().await.get(&assoc_id) {
+                        Some(v) => (v.incoming.clone(), v.local_addr.clone()),
+                        None => {
+                            tracing::error!(
+                                "[udp] [{assoc_id:#06x}] [from-{mode}] \
+                                 [{pkt_id:#06x}] unable to find udp session"
+                            );
+                            return;
+                        }
+                    };
                 let remote_addr = match remote_addr {
                     Address::None => unreachable!(),
-                    Address::DomainAddress(domain, port) => ClashSocksAddr::Domain(domain, port),
+                    Address::DomainAddress(domain, port) => {
+                        ClashSocksAddr::Domain(domain, port)
+                    }
                     Address::SocketAddress(socket) => ClashSocksAddr::Ip(socket),
                 };
-                if let Err(err) = session.send(UdpPacket::new(data.into(), remote_addr, local_addr)).await {
-                    tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] failed sending packet: {err}")
+                if let Err(err) = session
+                    .send(UdpPacket::new(data.into(), remote_addr, local_addr))
+                    .await
+                {
+                    tracing::error!(
+                        "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] \
+                         failed sending packet: {err}"
+                    )
                 };
-            },
+            }
             Ok(None) => {}
-            Err(err) => tracing::error!("[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] packet receiving error: {err}"),
+            Err(err) => tracing::error!(
+                "[udp] [{assoc_id:#06x}] [from-{mode}] [{pkt_id:#06x}] packet \
+                 receiving error: {err}"
+            ),
         }
     }
 
@@ -144,7 +171,9 @@ impl TuicConnection {
         }
 
         match self.inner.heartbeat().await {
-            Ok(()) => tracing::debug!("[tuic heartbeat] - {}", self.conn.remote_address()),
+            Ok(()) => {
+                tracing::debug!("[tuic heartbeat] - {}", self.conn.remote_address())
+            }
             Err(err) => tracing::error!("[tuic heartbeat] - {err}"),
         }
         Ok(())
@@ -156,6 +185,7 @@ impl TuicConnection {
         self.inner.collect_garbage(gc_lifetime);
         Ok(())
     }
+
     /// Tasks triggered by timer
     /// Won't return unless occurs error
     pub async fn cyclical_tasks(

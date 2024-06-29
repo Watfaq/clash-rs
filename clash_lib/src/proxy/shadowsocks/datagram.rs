@@ -47,7 +47,10 @@ impl OutboundDatagramShadowsocks {
 impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
     type Error = io::Error;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         if !self.flushed {
             match self.poll_flush(cx)? {
                 Poll::Ready(()) => {}
@@ -66,7 +69,10 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
     }
 
     #[instrument(skip(self, cx))]
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         if self.flushed {
             return Poll::Ready(Ok(()));
         }
@@ -113,7 +119,8 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
             let n = ready!(inner.poll_send_to(dst, &addr, data, cx))?;
 
             debug!(
-                "send udp packet to remote ss server, len: {}, remote_addr: {}, dst_addr: {}",
+                "send udp packet to remote ss server, len: {}, remote_addr: {}, \
+                 dst_addr: {}",
                 n, dst, addr
             );
 
@@ -139,7 +146,10 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
         }
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         ready!(self.poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
@@ -149,7 +159,10 @@ impl Stream for OutboundDatagramShadowsocks {
     type Item = UdpPacket;
 
     #[instrument(skip(self, cx))]
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let Self {
             ref mut buf,
             ref inner,
@@ -162,7 +175,7 @@ impl Stream for OutboundDatagramShadowsocks {
         debug!("recv udp packet from remote ss server: {:?}", rv);
 
         match rv {
-            Ok((n, src, _, _)) => Poll::Ready(Some(UdpPacket {
+            Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled()[..n].to_vec(),
                 src_addr: src.into(),
                 dst_addr: SocksAddr::any_ipv4(),

@@ -238,7 +238,11 @@ impl WireguardTunnel {
                         match self.udp_send(packet).await {
                             Ok(_) => {}
                             Err(e) => {
-                                error!("Failed to send decapsulation-instructed packet to WireGuard endpoint: {:?}", e);
+                                error!(
+                                    "Failed to send decapsulation-instructed \
+                                     packet to WireGuard endpoint: {:?}",
+                                    e
+                                );
                                 break;
                             }
                         };
@@ -303,7 +307,10 @@ impl WireguardTunnel {
     }
 
     #[async_recursion]
-    async fn handle_routine_result<'a: 'async_recursion>(&self, result: TunnResult<'a>) {
+    async fn handle_routine_result<'a: 'async_recursion>(
+        &self,
+        result: TunnResult<'a>,
+    ) {
         match result {
             TunnResult::Done => {
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -312,7 +319,8 @@ impl WireguardTunnel {
                 warn!("wireguard connection expired");
                 let mut buf = vec![0u8; 65535];
                 let mut peer = self.peer.lock().await;
-                let tun_result = peer.format_handshake_initiation(&mut buf[..], false);
+                let tun_result =
+                    peer.format_handshake_initiation(&mut buf[..], false);
                 drop(peer);
 
                 self.handle_routine_result(tun_result).await;
@@ -320,12 +328,14 @@ impl WireguardTunnel {
             TunnResult::Err(e) => {
                 error!("wireguard error: {e:?}");
             }
-            TunnResult::WriteToNetwork(packet) => match self.udp_send(packet).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("failed to send packet: {}", e);
+            TunnResult::WriteToNetwork(packet) => {
+                match self.udp_send(packet).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("failed to send packet: {}", e);
+                    }
                 }
-            },
+            }
             _ => {
                 error!("unexpected result from wireguard");
             }
@@ -338,23 +348,29 @@ impl WireguardTunnel {
         match IpVersion::of_packet(packet) {
             Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip)
+                .filter(|packet| {
+                    Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip
+                })
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),
                         IpProtocol::Udp => Some(PortProtocol::Udp),
-                        // Unrecognized protocol, so we cannot determine where to route
+                        // Unrecognized protocol, so we cannot determine where
+                        // to route
                         _ => None,
                     }
                 }),
             Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6)
+                .filter(|packet| {
+                    Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6
+                })
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),
                         IpProtocol::Udp => Some(PortProtocol::Udp),
-                        // Unrecognized protocol, so we cannot determine where to route
+                        // Unrecognized protocol, so we cannot determine where
+                        // to route
                         _ => None,
                     }
                 }),
@@ -364,7 +380,8 @@ impl WireguardTunnel {
 
     fn is_ip_allowed(&self, ip: IpAddr) -> bool {
         trace!("checking if {} is allowed in {:?}", ip, self.allowed_ips);
-        self.allowed_ips.is_empty() || self.allowed_ips.iter().any(|x| x.contains(&ip))
+        self.allowed_ips.is_empty()
+            || self.allowed_ips.iter().any(|x| x.contains(&ip))
     }
 }
 

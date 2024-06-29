@@ -14,7 +14,8 @@ use serde::Deserialize;
 
 use crate::{
     app::{
-        api::AppState, outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+        api::AppState, outbound::manager::ThreadSafeOutboundManager,
+        profile::ThreadSafeCacheFile,
     },
     proxy::AnyOutboundHandler,
 };

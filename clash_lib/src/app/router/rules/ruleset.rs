@@ -1,6 +1,10 @@
-use crate::app::remote_content_manager::providers::rule_provider::ThreadSafeRuleProvider;
-use crate::app::router::rules::RuleMatcher;
-use crate::session::Session;
+use crate::{
+    app::{
+        remote_content_manager::providers::rule_provider::ThreadSafeRuleProvider,
+        router::rules::RuleMatcher,
+    },
+    session::Session,
+};
 
 #[derive(Clone)]
 pub struct RuleSet {
@@ -10,7 +14,11 @@ pub struct RuleSet {
 }
 
 impl RuleSet {
-    pub fn new(rule_set: String, target: String, rule_provider: ThreadSafeRuleProvider) -> Self {
+    pub fn new(
+        rule_set: String,
+        target: String,
+        rule_provider: ThreadSafeRuleProvider,
+    ) -> Self {
         Self {
             rule_set,
             target,
