@@ -1,26 +1,27 @@
 use std::collections::HashMap;
 
-use std::fmt::Display;
-use std::net::IpAddr;
-use std::str::FromStr;
+use std::{fmt::Display, net::IpAddr, str::FromStr};
 
-use serde::de::value::MapDeserializer;
-use serde::{Deserialize, Serialize};
+use serde::{de::value::MapDeserializer, Deserialize, Serialize};
 use serde_yaml::Value;
 
-use crate::app::remote_content_manager::providers::rule_provider::RuleSetBehavior;
-use crate::common::auth;
-use crate::config::def::{self};
-use crate::config::internal::proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT};
-use crate::config::internal::rule::RuleType;
-use crate::proxy::utils::Interface;
 use crate::{
-    app::dns,
-    config::def::{LogLevel, RunMode},
+    app::{dns, remote_content_manager::providers::rule_provider::RuleSetBehavior},
+    common::auth,
+    config::{
+        def::{self, LogLevel, RunMode},
+        internal::{
+            proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT},
+            rule::RuleType,
+        },
+    },
+    proxy::utils::Interface,
     Error,
 };
 
-use super::proxy::{map_serde_error, OutboundProxyProtocol, OutboundProxyProviderDef};
+use super::proxy::{
+    map_serde_error, OutboundProxyProtocol, OutboundProxyProviderDef,
+};
 
 pub struct Config {
     pub general: General,
@@ -41,7 +42,8 @@ pub struct Config {
 impl Config {
     fn validate(self) -> Result<Self, crate::Error> {
         for r in self.rules.iter() {
-            if !self.proxies.contains_key(r.target()) && !self.proxy_groups.contains_key(r.target())
+            if !self.proxies.contains_key(r.target())
+                && !self.proxy_groups.contains_key(r.target())
             {
                 return Err(Error::InvalidConfig(format!(
                     "proxy `{}` referenced in a rule was not found",
@@ -57,7 +59,8 @@ impl TryFrom<def::Config> for Config {
     type Error = crate::Error;
 
     fn try_from(c: def::Config) -> Result<Self, Self::Error> {
-        let mut proxy_names = vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
+        let mut proxy_names =
+            vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
         #[allow(deprecated)]
         Self {
             general: General {
@@ -92,8 +95,15 @@ impl TryFrom<def::Config> for Config {
             dns: (&c).try_into()?,
             experimental: c.experimental,
             tun: match c.tun {
-                Some(mapping) => TunConfig::deserialize(MapDeserializer::new(mapping.into_iter()))
-                    .map_err(|e| Error::InvalidConfig(format!("invalid tun config: {}", e)))?,
+                Some(mapping) => {
+                    TunConfig::deserialize(MapDeserializer::new(mapping.into_iter()))
+                        .map_err(|e| {
+                            Error::InvalidConfig(format!(
+                                "invalid tun config: {}",
+                                e
+                            ))
+                        })?
+                }
                 None => TunConfig::default(),
             },
             profile: Profile {
@@ -107,24 +117,31 @@ impl TryFrom<def::Config> for Config {
                         .map_err(|x| Error::InvalidConfig(x.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            rule_providers: c
-                .rule_provider
-                .map(|m| {
-                    m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
-                            let provider = RuleProviderDef::try_from(body).map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "invalid rule provider {}: {}",
-                                    name, x
-                                ))
-                            })?;
-                            rv.insert(name, provider);
-                            Ok::<HashMap<std::string::String, RuleProviderDef>, Error>(rv)
-                        })
-                        .expect("proxy provider parse error")
-                })
-                .unwrap_or_default(),
+            rule_providers:
+                c.rule_provider
+                    .map(|m| {
+                        m.into_iter()
+                            .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                                body.insert(
+                                    "name".to_owned(),
+                                    serde_yaml::Value::String(name.clone()),
+                                );
+                                let provider = RuleProviderDef::try_from(body)
+                                    .map_err(|x| {
+                                        Error::InvalidConfig(format!(
+                                            "invalid rule provider {}: {}",
+                                            name, x
+                                        ))
+                                    })?;
+                                rv.insert(name, provider);
+                                Ok::<
+                                    HashMap<std::string::String, RuleProviderDef>,
+                                    Error,
+                                >(rv)
+                            })
+                            .expect("proxy provider parse error")
+                    })
+                    .unwrap_or_default(),
             users: c
                 .authentication
                 .into_iter()
@@ -147,7 +164,9 @@ impl TryFrom<def::Config> for Config {
                     ),
                 ]),
                 |mut rv, x| {
-                    let proxy = OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
+                    let proxy = OutboundProxy::ProxyServer(
+                        OutboundProxyProtocol::try_from(x)?,
+                    );
                     let name = proxy.name();
                     if rv.contains_key(name.as_str()) {
                         return Err(Error::InvalidConfig(format!(
@@ -163,19 +182,22 @@ impl TryFrom<def::Config> for Config {
             proxy_groups: c.proxy_group.into_iter().try_fold(
                 HashMap::<String, OutboundProxy>::new(),
                 |mut rv, mapping| {
-                    let group = OutboundProxy::ProxyGroup(mapping.clone().try_into().map_err(
-                        |x: Error| {
+                    let group = OutboundProxy::ProxyGroup(
+                        mapping.clone().try_into().map_err(|x: Error| {
                             if let Some(name) = mapping.get("name") {
                                 Error::InvalidConfig(format!(
                                     "proxy group: {}: {}",
-                                    name.as_str().expect("proxy group name must be string"),
+                                    name.as_str()
+                                        .expect("proxy group name must be string"),
                                     x
                                 ))
                             } else {
-                                Error::InvalidConfig("proxy group name missing".to_string())
+                                Error::InvalidConfig(
+                                    "proxy group name missing".to_string(),
+                                )
                             }
-                        },
-                    )?);
+                        })?,
+                    );
                     proxy_names.push(group.name());
                     rv.insert(group.name().to_string(), group);
                     Ok::<HashMap<String, OutboundProxy>, Error>(rv)
@@ -188,16 +210,25 @@ impl TryFrom<def::Config> for Config {
                 .map(|m| {
                     m.into_iter()
                         .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                            body.insert("name".to_owned(), serde_yaml::Value::String(name.clone()));
-                            let provider =
-                                OutboundProxyProviderDef::try_from(body).map_err(|x| {
+                            body.insert(
+                                "name".to_owned(),
+                                serde_yaml::Value::String(name.clone()),
+                            );
+                            let provider = OutboundProxyProviderDef::try_from(body)
+                                .map_err(|x| {
                                     Error::InvalidConfig(format!(
                                         "invalid proxy provider {}: {}",
                                         name, x
                                     ))
                                 })?;
                             rv.insert(name, provider);
-                            Ok::<HashMap<std::string::String, OutboundProxyProviderDef>, Error>(rv)
+                            Ok::<
+                                HashMap<
+                                    std::string::String,
+                                    OutboundProxyProviderDef,
+                                >,
+                                Error,
+                            >(rv)
                         })
                         .expect("proxy provider parse error")
                 })
@@ -283,7 +314,9 @@ impl FromStr for BindAddress {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "*" => Ok(Self::Any),
-            "localhost" => Ok(Self::One(Interface::IpAddr(IpAddr::from([127, 0, 0, 1])))),
+            "localhost" => {
+                Ok(Self::One(Interface::IpAddr(IpAddr::from([127, 0, 0, 1]))))
+            }
             _ => {
                 if let Ok(ip) = s.parse::<IpAddr>() {
                     Ok(BindAddress::One(Interface::IpAddr(ip)))

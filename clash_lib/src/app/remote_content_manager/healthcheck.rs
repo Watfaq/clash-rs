@@ -61,7 +61,8 @@ impl HealthCheck {
         let proxy_manager = self.proxy_manager.clone();
         let url = self.url.clone();
         let task_handle = tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(interval));
+            let mut ticker =
+                tokio::time::interval(tokio::time::Duration::from_secs(interval));
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {

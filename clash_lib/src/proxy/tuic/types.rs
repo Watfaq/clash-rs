@@ -1,13 +1,16 @@
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::proxy::utils::{get_outbound_interface, new_udp_socket, Interface};
-use crate::session::SocksAddr as ClashSocksAddr;
+use crate::{
+    app::dns::ThreadSafeDNSResolver,
+    proxy::utils::{get_outbound_interface, new_udp_socket, Interface},
+    session::SocksAddr as ClashSocksAddr,
+};
 
 use anyhow::Result;
-use quinn::Connection as QuinnConnection;
-use quinn::{Endpoint as QuinnEndpoint, ZeroRttAccepted};
+use quinn::{
+    Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
+};
 use register_count::Counter;
-use std::collections::HashMap;
 use std::{
+    collections::HashMap,
     net::{IpAddr, SocketAddr},
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
@@ -38,7 +41,8 @@ impl TuicEndpoint {
     ) -> Result<Arc<TuicConnection>> {
         let remote_addr = self.server.resolve(resolver).await?;
         let connect_to = async {
-            // if client and server don't match each other or forced to rebind, then rebind local socket
+            // if client and server don't match each other or forced to rebind,
+            // then rebind local socket
             if rebind {
                 debug!("rebinding endpoint UDP socket");
 
@@ -55,9 +59,9 @@ impl TuicEndpoint {
 
                 debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);
 
-                self.ep
-                    .rebind(socket.into_std()?)
-                    .map_err(|err| anyhow!("failed to rebind endpoint UDP socket {}", err))?;
+                self.ep.rebind(socket.into_std()?).map_err(|err| {
+                    anyhow!("failed to rebind endpoint UDP socket {}", err)
+                })?;
             }
 
             tracing::trace!(
@@ -141,16 +145,19 @@ impl TuicConnection {
             udp_relay_mode,
             remote_uni_stream_cnt: Counter::new(),
             remote_bi_stream_cnt: Counter::new(),
-            // TODO: seems tuic dynamicly adjust the size of max concurrent streams, is it necessary to configure the stream size?
+            // TODO: seems tuic dynamicly adjust the size of max concurrent
+            // streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
             udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
         let conn = Arc::new(conn);
-        tokio::spawn(
-            conn.clone()
-                .init(zero_rtt_accepted, heartbeat, gc_interval, gc_lifetime),
-        );
+        tokio::spawn(conn.clone().init(
+            zero_rtt_accepted,
+            heartbeat,
+            gc_interval,
+            gc_lifetime,
+        ));
 
         conn
     }
@@ -165,10 +172,11 @@ impl TuicConnection {
 
         // TODO check the cancellation safety of tuic_auth
         tokio::spawn(self.clone().tuic_auth(zero_rtt_accepted));
-        tokio::spawn(
-            self.clone()
-                .cyclical_tasks(heartbeat, gc_interval, gc_lifetime),
-        );
+        tokio::spawn(self.clone().cyclical_tasks(
+            heartbeat,
+            gc_interval,
+            gc_lifetime,
+        ));
 
         let err = loop {
             tokio::select! {
@@ -205,7 +213,10 @@ impl ServerAddr {
         &self.domain
     }
 
-    pub async fn resolve(&self, resolver: &ThreadSafeDNSResolver) -> Result<SocketAddr> {
+    pub async fn resolve(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+    ) -> Result<SocketAddr> {
         if let Some(ip) = self.ip {
             Ok(SocketAddr::from((ip, self.port)))
         } else {
@@ -246,12 +257,16 @@ impl From<&str> for CongestionControl {
     fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("cubic") {
             Self::Cubic
-        } else if s.eq_ignore_ascii_case("new_reno") || s.eq_ignore_ascii_case("newreno") {
+        } else if s.eq_ignore_ascii_case("new_reno")
+            || s.eq_ignore_ascii_case("newreno")
+        {
             Self::NewReno
         } else if s.eq_ignore_ascii_case("bbr") {
             Self::Bbr
         } else {
-            tracing::warn!("Unknown congestion controller {s}. Use default controller");
+            tracing::warn!(
+                "Unknown congestion controller {s}. Use default controller"
+            );
             Self::default()
         }
     }
@@ -271,7 +286,9 @@ impl SocketAdderTrans for crate::session::SocksAddr {
         use crate::session::SocksAddr;
         match self {
             SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
-            SocksAddr::Domain(domain, port) => tuic::Address::DomainAddress(domain, port),
+            SocksAddr::Domain(domain, port) => {
+                tuic::Address::DomainAddress(domain, port)
+            }
         }
     }
 }

@@ -62,7 +62,10 @@ impl WebsocketStreamBuilder {
         request.body(()).unwrap()
     }
 
-    pub async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
+    pub async fn proxy_stream(
+        &self,
+        stream: AnyStream,
+    ) -> std::io::Result<AnyStream> {
         let req = self.req();
         if self.max_early_data > 0 {
             let early_data_conn = WebsocketEarlyDataConn::new(
@@ -74,9 +77,10 @@ impl WebsocketStreamBuilder {
             );
             Ok(Box::new(early_data_conn))
         } else {
-            let (stream, resp) = client_async_with_config(req, stream, self.ws_config)
-                .await
-                .map_err(map_io_error)?;
+            let (stream, resp) =
+                client_async_with_config(req, stream, self.ws_config)
+                    .await
+                    .map_err(map_io_error)?;
 
             if resp.status() != StatusCode::SWITCHING_PROTOCOLS {
                 return Err(std::io::Error::new(

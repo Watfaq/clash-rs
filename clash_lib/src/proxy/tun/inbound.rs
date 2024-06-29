@@ -58,8 +58,9 @@ async fn handle_inbound_datagram(
     // forward packets from tun to dispatcher
     let (d_tx, d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
-    // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
-    // and send back packets to this channel, which is to the tun
+    // for dispatcher - the dispatcher would receive packets from this channel,
+    // which is from the stack and send back packets to this channel, which
+    // is to the tun
     let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
 
     let sess = Session {
@@ -146,8 +147,8 @@ pub fn get_runner(
 
     let device_id = cfg.device_id;
 
-    let u =
-        Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+    let u = Url::parse(&device_id)
+        .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
 
@@ -217,7 +218,9 @@ pub fn get_runner(
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt.into_bytes().into()).await {
+                        if let Err(e) =
+                            stack_sink.send(pkt.into_bytes().into()).await
+                        {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -234,7 +237,9 @@ pub fn get_runner(
 
         let dsp = dispatcher.clone();
         futs.push(Box::pin(async move {
-            while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            while let Some((stream, local_addr, remote_addr)) =
+                tcp_listener.next().await
+            {
                 tokio::spawn(handle_inbound_stream(
                     stream,
                     local_addr,

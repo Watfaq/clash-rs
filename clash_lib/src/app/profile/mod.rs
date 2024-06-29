@@ -107,7 +107,10 @@ impl CacheFile {
             Ok(s) => match serde_yaml::from_str(&s) {
                 Ok(db) => db,
                 Err(e) => {
-                    error!("failed to parse cache file: {}, initilizing a new one", e);
+                    error!(
+                        "failed to parse cache file: {}, initilizing a new one",
+                        e
+                    );
                     Db {
                         selected: HashMap::new(),
                         ip_to_host: HashMap::new(),

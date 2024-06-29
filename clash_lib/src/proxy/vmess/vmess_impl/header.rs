@@ -5,7 +5,8 @@ use bytes::{Buf, BufMut, BytesMut};
 use crate::common::{crypto, errors::map_io_error, utils};
 
 use super::kdf::{
-    self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY, KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
+    self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+    KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
     KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_KEY,
     KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_IV,
     KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
@@ -22,7 +23,10 @@ fn create_auth_id(cmd_key: [u8; 16], timestamp: u64) -> [u8; 16] {
     let zero = crc32fast::hash(buf.as_ref());
     buf.put_u32(zero);
 
-    let pk = kdf::vmess_kdf_1_one_shot(&cmd_key[..], KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+    let pk = kdf::vmess_kdf_1_one_shot(
+        &cmd_key[..],
+        KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+    );
     let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
     let key = GenericArray::from(pk);
     let cipher = aes::Aes128::new(&key);
@@ -124,7 +128,10 @@ mod tests {
 
         let cmd_key = "1234567890123456".as_bytes();
 
-        let pk = kdf::vmess_kdf_1_one_shot(cmd_key, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY);
+        let pk = kdf::vmess_kdf_1_one_shot(
+            cmd_key,
+            KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+        );
         let pk: [u8; 16] = pk[..16].try_into().unwrap(); // That's wired
         let key = GenericArray::from(pk);
         let cipher = aes::Aes128::new(&key);
@@ -135,7 +142,10 @@ mod tests {
         let block: [u8; 16] = block.as_slice()[..16].try_into().unwrap();
         assert_eq!(
             block.to_vec(),
-            vec![55, 189, 144, 149, 192, 213, 241, 57, 37, 21, 179, 197, 135, 54, 86, 79]
+            vec![
+                55, 189, 144, 149, 192, 213, 241, 57, 37, 21, 179, 197, 135, 54, 86,
+                79
+            ]
         );
     }
 
@@ -197,10 +207,11 @@ mod tests {
         assert_eq!(
             out.freeze().to_vec(),
             [
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 137, 101, 25, 33, 23, 247, 66, 8,
-                94, 171, 181, 162, 176, 21, 19, 111, 34, 161, 0, 0, 0, 0, 0, 0, 0, 0, 199, 22, 13,
-                123, 209, 206, 78, 166, 69, 198, 7, 29, 224, 54, 214, 146, 73, 34, 66, 61, 10, 203,
-                144, 160, 81, 17, 17, 191, 39, 197, 163, 246
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 137, 101, 25, 33,
+                23, 247, 66, 8, 94, 171, 181, 162, 176, 21, 19, 111, 34, 161, 0, 0,
+                0, 0, 0, 0, 0, 0, 199, 22, 13, 123, 209, 206, 78, 166, 69, 198, 7,
+                29, 224, 54, 214, 146, 73, 34, 66, 61, 10, 203, 144, 160, 81, 17,
+                17, 191, 39, 197, 163, 246
             ]
         );
     }

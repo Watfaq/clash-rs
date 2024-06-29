@@ -6,11 +6,15 @@ use tracing::trace;
 use crate::{
     app::{
         dispatcher::{
-            ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+            ChainedDatagram, ChainedDatagramWrapper, ChainedStream,
+            ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
-    proxy::{datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler, AnyStream},
+    proxy::{
+        datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
+        AnyStream,
+    },
     session::{Network, Session, SocksAddr, Type},
 };
 
@@ -25,7 +29,9 @@ pub trait RemoteConnector: Send + Sync {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyStream>;
 
     async fn connect_datagram(
@@ -34,7 +40,9 @@ pub trait RemoteConnector: Send + Sync {
         src: Option<&SocketAddr>,
         destination: &SocksAddr,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
@@ -54,7 +62,9 @@ impl RemoteConnector for DirectConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyStream> {
         new_tcp_stream(
             resolver,
@@ -73,7 +83,9 @@ impl RemoteConnector for DirectConnector {
         src: Option<&SocketAddr>,
         _destination: &SocksAddr,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,
@@ -95,7 +107,10 @@ pub struct ProxyConnector {
 }
 
 impl ProxyConnector {
-    pub fn new(proxy: AnyOutboundHandler, connector: Box<dyn RemoteConnector>) -> Self {
+    pub fn new(
+        proxy: AnyOutboundHandler,
+        connector: Box<dyn RemoteConnector>,
+    ) -> Self {
         Self { proxy, connector }
     }
 }
@@ -108,7 +123,9 @@ impl RemoteConnector for ProxyConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyStream> {
         let sess = Session {
             network: Network::Tcp,
@@ -143,7 +160,9 @@ impl RemoteConnector for ProxyConnector {
         _src: Option<&SocketAddr>,
         destination: &SocksAddr,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
+            u32,
+        >,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let sess = Session {
             network: Network::Udp,
@@ -156,7 +175,11 @@ impl RemoteConnector for ProxyConnector {
         };
         let s = self
             .proxy
-            .connect_datagram_with_connector(&sess, resolver, self.connector.as_ref())
+            .connect_datagram_with_connector(
+                &sess,
+                resolver,
+                self.connector.as_ref(),
+            )
             .await?;
 
         let stream = ChainedDatagramWrapper::new(s);

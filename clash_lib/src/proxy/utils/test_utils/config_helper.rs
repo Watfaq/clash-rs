@@ -1,6 +1,5 @@
 use crate::Error;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tracing::debug;
 
 use crate::{
@@ -36,10 +35,12 @@ pub async fn load_config() -> anyhow::Result<(
     let mmdb_path = test_base_dir.join("Country.mmdb");
     let system_resolver =
         Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
-    let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+    let client = new_http_client(system_resolver)
+        .map_err(|x| Error::DNSError(x.to_string()))?;
 
     let mmdb = Arc::new(
-        mmdb::Mmdb::new(mmdb_path, config.general.mmdb_download_url.clone(), client).await?,
+        mmdb::Mmdb::new(mmdb_path, config.general.mmdb_download_url.clone(), client)
+            .await?,
     );
 
     debug!("initializing cache store");
@@ -49,7 +50,8 @@ pub async fn load_config() -> anyhow::Result<(
     );
 
     let dns_resolver: Arc<dyn ClashResolver> =
-        dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone()).await;
+        dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone())
+            .await;
 
     Ok((config, dns_resolver))
 }

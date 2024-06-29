@@ -51,7 +51,8 @@ impl AeadCipher {
         let nonce = &nonce[..security.nonce_len()];
         match security {
             VmessSecurity::Aes128Gcm(cipher) => {
-                let dec = cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
+                let dec =
+                    cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
                 if let Err(err) = dec {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -60,7 +61,8 @@ impl AeadCipher {
                 }
             }
             VmessSecurity::ChaCha20Poly1305(cipher) => {
-                let dec = cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
+                let dec =
+                    cipher.decrypt_in_place_with_slice(nonce, &[], &mut buf[..]);
                 if let Err(err) = dec {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,

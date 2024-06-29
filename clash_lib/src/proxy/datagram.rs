@@ -1,16 +1,18 @@
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::proxy::socks::Socks5UDPCodec;
-use crate::proxy::{AnyOutboundDatagram, InboundDatagram};
-use crate::session::SocksAddr;
+use crate::{
+    app::dns::ThreadSafeDNSResolver,
+    proxy::{socks::Socks5UDPCodec, AnyOutboundDatagram, InboundDatagram},
+    session::SocksAddr,
+};
 use bytes::Bytes;
 use futures::{ready, Sink, SinkExt, Stream, StreamExt};
-use std::fmt::{Debug, Display, Formatter};
-use std::io;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tokio::io::ReadBuf;
-use tokio::net::UdpSocket;
+use std::{
+    fmt::{Debug, Display, Formatter},
+    io,
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
+use tokio::{io::ReadBuf, net::UdpSocket};
 use tokio_util::udp::UdpFramed;
 
 #[derive(Clone)]
@@ -84,7 +86,10 @@ impl Debug for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
     type Item = UdpPacket;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let pin = self.get_mut();
 
         match pin.inner.poll_next_unpin(cx) {
@@ -107,7 +112,10 @@ impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
     type Error = std::io::Error;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
         pin.inner.poll_ready_unpin(cx)
     }
@@ -120,12 +128,18 @@ impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
         ))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
         pin.inner.poll_flush_unpin(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let pin = self.get_mut();
         pin.inner.poll_close_unpin(cx)
     }
@@ -143,7 +157,10 @@ pub struct OutboundDatagramImpl {
 
 impl OutboundDatagramImpl {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> AnyOutboundDatagram {
+    pub fn new(
+        udp: UdpSocket,
+        resolver: ThreadSafeDNSResolver,
+    ) -> AnyOutboundDatagram {
         let s = Self {
             inner: udp,
             resolver,
@@ -157,7 +174,10 @@ impl OutboundDatagramImpl {
 impl Sink<UdpPacket> for OutboundDatagramImpl {
     type Error = io::Error;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         if !self.flushed {
             match self.poll_flush(cx)? {
                 Poll::Ready(()) => {}
@@ -175,7 +195,10 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
         Ok(())
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         if self.flushed {
             return Poll::Ready(Ok(()));
         }
@@ -233,7 +256,10 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
         }
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         ready!(self.poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
@@ -241,7 +267,10 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
 impl Stream for OutboundDatagramImpl {
     type Item = UdpPacket;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         let Self { ref mut inner, .. } = *self;
         let mut mem = vec![0u8; 65535];
         let mut buf = ReadBuf::new(&mut mem);

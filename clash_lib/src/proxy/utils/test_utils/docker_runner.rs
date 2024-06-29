@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
-use bollard::container::{Config, LogsOptions, RemoveContainerOptions};
-use bollard::secret::{HostConfig, Mount, PortBinding};
-use bollard::Docker;
+use bollard::{
+    container::{Config, LogsOptions, RemoveContainerOptions},
+    secret::{HostConfig, Mount, PortBinding},
+    Docker,
+};
 
 use bollard::image::CreateImageOptions;
 
@@ -83,14 +85,18 @@ impl MultiDockerTestRunner {
         Self { runners }
     }
 
-    pub async fn add(&mut self, creator: impl Future<Output = anyhow::Result<DockerTestRunner>>) {
+    pub async fn add(
+        &mut self,
+        creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,
+    ) {
         match creator.await {
             Ok(runner) => {
                 self.runners.push(runner);
             }
             Err(e) => {
                 tracing::warn!(
-                    "cannot start container, please check the docker environment, error: {:?}",
+                    "cannot start container, please check the docker environment, \
+                     error: {:?}",
                     e
                 );
             }
@@ -257,7 +263,8 @@ impl DockerTestRunnerBuilder {
     }
 
     pub fn cap_add(mut self, caps: &[&str]) -> Self {
-        self.host_config.cap_add = Some(caps.iter().map(|x| x.to_string()).collect());
+        self.host_config.cap_add =
+            Some(caps.iter().map(|x| x.to_string()).collect());
         self
     }
 

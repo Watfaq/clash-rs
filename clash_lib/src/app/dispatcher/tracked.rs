@@ -9,7 +9,9 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{app::router::RuleMatcher, proxy::datagram::UdpPacket, session::Session};
+use crate::{
+    app::router::RuleMatcher, proxy::datagram::UdpPacket, session::Session,
+};
 
 use super::statistics_manager::{Manager, ProxyChain, TrackerInfo};
 
@@ -26,7 +28,9 @@ impl Tracked {
 }
 
 #[async_trait]
-pub trait ChainedStream: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync {
+pub trait ChainedStream:
+    AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync
+{
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 }
@@ -138,7 +142,9 @@ impl TrackedStream {
                     .as_ref()
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
-                rule_payload: rule.map(|x| x.payload().to_owned()).unwrap_or_default(),
+                rule_payload: rule
+                    .map(|x| x.payload().to_owned())
+                    .unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()
             }),
@@ -375,7 +381,9 @@ impl TrackedDatagram {
                     .as_ref()
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
-                rule_payload: rule.map(|x| x.payload().to_owned()).unwrap_or_default(),
+                rule_payload: rule
+                    .map(|x| x.payload().to_owned())
+                    .unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()
             }),
@@ -421,9 +429,10 @@ impl Stream for TrackedDatagram {
         let r = Pin::new(self.inner.as_mut()).poll_next(cx);
         if let Poll::Ready(Some(ref pkt)) = r {
             self.manager.push_downloaded(pkt.data.len());
-            self.tracker
-                .download_total
-                .fetch_add(pkt.data.len() as u64, std::sync::atomic::Ordering::Relaxed);
+            self.tracker.download_total.fetch_add(
+                pkt.data.len() as u64,
+                std::sync::atomic::Ordering::Relaxed,
+            );
         }
         r
     }
@@ -448,12 +457,17 @@ impl Sink<UdpPacket> for TrackedDatagram {
         Pin::new(self.inner.as_mut()).poll_ready(cx)
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        mut self: Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         match self.close_notify.try_recv() {
             Ok(_) => return Err(std::io::ErrorKind::BrokenPipe.into()),
             Err(e) => match e {
                 TryRecvError::Empty => {}
-                TryRecvError::Closed => return Err(std::io::ErrorKind::BrokenPipe.into()),
+                TryRecvError::Closed => {
+                    return Err(std::io::ErrorKind::BrokenPipe.into())
+                }
             },
         }
 

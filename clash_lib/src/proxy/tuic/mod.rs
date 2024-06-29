@@ -3,17 +3,18 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use crate::proxy::tuic::types::SocketAdderTrans;
-use crate::proxy::utils::new_udp_socket;
+use crate::proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket};
 use anyhow::Result;
 use axum::async_trait;
 
-use quinn::congestion::{BbrConfig, NewRenoConfig};
-use quinn::{EndpointConfig, TokioRuntime};
+use quinn::{
+    congestion::{BbrConfig, NewRenoConfig},
+    EndpointConfig, TokioRuntime,
+};
 use tracing::debug;
 
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
+    net::{Ipv4Addr, Ipv6Addr},
     sync::{
         atomic::{AtomicU16, Ordering},
         Arc,
@@ -27,8 +28,8 @@ use uuid::Uuid;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
-            ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -38,20 +39,21 @@ use crate::{
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
-use quinn::ClientConfig as QuinnConfig;
-use quinn::Endpoint as QuinnEndpoint;
-use quinn::TransportConfig as QuinnTransportConfig;
-use quinn::{congestion::CubicConfig, VarInt};
+use quinn::{
+    congestion::CubicConfig, ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
+    TransportConfig as QuinnTransportConfig, VarInt,
+};
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
-use super::utils::{get_outbound_interface, Interface};
-use super::ConnectorType;
 use super::{
-    datagram::UdpPacket, AnyOutboundDatagram, AnyOutboundHandler, OutboundHandler, OutboundType,
+    datagram::UdpPacket,
+    utils::{get_outbound_interface, Interface},
+    AnyOutboundDatagram, AnyOutboundHandler, ConnectorType, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -155,7 +157,9 @@ impl Handler {
             .unwrap()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
-        // TODO(error-handling) if alpn not match the following error will be throw: aborted by peer: the cryptographic handshake failed: error 120: peer doesn't support any known protocol
+        // TODO(error-handling) if alpn not match the following error will be
+        // throw: aborted by peer: the cryptographic handshake failed: error
+        // 120: peer doesn't support any known protocol
         crypto.alpn_protocols.clone_from(&opts.alpn);
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
@@ -168,15 +172,12 @@ impl Handler {
             .stream_receive_window(opts.receive_window)
             .max_idle_timeout(Some(opts.idle_timeout.try_into().unwrap()));
         match opts.congestion_controller {
-            CongestionControl::Cubic => {
-                transport_config.congestion_controller_factory(Arc::new(CubicConfig::default()))
-            }
-            CongestionControl::NewReno => {
-                transport_config.congestion_controller_factory(Arc::new(NewRenoConfig::default()))
-            }
-            CongestionControl::Bbr => {
-                transport_config.congestion_controller_factory(Arc::new(BbrConfig::default()))
-            }
+            CongestionControl::Cubic => transport_config
+                .congestion_controller_factory(Arc::new(CubicConfig::default())),
+            CongestionControl::NewReno => transport_config
+                .congestion_controller_factory(Arc::new(NewRenoConfig::default())),
+            CongestionControl::Bbr => transport_config
+                .congestion_controller_factory(Arc::new(BbrConfig::default())),
         };
 
         quinn_config.transport_config(Arc::new(transport_config));
@@ -217,7 +218,9 @@ impl Handler {
             ep: endpoint,
             server: ServerAddr::new(opts.server.clone(), opts.port, None),
             uuid: opts.uuid,
-            password: Arc::from(opts.password.clone().into_bytes().into_boxed_slice()),
+            password: Arc::from(
+                opts.password.clone().into_bytes().into_boxed_slice(),
+            ),
             udp_relay_mode: opts.udp_relay_mode,
             zero_rtt_handshake: opts.reduce_rtt,
             heartbeat: opts.heartbeat_interval,
@@ -228,10 +231,15 @@ impl Handler {
         Ok(endpoint)
     }
 
-    async fn get_conn(&self, resolver: &ThreadSafeDNSResolver) -> Result<Arc<TuicConnection>> {
+    async fn get_conn(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+    ) -> Result<Arc<TuicConnection>> {
         let endpoint = self
             .ep
-            .get_or_try_init(|| Self::init_endpoint(self.opts.clone(), resolver.clone()))
+            .get_or_try_init(|| {
+                Self::init_endpoint(self.opts.clone(), resolver.clone())
+            })
             .await?;
 
         let fut = async {
@@ -321,7 +329,9 @@ impl TuicDatagramOutbound {
                 }
             }
             // TuicDatagramOutbound dropped or outgoing_udp occurs error
-            tracing::info!("[udp] [dissociate] closing UDP session [{assoc_id:#06x}]");
+            tracing::info!(
+                "[udp] [dissociate] closing UDP session [{assoc_id:#06x}]"
+            );
             _ = conn.dissociate(assoc_id).await;
             udp_sessions.write().await.remove(&assoc_id);
             anyhow::Ok(())

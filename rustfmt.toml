@@ -1,0 +1,10 @@
+error_on_line_overflow = false
+format_strings = true
+normalize_comments = true
+imports_granularity = "Crate"
+reorder_modules = true
+max_width = 85
+# enum_discrim_align_threshold = 20
+use_try_shorthand = true
+wrap_comments = true
+edition = "2021"

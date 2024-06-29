@@ -6,11 +6,12 @@ use std::{
 };
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use futures::ready;
-use futures::Future;
+use futures::{ready, Future};
 use http::{HeaderValue, Request, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_tungstenite::{client_async_with_config, tungstenite::protocol::WebSocketConfig};
+use tokio_tungstenite::{
+    client_async_with_config, tungstenite::protocol::WebSocketConfig,
+};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -23,7 +24,13 @@ pub struct WebsocketEarlyDataConn {
     stream: Option<AnyStream>,
     req: Option<Request<()>>,
     stream_future: Option<
-        Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send + Sync>>,
+        Pin<
+            Box<
+                dyn std::future::Future<Output = std::io::Result<AnyStream>>
+                    + Send
+                    + Sync,
+            >,
+        >,
     >,
     early_waker: Option<Waker>,
     flush_waker: Option<Waker>,
@@ -73,7 +80,13 @@ impl WebsocketEarlyDataConn {
         stream: AnyStream,
         req: Request<()>,
         config: Option<WebSocketConfig>,
-    ) -> Pin<Box<dyn std::future::Future<Output = std::io::Result<AnyStream>> + Send + Sync>> {
+    ) -> Pin<
+        Box<
+            dyn std::future::Future<Output = std::io::Result<AnyStream>>
+                + Send
+                + Sync,
+        >,
+    > {
         async fn run(
             stream: AnyStream,
             req: Request<()>,
@@ -83,7 +96,9 @@ impl WebsocketEarlyDataConn {
                 .await
                 .map_err(map_io_error)?;
             if resp.status() != StatusCode::SWITCHING_PROTOCOLS {
-                return Err(new_io_error("msg: websocket early data handshake failed"));
+                return Err(new_io_error(
+                    "msg: websocket early data handshake failed",
+                ));
             }
             let rv = Box::new(WebsocketConn::from_websocket(stream));
             Ok(rv)
@@ -135,21 +150,25 @@ impl AsyncWrite for WebsocketEarlyDataConn {
                     }
                     return Poll::Ready(Ok(self.as_mut().early_data_len));
                 } else {
-                    let mut req = self.as_mut().req.take().expect("req must be present");
+                    let mut req =
+                        self.as_mut().req.take().expect("req must be present");
                     if let Some(v) = req
                         .headers_mut()
                         .get_mut(&self.as_mut().early_data_header_name)
                     {
                         self.as_mut().early_data_len =
                             cmp::min(self.as_mut().early_data_len, buf.len());
-                        let header_value =
-                            URL_SAFE_NO_PAD.encode(&buf[..self.as_mut().early_data_len]);
-                        *v = HeaderValue::from_str(&header_value).expect("bad header value");
+                        let header_value = URL_SAFE_NO_PAD
+                            .encode(&buf[..self.as_mut().early_data_len]);
+                        *v = HeaderValue::from_str(&header_value)
+                            .expect("bad header value");
                     }
 
-                    let stream = self.as_mut().stream.take().expect("msg: bad state");
+                    let stream =
+                        self.as_mut().stream.take().expect("msg: bad state");
                     let config = self.as_mut().ws_config.take();
-                    self.as_mut().stream_future = Some(Self::proxy_stream(stream, req, config));
+                    self.as_mut().stream_future =
+                        Some(Self::proxy_stream(stream, req, config));
                 }
             }
         }

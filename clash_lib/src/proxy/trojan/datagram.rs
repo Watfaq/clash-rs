@@ -61,7 +61,10 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
         Poll::Ready(Ok(()))
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        self: std::pin::Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         let pin = self.get_mut();
         pin.pkt = Some(item);
         pin.flushed = false;
@@ -180,7 +183,10 @@ impl Stream for OutboundDatagramTrojan {
                             *state = ReadState::Addr(atyp);
                         }
                         Err(err) => {
-                            debug!("failed to read socks addr from Trojan stream: {}", err);
+                            debug!(
+                                "failed to read socks addr from Trojan stream: {}",
+                                err
+                            );
                             return Poll::Ready(None);
                         }
                     }
@@ -195,7 +201,11 @@ impl Stream for OutboundDatagramTrojan {
                                 *state = ReadState::Port(Addr::V4(ip));
                             }
                             Err(err) => {
-                                debug!("failed to read socks addr from Trojan stream: {}", err);
+                                debug!(
+                                    "failed to read socks addr from Trojan stream: \
+                                     {}",
+                                    err
+                                );
                                 return Poll::Ready(None);
                             }
                         }
@@ -209,7 +219,11 @@ impl Stream for OutboundDatagramTrojan {
                                 *state = ReadState::Port(Addr::V6(ip));
                             }
                             Err(err) => {
-                                debug!("failed to read socks addr from Trojan stream: {}", err);
+                                debug!(
+                                    "failed to read socks addr from Trojan stream: \
+                                     {}",
+                                    err
+                                );
                                 return Poll::Ready(None);
                             }
                         }
@@ -226,7 +240,8 @@ impl Stream for OutboundDatagramTrojan {
                                     Ok(n) => n,
                                     Err(err) => {
                                         debug!(
-                                            "failed to read socks addr from Trojan stream: {}",
+                                            "failed to read socks addr from Trojan \
+                                             stream: {}",
                                             err
                                         );
                                         return Poll::Ready(None);
@@ -240,7 +255,8 @@ impl Stream for OutboundDatagramTrojan {
                                     Ok(domain) => domain,
                                     Err(err) => {
                                         debug!(
-                                            "failed to read socks addr from Trojan stream: {}",
+                                            "failed to read socks addr from Trojan \
+                                             stream: {}",
                                             err
                                         );
                                         return Poll::Ready(None);
@@ -249,7 +265,11 @@ impl Stream for OutboundDatagramTrojan {
                                 *state = ReadState::Port(Addr::Domain(domain));
                             }
                             Err(err) => {
-                                debug!("failed to read socks addr from Trojan stream: {}", err);
+                                debug!(
+                                    "failed to read socks addr from Trojan stream: \
+                                     {}",
+                                    err
+                                );
                                 return Poll::Ready(None);
                             }
                         }
@@ -268,11 +288,15 @@ impl Stream for OutboundDatagramTrojan {
                                 Addr::V4(ip) => SocksAddr::from((*ip, port)),
                                 Addr::V6(ip) => SocksAddr::from((*ip, port)),
                                 Addr::Domain(domain) => {
-                                    match SocksAddr::try_from((domain.to_owned(), port)) {
+                                    match SocksAddr::try_from((
+                                        domain.to_owned(),
+                                        port,
+                                    )) {
                                         Ok(addr) => addr,
                                         Err(err) => {
                                             debug!(
-                                                "failed to read socks addr from Trojan stream: {}",
+                                                "failed to read socks addr from \
+                                                 Trojan stream: {}",
                                                 err
                                             );
                                             return Poll::Ready(None);
@@ -283,19 +307,26 @@ impl Stream for OutboundDatagramTrojan {
                             *state = ReadState::DataLen(addr);
                         }
                         Err(err) => {
-                            debug!("failed to read socks addr from Trojan stream: {}", err);
+                            debug!(
+                                "failed to read socks addr from Trojan stream: {}",
+                                err
+                            );
                             return Poll::Ready(None);
                         }
                     }
                 }
                 ReadState::DataLen(addr) => {
-                    // TODO: this is error prone, make this a more accurate state machine
+                    // TODO: this is error prone, make this a more accurate
+                    // state machine
                     let fut = pin.read_u16();
                     pin_mut!(fut);
                     let data_len = match ready!(fut.poll(cx)) {
                         Ok(data_len) => data_len,
                         Err(err) => {
-                            debug!("failed to read socks addr from Trojan stream: {}", err);
+                            debug!(
+                                "failed to read socks addr from Trojan stream: {}",
+                                err
+                            );
                             return Poll::Ready(None);
                         }
                     };
@@ -310,7 +341,10 @@ impl Stream for OutboundDatagramTrojan {
                             }
                         }
                         Err(err) => {
-                            debug!("failed to read socks addr from Trojan stream: {}", err);
+                            debug!(
+                                "failed to read socks addr from Trojan stream: {}",
+                                err
+                            );
                             return Poll::Ready(None);
                         }
                     };
@@ -342,7 +376,10 @@ impl Stream for OutboundDatagramTrojan {
                             }));
                         }
                         Err(err) => {
-                            debug!("failed to read socks addr from Trojan stream: {}", err);
+                            debug!(
+                                "failed to read socks addr from Trojan stream: {}",
+                                err
+                            );
                             return Poll::Ready(None);
                         }
                     }

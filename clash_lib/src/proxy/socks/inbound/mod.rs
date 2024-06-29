@@ -1,14 +1,14 @@
 mod datagram;
 mod stream;
 
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::proxy::utils::apply_tcp_options;
-use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::session::{Network, Session, Type};
-use crate::Dispatcher;
+use crate::{
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{utils::apply_tcp_options, AnyInboundListener, InboundListener},
+    session::{Network, Session, Type},
+    Dispatcher,
+};
 use async_trait::async_trait;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 pub use stream::handle_tcp;
 use tokio::net::TcpListener;
 use tracing::warn;

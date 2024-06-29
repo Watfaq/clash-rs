@@ -1,6 +1,4 @@
-use axum::extract::Query;
-use axum::http::Request;
-use axum::{body::Body, response::Response};
+use axum::{body::Body, extract::Query, http::Request, response::Response};
 use futures::future::BoxFuture;
 
 use serde::Deserialize;

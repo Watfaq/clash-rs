@@ -44,14 +44,20 @@ impl AsyncWrite for StreamWrapper {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         match self.0.try_lock() {
             Ok(mut stream) => Pin::new(&mut *stream).poll_flush(cx),
             Err(_) => Poll::Pending,
         }
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         match self.0.try_lock() {
             Ok(mut stream) => Pin::new(&mut *stream).poll_shutdown(cx),
             Err(_) => Poll::Pending,

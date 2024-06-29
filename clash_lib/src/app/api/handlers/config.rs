@@ -144,7 +144,9 @@ async fn update_configs(
                     .into_response(),
             }
         }
-        (None, None) => (StatusCode::BAD_REQUEST, "no path or payload provided").into_response(),
+        (None, None) => {
+            (StatusCode::BAD_REQUEST, "no path or payload provided").into_response()
+        }
     }
 }
 
@@ -179,7 +181,10 @@ async fn patch_configs(
     Json(payload): Json<PatchConfigRequest>,
 ) -> impl IntoResponse {
     if payload.allow_lan.is_some() {
-        warn!("setting allow_lan doesn't do anything. please set bind_address to a LAN address instead.");
+        warn!(
+            "setting allow_lan doesn't do anything. please set bind_address to a \
+             LAN address instead."
+        );
     }
 
     let mut inbound_manager = state.inbound_manager.lock().await;

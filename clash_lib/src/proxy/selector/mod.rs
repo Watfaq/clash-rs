@@ -74,7 +74,8 @@ impl Handler {
             }
         }
         debug!("selected proxy `{}` not found", current);
-        // in the case the selected proxy is not found(stale cache), return the first one
+        // in the case the selected proxy is not found(stale cache), return the
+        // first one
         proxies.first().unwrap().clone()
     }
 }
@@ -182,7 +183,8 @@ impl OutboundHandler for Handler {
         m.insert("now".to_string(), Box::new(self.current().await) as _);
         m.insert(
             "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
+                as _,
         );
         m
     }
@@ -224,7 +226,8 @@ mod tests {
         )
         .await;
 
-        let selector_control = Arc::new(Mutex::new(handler.clone())) as ThreadSafeSelectorControl;
+        let selector_control =
+            Arc::new(Mutex::new(handler.clone())) as ThreadSafeSelectorControl;
         let outbound_handler = Arc::new(handler);
 
         assert_eq!(

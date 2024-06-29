@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
 use std::{
+    collections::HashMap,
+    fmt::{Debug, Display, Formatter},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
@@ -185,7 +185,8 @@ impl SocksAddr {
                 let mut buf = vec![0u8; domain_len];
                 cur.copy_to_slice(&mut buf);
                 let port = cur.get_u16();
-                let domain_name = String::from_utf8(buf).map_err(|_x| invalid_domain())?;
+                let domain_name =
+                    String::from_utf8(buf).map_err(|_x| invalid_domain())?;
                 Ok(Self::Domain(domain_name, port))
             }
             _ => Err(invalid_atyp()),
@@ -227,7 +228,9 @@ impl Clone for SocksAddr {
     fn clone(&self) -> Self {
         match self {
             SocksAddr::Ip(a) => Self::from(a.to_owned()),
-            SocksAddr::Domain(domain, port) => Self::try_from((domain.clone(), *port)).unwrap(),
+            SocksAddr::Domain(domain, port) => {
+                Self::try_from((domain.clone(), *port)).unwrap()
+            }
         }
     }
 }
@@ -317,9 +320,13 @@ impl TryFrom<&[u8]> for SocksAddr {
                 if buf.len() < 1 + domain_len + 2 {
                     return Err(insuff_bytes());
                 }
-                let domain = String::from_utf8((buf[2..domain_len + 2]).to_vec()).map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("invalid domain: {}", e))
-                })?;
+                let domain = String::from_utf8((buf[2..domain_len + 2]).to_vec())
+                    .map_err(|e| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("invalid domain: {}", e),
+                        )
+                    })?;
                 let mut port_bytes = [0u8; 2];
                 (port_bytes).copy_from_slice(&buf[domain_len + 2..domain_len + 4]);
                 let port = u16::from_be_bytes(port_bytes);
@@ -337,7 +344,9 @@ impl TryFrom<SocksAddr> for SocketAddr {
     fn try_from(s: SocksAddr) -> Result<Self, Self::Error> {
         match s {
             SocksAddr::Ip(ip) => Ok(ip),
-            SocksAddr::Domain(_, _) => Err(io::Error::new(io::ErrorKind::Other, "cannot convert")),
+            SocksAddr::Domain(_, _) => {
+                Err(io::Error::new(io::ErrorKind::Other, "cannot convert"))
+            }
         }
     }
 }

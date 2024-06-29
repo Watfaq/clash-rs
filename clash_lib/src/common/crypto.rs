@@ -1,38 +1,51 @@
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
-use aes_gcm::aes::cipher::Unsigned;
-use aes_gcm::{AeadInPlace, KeyInit};
+use aes_gcm::{aes::cipher::Unsigned, AeadInPlace, KeyInit};
 use anyhow::Ok;
 
-pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
+pub fn aes_cfb_encrypt(
+    key: &[u8],
+    iv: &[u8],
+    data: &mut [u8],
+) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into()).encrypt(data);
+            cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into())
+                .encrypt(data);
             Ok(())
         }
         24 => {
-            cfb_mode::Encryptor::<aes::Aes192>::new(key.into(), iv.into()).encrypt(data);
+            cfb_mode::Encryptor::<aes::Aes192>::new(key.into(), iv.into())
+                .encrypt(data);
             Ok(())
         }
         32 => {
-            cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into()).encrypt(data);
+            cfb_mode::Encryptor::<aes::Aes256>::new(key.into(), iv.into())
+                .encrypt(data);
             Ok(())
         }
         _ => anyhow::bail!("invalid key length"),
     }
 }
 
-pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> anyhow::Result<()> {
+pub fn aes_cfb_decrypt(
+    key: &[u8],
+    iv: &[u8],
+    data: &mut [u8],
+) -> anyhow::Result<()> {
     match key.len() {
         16 => {
-            cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into()).decrypt(data);
+            cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into())
+                .decrypt(data);
             Ok(())
         }
         24 => {
-            cfb_mode::Decryptor::<aes::Aes192>::new(key.into(), iv.into()).decrypt(data);
+            cfb_mode::Decryptor::<aes::Aes192>::new(key.into(), iv.into())
+                .decrypt(data);
             Ok(())
         }
         32 => {
-            cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into()).decrypt(data);
+            cfb_mode::Decryptor::<aes::Aes256>::new(key.into(), iv.into())
+                .decrypt(data);
             Ok(())
         }
         _ => anyhow::bail!("invalid key length"),
@@ -104,7 +117,12 @@ pub trait AeadCipherHelper: AeadInPlace {
     fn new_with_slice(key: &[u8]) -> Self;
     /// it's up to the caller to ensure that the buffer is large enough
     /// i.e. buffer.len() >= plaintext.len() + Self::TagSize::to_usize()
-    fn encrypt_in_place_with_slice(&self, nonce: &[u8], aad: &[u8], buffer: &mut [u8]) {
+    fn encrypt_in_place_with_slice(
+        &self,
+        nonce: &[u8],
+        aad: &[u8],
+        buffer: &mut [u8],
+    ) {
         let tag_pos = buffer.len() - Self::TagSize::to_usize();
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         let x = self
@@ -183,7 +201,8 @@ mod tests {
         let ad = "abc".as_bytes();
         let encrypted = aes_gcm_encrypt(key, nonce, data, Some(ad)).expect("sealed");
 
-        let decrypted = aes_gcm_decrypt(key, nonce, &encrypted, Some(ad)).expect("opened");
+        let decrypted =
+            aes_gcm_decrypt(key, nonce, &encrypted, Some(ad)).expect("opened");
         assert_eq!(decrypted, data);
     }
 

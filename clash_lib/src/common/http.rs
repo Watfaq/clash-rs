@@ -23,7 +23,8 @@ pub struct LocalConnector(pub ThreadSafeDNSResolver);
 impl Service<Uri> for LocalConnector {
     type Response = AnyStream;
     type Error = std::io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -66,7 +67,9 @@ impl Connection for AnyStream {
 
 pub type HttpClient = hyper::Client<hyper_rustls::HttpsConnector<LocalConnector>>;
 
-pub fn new_http_client(dns_resolver: ThreadSafeDNSResolver) -> std::io::Result<HttpClient> {
+pub fn new_http_client(
+    dns_resolver: ThreadSafeDNSResolver,
+) -> std::io::Result<HttpClient> {
     use std::sync::Arc;
 
     use super::tls::GLOBAL_ROOT_STORE;

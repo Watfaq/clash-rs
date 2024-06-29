@@ -6,17 +6,25 @@ use super::{ClashResolver, ResolverKind};
 
 pub struct SystemResolver;
 
-/// SystemResolver is a resolver that uses libc getaddrinfo to resolve hostnames.
+/// SystemResolver is a resolver that uses libc getaddrinfo to resolve
+/// hostnames.
 impl SystemResolver {
     pub fn new() -> anyhow::Result<Self> {
-        warn!("Default dns resolver doesn't support ipv6, please enable clash dns resolver if you need ipv6 support.");
+        warn!(
+            "Default dns resolver doesn't support ipv6, please enable clash dns \
+             resolver if you need ipv6 support."
+        );
         Ok(Self)
     }
 }
 
 #[async_trait]
 impl ClashResolver for SystemResolver {
-    async fn resolve(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::IpAddr>> {
+    async fn resolve(
+        &self,
+        host: &str,
+        _: bool,
+    ) -> anyhow::Result<Option<std::net::IpAddr>> {
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();
@@ -26,7 +34,11 @@ impl ClashResolver for SystemResolver {
             .choose(&mut rand::thread_rng()))
     }
 
-    async fn resolve_v4(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
+    async fn resolve_v4(
+        &self,
+        host: &str,
+        _: bool,
+    ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();
@@ -39,7 +51,11 @@ impl ClashResolver for SystemResolver {
             })
             .choose(&mut rand::thread_rng()))
     }
-    async fn resolve_v6(&self, host: &str, _: bool) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+    async fn resolve_v6(
+        &self,
+        host: &str,
+        _: bool,
+    ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();
@@ -102,7 +118,8 @@ mod tests {
         assert!(response.is_err());
         assert_eq!(
             response.unwrap_err().to_string(),
-            "proto error: Label contains invalid characters: Err(Errors { invalid_mapping, disallowed_by_std3_ascii_rules })"
+            "proto error: Label contains invalid characters: Err(Errors { \
+             invalid_mapping, disallowed_by_std3_ascii_rules })"
         );
     }
 

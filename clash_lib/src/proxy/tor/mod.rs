@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
+            ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -69,7 +70,9 @@ impl OutboundHandler for Handler {
                 #[cfg(feature = "onion")]
                 StreamPrefs::new()
                     .any_exit_country()
-                    .connect_to_onion_services(arti_client::config::BoolOrAuto::Explicit(true)),
+                    .connect_to_onion_services(
+                        arti_client::config::BoolOrAuto::Explicit(true),
+                    ),
                 #[cfg(not(feature = "onion"))]
                 StreamPrefs::new().any_exit_country(),
             )

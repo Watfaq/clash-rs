@@ -1,5 +1,4 @@
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
 use bytes::Bytes;
 use quinn::{RecvStream, SendStream, VarInt};
@@ -27,7 +26,9 @@ impl TuicConnection {
         Ok((recv, reg))
     }
 
-    pub async fn accept_bi_stream(&self) -> anyhow::Result<(SendStream, RecvStream, Register)> {
+    pub async fn accept_bi_stream(
+        &self,
+    ) -> anyhow::Result<(SendStream, RecvStream, Register)> {
         let max = self.max_concurrent_bi_streams.load(Ordering::Relaxed);
 
         if self.remote_bi_stream_cnt.count() as u32 == max {
@@ -47,7 +48,11 @@ impl TuicConnection {
         Ok(self.conn.read_datagram().await?)
     }
 
-    pub async fn handle_uni_stream(self: Arc<Self>, recv: RecvStream, _reg: Register) {
+    pub async fn handle_uni_stream(
+        self: Arc<Self>,
+        recv: RecvStream,
+        _reg: Register,
+    ) {
         tracing::debug!("[relay] incoming unidirectional stream");
 
         let res = match self.inner.accept_uni_stream(recv).await {

@@ -30,7 +30,8 @@ impl Builder {
         let uuid = uuid::Uuid::parse_str(&opt.uuid).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "invalid uuid format, should be xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "invalid uuid format, should be \
+                 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
             )
         })?;
 

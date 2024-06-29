@@ -1,14 +1,18 @@
-use crate::proxy::{AnyStream, ProxyError};
-use crate::session::{Network, Session, Type};
-use crate::Dispatcher;
+use crate::{
+    proxy::{AnyStream, ProxyError},
+    session::{Network, Session, Type},
+    Dispatcher,
+};
 use futures::FutureExt;
 
 use hyper::Uri;
-use std::future::Future;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::{
+    future::Future,
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tokio::io::duplex;
 
 use super::proxy::maybe_socks_addr;
@@ -28,7 +32,8 @@ impl Connector {
 impl tower::Service<Uri> for Connector {
     type Response = AnyStream;
     type Error = ProxyError;
-    type Future = Pin<Box<dyn Future<Output = Result<AnyStream, Self::Error>> + Send>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<AnyStream, Self::Error>> + Send>>;
 
     fn poll_ready(
         &mut self,
@@ -50,7 +55,8 @@ impl tower::Service<Uri> for Connector {
                 network: Network::Tcp,
                 typ: Type::Http,
                 source: src,
-                destination: destination.ok_or(ProxyError::InvalidUrl(url.to_string()))?,
+                destination: destination
+                    .ok_or(ProxyError::InvalidUrl(url.to_string()))?,
                 ..Default::default()
             };
 

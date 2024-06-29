@@ -1,35 +1,37 @@
-use std::fmt::{Debug, Display, Formatter};
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::{net, sync::Arc, time::Duration};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    net,
+    net::SocketAddr,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 
-use hickory_client::client::AsyncClient;
 use hickory_client::{
-    client, proto::iocompat::AsyncIoTokioAsStd, tcp::TcpClientStream, udp::UdpClientStream,
+    client, client::AsyncClient, proto::iocompat::AsyncIoTokioAsStd,
+    tcp::TcpClientStream, udp::UdpClientStream,
 };
 use hickory_proto::error::ProtoError;
 use rustls::ClientConfig;
-use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
+use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
-use crate::common::tls::{self, GLOBAL_ROOT_STORE};
-use crate::dns::dhcp::DhcpClient;
-use crate::dns::ThreadSafeDNSClient;
-use hickory_proto::h2::HttpsClientStreamBuilder;
-use hickory_proto::op::Message;
-use hickory_proto::rustls::tls_client_connect_with_bind_addr;
+use crate::{
+    common::tls::{self, GLOBAL_ROOT_STORE},
+    dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
+};
 use hickory_proto::{
+    h2::HttpsClientStreamBuilder,
+    op::Message,
+    rustls::tls_client_connect_with_bind_addr,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
     DnsHandle,
 };
-use tokio::net::TcpStream as TokioTcpStream;
-use tokio::net::UdpSocket as TokioUdpSocket;
+use tokio::net::{TcpStream as TokioTcpStream, UdpSocket as TokioUdpSocket};
 
-use crate::proxy::utils::Interface;
-use crate::Error;
+use crate::{proxy::utils::Interface, Error};
 
 use super::{ClashResolver, Client};
 
@@ -146,10 +148,10 @@ impl DnsClient {
 
             other => {
                 let ip = if let Some(r) = opts.r {
-                    if let Some(ip) = r
-                        .resolve(&opts.host, false)
-                        .await
-                        .map_err(|x| anyhow!("resolve hostname failure: {}", x.to_string()))?
+                    if let Some(ip) =
+                        r.resolve(&opts.host, false).await.map_err(|x| {
+                            anyhow!("resolve hostname failure: {}", x.to_string())
+                        })?
                     {
                         ip
                     } else {
@@ -161,14 +163,19 @@ impl DnsClient {
                     }
                 } else {
                     opts.host.parse::<net::IpAddr>().map_err(|x| {
-                        Error::DNSError(format!("resolve DNS hostname error: {}, {}", x, opts.host))
+                        Error::DNSError(format!(
+                            "resolve DNS hostname error: {}, {}",
+                            x, opts.host
+                        ))
                     })?
                 };
 
                 match other {
                     DNSNetMode::Udp => {
-                        let cfg =
-                            DnsConfig::Udp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
+                        let cfg = DnsConfig::Udp(
+                            net::SocketAddr::new(ip, opts.port),
+                            opts.iface.clone(),
+                        );
 
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
@@ -185,8 +192,10 @@ impl DnsClient {
                         }))
                     }
                     DNSNetMode::Tcp => {
-                        let cfg =
-                            DnsConfig::Tcp(net::SocketAddr::new(ip, opts.port), opts.iface.clone());
+                        let cfg = DnsConfig::Tcp(
+                            net::SocketAddr::new(ip, opts.port),
+                            opts.iface.clone(),
+                        );
 
                         Ok(Arc::new(Self {
                             inner: Arc::new(RwLock::new(Inner {
@@ -272,7 +281,10 @@ impl Client for DnsClient {
 
         if let Some(bg) = &inner.bg_handle {
             if bg.is_finished() {
-                warn!("dns client background task is finished, likely connection closed, restarting a new one");
+                warn!(
+                    "dns client background task is finished, likely connection \
+                     closed, restarting a new one"
+                );
                 let (client, bg) = dns_stream_builder(&self.cfg).await?;
                 inner.c.replace(client);
                 inner.bg_handle.replace(bg);
@@ -305,30 +317,32 @@ async fn dns_stream_builder(
 ) -> Result<(AsyncClient, JoinHandle<Result<(), ProtoError>>), Error> {
     match cfg {
         DnsConfig::Udp(addr, iface) => {
-            let stream = UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
-                net::SocketAddr::new(addr.ip(), addr.port()),
-                // TODO: simplify this match
-                match iface {
-                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
-                    _ => None,
-                },
-                Duration::from_secs(5),
-            );
-            client::AsyncClient::connect(stream)
-                .await
-                .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
-        }
-        DnsConfig::Tcp(addr, iface) => {
-            let (stream, sender) =
-                TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_bind_addr_and_timeout(
+            let stream =
+                UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
                     net::SocketAddr::new(addr.ip(), addr.port()),
+                    // TODO: simplify this match
                     match iface {
                         Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
                         _ => None,
                     },
                     Duration::from_secs(5),
                 );
+            client::AsyncClient::connect(stream)
+                .await
+                .map(|(x, y)| (x, tokio::spawn(y)))
+                .map_err(|x| Error::DNSError(x.to_string()))
+        }
+        DnsConfig::Tcp(addr, iface) => {
+            let (stream, sender) = TcpClientStream::<
+                AsyncIoTokioAsStd<TokioTcpStream>,
+            >::with_bind_addr_and_timeout(
+                net::SocketAddr::new(addr.ip(), addr.port()),
+                match iface {
+                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
+                    _ => None,
+                },
+                Duration::from_secs(5),
+            );
 
             client::AsyncClient::new(stream, sender, None)
                 .await
@@ -342,21 +356,27 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into()];
 
-            let (stream, sender) =
-                tls_client_connect_with_bind_addr::<AsyncIoTokioAsStd<TokioTcpStream>>(
-                    net::SocketAddr::new(addr.ip(), addr.port()),
-                    match iface {
-                        Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
-                        _ => None,
-                    },
-                    host.clone(),
-                    Arc::new(tls_config),
-                );
+            let (stream, sender) = tls_client_connect_with_bind_addr::<
+                AsyncIoTokioAsStd<TokioTcpStream>,
+            >(
+                net::SocketAddr::new(addr.ip(), addr.port()),
+                match iface {
+                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
+                    _ => None,
+                },
+                host.clone(),
+                Arc::new(tls_config),
+            );
 
-            client::AsyncClient::with_timeout(stream, sender, Duration::from_secs(5), None)
-                .await
-                .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+            client::AsyncClient::with_timeout(
+                stream,
+                sender,
+                Duration::from_secs(5),
+                None,
+            )
+            .await
+            .map(|(x, y)| (x, tokio::spawn(y)))
+            .map_err(|x| Error::DNSError(x.to_string()))
         }
         DnsConfig::Https(addr, host, iface) => {
             let mut tls_config = ClientConfig::builder()

@@ -185,7 +185,11 @@ where
         }
     }
 
-    async fn pull_loop(&self, immediately_update: bool, mut ticker: tokio::time::Interval) {
+    async fn pull_loop(
+        &self,
+        immediately_update: bool,
+        mut ticker: tokio::time::Interval,
+    ) {
         let inner = self.inner.clone();
         let vehicle = self.vehicle.clone();
         let parser = self.parser.clone();
@@ -203,7 +207,9 @@ where
                 let on_update = on_update.clone();
                 let update = || async move {
                     let (elm, same) =
-                        match Fetcher::<U, P>::update_inner(inner, vehicle, parser).await {
+                        match Fetcher::<U, P>::update_inner(inner, vehicle, parser)
+                            .await
+                        {
                             Ok((elm, same)) => (elm, same),
                             Err(e) => {
                                 warn!("{} update failed: {}", &name, e);
@@ -243,7 +249,9 @@ mod tests {
     use futures::future::BoxFuture;
     use tokio::time::sleep;
 
-    use crate::app::remote_content_manager::providers::{MockProviderVehicle, ProviderVehicleType};
+    use crate::app::remote_content_manager::providers::{
+        MockProviderVehicle, ProviderVehicleType,
+    };
 
     use super::Fetcher;
 

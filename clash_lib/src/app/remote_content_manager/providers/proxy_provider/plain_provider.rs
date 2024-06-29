@@ -30,7 +30,9 @@ impl PlainProvider {
         let hc = Arc::new(hc);
 
         if proxies.is_empty() {
-            return Err(Error::InvalidConfig(format!("{}: proxies is empty", name)).into());
+            return Err(
+                Error::InvalidConfig(format!("{}: proxies is empty", name)).into()
+            );
         }
 
         if hc.auto() {

@@ -21,7 +21,8 @@ pub struct LocalConnector(pub AnyOutboundHandler, pub ThreadSafeDNSResolver);
 impl Service<Uri> for LocalConnector {
     type Response = BoxedChainedStream;
     type Error = std::io::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

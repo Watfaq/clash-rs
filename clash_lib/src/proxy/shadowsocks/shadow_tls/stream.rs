@@ -54,9 +54,11 @@ impl<T: ReadExtBase> ReadExt for T {
         unsafe { read_buf.set_len(size) }
         loop {
             if *read_pos < size {
-                // # safety: read_pos<size==read_buf.len(), and read_buf[0..read_pos] is initialized
+                // # safety: read_pos<size==read_buf.len(), and
+                // read_buf[0..read_pos] is initialized
                 let dst = unsafe {
-                    &mut *((&mut read_buf[*read_pos..size]) as *mut _ as *mut [MaybeUninit<u8>])
+                    &mut *((&mut read_buf[*read_pos..size]) as *mut _
+                        as *mut [MaybeUninit<u8>])
                 };
                 let mut buf = ReadBuf::uninit(dst);
                 let ptr = buf.filled().as_ptr();
@@ -98,7 +100,8 @@ pub struct ProxyTlsStream<S> {
     read_authorized: bool,
     tls13: bool,
 
-    // if true, the stream will only act as a wrapper, and won't modify the inner byte stream
+    // if true, the stream will only act as a wrapper, and won't modify the
+    // inner byte stream
     pub fake_request: bool,
 }
 
@@ -189,7 +192,8 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                                         TLS_RANDOM_SIZE,
                                     )
                                 }
-                                let hmac = Hmac::new(&this.password, (&server_random, &[]));
+                                let hmac =
+                                    Hmac::new(&this.password, (&server_random, &[]));
                                 let key = kdf(&this.password, &server_random);
                                 this.certs = Some(Certs {
                                     server_random,
@@ -202,7 +206,9 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                         APPLICATION_DATA => {
                             this.read_authorized = false;
                             if body.len() > HMAC_SIZE {
-                                if let Some(Certs { hmac, key, .. }) = this.certs.as_mut() {
+                                if let Some(Certs { hmac, key, .. }) =
+                                    this.certs.as_mut()
+                                {
                                     hmac.update(&body[HMAC_SIZE..]);
                                     if hmac.finalize() == body[0..HMAC_SIZE] {
                                         // 1. xor to the the original data
@@ -217,16 +223,22 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                                         };
                                         // 3. rewrite the data size in the header
                                         (&mut header[3..5])
-                                            .write_u16::<BigEndian>(size as u16 - HMAC_SIZE as u16)
+                                            .write_u16::<BigEndian>(
+                                                size as u16 - HMAC_SIZE as u16,
+                                            )
                                             .unwrap();
                                         this.read_authorized = true;
-                                        // 4. rewrite the body length to be put into the read buf
+                                        // 4. rewrite the body length to be put into
+                                        //    the read buf
                                         unsafe {
                                             body.set_len(body.len() - HMAC_SIZE);
                                         }
-                                        // 4. put the header and body into our own read buf
+                                        // 4. put the header and body into our
+                                        //    own read buf
                                     } else {
-                                        tracing::debug!("shadowtls verification failed");
+                                        tracing::debug!(
+                                            "shadowtls verification failed"
+                                        );
                                     }
                                 }
                             }
@@ -369,7 +381,12 @@ impl<S: AsyncRead + Unpin> AsyncRead for VerifiedStream<S> {
 
                         // the application data from the data server
                         // we need to verfiy and removec the hmac(4 bytes)
-                        if verify_appdata(&header, &mut data, &mut this.server_cert, true) {
+                        if verify_appdata(
+                            &header,
+                            &mut data,
+                            &mut this.server_cert,
+                            true,
+                        ) {
                             // modify data, reuse the read buf
                             this.read_buf.clear();
                             this.read_buf.put(&data[HMAC_SIZE..]);
@@ -438,7 +455,8 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for VerifiedStream<S> {
                     };
 
                     this.write_buf.put_slice(&header_body);
-                    this.write_state = WriteState::FlushingData(buf.len(), header_body.len(), 0);
+                    this.write_state =
+                        WriteState::FlushingData(buf.len(), header_body.len(), 0);
                 }
                 WriteState::FlushingData(consume, total, written) => {
                     let nw = ready!(tokio_util::io::poll_write_buf(
@@ -461,7 +479,8 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for VerifiedStream<S> {
                         return Poll::Ready(Ok(consume));
                     }
 
-                    this.write_state = WriteState::FlushingData(consume, total, written + nw);
+                    this.write_state =
+                        WriteState::FlushingData(consume, total, written + nw);
                 }
             }
         }
