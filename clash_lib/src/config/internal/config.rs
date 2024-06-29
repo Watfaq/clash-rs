@@ -117,10 +117,10 @@ impl TryFrom<def::Config> for Config {
                         .map_err(|x| Error::InvalidConfig(x.to_string()))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            rule_providers:
-                c.rule_provider
-                    .map(|m| {
-                        m.into_iter()
+            rule_providers: c
+                .rule_provider
+                .map(|m| {
+                    m.into_iter()
                             .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
                                 body.insert(
                                     "name".to_owned(),
@@ -140,8 +140,8 @@ impl TryFrom<def::Config> for Config {
                                 >(rv)
                             })
                             .expect("proxy provider parse error")
-                    })
-                    .unwrap_or_default(),
+                })
+                .unwrap_or_default(),
             users: c
                 .authentication
                 .into_iter()
