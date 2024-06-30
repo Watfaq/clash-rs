@@ -16,13 +16,10 @@ use crate::{
 use app::{dispatcher::StatisticsManager, dns::SystemResolver, profile};
 use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
+use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
 
-use std::{
-    io,
-    path::PathBuf,
-    sync::{Arc, OnceLock},
-};
+use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{
     sync::{broadcast, mpsc, oneshot, Mutex},
@@ -108,8 +105,7 @@ pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
 }
 
-static RUNTIME_CONTROLLER: OnceLock<std::sync::RwLock<RuntimeController>> =
-    OnceLock::new();
+static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
 
 pub fn start(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
@@ -133,8 +129,8 @@ pub fn start(opts: Options) -> Result<(), Error> {
 }
 
 pub fn shutdown() -> bool {
-    match RUNTIME_CONTROLLER.get().unwrap().write() {
-        Ok(rt) => rt.shutdown_tx.blocking_send(()).is_ok(),
+    match RUNTIME_CONTROLLER.get() {
+        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
         _ => false,
     }
 }
@@ -142,8 +138,7 @@ pub fn shutdown() -> bool {
 async fn start_async(opts: Options) -> Result<(), Error> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
-    let _ = RUNTIME_CONTROLLER
-        .set(std::sync::RwLock::new(RuntimeController { shutdown_tx }));
+    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
 
     let config: InternalConfig = opts.config.try_parse()?;
 
