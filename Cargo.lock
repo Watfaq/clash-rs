@@ -266,7 +266,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
  "void",
 ]
@@ -1086,7 +1086,7 @@ dependencies = [
  "tokio-test",
  "tokio-tungstenite 0.23.1",
  "tokio-util",
- "tor-rtcompat 0.18.0",
+ "tor-rtcompat",
  "tower",
  "tower-http",
  "tracing",
@@ -1558,12 +1558,12 @@ checksum = "68a27f0a2651f507903d67f8fb0688291e3e69f70381cdb5ee9729366f795f80"
 dependencies = [
  "heck 0.5.0",
  "indexmap 2.2.6",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
  "sha3",
- "strum 0.25.0",
+ "strum 0.26.3",
  "syn 2.0.66",
  "void",
 ]
@@ -5585,7 +5585,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdir",
  "tor-proto",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tor-socksproto",
  "tor-units",
  "tracing",
@@ -5643,7 +5643,7 @@ dependencies = [
  "tor-proto",
  "tor-protover",
  "tor-relay-selection",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
  "void",
  "weak-table",
@@ -5715,7 +5715,7 @@ dependencies = [
  "tor-llcrypto",
  "tor-netdoc",
  "tor-proto",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5766,7 +5766,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5824,7 +5824,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-relay-selection",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tor-units",
  "tracing",
 ]
@@ -5866,7 +5866,7 @@ dependencies = [
  "tor-netdoc",
  "tor-persist",
  "tor-proto",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
 ]
 
@@ -5993,7 +5993,7 @@ dependencies = [
  "once_cell",
  "thiserror",
  "tor-error",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
  "weak-table",
 ]
@@ -6133,7 +6133,7 @@ dependencies = [
  "tor-linkspec",
  "tor-llcrypto",
  "tor-log-ratelim",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tor-rtmock",
  "tor-units",
  "tracing",
@@ -6165,24 +6165,6 @@ dependencies = [
  "tor-linkspec",
  "tor-netdir",
  "tor-netdoc",
-]
-
-[[package]]
-name = "tor-rtcompat"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0d97b2264cfea9e8ed9b7aa50d220d1003a5775f5065ec3ef576eb9e61a1885"
-dependencies = [
- "async-trait",
- "async_executors",
- "coarsetime",
- "derive_more",
- "educe",
- "futures",
- "paste",
- "pin-project",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
@@ -6231,7 +6213,7 @@ dependencies = [
  "thiserror",
  "tor-async-utils",
  "tor-error",
- "tor-rtcompat 0.20.0",
+ "tor-rtcompat",
  "tracing",
  "tracing-test",
  "void",
