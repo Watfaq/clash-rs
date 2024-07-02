@@ -95,7 +95,7 @@ pub async fn new_tcp_stream<'a>(
         ))?;
 
     debug!(
-        "dialing {}[{}]:{} via {:?}",
+        "dialing {}[{}]:{} via iface {:?}",
         address, dial_addr, port, iface
     );
 
@@ -115,6 +115,7 @@ pub async fn new_tcp_stream<'a>(
     };
 
     if let Some(iface) = iface {
+        debug!("binding tcp socket to interface: {:?}", iface);
         must_bind_socket_on_interface(&socket, iface)?;
     }
 
@@ -175,7 +176,7 @@ pub async fn new_udp_socket(
             socket.bind(&(*src).into())?;
         }
         (None, Some(iface)) => {
-            debug!("binding socket to interface: {:?}", iface);
+            debug!("binding udp socket to interface: {:?}", iface);
             must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
                 error!("failed to bind socket to interface: {}", x);
             })?;

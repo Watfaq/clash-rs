@@ -37,7 +37,7 @@ async fn handle_inbound_stream(
         ..Default::default()
     };
 
-    debug!("new tun TCP connection: {}", sess);
+    debug!("new tun TCP session assigned: {}", sess);
     dispatcher.dispatch_stream(sess, stream).await;
 }
 
@@ -240,6 +240,8 @@ pub fn get_runner(
             while let Some((stream, local_addr, remote_addr)) =
                 tcp_listener.next().await
             {
+                debug!("new tun TCP connection: {} -> {}", local_addr, remote_addr);
+
                 tokio::spawn(handle_inbound_stream(
                     stream,
                     local_addr,

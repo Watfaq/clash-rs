@@ -31,6 +31,7 @@ impl ClashResolver for SystemResolver {
         Ok(response
             .iter()
             .map(|x| x.ip())
+            .filter(|x| self.ipv6() || x.is_ipv4())
             .choose(&mut rand::thread_rng()))
     }
 
