@@ -50,7 +50,10 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
         Poll::Ready(Ok(()))
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        self: std::pin::Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         let pin = self.get_mut();
         pin.pkt = Some(item);
         pin.flushed = false;
@@ -81,7 +84,8 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
         if let Some(pkt) = pkt_container {
             if &pkt.dst_addr != remote_addr {
                 error!(
-                    "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: {}",
+                    "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: \
+                     {}",
                     pkt.dst_addr, remote_addr
                 );
                 return Poll::Ready(Err(io::Error::new(
@@ -93,7 +97,8 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             if written.is_none() {
                 let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
                 debug!(
-                    "send udp packet to remote vmess server, len: {}, remote_addr: {}, dst_addr: {}",
+                    "send udp packet to remote vmess server, len: {}, remote_addr: \
+                     {}, dst_addr: {}",
                     n, remote_addr, pkt.dst_addr
                 );
                 *written = Some(n);

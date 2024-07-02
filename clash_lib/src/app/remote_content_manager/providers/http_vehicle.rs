@@ -1,7 +1,11 @@
 use super::{ProviderVehicle, ProviderVehicleType};
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::common::errors::map_io_error;
-use crate::common::http::{new_http_client, HttpClient};
+use crate::{
+    app::dns::ThreadSafeDNSResolver,
+    common::{
+        errors::map_io_error,
+        http::{new_http_client, HttpClient},
+    },
+};
 
 use async_trait::async_trait;
 
@@ -24,7 +28,8 @@ impl Vehicle {
         cwd: Option<P>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
-        let client = new_http_client(dns_resolver).expect("failed to create http client");
+        let client =
+            new_http_client(dns_resolver).expect("failed to create http client");
         Self {
             url: url.into(),
             path: match cwd {
@@ -62,8 +67,7 @@ impl ProviderVehicle for Vehicle {
 #[cfg(test)]
 mod tests {
     use super::ProviderVehicle;
-    use std::str;
-    use std::sync::Arc;
+    use std::{str, sync::Arc};
 
     use hyper::Uri;
 

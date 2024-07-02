@@ -1,34 +1,32 @@
 use std::{io, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::BufMut;
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use futures::TryFutureExt;
-use sha2::Digest;
-use sha2::Sha224;
+use sha2::{Digest, Sha224};
 use tokio::io::AsyncWriteExt;
 
-use crate::app::dispatcher::BoxedChainedDatagram;
-use crate::app::dispatcher::ChainedDatagram;
-use crate::app::dispatcher::ChainedDatagramWrapper;
-use crate::app::dispatcher::ChainedStream;
-use crate::app::dispatcher::ChainedStreamWrapper;
-use crate::common::utils;
 use crate::{
-    app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
+    app::{
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+        },
+        dns::ThreadSafeDNSResolver,
+    },
+    common::utils,
     session::Session,
 };
 
 use self::datagram::OutboundDatagramTrojan;
 
-use super::transport;
-use super::transport::TLSOptions;
-use super::utils::RemoteConnector;
-use super::ConnectorType;
 use super::{
     options::{GrpcOption, WsOption},
-    utils::new_tcp_stream,
-    AnyOutboundHandler, AnyStream, CommonOption, OutboundHandler, OutboundType,
+    transport,
+    transport::TLSOptions,
+    utils::{new_tcp_stream, RemoteConnector},
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
+    OutboundType,
 };
 
 mod datagram;
@@ -153,7 +151,7 @@ impl OutboundHandler for Handler {
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -184,7 +182,7 @@ impl OutboundHandler for Handler {
             resolver.clone(),
             self.opts.server.as_str(),
             self.opts.port,
-            self.opts.common_opts.iface.as_ref(),
+            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -223,7 +221,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref(),
+                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
@@ -246,7 +244,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref(),
+                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
@@ -325,7 +323,8 @@ mod tests {
         };
         let handler = Handler::new(opts);
         // ignore the udp test
-        run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::all()).await
+        run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::all())
+            .await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -364,6 +363,7 @@ mod tests {
             })),
         };
         let handler = Handler::new(opts);
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all()).await
+        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
+            .await
     }
 }

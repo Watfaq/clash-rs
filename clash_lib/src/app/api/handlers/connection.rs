@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    extract::{ws::Message, FromRequest, Path, Query, Request, State, WebSocketUpgrade},
+    extract::{
+        ws::Message, FromRequest, Path, Query, Request, State, WebSocketUpgrade,
+    },
     response::IntoResponse,
     routing::{delete, get},
     Json, Router,
@@ -72,7 +74,10 @@ async fn get_connections(
                 break;
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(interval.unwrap_or(1))).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                interval.unwrap_or(1),
+            ))
+            .await;
         }
     })
 }
@@ -86,7 +91,9 @@ async fn close_connection(
     format!("connection {} closed", id).into_response()
 }
 
-async fn close_all_connection(State(state): State<ConnectionState>) -> impl IntoResponse {
+async fn close_all_connection(
+    State(state): State<ConnectionState>,
+) -> impl IntoResponse {
     let mgr = state.statistics_manager;
     mgr.close_all().await;
     "all connections closed".into_response()

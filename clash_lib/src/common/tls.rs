@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
 use rustls::{
-    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier},
+    client::{
+        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+        WebPkiVerifier,
+    },
     DigitallySignedStruct, OwnedTrustAnchor, RootCertStore,
 };
 use tracing::warn;
@@ -8,7 +11,8 @@ use tracing::warn;
 use rustls::{Certificate, ServerName};
 use std::{sync::Arc, time::SystemTime};
 
-pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(global_root_store);
+pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> =
+    Lazy::new(global_root_store);
 
 fn global_root_store() -> Arc<RootCertStore> {
     let mut root_store = RootCertStore::empty();
@@ -70,7 +74,8 @@ impl ServerCertVerifier for NoHostnameTlsVerifier {
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        let verifier = WebPkiVerifier::new(rustls::RootCertStore { roots: vec![] }, None);
+        let verifier =
+            WebPkiVerifier::new(rustls::RootCertStore { roots: vec![] }, None);
         match verifier.verify_server_cert(
             end_entity,
             intermediates,

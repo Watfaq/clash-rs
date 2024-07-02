@@ -22,12 +22,14 @@ use super::{
     cipher::{AeadCipher, VmessSecurity},
     header,
     kdf::{
-        self, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
-        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV, KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
+        self, KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
+        KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
+        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
+        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
     user::ID,
-    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
-    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
+    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM,
+    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
 
 pub struct VmessStream<S> {
@@ -158,11 +160,13 @@ where
         let (aead_read_cipher, aead_write_cipher) = match *security {
             SECURITY_NONE => (None, None),
             SECURITY_AES_128_GCM => {
-                let write_cipher =
-                    VmessSecurity::Aes128Gcm(Aes128Gcm::new_with_slice(&req_body_key));
+                let write_cipher = VmessSecurity::Aes128Gcm(
+                    Aes128Gcm::new_with_slice(&req_body_key),
+                );
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
-                let reader_cipher =
-                    VmessSecurity::Aes128Gcm(Aes128Gcm::new_with_slice(&resp_body_key));
+                let reader_cipher = VmessSecurity::Aes128Gcm(
+                    Aes128Gcm::new_with_slice(&resp_body_key),
+                );
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);
                 (Some(read_cipher), Some(write_cipher))
             }
@@ -172,8 +176,9 @@ where
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
 
-                let write_cipher =
-                    VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
+                let write_cipher = VmessSecurity::ChaCha20Poly1305(
+                    ChaCha20Poly1305::new_with_slice(&key),
+                );
                 let write_cipher = AeadCipher::new(&req_body_iv, write_cipher);
 
                 let mut key = [0u8; 32];
@@ -181,8 +186,9 @@ where
                 let tmp = utils::md5(&key[..16]);
                 key[16..].copy_from_slice(&tmp);
 
-                let reader_cipher =
-                    VmessSecurity::ChaCha20Poly1305(ChaCha20Poly1305::new_with_slice(&key));
+                let reader_cipher = VmessSecurity::ChaCha20Poly1305(
+                    ChaCha20Poly1305::new_with_slice(&key),
+                );
                 let read_cipher = AeadCipher::new(&resp_body_iv, reader_cipher);
 
                 (Some(read_cipher), Some(write_cipher))
@@ -252,8 +258,8 @@ where
         let mut mbuf = BytesMut::new();
 
         if !is_aead {
-            let mut mac =
-                HmacMd5::new_from_slice(id.uuid.as_bytes()).expect("key len expected to be 16");
+            let mut mac = HmacMd5::new_from_slice(id.uuid.as_bytes())
+                .expect("key len expected to be 16");
             mac.update(now.to_be_bytes().as_slice());
             mbuf.put_slice(&mac.finalize().into_bytes());
         }
@@ -289,15 +295,23 @@ where
 
         if !is_aead {
             let mut data = buf.to_vec();
-            crypto::aes_cfb_encrypt(&id.cmd_key[..], &hash_timestamp(now)[..], &mut data)
-                .map_err(map_io_error)?;
+            crypto::aes_cfb_encrypt(
+                &id.cmd_key[..],
+                &hash_timestamp(now)[..],
+                &mut data,
+            )
+            .map_err(map_io_error)?;
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
             stream.write_all(&out).await?;
         } else {
-            let out = header::seal_vmess_aead_header(id.cmd_key, buf.freeze().to_vec(), now)
-                .map_err(map_io_error)?;
+            let out = header::seal_vmess_aead_header(
+                id.cmd_key,
+                buf.freeze().to_vec(),
+                now,
+            )
+            .map_err(map_io_error)?;
             stream.write_all(&out).await?;
         }
 
@@ -327,8 +341,12 @@ where
                     if !this.is_aead {
                         ready!(this.poll_read_exact(cx, 4))?;
                         let mut buf = this.read_buf.split().freeze().to_vec();
-                        crypto::aes_cfb_decrypt(&resp_body_key, &resp_body_iv, &mut buf)
-                            .map_err(map_io_error)?;
+                        crypto::aes_cfb_decrypt(
+                            &resp_body_key,
+                            &resp_body_iv,
+                            &mut buf,
+                        )
+                        .map_err(map_io_error)?;
                         if buf[0] != resp_v {
                             return Poll::Ready(Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
@@ -347,14 +365,16 @@ where
                     } else {
                         ready!(this.poll_read_exact(cx, 18))?;
 
-                        let aead_response_header_length_encryption_key = &kdf::vmess_kdf_1_one_shot(
-                            &resp_body_key,
-                            KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
-                        )[..16];
-                        let aead_response_header_length_encryption_iv = &kdf::vmess_kdf_1_one_shot(
-                            &resp_body_iv,
-                            KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
-                        )[..12];
+                        let aead_response_header_length_encryption_key =
+                            &kdf::vmess_kdf_1_one_shot(
+                                &resp_body_key,
+                                KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
+                            )[..16];
+                        let aead_response_header_length_encryption_iv =
+                            &kdf::vmess_kdf_1_one_shot(
+                                &resp_body_iv,
+                                KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
+                            )[..12];
 
                         let decrypted_response_header_len = crypto::aes_gcm_decrypt(
                             aead_response_header_length_encryption_key,
@@ -372,10 +392,13 @@ where
                             .into();
                         }
 
-                        this.read_state = ReadState::AeadWaitingHeader(u16::from_be_bytes(
-                            decrypted_response_header_len[..2].try_into().unwrap(),
-                        )
-                            as usize);
+                        this.read_state = ReadState::AeadWaitingHeader(
+                            u16::from_be_bytes(
+                                decrypted_response_header_len[..2]
+                                    .try_into()
+                                    .unwrap(),
+                            ) as usize,
+                        );
                     }
                 }
 
@@ -386,14 +409,16 @@ where
                     let resp_body_key = this.resp_body_key.clone();
                     let resp_body_iv = this.resp_body_iv.clone();
 
-                    let aead_response_header_payload_encryption_key = &kdf::vmess_kdf_1_one_shot(
-                        &resp_body_key,
-                        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
-                    )[..16];
-                    let aead_response_header_payload_encryption_iv = &kdf::vmess_kdf_1_one_shot(
-                        &resp_body_iv,
-                        KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
-                    )[..12];
+                    let aead_response_header_payload_encryption_key =
+                        &kdf::vmess_kdf_1_one_shot(
+                            &resp_body_key,
+                            KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
+                        )[..16];
+                    let aead_response_header_payload_encryption_iv =
+                        &kdf::vmess_kdf_1_one_shot(
+                            &resp_body_iv,
+                            KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
+                        )[..12];
 
                     let buf = crypto::aes_gcm_decrypt(
                         aead_response_header_payload_encryption_key,
@@ -430,8 +455,9 @@ where
                 ReadState::StreamWaitingLength => {
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, 2))?;
-                    let len = u16::from_be_bytes(this.read_buf.split().as_ref().try_into().unwrap())
-                        as usize;
+                    let len = u16::from_be_bytes(
+                        this.read_buf.split().as_ref().try_into().unwrap(),
+                    ) as usize;
 
                     if len > MAX_CHUNK_SIZE {
                         return Poll::Ready(Err(std::io::Error::new(
@@ -463,7 +489,8 @@ where
                     buf.put_slice(&payload);
                     if to_read < size {
                         // there're unread data, continues in next poll
-                        self.read_state = ReadState::StreamFlushingData(size - to_read);
+                        self.read_state =
+                            ReadState::StreamFlushingData(size - to_read);
                     } else {
                         // all data consumed, ready to read next chunk
                         self.read_state = ReadState::StreamWaitingLength;
@@ -506,26 +533,31 @@ where
 
                     piece2.put_slice(&buf[..consume_len]);
                     if let Some(ref mut cipher) = this.aead_write_cipher {
-                        piece2
-                            .extend_from_slice(vec![0u8; cipher.security.overhead_len()].as_ref());
+                        piece2.extend_from_slice(
+                            vec![0u8; cipher.security.overhead_len()].as_ref(),
+                        );
                         cipher.encrypt_inplace(&mut piece2)?;
                     }
 
                     this.write_buf.unsplit(piece2);
 
                     // ready to write data
-                    self.write_state =
-                        WriteState::FlushingData(consume_len, (this.write_buf.len(), 0));
+                    self.write_state = WriteState::FlushingData(
+                        consume_len,
+                        (this.write_buf.len(), 0),
+                    );
                 }
 
-                // consumed is the consumed plaintext length we're going to return to caller.
-                // total is total length of the ciphertext data chunk we're going to write to remote.
+                // consumed is the consumed plaintext length we're going to
+                // return to caller. total is total length of
+                // the ciphertext data chunk we're going to write to remote.
                 // written is the number of ciphertext bytes were written.
                 WriteState::FlushingData(consumed, (total, written)) => {
                     let this = &mut *self;
 
-                    // There would be trouble if the caller change the buf upon pending, but I
-                    // believe that's not a usual use case.
+                    // There would be trouble if the caller change the buf upon
+                    // pending, but I believe that's not a
+                    // usual use case.
                     let nw = ready!(tokio_util::io::poll_write_buf(
                         Pin::new(&mut this.stream),
                         cx,
@@ -545,7 +577,8 @@ where
                         return Poll::Ready(Ok(consumed));
                     }
 
-                    this.write_state = WriteState::FlushingData(consumed, (total, written + nw));
+                    this.write_state =
+                        WriteState::FlushingData(consumed, (total, written + nw));
                 }
             }
         }

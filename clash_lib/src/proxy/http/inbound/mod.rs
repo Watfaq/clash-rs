@@ -2,17 +2,16 @@ mod auth;
 mod connector;
 mod proxy;
 
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::proxy::utils::apply_tcp_options;
-use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::Dispatcher;
+use crate::{
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{utils::apply_tcp_options, AnyInboundListener, InboundListener},
+    Dispatcher,
+};
 use async_trait::async_trait;
 
 pub use proxy::handle as handle_http;
 
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{io, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::warn;
 

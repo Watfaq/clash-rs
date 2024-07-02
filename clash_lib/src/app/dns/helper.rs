@@ -1,7 +1,11 @@
-use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
-use crate::dns::{ClashResolver, ThreadSafeDNSClient};
-use crate::dns_debug;
-use crate::proxy::utils::Interface;
+use crate::{
+    dns::{
+        dns_client::{DNSNetMode, DnsClient, Opts},
+        ClashResolver, ThreadSafeDNSClient,
+    },
+    dns_debug,
+    proxy::utils::Interface,
+};
 use std::sync::Arc;
 use tracing::{debug, warn};
 

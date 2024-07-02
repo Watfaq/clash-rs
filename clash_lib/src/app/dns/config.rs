@@ -95,7 +95,10 @@ impl Config {
                 server = "udp://".to_owned() + &server;
             }
             let url = Url::parse(&server).map_err(|_x| {
-                Error::InvalidConfig(format!("invalid dns server: {}", server.as_str()))
+                Error::InvalidConfig(format!(
+                    "invalid dns server: {}",
+                    server.as_str()
+                ))
             })?;
 
             let host = url.host_str().expect("dns host must be valid");
@@ -164,7 +167,9 @@ impl Config {
         Ok(policy)
     }
 
-    pub fn parse_fallback_ip_cidr(ipcidr: &[String]) -> anyhow::Result<Vec<ipnet::IpNet>> {
+    pub fn parse_fallback_ip_cidr(
+        ipcidr: &[String],
+    ) -> anyhow::Result<Vec<ipnet::IpNet>> {
         let mut output = vec![];
 
         for ip in ipcidr.iter() {
@@ -226,7 +231,8 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
         let nameservers = Config::parse_nameserver(&dc.nameserver)?;
         let fallback = Config::parse_nameserver(&dc.fallback)?;
-        let nameserver_policy = Config::parse_nameserver_policy(&dc.nameserver_policy)?;
+        let nameserver_policy =
+            Config::parse_nameserver_policy(&dc.nameserver_policy)?;
 
         if dc.default_nameserver.is_empty() {
             return Err(Error::InvalidConfig(String::from(
@@ -253,7 +259,10 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .map(|l| match l {
                     DNSListen::Udp(u) => {
                         let addr = u.parse::<SocketAddr>().map_err(|_| {
-                            Error::InvalidConfig(format!("invalid dns udp listen address: {}", u))
+                            Error::InvalidConfig(format!(
+                                "invalid dns udp listen address: {}",
+                                u
+                            ))
                         })?;
                         Ok(DNSListenAddr {
                             udp: Some(addr),
@@ -278,7 +287,9 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 "tcp" => tcp = Some(addr),
                                 "doh" => {
                                     let mut buf_read: Box<dyn std::io::BufRead> =
-                                        Box::new(BufReader::new(TEST_CERT.as_bytes()));
+                                        Box::new(BufReader::new(
+                                            TEST_CERT.as_bytes(),
+                                        ));
                                     let certs = rustls_pemfile::certs(&mut buf_read)
                                         .unwrap()
                                         .into_iter()
@@ -286,18 +297,30 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .collect::<Vec<_>>();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
-                                        Box::new(BufReader::new(TEST_KEY.as_bytes()));
+                                        Box::new(BufReader::new(
+                                            TEST_KEY.as_bytes(),
+                                        ));
                                     let mut keys =
-                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                        rustls_pemfile::pkcs8_private_keys(
+                                            &mut buf_read,
+                                        )
+                                        .unwrap();
                                     let c = DoHConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
-                                        dns_hostname: Some("dns.example.com".to_owned()),
+                                        certificate_and_key: (
+                                            certs,
+                                            PrivateKey(keys.remove(0)),
+                                        ),
+                                        dns_hostname: Some(
+                                            "dns.example.com".to_owned(),
+                                        ),
                                     };
                                     doh = Some((addr, c))
                                 }
                                 "dot" => {
                                     let mut buf_read: Box<dyn std::io::BufRead> =
-                                        Box::new(BufReader::new(TEST_CERT.as_bytes()));
+                                        Box::new(BufReader::new(
+                                            TEST_CERT.as_bytes(),
+                                        ));
                                     let certs = rustls_pemfile::certs(&mut buf_read)
                                         .unwrap()
                                         .into_iter()
@@ -305,11 +328,19 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .collect::<Vec<_>>();
 
                                     let mut buf_read: Box<dyn std::io::BufRead> =
-                                        Box::new(BufReader::new(TEST_KEY.as_bytes()));
+                                        Box::new(BufReader::new(
+                                            TEST_KEY.as_bytes(),
+                                        ));
                                     let mut keys =
-                                        rustls_pemfile::pkcs8_private_keys(&mut buf_read).unwrap();
+                                        rustls_pemfile::pkcs8_private_keys(
+                                            &mut buf_read,
+                                        )
+                                        .unwrap();
                                     let c = DoTConfig {
-                                        certificate_and_key: (certs, PrivateKey(keys.remove(0))),
+                                        certificate_and_key: (
+                                            certs,
+                                            PrivateKey(keys.remove(0)),
+                                        ),
                                     };
                                     dot = Some((addr, c))
                                 }
@@ -329,10 +360,9 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .unwrap_or_default(),
             enhance_mode: dc.enhanced_mode.clone(),
             default_nameserver,
-            fake_ip_range: dc
-                .fake_ip_range
-                .parse::<ipnet::IpNet>()
-                .map_err(|_| Error::InvalidConfig(String::from("invalid fake ip range")))?,
+            fake_ip_range: dc.fake_ip_range.parse::<ipnet::IpNet>().map_err(
+                |_| Error::InvalidConfig(String::from("invalid fake ip range")),
+            )?,
             fake_ip_filter: dc.fake_ip_filter.clone(),
             store_fake_ip: c.profile.store_fake_ip,
             hosts: if dc.user_hosts && !c.hosts.is_empty() {

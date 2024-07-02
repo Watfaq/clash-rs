@@ -10,9 +10,9 @@ use tokio::{
     time::timeout,
 };
 
-use tracing::debug;
 #[cfg(target_os = "windows")]
 use tracing::warn;
+use tracing::{debug, error};
 
 use super::Interface;
 use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
@@ -41,9 +41,13 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
-fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) -> io::Result<()> {
+fn must_bind_socket_on_interface(
+    socket: &socket2::Socket,
+    iface: &Interface,
+) -> io::Result<()> {
     match iface {
-        // TODO: should this be ever used vs. calling .bind(2) from the caller side?
+        // TODO: should this be ever used vs. calling .bind(2) from the caller
+        // side?
         Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(*ip, 0).into()),
         Interface::Name(name) => {
             #[cfg(target_vendor = "apple")]
@@ -52,7 +56,11 @@ fn must_bind_socket_on_interface(socket: &socket2::Socket, iface: &Interface) ->
                     libc::if_nametoindex(name.as_str().as_ptr() as *const _)
                 }))
             }
-            #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+            #[cfg(any(
+                target_os = "android",
+                target_os = "fuchsia",
+                target_os = "linux"
+            ))]
             {
                 socket.bind_device(Some(name.as_bytes()))
             }
@@ -78,14 +86,16 @@ pub async fn new_tcp_stream<'a>(
     let dial_addr = resolver
         .resolve(address, false)
         .await
-        .map_err(|v| io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v)))?
+        .map_err(|v| {
+            io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v))
+        })?
         .ok_or(io::Error::new(
             io::ErrorKind::Other,
             format!("can't resolve dns: {}", address),
         ))?;
 
     debug!(
-        "dialing {}[{}]:{} via {:?}",
+        "dialing {}[{}]:{} via iface {:?}",
         address, dial_addr, port, iface
     );
 
@@ -105,6 +115,7 @@ pub async fn new_tcp_stream<'a>(
     };
 
     if let Some(iface) = iface {
+        debug!("binding tcp socket to interface: {:?}", iface);
         must_bind_socket_on_interface(&socket, iface)?;
     }
 
@@ -135,20 +146,44 @@ pub async fn new_udp_socket(
     let socket = match src {
         Some(src) => {
             if src.is_ipv4() {
-                socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
+                socket2::Socket::new(
+                    socket2::Domain::IPV4,
+                    socket2::Type::DGRAM,
+                    None,
+                )?
             } else {
-                socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?
+                socket2::Socket::new(
+                    socket2::Domain::IPV6,
+                    socket2::Type::DGRAM,
+                    None,
+                )?
             }
         }
-        None => socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
+        None => {
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
+        }
     };
 
-    if let Some(src) = src {
-        socket.bind(&(*src).into())?;
-    }
-
-    if let Some(iface) = iface {
-        must_bind_socket_on_interface(&socket, iface)?;
+    match (src, iface) {
+        (Some(_), Some(iface)) => {
+            debug!("both src and iface are set, iface will be used: {:?}", src);
+            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
+                error!("failed to bind socket to interface: {}", x);
+            })?;
+        }
+        (Some(src), None) => {
+            debug!("binding socket to: {:?}", src);
+            socket.bind(&(*src).into())?;
+        }
+        (None, Some(iface)) => {
+            debug!("binding udp socket to interface: {:?}", iface);
+            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
+                error!("failed to bind socket to interface: {}", x);
+            })?;
+        }
+        (None, None) => {
+            debug!("not binding socket to any address or interface");
+        }
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -176,9 +211,12 @@ mod tests {
         for i in 0..100 {
             futs.push(tokio::spawn(async move {
                 let now = std::time::Instant::now();
-                let socket =
-                    socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)
-                        .unwrap();
+                let socket = socket2::Socket::new(
+                    socket2::Domain::IPV4,
+                    socket2::Type::DGRAM,
+                    None,
+                )
+                .unwrap();
 
                 timeout(
                     Duration::from_secs(10),

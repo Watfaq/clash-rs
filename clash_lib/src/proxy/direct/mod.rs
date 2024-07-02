@@ -1,20 +1,25 @@
-use crate::app::dispatcher::{
-    BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
-    ChainedStream, ChainedStreamWrapper,
+use crate::{
+    app::{
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+        },
+        dns::ThreadSafeDNSResolver,
+    },
+    config::internal::proxy::PROXY_DIRECT,
+    proxy::{
+        datagram::OutboundDatagramImpl,
+        utils::{new_tcp_stream, new_udp_socket},
+        AnyOutboundHandler, OutboundHandler,
+    },
+    session::Session,
 };
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::config::internal::proxy::PROXY_DIRECT;
-use crate::proxy::datagram::OutboundDatagramImpl;
-use crate::proxy::utils::{new_tcp_stream, new_udp_socket};
-use crate::proxy::{AnyOutboundHandler, OutboundHandler};
-use crate::session::Session;
 
 use async_trait::async_trait;
 use serde::Serialize;
 use std::sync::Arc;
 
-use super::utils::RemoteConnector;
-use super::{ConnectorType, OutboundType};
+use super::{utils::RemoteConnector, ConnectorType, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -49,7 +54,7 @@ impl OutboundHandler for Handler {
             resolver,
             sess.destination.host().as_str(),
             sess.destination.port(),
-            None,
+            sess.iface.as_ref(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -94,7 +99,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 sess.destination.host().as_str(),
                 sess.destination.port(),
-                None,
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

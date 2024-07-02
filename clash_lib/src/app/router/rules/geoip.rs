@@ -23,7 +23,8 @@ impl std::fmt::Display for GeoIP {
 impl RuleMatcher for GeoIP {
     fn apply(&self, sess: &Session) -> bool {
         match sess.destination {
-            crate::session::SocksAddr::Ip(addr) => match self.mmdb.lookup(addr.ip()) {
+            crate::session::SocksAddr::Ip(addr) => match self.mmdb.lookup(addr.ip())
+            {
                 Ok(country) => {
                     country
                         .country
@@ -37,9 +38,10 @@ impl RuleMatcher for GeoIP {
                     false
                 }
             },
-            crate::session::SocksAddr::Domain(_, _) => false,
+            crate::session::SocksAddr::Domain(..) => false,
         }
     }
+
     fn target(&self) -> &str {
         self.target.as_str()
     }

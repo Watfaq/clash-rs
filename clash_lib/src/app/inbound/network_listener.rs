@@ -1,16 +1,18 @@
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::config::internal::config::BindAddress;
+use crate::{
+    common::auth::ThreadSafeAuthenticator, config::internal::config::BindAddress,
+};
 
 use crate::proxy::{http, mixed, socks, AnyInboundListener};
 
-use crate::proxy::utils::Interface;
-use crate::{Dispatcher, Error, Runner};
+use crate::{proxy::utils::Interface, Dispatcher, Error, Runner};
 use futures::FutureExt;
 use network_interface::{Addr, NetworkInterfaceConfig};
 use tracing::{info, warn};
 
-use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum ListenerType {
@@ -36,24 +38,30 @@ impl NetworkInboundListener {
             BindAddress::Any => {
                 #[cfg(target_os = "ios")]
                 {
-                    let all_ifaces =
-                        network_interface::NetworkInterface::show().expect("list interfaces");
+                    let all_ifaces = network_interface::NetworkInterface::show()
+                        .expect("list interfaces");
 
                     for iface in all_ifaces.into_iter() {
-                        let ip = iface
-                            .addr
-                            .into_iter()
-                            .map(|x| x.ip())
-                            .find(|x| !x.is_unspecified() && !x.is_multicast() && x.is_ipv4());
+                        let ip =
+                            iface.addr.map(|x| x.ip()).filter(|x| x.is_ipv4()).map(
+                                |x| match x {
+                                    IpAddr::V4(v4) => v4,
+                                    IpAddr::V6(_) => unreachable!(),
+                                },
+                            );
 
-                        if ip.is_none() {
+                        if !ip.is_some() {
                             continue;
                         }
 
-                        let ip = match ip.unwrap() {
-                            IpAddr::V4(v4) => v4,
-                            IpAddr::V6(_) => unreachable!(),
-                        };
+                        let ip = ip.unwrap();
+                        if ip.is_unspecified()
+                            || ip.is_link_local()
+                            || ip.is_multicast()
+                        {
+                            continue;
+                        }
+
                         self.build_and_insert_listener(&mut runners, ip);
                     }
                 }
@@ -65,7 +73,9 @@ impl NetworkInboundListener {
             }
             BindAddress::One(iface) => match iface {
                 Interface::IpAddr(ip) => match ip {
-                    IpAddr::V4(ip) => self.build_and_insert_listener(&mut runners, *ip),
+                    IpAddr::V4(ip) => {
+                        self.build_and_insert_listener(&mut runners, *ip)
+                    }
                     IpAddr::V6(_) => unreachable!("unsupported listening v6"),
                 },
                 Interface::Name(iface) => {
@@ -78,7 +88,11 @@ impl NetworkInboundListener {
                             Addr::V4(v4) => v4.ip,
                             Addr::V6(_) => unreachable!(),
                         })
-                        .find(|x| !x.is_unspecified() && !x.is_link_local() && !x.is_multicast())
+                        .find(|x| {
+                            !x.is_unspecified()
+                                && !x.is_link_local()
+                                && !x.is_multicast()
+                        })
                         .expect("no valid ip");
 
                     self.build_and_insert_listener(&mut runners, ip);
@@ -116,7 +130,10 @@ impl NetworkInboundListener {
             runners.push(
                 async move {
                     tcp_listener.listen_tcp().await.map_err(|e| {
-                        warn!("handler of {:?} tcp listen failed: {}", listener_type, e);
+                        warn!(
+                            "handler of {:?} tcp listen failed: {}",
+                            listener_type, e
+                        );
                         e.into()
                     })
                 }

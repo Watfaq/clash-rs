@@ -1,16 +1,22 @@
-use crate::session::SocksAddr as ClashSocksAddr;
+use crate::{
+    app::dns::ThreadSafeDNSResolver,
+    proxy::utils::{get_outbound_interface, new_udp_socket, Interface},
+    session::SocksAddr as ClashSocksAddr,
+};
+
 use anyhow::Result;
-use quinn::Connection as QuinnConnection;
-use quinn::{Endpoint as QuinnEndpoint, ZeroRttAccepted};
+use quinn::{
+    Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
+};
 use register_count::Counter;
-use std::collections::HashMap;
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    str::FromStr,
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
     sync::{atomic::AtomicU32, Arc},
     time::Duration,
 };
 use tokio::sync::RwLock as AsyncRwLock;
+use tracing::debug;
 use tuic_quinn::Connection as InnerConnection;
 use uuid::Uuid;
 
@@ -28,61 +34,69 @@ pub struct TuicEndpoint {
     pub gc_lifetime: Duration,
 }
 impl TuicEndpoint {
-    pub async fn connect(&self) -> Result<Arc<TuicConnection>> {
-        let mut last_err = None;
+    pub async fn connect(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+        rebind: bool,
+    ) -> Result<Arc<TuicConnection>> {
+        let remote_addr = self.server.resolve(resolver).await?;
+        let connect_to = async {
+            // if client and server don't match each other or forced to rebind,
+            // then rebind local socket
+            if rebind {
+                debug!("rebinding endpoint UDP socket");
 
-        for addr in self.server.resolve().await? {
-            let connect_to = async {
-                let match_ipv4 =
-                    addr.is_ipv4() && self.ep.local_addr().map_or(false, |addr| addr.is_ipv4());
-                let match_ipv6 =
-                    addr.is_ipv6() && self.ep.local_addr().map_or(false, |addr| addr.is_ipv6());
-
-                if !match_ipv4 && !match_ipv6 {
-                    let bind_addr = if addr.is_ipv4() {
-                        SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0))
-                    } else {
-                        SocketAddr::from((Ipv6Addr::UNSPECIFIED, 0))
-                    };
-
-                    self.ep
-                        .rebind(UdpSocket::bind(bind_addr).map_err(|err| {
-                            anyhow!("failed to create endpoint UDP socket {}", err)
-                        })?)
-                        .map_err(|err| anyhow!("failed to rebind endpoint UDP socket {}", err))?;
-                }
-
-                tracing::trace!("Connect to {} {}", addr, self.server.server_name());
-                let conn = self.ep.connect(addr, self.server.server_name())?;
-                let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
-                    match conn.into_0rtt() {
-                        Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
-                        Err(conn) => (conn.await?, None),
-                    }
-                } else {
-                    (conn.await?, None)
+                let socket = {
+                    let iface = get_outbound_interface();
+                    new_udp_socket(
+                        None,
+                        iface.map(|x| Interface::Name(x.name)).as_ref(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        None,
+                    )
+                    .await?
                 };
 
-                Ok((conn, zero_rtt_accepted))
+                debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);
+
+                self.ep.rebind(socket.into_std()?).map_err(|err| {
+                    anyhow!("failed to rebind endpoint UDP socket {}", err)
+                })?;
+            }
+
+            tracing::trace!(
+                "connecting to {} {} from {}",
+                remote_addr,
+                self.server.server_name(),
+                self.ep.local_addr().unwrap()
+            );
+
+            let conn = self.ep.connect(remote_addr, self.server.server_name())?;
+            let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
+                match conn.into_0rtt() {
+                    Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
+                    Err(conn) => (conn.await?, None),
+                }
+            } else {
+                (conn.await?, None)
             };
 
-            match connect_to.await {
-                Ok((conn, zero_rtt_accepted)) => {
-                    return Ok(TuicConnection::new(
-                        conn,
-                        zero_rtt_accepted,
-                        self.udp_relay_mode,
-                        self.uuid,
-                        self.password.clone(),
-                        self.heartbeat,
-                        self.gc_interval,
-                        self.gc_lifetime,
-                    ));
-                }
-                Err(err) => last_err = Some(err),
-            }
+            Ok((conn, zero_rtt_accepted))
+        };
+
+        match connect_to.await {
+            Ok((conn, zero_rtt_accepted)) => Ok(TuicConnection::new(
+                conn,
+                zero_rtt_accepted,
+                self.udp_relay_mode,
+                self.uuid,
+                self.password.clone(),
+                self.heartbeat,
+                self.gc_interval,
+                self.gc_lifetime,
+            )),
+            Err(err) => Err(err),
         }
-        Err(last_err.unwrap_or(anyhow!("dns resolve")))
     }
 }
 
@@ -112,6 +126,7 @@ impl TuicConnection {
             None => Ok(()),
         }
     }
+
     #[allow(clippy::too_many_arguments)]
     fn new(
         conn: QuinnConnection,
@@ -131,19 +146,23 @@ impl TuicConnection {
             udp_relay_mode,
             remote_uni_stream_cnt: Counter::new(),
             remote_bi_stream_cnt: Counter::new(),
-            // TODO: seems tuic dynamicly adjust the size of max concurrent streams, is it necessary to configure the stream size?
+            // TODO: seems tuic dynamicly adjust the size of max concurrent
+            // streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
             udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
         let conn = Arc::new(conn);
-        tokio::spawn(
-            conn.clone()
-                .init(zero_rtt_accepted, heartbeat, gc_interval, gc_lifetime),
-        );
+        tokio::spawn(conn.clone().init(
+            zero_rtt_accepted,
+            heartbeat,
+            gc_interval,
+            gc_lifetime,
+        ));
 
         conn
     }
+
     async fn init(
         self: Arc<Self>,
         zero_rtt_accepted: Option<ZeroRttAccepted>,
@@ -155,10 +174,11 @@ impl TuicConnection {
 
         // TODO check the cancellation safety of tuic_auth
         tokio::spawn(self.clone().tuic_auth(zero_rtt_accepted));
-        tokio::spawn(
-            self.clone()
-                .cyclical_tasks(heartbeat, gc_interval, gc_lifetime),
-        );
+        tokio::spawn(self.clone().cyclical_tasks(
+            heartbeat,
+            gc_interval,
+            gc_lifetime,
+        ));
 
         let err = loop {
             tokio::select! {
@@ -177,7 +197,7 @@ impl TuicConnection {
             };
         };
 
-        tracing::warn!("connection error: {err}");
+        tracing::warn!("connection error: {err:?}");
     }
 }
 
@@ -194,15 +214,19 @@ impl ServerAddr {
     pub fn server_name(&self) -> &str {
         &self.domain
     }
-    // TODO change to clash dns?
-    pub async fn resolve(&self) -> Result<impl Iterator<Item = SocketAddr>> {
+
+    pub async fn resolve(
+        &self,
+        resolver: &ThreadSafeDNSResolver,
+    ) -> Result<SocketAddr> {
         if let Some(ip) = self.ip {
-            Ok(vec![SocketAddr::from((ip, self.port))].into_iter())
+            Ok(SocketAddr::from((ip, self.port)))
         } else {
-            Ok(tokio::net::lookup_host((self.domain.as_str(), self.port))
+            let ip = resolver
+                .resolve(self.domain.as_str(), false)
                 .await?
-                .collect::<Vec<_>>()
-                .into_iter())
+                .ok_or(anyhow!("Resolve failed: unknown hostname"))?;
+            Ok(SocketAddr::from((ip, self.port)))
         }
     }
 }
@@ -212,17 +236,15 @@ pub enum UdpRelayMode {
     Native,
     Quic,
 }
-
-impl FromStr for UdpRelayMode {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl From<&str> for UdpRelayMode {
+    fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("native") {
-            Ok(Self::Native)
+            Self::Native
         } else if s.eq_ignore_ascii_case("quic") {
-            Ok(Self::Quic)
+            Self::Quic
         } else {
-            Err("invalid UDP relay mode")
+            // TODO logging
+            Self::Quic
         }
     }
 }
@@ -237,12 +259,16 @@ impl From<&str> for CongestionControl {
     fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("cubic") {
             Self::Cubic
-        } else if s.eq_ignore_ascii_case("new_reno") || s.eq_ignore_ascii_case("newreno") {
+        } else if s.eq_ignore_ascii_case("new_reno")
+            || s.eq_ignore_ascii_case("newreno")
+        {
             Self::NewReno
         } else if s.eq_ignore_ascii_case("bbr") {
             Self::Bbr
         } else {
-            tracing::warn!("Unknown congestion controller {s}. Use default controller");
+            tracing::warn!(
+                "Unknown congestion controller {s}. Use default controller"
+            );
             Self::default()
         }
     }
@@ -262,7 +288,9 @@ impl SocketAdderTrans for crate::session::SocksAddr {
         use crate::session::SocksAddr;
         match self {
             SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
-            SocksAddr::Domain(domain, port) => tuic::Address::DomainAddress(domain, port),
+            SocksAddr::Domain(domain, port) => {
+                tuic::Address::DomainAddress(domain, port)
+            }
         }
     }
 }

@@ -65,7 +65,8 @@ impl DnsHandler {
         let builder = MessageResponseBuilder::from_message_request(request);
         let mut header = Header::response_from_request(request.header());
 
-        if request.query().query_type() == RecordType::AAAA && !self.resolver.ipv6() {
+        if request.query().query_type() == RecordType::AAAA && !self.resolver.ipv6()
+        {
             header.set_authoritative(true);
 
             let resp = builder.build_no_records(header);
@@ -98,7 +99,8 @@ impl DnsHandler {
                             rdata,
                         )];
 
-                        let resp = builder.build(header, records.iter(), &[], &[], &[]);
+                        let resp =
+                            builder.build(header, records.iter(), &[], &[], &[]);
                         return Ok(response_handle.send_response(resp).await?);
                     }
                     None => {
@@ -137,8 +139,13 @@ impl DnsHandler {
                 header.set_name_server_count(m.name_server_count());
                 header.set_additional_count(m.additional_count());
 
-                let mut rv =
-                    builder.build(header, m.answers(), m.name_servers(), &[], m.additionals());
+                let mut rv = builder.build(
+                    header,
+                    m.answers(),
+                    m.name_servers(),
+                    &[],
+                    m.additionals(),
+                );
 
                 if let Some(edns) = request.edns() {
                     if edns.dnssec_ok() {
@@ -193,7 +200,10 @@ impl RequestHandler for DnsHandler {
 
 static DEFAULT_DNS_SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> Option<Runner> {
+pub async fn get_dns_listener(
+    cfg: Config,
+    resolver: ThreadSafeDNSResolver,
+) -> Option<Runner> {
     if !cfg.enable {
         return None;
     }
@@ -239,7 +249,11 @@ pub async fn get_dns_listener(cfg: Config, resolver: ThreadSafeDNSResolver) -> O
             .await
             .and_then(|x| {
                 info!("dns server listening on dot: {}", c.0);
-                s.register_tls_listener(x, DEFAULT_DNS_SERVER_TIMEOUT, c.1.certificate_and_key)?;
+                s.register_tls_listener(
+                    x,
+                    DEFAULT_DNS_SERVER_TIMEOUT,
+                    c.1.certificate_and_key,
+                )?;
                 Ok(())
             })
             .ok()?;

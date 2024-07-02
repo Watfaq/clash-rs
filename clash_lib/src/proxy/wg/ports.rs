@@ -33,7 +33,8 @@ impl PortPool {
         }
     }
 
-    /// Requests a free port from the pool. An error is returned if none is available (exhausted max capacity).
+    /// Requests a free port from the pool. An error is returned if none is
+    /// available (exhausted max capacity).
     pub async fn next(&self) -> anyhow::Result<u16> {
         let mut inner = self.inner.write().await;
         let port = inner

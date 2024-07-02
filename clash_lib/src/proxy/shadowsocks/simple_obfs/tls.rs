@@ -10,8 +10,7 @@ use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::BufMut;
 use chrono::Utc;
 use futures::pin_mut;
-use std::future::Future;
-use std::task::ready;
+use std::{future::Future, task::ready};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
 use crate::proxy::AnyStream;
@@ -68,7 +67,10 @@ impl AsyncWrite for TLSObfs {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
         let this = self.get_mut();
         Pin::new(&mut this.inner).poll_flush(cx)
     }
@@ -144,51 +146,53 @@ fn reading(
     let this = this.get_mut();
     let mut inner = Pin::new(&mut this.inner);
 
-    match this.read_state {
-        ReadState::Idle => {
-            // 1. discard n bytes
-            let mut buffer = vec![0; discard_n];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    this.read_state = ReadState::Parsing;
-                    Poll::Pending // do next step
-                }
-                Err(e) => Poll::Ready(Err(e)),
-            }
-        }
-        ReadState::Parsing => {
-            // 2. read 2 bytes as length
-            let mut buffer = vec![0; 2];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    let length = BigEndian::read_u16(&buffer[..2]) as usize;
-                    this.read_state = ReadState::Reading(length);
-                    Poll::Pending // do next step
-                }
-                Err(e) => Poll::Ready(Err(e)),
-            }
-        }
-        ReadState::Reading(length) => {
-            // 3. read length bytes
-            let remaining = buf.remaining();
-            let len = length.min(remaining);
-            let mut buffer = vec![0; len];
-            let fut = inner.read_exact(&mut buffer);
-            pin_mut!(fut);
-            match ready!(fut.poll(cx)) {
-                Ok(_) => {
-                    buf.put_slice(&buffer);
-                    if length > remaining {
-                        this.remain = length - remaining;
+    loop {
+        match this.read_state {
+            ReadState::Idle => {
+                // 1. discard n bytes
+                let mut buffer = vec![0; discard_n];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        this.read_state = ReadState::Parsing;
+                        continue;
                     }
-                    this.read_state = ReadState::Idle;
-                    Poll::Ready(Ok(()))
+                    Err(e) => return Poll::Ready(Err(e)),
                 }
-                Err(e) => Poll::Ready(Err(e)),
+            }
+            ReadState::Parsing => {
+                // 2. read 2 bytes as length
+                let mut buffer = vec![0; 2];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        let length = BigEndian::read_u16(&buffer[..2]) as usize;
+                        this.read_state = ReadState::Reading(length);
+                        continue;
+                    }
+                    Err(e) => return Poll::Ready(Err(e)),
+                }
+            }
+            ReadState::Reading(length) => {
+                // 3. read length bytes
+                let remaining = buf.remaining();
+                let len = length.min(remaining);
+                let mut buffer = vec![0; len];
+                let fut = inner.read_exact(&mut buffer);
+                pin_mut!(fut);
+                match ready!(fut.poll(cx)) {
+                    Ok(_) => {
+                        buf.put_slice(&buffer);
+                        if length > remaining {
+                            this.remain = length - remaining;
+                        }
+                        this.read_state = ReadState::Idle;
+                        return Poll::Ready(Ok(()));
+                    }
+                    Err(e) => return Poll::Ready(Err(e)),
+                }
             }
         }
     }
@@ -224,10 +228,11 @@ fn make_client_hello_msg<'a>(data: &[u8], server: &str) -> Cow<'a, Vec<u8>> {
     // cipher suites
     buf.put_slice(&[0x00, 0x38]);
     buf.put_slice(&[
-        0xc0, 0x2c, 0xc0, 0x30, 0x00, 0x9f, 0xcc, 0xa9, 0xcc, 0xa8, 0xcc, 0xaa, 0xc0, 0x2b, 0xc0,
-        0x2f, 0x00, 0x9e, 0xc0, 0x24, 0xc0, 0x28, 0x00, 0x6b, 0xc0, 0x23, 0xc0, 0x27, 0x00, 0x67,
-        0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x39, 0xc0, 0x09, 0xc0, 0x13, 0x00, 0x33, 0x00, 0x9d, 0x00,
-        0x9c, 0x00, 0x3d, 0x00, 0x3c, 0x00, 0x35, 0x00, 0x2f, 0x00, 0xff,
+        0xc0, 0x2c, 0xc0, 0x30, 0x00, 0x9f, 0xcc, 0xa9, 0xcc, 0xa8, 0xcc, 0xaa,
+        0xc0, 0x2b, 0xc0, 0x2f, 0x00, 0x9e, 0xc0, 0x24, 0xc0, 0x28, 0x00, 0x6b,
+        0xc0, 0x23, 0xc0, 0x27, 0x00, 0x67, 0xc0, 0x0a, 0xc0, 0x14, 0x00, 0x39,
+        0xc0, 0x09, 0xc0, 0x13, 0x00, 0x33, 0x00, 0x9d, 0x00, 0x9c, 0x00, 0x3d,
+        0x00, 0x3c, 0x00, 0x35, 0x00, 0x2f, 0x00, 0xff,
     ]);
 
     // compression
@@ -257,14 +262,15 @@ fn make_client_hello_msg<'a>(data: &[u8], server: &str) -> Cow<'a, Vec<u8>> {
 
     // groups
     buf.put_slice(&[
-        0x00, 0x0a, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x19, 0x00, 0x18,
+        0x00, 0x0a, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x19,
+        0x00, 0x18,
     ]);
 
     // signature
     buf.put_slice(&[
-        0x00, 0x0d, 0x00, 0x20, 0x00, 0x1e, 0x06, 0x01, 0x06, 0x02, 0x06, 0x03, 0x05, 0x01, 0x05,
-        0x02, 0x05, 0x03, 0x04, 0x01, 0x04, 0x02, 0x04, 0x03, 0x03, 0x01, 0x03, 0x02, 0x03, 0x03,
-        0x02, 0x01, 0x02, 0x02, 0x02, 0x03,
+        0x00, 0x0d, 0x00, 0x20, 0x00, 0x1e, 0x06, 0x01, 0x06, 0x02, 0x06, 0x03,
+        0x05, 0x01, 0x05, 0x02, 0x05, 0x03, 0x04, 0x01, 0x04, 0x02, 0x04, 0x03,
+        0x03, 0x01, 0x03, 0x02, 0x03, 0x03, 0x02, 0x01, 0x02, 0x02, 0x02, 0x03,
     ]);
 
     // encrypt then mac

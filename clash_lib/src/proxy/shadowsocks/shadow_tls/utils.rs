@@ -20,7 +20,8 @@ pub(crate) mod prelude {
     pub(crate) const APPLICATION_DATA: u8 = 0x17;
 
     pub(crate) const SERVER_RANDOM_OFFSET: usize = 1 + 3 + 2;
-    pub(crate) const SESSION_ID_LEN_IDX: usize = TLS_HEADER_SIZE + 1 + 3 + 2 + TLS_RANDOM_SIZE;
+    pub(crate) const SESSION_ID_LEN_IDX: usize =
+        TLS_HEADER_SIZE + 1 + 3 + 2 + TLS_RANDOM_SIZE;
     pub(crate) const TLS_HMAC_HEADER_SIZE: usize = TLS_HEADER_SIZE + HMAC_SIZE;
 
     pub(crate) const COPY_BUF_SIZE: usize = 4096;
@@ -41,7 +42,8 @@ impl Hmac {
     pub(crate) fn new(password: &str, init_data: (&[u8], &[u8])) -> Self {
         // Note: infact new_from_slice never returns Err.
         let mut hmac: hmac::Hmac<sha1::Sha1> =
-            hmac::Hmac::new_from_slice(password.as_bytes()).expect("unable to build hmac instance");
+            hmac::Hmac::new_from_slice(password.as_bytes())
+                .expect("unable to build hmac instance");
         hmac.update(init_data.0);
         hmac.update(init_data.1);
         Self(hmac)
@@ -58,7 +60,13 @@ impl Hmac {
         let hmac = self.0.clone();
         let hash = hmac.finalize().into_bytes();
         let mut res = [0; HMAC_SIZE];
-        unsafe { copy_nonoverlapping(hash.as_slice().as_ptr(), res.as_mut_ptr(), HMAC_SIZE) };
+        unsafe {
+            copy_nonoverlapping(
+                hash.as_slice().as_ptr(),
+                res.as_mut_ptr(),
+                HMAC_SIZE,
+            )
+        };
         res
     }
 
@@ -134,7 +142,7 @@ pub(crate) fn support_tls13(frame: &[u8]) -> bool {
     }
     let mut cursor = std::io::Cursor::new(&frame[SESSION_ID_LEN_IDX..]);
     macro_rules! read_ok {
-        ($res: expr) => {
+        ($res:expr) => {
             match $res {
                 Ok(r) => r,
                 Err(_) => {
@@ -160,7 +168,7 @@ pub(crate) fn support_tls13(frame: &[u8]) -> bool {
         let ext_len = read_ok!(cursor.read_u16::<BigEndian>());
         let ext_val = read_ok!(cursor.read_u16::<BigEndian>());
         let use_tls13 = ext_len == 2 && ext_val == TLS_13;
-        tracing::debug!("found supported_versions extension, tls1.3: {use_tls13}");
+        tracing::trace!("found supported_versions extension, tls1.3: {use_tls13}");
         return use_tls13;
     }
     false

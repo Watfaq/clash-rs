@@ -25,7 +25,9 @@ use tokio::sync::{
 };
 use tracing::{debug, error, trace, trace_span, warn, Instrument};
 
-use crate::{app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr};
+use crate::{
+    app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr,
+};
 
 use super::{
     events::PortProtocol,
@@ -89,7 +91,8 @@ impl DeviceManager {
         let tcp_port_pool = PortPool::new();
         let udp_port_pool = PortPool::new();
 
-        let (socket_notifier, socket_notifier_receiver) = tokio::sync::mpsc::channel(1024);
+        let (socket_notifier, socket_notifier_receiver) =
+            tokio::sync::mpsc::channel(1024);
 
         Self {
             addr,
@@ -135,7 +138,11 @@ impl DeviceManager {
         UdpPair::new(read_pair.1, write_pair.0)
     }
 
-    pub async fn look_up_dns(&self, host: &str, server: SocketAddr) -> Option<IpAddr> {
+    pub async fn look_up_dns(
+        &self,
+        host: &str,
+        server: SocketAddr,
+    ) -> Option<IpAddr> {
         debug!("looking up {} on {}", host, server);
 
         #[async_recursion::async_recursion]
@@ -160,19 +167,26 @@ impl DeviceManager {
 
             msg.set_recursion_desired(true);
 
-            let pkt = UdpPacket::new(msg.to_vec().unwrap(), SocksAddr::any_ipv4(), server.into());
+            let pkt = UdpPacket::new(
+                msg.to_vec().unwrap(),
+                SocksAddr::any_ipv4(),
+                server.into(),
+            );
 
             socket.feed(pkt).await.ok()?;
             socket.flush().await.ok()?;
             trace!("sent dns query: {:?}", msg);
 
-            let pkt = match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
-                Ok(Some(pkt)) => pkt,
-                _ => {
-                    warn!("wg dns query timed out with server {server}");
-                    return None;
-                }
-            };
+            let pkt =
+                match tokio::time::timeout(Duration::from_secs(5), socket.next())
+                    .await
+                {
+                    Ok(Some(pkt)) => pkt,
+                    _ => {
+                        warn!("wg dns query timed out with server {server}");
+                        return None;
+                    }
+                };
 
             let msg = hickory_proto::op::Message::from_vec(&pkt.data).ok()?;
             trace!("got dns response: {:?}", msg);
@@ -185,7 +199,13 @@ impl DeviceManager {
                                     "{} resolved to CNAME {}, asking recursively",
                                     host, cname.0
                                 );
-                                return query(rtype, &cname.0.to_ascii(), server, socket).await;
+                                return query(
+                                    rtype,
+                                    &cname.0.to_ascii(),
+                                    server,
+                                    socket,
+                                )
+                                .await;
                             }
                             (
                                 hickory_proto::rr::RecordType::A,
@@ -211,7 +231,8 @@ impl DeviceManager {
         let v4_query = query(hickory_proto::rr::RecordType::A, host, server, socket);
         if self.addr_v6.is_some() {
             let socket = self.new_udp_socket().await;
-            let v6_query = query(hickory_proto::rr::RecordType::AAAA, host, server, socket);
+            let v6_query =
+                query(hickory_proto::rr::RecordType::AAAA, host, server, socket);
             match tokio::time::timeout(
                 Duration::from_secs(5),
                 futures::future::join(v4_query, v6_query),
@@ -247,8 +268,10 @@ impl DeviceManager {
 
         let (device_sender, mut device_receiver) = tokio::sync::mpsc::channel(1024);
 
-        let mut tcp_queue: HashMap<SocketHandle, VecDeque<(Bytes, bool)>> = HashMap::new();
-        let mut udp_queue: HashMap<SocketHandle, VecDeque<(UdpPacket, bool)>> = HashMap::new();
+        let mut tcp_queue: HashMap<SocketHandle, VecDeque<(Bytes, bool)>> =
+            HashMap::new();
+        let mut udp_queue: HashMap<SocketHandle, VecDeque<(UdpPacket, bool)>> =
+            HashMap::new();
         let mut next_poll = None;
 
         loop {
@@ -256,7 +279,8 @@ impl DeviceManager {
             let mut socket_pairs = self.socket_pairs.lock().await;
 
             let mut packet_notifier = self.packet_notifier.lock().await;
-            let mut socket_notifier_receiver = self.socket_notifier_receiver.lock().await;
+            let mut socket_notifier_receiver =
+                self.socket_notifier_receiver.lock().await;
 
             tokio::select! {
                 Some(socket) = socket_notifier_receiver.recv() => {
@@ -633,16 +657,20 @@ impl VirtualIpDevice {
         // when wg stack receives a packet, it will send it to this receiver
         mut packet_receiver: Receiver<(PortProtocol, Bytes)>,
 
-        // when wg stack receives a packet, it will send a notification to this sender
+        // when wg stack receives a packet, it will send a notification to this
+        // sender
         packet_notifier: Sender<()>,
         mtu: usize,
     ) -> Self {
-        let (inner_packet_sender, inner_packet_receiver) = tokio::sync::mpsc::channel(1024);
+        let (inner_packet_sender, inner_packet_receiver) =
+            tokio::sync::mpsc::channel(1024);
         tokio::spawn(async move {
             loop {
                 let span = trace_span!("receive_packet");
 
-                if let Some((proto, data)) = packet_receiver.recv().instrument(span).await {
+                if let Some((proto, data)) =
+                    packet_receiver.recv().instrument(span).await
+                {
                     inner_packet_sender.send((proto, data)).await.unwrap();
                     let _ = packet_notifier.try_send(());
                 } else {
@@ -686,7 +714,10 @@ impl Device for VirtualIpDevice {
         }
     }
 
-    fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+    fn transmit(
+        &mut self,
+        _timestamp: smoltcp::time::Instant,
+    ) -> Option<Self::TxToken<'_>> {
         Some(TxToken {
             sender: self.packet_sender.clone(),
         })
