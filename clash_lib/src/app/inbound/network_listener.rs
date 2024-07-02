@@ -42,27 +42,29 @@ impl NetworkInboundListener {
                         .expect("list interfaces");
 
                     for iface in all_ifaces.into_iter() {
-                        let ip =
-                            iface.addr.map(|x| x.ip()).filter(|x| x.is_ipv4()).map(
-                                |x| match x {
-                                    IpAddr::V4(v4) => v4,
-                                    IpAddr::V6(_) => unreachable!(),
-                                },
-                            );
+                        let ip = iface
+                            .addr
+                            .into_iter()
+                            .filter_map(|x| match x {
+                                Addr::V4(v4) => {
+                                    if v4.ip.is_unspecified()
+                                        || v4.ip.is_link_local()
+                                        || v4.ip.is_multicast()
+                                    {
+                                        None
+                                    } else {
+                                        Some(v4.ip)
+                                    }
+                                }
+                                Addr::V6(_) => None,
+                            })
+                            .next();
 
                         if !ip.is_some() {
                             continue;
                         }
 
-                        let ip = ip.unwrap();
-                        if ip.is_unspecified()
-                            || ip.is_link_local()
-                            || ip.is_multicast()
-                        {
-                            continue;
-                        }
-
-                        self.build_and_insert_listener(&mut runners, ip);
+                        self.build_and_insert_listener(&mut runners, ip.unwrap());
                     }
                 }
                 #[cfg(not(target_os = "ios"))]
