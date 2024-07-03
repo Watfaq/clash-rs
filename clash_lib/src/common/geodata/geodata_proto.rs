@@ -37,23 +37,35 @@ pub mod domain {
         }
     }
     /// Type of domain value.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
     #[repr(i32)]
     pub enum Type {
         /// The value is used as is.
-        Plain = 0,
+        Plain  = 0,
         /// The value is used as a regular expression.
-        Regex = 1,
+        Regex  = 1,
         /// The value is a root domain.
         Domain = 2,
         /// The value is a domain.
-        Full = 3,
+        Full   = 3,
     }
     impl Type {
-        /// String value of the enum field names used in the ProtoBuf definition.
+        /// String value of the enum field names used in the ProtoBuf
+        /// definition.
         ///
-        /// The values are not transformed in any way and thus are considered stable
-        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        /// The values are not transformed in any way and thus are considered
+        /// stable (if the ProtoBuf definition does not change) and safe
+        /// for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
                 Type::Plain => "Plain",
@@ -62,6 +74,7 @@ pub mod domain {
                 Type::Full => "Full",
             }
         }
+
         /// Creates an enum from field names used in the ProtoBuf definition.
         pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
             match value {

@@ -1,11 +1,11 @@
 use async_recursion::async_recursion;
 use hyper::body::HttpBody;
-use std::path::Path;
-use std::{fmt::Write, num::ParseIntError};
+use std::{fmt::Write, num::ParseIntError, path::Path};
 
-use crate::common::errors::new_io_error;
-use crate::common::http::HttpClient;
-use crate::Error;
+use crate::{
+    common::{errors::new_io_error, http::HttpClient},
+    Error,
+};
 use rand::{
     distributions::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
@@ -63,7 +63,11 @@ pub fn default_bool_true() -> bool {
 }
 
 #[async_recursion]
-pub async fn download<P>(url: &str, path: P, http_client: &HttpClient) -> anyhow::Result<()>
+pub async fn download<P>(
+    url: &str,
+    path: P,
+    http_client: &HttpClient,
+) -> anyhow::Result<()>
 where
     P: AsRef<Path> + std::marker::Send,
 {
@@ -89,7 +93,11 @@ where
     }
 
     if !res.status().is_success() {
-        return Err(Error::InvalidConfig(format!("mmdb download failed: {}", res.status())).into());
+        return Err(Error::InvalidConfig(format!(
+            "mmdb download failed: {}",
+            res.status()
+        ))
+        .into());
     }
 
     debug!("downloading mmdb to {}", path.as_ref().to_string_lossy());

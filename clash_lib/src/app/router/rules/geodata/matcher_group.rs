@@ -1,6 +1,10 @@
-use crate::app::router::rules::geodata::str_matcher::{try_new_matcher, Matcher};
-use crate::common::geodata::geodata_proto::{domain::Type, Domain};
-use crate::common::trie;
+use crate::{
+    app::router::rules::geodata::str_matcher::{try_new_matcher, Matcher},
+    common::{
+        geodata::geodata_proto::{domain::Type, Domain},
+        trie,
+    },
+};
 use std::sync::Arc;
 
 pub trait DomainGroupMatcher: Send + Sync {

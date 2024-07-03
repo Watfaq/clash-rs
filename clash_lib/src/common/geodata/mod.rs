@@ -1,6 +1,7 @@
-use crate::common::http::HttpClient;
-use crate::common::utils::download;
-use crate::Error;
+use crate::{
+    common::{http::HttpClient, utils::download},
+    Error,
+};
 use prost::Message;
 use std::path::Path;
 use tracing::{debug, info};
@@ -26,7 +27,12 @@ impl GeoData {
                 info!("downloading geodata from {}", url);
                 download(url, &geosite_file, &http_client)
                     .await
-                    .map_err(|x| Error::InvalidConfig(format!("geosite download failed: {}", x)))?;
+                    .map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "geosite download failed: {}",
+                            x
+                        ))
+                    })?;
             } else {
                 return Err(Error::InvalidConfig(format!(
                     "geosite `{}` not found and geosite_download_url is not set",

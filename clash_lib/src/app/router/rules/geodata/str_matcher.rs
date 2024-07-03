@@ -47,7 +47,10 @@ impl Matcher for RegexMatcher {
     }
 }
 
-pub fn try_new_matcher(domain: String, t: Type) -> Result<Box<dyn Matcher>, crate::Error> {
+pub fn try_new_matcher(
+    domain: String,
+    t: Type,
+) -> Result<Box<dyn Matcher>, crate::Error> {
     Ok(match t {
         Type::Plain => Box::new(SubStrMatcher(domain)),
         Type::Regex => Box::new(RegexMatcher(regex::Regex::new(&domain)?)),
@@ -75,7 +78,8 @@ mod tests {
         assert_eq!(domain_matcher.matches("https://www.fakegoogle.com"), false);
         assert_eq!(domain_matcher.matches("https://wwwgoogle.com"), false);
 
-        let regex_matcher = RegexMatcher(regex::Regex::new(r".*google\..*").unwrap());
+        let regex_matcher =
+            RegexMatcher(regex::Regex::new(r".*google\..*").unwrap());
         assert_eq!(regex_matcher.matches("https://www.google.com"), true);
         assert_eq!(regex_matcher.matches("https://www.fakegoogle.com"), true);
         assert_eq!(regex_matcher.matches("https://goo.gle.com"), false);

@@ -174,17 +174,22 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     debug!("initializing dns resolver");
     let system_resolver =
         Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
-    let client =
-        new_http_client(system_resolver.clone()).map_err(|x| Error::DNSError(x.to_string()))?;
-        
+    let client = new_http_client(system_resolver.clone())
+        .map_err(|x| Error::DNSError(x.to_string()))?;
+
     debug!("initializing mmdb");
     let cwd = PathBuf::from(cwd);
+    let mmdb = Arc::new(
+        mmdb::Mmdb::new(
+            cwd.join(&config.general.mmdb),
+            config.general.mmdb_download_url,
             client,
         )
         .await?,
     );
 
-    let client = new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+    let client = new_http_client(system_resolver)
+        .map_err(|x| Error::DNSError(x.to_string()))?;
     let geodata = Arc::new(
         geodata::GeoData::new(
             cwd.join(&config.general.geosite),
@@ -334,8 +339,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             };
 
             debug!("reloading dns resolver");
-            let system_resolver =
-                Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
+            let system_resolver = Arc::new(
+                SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?,
+            );
             let client = new_http_client(system_resolver.clone())
                 .map_err(|x| Error::DNSError(x.to_string()))?;
 
@@ -349,8 +355,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 .await?,
             );
 
-            let client =
-                new_http_client(system_resolver).map_err(|x| Error::DNSError(x.to_string()))?;
+            let client = new_http_client(system_resolver)
+                .map_err(|x| Error::DNSError(x.to_string()))?;
             let geodata = Arc::new(
                 geodata::GeoData::new(
                     cwd.join(&config.general.geosite),

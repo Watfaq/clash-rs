@@ -1,17 +1,21 @@
-use crate::app::router::RuleMatcher;
-use crate::session::Session;
+use crate::{app::router::RuleMatcher, session::Session};
 use std::fmt::{Display, Formatter};
 
-use crate::app::router::rules::geodata::attribute::{AndAttrMatcher, AttrMatcher};
-use crate::app::router::rules::geodata::matcher_group::{DomainGroupMatcher, SuccinctMatcherGroup};
-use crate::common::geodata::GeoData;
+use crate::{
+    app::router::rules::geodata::{
+        attribute::{AndAttrMatcher, AttrMatcher},
+        matcher_group::{DomainGroupMatcher, SuccinctMatcherGroup},
+    },
+    common::geodata::GeoData,
+};
 
 mod attribute;
 mod matcher_group;
 mod str_matcher;
 
 // if country_code is empty, return None
-// or will return the parsed **real** code and the attr list and if the code is negated
+// or will return the parsed **real** code and the attr list and if the code is
+// negated
 fn parse(country_code: &str) -> Option<(bool, String, Box<dyn AttrMatcher>)> {
     let country_code = country_code.trim().to_lowercase();
     let mut country_code = country_code.as_str();
@@ -44,7 +48,11 @@ pub struct GeoSiteMatcher {
 }
 
 impl GeoSiteMatcher {
-    pub fn new(country_code: String, target: String, loader: &GeoData) -> anyhow::Result<Self> {
+    pub fn new(
+        country_code: String,
+        target: String,
+        loader: &GeoData,
+    ) -> anyhow::Result<Self> {
         let (not, code, attr_matcher) = parse(&country_code).unwrap();
         let list = loader.get(&code).cloned().unwrap();
         let domains = list
@@ -73,7 +81,9 @@ impl RuleMatcher for GeoSiteMatcher {
     fn apply(&self, sess: &Session) -> bool {
         match &sess.destination {
             crate::session::SocksAddr::Ip(_) => false,
-            crate::session::SocksAddr::Domain(domain, _) => self.matcher.apply(domain.as_str()),
+            crate::session::SocksAddr::Domain(domain, _) => {
+                self.matcher.apply(domain.as_str())
+            }
         }
     }
 
@@ -95,14 +105,16 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::app::dns::SystemResolver;
-    use crate::app::router::rules::geodata::matcher_group::{
-        DomainGroupMatcher, SuccinctMatcherGroup,
+    use crate::{
+        app::{
+            dns::SystemResolver,
+            router::rules::geodata::matcher_group::{
+                DomainGroupMatcher, SuccinctMatcherGroup,
+            },
+        },
+        common::{geodata::GeoData, http::new_http_client, utils::download},
+        Error,
     };
-    use crate::common::geodata::GeoData;
-    use crate::common::http::new_http_client;
-    use crate::common::utils::download;
-    use crate::Error;
 
     const GEOSITE_URL: &str =
         "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
@@ -148,11 +160,17 @@ mod tests {
             },
             TestSuite {
                 country_code: "youtube",
-                expected_results: vec![("www.youtube.com", true), ("www.bilibili.com", false)],
+                expected_results: vec![
+                    ("www.youtube.com", true),
+                    ("www.bilibili.com", false),
+                ],
             },
             TestSuite {
                 country_code: "!youtube",
-                expected_results: vec![("www.youtube.com", false), ("www.bilibili.com", true)],
+                expected_results: vec![
+                    ("www.youtube.com", false),
+                    ("www.bilibili.com", true),
+                ],
             },
         ];
 
