@@ -20,7 +20,7 @@ use crate::{
         },
         router::{map_rule_type, RuleMatcher},
     },
-    common::{errors::map_io_error, mmdb::Mmdb, trie},
+    common::{errors::map_io_error, geodata::GeoData, mmdb::Mmdb, trie},
     config::internal::rule::RuleType,
     session::Session,
     Error,
@@ -86,6 +86,7 @@ impl RuleProviderImpl {
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
         mmdb: Arc<Mmdb>,
+        geodata: Arc<GeoData>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behovior {
@@ -123,7 +124,12 @@ impl RuleProviderImpl {
                             n, x
                         ))
                     })?;
-                let rules = make_rules(behovior, scheme.payload, mmdb.clone())?;
+                let rules = make_rules(
+                    behovior,
+                    scheme.payload,
+                    mmdb.clone(),
+                    geodata.clone(),
+                )?;
                 Ok(rules)
             });
 
@@ -233,6 +239,7 @@ fn make_rules(
     behavior: RuleSetBehavior,
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
@@ -241,9 +248,9 @@ fn make_rules(
         RuleSetBehavior::Ipcidr => {
             Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?)))
         }
-        RuleSetBehavior::Classical => {
-            Ok(RuleContent::Classical(make_classical_rules(rules, mmdb)?))
-        }
+        RuleSetBehavior::Classical => Ok(RuleContent::Classical(
+            make_classical_rules(rules, mmdb, geodata)?,
+        )),
     }
 }
 
@@ -266,6 +273,7 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
 fn make_classical_rules(
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
@@ -282,7 +290,8 @@ fn make_classical_rules(
             _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", rule))),
         }?;
 
-        let rule_matcher = map_rule_type(rule_type, mmdb.clone(), None);
+        let rule_matcher =
+            map_rule_type(rule_type, mmdb.clone(), geodata.clone(), None);
         rv.push(rule_matcher);
     }
     Ok(rv)

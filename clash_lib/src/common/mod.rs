@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod crypto;
 pub mod errors;
+pub mod geodata;
 pub mod http;
 pub mod io;
 pub mod mmdb;
