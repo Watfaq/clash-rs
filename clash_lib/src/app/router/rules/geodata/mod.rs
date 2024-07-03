@@ -135,6 +135,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial] // multi-threaded static linked libc can crash:  https://sourceware.org/bugzilla/show_bug.cgi?id=10652
     async fn test_download_and_apply() -> anyhow::Result<()> {
         let system_resolver = Arc::new(
             SystemResolver::new()

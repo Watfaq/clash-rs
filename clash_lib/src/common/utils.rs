@@ -94,13 +94,13 @@ where
 
     if !res.status().is_success() {
         return Err(Error::InvalidConfig(format!(
-            "mmdb download failed: {}",
+            "data download failed: {}",
             res.status()
         ))
         .into());
     }
 
-    debug!("downloading mmdb to {}", path.as_ref().to_string_lossy());
+    debug!("downloading data to {}", path.as_ref().to_string_lossy());
 
     while let Some(chunk) = res.body_mut().data().await {
         out.write_all(&chunk?)?;
