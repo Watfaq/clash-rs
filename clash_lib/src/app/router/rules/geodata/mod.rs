@@ -1,4 +1,4 @@
-use crate::{app::router::RuleMatcher, session::Session};
+use crate::{app::router::RuleMatcher, session::Session, Error};
 use std::fmt::{Display, Formatter};
 
 use crate::{
@@ -53,8 +53,18 @@ impl GeoSiteMatcher {
         target: String,
         loader: &GeoData,
     ) -> anyhow::Result<Self> {
-        let (not, code, attr_matcher) = parse(&country_code).unwrap();
-        let list = loader.get(&code).cloned().unwrap();
+        let (not, code, attr_matcher) =
+            parse(&country_code).ok_or(Error::InvalidConfig(
+                "invalid geosite matcher, country code is empty".to_owned(),
+            ))?;
+        let list =
+            loader
+                .get(&code)
+                .cloned()
+                .ok_or(Error::InvalidConfig(format!(
+                    "geosite matcher, country code {} not found",
+                    code
+                )))?;
         let domains = list
             .domain
             .into_iter()
@@ -62,7 +72,7 @@ impl GeoSiteMatcher {
             .collect::<Vec<_>>();
 
         let matcher_group: Box<dyn DomainGroupMatcher> =
-            Box::new(SuccinctMatcherGroup::try_new(domains, not).unwrap());
+            Box::new(SuccinctMatcherGroup::try_new(domains, not)?);
         Ok(Self {
             country_code,
             target,
