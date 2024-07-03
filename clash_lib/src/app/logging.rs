@@ -1,22 +1,15 @@
 use std::io::IsTerminal;
 
 use crate::def::LogLevel;
-use opentelemetry::global;
-use opentelemetry::KeyValue;
-use opentelemetry_sdk::trace;
-use opentelemetry_sdk::Resource;
+use opentelemetry::{global, KeyValue};
+use opentelemetry_sdk::{trace, Resource};
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::debug;
-use tracing::error;
-use tracing_appender::non_blocking::NonBlocking;
-use tracing_appender::non_blocking::WorkerGuard;
+use tracing::{debug, error};
+use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
 use tracing_oslog::OsLogger;
-use tracing_subscriber::filter::Directive;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::Layer;
-use tracing_subscriber::{filter, EnvFilter};
+use tracing_subscriber::{filter, filter::Directive, prelude::*, EnvFilter, Layer};
 
 impl From<LogLevel> for filter::LevelFilter {
     fn from(level: LogLevel) -> Self {
@@ -99,13 +92,15 @@ pub fn setup_logging(
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::builder()
-        .with_default_directive(format!("clash={}", level).parse::<Directive>().unwrap())
+        .with_default_directive(
+            format!("clash={}", level).parse::<Directive>().unwrap(),
+        )
         .from_env_lossy();
 
-    let jaeger = if std::env::var("JAEGER_DISABLED").is_ok() {
-        None
-    } else {
-        global::set_text_map_propagator(opentelemetry_jaeger_propagator::Propagator::new());
+    let jaeger = if std::env::var("JAEGER_ENABLED").is_ok() {
+        global::set_text_map_propagator(
+            opentelemetry_jaeger_propagator::Propagator::new(),
+        );
         global::set_error_handler(|e| {
             error!("OpenTelemetry error: {:?}", e);
         })
@@ -113,16 +108,17 @@ pub fn setup_logging(
 
         let otlp_exporter = opentelemetry_otlp::new_exporter().tonic();
 
-        let tracer =
-            opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_exporter(otlp_exporter)
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", "clash-rs"),
-                ])))
-                .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(otlp_exporter)
+            .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                KeyValue::new("service.name", "clash-rs"),
+            ])))
+            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
     };
 
     let ios_os_log = if cfg!(target_os = "ios") {
@@ -154,10 +150,14 @@ pub fn setup_logging(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
-                .with_target(false)
+                .with_target(true)
                 .with_file(true)
                 .with_line_number(true)
-                .with_writer(move || -> Box<dyn std::io::Write> { Box::new(W(appender.clone())) })
+                .with_level(true)
+                .with_thread_ids(true)
+                .with_writer(move || -> Box<dyn std::io::Write> {
+                    Box::new(W(appender.clone()))
+                })
                 .with_writer(std::io::stdout),
         )
         .with(ios_os_log);
@@ -191,7 +191,11 @@ impl<'a> tracing::field::Visit for EventVisitor<'a> {
         println!("str {} = {}", field.name(), value);
     }
 
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+    fn record_debug(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &dyn std::fmt::Debug,
+    ) {
         if field.name() == "message" {
             self.0.push(format!("{:?}", value));
         } else {

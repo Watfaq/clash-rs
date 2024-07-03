@@ -8,8 +8,8 @@ use tracing::debug;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
-            ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
@@ -20,8 +20,8 @@ use crate::{
 
 use super::{
     utils::{
-        provider_helper::get_proxies_from_providers, DirectConnector, ProxyConnector,
-        RemoteConnector,
+        provider_helper::get_proxies_from_providers, DirectConnector,
+        ProxyConnector, RemoteConnector,
     },
     AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
@@ -80,16 +80,26 @@ impl OutboundHandler for Handler {
                 proxy.connect_stream(sess, resolver).await
             }
             _ => {
-                let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
+                let mut connector: Box<dyn RemoteConnector> =
+                    Box::new(DirectConnector::new());
                 let (proxies, last) = proxies.split_at(proxies.len() - 1);
                 for proxy in proxies {
-                    debug!("tcp relay `{}` via proxy `{}`", self.name(), proxy.name());
-                    connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
+                    debug!(
+                        "tcp relay `{}` via proxy `{}`",
+                        self.name(),
+                        proxy.name()
+                    );
+                    connector =
+                        Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
 
                 debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let s = last[0]
-                    .connect_stream_with_connector(sess, resolver, connector.as_ref())
+                    .connect_stream_with_connector(
+                        sess,
+                        resolver,
+                        connector.as_ref(),
+                    )
                     .await?;
 
                 let chained = ChainedStreamWrapper::new(s);
@@ -115,14 +125,24 @@ impl OutboundHandler for Handler {
                 proxy.connect_datagram(sess, resolver).await
             }
             _ => {
-                let mut connector: Box<dyn RemoteConnector> = Box::new(DirectConnector::new());
+                let mut connector: Box<dyn RemoteConnector> =
+                    Box::new(DirectConnector::new());
                 let (proxies, last) = proxies.split_at(proxies.len() - 1);
                 for proxy in proxies {
-                    debug!("udp relay `{}` via proxy `{}`", self.name(), proxy.name());
-                    connector = Box::new(ProxyConnector::new(proxy.clone(), connector));
+                    debug!(
+                        "udp relay `{}` via proxy `{}`",
+                        self.name(),
+                        proxy.name()
+                    );
+                    connector =
+                        Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
                 let d = last[0]
-                    .connect_datagram_with_connector(sess, resolver, connector.as_ref())
+                    .connect_datagram_with_connector(
+                        sess,
+                        resolver,
+                        connector.as_ref(),
+                    )
                     .await?;
 
                 let chained = ChainedDatagramWrapper::new(d);
@@ -143,7 +163,8 @@ impl OutboundHandler for Handler {
         m.insert("type".to_string(), Box::new(self.proto()) as _);
         m.insert(
             "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
+                as _,
         );
 
         m
@@ -155,11 +176,13 @@ mod tests {
 
     use tokio::sync::RwLock;
 
-    use crate::proxy::mocks::MockDummyProxyProvider;
-    use crate::proxy::utils::test_utils::Suite;
-    use crate::proxy::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
-    use crate::proxy::utils::test_utils::{
-        docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+    use crate::proxy::{
+        mocks::MockDummyProxyProvider,
+        utils::test_utils::{
+            consts::*,
+            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+            run_test_suites_and_cleanup, Suite,
+        },
     };
 
     use super::*;
@@ -204,8 +227,14 @@ mod tests {
             proxies
         });
 
-        let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::tcp_tests()).await
+        let handler =
+            Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        run_test_suites_and_cleanup(
+            handler,
+            get_ss_runner(port).await?,
+            Suite::tcp_tests(),
+        )
+        .await
     }
 
     #[tokio::test]
@@ -236,7 +265,13 @@ mod tests {
             proxies
         });
 
-        let handler = Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::tcp_tests()).await
+        let handler =
+            Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
+        run_test_suites_and_cleanup(
+            handler,
+            get_ss_runner(port).await?,
+            Suite::tcp_tests(),
+        )
+        .await
     }
 }

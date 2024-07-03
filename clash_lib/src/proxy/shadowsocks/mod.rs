@@ -8,14 +8,15 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use shadowsocks::{
     config::ServerType, context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket, ServerConfig,
+    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
+    ServerConfig,
 };
 
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper,
-            ChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -46,7 +47,9 @@ pub struct SimpleOBFSOption {
 impl TryFrom<HashMap<String, serde_yaml::Value>> for SimpleOBFSOption {
     type Error = crate::Error;
 
-    fn try_from(value: HashMap<String, serde_yaml::Value>) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: HashMap<String, serde_yaml::Value>,
+    ) -> Result<Self, Self::Error> {
         let host = value
             .get("host")
             .and_then(|x| x.as_str())
@@ -84,7 +87,9 @@ pub struct V2RayOBFSOption {
 impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
     type Error = crate::Error;
 
-    fn try_from(value: HashMap<String, serde_yaml::Value>) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: HashMap<String, serde_yaml::Value>,
+    ) -> Result<Self, Self::Error> {
         let host = value
             .get("host")
             .and_then(|x| x.as_str())
@@ -95,7 +100,10 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
 
         if mode != "websocket" {
-            return Err(Error::InvalidConfig(format!("invalid obfs mode: {}", mode)));
+            return Err(Error::InvalidConfig(format!(
+                "invalid obfs mode: {}",
+                mode
+            )));
         }
 
         let path = value
@@ -142,7 +150,9 @@ pub struct ShadowTlsOption {
 impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
     type Error = crate::Error;
 
-    fn try_from(value: HashMap<String, serde_yaml::Value>) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: HashMap<String, serde_yaml::Value>,
+    ) -> Result<Self, Self::Error> {
         let host = value
             .get("host")
             .and_then(|x| x.as_str())
@@ -200,14 +210,19 @@ impl Handler {
         let stream: AnyStream = match &self.opts.plugin_opts {
             Some(plugin) => match plugin {
                 OBFSOption::Simple(opts) => {
-                    tracing::warn!("simple-obfs is deprecated, please use v2ray-plugin instead");
+                    tracing::warn!(
+                        "simple-obfs is deprecated, please use v2ray-plugin instead"
+                    );
                     match opts.mode {
-                        SimpleOBFSMode::Http => {
-                            simple_obfs::SimpleObfsHTTP::new(s, opts.host.clone(), self.opts.port)
-                                .into()
-                        }
+                        SimpleOBFSMode::Http => simple_obfs::SimpleObfsHTTP::new(
+                            s,
+                            opts.host.clone(),
+                            self.opts.port,
+                        )
+                        .into(),
                         SimpleOBFSMode::Tls => {
-                            simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
+                            simple_obfs::SimpleObfsTLS::new(s, opts.host.clone())
+                                .into()
                         }
                     }
                 }
@@ -231,7 +246,12 @@ impl Handler {
                 "aes-128-gcm" => CipherKind::AES_128_GCM,
                 "aes-256-gcm" => CipherKind::AES_256_GCM,
                 "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-                _ => return Err(io::Error::new(io::ErrorKind::Other, "unsupported cipher")),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "unsupported cipher",
+                    ))
+                }
             },
         );
 
@@ -303,7 +323,12 @@ impl OutboundHandler for Handler {
                 "aes-128-gcm" => CipherKind::AES_128_GCM,
                 "aes-256-gcm" => CipherKind::AES_256_GCM,
                 "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-                _ => return Err(io::Error::new(io::ErrorKind::Other, "unsupported cipher")),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "unsupported cipher",
+                    ))
+                }
             },
         );
         let socket = new_udp_socket(
@@ -314,7 +339,8 @@ impl OutboundHandler for Handler {
         )
         .await?;
 
-        let socket = ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
+        let socket =
+            ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
         let d = OutboundDatagramShadowsocks::new(
             socket,
             (self.opts.server.to_owned(), self.opts.port),
@@ -356,7 +382,9 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner,
+    };
     use crate::proxy::utils::test_utils::{
         docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
         run_test_suites_and_cleanup, Suite,
@@ -394,7 +422,12 @@ mod tests {
         };
         let port = opts.port;
         let handler = Handler::new(opts);
-        run_test_suites_and_cleanup(handler, get_ss_runner(port).await?, Suite::all()).await
+        run_test_suites_and_cleanup(
+            handler,
+            get_ss_runner(port).await?,
+            Suite::all(),
+        )
+        .await
     }
 
     async fn get_shadowtls_runner(
@@ -426,7 +459,8 @@ mod tests {
     async fn test_shadowtls() -> anyhow::Result<()> {
         // the real port that used for communication
         let shadow_tls_port = 10002;
-        // not important, you can assign any port that is not conflict with others
+        // not important, you can assign any port that is not conflict with
+        // others
         let ss_port = 10004;
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
@@ -443,7 +477,8 @@ mod tests {
             udp: false,
         };
         let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
-        // we need to store all the runners in a container, to make sure all of them can be destroyed after the test
+        // we need to store all the runners in a container, to make sure all of
+        // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
         chained
@@ -504,20 +539,28 @@ mod tests {
         run_test_suites_and_cleanup(handler, chained, &Suite::tcp_tests()).await
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
-        test_ss_obfs_inner(SimpleOBFSMode::Http).await
+        if cfg!(target_arch = "x86_64") {
+            test_ss_obfs_inner(SimpleOBFSMode::Http).await
+        } else {
+            eprintln!("test_ss_obfs_http is ignored on non-x86_64 platform");
+            Ok(())
+        }
     }
 
-    #[cfg(target_arch = "x86_64")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .try_init();
-        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+        if cfg!(target_arch = "x86_64") {
+            let _ = tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::DEBUG)
+                .try_init();
+            test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+        } else {
+            eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");
+            Ok(())
+        }
     }
 }

@@ -43,6 +43,6 @@ impl Store for FileStore {
     }
 
     async fn copy_to(&self, #[allow(unused)] store: &mut Box<dyn Store>) {
-        //NO-OP
+        // NO-OP
     }
 }

@@ -1,16 +1,16 @@
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::proxy::{AnyInboundListener, InboundListener};
-use crate::session::{Network, Session};
-use crate::Dispatcher;
+use crate::{
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{AnyInboundListener, InboundListener},
+    session::{Network, Session},
+    Dispatcher,
+};
 use async_trait::async_trait;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use tokio::net::TcpListener;
 use tracing::warn;
 
-use super::utils::apply_tcp_options;
-use super::{http, socks};
+use super::{http, socks, utils::apply_tcp_options};
 
 pub struct Listener {
     addr: SocketAddr,
@@ -76,13 +76,25 @@ impl InboundListener for Listener {
                     };
 
                     tokio::spawn(async move {
-                        socks::handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
+                        socks::handle_tcp(
+                            &mut sess,
+                            &mut socket,
+                            dispatcher,
+                            authenticator,
+                        )
+                        .await
                     });
                 }
 
                 _ => {
                     let src = socket.peer_addr()?;
-                    http::handle_http(Box::new(socket), src, dispatcher, authenticator).await;
+                    http::handle_http(
+                        Box::new(socket),
+                        src,
+                        dispatcher,
+                        authenticator,
+                    )
+                    .await;
                 }
             }
         }

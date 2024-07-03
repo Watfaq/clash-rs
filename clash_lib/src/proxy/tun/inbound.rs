@@ -8,9 +8,9 @@ use url::Url;
 
 use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
-    common::errors::map_io_error,
+    common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, utils::Interface},
+    proxy::{datagram::UdpPacket, utils::get_outbound_interface},
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -26,18 +26,18 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: netdev::get_default_interface()
-            .map(|x| Interface::Name(x.name))
+        iface: get_outbound_interface()
+            .map(|x| crate::proxy::utils::Interface::Name(x.name))
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
                     x
                 );
-            })
-            .ok(),
+            }),
         ..Default::default()
     };
 
+    debug!("new tun TCP session assigned: {}", sess);
     dispatcher.dispatch_stream(sess, stream).await;
 }
 
@@ -58,19 +58,20 @@ async fn handle_inbound_datagram(
     // forward packets from tun to dispatcher
     let (d_tx, d_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
-    // for dispatcher - the dispatcher would receive packets from this channel, which is from the stack
-    // and send back packets to this channel, which is to the tun
+    // for dispatcher - the dispatcher would receive packets from this channel,
+    // which is from the stack and send back packets to this channel, which
+    // is to the tun
     let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
 
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
-        iface: netdev::get_default_interface()
-            .map(|x| Interface::Name(x.name))
+        iface: get_outbound_interface()
+            .map(|x| crate::proxy::utils::Interface::Name(x.name))
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
-            })
-            .ok(),
+            }),
+
         ..Default::default()
     };
 
@@ -129,6 +130,8 @@ async fn handle_inbound_datagram(
         closer.send(0).ok();
     });
 
+    debug!("tun UDP ready");
+
     let _ = futures::future::join(fut1, fut2).await;
 }
 
@@ -144,8 +147,8 @@ pub fn get_runner(
 
     let device_id = cfg.device_id;
 
-    let u =
-        Url::parse(&device_id).map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+    let u = Url::parse(&device_id)
+        .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
 
@@ -173,7 +176,8 @@ pub fn get_runner(
 
     tun_cfg.up();
 
-    let tun = tun::create_as_async(&tun_cfg).map_err(map_io_error)?;
+    let tun = tun::create_as_async(&tun_cfg)
+        .map_err(|x| new_io_error(&format!("failed to create tun device: {}", x)))?;
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
@@ -214,7 +218,9 @@ pub fn get_runner(
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt.into_bytes().into()).await {
+                        if let Err(e) =
+                            stack_sink.send(pkt.into_bytes().into()).await
+                        {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -231,7 +237,11 @@ pub fn get_runner(
 
         let dsp = dispatcher.clone();
         futs.push(Box::pin(async move {
-            while let Some((stream, local_addr, remote_addr)) = tcp_listener.next().await {
+            while let Some((stream, local_addr, remote_addr)) =
+                tcp_listener.next().await
+            {
+                debug!("new tun TCP connection: {} -> {}", local_addr, remote_addr);
+
                 tokio::spawn(handle_inbound_stream(
                     stream,
                     local_addr,

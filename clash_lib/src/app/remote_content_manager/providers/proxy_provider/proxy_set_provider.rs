@@ -11,8 +11,10 @@ use super::ProxyProvider;
 use crate::{
     app::remote_content_manager::{
         healthcheck::HealthCheck,
-        providers::{fetcher::Fetcher, ThreadSafeProviderVehicle},
-        providers::{Provider, ProviderType, ProviderVehicleType},
+        providers::{
+            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
+            ThreadSafeProviderVehicle,
+        },
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
@@ -31,10 +33,15 @@ struct Inner {
     hc: Arc<HealthCheck>,
 }
 
-type ProxyUpdater =
-    Box<dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
-type ProxyParser =
-    Box<dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>;
+type ProxyUpdater = Box<
+    dyn Fn(Vec<AnyOutboundHandler>) -> BoxFuture<'static, ()>
+        + Send
+        + Sync
+        + 'static,
+>;
+type ProxyParser = Box<
+    dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
+>;
 
 pub struct ProxySetProvider {
     fetcher: Fetcher<ProxyUpdater, ProxyParser>,
@@ -87,19 +94,29 @@ impl ProxySetProvider {
         let n = name.clone();
         let parser: ProxyParser = Box::new(
             move |input: &[u8]| -> anyhow::Result<Vec<AnyOutboundHandler>> {
-                let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
-                    Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
-                })?;
+                let scheme: ProviderScheme =
+                    serde_yaml::from_slice(input).map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "proxy provider parse error {}: {}",
+                            n, x
+                        ))
+                    })?;
                 let proxies = scheme.proxies;
                 if let Some(proxies) = proxies {
                     let proxies = proxies
                         .into_iter()
                         .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
                         .map(|x| match x {
-                            OutboundProxyProtocol::Direct => Ok(direct::Handler::new()),
-                            OutboundProxyProtocol::Reject => Ok(reject::Handler::new()),
+                            OutboundProxyProtocol::Direct => {
+                                Ok(direct::Handler::new())
+                            }
+                            OutboundProxyProtocol::Reject => {
+                                Ok(reject::Handler::new())
+                            }
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
-                            OutboundProxyProtocol::Socks5(_) => todo!("socks5 not supported yet"),
+                            OutboundProxyProtocol::Socks5(_) => {
+                                todo!("socks5 not supported yet")
+                            }
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
@@ -109,7 +126,8 @@ impl ProxySetProvider {
                         .collect::<Result<Vec<_>, _>>();
                     Ok(proxies?)
                 } else {
-                    Err(Error::InvalidConfig(format!("{}: proxies is empty", n)).into())
+                    Err(Error::InvalidConfig(format!("{}: proxies is empty", n))
+                        .into())
                 }
             },
         );
@@ -204,7 +222,9 @@ mod tests {
         remote_content_manager::{
             healthcheck::HealthCheck,
             providers::{
-                proxy_provider::{proxy_set_provider::ProxySetProvider, ProxyProvider},
+                proxy_provider::{
+                    proxy_set_provider::ProxySetProvider, ProxyProvider,
+                },
                 MockProviderVehicle, Provider, ProviderVehicleType,
             },
             ProxyManager,
@@ -250,8 +270,13 @@ proxies:
         )
         .unwrap();
 
-        let provider =
-            ProxySetProvider::new("test".to_owned(), Duration::from_secs(1), vehicle, hc).unwrap();
+        let provider = ProxySetProvider::new(
+            "test".to_owned(),
+            Duration::from_secs(1),
+            vehicle,
+            hc,
+        )
+        .unwrap();
 
         assert_eq!(provider.proxies().await.len(), 0);
 

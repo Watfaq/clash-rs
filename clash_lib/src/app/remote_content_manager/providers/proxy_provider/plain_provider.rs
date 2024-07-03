@@ -30,7 +30,9 @@ impl PlainProvider {
         let hc = Arc::new(hc);
 
         if proxies.is_empty() {
-            return Err(Error::InvalidConfig(format!("{}: proxies is empty", name)).into());
+            return Err(
+                Error::InvalidConfig(format!("{}: proxies is empty", name)).into()
+            );
         }
 
         if hc.auto() {
@@ -50,15 +52,19 @@ impl Provider for PlainProvider {
     fn name(&self) -> &str {
         &self.name
     }
+
     fn vehicle_type(&self) -> ProviderVehicleType {
         ProviderVehicleType::Compatible
     }
+
     fn typ(&self) -> ProviderType {
         ProviderType::Proxy
     }
+
     async fn initialize(&self) -> std::io::Result<()> {
         Ok(())
     }
+
     async fn update(&self) -> std::io::Result<()> {
         Ok(())
     }

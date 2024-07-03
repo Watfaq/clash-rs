@@ -1,21 +1,19 @@
-use std::io;
-use std::ptr::copy_nonoverlapping;
-use std::sync::Arc;
+use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 
 use rand::Rng;
 
 use rand::distributions::Distribution;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::client::TlsStream;
-use tokio_rustls::TlsConnector;
+use tokio_rustls::{client::TlsStream, TlsConnector};
 
-use crate::proxy::shadowsocks::ShadowTlsOption;
-use crate::proxy::AnyStream;
+use crate::proxy::{shadowsocks::ShadowTlsOption, AnyStream};
 
 use super::prelude::*;
 
-use super::stream::{ProxyTlsStream, VerifiedStream};
-use super::utils::Hmac;
+use super::{
+    stream::{ProxyTlsStream, VerifiedStream},
+    utils::Hmac,
+};
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -39,13 +37,17 @@ impl Connector {
         TlsConnector::from(Arc::new(tls_config.clone()))
     }
 
-    pub async fn wrap(opts: &ShadowTlsOption, stream: AnyStream) -> std::io::Result<AnyStream> {
+    pub async fn wrap(
+        opts: &ShadowTlsOption,
+        stream: AnyStream,
+    ) -> std::io::Result<AnyStream> {
         let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
 
         let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
         let sni_name = rustls::ServerName::try_from(opts.host.as_str())
             .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
-        let session_id_generator = move |data: &_| generate_session_id(&hamc_handshake, data);
+        let session_id_generator =
+            move |data: &_| generate_session_id(&hamc_handshake, data);
         let connector = Self::connector();
         let mut tls = connector
             .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
@@ -58,16 +60,21 @@ impl Connector {
             .as_ref()
             .map(|s| (s.server_random, s.hmac.to_owned()));
 
-        // whatever the fake_request is successful or not, we should return an error when strict mode is enabled
+        // whatever the fake_request is successful or not, we should return an
+        // error when strict mode is enabled
         if (!authorized || maybe_server_random_and_hamc.is_none()) && opts.strict {
-            tracing::warn!("shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not supported, perform fake request");
+            tracing::warn!(
+                "shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not \
+                 supported, perform fake request"
+            );
 
             tls.get_mut().0.fake_request = true;
             fake_request(tls).await?;
 
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake request"
+                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, \
+                 fake request"
                     .to_string(),
             ));
         }
@@ -77,14 +84,17 @@ impl Connector {
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
-                    "server random and hmac not extracted from handshake, fail to connect"
+                    "server random and hmac not extracted from handshake, fail to \
+                     connect"
                         .to_string(),
                 ));
             }
         };
 
-        let hmac_client = Hmac::new(&opts.password, (&server_random, "C".as_bytes()));
-        let hmac_server = Hmac::new(&opts.password, (&server_random, "S".as_bytes()));
+        let hmac_client =
+            Hmac::new(&opts.password, (&server_random, "C".as_bytes()));
+        let hmac_server =
+            Hmac::new(&opts.password, (&server_random, "S".as_bytes()));
 
         let verified_stream = VerifiedStream::new(
             tls.into_inner().0.raw,
@@ -134,8 +144,8 @@ async fn fake_request<S: tokio::io::AsyncRead + AsyncWrite + Unpin>(
 ) -> std::io::Result<()> {
     const HEADER: &[u8; 207] = b"GET / HTTP/1.1\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36\nAccept: gzip, deflate, br\nConnection: Close\nCookie: sessionid=";
     const FAKE_REQUEST_LENGTH_RANGE: (usize, usize) = (16, 64);
-    let cnt =
-        rand::thread_rng().gen_range(FAKE_REQUEST_LENGTH_RANGE.0..FAKE_REQUEST_LENGTH_RANGE.1);
+    let cnt = rand::thread_rng()
+        .gen_range(FAKE_REQUEST_LENGTH_RANGE.0..FAKE_REQUEST_LENGTH_RANGE.1);
     let mut buffer = Vec::with_capacity(cnt + HEADER.len() + 1);
 
     buffer.extend_from_slice(HEADER);

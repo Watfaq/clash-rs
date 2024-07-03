@@ -130,7 +130,8 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         }
 
         if let Some(c) = node.get_child(parts.last().unwrap().to_owned()) {
-            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
+            {
                 if n.data.is_some() {
                     return Some(n);
                 }
@@ -138,7 +139,8 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         }
 
         if let Some(c) = node.get_child(WILDCARD) {
-            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into()) {
+            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
+            {
                 if n.data.is_some() {
                     return Some(n);
                 }
@@ -242,7 +244,9 @@ mod tests {
             tree.insert(d, Arc::new(idx));
         }
 
-        let assert_fn = |k: &str| -> Arc<usize> { tree.search(k).unwrap().data.clone().unwrap() };
+        let assert_fn = |k: &str| -> Arc<usize> {
+            tree.search(k).unwrap().data.clone().unwrap()
+        };
 
         assert_eq!(assert_fn("test.dev"), Arc::new(0));
         assert_eq!(assert_fn("foo.bar.dev"), Arc::new(0));

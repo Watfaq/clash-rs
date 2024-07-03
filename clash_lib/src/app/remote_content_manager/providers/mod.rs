@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use erased_serde::Serialize;
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::io;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    io,
+    sync::Arc,
+};
 
 pub mod fetcher;
 pub mod file_vehicle;

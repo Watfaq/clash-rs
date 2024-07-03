@@ -48,7 +48,8 @@ pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
 
-    connector_map: Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
+    connector_map:
+        Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
 }
 
 impl ProxyManager {
@@ -168,12 +169,18 @@ impl ProxyManager {
             let resp = TimedFuture::new(client.request(req), None);
 
             let delay: u16 =
-                match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp).await {
+                match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp)
+                    .await
+                {
                     Ok((res, delay)) => match res {
                         Ok(res) => {
-                            let delay = delay.as_millis().try_into().expect("delay is too large");
+                            let delay = delay
+                                .as_millis()
+                                .try_into()
+                                .expect("delay is too large");
                             trace!(
-                                "urltest for proxy {} with url {} returned response {} in {}ms",
+                                "urltest for proxy {} with url {} returned \
+                                 response {} in {}ms",
                                 &name,
                                 url,
                                 res.status(),
@@ -182,11 +189,16 @@ impl ProxyManager {
                             Ok(delay)
                         }
                         Err(e) => {
-                            debug!("urltest for proxy {} with url {} failed: {}", &name, url, e);
+                            debug!(
+                                "urltest for proxy {} with url {} failed: {}",
+                                &name, url, e
+                            );
                             Err(new_io_error(format!("{}: {}", url, e).as_str()))
                         }
                     },
-                    Err(_) => Err(new_io_error(format!("timeout for {}", url).as_str())),
+                    Err(_) => {
+                        Err(new_io_error(format!("timeout for {}", url).as_str()))
+                    }
                 }?;
 
             let req2 = Request::get(url)
@@ -196,16 +208,20 @@ impl ProxyManager {
                 .unwrap();
             let resp2 = TimedFuture::new(client.request(req2), None);
 
-            let mean_delay: u16 =
-                match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp2).await {
-                    Ok((res, delay2)) => match res {
-                        Ok(_) => ((delay2.as_millis() + delay as u128) / 2)
-                            .try_into()
-                            .expect("delay is too large"),
-                        Err(_) => 0,
-                    },
+            let mean_delay: u16 = match tokio::time::timeout(
+                timeout.unwrap_or(default_timeout),
+                resp2,
+            )
+            .await
+            {
+                Ok((res, delay2)) => match res {
+                    Ok(_) => ((delay2.as_millis() + delay as u128) / 2)
+                        .try_into()
+                        .expect("delay is too large"),
                     Err(_) => 0,
-                };
+                },
+                Err(_) => 0,
+            };
 
             Ok((delay, mean_delay))
         };
@@ -239,7 +255,10 @@ mod tests {
     use futures::TryFutureExt;
 
     use crate::{
-        app::{dispatcher::ChainedStreamWrapper, dns::MockClashResolver, remote_content_manager},
+        app::{
+            dispatcher::ChainedStreamWrapper, dns::MockClashResolver,
+            remote_content_manager,
+        },
         config::internal::proxy::PROXY_DIRECT,
         proxy::{direct, mocks::MockDummyOutboundHandler},
     };
@@ -247,12 +266,13 @@ mod tests {
     #[tokio::test]
     async fn test_proxy_manager_alive() {
         let mut mock_resolver = MockClashResolver::new();
-        mock_resolver
-            .expect_resolve()
-            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67)))));
+        mock_resolver.expect_resolve().returning(|_, _| {
+            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67))))
+        });
         mock_resolver.expect_ipv6().return_const(false);
 
-        let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
+        let manager =
+            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
         let mock_handler = direct::Handler::new();
 
@@ -291,11 +311,12 @@ mod tests {
     #[tokio::test]
     async fn test_proxy_manager_timeout() {
         let mut mock_resolver = MockClashResolver::new();
-        mock_resolver
-            .expect_resolve()
-            .returning(|_, _| Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))));
+        mock_resolver.expect_resolve().returning(|_, _| {
+            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))))
+        });
 
-        let manager = remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
+        let manager =
+            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler

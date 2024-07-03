@@ -13,7 +13,8 @@ pub async fn get_proxies_from_providers(
             provider.read().await.touch().await;
         }
 
-        let mut proxies_from_provider = provider.read().await.proxies().await.to_vec();
+        let mut proxies_from_provider =
+            provider.read().await.proxies().await.to_vec();
         proxies.append(&mut proxies_from_provider);
     }
     proxies

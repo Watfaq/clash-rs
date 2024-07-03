@@ -55,7 +55,8 @@ impl AsyncWrite for HTTPObfs {
                 )
                 .as_bytes(),
             );
-            buffer.put_slice(format!("Content-Length: {}\r\n", buf.len()).as_bytes());
+            buffer
+                .put_slice(format!("Content-Length: {}\r\n", buf.len()).as_bytes());
             buffer.put_slice(b"\r\n");
             buffer.put_slice(buf);
 
@@ -90,7 +91,8 @@ impl AsyncRead for HTTPObfs {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         let pin = self.get_mut();
-        // as long as the buffer is not empty, we should return the data in the buffer first
+        // as long as the buffer is not empty, we should return the data in the
+        // buffer first
         if !pin.read_buf.is_empty() {
             let to_read = std::cmp::min(buf.remaining(), pin.read_buf.len());
             if to_read == 0 {
@@ -105,7 +107,8 @@ impl AsyncRead for HTTPObfs {
 
         if pin.first_response {
             // TODO: move this static buffer size to global constant
-            // maximum packet size of vmess/shadowsocks is about 16 KiB so define a buffer of 20 KiB to reduce the memory of each TCP relay
+            // maximum packet size of vmess/shadowsocks is about 16 KiB so
+            // define a buffer of 20 KiB to reduce the memory of each TCP relay
             let mut b = [0; 20 * 1024];
             let mut b = tokio::io::ReadBuf::new(&mut b);
             match Pin::new(&mut pin.inner).poll_read(cx, &mut b) {

@@ -1,0 +1,17 @@
+edition = "2021"
+reorder_modules = true
+reorder_impl_items = true
+reorder_imports = true
+format_strings = true
+format_code_in_doc_comments = true
+format_macro_matchers = true
+condense_wildcard_suffixes = true
+normalize_comments = true
+use_try_shorthand = true
+wrap_comments = true
+use_field_init_shorthand = true
+error_on_line_overflow = false
+tab_spaces = 4
+enum_discrim_align_threshold = 20
+max_width = 85
+imports_granularity = "Crate"

@@ -1,30 +1,36 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
 use rand::prelude::SliceRandom;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Duration;
-use std::{net, sync::Arc};
+use std::{
+    net,
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, warn};
 
 use hickory_proto::{op, rr};
 
-use crate::app::profile::ThreadSafeCacheFile;
-use crate::common::mmdb::Mmdb;
-use crate::config::def::DNSMode;
-use crate::dns::helper::make_clients;
-use crate::dns::ThreadSafeDNSClient;
-use crate::dns_debug;
-use crate::{common::trie, Error};
-
-use super::fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns};
-use super::system::SystemResolver;
-use super::{
-    filters::{DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter, IPNetFilter},
-    Config,
+use crate::{
+    app::profile::ThreadSafeCacheFile,
+    common::{mmdb::Mmdb, trie},
+    config::def::DNSMode,
+    dns::{helper::make_clients, ThreadSafeDNSClient},
+    dns_debug, Error,
 };
-use super::{ClashResolver, ResolverKind, ThreadSafeDNSResolver};
+
+use super::{
+    fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
+    filters::{
+        DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
+        IPNetFilter,
+    },
+    system::SystemResolver,
+    ClashResolver, Config, ResolverKind, ThreadSafeDNSResolver,
+};
 
 static TTL: Duration = Duration::from_secs(60);
 
@@ -79,7 +85,9 @@ impl Resolver {
         mmdb: Arc<Mmdb>,
     ) -> ThreadSafeDNSResolver {
         if !cfg.enable {
-            return Arc::new(SystemResolver::new().expect("failed to create system resolver"));
+            return Arc::new(
+                SystemResolver::new().expect("failed to create system resolver"),
+            );
         }
 
         let default_resolver = Arc::new(Resolver {
@@ -97,10 +105,20 @@ impl Resolver {
 
         let r = Resolver {
             ipv6: AtomicBool::new(cfg.ipv6),
-            main: make_clients(cfg.nameserver.clone(), Some(default_resolver.clone())).await,
+            main: make_clients(
+                cfg.nameserver.clone(),
+                Some(default_resolver.clone()),
+            )
+            .await,
             hosts: cfg.hosts.clone(),
             fallback: if !cfg.fallback.is_empty() {
-                Some(make_clients(cfg.fallback.clone(), Some(default_resolver.clone())).await)
+                Some(
+                    make_clients(
+                        cfg.fallback.clone(),
+                        Some(default_resolver.clone()),
+                    )
+                    .await,
+                )
             } else {
                 None
             },
@@ -120,15 +138,15 @@ impl Resolver {
             {
                 let mut filters = vec![];
 
-                filters.push(
-                    Box::new(GeoIPFilter::new(&cfg.fallback_filter.geo_ip_code, mmdb))
-                        as Box<dyn FallbackIPFilter>,
-                );
+                filters.push(Box::new(GeoIPFilter::new(
+                    &cfg.fallback_filter.geo_ip_code,
+                    mmdb,
+                )) as Box<dyn FallbackIPFilter>);
 
                 if let Some(ipcidr) = &cfg.fallback_filter.ip_cidr {
                     for subnet in ipcidr {
-                        filters
-                            .push(Box::new(IPNetFilter::new(*subnet)) as Box<dyn FallbackIPFilter>)
+                        filters.push(Box::new(IPNetFilter::new(*subnet))
+                            as Box<dyn FallbackIPFilter>)
                     }
                 }
 
@@ -137,7 +155,9 @@ impl Resolver {
                 None
             },
             lru_cache: Some(Arc::new(RwLock::new(
-                lru_time_cache::LruCache::with_expiry_duration_and_capacity(TTL, 4096),
+                lru_time_cache::LruCache::with_expiry_duration_and_capacity(
+                    TTL, 4096,
+                ),
             ))),
             policy: if !cfg.nameserver_policy.is_empty() {
                 let mut p = trie::StringTrie::new();
@@ -145,7 +165,11 @@ impl Resolver {
                     p.insert(
                         domain.as_str(),
                         Arc::new(
-                            make_clients(vec![ns.to_owned()], Some(default_resolver.clone())).await,
+                            make_clients(
+                                vec![ns.to_owned()],
+                                Some(default_resolver.clone()),
+                            )
+                            .await,
                         ),
                     );
                 }
@@ -175,7 +199,9 @@ impl Resolver {
                     .unwrap(),
                 ))),
                 DNSMode::RedirHost => {
-                    warn!("dns redir-host is not supported and will not do anything");
+                    warn!(
+                        "dns redir-host is not supported and will not do anything"
+                    );
                     None
                 }
                 _ => None,
@@ -195,7 +221,11 @@ impl Resolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            debug!("DNS client {} resolve error: {}", c.id(), x.to_string())
+                            debug!(
+                                "DNS client {} resolve error: {}",
+                                c.id(),
+                                x.to_string()
+                            )
                         })
                         .await
                 }
@@ -256,7 +286,10 @@ impl Resolver {
         }
     }
 
-    async fn exchange_no_cache(&self, message: &op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange_no_cache(
+        &self,
+        message: &op::Message,
+    ) -> anyhow::Result<op::Message> {
         let q = message.query().unwrap();
 
         let query = async move {
@@ -319,14 +352,21 @@ impl Resolver {
         None
     }
 
-    async fn ip_exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
+    async fn ip_exchange(
+        &self,
+        message: &op::Message,
+    ) -> anyhow::Result<op::Message> {
         if let Some(matched) = self.match_policy(message) {
             return Resolver::batch_exchange(matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message).await;
+            return Resolver::batch_exchange(
+                self.fallback.as_ref().unwrap(),
+                message,
+            )
+            .await;
         }
 
         let main_query = Resolver::batch_exchange(&self.main, message);
@@ -335,7 +375,8 @@ impl Resolver {
             return main_query.await;
         }
 
-        let fallback_query = Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message);
+        let fallback_query =
+            Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message);
 
         if let Ok(main_result) = main_query.await {
             let ip_list = Resolver::ip_list_of_message(&main_result);
@@ -379,7 +420,8 @@ impl Resolver {
     // helpers
     fn is_ip_request(q: &op::Query) -> bool {
         q.query_class() == rr::DNSClass::IN
-            && (q.query_type() == rr::RecordType::A || q.query_type() == rr::RecordType::AAAA)
+            && (q.query_type() == rr::RecordType::A
+                || q.query_type() == rr::RecordType::AAAA)
     }
 
     fn domain_name_of_message(m: &op::Message) -> Option<String> {
@@ -391,7 +433,8 @@ impl Resolver {
         m.answers()
             .iter()
             .filter(|r| {
-                r.record_type() == rr::RecordType::A || r.record_type() == rr::RecordType::AAAA
+                r.record_type() == rr::RecordType::A
+                    || r.record_type() == rr::RecordType::AAAA
             })
             .map(|r| match r.data() {
                 Some(data) => match data {
@@ -408,7 +451,11 @@ impl Resolver {
 #[async_trait]
 impl ClashResolver for Resolver {
     #[instrument(skip(self))]
-    async fn resolve(&self, host: &str, enhanced: bool) -> anyhow::Result<Option<net::IpAddr>> {
+    async fn resolve(
+        &self,
+        host: &str,
+        enhanced: bool,
+    ) -> anyhow::Result<Option<net::IpAddr>> {
         match self.ipv6.load(Relaxed) {
             true => {
                 let fut1 = self
@@ -432,6 +479,7 @@ impl ClashResolver for Resolver {
                 .map(|ip| ip.map(net::IpAddr::from)),
         }
     }
+
     async fn resolve_v4(
         &self,
         host: &str,
@@ -558,14 +606,17 @@ impl ClashResolver for Resolver {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::dns_client::{DNSNetMode, DnsClient, Opts};
-    use crate::dns::{Resolver, ThreadSafeDNSClient};
+    use crate::dns::{
+        dns_client::{DNSNetMode, DnsClient, Opts},
+        Resolver, ThreadSafeDNSClient,
+    };
     use hickory_client::{client, op};
-    use hickory_proto::rr;
-    use hickory_proto::udp::UdpClientStream;
-    use hickory_proto::xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer};
-    use std::sync::Arc;
-    use std::time::Duration;
+    use hickory_proto::{
+        rr,
+        udp::UdpClientStream,
+        xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
+    };
+    use std::{sync::Arc, time::Duration};
     use tokio::net::UdpSocket;
 
     #[tokio::test]

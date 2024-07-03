@@ -46,13 +46,18 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::Ws(WsOption {
-                                path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                path: x
+                                    .path
+                                    .as_ref()
+                                    .map(|x| x.to_owned())
+                                    .unwrap_or_default(),
                                 headers: x
                                     .headers
                                     .as_ref()
                                     .map(|x| x.to_owned())
                                     .unwrap_or_default(),
-                                max_early_data: x.max_early_data.unwrap_or_default() as usize,
+                                max_early_data: x.max_early_data.unwrap_or_default()
+                                    as usize,
                                 early_data_header_name: x
                                     .early_data_header_name
                                     .as_ref()
@@ -73,7 +78,11 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                                     .as_ref()
                                     .map(|x| x.to_owned())
                                     .unwrap_or(vec![s.server.to_owned()]),
-                                path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                path: x
+                                    .path
+                                    .as_ref()
+                                    .map(|x| x.to_owned())
+                                    .unwrap_or_default(),
                             })
                         })
                         .ok_or(Error::InvalidConfig(
@@ -84,7 +93,11 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             VmessTransport::Grpc(GrpcOption {
-                                host: s.server_name.as_ref().unwrap_or(&s.server).to_owned(),
+                                host: s
+                                    .server_name
+                                    .as_ref()
+                                    .unwrap_or(&s.server)
+                                    .to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()
@@ -96,7 +109,10 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),
                         )),
-                    _ => Err(Error::InvalidConfig(format!("unsupported network: {}", x))),
+                    _ => Err(Error::InvalidConfig(format!(
+                        "unsupported network: {}",
+                        x
+                    ))),
                 })
                 .transpose()?,
             tls: match s.tls.unwrap_or_default() {
@@ -121,7 +137,10 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                             "ws" => Ok(vec!["http/1.1".to_owned()]),
                             "http" => Ok(vec![]),
                             "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
-                            _ => Err(Error::InvalidConfig(format!("unsupported network: {}", x))),
+                            _ => Err(Error::InvalidConfig(format!(
+                                "unsupported network: {}",
+                                x
+                            ))),
                         })
                         .transpose()?,
                 }),

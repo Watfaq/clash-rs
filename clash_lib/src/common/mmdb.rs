@@ -3,9 +3,8 @@ use std::{fs, net::IpAddr, path::Path};
 use maxminddb::geoip2;
 use tracing::{debug, info, warn};
 
-use crate::common::utils::download;
 use crate::{
-    common::{errors::map_io_error, http::HttpClient},
+    common::{errors::map_io_error, http::HttpClient, utils::download},
     Error,
 };
 
@@ -34,9 +33,9 @@ impl Mmdb {
         if !mmdb_file.exists() {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
-                download(url, &mmdb_file, http_client)
-                    .await
-                    .map_err(|x| Error::InvalidConfig(format!("mmdb download failed: {}", x)))?;
+                download(url, &mmdb_file, http_client).await.map_err(|x| {
+                    Error::InvalidConfig(format!("mmdb download failed: {}", x))
+                })?;
             } else {
                 return Err(Error::InvalidConfig(format!(
                     "mmdb `{}` not found and mmdb_download_url is not set",
@@ -60,9 +59,14 @@ impl Mmdb {
                     fs::remove_file(&mmdb_file)?;
                     if let Some(url) = download_url.as_ref() {
                         info!("downloading mmdb from {}", url);
-                        download(url, &mmdb_file, http_client).await.map_err(|x| {
-                            Error::InvalidConfig(format!("mmdb download failed: {}", x))
-                        })?;
+                        download(url, &mmdb_file, http_client).await.map_err(
+                            |x| {
+                                Error::InvalidConfig(format!(
+                                    "mmdb download failed: {}",
+                                    x
+                                ))
+                            },
+                        )?;
                         Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
                             Error::InvalidConfig(format!(
                                 "cant open mmdb `{}`: {}",

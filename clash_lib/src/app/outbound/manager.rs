@@ -1,39 +1,38 @@
 use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
-use tracing::error;
-use tracing::warn;
+use tracing::{debug, error, warn};
 
 use tracing::info;
 
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::app::profile::ThreadSafeCacheFile;
-use crate::app::remote_content_manager::healthcheck::HealthCheck;
-use crate::app::remote_content_manager::providers::file_vehicle;
-use crate::app::remote_content_manager::providers::http_vehicle;
-use crate::app::remote_content_manager::ProxyManager;
+use crate::app::{
+    dns::ThreadSafeDNSResolver,
+    profile::ThreadSafeCacheFile,
+    remote_content_manager::{
+        healthcheck::HealthCheck,
+        providers::{file_vehicle, http_vehicle},
+        ProxyManager,
+    },
+};
 
-use crate::app::remote_content_manager::providers::proxy_provider::PlainProvider;
-use crate::app::remote_content_manager::providers::proxy_provider::ProxySetProvider;
-use crate::app::remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider;
-use crate::config::internal::proxy::PROXY_GLOBAL;
-use crate::config::internal::proxy::{OutboundProxyProviderDef, PROXY_DIRECT, PROXY_REJECT};
-use crate::proxy::fallback;
-use crate::proxy::loadbalance;
-use crate::proxy::selector;
+use crate::{
+    app::remote_content_manager::providers::proxy_provider::{
+        PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
+    },
+    config::internal::proxy::{
+        OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
+    },
+    proxy::{fallback, loadbalance, selector},
+};
 
-use crate::proxy::selector::ThreadSafeSelectorControl;
-use crate::proxy::urltest;
-use crate::proxy::{reject, relay};
 use crate::{
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
-    proxy::{direct, AnyOutboundHandler},
+    proxy::{
+        direct, reject, relay, selector::ThreadSafeSelectorControl, urltest,
+        AnyOutboundHandler,
+    },
     Error,
 };
 
@@ -108,7 +107,10 @@ impl OutboundManager {
     }
 
     // API handles start
-    pub fn get_selector_control(&self, name: &str) -> Option<ThreadSafeSelectorControl> {
+    pub fn get_selector_control(
+        &self,
+        name: &str,
+    ) -> Option<ThreadSafeSelectorControl> {
         self.selector_control.get(name).cloned()
     }
 
@@ -188,11 +190,13 @@ impl OutboundManager {
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
-                    handlers.insert(PROXY_DIRECT.to_string(), direct::Handler::new());
+                    handlers
+                        .insert(PROXY_DIRECT.to_string(), direct::Handler::new());
                 }
 
                 OutboundProxyProtocol::Reject => {
-                    handlers.insert(PROXY_REJECT.to_string(), reject::Handler::new());
+                    handlers
+                        .insert(PROXY_REJECT.to_string(), reject::Handler::new());
                 }
 
                 OutboundProxyProtocol::Ss(s) => {
@@ -249,7 +253,9 @@ impl OutboundManager {
                 .map(|x| {
                     handlers
                         .get(x)
-                        .ok_or_else(|| Error::InvalidConfig(format!("proxy {} not found", x)))
+                        .ok_or_else(|| {
+                            Error::InvalidConfig(format!("proxy {} not found", x))
+                        })
                         .cloned()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -264,8 +270,9 @@ impl OutboundManager {
             .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
 
             let pd = Arc::new(RwLock::new(
-                PlainProvider::new(name.to_owned(), proxies, hc)
-                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?,
+                PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
+                    Error::InvalidConfig(format!("invalid provider config: {}", x))
+                })?,
             ));
 
             proxy_providers.push(pd.clone());
@@ -309,7 +316,9 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
+                                .unwrap_or_else(|| {
+                                    panic!("provider {} not found", provider_name)
+                                })
                                 .clone();
                             providers.push(provider);
                         }
@@ -357,7 +366,9 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
+                                .unwrap_or_else(|| {
+                                    panic!("provider {} not found", provider_name)
+                                })
                                 .clone();
                             providers.push(provider);
                         }
@@ -408,7 +419,9 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
+                                .unwrap_or_else(|| {
+                                    panic!("provider {} not found", provider_name)
+                                })
                                 .clone();
                             providers.push(provider);
                         }
@@ -458,7 +471,9 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
+                                .unwrap_or_else(|| {
+                                    panic!("provider {} not found", provider_name)
+                                })
                                 .clone();
                             providers.push(provider);
                         }
@@ -507,14 +522,17 @@ impl OutboundManager {
                         for provider_name in provider_names {
                             let provider = provider_registry
                                 .get(provider_name)
-                                .unwrap_or_else(|| panic!("provider {} not found", provider_name))
+                                .unwrap_or_else(|| {
+                                    panic!("provider {} not found", provider_name)
+                                })
                                 .clone();
 
                             providers.push(provider);
                         }
                     }
 
-                    let stored_selection = cache_store.get_selected(&proto.name).await;
+                    let stored_selection =
+                        cache_store.get_selected(&proto.name).await;
 
                     let selector = selector::Handler::new(
                         selector::HandlerOptions {
@@ -527,7 +545,8 @@ impl OutboundManager {
                     .await;
 
                     handlers.insert(proto.name.clone(), Arc::new(selector.clone()));
-                    selector_control.insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
+                    selector_control
+                        .insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
                 }
             }
         }
@@ -578,9 +597,9 @@ impl OutboundManager {
             match provider {
                 OutboundProxyProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
-                        http.url
-                            .parse::<Uri>()
-                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
+                        http.url.parse::<Uri>().unwrap_or_else(|_| {
+                            panic!("invalid provider url: {}", http.url)
+                        }),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),
@@ -592,14 +611,21 @@ impl OutboundManager {
                         http.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
                     )
-                    .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+                    .map_err(|e| {
+                        Error::InvalidConfig(format!("invalid hc config {}", e))
+                    })?;
                     let provider = ProxySetProvider::new(
                         name.clone(),
                         Duration::from_secs(http.interval),
                         Arc::new(vehicle),
                         hc,
                     )
-                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
+                    .map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "invalid provider config: {}",
+                            x
+                        ))
+                    })?;
 
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
@@ -617,7 +643,9 @@ impl OutboundManager {
                         file.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
                     )
-                    .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+                    .map_err(|e| {
+                        Error::InvalidConfig(format!("invalid hc config {}", e))
+                    })?;
 
                     let provider = ProxySetProvider::new(
                         name.clone(),
@@ -625,7 +653,12 @@ impl OutboundManager {
                         Arc::new(vehicle),
                         hc,
                     )
-                    .map_err(|x| Error::InvalidConfig(format!("invalid provider config: {}", x)))?;
+                    .map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "invalid provider config: {}",
+                            x
+                        ))
+                    })?;
 
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
@@ -638,7 +671,11 @@ impl OutboundManager {
             match p.initialize().await {
                 Ok(_) => {}
                 Err(err) => {
-                    error!("failed to initialize proxy provider {}: {}", p.name(), err);
+                    error!(
+                        "failed to initialize proxy provider {}: {}",
+                        p.name(),
+                        err
+                    );
                 }
             }
             info!("initialized provider {}", p.name());

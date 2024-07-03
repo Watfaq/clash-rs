@@ -1,27 +1,24 @@
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{response::Redirect, routing::get, Router};
 
-use http::header;
-use http::Method;
+use http::{header, Method};
 use tokio::sync::{broadcast::Sender, Mutex};
 use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
-use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+    trace::TraceLayer,
+};
 use tracing::{error, info};
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
-use super::dispatcher::StatisticsManager;
-use super::dns::ThreadSafeDNSResolver;
-use super::logging::LogEvent;
-use super::profile::ThreadSafeCacheFile;
 use super::{
-    dispatcher, inbound::manager::ThreadSafeInboundManager,
-    outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter,
+    dispatcher, dispatcher::StatisticsManager, dns::ThreadSafeDNSResolver,
+    inbound::manager::ThreadSafeInboundManager, logging::LogEvent,
+    outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+    router::ThreadSafeRouter,
 };
 
 mod handlers;
@@ -104,7 +101,10 @@ pub fn get_api_runner(
             if let Some(external_ui) = controller_cfg.external_ui {
                 app = app
                     .route("/ui", get(|| async { Redirect::to("/ui/") }))
-                    .nest_service("/ui/", ServeDir::new(PathBuf::from(cwd).join(external_ui)));
+                    .nest_service(
+                        "/ui/",
+                        ServeDir::new(PathBuf::from(cwd).join(external_ui)),
+                    );
             }
 
             let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();

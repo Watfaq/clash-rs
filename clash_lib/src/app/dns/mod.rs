@@ -70,8 +70,11 @@ pub type ThreadSafeDNSResolver = Arc<dyn ClashResolver>;
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait ClashResolver: Sync + Send {
-    async fn resolve(&self, host: &str, enhanced: bool)
-        -> anyhow::Result<Option<std::net::IpAddr>>;
+    async fn resolve(
+        &self,
+        host: &str,
+        enhanced: bool,
+    ) -> anyhow::Result<Option<std::net::IpAddr>>;
     async fn resolve_v4(
         &self,
         host: &str,

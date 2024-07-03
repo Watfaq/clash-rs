@@ -43,7 +43,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
+    pub fn new(
+        opts: HandlerOptions,
+        providers: Vec<ThreadSafeProxyProvider>,
+    ) -> Self {
         let strategy_fn = match opts.strategy {
             LoadBalanceStrategy::ConsistentHashing => strategy_consistent_hashring(),
             LoadBalanceStrategy::RoundRobin => strategy_rr(),
@@ -135,7 +138,8 @@ impl OutboundHandler for Handler {
 
         m.insert(
             "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
+                as _,
         );
         m
     }

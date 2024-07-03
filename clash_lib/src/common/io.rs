@@ -1,9 +1,11 @@
 /// copy of https://github.com/eycorsican/leaf/blob/a77a1e497ae034f3a2a89c8628d5e7ebb2af47f0/leaf/src/common/io.rs
 use std::future::Future;
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -114,8 +116,9 @@ impl CopyBuffer {
                     Poll::Ready(Ok(_)) => (),
                     Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                     Poll::Pending => {
-                        // Try flushing when the reader has no progress to avoid deadlock
-                        // when the reader depends on buffered writer.
+                        // Try flushing when the reader has no progress to avoid
+                        // deadlock when the reader
+                        // depends on buffered writer.
                         if self.need_flush {
                             ready!(writer.as_mut().poll_flush(cx))?;
                             self.need_flush = false;
@@ -137,7 +140,8 @@ impl CopyBuffer {
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
                 let me = &mut *self;
-                let i = ready!(writer.as_mut().poll_write(cx, &me.buf[me.pos..me.cap]))?;
+                let i =
+                    ready!(writer.as_mut().poll_write(cx, &me.buf[me.pos..me.cap]))?;
                 if i == 0 {
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
@@ -222,14 +226,17 @@ where
                             continue;
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(Err(CopyBidirectionalError::LeftClosed(err)))
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::LeftClosed(err),
+                            ))
                         }
                         Poll::Pending => {
                             if let Some(delay) = a_to_b_delay {
                                 match delay.as_mut().poll(cx) {
                                     Poll::Ready(()) => {
-                                        *a_to_b =
-                                            TransferState::ShuttingDown(buf.amount_transfered());
+                                        *a_to_b = TransferState::ShuttingDown(
+                                            buf.amount_transfered(),
+                                        );
                                         continue;
                                     }
                                     Poll::Pending => (),
@@ -244,12 +251,15 @@ where
                         Poll::Ready(Ok(())) => {
                             *a_to_b_count += *count;
                             *a_to_b = TransferState::Done;
-                            b_to_a_delay
-                                .replace(Box::pin(tokio::time::sleep(*b_to_a_timeout_duration)));
+                            b_to_a_delay.replace(Box::pin(tokio::time::sleep(
+                                *b_to_a_timeout_duration,
+                            )));
                             continue;
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(Err(CopyBidirectionalError::LeftClosed(err)))
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::LeftClosed(err),
+                            ))
                         }
                         Poll::Pending => (),
                     }
@@ -266,14 +276,17 @@ where
                             continue;
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(Err(CopyBidirectionalError::RightClosed(err)))
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::RightClosed(err),
+                            ))
                         }
                         Poll::Pending => {
                             if let Some(delay) = b_to_a_delay {
                                 match delay.as_mut().poll(cx) {
                                     Poll::Ready(()) => {
-                                        *b_to_a =
-                                            TransferState::ShuttingDown(buf.amount_transfered());
+                                        *b_to_a = TransferState::ShuttingDown(
+                                            buf.amount_transfered(),
+                                        );
                                         continue;
                                     }
                                     Poll::Pending => (),
@@ -288,12 +301,15 @@ where
                         Poll::Ready(Ok(())) => {
                             *b_to_a_count += *count;
                             *b_to_a = TransferState::Done;
-                            a_to_b_delay
-                                .replace(Box::pin(tokio::time::sleep(*a_to_b_timeout_duration)));
+                            a_to_b_delay.replace(Box::pin(tokio::time::sleep(
+                                *a_to_b_timeout_duration,
+                            )));
                             continue;
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(Err(CopyBidirectionalError::RightClosed(err)))
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::RightClosed(err),
+                            ))
                         }
                         Poll::Pending => (),
                     }

@@ -1,31 +1,31 @@
-use crate::app::dispatcher::tracked::TrackedDatagram;
-use crate::app::dispatcher::tracked::TrackedStream;
-use crate::app::outbound::manager::ThreadSafeOutboundManager;
-use crate::app::router::ThreadSafeRouter;
-use crate::common::io::copy_buf_bidirectional_with_timeout;
-use crate::config::def::RunMode;
-use crate::config::internal::proxy::PROXY_DIRECT;
-use crate::config::internal::proxy::PROXY_GLOBAL;
-use crate::proxy::datagram::UdpPacket;
-use crate::proxy::AnyInboundDatagram;
-use crate::session::Session;
-use futures::SinkExt;
-use futures::StreamExt;
-use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::Duration;
-use std::time::Instant;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
-use tracing::info_span;
-use tracing::instrument;
-use tracing::trace;
-use tracing::Instrument;
-use tracing::{debug, error, info, warn};
+use crate::{
+    app::{
+        dispatcher::tracked::{TrackedDatagram, TrackedStream},
+        outbound::manager::ThreadSafeOutboundManager,
+        router::ThreadSafeRouter,
+    },
+    common::io::copy_buf_bidirectional_with_timeout,
+    config::{
+        def::RunMode,
+        internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
+    },
+    proxy::{datagram::UdpPacket, AnyInboundDatagram},
+    session::Session,
+};
+use futures::{SinkExt, StreamExt};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    sync::RwLock,
+    task::JoinHandle,
+};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 use crate::app::dns::ThreadSafeDNSResolver;
 
@@ -88,8 +88,10 @@ impl Dispatcher {
                         match host {
                             Some(host) => {
                                 let mut sess = sess;
-                                sess.destination =
-                                    crate::session::SocksAddr::Domain(host, addr.port());
+                                sess.destination = crate::session::SocksAddr::Domain(
+                                    host,
+                                    addr.port(),
+                                );
                                 sess
                             }
                             None => {
@@ -101,7 +103,7 @@ impl Dispatcher {
                         sess
                     }
                 }
-                crate::session::SocksAddr::Domain(_, _) => sess,
+                crate::session::SocksAddr::Domain(..) => sess,
             }
         } else {
             sess
@@ -129,8 +131,13 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let mut rhs =
-                    TrackedStream::new(rhs, self.manager.clone(), sess.clone(), rule).await;
+                let mut rhs = TrackedStream::new(
+                    rhs,
+                    self.manager.clone(),
+                    sess.clone(),
+                    rule,
+                )
+                .await;
                 match copy_buf_bidirectional_with_timeout(
                     &mut lhs,
                     &mut rhs,
@@ -151,49 +158,60 @@ impl Dispatcher {
                         );
                     }
                     Err(err) => match err {
-                        crate::common::io::CopyBidirectionalError::LeftClosed(err) => {
-                            match err.kind() {
-                                std::io::ErrorKind::UnexpectedEof
-                                | std::io::ErrorKind::ConnectionReset
-                                | std::io::ErrorKind::BrokenPipe => {
-                                    debug!(
-                                        "connection {} closed with error {} by local",
-                                        sess, err
-                                    );
-                                }
-                                _ => {
-                                    warn!("connection {} closed with error {} by local", sess, err);
-                                }
+                        crate::common::io::CopyBidirectionalError::LeftClosed(
+                            err,
+                        ) => match err.kind() {
+                            std::io::ErrorKind::UnexpectedEof
+                            | std::io::ErrorKind::ConnectionReset
+                            | std::io::ErrorKind::BrokenPipe => {
+                                debug!(
+                                    "connection {} closed with error {} by local",
+                                    sess, err
+                                );
                             }
-                        }
-                        crate::common::io::CopyBidirectionalError::RightClosed(err) => {
+                            _ => {
+                                warn!(
+                                    "connection {} closed with error {} by local",
+                                    sess, err
+                                );
+                            }
+                        },
+                        crate::common::io::CopyBidirectionalError::RightClosed(
+                            err,
+                        ) => match err.kind() {
+                            std::io::ErrorKind::UnexpectedEof
+                            | std::io::ErrorKind::ConnectionReset
+                            | std::io::ErrorKind::BrokenPipe => {
+                                debug!(
+                                    "connection {} closed with error {} by remote",
+                                    sess, err
+                                );
+                            }
+                            _ => {
+                                warn!(
+                                    "connection {} closed with error {} by remote",
+                                    sess, err
+                                );
+                            }
+                        },
+                        crate::common::io::CopyBidirectionalError::Other(err) => {
                             match err.kind() {
                                 std::io::ErrorKind::UnexpectedEof
                                 | std::io::ErrorKind::ConnectionReset
                                 | std::io::ErrorKind::BrokenPipe => {
                                     debug!(
-                                        "connection {} closed with error {} by remote",
+                                        "connection {} closed with error {}",
                                         sess, err
                                     );
                                 }
                                 _ => {
                                     warn!(
-                                        "connection {} closed with error {} by remote",
+                                        "connection {} closed with error {}",
                                         sess, err
                                     );
                                 }
                             }
                         }
-                        crate::common::io::CopyBidirectionalError::Other(err) => match err.kind() {
-                            std::io::ErrorKind::UnexpectedEof
-                            | std::io::ErrorKind::ConnectionReset
-                            | std::io::ErrorKind::BrokenPipe => {
-                                debug!("connection {} closed with error {}", sess, err);
-                            }
-                            _ => {
-                                warn!("connection {} closed with error {}", sess, err);
-                            }
-                        },
                     },
                 }
             }
@@ -226,7 +244,8 @@ impl Dispatcher {
         let manager = self.manager.clone();
 
         let (mut local_w, mut local_r) = udp_inbound.split();
-        let (remote_receiver_w, mut remote_receiver_r) = tokio::sync::mpsc::channel(32);
+        let (remote_receiver_w, mut remote_receiver_r) =
+            tokio::sync::mpsc::channel(32);
 
         let s = sess.clone();
         let ss = sess.clone();
@@ -250,11 +269,17 @@ impl Dispatcher {
                                         trace!("fake ip resolved to {}", host);
                                         let mut sess = sess;
                                         sess.destination =
-                                            crate::session::SocksAddr::Domain(host, addr.port());
+                                            crate::session::SocksAddr::Domain(
+                                                host,
+                                                addr.port(),
+                                            );
                                         sess
                                     }
                                     None => {
-                                        error!("failed to reverse lookup fake ip: {}", ip);
+                                        error!(
+                                            "failed to reverse lookup fake ip: {}",
+                                            ip
+                                        );
                                         continue;
                                     }
                                 }
@@ -262,7 +287,7 @@ impl Dispatcher {
                                 sess
                             }
                         }
-                        crate::session::SocksAddr::Domain(_, _) => sess,
+                        crate::session::SocksAddr::Domain(..) => sess,
                     }
                 } else {
                     sess
@@ -287,28 +312,38 @@ impl Dispatcher {
                 let remote_receiver_w = remote_receiver_w.clone();
 
                 let mgr = outbound_manager.clone();
-                let handler = mgr.get_outbound(&outbound_name).unwrap_or_else(|| {
-                    debug!("unknown rule: {}, fallback to direct", outbound_name);
-                    mgr.get_outbound(PROXY_DIRECT).unwrap()
-                });
+                let handler =
+                    mgr.get_outbound(&outbound_name).unwrap_or_else(|| {
+                        debug!(
+                            "unknown rule: {}, fallback to direct",
+                            outbound_name
+                        );
+                        mgr.get_outbound(PROXY_DIRECT).unwrap()
+                    });
 
                 match outbound_handle_guard
                     .get_outbound_sender_mut(
                         &outbound_name,
-                        packet.src_addr.clone().must_into_socket_addr(), // this is only expected to be socket addr as it's from local udp
+                        packet.src_addr.clone().must_into_socket_addr(), /* this is only
+                                                                          * expected to be
+                                                                          * socket addr as it's
+                                                                          * from local
+                                                                          * udp */
                     )
                     .await
                 {
                     None => {
                         debug!("building {} outbound datagram connecting", sess);
-                        let outbound_datagram =
-                            match handler.connect_datagram(&sess, resolver.clone()).await {
-                                Ok(v) => v,
-                                Err(err) => {
-                                    error!("failed to connect outbound: {}", err);
-                                    continue;
-                                }
-                            };
+                        let outbound_datagram = match handler
+                            .connect_datagram(&sess, resolver.clone())
+                            .await
+                        {
+                            Ok(v) => v,
+                            Err(err) => {
+                                error!("failed to connect outbound: {}", err);
+                                continue;
+                            }
+                        };
 
                         debug!("{} outbound datagram connected", sess);
 
@@ -332,11 +367,17 @@ impl Dispatcher {
                                 packet.src_addr = sess.destination.clone();
                                 packet.dst_addr = sess.source.into();
 
-                                debug!("UDP NAT for packet: {:?}, session: {}", packet, sess);
+                                debug!(
+                                    "UDP NAT for packet: {:?}, session: {}",
+                                    packet, sess
+                                );
                                 match remote_receiver_w.send(packet).await {
                                     Ok(_) => {}
                                     Err(err) => {
-                                        warn!("failed to send packet to local: {}", err);
+                                        warn!(
+                                            "failed to send packet to local: {}",
+                                            err
+                                        );
                                     }
                                 }
                             }
@@ -347,7 +388,10 @@ impl Dispatcher {
                                 match remote_w.send(packet).await {
                                     Ok(_) => {}
                                     Err(err) => {
-                                        warn!("failed to send packet to remote: {}", err);
+                                        warn!(
+                                            "failed to send packet to remote: {}",
+                                            err
+                                        );
                                     }
                                 }
                             }
@@ -371,6 +415,7 @@ impl Dispatcher {
                         };
                     }
                     Some(handle) => match handle.send(packet).await {
+                        // TODO: need to reset when GLOBAL select is changed
                         Ok(_) => {
                             debug!("reusing {} sent to remote", sess);
                         }
@@ -533,16 +578,16 @@ impl OutboundHandleMap {
         outbound_name: &str,
         src_addr: SocketAddr,
     ) -> Option<OutboundPacketSender> {
-        self.0
-            .get_mut(&(outbound_name.to_owned(), src_addr))
-            .map(|(_, _, sender, last)| {
+        self.0.get_mut(&(outbound_name.to_owned(), src_addr)).map(
+            |(_, _, sender, last)| {
                 trace!(
                     "updating last access time for outbound {:?}",
                     (outbound_name, src_addr)
                 );
                 *last = Instant::now();
                 sender.clone()
-            })
+            },
+        )
     }
 }
 
@@ -552,7 +597,7 @@ impl Drop for OutboundHandleMap {
             "dropping inner outbound handle map that has {} sessions",
             self.0.len()
         );
-        for (_, (recv_handle, send_handle, _, _)) in self.0.drain() {
+        for (_, (recv_handle, send_handle, ..)) in self.0.drain() {
             recv_handle.abort();
             send_handle.abort();
         }

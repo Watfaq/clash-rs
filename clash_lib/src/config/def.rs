@@ -1,7 +1,5 @@
 use crate::Error;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
@@ -73,8 +71,8 @@ impl Display for LogLevel {
 
 ///   # ipv6: false # when the false, response to AAAA questions will be empty
 
-///   # These nameservers are used to resolve the DNS nameserver hostnames below.
-///   # Specify IP addresses only
+///   # These nameservers are used to resolve the DNS nameserver hostnames
+/// below.   # Specify IP addresses only
 ///   default-nameserver:
 ///     - 114.114.114.114
 ///     - 8.8.8.8
@@ -113,9 +111,7 @@ impl Display for LogLevel {
 ///   store-fake-ip: false
 
 /// proxy-groups:
-///   - name: "relay"
-///     type: relay
-///     proxies:
+///   - name: "relay" type: relay proxies:
 ///       - "plain-vmess"
 ///       - "ws-vmess"
 ///       - "auto"
@@ -124,32 +120,24 @@ impl Display for LogLevel {
 ///       - "select"
 ///       - DIRECT
 
-///   - name: "relay-one"
-///     type: relay
-///     use:
+///   - name: "relay-one" type: relay use:
 ///       - "file-provider"
 
-///   - name: "auto"
-///     type: url-test
-///     use:
+///   - name: "auto" type: url-test use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
 ///     url: "http://www.gstatic.com/generate_204"
 ///     interval: 300
 
-///   - name: "fallback-auto"
-///     type: fallback
-///     use:
+///   - name: "fallback-auto" type: fallback use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
 ///     url: "http://www.gstatic.com/generate_204"
 ///     interval: 300
 
-///   - name: "load-balance"
-///     type: load-balance
-///     use:
+///   - name: "load-balance" type: load-balance use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
@@ -157,96 +145,39 @@ impl Display for LogLevel {
 ///     url: "http://www.gstatic.com/generate_204"
 ///     interval: 300
 
-///   - name: select
-///     type: select
-///     use:
+///   - name: select type: select use:
 ///       - "file-provider"
 
-///   - name: test 🌏
-///     type: select
-///     use:
+///   - name: test 🌏 type: select use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
 
 /// proxies:
-///   - name: plain-vmess
-///     type: vmess
-///     server: 10.0.0.13
-///     port: 16823
-///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
-///     alterId: 0
-///     cipher: auto
-///     udp: true
+///   - name: plain-vmess type: vmess server: 10.0.0.13 port: 16823 uuid:
+///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
 ///     skip-cert-verify: true
-///   - name: ws-vmess
-///     type: vmess
-///     server: 10.0.0.13
-///     port: 16824
-///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
-///     alterId: 0
-///     cipher: auto
-///     udp: true
-///     skip-cert-verify: true
-///     network: ws
-///     ws-opts:
-///       path: /api/v3/download.getFile
-///       headers:
-///         Host: www.amazon.com
+///   - name: ws-vmess type: vmess server: 10.0.0.13 port: 16824 uuid:
+///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
+///     skip-cert-verify: true network: ws ws-opts: path:
+///     /api/v3/download.getFile headers: Host: www.amazon.com
 
-///   - name: tls-vmess
-///     type: vmess
-///     server: 10.0.0.13
-///     port: 8443
-///     uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
-///     alterId: 0
-///     cipher: auto
-///     udp: true
-///     skip-cert-verify: true
-///     tls: true
+///   - name: tls-vmess type: vmess server: 10.0.0.13 port: 8443 uuid:
+///     23ad6b10-8d1a-40f7-8ad0-e3e35cd38297 alterId: 0 cipher: auto udp: true
+///     skip-cert-verify: true tls: true
 
-///   - name: h2-vmess
-///     type: vmess
-///     server: 10.0.0.13
-///     port: 8444
-///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
-///     alterId: 0
-///     cipher: auto
-///     udp: true
-///     skip-cert-verify: true
-///     tls: true
-///     network: h2
-///     h2-opts:
-///       path: /ray
+///   - name: h2-vmess type: vmess server: 10.0.0.13 port: 8444 uuid:
+///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
+///     skip-cert-verify: true tls: true network: h2 h2-opts: path: /ray
 
-///   - name: vmess-altid
-///     type: vmess
-///     server: tw-1.ac.laowanxiang.com
-///     port: 153
-///     uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687
-///     alterId: 64
-///     cipher: auto
-///     udp: true
-///     network: ws
-///     ws-opts:
-///       path: /api/v3/download.getFile
-///       headers:
-///         Host: 5607b9d187e655736f563fee87d7283994721.laowanxiang.com
-///   - name: "ss-simple"
-///     type: ss
-///     server: 10.0.0.13
-///     port: 8388
-///     cipher: aes-256-gcm
-///     password: "password"
-///     udp: true
-///   - name: "trojan"
-///     type: trojan
-///     server: 10.0.0.13
-///     port: 9443
-///     password: password1
-///     udp: true
-///     # sni: example.com # aka server name
-///     alpn:
+///   - name: vmess-altid type: vmess server: tw-1.ac.laowanxiang.com port: 153
+///     uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687 alterId: 64 cipher: auto udp:
+///     true network: ws ws-opts: path: /api/v3/download.getFile headers: Host:
+///     5607b9d187e655736f563fee87d7283994721.laowanxiang.com
+///   - name: "ss-simple" type: ss server: 10.0.0.13 port: 8388 cipher:
+///     aes-256-gcm password: "password" udp: true
+///   - name: "trojan" type: trojan server: 10.0.0.13 port: 9443 password:
+///     password1 udp: true # sni: example.com # aka server name alpn:
 ///       - h2
 ///       - http/1.1
 ///     skip-cert-verify: true
@@ -308,9 +239,11 @@ pub struct Config {
     pub allow_lan: bool,
     /// The address that the inbound listens on
     /// # Note
-    /// - setting this to `*` will listen on all interfaces, which is essentially the same as setting it to `0.0.0.0`
+    /// - setting this to `*` will listen on all interfaces, which is
+    ///   essentially the same as setting it to `0.0.0.0`
     /// - setting this to non local IP will enable `allow_lan` automatically
-    /// - and if you don't want `allow_lan` to be enabled, you should set this to `localhost` or `127.1`
+    /// - and if you don't want `allow_lan` to be enabled, you should set this
+    ///   to `localhost` or `127.1`
     pub bind_address: String,
     /// Clash router working mode
     /// Either `rule`, `global` or `direct`
@@ -395,7 +328,10 @@ impl FromStr for Config {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_yaml::from_str(s).map_err(|x| {
-            Error::InvalidConfig(format!("cound not parse config content {}: {}", s, x))
+            Error::InvalidConfig(format!(
+                "cound not parse config content {}: {}",
+                s, x
+            ))
         })
     }
 }
@@ -449,8 +385,8 @@ pub enum DNSListen {
 }
 
 /// DNS client/server settings
-/// This section is optional. When not present, the DNS server will be disabled and system DNS config will be used
-/// # Example
+/// This section is optional. When not present, the DNS server will be disabled
+/// and system DNS config will be used # Example
 /// ```yaml
 /// dns:
 ///   enable: true
@@ -478,7 +414,8 @@ pub struct DNS {
     pub fallback: Vec<String>,
     /// Fallback DNS filter
     pub fallback_filter: FallbackFilter,
-    /// DNS server listening address. If not present, the DNS server will be disabled.
+    /// DNS server listening address. If not present, the DNS server will be
+    /// disabled.
     pub listen: Option<DNSListen>,
     /// Whether to use fake IP addresses
     pub enhanced_mode: DNSMode,
@@ -505,7 +442,10 @@ impl Default for DNS {
             enhanced_mode: Default::default(),
             fake_ip_range: String::from("198.18.0.1/16"),
             fake_ip_filter: Default::default(),
-            default_nameserver: vec![String::from("114.114.114.114"), String::from("8.8.8.8")],
+            default_nameserver: vec![
+                String::from("114.114.114.114"),
+                String::from("8.8.8.8"),
+            ],
             nameserver_policy: Default::default(),
         }
     }
@@ -1050,7 +990,8 @@ rules:
   - MATCH,auto
   "###;
 
-        let des: Config = serde_yaml::from_str(example_cfg).expect("should parse yaml");
+        let des: Config =
+            serde_yaml::from_str(example_cfg).expect("should parse yaml");
         assert_eq!(des.port.expect("invalid port"), 7890);
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
         assert_eq!(des.proxy.len(), 14);

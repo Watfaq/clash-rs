@@ -81,7 +81,9 @@ impl RuleType {
 impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuleType::Domain { domain, target } => write!(f, "DOMAIN,{},{}", domain, target),
+            RuleType::Domain { domain, target } => {
+                write!(f, "DOMAIN,{},{}", domain, target)
+            }
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
             RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
             RuleType::GeoIP { .. } => write!(f, "GEOIP"),
