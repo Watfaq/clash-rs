@@ -1,13 +1,14 @@
 use async_trait::async_trait;
+use hickory_resolver::{
+    name_server::{GenericConnector, TokioRuntimeProvider},
+    AsyncResolver,
+};
 use rand::seq::IteratorRandom;
 use tracing::warn;
 
 use super::{ClashResolver, ResolverKind};
 
-#[cfg(target_feature = "crt-static")]
-pub struct SystemResolver(tokio::sync::Mutex<()>);
-#[cfg(not(target_feature = "crt-static"))]
-pub struct SystemResolver;
+pub struct SystemResolver(AsyncResolver<GenericConnector<TokioRuntimeProvider>>);
 
 /// SystemResolver is a resolver that uses libc getaddrinfo to resolve
 /// hostnames.
@@ -18,15 +19,11 @@ impl SystemResolver {
              resolver if you need ipv6 support."
         );
 
-        #[cfg(target_feature = "crt-static")]
-        {
-            Ok(Self(tokio::sync::Mutex::new(())))
-        }
+        let resolver: AsyncResolver<
+            GenericConnector<hickory_resolver::name_server::TokioRuntimeProvider>,
+        > = hickory_resolver::AsyncResolver::tokio_from_system_conf()?;
 
-        #[cfg(not(target_feature = "crt-static"))]
-        {
-            Ok(Self)
-        }
+        Ok(Self(resolver))
     }
 }
 
@@ -37,15 +34,9 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
-        #[cfg(target_feature = "crt-static")]
-        let _g = self.0.lock().await;
-
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .collect::<Vec<_>>();
+        let response = self.0.lookup_ip(host).await?;
         Ok(response
             .iter()
-            .map(|x| x.ip())
             .filter(|x| self.ipv6() || x.is_ipv4())
             .choose(&mut rand::thread_rng()))
     }
@@ -55,20 +46,8 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
-        #[cfg(target_feature = "crt-static")]
-        let _g = self.0.lock().await;
-
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .collect::<Vec<_>>();
-        Ok(response
-            .iter()
-            .map(|x| x.ip())
-            .filter_map(|ip| match ip {
-                std::net::IpAddr::V4(ip) => Some(ip),
-                _ => None,
-            })
-            .choose(&mut rand::thread_rng()))
+        let response = self.0.ipv4_lookup(host).await?;
+        Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
     async fn resolve_v6(
@@ -76,20 +55,8 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
-        #[cfg(target_feature = "crt-static")]
-        let _g = self.0.lock().await;
-
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .collect::<Vec<_>>();
-        Ok(response
-            .iter()
-            .map(|x| x.ip())
-            .filter_map(|ip| match ip {
-                std::net::IpAddr::V6(ip) => Some(ip),
-                _ => None,
-            })
-            .choose(&mut rand::thread_rng()))
+        let response = self.0.ipv6_lookup(host).await?;
+        Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
     async fn exchange(
@@ -100,6 +67,7 @@ impl ClashResolver for SystemResolver {
     }
 
     fn ipv6(&self) -> bool {
+        // TODO: support ipv6
         false
     }
 
