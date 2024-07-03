@@ -114,7 +114,6 @@ mod tests {
     use crate::app::dns::{ClashResolver, SystemResolver};
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_system_resolver_with_bad_labels() {
         let resolver = TokioAsyncResolver::tokio_from_system_conf().unwrap();
         let response = resolver.lookup_ip("some_under_store.com").await;
@@ -127,7 +126,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_system_resolver_default_config() {
         let resolver = SystemResolver::new().unwrap();
         let response = resolver.resolve("www.google.com", false).await.unwrap();
