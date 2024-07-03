@@ -1,29 +1,30 @@
-use crate::app::router::rules::domain::Domain;
-use crate::app::router::rules::domain_keyword::DomainKeyword;
-use crate::app::router::rules::domain_suffix::DomainSuffix;
-use crate::app::router::rules::ipcidr::IpCidr;
-use crate::app::router::rules::ruleset::RuleSet;
-use crate::Error;
+use crate::{
+    app::router::rules::{
+        domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
+        ipcidr::IpCidr, ruleset::RuleSet,
+    },
+    Error,
+};
 
-use crate::common::mmdb::Mmdb;
-use crate::config::internal::config::RuleProviderDef;
-use crate::config::internal::rule::RuleType;
-use crate::session::{Session, SocksAddr};
+use crate::{
+    common::mmdb::Mmdb,
+    config::internal::{config::RuleProviderDef, rule::RuleType},
+    session::{Session, SocksAddr},
+};
 
 use crate::app::router::rules::final_::Final;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
 use tracing::{debug, error, info};
 
-use super::dns::ThreadSafeDNSResolver;
-use super::remote_content_manager::providers::rule_provider::{
-    RuleProviderImpl, ThreadSafeRuleProvider,
+use super::{
+    dns::ThreadSafeDNSResolver,
+    remote_content_manager::providers::{
+        file_vehicle, http_vehicle,
+        rule_provider::{RuleProviderImpl, ThreadSafeRuleProvider},
+    },
 };
-use super::remote_content_manager::providers::{file_vehicle, http_vehicle};
 
 mod rules;
 pub use rules::RuleMatcher;
@@ -62,7 +63,9 @@ impl Router {
         Self {
             rules: rules
                 .into_iter()
-                .map(|r| map_rule_type(r, mmdb.clone(), Some(&rule_provider_registry)))
+                .map(|r| {
+                    map_rule_type(r, mmdb.clone(), Some(&rule_provider_registry))
+                })
                 .collect(),
             dns_resolver,
             rule_provider_registry,
@@ -77,7 +80,10 @@ impl Router {
         let mut sess_dup = sess.clone();
 
         for r in self.rules.iter() {
-            if sess.destination.is_domain() && r.should_resolve_ip() && !sess_resolved {
+            if sess.destination.is_domain()
+                && r.should_resolve_ip()
+                && !sess_resolved
+            {
                 debug!(
                     "rule `{r}` resolving domain {} locally",
                     sess.destination.domain().unwrap()
@@ -87,7 +93,8 @@ impl Router {
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
                 {
-                    sess_dup.destination = SocksAddr::from((ip, sess.destination.port()));
+                    sess_dup.destination =
+                        SocksAddr::from((ip, sess.destination.port()));
                     sess_resolved = true;
                 }
             }
@@ -117,9 +124,9 @@ impl Router {
             match provider {
                 RuleProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
-                        http.url
-                            .parse::<Uri>()
-                            .unwrap_or_else(|_| panic!("invalid provider url: {}", http.url)),
+                        http.url.parse::<Uri>().unwrap_or_else(|_| {
+                            panic!("invalid provider url: {}", http.url)
+                        }),
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),
@@ -165,7 +172,11 @@ impl Router {
                         info!("rule provider {} initialized", p.name());
                     }
                     Err(err) => {
-                        error!("failed to initialize rule provider {}: {}", p.name(), err);
+                        error!(
+                            "failed to initialize rule provider {}: {}",
+                            p.name(),
+                            err
+                        );
                     }
                 }
             });
@@ -266,10 +277,14 @@ pub fn map_rule_type(
                 target,
                 rule_provider_registry
                     .get(&rule_set)
-                    .unwrap_or_else(|| panic!("rule provider {} not found", rule_set))
+                    .unwrap_or_else(|| {
+                        panic!("rule provider {} not found", rule_set)
+                    })
                     .clone(),
             )),
-            None => unreachable!("you shouldn't next rule-set within another rule-set"),
+            None => {
+                unreachable!("you shouldn't next rule-set within another rule-set")
+            }
         },
         RuleType::Match { target } => Box::new(Final { target }),
     }

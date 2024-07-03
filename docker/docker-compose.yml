@@ -23,6 +23,7 @@ services:
       - type: bind
         source: ./v2ray/key.pem
         target: /etc/v2ray/v2ray.key
+    restart: unless-stopped
 
   nginx:
     image: nginx
@@ -37,12 +38,4 @@ services:
       - type: bind
         source: ./v2ray/key.pem
         target: /etc/v2ray/v2ray.key
-
-  wireguard:
-    image: linuxserver/wireguard:latest
-    network_mode: "host"
-    cap_add:
-      - NET_ADMIN
-    volumes:
-      - ./wg/config:/config
     restart: unless-stopped

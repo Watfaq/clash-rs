@@ -28,16 +28,27 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             port: s.port,
             uuid: s.uuid.to_owned(),
             password: s.password.to_owned(),
-            udp_relay_mode: s.udp_relay_mode.to_owned().unwrap_or("native".to_string()),
+            udp_relay_mode: s
+                .udp_relay_mode
+                .to_owned()
+                .unwrap_or("native".to_string())
+                .as_str()
+                .into(),
             disable_sni: s.disable_sni.unwrap_or(false),
             alpn: s
                 .alpn
                 .clone()
                 .map(|v| v.into_iter().map(|alpn| alpn.into_bytes()).collect())
                 .unwrap_or_default(),
-            heartbeat_interval: Duration::from_millis(s.heartbeat_interval.unwrap_or(3000)),
-            reduce_rtt: s.reduce_rtt.unwrap_or(false) || s.fast_open.unwrap_or(false),
-            request_timeout: Duration::from_millis(s.request_timeout.unwrap_or(8000)),
+            heartbeat_interval: Duration::from_millis(
+                s.heartbeat_interval.unwrap_or(3000),
+            ),
+            reduce_rtt: s.reduce_rtt.unwrap_or(false)
+                || s.fast_open.unwrap_or(false),
+            request_timeout: Duration::from_millis(
+                s.request_timeout.unwrap_or(4000),
+            ),
+            idle_timeout: Duration::from_millis(s.request_timeout.unwrap_or(4000)),
             congestion_controller: s
                 .congestion_controller
                 .clone()
@@ -52,8 +63,10 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
             gc_interval: Duration::from_millis(s.gc_interval.unwrap_or(3000)),
             gc_lifetime: Duration::from_millis(s.gc_lifetime.unwrap_or(15000)),
             send_window: s.send_window.unwrap_or(8 * 1024 * 1024 * 2),
-            receive_window: VarInt::from_u64(s.receive_window.unwrap_or(8 * 1024 * 1024))
-                .unwrap_or(VarInt::MAX),
+            receive_window: VarInt::from_u64(
+                s.receive_window.unwrap_or(8 * 1024 * 1024),
+            )
+            .unwrap_or(VarInt::MAX),
         })
     }
 }

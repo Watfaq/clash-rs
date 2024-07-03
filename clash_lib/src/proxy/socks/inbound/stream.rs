@@ -1,18 +1,23 @@
-use crate::common::auth::ThreadSafeAuthenticator;
-use crate::common::errors::new_io_error;
-use crate::proxy::datagram::InboundUdp;
-use crate::proxy::socks::inbound::datagram::Socks5UDPCodec;
-use crate::proxy::socks::inbound::{auth_methods, response_code, socks_command, SOCKS5_VERSION};
-use crate::proxy::utils::new_udp_socket;
-use crate::session::{Network, Session, SocksAddr, Type};
-use crate::Dispatcher;
+use crate::{
+    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
+    proxy::{
+        datagram::InboundUdp,
+        socks::inbound::{
+            auth_methods, datagram::Socks5UDPCodec, response_code, socks_command,
+            SOCKS5_VERSION,
+        },
+        utils::new_udp_socket,
+    },
+    session::{Network, Session, SocksAddr, Type},
+    Dispatcher,
+};
 use bytes::{BufMut, BytesMut};
 
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::{io, str};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use std::{io, net::SocketAddr, str, sync::Arc};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 use tokio_util::udp::UdpFramed;
 use tracing::{instrument, trace, warn};
 
@@ -38,7 +43,10 @@ pub async fn handle_tcp<'a>(
 
         let n_methods = buf[1] as usize;
         if n_methods == 0 {
-            return Err(io::Error::new(io::ErrorKind::Other, "malformed SOCKS data"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "malformed SOCKS data",
+            ));
         }
 
         buf.resize(n_methods, 0);
@@ -58,34 +66,34 @@ pub async fn handle_tcp<'a>(
             response[1] = auth_methods::USER_PASS;
             s.write_all(&response).await?;
 
-            /*
-            +----+------+----------+------+----------+
-            |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
-            +----+------+----------+------+----------+
-            | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
-            +----+------+----------+------+----------+
-              */
+            // +----+------+----------+------+----------+
+            // |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+            // +----+------+----------+------+----------+
+            // | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+            // +----+------+----------+------+----------+
             buf.resize(2, 0);
             s.read_exact(&mut buf[..]).await?;
             let ulen = buf[1] as usize;
             buf.resize(ulen, 0);
             s.read_exact(&mut buf[..]).await?;
-            let user = unsafe { str::from_utf8_unchecked(buf.to_owned().as_ref()).to_owned() };
+            let user = unsafe {
+                str::from_utf8_unchecked(buf.to_owned().as_ref()).to_owned()
+            };
 
             s.read_exact(&mut buf[..1]).await?;
             let plen = buf[0] as usize;
             buf.resize(plen, 0);
             s.read_exact(&mut buf[..]).await?;
-            let pass = unsafe { str::from_utf8_unchecked(buf.to_owned().as_ref()).to_owned() };
+            let pass = unsafe {
+                str::from_utf8_unchecked(buf.to_owned().as_ref()).to_owned()
+            };
 
             match authenticator.authenticate(&user, &pass) {
-                /*
-                +----+--------+
-                |VER | STATUS |
-                +----+--------+
-                | 1  |   1    |
-                +----+--------+
-                 */
+                // +----+--------+
+                // |VER | STATUS |
+                // +----+--------+
+                // | 1  |   1    |
+                // +----+--------+
                 true => {
                     response = [0x1, response_code::SUCCEEDED];
                     s.write_all(&response).await?;
@@ -94,7 +102,10 @@ pub async fn handle_tcp<'a>(
                     response = [0x1, response_code::FAILURE];
                     s.write_all(&response).await?;
                     s.shutdown().await?;
-                    return Err(io::Error::new(io::ErrorKind::Other, "auth failure"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "auth failure",
+                    ));
                 }
             }
         } else if methods.contains(&auth_methods::NO_AUTH) {
@@ -174,8 +185,8 @@ pub async fn handle_tcp<'a>(
             let dispatcher_cloned = dispatcher.clone();
 
             tokio::spawn(async move {
-                let handle =
-                    dispatcher_cloned.dispatch_datagram(sess, Box::new(InboundUdp::new(framed)));
+                let handle = dispatcher_cloned
+                    .dispatch_datagram(sess, Box::new(InboundUdp::new(framed)));
                 close_listener.await.ok();
                 handle.send(0).ok();
             });

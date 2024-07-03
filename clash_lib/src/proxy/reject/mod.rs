@@ -1,12 +1,15 @@
-use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream};
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::config::internal::proxy::PROXY_REJECT;
-use crate::proxy::{AnyOutboundHandler, OutboundHandler};
-use crate::session::Session;
+use crate::{
+    app::{
+        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dns::ThreadSafeDNSResolver,
+    },
+    config::internal::proxy::PROXY_REJECT,
+    proxy::{AnyOutboundHandler, OutboundHandler},
+    session::Session,
+};
 use async_trait::async_trait;
 use serde::Serialize;
-use std::io;
-use std::sync::Arc;
+use std::{io, sync::Arc};
 
 use super::{ConnectorType, OutboundType};
 

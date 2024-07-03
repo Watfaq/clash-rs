@@ -40,7 +40,9 @@ impl Mmdb {
                 info!("downloading mmdb from {}", url);
                 Self::download(url, &mmdb_file, http_client)
                     .await
-                    .map_err(|x| Error::InvalidConfig(format!("mmdb download failed: {}", x)))?;
+                    .map_err(|x| {
+                        Error::InvalidConfig(format!("mmdb download failed: {}", x))
+                    })?;
             } else {
                 return Err(Error::InvalidConfig(format!(
                     "mmdb `{}` not found and mmdb_download_url is not set",
@@ -64,11 +66,14 @@ impl Mmdb {
                     fs::remove_file(&mmdb_file)?;
                     if let Some(url) = download_url.as_ref() {
                         info!("downloading mmdb from {}", url);
-                        Self::download(url, &mmdb_file, http_client)
-                            .await
-                            .map_err(|x| {
-                                Error::InvalidConfig(format!("mmdb download failed: {}", x))
-                            })?;
+                        Self::download(url, &mmdb_file, http_client).await.map_err(
+                            |x| {
+                                Error::InvalidConfig(format!(
+                                    "mmdb download failed: {}",
+                                    x
+                                ))
+                            },
+                        )?;
                         Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
                             Error::InvalidConfig(format!(
                                 "cant open mmdb `{}`: {}",
@@ -93,7 +98,11 @@ impl Mmdb {
     }
 
     #[async_recursion]
-    async fn download<P>(url: &str, path: P, http_client: &HttpClient) -> anyhow::Result<()>
+    async fn download<P>(
+        url: &str,
+        path: P,
+        http_client: &HttpClient,
+    ) -> anyhow::Result<()>
     where
         P: AsRef<Path> + std::marker::Send,
     {
@@ -117,9 +126,11 @@ impl Mmdb {
         }
 
         if !res.status().is_success() {
-            return Err(
-                Error::InvalidConfig(format!("mmdb download failed: {}", res.status())).into(),
-            );
+            return Err(Error::InvalidConfig(format!(
+                "mmdb download failed: {}",
+                res.status()
+            ))
+            .into());
         }
 
         debug!("downloading mmdb to {}", path.as_ref().to_string_lossy());

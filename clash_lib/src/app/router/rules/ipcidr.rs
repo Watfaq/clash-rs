@@ -1,5 +1,7 @@
-use crate::app::router::rules::RuleMatcher;
-use crate::session::{Session, SocksAddr};
+use crate::{
+    app::router::rules::RuleMatcher,
+    session::{Session, SocksAddr},
+};
 
 #[derive(Clone)]
 pub struct IpCidr {
@@ -27,10 +29,11 @@ impl RuleMatcher for IpCidr {
             true => self.ipnet.contains(&sess.source.ip()),
             false => match &sess.destination {
                 SocksAddr::Ip(ip) => self.ipnet.contains(&ip.ip()),
-                SocksAddr::Domain(_, _) => false,
+                SocksAddr::Domain(..) => false,
             },
         }
     }
+
     fn target(&self) -> &str {
         self.target.as_str()
     }

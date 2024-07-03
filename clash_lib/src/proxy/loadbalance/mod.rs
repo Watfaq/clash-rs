@@ -20,7 +20,7 @@ use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -28,8 +28,6 @@ pub struct HandlerOptions {
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,
-
-    pub common_option: CommonOption,
 }
 
 struct HandlerInner {
@@ -45,7 +43,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: HandlerOptions, providers: Vec<ThreadSafeProxyProvider>) -> Self {
+    pub fn new(
+        opts: HandlerOptions,
+        providers: Vec<ThreadSafeProxyProvider>,
+    ) -> Self {
         let strategy_fn = match opts.strategy {
             LoadBalanceStrategy::ConsistentHashing => strategy_consistent_hashring(),
             LoadBalanceStrategy::RoundRobin => strategy_rr(),
@@ -137,7 +138,8 @@ impl OutboundHandler for Handler {
 
         m.insert(
             "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
+                as _,
         );
         m
     }

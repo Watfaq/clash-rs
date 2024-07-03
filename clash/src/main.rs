@@ -44,7 +44,8 @@ fn main() {
         .to_string();
 
     if !Path::new(&file).exists() {
-        // TODO: offer a internal default config, to compatible with clash behavior
+        // TODO: offer a internal default config, to compatible with clash
+        // behavior
         panic!("config file not found: {}", file);
     }
     if cli.test_config {
@@ -54,7 +55,7 @@ fn main() {
                 exit(0);
             }
             Err(e) => {
-                eprintln!(" configuration file {} test failed: {}", file, e);
+                eprintln!("configuration file {} test failed: {}", file, e);
                 exit(1);
             }
         }

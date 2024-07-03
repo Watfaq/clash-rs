@@ -1,24 +1,24 @@
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{response::Redirect, routing::get, Router};
 
-use http::header;
-use http::Method;
+use http::{header, Method};
 use tokio::sync::{broadcast::Sender, Mutex};
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
+use tower::ServiceBuilder;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+    trace::TraceLayer,
+};
 use tracing::{error, info};
 
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
-use super::dispatcher::StatisticsManager;
-use super::dns::ThreadSafeDNSResolver;
-use super::logging::LogEvent;
-use super::profile::ThreadSafeCacheFile;
 use super::{
-    dispatcher, inbound::manager::ThreadSafeInboundManager,
-    outbound::manager::ThreadSafeOutboundManager, router::ThreadSafeRouter,
+    dispatcher, dispatcher::StatisticsManager, dns::ThreadSafeDNSResolver,
+    inbound::manager::ThreadSafeInboundManager, logging::LogEvent,
+    outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+    router::ThreadSafeRouter,
 };
 
 mod handlers;
@@ -54,6 +54,13 @@ pub fn get_api_runner(
             .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
             .allow_origin(Any);
 
+        let bind_addr = if bind_addr.starts_with(':') {
+            info!("hostname not provided, listening on localhost");
+            format!("localhost{}", bind_addr)
+        } else {
+            bind_addr
+        };
+
         let runner = async move {
             info!("Starting API server at {}", bind_addr);
             let mut app = Router::new()
@@ -88,17 +95,26 @@ pub fn get_api_runner(
                     controller_cfg.secret.unwrap_or_default(),
                 ))
                 .route_layer(cors)
-                .with_state(app_state);
+                .with_state(app_state)
+                .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
             if let Some(external_ui) = controller_cfg.external_ui {
                 app = app
                     .route("/ui", get(|| async { Redirect::to("/ui/") }))
-                    .nest_service("/ui/", ServeDir::new(PathBuf::from(cwd).join(external_ui)));
+                    .nest_service(
+                        "/ui/",
+                        ServeDir::new(PathBuf::from(cwd).join(external_ui)),
+                    );
             }
 
             let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
 
-            axum::serve(listener, app).await.map_err(|x| {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .map_err(|x| {
                 error!("API server error: {}", x);
                 crate::Error::Operation(format!("API server error: {}", x))
             })

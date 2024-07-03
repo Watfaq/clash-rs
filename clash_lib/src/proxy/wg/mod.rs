@@ -5,23 +5,21 @@ use std::{
 };
 
 use crate::{
-    app::dispatcher::{
-        ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-    },
-    Error,
-};
-use crate::{
     app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+        },
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
     session::Session,
+    Error,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, CommonOption, ConnectorType, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -40,7 +38,6 @@ mod wireguard;
 
 pub struct HandlerOpts {
     pub name: String,
-    pub common_opts: CommonOption,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,
@@ -78,7 +75,10 @@ impl Handler {
         })
     }
 
-    async fn initialize_inner(&self, resolver: ThreadSafeDNSResolver) -> Result<&Inner, Error> {
+    async fn initialize_inner(
+        &self,
+        resolver: ThreadSafeDNSResolver,
+    ) -> Result<&Inner, Error> {
         self.inner
             .get_or_try_init(|| async {
                 let recv_pair = tokio::sync::mpsc::channel(1024);
@@ -88,7 +88,8 @@ impl Handler {
                     .await
                     .map_err(map_io_error)?
                     .ok_or(new_io_error(
-                        format!("invalid remote server: {}", self.opts.server).as_str(),
+                        format!("invalid remote server: {}", self.opts.server)
+                            .as_str(),
                     ))?;
                 let allowed_ips = self
                     .opts
@@ -98,7 +99,10 @@ impl Handler {
                         ips.iter()
                             .map(|ip| {
                                 ip.parse::<IpNet>().map_err(|e| {
-                                    new_io_error(format!("invalid allowed ip: {}", e).as_str())
+                                    new_io_error(
+                                        format!("invalid allowed ip: {}", e)
+                                            .as_str(),
+                                    )
                                 })
                             })
                             .collect::<Result<Vec<_>, _>>()
@@ -109,7 +113,13 @@ impl Handler {
                 // we shouldn't create a new tunnel for each connection
                 let wg = wireguard::WireguardTunnel::new(
                     Config {
-                        private_key: self.opts.private_key.parse::<KeyBytes>().unwrap().0.into(),
+                        private_key: self
+                            .opts
+                            .private_key
+                            .parse::<KeyBytes>()
+                            .unwrap()
+                            .0
+                            .into(),
                         endpoint_public_key: self
                             .opts
                             .public_key
@@ -169,7 +179,9 @@ impl Handler {
                             .map(|server| {
                                 server
                                     .iter()
-                                    .map(|s| (s.parse::<IpAddr>().unwrap(), 53).into())
+                                    .map(|s| {
+                                        (s.parse::<IpAddr>().unwrap(), 53).into()
+                                    })
                                     .collect::<Vec<_>>()
                             })
                             .unwrap_or_default()
@@ -284,10 +296,14 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use crate::proxy::utils::test_utils::docker_runner::DockerTestRunnerBuilder;
-    use crate::proxy::utils::test_utils::{config_helper::test_config_base_dir, Suite};
+    use crate::proxy::utils::test_utils::{
+        config_helper::test_config_base_dir, docker_runner::DockerTestRunnerBuilder,
+        Suite,
+    };
 
-    use super::super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner};
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner,
+    };
     use crate::proxy::utils::test_utils::run_test_suites_and_cleanup;
 
     use super::*;
@@ -298,7 +314,8 @@ mod tests {
     async fn get_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let wg_config = test_config_dir.join("wg_config");
-        // the following configs is in accordance with the config in `wg_config` dir
+        // the following configs is in accordance with the config in `wg_config`
+        // dir
         DockerTestRunnerBuilder::new()
             .image(IMAGE_WG)
             .env(&[
@@ -325,14 +342,15 @@ mod tests {
     async fn test_wg() -> anyhow::Result<()> {
         let opts = HandlerOpts {
             name: "wg".to_owned(),
-            common_opts: CommonOption::default(),
             server: "127.0.0.1".to_owned(),
             port: 10002,
             ip: Ipv4Addr::new(10, 13, 13, 2),
             ipv6: None,
             private_key: "KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=".to_owned(),
             public_key: "INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=".to_owned(),
-            preshared_key: Some("+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=".to_owned()),
+            preshared_key: Some(
+                "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=".to_owned(),
+            ),
             remote_dns_resolve: false,
             dns: None,
             mtu: Some(1000),
@@ -342,12 +360,18 @@ mod tests {
         };
         let handler = Handler::new(opts);
 
-        // cannot run the ping pong test, since the wireguard server is running on bridge network mode
-        // and the `net.ipv4.conf.all.src_valid_mark` is not supported in the host network mode
-        // the latency test should be enough
+        // cannot run the ping pong test, since the wireguard server is running
+        // on bridge network mode and the `net.ipv4.conf.all.
+        // src_valid_mark` is not supported in the host network mode the
+        // latency test should be enough
         let runner = get_runner().await?;
         // FIXME: wait for the startup of the test runner in a more elegant way
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        run_test_suites_and_cleanup(handler, runner, &[Suite::LatencyTcp, Suite::DnsUdp]).await
+        run_test_suites_and_cleanup(
+            handler,
+            runner,
+            &[Suite::LatencyTcp, Suite::DnsUdp],
+        )
+        .await
     }
 }

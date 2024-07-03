@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
-use std::fmt::Display;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 pub fn deserialize_u64<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where

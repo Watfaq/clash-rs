@@ -68,8 +68,10 @@ pub trait RuleProvider: Provider {
 
 pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
 
-type RuleUpdater = Box<dyn Fn(RuleContent) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
-type RuleParser = Box<dyn Fn(&[u8]) -> anyhow::Result<RuleContent> + Send + Sync + 'static>;
+type RuleUpdater =
+    Box<dyn Fn(RuleContent) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
+type RuleParser =
+    Box<dyn Fn(&[u8]) -> anyhow::Result<RuleContent> + Send + Sync + 'static>;
 
 pub struct RuleProviderImpl {
     fetcher: Fetcher<RuleUpdater, RuleParser>,
@@ -87,8 +89,12 @@ impl RuleProviderImpl {
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behovior {
-                RuleSetBehavior::Domain => RuleContent::Domain(trie::StringTrie::new()),
-                RuleSetBehavior::Ipcidr => RuleContent::Ipcidr(Box::new(CidrTrie::new())),
+                RuleSetBehavior::Domain => {
+                    RuleContent::Domain(trie::StringTrie::new())
+                }
+                RuleSetBehavior::Ipcidr => {
+                    RuleContent::Ipcidr(Box::new(CidrTrie::new()))
+                }
                 RuleSetBehavior::Classical => RuleContent::Classical(vec![]),
             },
         }));
@@ -96,24 +102,30 @@ impl RuleProviderImpl {
         let inner_clone = inner.clone();
 
         let n = name.clone();
-        let updater: RuleUpdater = Box::new(move |input: RuleContent| -> BoxFuture<'static, ()> {
-            let n = n.clone();
-            let inner: Arc<tokio::sync::RwLock<Inner>> = inner_clone.clone();
-            Box::pin(async move {
-                let mut inner = inner.write().await;
-                trace!("updated rules for: {}", n);
-                inner.content = input;
-            })
-        });
+        let updater: RuleUpdater =
+            Box::new(move |input: RuleContent| -> BoxFuture<'static, ()> {
+                let n = n.clone();
+                let inner: Arc<tokio::sync::RwLock<Inner>> = inner_clone.clone();
+                Box::pin(async move {
+                    let mut inner = inner.write().await;
+                    trace!("updated rules for: {}", n);
+                    inner.content = input;
+                })
+            });
 
         let n = name.clone();
-        let parser: RuleParser = Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
-            let scheme: ProviderScheme = serde_yaml::from_slice(input).map_err(|x| {
-                Error::InvalidConfig(format!("proxy provider parse error {}: {}", n, x))
-            })?;
-            let rules = make_rules(behovior, scheme.payload, mmdb.clone())?;
-            Ok(rules)
-        });
+        let parser: RuleParser =
+            Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
+                let scheme: ProviderScheme =
+                    serde_yaml::from_slice(input).map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "proxy provider parse error {}: {}",
+                            n, x
+                        ))
+                    })?;
+                let rules = make_rules(behovior, scheme.payload, mmdb.clone())?;
+                Ok(rules)
+            });
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
 
@@ -132,7 +144,9 @@ impl RuleProvider for RuleProviderImpl {
 
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(trie) => trie.search(&sess.destination.host()).is_some(),
+                RuleContent::Domain(trie) => {
+                    trie.search(&sess.destination.host()).is_some()
+                }
                 RuleContent::Ipcidr(trie) => trie.contains(
                     sess.destination
                         .ip()
@@ -153,6 +167,7 @@ impl RuleProvider for RuleProviderImpl {
             }
         }
     }
+
     fn behavior(&self) -> RuleSetBehavior {
         self.behavior
     }
@@ -163,12 +178,15 @@ impl Provider for RuleProviderImpl {
     fn name(&self) -> &str {
         self.fetcher.name()
     }
+
     fn vehicle_type(&self) -> ProviderVehicleType {
         self.fetcher.vehicle_type()
     }
+
     fn typ(&self) -> ProviderType {
         ProviderType::Rule
     }
+
     async fn initialize(&self) -> std::io::Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
@@ -177,6 +195,7 @@ impl Provider for RuleProviderImpl {
         }
         Ok(())
     }
+
     async fn update(&self) -> std::io::Result<()> {
         let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
         debug!("rule provider {} updated. same? {}", self.name(), same);
@@ -216,8 +235,12 @@ fn make_rules(
     mmdb: Arc<Mmdb>,
 ) -> Result<RuleContent, Error> {
     match behavior {
-        RuleSetBehavior::Domain => Ok(RuleContent::Domain(make_domain_rules(rules)?)),
-        RuleSetBehavior::Ipcidr => Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?))),
+        RuleSetBehavior::Domain => {
+            Ok(RuleContent::Domain(make_domain_rules(rules)?))
+        }
+        RuleSetBehavior::Ipcidr => {
+            Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?)))
+        }
         RuleSetBehavior::Classical => {
             Ok(RuleContent::Classical(make_classical_rules(rules, mmdb)?))
         }
@@ -248,9 +271,9 @@ fn make_classical_rules(
     for rule in rules {
         let parts = rule.split(',').map(str::trim).collect::<Vec<&str>>();
 
-        // the rule inside RULE-SET is slightly different from the rule in config
-        // the target is always empty as it's holded in the RULE-SET container
-        // let's parse it manually
+        // the rule inside RULE-SET is slightly different from the rule in
+        // config the target is always empty as it's holded in the
+        // RULE-SET container let's parse it manually
         let rule_type = match parts.as_slice() {
             [proto, payload] => RuleType::new(proto, payload, "", None),
             [proto, payload, params @ ..] => {

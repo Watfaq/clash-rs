@@ -1,7 +1,7 @@
 mod cipher;
 mod client;
 mod header;
-//pub mod http;
+// pub mod http;
 mod datagram;
 mod kdf;
 mod stream;
@@ -25,6 +25,5 @@ pub(crate) const COMMAND_UDP: u8 = 2;
 const CHUNK_SIZE: usize = 1 << 14;
 const MAX_CHUNK_SIZE: usize = 17 * 1024;
 
-pub use client::Builder;
-pub use client::VmessOption;
+pub use client::{Builder, VmessOption};
 pub use datagram::OutboundDatagramVmess;

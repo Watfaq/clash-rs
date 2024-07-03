@@ -20,13 +20,13 @@ use crate::{
 use super::{auth::authenticate_req, connector::Connector};
 
 pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
-    let port = r
-        .port_u16()
-        .unwrap_or(match r.scheme().map(|s| s.as_str()).unwrap_or("http") {
+    let port = r.port_u16().unwrap_or(
+        match r.scheme().map(|s| s.as_str()).unwrap_or("http") {
             "http" => 80 as _,
             "https" => 443 as _,
             _ => return None,
-        });
+        },
+    );
 
     r.host().map(|x| {
         if let Ok(ip) = x.parse::<IpAddr>() {
@@ -107,11 +107,9 @@ struct ProxyService {
 }
 
 impl Service<Request<Body>> for ProxyService {
-    type Response = Response<Body>;
-
     type Error = ProxyError;
-
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Response = Response<Body>;
 
     fn poll_ready(
         &mut self,

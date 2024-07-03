@@ -19,7 +19,6 @@ pub struct VmessOption {
 
 pub struct Builder {
     pub user: Vec<user::ID>,
-    pub uuid: uuid::Uuid,
     pub security: Security,
     pub is_aead: bool,
     pub is_udp: bool,
@@ -31,7 +30,8 @@ impl Builder {
         let uuid = uuid::Uuid::parse_str(&opt.uuid).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "invalid uuid format, should be xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "invalid uuid format, should be \
+                 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
             )
         })?;
 
@@ -53,7 +53,6 @@ impl Builder {
 
         Ok(Self {
             user: new_alter_id_list(&user::new_id(&uuid), opt.alter_id),
-            uuid,
             security,
             is_aead: opt.alter_id == 0,
             is_udp: opt.udp,

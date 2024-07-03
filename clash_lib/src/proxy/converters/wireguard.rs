@@ -23,7 +23,6 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOpts {
             name: s.name.to_owned(),
-            common_opts: Default::default(),
             server: s.server.to_owned(),
             port: s.port,
             ip: s
@@ -36,7 +35,10 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
                     )),
                 })
                 .map_err(|x| {
-                    Error::InvalidConfig(format!("invalid ip address: {}, {}", x, s.ip))
+                    Error::InvalidConfig(format!(
+                        "invalid ip address: {}, {}",
+                        x, s.ip
+                    ))
                 })??,
             ipv6: s
                 .ipv6
@@ -45,12 +47,16 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
                     x.parse::<IpNet>()
                         .map(|x| match x.addr() {
                             std::net::IpAddr::V4(_) => Err(Error::InvalidConfig(
-                                "invalid ip address: put an v6 address here".to_owned(),
+                                "invalid ip address: put an v6 address here"
+                                    .to_owned(),
                             )),
                             std::net::IpAddr::V6(v6) => Ok(v6),
                         })
                         .map_err(|e| {
-                            Error::InvalidConfig(format!("invalid ipv6 address: {}, {}", e, x))
+                            Error::InvalidConfig(format!(
+                                "invalid ipv6 address: {}, {}",
+                                e, x
+                            ))
                         })
                         .ok()
                 })

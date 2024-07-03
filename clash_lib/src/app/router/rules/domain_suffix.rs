@@ -1,5 +1,7 @@
-use crate::app::router::rules::RuleMatcher;
-use crate::session::{Session, SocksAddr};
+use crate::{
+    app::router::rules::RuleMatcher,
+    session::{Session, SocksAddr},
+};
 
 #[derive(Clone)]
 pub struct DomainSuffix {

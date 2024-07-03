@@ -50,13 +50,18 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             Transport::Ws(WsOption {
-                                path: x.path.as_ref().map(|x| x.to_owned()).unwrap_or_default(),
+                                path: x
+                                    .path
+                                    .as_ref()
+                                    .map(|x| x.to_owned())
+                                    .unwrap_or_default(),
                                 headers: x
                                     .headers
                                     .as_ref()
                                     .map(|x| x.to_owned())
                                     .unwrap_or_default(),
-                                max_early_data: x.max_early_data.unwrap_or_default() as usize,
+                                max_early_data: x.max_early_data.unwrap_or_default()
+                                    as usize,
                                 early_data_header_name: x
                                     .early_data_header_name
                                     .as_ref()

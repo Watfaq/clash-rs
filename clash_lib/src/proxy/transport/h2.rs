@@ -27,7 +27,9 @@ impl Http2Config {
                 .authority(self.hosts[uri_idx].as_str())
                 .path_and_query(self.path.clone())
                 .build()
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                })?
         };
         let mut request = Request::builder()
             .uri(uri)
@@ -42,10 +44,15 @@ impl Http2Config {
         Ok(request.body(()).expect("build req"))
     }
 
-    pub async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
-        let (mut client, h2) = h2::client::handshake(stream).await.map_err(map_io_error)?;
+    pub async fn proxy_stream(
+        &self,
+        stream: AnyStream,
+    ) -> std::io::Result<AnyStream> {
+        let (mut client, h2) =
+            h2::client::handshake(stream).await.map_err(map_io_error)?;
         let req = self.req()?;
-        let (resp, send_stream) = client.send_request(req, false).map_err(map_io_error)?;
+        let (resp, send_stream) =
+            client.send_request(req, false).map_err(map_io_error)?;
         tokio::spawn(async move {
             if let Err(e) = h2.await {
                 error!("h2 error: {}", e);
@@ -107,7 +114,12 @@ impl AsyncRead for Http2Stream {
                     .flow_control()
                     .release_capacity(to_read)
                     .map_or_else(
-                        |e| Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, e)),
+                        |e| {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::ConnectionReset,
+                                e,
+                            ))
+                        },
                         |_| Ok(()),
                     )
             }

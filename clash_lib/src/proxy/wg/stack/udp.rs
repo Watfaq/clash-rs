@@ -51,7 +51,10 @@ impl Sink<UdpPacket> for UdpPair {
         }
     }
 
-    fn start_send(self: std::pin::Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
+    fn start_send(
+        self: std::pin::Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<(), Self::Error> {
         let this = self.get_mut();
         this.pkt = Some(item);
         this.flushed = false;

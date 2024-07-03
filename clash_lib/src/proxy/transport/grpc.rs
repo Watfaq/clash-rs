@@ -1,23 +1,22 @@
-use crate::common::errors::map_io_error;
-use crate::proxy::AnyStream;
+use crate::{common::errors::map_io_error, proxy::AnyStream};
 
-use bytes::Buf;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
-use prost::encoding::decode_varint;
-use prost::encoding::encode_varint;
+use prost::encoding::{decode_varint, encode_varint};
 use tokio::sync::{mpsc, Mutex};
 use tracing::warn;
 
-use std::fmt::Debug;
-use std::io;
-use std::io::{Error, ErrorKind};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::{
+    fmt::Debug,
+    io,
+    io::{Error, ErrorKind},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Clone)]
@@ -61,10 +60,11 @@ impl GrpcStreamBuilder {
         let mut client = client.ready().await.map_err(map_io_error)?;
 
         let req = self.req()?;
-        let (resp, send_stream) = client.send_request(req, false).map_err(map_io_error)?;
+        let (resp, send_stream) =
+            client.send_request(req, false).map_err(map_io_error)?;
         tokio::spawn(async move {
             if let Err(e) = h2.await {
-                //TODO: collect this somewhere?
+                // TODO: collect this somewhere?
                 warn!("http2 got err:{:?}", e);
             }
         });
@@ -148,8 +148,9 @@ impl GrpcStream {
         let grpc_payload_len = (protobuf_header.len() + data.len()) as u32;
         grpc_header[1..5].copy_from_slice(&grpc_payload_len.to_be_bytes());
 
-        let mut buf =
-            BytesMut::with_capacity(grpc_header.len() + protobuf_header.len() + data.len());
+        let mut buf = BytesMut::with_capacity(
+            grpc_header.len() + protobuf_header.len() + data.len(),
+        );
         buf.put_slice(&grpc_header[..]);
         buf.put_slice(&protobuf_header.freeze()[..]);
         buf.put_slice(data);
@@ -182,7 +183,8 @@ impl AsyncRead for GrpcStream {
         {
             if self.payload_len == 0 {
                 self.buffer.advance(6);
-                let payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
+                let payload_len =
+                    decode_varint(&mut self.buffer).map_err(map_io_error)?;
                 self.payload_len = payload_len as usize;
             }
 
@@ -210,7 +212,8 @@ impl AsyncRead for GrpcStream {
                 while self.payload_len > 0 || self.buffer.len() > 6 {
                     if self.payload_len == 0 {
                         self.buffer.advance(6);
-                        let payload_len = decode_varint(&mut self.buffer).map_err(map_io_error)?;
+                        let payload_len =
+                            decode_varint(&mut self.buffer).map_err(map_io_error)?;
                         self.payload_len = payload_len as usize;
                     }
                     let to_read = std::cmp::min(self.buffer.len(), self.payload_len);
@@ -228,7 +231,12 @@ impl AsyncRead for GrpcStream {
                     .flow_control()
                     .release_capacity(b.len())
                     .map_or_else(
-                        |e| Poll::Ready(Err(Error::new(ErrorKind::ConnectionReset, e))),
+                        |e| {
+                            Poll::Ready(Err(Error::new(
+                                ErrorKind::ConnectionReset,
+                                e,
+                            )))
+                        },
                         |_| Poll::Ready(Ok(())),
                     )
             }
@@ -272,12 +280,18 @@ impl AsyncWrite for GrpcStream {
     }
 
     #[inline]
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 
     #[inline]
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         self.send.send_reset(h2::Reason::NO_ERROR);
         self.send
             .poll_reset(cx)

@@ -6,7 +6,9 @@ use std::{
 use crate::{config::internal::proxy::OutboundGroupProtocol, Error};
 
 // copy paste from https://github.com/Dreamacro/clash/blob/6a661bff0c185f38c4bd9d21c91a3233ba5fdb97/config/utils.go#L21
-pub fn proxy_groups_dag_sort(groups: &mut [OutboundGroupProtocol]) -> Result<(), Error> {
+pub fn proxy_groups_dag_sort(
+    groups: &mut [OutboundGroupProtocol],
+) -> Result<(), Error> {
     struct Node {
         in_degree: i32,
 
@@ -171,8 +173,8 @@ pub fn proxy_groups_dag_sort(groups: &mut [OutboundGroupProtocol]) -> Result<(),
 #[cfg(test)]
 mod tests {
     use crate::config::internal::proxy::{
-        OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupProtocol, OutboundGroupRelay,
-        OutboundGroupSelect, OutboundGroupUrlTest,
+        OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupProtocol,
+        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupUrlTest,
     };
 
     #[test]

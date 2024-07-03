@@ -1,11 +1,10 @@
-use crate::common::utils::default_bool_true;
-use crate::config::utils;
-use crate::Error;
-use serde::de::value::MapDeserializer;
-use serde::Deserialize;
+use crate::{common::utils::default_bool_true, config::utils, Error};
+use serde::{de::value::MapDeserializer, Deserialize};
 use serde_yaml::Value;
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+};
 use uuid::Uuid;
 
 pub const PROXY_DIRECT: &str = "DIRECT";
@@ -27,7 +26,9 @@ impl OutboundProxy {
     }
 }
 
-pub fn map_serde_error(name: String) -> impl FnOnce(serde_yaml::Error) -> crate::Error {
+pub fn map_serde_error(
+    name: String,
+) -> impl FnOnce(serde_yaml::Error) -> crate::Error {
     move |x| {
         if let Some(loc) = x.location() {
             Error::InvalidConfig(format!(
@@ -438,7 +439,9 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
                 "missing field `name` in outbound proxy provider".to_owned(),
             ))?
             .to_owned();
-        OutboundProxyProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
+        OutboundProxyProviderDef::deserialize(MapDeserializer::new(
+            mapping.into_iter(),
+        ))
+        .map_err(map_serde_error(name))
     }
 }
