@@ -4,6 +4,9 @@ use tracing::warn;
 
 use super::{ClashResolver, ResolverKind};
 
+#[cfg(target_feature = "crt-static")]
+pub struct SystemResolver(tokio::sync::Mutex<()>);
+#[cfg(not(target_feature = "crt-static"))]
 pub struct SystemResolver;
 
 /// SystemResolver is a resolver that uses libc getaddrinfo to resolve
@@ -14,7 +17,16 @@ impl SystemResolver {
             "Default dns resolver doesn't support ipv6, please enable clash dns \
              resolver if you need ipv6 support."
         );
-        Ok(Self)
+
+        #[cfg(target_feature = "crt-static")]
+        {
+            Ok(Self(tokio::sync::Mutex::new(())))
+        }
+
+        #[cfg(not(target_feature = "crt-static"))]
+        {
+            Ok(Self)
+        }
     }
 }
 
@@ -25,6 +37,9 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
+        #[cfg(target_feature = "crt-static")]
+        let _g = self.0.lock().await;
+
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();
@@ -40,6 +55,9 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
+        #[cfg(target_feature = "crt-static")]
+        let _g = self.0.lock().await;
+
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();
@@ -58,6 +76,9 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+        #[cfg(target_feature = "crt-static")]
+        let _g = self.0.lock().await;
+
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
             .collect::<Vec<_>>();

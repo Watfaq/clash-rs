@@ -135,8 +135,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // multi-threaded static linked libc can crash:  https://sourceware.org/bugzilla/show_bug.cgi?id=10652
-    #[cfg(not(target_feature = "crt-static"))]
     async fn test_download_and_apply() -> anyhow::Result<()> {
         let system_resolver = Arc::new(
             SystemResolver::new()
