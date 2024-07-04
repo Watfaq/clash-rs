@@ -41,7 +41,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             cross: true
@@ -52,7 +52,7 @@ jobs:
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static,-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-feature=+crt-static -Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
@@ -96,7 +96,7 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             cross: false
@@ -109,7 +109,7 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static,-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-feature=+crt-static -Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
@@ -122,7 +122,7 @@ jobs:
             target: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             cross: false
@@ -133,7 +133,7 @@ jobs:
             release-name: x86_64-apple-darwin-static-crt
             cross: false
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static,-3dnow,-3dnowa -Ctarget-cpu=sandybridge --cfg tokio_unstable"
+            rustflags: "-Ctarget-feature=+crt-static -Ctarget-cpu=sandybridge --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
