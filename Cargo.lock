@@ -990,7 +990,7 @@ checksum = "4b82cf0babdbd58558212896d1a4272303a57bdb245c2bf1147185fb45640e70"
 
 [[package]]
 name = "clash"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "clap",
  "clash_lib",
@@ -998,14 +998,14 @@ dependencies = [
 
 [[package]]
 name = "clash_doc"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "clash_lib",
 ]
 
 [[package]]
 name = "clash_lib"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "aead",
  "aes",
