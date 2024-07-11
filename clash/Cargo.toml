@@ -1,12 +1,8 @@
 [package]
-name = "clash"
+name = "clash-rs"
 repository = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
-
-[[bin]]
-name = "clash"
-path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.9", features = ["derive"] }
