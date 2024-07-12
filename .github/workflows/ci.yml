@@ -209,7 +209,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Rename binary
-        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
+        run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
