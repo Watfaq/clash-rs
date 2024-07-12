@@ -146,7 +146,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
       - uses: actions/cache@v4
         with:
           path: |
@@ -210,14 +209,22 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Rename binary
-        run: mv target/${{ matrix.target }}/release/${{ env.PACKAGE }}${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
+        run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
-
+          
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          timeout-minutes: 15
+          limit-access-to-actor: true
+          
   release:
     name: Release
 

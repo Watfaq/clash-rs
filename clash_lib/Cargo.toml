@@ -34,7 +34,7 @@ libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "2.0.0"
 base64 = "0.22"
-uuid = { version = "1.9.1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+uuid = { version = "1.10.0", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 
 ip_network_table-deps-treebitmap = "0.5.0"
 once_cell = "1.18.0"
@@ -108,8 +108,8 @@ maxminddb = "0.24.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"
 
-arti-client = { version = "0.18.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.18.0" }
+arti-client = { version = "0.20.0", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
+tor-rtcompat = { version = "0.20.0" }
 
 # tuic
 tuic = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }

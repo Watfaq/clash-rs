@@ -19,6 +19,10 @@ pub enum RuleType {
         country_code: String,
         no_resolve: bool,
     },
+    GeoSite {
+        target: String,
+        country_code: String,
+    },
     IpCidr {
         ipnet: ipnet::IpNet,
         target: String,
@@ -61,6 +65,7 @@ impl RuleType {
             RuleType::DomainSuffix { target, .. } => target,
             RuleType::DomainKeyword { target, .. } => target,
             RuleType::GeoIP { target, .. } => target,
+            RuleType::GeoSite { target, .. } => target,
             RuleType::IpCidr { target, .. } => target,
             RuleType::SrcCidr { target, .. } => target,
             RuleType::SRCPort { target, .. } => target,
@@ -82,6 +87,7 @@ impl Display for RuleType {
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
             RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
             RuleType::GeoIP { .. } => write!(f, "GEOIP"),
+            RuleType::GeoSite { .. } => write!(f, "GEOSITE"),
             RuleType::IpCidr { .. } => write!(f, "IP-CIDR"),
             RuleType::SrcCidr { .. } => write!(f, "SRC-IP-CIDR"),
             RuleType::SRCPort { .. } => write!(f, "SRC-PORT"),
@@ -113,6 +119,10 @@ impl RuleType {
             "DOMAIN-KEYWORD" => Ok(RuleType::DomainKeyword {
                 domain_keyword: payload.to_string(),
                 target: target.to_string(),
+            }),
+            "GEOSITE" => Ok(RuleType::GeoSite {
+                target: target.to_string(),
+                country_code: payload.to_string(),
             }),
             "GEOIP" => Ok(RuleType::GeoIP {
                 target: target.to_string(),
