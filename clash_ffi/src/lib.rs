@@ -34,8 +34,10 @@ pub struct ConfigOverride {
     pub dns_server: *const c_char,
     pub bind_address: *const c_char,
     pub external_controller: *const c_char,
-    pub rules_list: *const *const c_char,
-    pub rules_list_len: usize,
+    /// \n separated rules list
+    /// TODO: use a better way to pass rules list, like a list of strings
+    pub rules_list: *const c_char,
+    pub outbounds: *const c_char,
 }
 
 #[no_mangle]
@@ -108,21 +110,17 @@ pub extern "C" fn start_clash_with_config(
                     cfg_def.port = Some(cfg_override.http_port);
                 }
 
-                if cfg_override.rules_list_len > 0 {
-                    let rules_list = unsafe {
-                        std::slice::from_raw_parts(
-                            cfg_override.rules_list,
-                            cfg_override.rules_list_len,
-                        )
-                    };
-                    let mut rule_list = vec![];
-                    for rule in rules_list {
-                        let rule = unsafe { std::ffi::CStr::from_ptr(*rule) }
+                if cfg_override.rules_list != ptr::null() {
+                    let mut rules_list = unsafe {
+                        std::ffi::CStr::from_ptr(cfg_override.rules_list)
                             .to_string_lossy()
-                            .to_string();
-                        rule_list.push(rule);
+                            .to_string()
                     }
-                    cfg_def.rule.append(&mut rule_list);
+                    .split("\n")
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                    cfg_def.rule.append(&mut rules_list);
                 }
             }
 
@@ -329,8 +327,9 @@ mod tests {
             dns_server: "127.0.0.1:53\0".as_ptr() as _,
             bind_address: "240.0.0.2\0".as_ptr() as _,
             external_controller: ptr::null(),
-            rules_list: ptr::null(),
-            rules_list_len: 0,
+            rules_list: "DOMAIN-KEYWORD,example.com,DIRECT\nDOMAIN-SUFFIX,example.\
+                         org,DIRECT\n\0"
+                .as_ptr() as _,
         });
 
         if let Some(cfg_override) = cfg_override {
