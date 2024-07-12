@@ -15,6 +15,8 @@ typedef struct ConfigOverride {
   const char *dns_server;
   const char *bind_address;
   const char *external_controller;
+  const char *const *rules_list;
+  uintptr_t rules_list_len;
 } ConfigOverride;
 
 typedef struct GeneralConfig {

@@ -34,6 +34,8 @@ pub struct ConfigOverride {
     pub dns_server: *const c_char,
     pub bind_address: *const c_char,
     pub external_controller: *const c_char,
+    pub rules_list: *const *const c_char,
+    pub rules_list_len: usize,
 }
 
 #[no_mangle]
@@ -64,39 +66,63 @@ pub extern "C" fn start_clash_with_config(
             if let Some(cfg_override) = cfg_override {
                 if cfg_override.tun_fd != 0 {
                     let mut tun_cfg = HashMap::new();
-                    tun_cfg.insert("enable".to_string(), serde_yaml::Value::Bool(true));
+                    tun_cfg
+                        .insert("enable".to_string(), serde_yaml::Value::Bool(true));
                     tun_cfg.insert(
                         "device-id".to_string(),
-                        serde_yaml::Value::String(format!("fd://{}", cfg_override.tun_fd)),
+                        serde_yaml::Value::String(format!(
+                            "fd://{}",
+                            cfg_override.tun_fd
+                        )),
                     );
                     cfg_def.tun = Some(tun_cfg);
                 }
 
                 if cfg_override.bind_address != ptr::null() {
-                    let bind_address =
-                        unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
-                            .to_string_lossy()
-                            .to_string();
+                    let bind_address = unsafe {
+                        std::ffi::CStr::from_ptr(cfg_override.bind_address)
+                    }
+                    .to_string_lossy()
+                    .to_string();
                     cfg_def.bind_address = bind_address;
                 }
 
                 if cfg_override.dns_server != ptr::null() {
-                    let dns_server = unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
-                        .to_string_lossy()
-                        .to_string();
+                    let dns_server =
+                        unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
+                            .to_string_lossy()
+                            .to_string();
                     cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
                 }
 
                 if cfg_override.external_controller != ptr::null() {
-                    let external_controller =
-                        unsafe { std::ffi::CStr::from_ptr(cfg_override.external_controller) }
-                            .to_string_lossy()
-                            .to_string();
+                    let external_controller = unsafe {
+                        std::ffi::CStr::from_ptr(cfg_override.external_controller)
+                    }
+                    .to_string_lossy()
+                    .to_string();
                     cfg_def.external_controller = Some(external_controller);
                 }
 
                 if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
                     cfg_def.port = Some(cfg_override.http_port);
+                }
+
+                if cfg_override.rules_list_len > 0 {
+                    let rules_list = unsafe {
+                        std::slice::from_raw_parts(
+                            cfg_override.rules_list,
+                            cfg_override.rules_list_len,
+                        )
+                    };
+                    let mut rule_list = vec![];
+                    for rule in rules_list {
+                        let rule = unsafe { std::ffi::CStr::from_ptr(*rule) }
+                            .to_string_lossy()
+                            .to_string();
+                        rule_list.push(rule);
+                    }
+                    cfg_def.rule.append(&mut rule_list);
                 }
             }
 
@@ -122,7 +148,10 @@ pub extern "C" fn start_clash_with_config(
             match clash_lib::start(opts) {
                 Ok(_) => ERR_OK,
                 Err(e) => {
-                    error::update_last_error(Error::Operation(format!("start clash error: {}", e)));
+                    error::update_last_error(Error::Operation(format!(
+                        "start clash error: {}",
+                        e
+                    )));
                     ERR_START
                 }
             }
@@ -300,6 +329,8 @@ mod tests {
             dns_server: "127.0.0.1:53\0".as_ptr() as _,
             bind_address: "240.0.0.2\0".as_ptr() as _,
             external_controller: ptr::null(),
+            rules_list: ptr::null(),
+            rules_list_len: 0,
         });
 
         if let Some(cfg_override) = cfg_override {
@@ -308,22 +339,27 @@ mod tests {
                 tun_cfg.insert("enable".to_string(), serde_yaml::Value::Bool(true));
                 tun_cfg.insert(
                     "device-id".to_string(),
-                    serde_yaml::Value::String(format!("fd://{}", cfg_override.tun_fd)),
+                    serde_yaml::Value::String(format!(
+                        "fd://{}",
+                        cfg_override.tun_fd
+                    )),
                 );
                 cfg_def.tun = Some(tun_cfg);
             }
 
             if cfg_override.bind_address != ptr::null() {
-                let bind_address = unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
-                    .to_string_lossy()
-                    .to_string();
+                let bind_address =
+                    unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
+                        .to_string_lossy()
+                        .to_string();
                 cfg_def.bind_address = bind_address;
             }
 
             if cfg_override.dns_server != ptr::null() {
-                let dns_server = unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
-                    .to_string_lossy()
-                    .to_string();
+                let dns_server =
+                    unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
+                        .to_string_lossy()
+                        .to_string();
                 cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
             }
         }
