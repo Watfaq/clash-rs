@@ -4,21 +4,21 @@ services:
   socks5-auth:
     image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
     network_mode: "host"
-    cmd:
+    command:
       - "-u"
       - "user"
       - "-p"
       - "password"
       - "-a"
-      - "10801"
+      - "0.0.0.0:10801"
     restart: unless-stopped
   
   socks5-noauth:
     image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
     network_mode: "host"
-    cmd:
+    command:
       - "-a"
-      - "10800"
+      - "0.0.0.0:10800"
     restart: unless-stopped
   shadowsocks:
     build: ./ss
