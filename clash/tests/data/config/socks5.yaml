@@ -27,6 +27,8 @@ proxies:
     type: socks5
     server: 10.0.0.13
     port: 10802
+    username: user
+    password: password
     tls: true
     udp: true
     skip-cert-verify: true
