@@ -23,5 +23,5 @@ proxies:
     password: password
     udp: true
 rules:
-  - MATCH, socks5-noauth
+  - MATCH, socks5-auth
 ...

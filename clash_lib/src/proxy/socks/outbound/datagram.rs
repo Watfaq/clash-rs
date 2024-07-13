@@ -10,23 +10,37 @@ use tokio_util::udp::UdpFramed;
 use tracing::{error, trace};
 
 use crate::{
-    proxy::{datagram::UdpPacket, socks::Socks5UDPCodec},
+    proxy::{datagram::UdpPacket, socks::Socks5UDPCodec, AnyStream},
     session::SocksAddr,
 };
 
 pub(crate) struct Socks5Datagram {
+    // hold the socket to keep it alive and drop it when this is dropped
+    _socket: AnyStream,
     remote: SocketAddr,
     inner: UdpFramed<Socks5UDPCodec>,
 }
 
 impl Socks5Datagram {
-    pub(crate) fn new(remote: SocketAddr, udp_socket: UdpSocket) -> Self {
+    pub(crate) fn new(
+        socket: AnyStream,
+        remote: SocketAddr,
+        udp_socket: UdpSocket,
+    ) -> Self {
         let framed = UdpFramed::new(udp_socket, Socks5UDPCodec);
 
         Self {
+            _socket: socket,
             remote,
             inner: framed,
         }
+    }
+}
+
+impl Drop for Socks5Datagram {
+    fn drop(&mut self) {
+        // this should drop the inner socket too.
+        trace!("UDP relay to {} closed, closing socket", self.remote);
     }
 }
 
@@ -43,12 +57,14 @@ impl Sink<UdpPacket> for Socks5Datagram {
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         let remote = self.remote;
+        trace!(
+            "sending UDP packet to {}, item dst: {}",
+            remote,
+            item.dst_addr
+        );
         let pin = self.get_mut();
-        pin.start_send_unpin(UdpPacket {
-            src_addr: item.src_addr,
-            dst_addr: SocksAddr::Ip(remote),
-            data: item.data,
-        })
+        pin.inner
+            .start_send_unpin(((item.data.into(), item.dst_addr), remote))
     }
 
     fn poll_flush(

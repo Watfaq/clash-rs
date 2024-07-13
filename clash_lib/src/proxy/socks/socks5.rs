@@ -96,5 +96,23 @@ pub(crate) async fn client_handshake(
         return Err(new_io_error("unsupported SOCKS version"));
     }
 
+    if buf[1] == response_code::COMMAND_NOT_SUPPORTED {
+        return Err(new_io_error(
+            format!(
+                "server does not support the {} command",
+                match command {
+                    socks_command::CONNECT => "CONNECT",
+                    socks_command::UDP_ASSOCIATE => "UDP_ASSOCIATE",
+                    _ => "unknown",
+                },
+            )
+            .as_str(),
+        ));
+    }
+
+    if buf[1] != response_code::SUCCEEDED {
+        return Err(new_io_error("SOCKS5 request failed"));
+    }
+
     SocksAddr::read_from(s).await
 }

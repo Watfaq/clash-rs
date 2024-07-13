@@ -2,19 +2,23 @@ version: "3.9"
 
 services:
   socks5-auth:
-    image: serjs/go-socks5-proxy
+    image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
     network_mode: "host"
-    environment:
-      - PROXY_USER=user
-      - PROXY_PASSWORD=password
-      - PROXY_PORT=10801
+    cmd:
+      - "-u"
+      - "user"
+      - "-p"
+      - "password"
+      - "-a"
+      - "10801"
     restart: unless-stopped
   
   socks5-noauth:
-    image: serjs/go-socks5-proxy
+    image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
     network_mode: "host"
-    environment:
-      - PROXY_PORT=10800
+    cmd:
+      - "-a"
+      - "10800"
     restart: unless-stopped
   shadowsocks:
     build: ./ss

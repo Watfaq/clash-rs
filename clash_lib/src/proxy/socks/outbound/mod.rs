@@ -21,8 +21,7 @@ use crate::{
 use async_trait::async_trait;
 use datagram::Socks5Datagram;
 use std::sync::Arc;
-use tokio::io::AsyncReadExt;
-use tracing::debug;
+use tracing::trace;
 
 use super::socks5::{client_handshake, socks_command};
 
@@ -99,7 +98,7 @@ impl Handler {
         let bind_addr = client_handshake(
             &mut s,
             &sess.destination,
-            socks_command::CONNECT,
+            socks_command::UDP_ASSOCIATE,
             self.opts.user.clone(),
             self.opts.password.clone(),
         )
@@ -109,6 +108,7 @@ impl Handler {
             .ip()
             .ok_or(new_io_error("missing IP in bind address"))?;
         let bind_ip = if bind_ip.is_unspecified() {
+            trace!("bind address is unspecified, resolving server address");
             let remote_addr = resolver
                 .resolve(&self.opts.server, false)
                 .await
@@ -118,9 +118,11 @@ impl Handler {
                  address",
             ))?
         } else {
+            trace!("using server returned bind addr {}", bind_ip);
             bind_ip
         };
         let bind_port = bind_addr.port();
+        trace!("bind address resolved to {}:{}", bind_ip, bind_port);
 
         let udp_socket = new_udp_socket(
             None,
@@ -130,25 +132,11 @@ impl Handler {
         )
         .await?;
 
-        tokio::spawn(async move {
-            loop {
-                let mut buf = vec![0u8; 2 * 1024];
-                match s.read(&mut buf).await {
-                    Ok(_) => {
-                        continue;
-                    }
-
-                    Err(e) => {
-                        // TODO: maybe we should drop the UdpSocket somehow?
-                        // these's no close() method on UdpSocket
-                        debug!("UDP association closed: {}", e);
-                        break;
-                    }
-                }
-            }
-        });
-
-        Ok(Socks5Datagram::new((bind_ip, bind_port).into(), udp_socket))
+        Ok(Socks5Datagram::new(
+            s,
+            (bind_ip, bind_port).into(),
+            udp_socket,
+        ))
     }
 }
 

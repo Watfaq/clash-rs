@@ -58,8 +58,16 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+/// Default value true for bool on serde
+/// use this if you don't want do deal with Option<bool>
 pub fn default_bool_true() -> bool {
     true
+}
+
+/// Default value false for bool on serde
+/// use this if you don't want do deal with Option<bool>
+pub fn default_bool_false() -> bool {
+    false
 }
 
 #[async_recursion]
