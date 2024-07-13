@@ -25,6 +25,7 @@ use tracing::trace;
 
 use super::socks5::{client_handshake, socks_command};
 
+#[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
     pub common_opts: CommonOption,
@@ -54,6 +55,12 @@ impl Handler {
         sess: &Session,
     ) -> std::io::Result<AnyStream> {
         let mut s = if self.opts.tls {
+            trace!(
+                "TLS config - enabled: {}, skip_cert_verify: {}, sni: {}",
+                self.opts.tls,
+                self.opts.skip_cert_verify,
+                self.opts.sni
+            );
             let tls_opt = TLSOptions {
                 skip_cert_verify: self.opts.skip_cert_verify,
                 sni: self.opts.sni.clone(),
@@ -176,6 +183,8 @@ impl OutboundHandler for Handler {
         Ok(Box::new(s))
     }
 
+    // it;s up to the server to allow full cone UDP
+    // https://github.com/wzshiming/socks5/blob/0e66f80351778057703bd652e8b177fabe443f34/server.go#L368
     async fn connect_datagram(
         &self,
         sess: &Session,
@@ -249,5 +258,101 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+}
+
+#[cfg(all(test, not(ci)))]
+mod tests {
+
+    use crate::proxy::{
+        socks::{Handler, HandlerOptions},
+        utils::test_utils::{
+            consts::{IMAGE_SOCKS5, LOCAL_ADDR},
+            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+            run_test_suites_and_cleanup, Suite,
+        },
+    };
+
+    const USER: &str = "user";
+    const PASSWORD: &str = "password";
+
+    async fn get_socks5_runner(
+        port: u16,
+        username: Option<String>,
+        password: Option<String>,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let host = format!("0.0.0.0:{}", port);
+        let username = username.unwrap_or_default();
+        let password = password.unwrap_or_default();
+        let cmd = if username != "" && password != "" {
+            vec![
+                "-a",
+                &host,
+                "-u",
+                username.as_str(),
+                "-p",
+                password.as_str(),
+            ]
+        } else {
+            vec!["-a", &host]
+        };
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SOCKS5)
+            .cmd(&cmd)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_socks5_no_auth() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt().try_init();
+        let opts = HandlerOptions {
+            name: "test-socks5-no-auth".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            user: None,
+            password: None,
+            udp: true,
+            ..Default::default()
+        };
+        let port = opts.port;
+        let handler = Handler::new(opts);
+        run_test_suites_and_cleanup(
+            handler,
+            get_socks5_runner(port, None, None).await?,
+            Suite::all(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_socks5_auth() -> anyhow::Result<()> {
+        let _ = tracing_subscriber::fmt().try_init();
+        let opts = HandlerOptions {
+            name: "test-socks5-no-auth".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: 10002,
+            user: Some(USER.to_owned()),
+            password: Some(PASSWORD.to_owned()),
+            udp: true,
+            ..Default::default()
+        };
+        let port = opts.port;
+        let handler = Handler::new(opts);
+        run_test_suites_and_cleanup(
+            handler,
+            get_socks5_runner(
+                port,
+                Some(USER.to_owned()),
+                Some(PASSWORD.to_owned()),
+            )
+            .await?,
+            Suite::all(),
+        )
+        .await
     }
 }

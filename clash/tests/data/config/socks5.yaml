@@ -22,6 +22,16 @@ proxies:
     username: user
     password: password
     udp: true
+  
+  - name: "socks5-tls"
+    type: socks5
+    server: 10.0.0.13
+    port: 10802
+    tls: true
+    udp: true
+    skip-cert-verify: true
 rules:
-  - MATCH, socks5-auth
+# - MATCH, socks5-noauth
+# - MATCH, socks5-auth
+  - MATCH, socks5-tls
 ...

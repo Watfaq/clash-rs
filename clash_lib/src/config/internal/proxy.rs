@@ -120,6 +120,7 @@ impl Display for OutboundProxyProtocol {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowsocks {
     pub name: String,
     pub server: String,
@@ -129,11 +130,11 @@ pub struct OutboundShadowsocks {
     #[serde(default = "default_bool_true")]
     pub udp: bool,
     pub plugin: Option<String>,
-    #[serde(alias = "plugin-opts")]
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,
@@ -144,12 +145,13 @@ pub struct OutboundSocks5 {
     pub tls: bool,
     pub sni: Option<String>,
     #[serde(default = "default_bool_false")]
-    pub skip_cert_verity: bool,
+    pub skip_cert_verify: bool,
     #[serde(default = "default_bool_true")]
     pub udp: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct WsOpt {
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,

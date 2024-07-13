@@ -28,7 +28,7 @@ impl TryFrom<&OutboundSocks5> for AnyOutboundHandler {
             udp: s.udp,
             tls: s.tls,
             sni: s.sni.clone().unwrap_or(s.server.to_owned()),
-            skip_cert_verify: s.skip_cert_verity,
+            skip_cert_verify: s.skip_cert_verify,
         });
         Ok(h)
     }

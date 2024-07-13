@@ -32,6 +32,18 @@ pub(crate) mod response_code {
     // pub const ADDR_TYPE_NOT_SUPPORTED: u8 = 0x08;
 }
 
+const ERROR_CODE_LOOKUP: &[&str] = &[
+    "succeeded",
+    "general SOCKS server failure",
+    "connection not allowed by ruleset",
+    "network unreachable",
+    "host unreachable",
+    "connection refused",
+    "TTL expired",
+    "command not supported",
+    "address type not supported",
+];
+
 pub(crate) async fn client_handshake(
     s: &mut AnyStream,
     addr: &SocksAddr,
@@ -86,7 +98,12 @@ pub(crate) async fn client_handshake(
     buf.put_u8(SOCKS5_VERSION);
     buf.put_u8(command);
     buf.put_u8(0x00);
-    addr.write_buf(&mut buf);
+    if command == socks_command::UDP_ASSOCIATE {
+        let addr = SocksAddr::any_ipv4();
+        addr.write_buf(&mut buf);
+    } else {
+        addr.write_buf(&mut buf);
+    }
     s.write(&buf).await?;
 
     buf.resize(3, 0);
@@ -96,22 +113,18 @@ pub(crate) async fn client_handshake(
         return Err(new_io_error("unsupported SOCKS version"));
     }
 
-    if buf[1] == response_code::COMMAND_NOT_SUPPORTED {
+    if buf[1] != response_code::SUCCEEDED {
         return Err(new_io_error(
             format!(
-                "server does not support the {} command",
-                match command {
-                    socks_command::CONNECT => "CONNECT",
-                    socks_command::UDP_ASSOCIATE => "UDP_ASSOCIATE",
-                    _ => "unknown",
-                },
+                "SOCKS5 request failed with {}",
+                if buf[1] < ERROR_CODE_LOOKUP.len() as u8 {
+                    ERROR_CODE_LOOKUP[buf[1] as usize]
+                } else {
+                    "unknown error"
+                }
             )
             .as_str(),
         ));
-    }
-
-    if buf[1] != response_code::SUCCEEDED {
-        return Err(new_io_error("SOCKS5 request failed"));
     }
 
     SocksAddr::read_from(s).await

@@ -7,3 +7,4 @@ pub const IMAGE_OBFS: &str = "liaohuqiu/simple-obfs:latest";
 pub const IMAGE_TROJAN_GO: &str = "p4gefau1t/trojan-go:latest";
 pub const IMAGE_VMESS: &str = "v2fly/v2fly-core:v4.45.2";
 pub const IMAGE_XRAY: &str = "teddysun/xray:latest";
+pub const IMAGE_SOCKS5: &str = "ghcr.io/wzshiming/socks5/socks5:v0.4.3";

@@ -40,6 +40,12 @@ impl Socks5Datagram {
 impl Drop for Socks5Datagram {
     fn drop(&mut self) {
         // this should drop the inner socket too.
+        // https://datatracker.ietf.org/doc/html/rfc1928
+        // A UDP association terminates when the TCP connection that the UDP
+        // ASSOCIATE request arrived on terminates.
+        // ideally we should be able to shutdown the UDP association
+        // when the TCP connection is closed, but we don't have a way to do that
+        // as there is no close() method on UdpSocket.
         trace!("UDP relay to {} closed, closing socket", self.remote);
     }
 }
