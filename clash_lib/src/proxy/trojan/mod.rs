@@ -38,7 +38,7 @@ pub enum Transport {
     Grpc(GrpcOption),
 }
 
-pub struct Opts {
+pub struct HandlerOptions {
     pub name: String,
     pub common_opts: CommonOption,
     pub server: String,
@@ -52,12 +52,12 @@ pub struct Opts {
 }
 
 pub struct Handler {
-    opts: Opts,
+    opts: HandlerOptions,
 }
 
 impl Handler {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: Opts) -> AnyOutboundHandler {
+    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self { opts })
     }
 
@@ -301,7 +301,7 @@ mod tests {
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
 
-        let opts = Opts {
+        let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
             common_opts: Default::default(),
             server: "127.0.0.1".to_owned(),
@@ -347,7 +347,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
-        let opts = Opts {
+        let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
             common_opts: Default::default(),
             server: "127.0.0.1".to_owned(),

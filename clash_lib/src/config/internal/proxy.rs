@@ -1,4 +1,8 @@
-use crate::{common::utils::default_bool_true, config::utils, Error};
+use crate::{
+    common::utils::{default_bool_false, default_bool_true},
+    config::utils,
+    Error,
+};
 use serde::{de::value::MapDeserializer, Deserialize};
 use serde_yaml::Value;
 use std::{
@@ -116,6 +120,7 @@ impl Display for OutboundProxyProtocol {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowsocks {
     pub name: String,
     pub server: String,
@@ -125,23 +130,28 @@ pub struct OutboundShadowsocks {
     #[serde(default = "default_bool_true")]
     pub udp: bool,
     pub plugin: Option<String>,
-    #[serde(alias = "plugin-opts")]
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
+    #[serde(default = "default_bool_false")]
     pub tls: bool,
-    pub skip_cert_verity: bool,
+    pub sni: Option<String>,
+    #[serde(default = "default_bool_false")]
+    pub skip_cert_verify: bool,
+    #[serde(default = "default_bool_true")]
     pub udp: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct WsOpt {
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,

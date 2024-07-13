@@ -122,6 +122,7 @@ pub enum OutboundType {
     WireGuard,
     Tor,
     Tuic,
+    Socks5,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -143,11 +144,14 @@ impl Display for OutboundType {
             OutboundType::WireGuard => write!(f, "WireGuard"),
             OutboundType::Tor => write!(f, "Tor"),
             OutboundType::Tuic => write!(f, "Tuic"),
+            OutboundType::Socks5 => write!(f, "Socks5"),
+
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),
             OutboundType::Relay => write!(f, "Relay"),
             OutboundType::LoadBalance => write!(f, "LoadBalance"),
             OutboundType::Fallback => write!(f, "Fallback"),
+
             OutboundType::Direct => write!(f, "Direct"),
             OutboundType::Reject => write!(f, "Reject"),
         }

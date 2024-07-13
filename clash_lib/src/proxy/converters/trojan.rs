@@ -4,7 +4,7 @@ use crate::{
     config::internal::proxy::OutboundTrojan,
     proxy::{
         options::{GrpcOption, WsOption},
-        trojan::{Handler, Opts, Transport},
+        trojan::{Handler, HandlerOptions, Transport},
         AnyOutboundHandler, CommonOption,
     },
     Error,
@@ -27,7 +27,7 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
             warn!("skipping TLS cert verification for {}", s.server);
         }
 
-        let h = Handler::new(Opts {
+        let h = Handler::new(HandlerOptions {
             name: s.name.to_owned(),
             common_opts: CommonOption::default(),
             server: s.server.to_owned(),

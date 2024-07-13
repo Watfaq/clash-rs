@@ -32,6 +32,7 @@ config.yaml
 cache.db
 Country.mmdb
 ruleset/
+geosite.dat
 
 rust-project.json
 

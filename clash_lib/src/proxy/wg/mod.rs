@@ -36,7 +36,7 @@ mod ports;
 mod stack;
 mod wireguard;
 
-pub struct HandlerOpts {
+pub struct HandlerOptions {
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -62,13 +62,13 @@ struct Inner {
 }
 
 pub struct Handler {
-    opts: HandlerOpts,
+    opts: HandlerOptions,
     inner: OnceCell<Inner>,
 }
 
 impl Handler {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOpts) -> AnyOutboundHandler {
+    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
         Arc::new(Self {
             opts,
             inner: OnceCell::new(),
@@ -340,7 +340,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_wg() -> anyhow::Result<()> {
-        let opts = HandlerOpts {
+        let opts = HandlerOptions {
             name: "wg".to_owned(),
             server: "127.0.0.1".to_owned(),
             port: 10002,
