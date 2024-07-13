@@ -2,7 +2,7 @@ mod grpc;
 mod h2;
 #[path = "tls.rs"]
 mod internal_tls;
-mod ws;
+pub mod ws;
 
 pub use ws::WebsocketStreamBuilder;
 

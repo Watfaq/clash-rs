@@ -203,6 +203,10 @@ impl OutboundManager {
                     handlers.insert(s.name.clone(), s.try_into()?);
                 }
 
+                OutboundProxyProtocol::Socks5(s) => {
+                    handlers.insert(s.name.clone(), s.try_into()?);
+                }
+
                 OutboundProxyProtocol::Vmess(v) => {
                     handlers.insert(v.name.clone(), v.try_into()?);
                 }
@@ -221,9 +225,6 @@ impl OutboundManager {
                 }
                 OutboundProxyProtocol::Tuic(tuic) => {
                     handlers.insert(tuic.name.clone(), tuic.try_into()?);
-                }
-                p => {
-                    unimplemented!("proto {} not supported yet", p);
                 }
             }
         }

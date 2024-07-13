@@ -137,7 +137,9 @@ pub struct OutboundSocks5 {
     pub username: Option<String>,
     pub password: Option<String>,
     pub tls: bool,
+    pub sni: Option<String>,
     pub skip_cert_verity: bool,
+    #[serde(default = "default_bool_true")]
     pub udp: bool,
 }
 

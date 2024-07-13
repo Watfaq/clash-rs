@@ -114,9 +114,7 @@ impl ProxySetProvider {
                                 Ok(reject::Handler::new())
                             }
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
-                            OutboundProxyProtocol::Socks5(_) => {
-                                todo!("socks5 not supported yet")
-                            }
+                            OutboundProxyProtocol::Socks5(s) => s.try_into(),
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
