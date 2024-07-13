@@ -61,7 +61,7 @@ pub(crate) async fn client_handshake(
         buf.put_u8(1);
         buf.put_u8(auth_methods::NO_AUTH);
     }
-    s.write(&buf).await?;
+    s.write_all(&buf).await?;
 
     s.read_exact(&mut buf[..2]).await?;
     if buf[0] != SOCKS5_VERSION {
@@ -83,7 +83,7 @@ pub(crate) async fn client_handshake(
         buf.put_slice(username.as_bytes());
         buf.put_u8(password.len() as u8);
         buf.put_slice(password.as_bytes());
-        s.write(&buf).await?;
+        s.write_all(&buf).await?;
 
         s.read_exact(&mut buf[..2]).await?;
 
@@ -104,7 +104,7 @@ pub(crate) async fn client_handshake(
     } else {
         addr.write_buf(&mut buf);
     }
-    s.write(&buf).await?;
+    s.write_all(&buf).await?;
 
     buf.resize(3, 0);
     s.read_exact(&mut buf).await?;
