@@ -171,6 +171,7 @@ impl OutboundHandler for Handler {
     }
 }
 
+#[cfg(feature = "shadowsocks")]
 #[cfg(all(test, not(ci)))]
 mod tests {
 

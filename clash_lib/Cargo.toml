@@ -5,7 +5,9 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["shadowsocks"]
+default = []
+shadowsocks = ["dep:shadowsocks"]
+tuic = ["dep:tuic", "dep:tuic-quinn", "dep:quinn", "dep:register-count"]
 tracing = []
 bench = ["criterion"]
 onion = ["arti-client/onion-service-client"]
@@ -112,10 +114,10 @@ arti-client = { version = "0.20.0", default-features = false, features = ["tokio
 tor-rtcompat = { version = "0.20.0" }
 
 # tuic
-tuic = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { rev = "82fab62", git = "https://github.com/Itsusinn/tuic.git" }
-quinn = { version = "0.10", default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
-register-count = "0.1.0"
+tuic = { rev = "82fab62", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { rev = "82fab62", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+quinn = { version = "0.10", optional = true, default-features = false, features = ["futures-io", "runtime-tokio", "tls-rustls"] }
+register-count = { version = "0.1.0", optional = true }
 
 console-subscriber = { version = "0.3.0" }
 tracing-timing = { version = "0.6.0" }
