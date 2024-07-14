@@ -1,7 +1,9 @@
 
 [build]
 # zig = "2.17"
-# pre-build = "./.github/prebuild.sh"
+pre-build = [
+    "apt install -y protobuf-compiler"
+]
 
 [build.env]
 # Docker in docker

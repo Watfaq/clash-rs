@@ -6,7 +6,9 @@ use prost::Message;
 use std::path::Path;
 use tracing::{debug, info};
 
-pub(crate) mod geodata_proto;
+pub(crate) mod geodata_proto {
+    include!(concat!(env!("OUT_DIR"), "/geodata.rs"));
+}
 
 pub struct GeoData {
     cache: geodata_proto::GeoSiteList,
