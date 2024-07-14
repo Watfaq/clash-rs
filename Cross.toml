@@ -1,14 +1,12 @@
-
 [build]
-# zig = "2.17"
 pre-build = [
+    "apt update",
     "apt install -y protobuf-compiler"
 ]
 
 [build.env]
 # Docker in docker
 volumes = ["/var/run/docker.sock=/var/run/docker.sock"]
-# passthrough = ["VAR1_ARG", "VAR2_ARG=VALUE"]
 
 [target.x86_64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
