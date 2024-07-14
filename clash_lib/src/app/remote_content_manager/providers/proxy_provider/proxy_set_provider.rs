@@ -113,12 +113,14 @@ impl ProxySetProvider {
                             OutboundProxyProtocol::Reject => {
                                 Ok(reject::Handler::new())
                             }
+                            #[cfg(feature = "shadowsocks")]
                             OutboundProxyProtocol::Ss(s) => s.try_into(),
                             OutboundProxyProtocol::Socks5(s) => s.try_into(),
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
                             OutboundProxyProtocol::Tor(tor) => tor.try_into(),
+                            #[cfg(feature = "tuic")]
                             OutboundProxyProtocol::Tuic(tuic) => tuic.try_into(),
                         })
                         .collect::<Result<Vec<_>, _>>();

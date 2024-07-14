@@ -38,6 +38,7 @@ pub mod shadowsocks;
 pub mod socks;
 pub mod tor;
 pub mod trojan;
+#[cfg(feature = "tuic")]
 pub mod tuic;
 pub mod tun;
 pub mod utils;

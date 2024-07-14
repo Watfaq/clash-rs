@@ -55,6 +55,7 @@ pub enum OutboundProxyProtocol {
     Direct,
     #[serde(skip)]
     Reject,
+    #[cfg(feature = "shadowsocks")]
     #[serde(rename = "ss")]
     Ss(OutboundShadowsocks),
     #[serde(rename = "socks5")]
@@ -67,6 +68,7 @@ pub enum OutboundProxyProtocol {
     Wireguard(OutboundWireguard),
     #[serde(rename = "tor")]
     Tor(OutboundTor),
+    #[cfg(feature = "tuic")]
     #[serde(rename = "tuic")]
     Tuic(OutboundTuic),
 }
@@ -76,12 +78,14 @@ impl OutboundProxyProtocol {
         match &self {
             OutboundProxyProtocol::Direct => PROXY_DIRECT,
             OutboundProxyProtocol::Reject => PROXY_REJECT,
+            #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
             OutboundProxyProtocol::Tor(tor) => &tor.name,
+            #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
         }
     }
@@ -106,6 +110,7 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
 impl Display for OutboundProxyProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
@@ -114,6 +119,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
+            #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
         }
     }
