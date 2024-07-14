@@ -1,4 +1,8 @@
-use crate::{common::utils::default_bool_true, config::utils, Error};
+use crate::{
+    common::utils::{default_bool_false, default_bool_true},
+    config::utils,
+    Error,
+};
 use serde::{de::value::MapDeserializer, Deserialize};
 use serde_yaml::Value;
 use std::{
@@ -51,6 +55,7 @@ pub enum OutboundProxyProtocol {
     Direct,
     #[serde(skip)]
     Reject,
+    #[cfg(feature = "shadowsocks")]
     #[serde(rename = "ss")]
     Ss(OutboundShadowsocks),
     #[serde(rename = "socks5")]
@@ -63,6 +68,7 @@ pub enum OutboundProxyProtocol {
     Wireguard(OutboundWireguard),
     #[serde(rename = "tor")]
     Tor(OutboundTor),
+    #[cfg(feature = "tuic")]
     #[serde(rename = "tuic")]
     Tuic(OutboundTuic),
 }
@@ -72,12 +78,14 @@ impl OutboundProxyProtocol {
         match &self {
             OutboundProxyProtocol::Direct => PROXY_DIRECT,
             OutboundProxyProtocol::Reject => PROXY_REJECT,
+            #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
             OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
             OutboundProxyProtocol::Tor(tor) => &tor.name,
+            #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
         }
     }
@@ -102,6 +110,7 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProtocol {
 impl Display for OutboundProxyProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
             OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
@@ -110,12 +119,14 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
+            #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
         }
     }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowsocks {
     pub name: String,
     pub server: String,
@@ -125,23 +136,28 @@ pub struct OutboundShadowsocks {
     #[serde(default = "default_bool_true")]
     pub udp: bool,
     pub plugin: Option<String>,
-    #[serde(alias = "plugin-opts")]
     pub plugin_opts: Option<HashMap<String, serde_yaml::Value>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundSocks5 {
     pub name: String,
     pub server: String,
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
+    #[serde(default = "default_bool_false")]
     pub tls: bool,
-    pub skip_cert_verity: bool,
+    pub sni: Option<String>,
+    #[serde(default = "default_bool_false")]
+    pub skip_cert_verify: bool,
+    #[serde(default = "default_bool_true")]
     pub udp: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct WsOpt {
     pub path: Option<String>,
     pub headers: Option<HashMap<String, String>>,

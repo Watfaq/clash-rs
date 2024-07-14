@@ -198,8 +198,12 @@ impl OutboundManager {
                     handlers
                         .insert(PROXY_REJECT.to_string(), reject::Handler::new());
                 }
-
+                #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => {
+                    handlers.insert(s.name.clone(), s.try_into()?);
+                }
+
+                OutboundProxyProtocol::Socks5(s) => {
                     handlers.insert(s.name.clone(), s.try_into()?);
                 }
 
@@ -219,11 +223,9 @@ impl OutboundManager {
                 OutboundProxyProtocol::Tor(tor) => {
                     handlers.insert(tor.name.clone(), tor.try_into()?);
                 }
+                #[cfg(feature = "tuic")]
                 OutboundProxyProtocol::Tuic(tuic) => {
                     handlers.insert(tuic.name.clone(), tuic.try_into()?);
-                }
-                p => {
-                    unimplemented!("proto {} not supported yet", p);
                 }
             }
         }
