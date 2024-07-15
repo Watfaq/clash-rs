@@ -23,11 +23,9 @@ impl SuccinctMatcherGroup {
         let mut other_matchers = Vec::new();
         for domain in domains {
             let t = Type::try_from(domain.r#type).map_err(|x| {
-                crate::Error::Decode(prost::DecodeError::new(format!(
-                    "invalid domain type: {}",
-                    x
-                )))
+                crate::Error::InvalidConfig(format!("invalid domain type: {}", x))
             })?;
+
             match t {
                 Type::Plain | Type::Regex => {
                     let matcher = try_new_matcher(domain.value, t)?;
