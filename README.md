@@ -48,6 +48,7 @@ Dependencies
 * cmake (3.29 or newer)
 * libclang([LLVM](https://github.com/llvm/llvm-project/releases/tag/llvmorg-16.0.4))
 * [nasm](https://www.nasm.us/pub/nasm/releasebuilds/2.16/win64/) (Windows)
+* protoc(for geodata proto generation)
 ```
 $ cargo build
 ```
