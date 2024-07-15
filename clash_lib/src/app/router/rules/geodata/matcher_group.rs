@@ -22,7 +22,12 @@ impl SuccinctMatcherGroup {
         let mut set = trie::StringTrie::new();
         let mut other_matchers = Vec::new();
         for domain in domains {
-            let t = Type::try_from(domain.r#type)?;
+            let t = Type::try_from(domain.r#type).map_err(|x| {
+                crate::Error::Decode(prost::DecodeError::new(format!(
+                    "invalid domain type: {}",
+                    x
+                )))
+            })?;
             match t {
                 Type::Plain | Type::Regex => {
                     let matcher = try_new_matcher(domain.value, t)?;
