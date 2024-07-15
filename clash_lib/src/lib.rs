@@ -45,10 +45,6 @@ pub enum Error {
     IpNet(#[from] ipnet::AddrParseError),
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error(transparent)]
-    Decode(#[from] prost::DecodeError),
-    #[error(transparent)]
-    Regex(#[from] regex::Error),
     #[error("invalid config: {0}")]
     InvalidConfig(String),
     #[error("profile error: {0}")]

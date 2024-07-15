@@ -43,14 +43,20 @@ impl GeoData {
             }
         }
         let bytes = tokio::fs::read(path).await?;
-        let cache = geodata_proto::GeoSiteList::decode(bytes.as_slice())?;
+        let cache =
+            geodata_proto::GeoSiteList::decode(bytes.as_slice()).map_err(|x| {
+                Error::InvalidConfig(format!("geosite decode failed: {}", x))
+            })?;
         Ok(Self { cache })
     }
 
     #[cfg(test)]
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let bytes = tokio::fs::read(path).await?;
-        let cache = geodata_proto::GeoSiteList::decode(bytes.as_slice())?;
+        let cache =
+            geodata_proto::GeoSiteList::decode(bytes.as_slice()).map_err(|x| {
+                Error::InvalidConfig(format!("geosite decode failed: {}", x))
+            })?;
         Ok(Self { cache })
     }
 
