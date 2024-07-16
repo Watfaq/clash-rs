@@ -132,7 +132,7 @@ bollard = "0.16"
 serial_test = "3.1.1"
 
 [build-dependencies]
-prost-build = "0.12"
+prost-build = "0.13"
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "2.11.1"
