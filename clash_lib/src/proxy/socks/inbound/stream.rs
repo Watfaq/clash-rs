@@ -2,9 +2,9 @@ use crate::{
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
         datagram::InboundUdp,
-        socks::inbound::{
-            auth_methods, datagram::Socks5UDPCodec, response_code, socks_command,
-            SOCKS5_VERSION,
+        socks::{
+            socks5::{auth_methods, response_code, socks_command},
+            Socks5UDPCodec, SOCKS5_VERSION,
         },
         utils::new_udp_socket,
     },
@@ -31,6 +31,7 @@ pub async fn handle_tcp<'a>(
     // handshake
     let mut buf = BytesMut::new();
     {
+        // TODO: move this to a function
         buf.resize(2, 0);
         s.read_exact(&mut buf[..]).await?;
 

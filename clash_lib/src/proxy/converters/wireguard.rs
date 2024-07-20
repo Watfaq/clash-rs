@@ -3,7 +3,7 @@ use ipnet::IpNet;
 use crate::{
     config::internal::proxy::OutboundWireguard,
     proxy::{
-        wg::{Handler, HandlerOpts},
+        wg::{Handler, HandlerOptions},
         AnyOutboundHandler,
     },
     Error,
@@ -21,7 +21,7 @@ impl TryFrom<&OutboundWireguard> for AnyOutboundHandler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
-        let h = Handler::new(HandlerOpts {
+        let h = Handler::new(HandlerOptions {
             name: s.name.to_owned(),
             server: s.server.to_owned(),
             port: s.port,

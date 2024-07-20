@@ -1,9 +1,27 @@
-
 [build]
-# zig = "2.17"
-# pre-build = "./.github/prebuild.sh"
+pre-build = [
+    "apt update",
+    "apt install -y protobuf-compiler"
+]
 
 [build.env]
 # Docker in docker
 volumes = ["/var/run/docker.sock=/var/run/docker.sock"]
-# passthrough = ["VAR1_ARG", "VAR2_ARG=VALUE"]
+
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
+
+[target.i686-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+[target.armv7-unknown-linux-gnueabi]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabi:main"
+
+[target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
+
+[target.armv7-unknown-linux-musleabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:main"
