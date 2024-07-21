@@ -3,7 +3,6 @@ use crate::{
         dns_client::{DNSNetMode, DnsClient, Opts},
         ClashResolver, ThreadSafeDNSClient,
     },
-    dns_debug,
     proxy::utils::Interface,
 };
 use std::sync::Arc;
@@ -18,7 +17,7 @@ pub async fn make_clients(
     let mut rv = Vec::new();
 
     for s in servers {
-        dns_debug!("building nameserver: {:?}", s);
+        debug!("building nameserver: {:?}", s);
 
         let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")

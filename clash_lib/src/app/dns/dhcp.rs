@@ -3,7 +3,6 @@ use crate::{
         dns_client::DNSNetMode, helper::make_clients, Client, Resolver,
         ThreadSafeDNSClient,
     },
-    dns_debug, dns_warn,
     proxy::utils::{new_udp_socket, Interface},
 };
 use async_trait::async_trait;
@@ -22,7 +21,7 @@ use std::{
 use tokio::{net::UdpSocket, sync::Mutex, task::yield_now};
 
 use hickory_proto::op::Message;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use super::config::NameServer;
 
@@ -193,7 +192,7 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
 }
 
 async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
-    dns_debug!("probing NS servers from DHCP");
+    debug!("probing NS servers from DHCP");
     let socket = listen_dhcp_client(iface).await?;
 
     let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
@@ -268,7 +267,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
                                         ) {
                                             match op {
                                                 dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
-                                                    dns_debug!(
+                                                    debug!(
                                                         "got NS servers {:?} from DHCP",
                                                         dns
                                                     );
@@ -289,8 +288,8 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         };
 
         tokio::select! {
-            _ = tx.closed() => {dns_debug!("future cancelled, likely other clients won")},
-            value = get_response => tx.send(value).map_err(|x| dns_warn!("send error: {:?}", x)).unwrap_or_default(),
+            _ = tx.closed() => {debug!("future cancelled, likely other clients won")},
+            value = get_response => tx.send(value).map_err(|x| debug!("send error: {:?}", x)).unwrap_or_default(),
         }
     });
 
@@ -303,7 +302,7 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         },
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
-            dns_debug!("DHCP timeout after 10 secs");
+            debug!("DHCP timeout after 10 secs");
             Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
         }
     }

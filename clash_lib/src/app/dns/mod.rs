@@ -17,35 +17,13 @@ mod filters;
 mod helper;
 pub mod resolver;
 mod server;
-mod system;
 
-pub use system::SystemResolver;
+pub use resolver::SystemResolver;
 
 pub use config::Config;
 
 pub use resolver::Resolver;
 pub use server::get_dns_listener;
-
-#[macro_export]
-macro_rules! dns_debug {
-    ($($arg:tt)*) => {
-        debug!(target: "dns", $($arg)*)
-    };
-}
-
-#[macro_export]
-macro_rules! dns_info {
-    ($($arg:tt)*) => {
-        info!(target: "dns", $($arg)*)
-    };
-}
-
-#[macro_export]
-macro_rules! dns_warn {
-    ($($arg:tt)*) => {
-        warn!(target: "dns", $($arg)*)
-    };
-}
 
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
