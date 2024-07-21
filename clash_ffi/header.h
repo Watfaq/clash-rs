@@ -20,6 +20,17 @@ typedef struct ConfigOverride {
    * TODO: use a better way to pass rules list, like a list of strings
    */
   const char *rules_list;
+  /**
+   * yaml string
+   * ```
+   *  - name: "socks5-noauth"
+   *    type: socks5
+   *    server: 10.0.0.13
+   *    port: 10800
+   *    udp: true
+   * ```
+   */
+  const char *outbounds;
 } ConfigOverride;
 
 typedef struct GeneralConfig {

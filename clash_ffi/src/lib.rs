@@ -37,7 +37,97 @@ pub struct ConfigOverride {
     /// \n separated rules list
     /// TODO: use a better way to pass rules list, like a list of strings
     pub rules_list: *const c_char,
+    /// yaml string
+    /// ```
+    ///  - name: "socks5-noauth"
+    ///    type: socks5
+    ///    server: 10.0.0.13
+    ///    port: 10800
+    ///    udp: true
+    /// ```
     pub outbounds: *const c_char,
+}
+
+fn apply_config_override(
+    cfg_override: &ConfigOverride,
+    cfg_def: &mut ClashConfigDef,
+) -> Option<String> {
+    if cfg_override.tun_fd != 0 {
+        let mut tun_cfg = HashMap::new();
+        tun_cfg.insert("enable".to_string(), serde_yaml::Value::Bool(true));
+        tun_cfg.insert(
+            "device-id".to_string(),
+            serde_yaml::Value::String(format!("fd://{}", cfg_override.tun_fd)),
+        );
+        cfg_def.tun = Some(tun_cfg);
+    }
+
+    if cfg_override.bind_address != ptr::null() {
+        let bind_address =
+            unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
+                .to_string_lossy()
+                .to_string();
+        cfg_def.bind_address = bind_address;
+    }
+
+    if cfg_override.dns_server != ptr::null() {
+        let dns_server =
+            unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
+                .to_string_lossy()
+                .to_string();
+        cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
+    }
+
+    if cfg_override.external_controller != ptr::null() {
+        let external_controller =
+            unsafe { std::ffi::CStr::from_ptr(cfg_override.external_controller) }
+                .to_string_lossy()
+                .to_string();
+        cfg_def.external_controller = Some(external_controller);
+    }
+
+    if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
+        cfg_def.port = Some(cfg_override.http_port);
+    }
+
+    if cfg_override.rules_list != ptr::null() {
+        let mut rules_list = unsafe {
+            std::ffi::CStr::from_ptr(cfg_override.rules_list)
+                .to_string_lossy()
+                .to_string()
+        }
+        .split("\n")
+        .filter_map(|s| {
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        })
+        .collect::<Vec<String>>();
+
+        cfg_def.rule.append(&mut rules_list);
+    }
+
+    if cfg_override.outbounds != ptr::null() {
+        let outbounds = unsafe {
+            std::ffi::CStr::from_ptr(cfg_override.outbounds)
+                .to_string_lossy()
+                .to_string()
+        };
+
+        match &mut serde_yaml::from_str::<_>(&outbounds) {
+            Ok(outbounds) => cfg_def.proxy.append(outbounds),
+            _ => {
+                return Some(format!(
+                    "couldn't parse outbounds: {}",
+                    outbounds.replace("\n", ""),
+                ));
+            }
+        }
+    }
+
+    None
 }
 
 #[no_mangle]
@@ -59,68 +149,14 @@ pub extern "C" fn start_clash_with_config(
     let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
     match cfg_def {
         Ok(mut cfg_def) => {
-            let cfg_override = if cfg_override.is_null() {
-                None
-            } else {
-                unsafe { Some(&*cfg_override) }
-            };
-
-            if let Some(cfg_override) = cfg_override {
-                if cfg_override.tun_fd != 0 {
-                    let mut tun_cfg = HashMap::new();
-                    tun_cfg
-                        .insert("enable".to_string(), serde_yaml::Value::Bool(true));
-                    tun_cfg.insert(
-                        "device-id".to_string(),
-                        serde_yaml::Value::String(format!(
-                            "fd://{}",
-                            cfg_override.tun_fd
-                        )),
-                    );
-                    cfg_def.tun = Some(tun_cfg);
-                }
-
-                if cfg_override.bind_address != ptr::null() {
-                    let bind_address = unsafe {
-                        std::ffi::CStr::from_ptr(cfg_override.bind_address)
+            if !cfg_override.is_null() {
+                match apply_config_override(unsafe { &*cfg_override }, &mut cfg_def)
+                {
+                    Some(err) => {
+                        error::update_last_error(Error::InvalidConfig(err));
+                        return ERR_CONFIG;
                     }
-                    .to_string_lossy()
-                    .to_string();
-                    cfg_def.bind_address = bind_address;
-                }
-
-                if cfg_override.dns_server != ptr::null() {
-                    let dns_server =
-                        unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
-                            .to_string_lossy()
-                            .to_string();
-                    cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
-                }
-
-                if cfg_override.external_controller != ptr::null() {
-                    let external_controller = unsafe {
-                        std::ffi::CStr::from_ptr(cfg_override.external_controller)
-                    }
-                    .to_string_lossy()
-                    .to_string();
-                    cfg_def.external_controller = Some(external_controller);
-                }
-
-                if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
-                    cfg_def.port = Some(cfg_override.http_port);
-                }
-
-                if cfg_override.rules_list != ptr::null() {
-                    let mut rules_list = unsafe {
-                        std::ffi::CStr::from_ptr(cfg_override.rules_list)
-                            .to_string_lossy()
-                            .to_string()
-                    }
-                    .split("\n")
-                    .map(|s| s.to_string())
-                    .collect::<Vec<String>>();
-
-                    cfg_def.rule.append(&mut rules_list);
+                    None => {}
                 }
             }
 
@@ -306,7 +342,7 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, ptr, vec};
+    use std::{ptr, vec};
 
     use clash_lib::{ClashConfigDef, ClashDNSListen};
 
@@ -321,7 +357,7 @@ mod tests {
             .parse::<ClashConfigDef>()
             .unwrap();
 
-        let cfg_override = Some(super::ConfigOverride {
+        let cfg_override = super::ConfigOverride {
             tun_fd: 1989,
             http_port: 7891,
             dns_server: "127.0.0.1:53\0".as_ptr() as _,
@@ -330,38 +366,20 @@ mod tests {
             rules_list: "DOMAIN-KEYWORD,example.com,DIRECT\nDOMAIN-SUFFIX,example.\
                          org,DIRECT\n\0"
                 .as_ptr() as _,
-        });
+            outbounds: r#"
+              - name: "socks5-noauth"
+                type: socks5
+                server: 10.0.0.13
+                port: 10800
+                udp: true
+            "#
+            .as_ptr() as _,
+        };
 
-        if let Some(cfg_override) = cfg_override {
-            if cfg_override.tun_fd != 0 {
-                let mut tun_cfg = HashMap::new();
-                tun_cfg.insert("enable".to_string(), serde_yaml::Value::Bool(true));
-                tun_cfg.insert(
-                    "device-id".to_string(),
-                    serde_yaml::Value::String(format!(
-                        "fd://{}",
-                        cfg_override.tun_fd
-                    )),
-                );
-                cfg_def.tun = Some(tun_cfg);
-            }
-
-            if cfg_override.bind_address != ptr::null() {
-                let bind_address =
-                    unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
-                        .to_string_lossy()
-                        .to_string();
-                cfg_def.bind_address = bind_address;
-            }
-
-            if cfg_override.dns_server != ptr::null() {
-                let dns_server =
-                    unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
-                        .to_string_lossy()
-                        .to_string();
-                cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
-            }
-        }
+        assert_eq!(
+            super::apply_config_override(&cfg_override, &mut cfg_def),
+            None
+        );
 
         assert_eq!(cfg_def.bind_address, "240.0.0.2");
         assert_eq!(cfg_def.dns.enable, false);
@@ -375,5 +393,11 @@ mod tests {
         );
         assert_eq!(cfg_def.tun.as_ref().unwrap()["enable"], true);
         assert_eq!(cfg_def.tun.unwrap()["device-id"], "fd://1989");
+
+        assert!(cfg_def
+            .rule
+            .contains(&"DOMAIN-KEYWORD,example.com,DIRECT".to_string()));
+        assert!(cfg_def.proxy.iter().any(|p| p.get("name")
+            == Some(&serde_yaml::Value::String("socks5-noauth".to_string()))));
     }
 }
