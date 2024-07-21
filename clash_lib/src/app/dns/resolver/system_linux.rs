@@ -1,13 +1,12 @@
 use async_trait::async_trait;
 use hickory_resolver::{
-    config::{ResolverConfig, ResolverOpts},
     name_server::{GenericConnector, TokioRuntimeProvider},
     AsyncResolver,
 };
 use rand::seq::IteratorRandom;
 use tracing::warn;
 
-use super::{ClashResolver, ResolverKind};
+use crate::app::dns::{ClashResolver, ResolverKind};
 
 pub struct SystemResolver(AsyncResolver<GenericConnector<TokioRuntimeProvider>>);
 
