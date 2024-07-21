@@ -340,6 +340,13 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn get_clash_version() -> *mut c_char {
+    static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    CString::new(VERSION).unwrap().into_raw()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{ptr, vec};
