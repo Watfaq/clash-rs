@@ -19,16 +19,16 @@ use crate::{
     common::{mmdb::Mmdb, trie},
     config::def::DNSMode,
     dns::{helper::make_clients, ThreadSafeDNSClient},
-    dns_debug, Error,
+    Error,
 };
 
-use super::{
+use crate::dns::{
     fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
     filters::{
         DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
         IPNetFilter,
     },
-    system::SystemResolver,
+    resolver::system::SystemResolver,
     ClashResolver, Config, ResolverKind, ThreadSafeDNSResolver,
 };
 
@@ -55,7 +55,7 @@ impl Resolver {
     pub async fn new_default() -> Self {
         use crate::app::dns::dns_client::DNSNetMode;
 
-        use super::config::NameServer;
+        use crate::app::dns::config::NameServer;
 
         Resolver {
             ipv6: AtomicBool::new(false),
@@ -504,7 +504,7 @@ impl ClashResolver for Resolver {
             let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
             if !fake_dns.should_skip(host) {
                 let ip = fake_dns.lookup(host).await;
-                dns_debug!("fake dns lookup: {} -> {:?}", host, ip);
+                debug!("fake dns lookup: {} -> {:?}", host, ip);
                 match ip {
                     net::IpAddr::V4(v4) => return Ok(Some(v4)),
                     _ => unreachable!("invalid IP family"),
@@ -594,7 +594,7 @@ impl ClashResolver for Resolver {
     }
 
     async fn reverse_lookup(&self, ip: net::IpAddr) -> Option<String> {
-        dns_debug!("reverse lookup: {}", ip);
+        debug!("reverse lookup: {}", ip);
         if !self.fake_ip_enabled() {
             return None;
         }
@@ -606,10 +606,7 @@ impl ClashResolver for Resolver {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::{
-        dns_client::{DNSNetMode, DnsClient, Opts},
-        Resolver, ThreadSafeDNSClient,
-    };
+
     use hickory_client::{client, op};
     use hickory_proto::{
         rr,
@@ -618,6 +615,12 @@ mod tests {
     };
     use std::{sync::Arc, time::Duration};
     use tokio::net::UdpSocket;
+
+    use crate::app::dns::{
+        dns_client::{DNSNetMode, DnsClient, Opts},
+        resolver::enhanced::Resolver,
+        ThreadSafeDNSClient,
+    };
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {
