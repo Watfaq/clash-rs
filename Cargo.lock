@@ -4021,7 +4021,7 @@ dependencies = [
  "prost 0.12.6",
  "prost-types",
  "regex",
- "syn 2.0.66",
+ "syn 2.0.70",
  "tempfile",
 ]
 
@@ -4048,7 +4048,7 @@ dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.70",
 ]
 
 [[package]]
