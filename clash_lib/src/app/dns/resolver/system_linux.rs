@@ -7,7 +7,7 @@ use hickory_resolver::{
 use rand::seq::IteratorRandom;
 use tracing::warn;
 
-use super::{ClashResolver, ResolverKind};
+use crate::app::dns::{ClashResolver, ResolverKind};
 
 pub struct SystemResolver(AsyncResolver<GenericConnector<TokioRuntimeProvider>>);
 
