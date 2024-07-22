@@ -111,9 +111,9 @@ pub fn setup_logging(
         let tracer = opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_exporter(otlp_exporter)
-            .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                KeyValue::new("service.name", "clash-rs"),
-            ])))
+            .with_trace_config(trace::Config::default().with_resource(
+                Resource::new(vec![KeyValue::new("service.name", "clash-rs")]),
+            ))
             .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
