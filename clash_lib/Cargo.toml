@@ -44,7 +44,7 @@ once_cell = "1.18.0"
 # opentelemetry
 opentelemetry = "0.23"
 opentelemetry_sdk = { version = "0.23", features = ["rt-tokio"] }
-tracing-opentelemetry = "0.24"
+tracing-opentelemetry = "0.25"
 opentelemetry-jaeger-propagator = "0.2.0"
 opentelemetry-jaeger = { version = "0.22", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.16.0", features = ["grpc-tonic"] }
