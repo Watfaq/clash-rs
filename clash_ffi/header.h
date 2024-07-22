@@ -45,6 +45,8 @@ typedef struct GeneralConfig {
 
 const char *get_last_error(void);
 
+const char *test_clash_config(const char *cfg_str);
+
 int start_clash_with_config(const char *cfg_dir,
                             const char *cfg_str,
                             const char *log_file,
@@ -61,3 +63,5 @@ void free_string(char *ptr);
 char *parse_proxy_group(const char *cfg_str);
 
 char *parse_rule_list(const char *cfg_str);
+
+char *get_clash_version(void);

@@ -139,6 +139,20 @@ pub extern "C" fn get_last_error() -> *const c_char {
 }
 
 #[no_mangle]
+pub extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
+    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
+    let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
+
+    match cfg_def {
+        Ok(_) => ptr::null(),
+        Err(err) => {
+            let err = CString::new(format!("{}", err)).unwrap();
+            err.into_raw()
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn start_clash_with_config(
     cfg_dir: *const c_char,
     cfg_str: *const c_char,
