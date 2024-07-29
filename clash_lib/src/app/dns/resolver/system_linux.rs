@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+
 use async_trait::async_trait;
 use hickory_resolver::{
     name_server::{GenericConnector, TokioRuntimeProvider},
@@ -16,7 +18,7 @@ pub struct SystemResolver {
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            resolver: hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
+            inner: hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
             ipv6: AtomicBool::new(ipv6),
         })
     }
@@ -29,7 +31,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
-        let response = self.0.lookup_ip(host).await?;
+        let response = self.inner.lookup_ip(host).await?;
         Ok(response
             .iter()
             .filter(|x| self.ipv6() || x.is_ipv4())
@@ -41,7 +43,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
-        let response = self.0.ipv4_lookup(host).await?;
+        let response = self.inner.ipv4_lookup(host).await?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
@@ -50,7 +52,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
-        let response = self.0.ipv6_lookup(host).await?;
+        let response = self.inner.ipv6_lookup(host).await?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
