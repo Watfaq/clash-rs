@@ -80,7 +80,7 @@ impl TryFrom<def::Config> for Config {
                 },
                 mode: c.mode,
                 log_level: c.log_level,
-                ipv6: c.ipv6.unwrap_or(false),
+                ipv6: c.ipv6,
                 interface: c.interface.as_ref().map(|iface| {
                     if let Ok(addr) = iface.parse::<IpAddr>() {
                         Interface::IpAddr(addr)

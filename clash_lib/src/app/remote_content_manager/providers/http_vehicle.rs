@@ -71,7 +71,7 @@ mod tests {
 
     use hyper::Uri;
 
-    use crate::app::dns::{Resolver, ThreadSafeDNSResolver};
+    use crate::app::dns::{EnhancedResolver, ThreadSafeDNSResolver};
 
     #[tokio::test]
     async fn test_http_vehicle() {
@@ -79,7 +79,7 @@ mod tests {
             .parse::<Uri>()
             .unwrap();
         let p = std::env::temp_dir().join("test_http_vehicle");
-        let r = Arc::new(Resolver::new_default().await);
+        let r = Arc::new(EnhancedResolver::new_default().await);
         let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
 
         let data = v.read().await.unwrap();

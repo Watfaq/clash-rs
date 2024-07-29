@@ -249,7 +249,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
 
         Ok(Self {
             enable: dc.enable,
-            ipv6: dc.ipv6,
+            ipv6: c.ipv6 && dc.ipv6,
             nameserver: nameservers,
             fallback,
             fallback_filter: dc.fallback_filter.clone().into(),
