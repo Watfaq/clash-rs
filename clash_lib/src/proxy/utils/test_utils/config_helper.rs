@@ -50,9 +50,10 @@ pub async fn load_config() -> anyhow::Result<(
         config.profile.store_selected,
     );
 
-    let dns_resolver: Arc<dyn ClashResolver> =
+    let dns_resolver = Arc::new(
         dns::EnhancedResolver::new(&config.dns, cache_store.clone(), mmdb.clone())
-            .await;
+            .await,
+    );
 
     Ok((config, dns_resolver))
 }

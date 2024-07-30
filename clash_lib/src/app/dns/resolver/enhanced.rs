@@ -28,8 +28,7 @@ use crate::dns::{
         DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
         IPNetFilter,
     },
-    resolver::system::SystemResolver,
-    ClashResolver, Config, ResolverKind, ThreadSafeDNSResolver,
+    ClashResolver, Config, ResolverKind,
 };
 
 static TTL: Duration = Duration::from_secs(60);
@@ -83,14 +82,7 @@ impl EnhancedResolver {
         cfg: &Config,
         store: ThreadSafeCacheFile,
         mmdb: Arc<Mmdb>,
-    ) -> ThreadSafeDNSResolver {
-        if !cfg.enable {
-            return Arc::new(
-                SystemResolver::new(cfg.ipv6)
-                    .expect("failed to create system resolver"),
-            );
-        }
-
+    ) -> Self {
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
@@ -104,7 +96,7 @@ impl EnhancedResolver {
             fake_dns: None,
         });
 
-        let r = EnhancedResolver {
+        Self {
             ipv6: AtomicBool::new(cfg.ipv6),
             main: make_clients(
                 cfg.nameserver.clone(),
@@ -207,9 +199,7 @@ impl EnhancedResolver {
                 }
                 _ => None,
             },
-        };
-
-        Arc::new(r)
+        }
     }
 
     pub async fn batch_exchange(

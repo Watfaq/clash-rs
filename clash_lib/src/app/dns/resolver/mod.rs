@@ -24,7 +24,7 @@ pub async fn new(
     if cfg.enable {
         match (store, mmdb) {
             (Some(store), Some(mmdb)) => {
-                EnhancedResolver::new(cfg, store, mmdb).await
+                Arc::new(EnhancedResolver::new(cfg, store, mmdb).await)
             }
             _ => panic!("enhanced resolver requires cache store and mmdb"),
         }
