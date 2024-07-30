@@ -1,8 +1,16 @@
 use std::io::IsTerminal;
 
 use crate::def::LogLevel;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::{
+    global::{self},
+    trace::TracerProvider,
+    KeyValue,
+};
 use opentelemetry_sdk::{trace, Resource};
+use opentelemetry_semantic_conventions::{
+    resource::{DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION},
+    SCHEMA_URL,
+};
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
@@ -106,17 +114,27 @@ pub fn setup_logging(
         })
         .unwrap();
 
-        let otlp_exporter = opentelemetry_otlp::new_exporter().tonic();
-
-        let tracer = opentelemetry_otlp::new_pipeline()
+        let provider = opentelemetry_otlp::new_pipeline()
             .tracing()
-            .with_exporter(otlp_exporter)
-            .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                KeyValue::new("service.name", "clash-rs"),
-            ])))
+            .with_exporter(opentelemetry_otlp::new_exporter().tonic())
+            .with_trace_config(trace::Config::default().with_resource(
+                Resource::from_schema_url(
+                    [
+                        KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
+                        KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+                        KeyValue::new(
+                            DEPLOYMENT_ENVIRONMENT,
+                            std::env::var("PROFILE").unwrap_or_default(),
+                        ),
+                    ],
+                    SCHEMA_URL,
+                ),
+            ))
             .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
-        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+        global::set_tracer_provider(provider.clone());
+
+        Some(tracing_opentelemetry::layer().with_tracer(provider.tracer("clash-rs")))
     } else {
         None
     };
