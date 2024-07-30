@@ -63,8 +63,11 @@ impl Client for DhcpClient {
             dbg_str.push(format!("{:?}", c));
         }
         debug!("using clients: {:?}", dbg_str);
-        tokio::time::timeout(DHCP_TIMEOUT, EnhancedResolver::batch_exchange(&clients, msg))
-            .await?
+        tokio::time::timeout(
+            DHCP_TIMEOUT,
+            EnhancedResolver::batch_exchange(&clients, msg),
+        )
+        .await?
     }
 }
 
