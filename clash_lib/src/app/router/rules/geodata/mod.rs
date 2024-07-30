@@ -137,7 +137,7 @@ mod tests {
     #[tokio::test]
     async fn test_download_and_apply() -> anyhow::Result<()> {
         let system_resolver = Arc::new(
-            SystemResolver::new()
+            SystemResolver::new(false)
                 .map_err(|x| Error::DNSError(x.to_string()))
                 .unwrap(),
         );

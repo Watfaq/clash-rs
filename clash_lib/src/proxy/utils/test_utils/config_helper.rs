@@ -33,8 +33,9 @@ pub async fn load_config() -> anyhow::Result<(
     let config_path = test_base_dir.join("ss.yaml").to_str().unwrap().to_owned();
     let config = Config::File(config_path).try_parse()?;
     let mmdb_path = test_base_dir.join("Country.mmdb");
-    let system_resolver =
-        Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
+    let system_resolver = Arc::new(
+        SystemResolver::new(false).map_err(|x| Error::DNSError(x.to_string()))?,
+    );
     let client = new_http_client(system_resolver)
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
@@ -49,9 +50,10 @@ pub async fn load_config() -> anyhow::Result<(
         config.profile.store_selected,
     );
 
-    let dns_resolver: Arc<dyn ClashResolver> =
-        dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone())
-            .await;
+    let dns_resolver = Arc::new(
+        dns::EnhancedResolver::new(&config.dns, cache_store.clone(), mmdb.clone())
+            .await,
+    );
 
     Ok((config, dns_resolver))
 }

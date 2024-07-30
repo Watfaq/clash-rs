@@ -275,10 +275,13 @@ pub struct Config {
     /// Geosite database download url
     pub geosite_download_url: Option<String>,
 
-    /// these options has default vals,
-    /// and needs extra processing
-    #[deprecated = "this is essentially just dns.ipv6 in original clash"]
-    pub ipv6: Option<bool>,
+    // these options has default vals,
+    // and needs extra processing
+    /// whether your network environment supports IPv6
+    /// this will affect the DNS server response to AAAA questions
+    /// default is `false`
+    #[serde(default = "Default::default")]
+    pub ipv6: bool,
     /// external controller address
     pub external_controller: Option<String>,
     /// dashboard folder path relative to the $CWD

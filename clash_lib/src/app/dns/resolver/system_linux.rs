@@ -1,26 +1,26 @@
+use std::sync::atomic::AtomicBool;
+
 use async_trait::async_trait;
 use hickory_resolver::{
     name_server::{GenericConnector, TokioRuntimeProvider},
     AsyncResolver,
 };
 use rand::seq::IteratorRandom;
-use tracing::warn;
 
 use crate::app::dns::{ClashResolver, ResolverKind};
 
-pub struct SystemResolver(AsyncResolver<GenericConnector<TokioRuntimeProvider>>);
+pub struct SystemResolver {
+    inner: AsyncResolver<GenericConnector<TokioRuntimeProvider>>,
+    ipv6: AtomicBool,
+}
 
 /// Bug in libc, use tokio impl instead: https://sourceware.org/bugzilla/show_bug.cgi?id=10652
 impl SystemResolver {
-    pub fn new() -> anyhow::Result<Self> {
-        warn!(
-            "Default dns resolver doesn't support ipv6, please enable clash dns \
-             resolver if you need ipv6 support."
-        );
-
-        Ok(Self(
-            hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
-        ))
+    pub fn new(ipv6: bool) -> anyhow::Result<Self> {
+        Ok(Self {
+            inner: hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
+            ipv6: AtomicBool::new(ipv6),
+        })
     }
 }
 
@@ -31,7 +31,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
-        let response = self.0.lookup_ip(host).await?;
+        let response = self.inner.lookup_ip(host).await?;
         Ok(response
             .iter()
             .filter(|x| self.ipv6() || x.is_ipv4())
@@ -43,7 +43,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
-        let response = self.0.ipv4_lookup(host).await?;
+        let response = self.inner.ipv4_lookup(host).await?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
@@ -52,7 +52,7 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
-        let response = self.0.ipv6_lookup(host).await?;
+        let response = self.inner.ipv6_lookup(host).await?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
     }
 
@@ -64,12 +64,11 @@ impl ClashResolver for SystemResolver {
     }
 
     fn ipv6(&self) -> bool {
-        // TODO: support ipv6
-        false
+        self.ipv6.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn set_ipv6(&self, _: bool) {
-        // NOOP
+    fn set_ipv6(&self, val: bool) {
+        self.ipv6.store(val, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn kind(&self) -> ResolverKind {
@@ -113,7 +112,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_resolver_default_config() {
-        let resolver = SystemResolver::new().unwrap();
+        let resolver = SystemResolver::new(false).unwrap();
         let response = resolver.resolve("www.google.com", false).await.unwrap();
         assert!(response.is_some());
     }

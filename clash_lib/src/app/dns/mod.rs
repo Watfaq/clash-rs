@@ -18,11 +18,10 @@ mod helper;
 pub mod resolver;
 mod server;
 
-pub use resolver::SystemResolver;
-
 pub use config::Config;
 
-pub use resolver::Resolver;
+pub use resolver::{new as new_resolver, EnhancedResolver, SystemResolver};
+
 pub use server::get_dns_listener;
 
 #[async_trait]

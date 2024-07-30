@@ -28,13 +28,12 @@ use crate::dns::{
         DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
         IPNetFilter,
     },
-    resolver::system::SystemResolver,
-    ClashResolver, Config, ResolverKind, ThreadSafeDNSResolver,
+    ClashResolver, Config, ResolverKind,
 };
 
 static TTL: Duration = Duration::from_secs(60);
 
-pub struct Resolver {
+pub struct EnhancedResolver {
     ipv6: AtomicBool,
     hosts: Option<trie::StringTrie<net::IpAddr>>,
     main: Vec<ThreadSafeDNSClient>,
@@ -49,7 +48,7 @@ pub struct Resolver {
     fake_dns: Option<ThreadSafeFakeDns>,
 }
 
-impl Resolver {
+impl EnhancedResolver {
     /// For testing purpose
     #[cfg(test)]
     pub async fn new_default() -> Self {
@@ -57,7 +56,7 @@ impl Resolver {
 
         use crate::app::dns::config::NameServer;
 
-        Resolver {
+        EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
             main: make_clients(
@@ -79,18 +78,12 @@ impl Resolver {
         }
     }
 
-    pub async fn new_resolver(
+    pub async fn new(
         cfg: &Config,
         store: ThreadSafeCacheFile,
         mmdb: Arc<Mmdb>,
-    ) -> ThreadSafeDNSResolver {
-        if !cfg.enable {
-            return Arc::new(
-                SystemResolver::new().expect("failed to create system resolver"),
-            );
-        }
-
-        let default_resolver = Arc::new(Resolver {
+    ) -> Self {
+        let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
             main: make_clients(cfg.default_nameserver.clone(), None).await,
@@ -103,7 +96,7 @@ impl Resolver {
             fake_dns: None,
         });
 
-        let r = Resolver {
+        Self {
             ipv6: AtomicBool::new(cfg.ipv6),
             main: make_clients(
                 cfg.nameserver.clone(),
@@ -206,9 +199,7 @@ impl Resolver {
                 }
                 _ => None,
             },
-        };
-
-        Arc::new(r)
+        }
     }
 
     pub async fn batch_exchange(
@@ -262,7 +253,7 @@ impl Resolver {
 
         match self.exchange(m).await {
             Ok(result) => {
-                let ip_list = Resolver::ip_list_of_message(&result);
+                let ip_list = EnhancedResolver::ip_list_of_message(&result);
                 if !ip_list.is_empty() {
                     Ok(ip_list)
                 } else {
@@ -293,15 +284,15 @@ impl Resolver {
         let q = message.query().unwrap();
 
         let query = async move {
-            if Resolver::is_ip_request(q) {
+            if EnhancedResolver::is_ip_request(q) {
                 return self.ip_exchange(message).await;
             }
 
             if let Some(matched) = self.match_policy(message) {
-                return Resolver::batch_exchange(matched, message).await;
+                return EnhancedResolver::batch_exchange(matched, message).await;
             }
 
-            Resolver::batch_exchange(&self.main, message).await
+            EnhancedResolver::batch_exchange(&self.main, message).await
         };
 
         let rv = query.await;
@@ -345,7 +336,7 @@ impl Resolver {
         if let (Some(_fallback), Some(_fallback_domain_filters), Some(policy)) =
             (&self.fallback, &self.fallback_domain_filters, &self.policy)
         {
-            if let Some(domain) = Resolver::domain_name_of_message(m) {
+            if let Some(domain) = EnhancedResolver::domain_name_of_message(m) {
                 return policy.search(&domain).map(|n| n.get_data().unwrap());
             }
         }
@@ -357,29 +348,31 @@ impl Resolver {
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
         if let Some(matched) = self.match_policy(message) {
-            return Resolver::batch_exchange(matched, message).await;
+            return EnhancedResolver::batch_exchange(matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return Resolver::batch_exchange(
+            return EnhancedResolver::batch_exchange(
                 self.fallback.as_ref().unwrap(),
                 message,
             )
             .await;
         }
 
-        let main_query = Resolver::batch_exchange(&self.main, message);
+        let main_query = EnhancedResolver::batch_exchange(&self.main, message);
 
         if self.fallback.is_none() {
             return main_query.await;
         }
 
-        let fallback_query =
-            Resolver::batch_exchange(self.fallback.as_ref().unwrap(), message);
+        let fallback_query = EnhancedResolver::batch_exchange(
+            self.fallback.as_ref().unwrap(),
+            message,
+        );
 
         if let Ok(main_result) = main_query.await {
-            let ip_list = Resolver::ip_list_of_message(&main_result);
+            let ip_list = EnhancedResolver::ip_list_of_message(&main_result);
             if !ip_list.is_empty() {
                 // TODO: only check 1st?
                 if !self.should_ip_fallback(&ip_list[0]) {
@@ -395,7 +388,7 @@ impl Resolver {
         if let (Some(_), Some(fallback_domain_filters)) =
             (&self.fallback, &self.fallback_domain_filters)
         {
-            if let Some(domain) = Resolver::domain_name_of_message(message) {
+            if let Some(domain) = EnhancedResolver::domain_name_of_message(message) {
                 for f in fallback_domain_filters.iter() {
                     if f.apply(domain.as_str()) {
                         return true;
@@ -449,7 +442,7 @@ impl Resolver {
 }
 
 #[async_trait]
-impl ClashResolver for Resolver {
+impl ClashResolver for EnhancedResolver {
     #[instrument(skip(self))]
     async fn resolve(
         &self,
@@ -618,7 +611,7 @@ mod tests {
 
     use crate::app::dns::{
         dns_client::{DNSNetMode, DnsClient, Opts},
-        resolver::enhanced::Resolver,
+        resolver::enhanced::EnhancedResolver,
         ThreadSafeDNSClient,
     };
 
@@ -688,7 +681,7 @@ mod tests {
     #[ignore = "network unstable on CI"]
     async fn test_dot_resolve() {
         let c = DnsClient::new_client(Opts {
-            r: Some(Arc::new(Resolver::new_default().await)),
+            r: Some(Arc::new(EnhancedResolver::new_default().await)),
             host: "dns.google".to_string(),
             port: 853,
             net: DNSNetMode::DoT,
@@ -703,7 +696,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "network unstable on CI"]
     async fn test_doh_resolve() {
-        let default_resolver = Arc::new(Resolver::new_default().await);
+        let default_resolver = Arc::new(EnhancedResolver::new_default().await);
 
         let c = DnsClient::new_client(Opts {
             r: Some(default_resolver.clone()),
@@ -741,11 +734,11 @@ mod tests {
         q.set_query_type(rr::RecordType::A);
         m.add_query(q);
 
-        let r = Resolver::batch_exchange(&vec![c.clone()], &m)
+        let r = EnhancedResolver::batch_exchange(&vec![c.clone()], &m)
             .await
             .expect("should exchange");
 
-        let ips = Resolver::ip_list_of_message(&r);
+        let ips = EnhancedResolver::ip_list_of_message(&r);
 
         assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());
@@ -757,11 +750,11 @@ mod tests {
         q.set_query_type(rr::RecordType::AAAA);
         m.add_query(q);
 
-        let r = Resolver::batch_exchange(&vec![c.clone()], &m)
+        let r = EnhancedResolver::batch_exchange(&vec![c.clone()], &m)
             .await
             .expect("should exchange");
 
-        let ips = Resolver::ip_list_of_message(&r);
+        let ips = EnhancedResolver::ip_list_of_message(&r);
 
         assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());

@@ -1,8 +1,4 @@
-use crate::{
-    common::utils::{default_bool_false, default_bool_true},
-    config::utils,
-    Error,
-};
+use crate::{common::utils::default_bool_true, config::utils, Error};
 use serde::{de::value::MapDeserializer, Deserialize};
 use serde_yaml::Value;
 use std::{
@@ -147,10 +143,10 @@ pub struct OutboundSocks5 {
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
-    #[serde(default = "default_bool_false")]
+    #[serde(default = "Default::default")]
     pub tls: bool,
     pub sni: Option<String>,
-    #[serde(default = "default_bool_false")]
+    #[serde(default = "Default::default")]
     pub skip_cert_verify: bool,
     #[serde(default = "default_bool_true")]
     pub udp: bool,
