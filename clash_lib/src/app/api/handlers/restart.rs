@@ -3,7 +3,7 @@ use std::os::unix::process::CommandExt;
 
 use axum::{response::IntoResponse, Json};
 use serde_json::Map;
-use tracing::{error, info};
+use tracing::info;
 
 pub async fn handle() -> impl IntoResponse {
     match std::env::current_exe() {
@@ -13,13 +13,18 @@ pub async fn handle() -> impl IntoResponse {
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-                if cfg!(unix) {
+                #[cfg(unix)]
+                {
                     let err = std::process::Command::new(exec)
                         .args(std::env::args().skip(1))
                         .envs(std::env::vars())
                         .exec();
                     info!("process restarted: {}", err);
-                } else {
+                }
+                #[cfg(windows)]
+                {
+                    use tracing::error;
+
                     match std::process::Command::new(exec)
                         .args(std::env::args().skip(1))
                         .envs(std::env::vars())
