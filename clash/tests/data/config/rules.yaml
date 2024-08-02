@@ -4,7 +4,7 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
 
 ipv6: true

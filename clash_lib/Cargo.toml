@@ -123,6 +123,8 @@ console-subscriber = { version = "0.4.0" }
 tracing-timing = { version = "0.6.0" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 
+memory-stats = "1.0.0"
+
 [dev-dependencies]
 tempfile = "3.10"
 mockall = "0.13.0"
