@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
 use axum::{response::IntoResponse, Json};
@@ -12,31 +13,28 @@ pub async fn handle() -> impl IntoResponse {
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-                match std::env::consts::OS {
-                    "windows" => {
-                        match std::process::Command::new(exec)
-                            .args(std::env::args().skip(1))
-                            .envs(std::env::vars())
-                            .stdin(std::process::Stdio::inherit())
-                            .stdout(std::process::Stdio::inherit())
-                            .stderr(std::process::Stdio::inherit())
-                            .spawn()
-                        {
-                            Ok(_) => {
-                                // exit the current process
-                                std::process::exit(0);
-                            }
-                            Err(e) => {
-                                error!("Failed to restart: {}", e);
-                            }
+                if cfg!(unix) {
+                    let err = std::process::Command::new(exec)
+                        .args(std::env::args().skip(1))
+                        .envs(std::env::vars())
+                        .exec();
+                    info!("process restarted: {}", err);
+                } else {
+                    match std::process::Command::new(exec)
+                        .args(std::env::args().skip(1))
+                        .envs(std::env::vars())
+                        .stdin(std::process::Stdio::inherit())
+                        .stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .spawn()
+                    {
+                        Ok(_) => {
+                            // exit the current process
+                            std::process::exit(0);
                         }
-                    }
-                    _ => {
-                        let err = std::process::Command::new(exec)
-                            .args(std::env::args().skip(1))
-                            .envs(std::env::vars())
-                            .exec();
-                        info!("process restarted: {}", err);
+                        Err(e) => {
+                            error!("Failed to restart: {}", e);
+                        }
                     }
                 }
             });
