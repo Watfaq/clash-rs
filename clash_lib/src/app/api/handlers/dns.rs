@@ -14,7 +14,7 @@ struct DNSState {
 pub fn routes(resolver: ThreadSafeDNSResolver) -> Router<Arc<AppState>> {
     let state = DNSState { resolver };
     Router::new()
-        .route("/dns", get(query_dns))
+        .route("/query", get(query_dns))
         .with_state(state)
 }
 

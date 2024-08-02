@@ -68,6 +68,7 @@ pub fn get_api_runner(
                 .route("/logs", get(handlers::log::handle))
                 .route("/traffic", get(handlers::traffic::handle))
                 .route("/version", get(handlers::version::handle))
+                .route("/memory", get(handlers::memory::handle))
                 .nest(
                     "/configs",
                     handlers::config::routes(
