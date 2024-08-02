@@ -37,12 +37,9 @@ async fn query_dns(
     State(state): State<DNSState>,
     q: Query<DnsQUery>,
 ) -> impl IntoResponse {
-    match state.resolver.kind() {
-        crate::app::dns::ResolverKind::System => {
-            return (StatusCode::BAD_REQUEST, "Clash resolver is not enabled.")
-                .into_response();
-        }
-        _ => {}
+    if let crate::app::dns::ResolverKind::System = state.resolver.kind() {
+        return (StatusCode::BAD_REQUEST, "Clash resolver is not enabled.")
+            .into_response();
     }
     let typ: RecordType = q.typ.parse().unwrap_or(RecordType::A);
     let mut m = Message::new();
@@ -63,7 +60,7 @@ async fn query_dns(
                 "Question".to_owned(),
                 response
                     .queries()
-                    .into_iter()
+                    .iter()
                     .map(|x| {
                         let mut data = Map::new();
                         data.insert("name".to_owned(), x.name().to_string().into());
@@ -102,21 +99,21 @@ async fn query_dns(
             if response.answer_count() > 0 {
                 resp.insert(
                     "Answer".to_owned(),
-                    response.answers().into_iter().map(rr2json).collect(),
+                    response.answers().iter().map(rr2json).collect(),
                 );
             }
 
             if response.name_server_count() > 0 {
                 resp.insert(
                     "Authority".to_owned(),
-                    response.name_servers().into_iter().map(rr2json).collect(),
+                    response.name_servers().iter().map(rr2json).collect(),
                 );
             }
 
             if response.additional_count() > 0 {
                 resp.insert(
                     "Additional".to_owned(),
-                    response.additionals().into_iter().map(rr2json).collect(),
+                    response.additionals().iter().map(rr2json).collect(),
                 );
             }
 
