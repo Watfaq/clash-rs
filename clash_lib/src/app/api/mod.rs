@@ -1,6 +1,10 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
-use axum::{response::Redirect, routing::get, Router};
+use axum::{
+    response::Redirect,
+    routing::{get, post},
+    Router,
+};
 
 use http::{header, Method};
 use tokio::sync::{broadcast::Sender, Mutex};
@@ -69,6 +73,7 @@ pub fn get_api_runner(
                 .route("/traffic", get(handlers::traffic::handle))
                 .route("/version", get(handlers::version::handle))
                 .route("/memory", get(handlers::memory::handle))
+                .route("/restart", post(handlers::restart::handle))
                 .nest(
                     "/configs",
                     handlers::config::routes(
