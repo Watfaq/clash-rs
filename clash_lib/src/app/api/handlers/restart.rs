@@ -3,7 +3,6 @@ use std::os::unix::process::CommandExt;
 
 use axum::{response::IntoResponse, Json};
 use serde_json::Map;
-use tracing::info;
 
 pub async fn handle() -> impl IntoResponse {
     match std::env::current_exe() {
@@ -15,6 +14,8 @@ pub async fn handle() -> impl IntoResponse {
 
                 #[cfg(unix)]
                 {
+                    use tracing::info;
+
                     let err = std::process::Command::new(exec)
                         .args(std::env::args().skip(1))
                         .envs(std::env::vars())
