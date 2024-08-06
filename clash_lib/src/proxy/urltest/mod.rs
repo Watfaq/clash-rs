@@ -18,7 +18,8 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default)]
@@ -118,6 +119,8 @@ impl Handler {
             .clone();
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

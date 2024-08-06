@@ -19,7 +19,10 @@ use crate::{
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
+use super::{
+    AnyOutboundHandler, CommonOption, ConnectorType, DialWithConnector,
+    OutboundHandler, OutboundType,
+};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -38,6 +41,7 @@ mod wireguard;
 
 pub struct HandlerOptions {
     pub name: String,
+    pub common_opts: CommonOption,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,
@@ -206,6 +210,8 @@ impl Handler {
     }
 }
 
+impl DialWithConnector for Handler {}
+
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
@@ -342,6 +348,7 @@ mod tests {
     async fn test_wg() -> anyhow::Result<()> {
         let opts = HandlerOptions {
             name: "wg".to_owned(),
+            common_opts: Default::default(),
             server: "127.0.0.1".to_owned(),
             port: 10002,
             ip: Ipv4Addr::new(10, 13, 13, 2),

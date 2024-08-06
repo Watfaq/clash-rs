@@ -11,6 +11,7 @@ use shadowsocks::{
     relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
     ServerConfig,
 };
+use tracing::debug;
 
 use crate::{
     app::{
@@ -24,13 +25,18 @@ use crate::{
     session::Session,
     Error,
 };
-use std::{collections::HashMap, io, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    io,
+    sync::{Arc, Mutex},
+};
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 
 use super::{
-    utils::{new_tcp_stream, new_udp_socket, RemoteConnector},
-    AnyOutboundHandler, AnyStream, ConnectorType, OutboundType,
+    utils::{new_udp_socket, DirectConnector, RemoteConnector},
+    AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
 
 #[derive(Clone, Copy)]
@@ -193,12 +199,24 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+
+    dialer: Arc<tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>>,
+}
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Shadowsocks")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            opts,
+            dialer: Arc::new(tokio::sync::Mutex::new(None)),
+        }
     }
 
     async fn proxy_stream(
@@ -267,6 +285,18 @@ impl Handler {
 }
 
 #[async_trait]
+impl DialWithConnector for Handler {
+    fn support_dialer(&self) -> Option<&str> {
+        self.opts.common_opts.connector.as_ref().map(|x| x.as_ref())
+    }
+
+    async fn register_dialer(&self, dialer: Arc<dyn RemoteConnector>) {
+        let mut d = self.dialer.lock().await;
+        *d = Some(dialer);
+    }
+}
+
+#[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
         self.opts.name.as_str()
@@ -285,29 +315,20 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
+        let default_dialer: Arc<dyn RemoteConnector> =
+            Arc::new(DirectConnector::new()) as _;
+        let dialer = self.dialer.lock().await;
 
-        let s = self.proxy_stream(stream, sess, resolver).await?;
-        let chained = ChainedStreamWrapper::new(s);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_stream_with_connector(
+            sess,
+            resolver,
+            dialer.as_ref().unwrap_or(&default_dialer).as_ref(),
+        )
+        .await
     }
 
     async fn connect_datagram(
@@ -421,7 +442,7 @@ mod tests {
             udp: false,
         };
         let port = opts.port;
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
@@ -476,7 +497,7 @@ mod tests {
             })),
             udp: false,
         };
-        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
@@ -532,7 +553,7 @@ mod tests {
             udp: false,
         };
 
-        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
         chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;

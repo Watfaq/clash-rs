@@ -7,7 +7,7 @@ use crate::{
     Error,
 };
 
-impl TryFrom<OutboundShadowsocks> for AnyOutboundHandler {
+impl TryFrom<OutboundShadowsocks> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundShadowsocks) -> Result<Self, Self::Error> {
@@ -15,15 +15,18 @@ impl TryFrom<OutboundShadowsocks> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundShadowsocks> for AnyOutboundHandler {
+impl TryFrom<&OutboundShadowsocks> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
-            name: s.name.to_owned(),
-            common_opts: CommonOption::default(),
-            server: s.server.to_owned(),
-            port: s.port,
+            name: s.common_opts.name.to_owned(),
+            common_opts: CommonOption {
+                connector: s.common_opts.connect_via.clone(),
+                ..Default::default()
+            },
+            server: s.common_opts.server.to_owned(),
+            port: s.common_opts.port,
             password: s.password.to_owned(),
             cipher: s.cipher.to_owned(),
             plugin_opts: match &s.plugin {

@@ -52,8 +52,8 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 use super::{
     datagram::UdpPacket,
     utils::{get_outbound_interface, Interface},
-    AnyOutboundDatagram, AnyOutboundHandler, ConnectorType, OutboundHandler,
-    OutboundType,
+    AnyOutboundDatagram, AnyOutboundHandler, ConnectorType, DialWithConnector,
+    OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -94,6 +94,8 @@ pub struct Handler {
     conn: AsyncMutex<Option<Arc<TuicConnection>>>,
     next_assoc_id: AtomicU16,
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

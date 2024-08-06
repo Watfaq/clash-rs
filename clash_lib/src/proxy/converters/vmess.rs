@@ -25,14 +25,17 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
     fn try_from(s: &OutboundVmess) -> Result<Self, Self::Error> {
         let skip_cert_verify = s.skip_cert_verify.unwrap_or_default();
         if skip_cert_verify {
-            warn!("skipping TLS cert verification for {}", s.server);
+            warn!(
+                "skipping TLS cert verification for {}",
+                s.common_opts.server
+            );
         }
 
         let h = Handler::new(HandlerOptions {
-            name: s.name.to_owned(),
-            common_opts: CommonOption::default(),
-            server: s.server.to_owned(),
-            port: s.port,
+            name: s.common_opts.name.to_owned(),
+            common_opts: Default::default(),
+            server: s.common_opts.server.to_owned(),
+            port: s.common_opts.port,
             uuid: s.uuid.clone(),
             alter_id: s.alter_id,
             security: s.cipher.clone().unwrap_or_default(),
@@ -77,7 +80,10 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                                     .host
                                     .as_ref()
                                     .map(|x| x.to_owned())
-                                    .unwrap_or(vec![s.server.to_owned()]),
+                                    .unwrap_or(vec![s
+                                        .common_opts
+                                        .server
+                                        .to_owned()]),
                                 path: x
                                     .path
                                     .as_ref()
@@ -96,7 +102,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                                 host: s
                                     .server_name
                                     .as_ref()
-                                    .unwrap_or(&s.server)
+                                    .unwrap_or(&s.common_opts.server)
                                     .to_owned(),
                                 service_name: x
                                     .grpc_service_name
@@ -127,7 +133,7 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
                                     h.cloned()
                                 })
                             })
-                            .unwrap_or(s.server.to_owned())
+                            .unwrap_or(s.common_opts.server.to_owned())
                             .to_owned(),
                     ),
                     alpn: s

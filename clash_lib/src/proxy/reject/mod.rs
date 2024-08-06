@@ -4,25 +4,25 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     config::internal::proxy::PROXY_REJECT,
-    proxy::{AnyOutboundHandler, OutboundHandler},
+    proxy::OutboundHandler,
     session::Session,
 };
 use async_trait::async_trait;
 use serde::Serialize;
-use std::{io, sync::Arc};
+use std::io;
 
-use super::{ConnectorType, OutboundType};
+use super::{ConnectorType, DialWithConnector, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-
-    pub fn new() -> AnyOutboundHandler {
-        Arc::new(Self)
+    pub fn new() -> Self {
+        Self
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

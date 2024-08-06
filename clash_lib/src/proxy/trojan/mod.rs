@@ -22,11 +22,10 @@ use self::datagram::OutboundDatagramTrojan;
 
 use super::{
     options::{GrpcOption, WsOption},
-    transport,
-    transport::TLSOptions,
+    transport::{self, TLSOptions},
     utils::{new_tcp_stream, RemoteConnector},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
-    OutboundType,
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, DialWithConnector,
+    OutboundHandler, OutboundType,
 };
 
 mod datagram;
@@ -127,6 +126,8 @@ impl Handler {
         Ok(s)
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

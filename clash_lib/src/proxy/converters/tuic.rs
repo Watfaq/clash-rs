@@ -23,9 +23,9 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
 
     fn try_from(s: &OutboundTuic) -> Result<Self, Self::Error> {
         Handler::new(HandlerOptions {
-            name: s.name.to_owned(),
-            server: s.server.to_owned(),
-            port: s.port,
+            name: s.common_opts.name.to_owned(),
+            server: s.common_opts.server.to_owned(),
+            port: s.common_opts.port,
             uuid: s.uuid.to_owned(),
             password: s.password.to_owned(),
             udp_relay_mode: s

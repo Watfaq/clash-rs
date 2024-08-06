@@ -24,21 +24,24 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
     fn try_from(s: &OutboundTrojan) -> Result<Self, Self::Error> {
         let skip_cert_verify = s.skip_cert_verify.unwrap_or_default();
         if skip_cert_verify {
-            warn!("skipping TLS cert verification for {}", s.server);
+            warn!(
+                "skipping TLS cert verification for {}",
+                s.common_opts.server
+            );
         }
 
         let h = Handler::new(HandlerOptions {
-            name: s.name.to_owned(),
-            common_opts: CommonOption::default(),
-            server: s.server.to_owned(),
-            port: s.port,
+            name: s.common_opts.name.to_owned(),
+            common_opts: Default::default(),
+            server: s.common_opts.server.to_owned(),
+            port: s.common_opts.port,
             password: s.password.clone(),
             udp: s.udp.unwrap_or_default(),
             sni: s
                 .sni
                 .as_ref()
                 .map(|x| x.to_owned())
-                .unwrap_or(s.server.to_owned()),
+                .unwrap_or(s.common_opts.server.to_owned()),
             alpn: s.alpn.as_ref().map(|x| x.to_owned()),
             skip_cert_verify,
             transport: s
@@ -77,7 +80,11 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
                         .as_ref()
                         .map(|x| {
                             Transport::Grpc(GrpcOption {
-                                host: s.sni.as_ref().unwrap_or(&s.server).to_owned(),
+                                host: s
+                                    .sni
+                                    .as_ref()
+                                    .unwrap_or(&s.common_opts.server)
+                                    .to_owned(),
                                 service_name: x
                                     .grpc_service_name
                                     .as_ref()

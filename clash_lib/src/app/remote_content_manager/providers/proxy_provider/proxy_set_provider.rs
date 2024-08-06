@@ -18,7 +18,7 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{direct, reject, AnyOutboundHandler},
+    proxy::{direct, reject, shadowsocks, AnyOutboundHandler},
     Error,
 };
 
@@ -108,13 +108,16 @@ impl ProxySetProvider {
                         .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
                         .map(|x| match x {
                             OutboundProxyProtocol::Direct => {
-                                Ok(direct::Handler::new())
+                                Ok(Arc::new(direct::Handler::new()) as _)
                             }
                             OutboundProxyProtocol::Reject => {
-                                Ok(reject::Handler::new())
+                                Ok(Arc::new(reject::Handler::new()) as _)
                             }
                             #[cfg(feature = "shadowsocks")]
-                            OutboundProxyProtocol::Ss(s) => s.try_into(),
+                            OutboundProxyProtocol::Ss(s) => {
+                                let h: shadowsocks::Handler = s.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
                             OutboundProxyProtocol::Socks5(s) => s.try_into(),
                             OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
                             OutboundProxyProtocol::Vmess(vm) => vm.try_into(),

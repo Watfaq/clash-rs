@@ -12,8 +12,8 @@ use crate::{
     proxy::{
         transport::{self, TLSOptions},
         utils::{new_tcp_stream, new_udp_socket, RemoteConnector},
-        AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
-        OutboundType,
+        AnyOutboundHandler, AnyStream, CommonOption, ConnectorType,
+        DialWithConnector, OutboundHandler, OutboundType,
     },
     session::Session,
 };
@@ -146,6 +146,8 @@ impl Handler {
         ))
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

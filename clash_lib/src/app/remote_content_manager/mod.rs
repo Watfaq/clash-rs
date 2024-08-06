@@ -274,7 +274,7 @@ mod tests {
         let manager =
             remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
-        let mock_handler = direct::Handler::new();
+        let mock_handler = Arc::new(direct::Handler::new());
 
         manager
             .url_test(
