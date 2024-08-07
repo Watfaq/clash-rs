@@ -4,15 +4,11 @@ mod simple_obfs;
 mod stream;
 mod v2ray;
 
-use async_trait::async_trait;
-use futures::TryFutureExt;
-use shadowsocks::{
-    config::ServerType, context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
-    ServerConfig,
+use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
+use super::{
+    utils::{new_udp_socket, DirectConnector, RemoteConnector},
+    AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
-use tracing::debug;
-
 use crate::{
     app::{
         dispatcher::{
@@ -25,19 +21,14 @@ use crate::{
     session::Session,
     Error,
 };
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    io,
-    sync::{Arc, Mutex},
+use async_trait::async_trait;
+use shadowsocks::{
+    config::ServerType, context::Context, crypto::CipherKind,
+    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
+    ServerConfig,
 };
-
-use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
-
-use super::{
-    utils::{new_udp_socket, DirectConnector, RemoteConnector},
-    AnyStream, ConnectorType, DialWithConnector, OutboundType,
-};
+use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
+use tracing::debug;
 
 #[derive(Clone, Copy)]
 pub enum SimpleOBFSMode {
@@ -200,7 +191,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    dialer: Arc<tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl Debug for Handler {
@@ -215,7 +206,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
-            dialer: Arc::new(tokio::sync::Mutex::new(None)),
+            connector: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -287,12 +278,12 @@ impl Handler {
 #[async_trait]
 impl DialWithConnector for Handler {
     fn support_dialer(&self) -> Option<&str> {
-        self.opts.common_opts.connector.as_ref().map(|x| x.as_ref())
+        self.opts.common_opts.connector.as_deref()
     }
 
-    async fn register_dialer(&self, dialer: Arc<dyn RemoteConnector>) {
-        let mut d = self.dialer.lock().await;
-        *d = Some(dialer);
+    async fn register_connector(&self, connector: Arc<dyn RemoteConnector>) {
+        let mut m = self.connector.lock().await;
+        *m = Some(connector);
     }
 }
 
@@ -317,7 +308,7 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedStream> {
         let default_dialer: Arc<dyn RemoteConnector> =
             Arc::new(DirectConnector::new()) as _;
-        let dialer = self.dialer.lock().await;
+        let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);

@@ -16,6 +16,12 @@ use super::{ConnectorType, DialWithConnector, OutboundType};
 #[derive(Serialize)]
 pub struct Handler;
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Reject").finish()
+    }
+}
+
 impl Handler {
     pub fn new() -> Self {
         Self

@@ -129,6 +129,10 @@ pub struct CommonOption {
     pub name: String,
     pub server: String,
     pub port: u16,
+    /// this can be a proxy name or a group name
+    /// can't be a name in a proxy provider
+    /// only applies to raw proxy, i.e. applying this to a proxy group does
+    /// nothing
     #[serde(alias = "dialer-proxy")]
     pub connect_via: Option<String>,
 }

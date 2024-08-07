@@ -147,6 +147,7 @@ proxies:
     cipher: auto
     udp: true
     skip-cert-verify: true
+    connect-via: auto
 
   - name: ws-vmess
     type: vmess

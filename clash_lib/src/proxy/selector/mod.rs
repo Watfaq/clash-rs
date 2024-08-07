@@ -46,6 +46,14 @@ pub struct Handler {
     inner: Arc<RwLock<HandlerInner>>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Selector")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
 impl Handler {
     pub async fn new(
         opts: HandlerOptions,

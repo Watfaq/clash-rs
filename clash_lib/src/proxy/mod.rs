@@ -169,7 +169,7 @@ pub enum ConnectorType {
 }
 
 #[async_trait]
-pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector {
+pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// The name of the outbound handler
     fn name(&self) -> &str;
 
@@ -242,5 +242,5 @@ pub trait DialWithConnector {
 
     /// register a dialer for the outbound handler
     /// this must be called before the outbound handler is used
-    async fn register_dialer(&self, _: Arc<dyn RemoteConnector>) {}
+    async fn register_connector(&self, _: Arc<dyn RemoteConnector>) {}
 }

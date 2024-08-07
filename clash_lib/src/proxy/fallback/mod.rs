@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, fmt::Debug, io};
 
 use erased_serde::Serialize;
 use tracing::debug;
@@ -30,6 +30,14 @@ pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
+}
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fallback")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {

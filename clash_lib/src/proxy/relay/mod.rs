@@ -37,6 +37,14 @@ pub struct Handler {
     providers: Vec<ThreadSafeProxyProvider>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Relay")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
 impl Handler {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(

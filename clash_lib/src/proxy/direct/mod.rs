@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     app::{
         dispatcher::{
@@ -24,6 +26,12 @@ use super::{
 
 #[derive(Serialize)]
 pub struct Handler;
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Direct").finish()
+    }
+}
 
 impl Handler {
     pub fn new() -> Self {

@@ -110,6 +110,7 @@ pub struct ProxyConnector {
 impl ProxyConnector {
     pub fn new(
         proxy: AnyOutboundHandler,
+        // TODO: make this Arc
         connector: Box<dyn RemoteConnector>,
     ) -> Self {
         Self { proxy, connector }

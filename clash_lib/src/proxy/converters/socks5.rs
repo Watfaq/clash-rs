@@ -2,11 +2,11 @@ use crate::{
     config::internal::proxy::OutboundSocks5,
     proxy::{
         socks::{Handler, HandlerOptions},
-        AnyOutboundHandler, CommonOption,
+        CommonOption,
     },
 };
 
-impl TryFrom<OutboundSocks5> for AnyOutboundHandler {
+impl TryFrom<OutboundSocks5> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundSocks5) -> Result<Self, Self::Error> {
@@ -14,13 +14,16 @@ impl TryFrom<OutboundSocks5> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundSocks5> for AnyOutboundHandler {
+impl TryFrom<&OutboundSocks5> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundSocks5) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: Default::default(),
+            common_opts: CommonOption {
+                connector: s.common_opts.connect_via.clone(),
+                ..Default::default()
+            },
             server: s.common_opts.server.to_owned(),
             port: s.common_opts.port,
             user: s.username.clone(),
