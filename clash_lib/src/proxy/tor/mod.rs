@@ -34,17 +34,22 @@ pub struct Handler {
     client: arti_client::TorClient<tor_rtcompat::PreferredRuntime>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tor").finish()
+    }
+}
+
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self {
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
             opts,
             client: arti_client::TorClient::builder()
                 .config(TorClientConfig::default())
                 .bootstrap_behavior(arti_client::BootstrapBehavior::OnDemand)
                 .create_unbootstrapped()
                 .unwrap(),
-        })
+        }
     }
 }
 

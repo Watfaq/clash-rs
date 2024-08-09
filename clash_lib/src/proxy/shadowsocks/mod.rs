@@ -6,7 +6,7 @@ mod v2ray;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    utils::{new_udp_socket, DirectConnector, RemoteConnector},
+    utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    impl_default_connector,
     proxy::{CommonOption, OutboundHandler},
     session::Session,
     Error,
@@ -194,6 +195,8 @@ pub struct Handler {
     connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
 }
 
+impl_default_connector!(Handler);
+
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Shadowsocks")
@@ -276,18 +279,6 @@ impl Handler {
 }
 
 #[async_trait]
-impl DialWithConnector for Handler {
-    fn support_dialer(&self) -> Option<&str> {
-        self.opts.common_opts.connector.as_deref()
-    }
-
-    async fn register_connector(&self, connector: Arc<dyn RemoteConnector>) {
-        let mut m = self.connector.lock().await;
-        *m = Some(connector);
-    }
-}
-
-#[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
         self.opts.name.as_str()
@@ -306,8 +297,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let default_dialer: Arc<dyn RemoteConnector> =
-            Arc::new(DirectConnector::new()) as _;
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -317,7 +306,10 @@ impl OutboundHandler for Handler {
         self.connect_stream_with_connector(
             sess,
             resolver,
-            dialer.as_ref().unwrap_or(&default_dialer).as_ref(),
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
         .await
     }

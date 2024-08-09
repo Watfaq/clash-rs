@@ -3,7 +3,10 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use crate::proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket};
+use crate::{
+    impl_default_connector,
+    proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
+};
 use anyhow::Result;
 use axum::async_trait;
 
@@ -34,7 +37,10 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::tls::GLOBAL_ROOT_STORE,
-    proxy::tuic::types::{ServerAddr, TuicEndpoint},
+    proxy::{
+        tuic::types::{ServerAddr, TuicEndpoint},
+        DialWithConnector,
+    },
     session::Session,
 };
 
@@ -51,8 +57,8 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
     datagram::UdpPacket,
-    utils::{get_outbound_interface, Interface},
-    AnyOutboundDatagram, AnyOutboundHandler, ConnectorType, DialWithConnector,
+    utils::{get_outbound_interface, Interface, RemoteConnector},
+    AnyOutboundDatagram, AnyOutboundHandler, CommonOption, ConnectorType,
     OutboundHandler, OutboundType,
 };
 
@@ -77,6 +83,8 @@ pub struct HandlerOptions {
     pub send_window: u64,
     pub receive_window: VarInt,
 
+    pub common_opts: CommonOption,
+
     /// not used
     #[allow(dead_code)]
     pub max_udp_relay_packet_size: u64,
@@ -93,6 +101,14 @@ pub struct Handler {
     ep: OnceCell<TuicEndpoint>,
     conn: AsyncMutex<Option<Arc<TuicConnection>>>,
     next_assoc_id: AtomicU16,
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tuic")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl DialWithConnector for Handler {}
@@ -139,14 +155,13 @@ impl OutboundHandler for Handler {
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> Result<AnyOutboundHandler, crate::Error> {
-        Ok(Arc::new(Self {
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
             opts,
             ep: OnceCell::new(),
             conn: AsyncMutex::new(None),
             next_assoc_id: AtomicU16::new(0),
-        }))
+        }
     }
 
     async fn init_endpoint(

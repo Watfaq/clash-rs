@@ -2,7 +2,7 @@ use crate::{
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
         shadowsocks::{Handler, HandlerOptions, OBFSOption},
-        AnyOutboundHandler, CommonOption,
+        CommonOption,
     },
     Error,
 };

@@ -11,9 +11,10 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
+    impl_default_connector,
     proxy::{
         transport::{self, TLSOptions},
-        utils::{new_tcp_stream, new_udp_socket, DirectConnector, RemoteConnector},
+        utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
         OutboundType,
     },
@@ -160,16 +161,7 @@ impl Handler {
     }
 }
 
-#[async_trait]
-impl DialWithConnector for Handler {
-    fn support_dialer(&self) -> Option<&str> {
-        self.opts.common_opts.connector.as_deref()
-    }
-
-    async fn register_connector(&self, connector: Arc<dyn RemoteConnector>) {
-        *self.connector.lock().await = Some(connector);
-    }
-}
+impl_default_connector!(Handler);
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -190,8 +182,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
-        let default_dialer: Arc<dyn RemoteConnector> =
-            Arc::new(DirectConnector::new()) as _;
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -201,7 +191,10 @@ impl OutboundHandler for Handler {
         self.connect_stream_with_connector(
             sess,
             resolver,
-            dialer.as_ref().unwrap_or(&default_dialer).as_ref(),
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
         .await
     }
@@ -213,8 +206,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let default_dialer: Arc<dyn RemoteConnector> =
-            Arc::new(DirectConnector::new()) as _;
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -224,7 +215,10 @@ impl OutboundHandler for Handler {
         self.connect_datagram_with_connector(
             sess,
             resolver,
-            dialer.as_ref().unwrap_or(&default_dialer).as_ref(),
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
         .await
     }

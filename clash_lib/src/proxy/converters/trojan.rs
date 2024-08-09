@@ -5,12 +5,12 @@ use crate::{
     proxy::{
         options::{GrpcOption, WsOption},
         trojan::{Handler, HandlerOptions, Transport},
-        AnyOutboundHandler, CommonOption,
+        CommonOption,
     },
     Error,
 };
 
-impl TryFrom<OutboundTrojan> for AnyOutboundHandler {
+impl TryFrom<OutboundTrojan> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundTrojan) -> Result<Self, Self::Error> {
@@ -18,7 +18,7 @@ impl TryFrom<OutboundTrojan> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
+impl TryFrom<&OutboundTrojan> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundTrojan) -> Result<Self, Self::Error> {
@@ -32,7 +32,10 @@ impl TryFrom<&OutboundTrojan> for AnyOutboundHandler {
 
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: Default::default(),
+            common_opts: CommonOption {
+                connector: s.common_opts.connect_via.clone(),
+                ..Default::default()
+            },
             server: s.common_opts.server.to_owned(),
             port: s.common_opts.port,
             password: s.password.clone(),

@@ -42,6 +42,14 @@ pub struct Handler {
     inner: Arc<Mutex<HandlerInner>>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UrlTest")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
 impl Handler {
     pub fn new(
         opts: HandlerOptions,

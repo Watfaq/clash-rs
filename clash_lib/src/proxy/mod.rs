@@ -2,7 +2,6 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
-        outbound::manager::ThreadSafeOutboundManager,
     },
     proxy::{datagram::UdpPacket, utils::Interface},
     session::Session,
@@ -31,7 +30,6 @@ pub mod http;
 pub mod mixed;
 
 pub(crate) mod datagram;
-mod options;
 
 pub mod converters;
 #[cfg(feature = "shadowsocks")]
@@ -52,6 +50,8 @@ pub mod relay;
 pub mod selector;
 pub mod urltest;
 
+mod common;
+mod options;
 mod transport;
 
 #[cfg(test)]

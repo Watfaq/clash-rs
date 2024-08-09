@@ -15,6 +15,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
+    impl_default_connector,
     session::{Session, SocksAddr},
 };
 
@@ -23,7 +24,7 @@ use self::vmess_impl::OutboundDatagramVmess;
 use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
-    utils::{new_tcp_stream, RemoteConnector},
+    utils::{new_tcp_stream, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, DialWithConnector,
     OutboundHandler, OutboundType,
 };
@@ -51,12 +52,26 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Vmess")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
+impl_default_connector!(Handler);
+
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            opts,
+            connector: tokio::sync::Mutex::new(None),
+        }
     }
 
     async fn inner_proxy_stream<'a>(
@@ -156,8 +171,6 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
-
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
@@ -179,30 +192,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        debug!("Connecting to {} via VMess", sess);
-        let stream = new_tcp_stream(
-            resolver,
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
+        let dialer = self.connector.lock().await;
 
-        let s = self.inner_proxy_stream(stream, sess, false).await?;
-        let chained = ChainedStreamWrapper::new(s);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_stream_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
+        )
+        .await
     }
 
     async fn connect_datagram(
@@ -210,46 +214,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+        let dialer = self.connector.lock().await;
+
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_datagram_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
-
-        let remote_addr = resolver
-            .resolve_v4(sess.destination.host().as_str(), false)
-            .map_err(map_io_error)
-            .await?
-            .ok_or(new_io_error(
-                format!("failed to resolve {}", sess.destination.host()).as_str(),
-            ))?;
-
-        let stream = self.inner_proxy_stream(stream, sess, true).await?;
-
-        let d = OutboundDatagramVmess::new(
-            stream,
-            SocksAddr::Ip(std::net::SocketAddr::new(
-                IpAddr::V4(remote_addr),
-                sess.destination.port(),
-            )),
-        );
-
-        let chained = ChainedDatagramWrapper::new(d);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        .await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -368,7 +347,7 @@ mod tests {
                 early_data_header_name: "".to_owned(),
             })),
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
         let runner = get_ws_runner().await?;
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
@@ -412,7 +391,7 @@ mod tests {
                 service_name: "example!".to_owned(),
             })),
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
             .await
     }
@@ -456,7 +435,7 @@ mod tests {
                 path: "/testlollol".into(),
             })),
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all())
             .await
     }

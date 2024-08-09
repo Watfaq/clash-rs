@@ -28,8 +28,9 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, shadowsocks, socks,
+        fallback, loadbalance, selector, shadowsocks, socks, tor, trojan, tuic,
         utils::{DirectConnector, ProxyConnector},
+        vmess, wg,
     },
 };
 
@@ -239,24 +240,39 @@ impl OutboundManager {
                 }
 
                 OutboundProxyProtocol::Vmess(v) => {
-                    handlers.insert(v.common_opts.name.clone(), v.try_into()?);
+                    handlers.insert(v.common_opts.name.clone(), {
+                        let h: vmess::Handler = v.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
 
                 OutboundProxyProtocol::Trojan(v) => {
-                    handlers.insert(v.common_opts.name.clone(), v.try_into()?);
+                    handlers.insert(v.common_opts.name.clone(), {
+                        let h: trojan::Handler = v.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
 
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
-                    handlers.insert(wg.common_opts.name.clone(), wg.try_into()?);
+                    handlers.insert(wg.common_opts.name.clone(), {
+                        let h: wg::Handler = wg.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
 
                 OutboundProxyProtocol::Tor(tor) => {
-                    handlers.insert(tor.name.clone(), tor.try_into()?);
+                    handlers.insert(tor.name.clone(), {
+                        let h: tor::Handler = tor.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
                 #[cfg(feature = "tuic")]
                 OutboundProxyProtocol::Tuic(tuic) => {
-                    handlers.insert(tuic.common_opts.name.clone(), tuic.try_into()?);
+                    handlers.insert(tuic.common_opts.name.clone(), {
+                        let h: tuic::Handler = tuic.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
             }
         }

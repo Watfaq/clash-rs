@@ -15,7 +15,10 @@ use crate::{
     session::Session,
 };
 
-use super::{AnyOutboundHandler, DialWithConnector, OutboundHandler, OutboundType};
+use super::{
+    utils::RemoteConnector, AnyOutboundHandler, DialWithConnector, OutboundHandler,
+    OutboundType,
+};
 
 mock! {
     pub DummyProxyProvider {}
@@ -41,6 +44,7 @@ mock! {
 }
 
 mock! {
+    #[derive(Debug)]
     pub DummyOutboundHandler {}
 
     #[async_trait::async_trait]
@@ -75,4 +79,25 @@ mock! {
     }
 
     impl DialWithConnector for DummyOutboundHandler {}
+}
+
+mock! {
+    #[derive(Debug)]
+    pub MockProxyConnector{}
+
+    #[async_trait::async_trait]
+    impl RemoteConnector for MockProxyConnector {
+        async fn connect_stream(
+            &self,
+            sess: &Session,
+            resolver: ThreadSafeDNSResolver,
+        ) -> io::Result<BoxedChainedStream>;
+
+        async fn connect_datagram(
+            &self,
+            sess: &Session,
+            resolver: ThreadSafeDNSResolver,
+        ) -> io::Result<BoxedChainedDatagram>;
+    }
+
 }

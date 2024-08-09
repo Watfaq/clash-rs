@@ -11,7 +11,7 @@ use crate::{
     Error,
 };
 
-impl TryFrom<OutboundVmess> for AnyOutboundHandler {
+impl TryFrom<OutboundVmess> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundVmess) -> Result<Self, Self::Error> {
@@ -19,7 +19,7 @@ impl TryFrom<OutboundVmess> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
+impl TryFrom<&OutboundVmess> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundVmess) -> Result<Self, Self::Error> {
@@ -33,7 +33,10 @@ impl TryFrom<&OutboundVmess> for AnyOutboundHandler {
 
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: Default::default(),
+            common_opts: CommonOption {
+                connector: s.common_opts.connect_via.clone(),
+                ..Default::default()
+            },
             server: s.common_opts.server.to_owned(),
             port: s.common_opts.port,
             uuid: s.uuid.clone(),

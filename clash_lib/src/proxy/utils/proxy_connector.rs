@@ -1,6 +1,7 @@
-use std::{fmt::Debug, net::SocketAddr};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use tracing::trace;
 
 use crate::{
@@ -53,6 +54,13 @@ impl DirectConnector {
     pub fn new() -> Self {
         Self
     }
+}
+
+pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn RemoteConnector>> =
+    Lazy::new(global_direct_connector);
+
+fn global_direct_connector() -> Arc<dyn RemoteConnector> {
+    Arc::new(DirectConnector::new())
 }
 
 #[async_trait]

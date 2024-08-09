@@ -23,7 +23,10 @@ use tokio::{
 };
 use tracing::{enabled, error, trace, trace_span, warn, Instrument};
 
-use crate::{proxy::utils::new_udp_socket, Error};
+use crate::{
+    proxy::utils::{new_udp_socket, RemoteConnector},
+    Error,
+};
 
 use super::events::PortProtocol;
 
@@ -68,6 +71,7 @@ impl WireguardTunnel {
         config: Config,
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
+        #[allow(unused)] connector: Option<Arc<dyn RemoteConnector>>,
     ) -> Result<Self, Error> {
         let peer = Tunn::new(
             config.private_key,
