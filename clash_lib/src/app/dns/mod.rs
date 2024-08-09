@@ -68,7 +68,6 @@ pub trait ClashResolver: Sync + Send {
     /// Only used for look up fake IP
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool;
-    async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool;
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);

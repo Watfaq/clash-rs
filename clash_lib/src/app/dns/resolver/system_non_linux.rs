@@ -102,10 +102,6 @@ impl ClashResolver for SystemResolver {
         false
     }
 
-    async fn fake_ip_exists(&self, _: std::net::IpAddr) -> bool {
-        false
-    }
-
     async fn reverse_lookup(&self, _: std::net::IpAddr) -> Option<String> {
         None
     }

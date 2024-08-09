@@ -72,7 +72,16 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        false
+        for proxy in self.get_proxies(false).await {
+            match proxy.support_connector().await {
+                ConnectorType::All => return true,
+                _ => (),
+            }
+            if !proxy.support_udp().await {
+                return false;
+            }
+        }
+        true
     }
 
     async fn connect_stream(

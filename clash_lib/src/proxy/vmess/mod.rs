@@ -22,8 +22,9 @@ use self::vmess_impl::OutboundDatagramVmess;
 use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR}, AnyStream, CommonOption, ConnectorType, DialWithConnector,
-    OutboundHandler, OutboundType,
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 pub enum VmessTransport {
@@ -141,7 +142,10 @@ impl Handler {
                 grpc_builder.proxy_stream(stream).await?
             }
             Some(VmessTransport::Http(_)) => {
-                unimplemented!("HTTP transport is not implemented yet")
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "HTTP transport is not supported",
+                ));
             }
             None => {
                 if let Some(tls_opt) = self.opts.tls.as_ref() {

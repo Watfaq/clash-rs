@@ -163,7 +163,6 @@ impl Display for OutboundType {
 
 pub enum ConnectorType {
     Tcp,
-    Udp,
     All,
     None,
 }
