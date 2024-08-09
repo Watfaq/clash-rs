@@ -5,7 +5,8 @@ use crate::{
     proxy::{
         options::{GrpcOption, Http2Option, WsOption},
         transport::TLSOptions,
-        vmess::{Handler, HandlerOptions, VmessTransport}, CommonOption,
+        vmess::{Handler, HandlerOptions, VmessTransport},
+        CommonOption,
     },
     Error,
 };

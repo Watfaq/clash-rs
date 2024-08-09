@@ -24,8 +24,9 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     options::{GrpcOption, WsOption},
     transport::{self, TLSOptions},
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR}, AnyStream, CommonOption, ConnectorType, DialWithConnector,
-    OutboundHandler, OutboundType,
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 mod datagram;

@@ -1,6 +1,5 @@
 mod stream;
 
-
 use arti_client::{StreamPrefs, TorClientConfig};
 use async_trait::async_trait;
 
@@ -18,10 +17,7 @@ use crate::{
 
 use self::stream::StreamWrapper;
 
-use super::{
-    ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
-};
+use super::{ConnectorType, DialWithConnector, OutboundHandler, OutboundType};
 
 pub struct HandlerOptions {
     pub name: String,

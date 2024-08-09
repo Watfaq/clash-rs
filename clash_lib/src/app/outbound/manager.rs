@@ -1,10 +1,7 @@
 use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
-use std::{
-    collections::HashMap, path::PathBuf, sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, warn};
 
