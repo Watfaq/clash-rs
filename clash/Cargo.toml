@@ -5,6 +5,6 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-clap = { version = "4.5.13", features = ["derive"] }
+clap = { version = "4.5.14", features = ["derive"] }
 
 clash_lib = { path = "../clash_lib", version = "*" }
