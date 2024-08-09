@@ -75,7 +75,7 @@ impl OutboundHandler for Handler {
         for proxy in self.get_proxies(false).await {
             match proxy.support_connector().await {
                 ConnectorType::All => return true,
-                _ => (),
+                ConnectorType::None | ConnectorType::Tcp => (),
             }
             if !proxy.support_udp().await {
                 return false;
