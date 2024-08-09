@@ -80,24 +80,3 @@ mock! {
 
     impl DialWithConnector for DummyOutboundHandler {}
 }
-
-mock! {
-    #[derive(Debug)]
-    pub MockProxyConnector{}
-
-    #[async_trait::async_trait]
-    impl RemoteConnector for MockProxyConnector {
-        async fn connect_stream(
-            &self,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<BoxedChainedStream>;
-
-        async fn connect_datagram(
-            &self,
-            sess: &Session,
-            resolver: ThreadSafeDNSResolver,
-        ) -> io::Result<BoxedChainedDatagram>;
-    }
-
-}

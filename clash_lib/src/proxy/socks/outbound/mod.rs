@@ -47,6 +47,8 @@ pub struct Handler {
     connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
 }
 
+impl_default_connector!(Handler);
+
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Socks5")
@@ -160,8 +162,6 @@ impl Handler {
         ))
     }
 }
-
-impl_default_connector!(Handler);
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -283,10 +283,13 @@ mod tests {
 
     use crate::proxy::{
         socks::{Handler, HandlerOptions},
-        utils::test_utils::{
-            consts::{IMAGE_SOCKS5, LOCAL_ADDR},
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup, Suite,
+        utils::{
+            test_utils::{
+                consts::{IMAGE_SOCKS5, LOCAL_ADDR},
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup, Suite,
+            },
+            GLOBAL_DIRECT_CONNECTOR,
         },
     };
 
@@ -347,6 +350,8 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_auth() -> anyhow::Result<()> {
+        use crate::proxy::DialWithConnector;
+
         let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
@@ -360,6 +365,9 @@ mod tests {
         };
         let port = opts.port;
         let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         run_test_suites_and_cleanup(
             handler,
             get_socks5_runner(

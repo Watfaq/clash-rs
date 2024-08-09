@@ -426,6 +426,9 @@ mod tests {
         };
         let port = opts.port;
         let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
