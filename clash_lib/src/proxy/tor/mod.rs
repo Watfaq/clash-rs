@@ -1,6 +1,5 @@
 mod stream;
 
-use std::sync::Arc;
 
 use arti_client::{StreamPrefs, TorClientConfig};
 use async_trait::async_trait;
@@ -20,7 +19,7 @@ use crate::{
 use self::stream::StreamWrapper;
 
 use super::{
-    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    ConnectorType, DialWithConnector, OutboundHandler,
     OutboundType,
 };
 

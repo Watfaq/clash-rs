@@ -3,8 +3,7 @@ use ipnet::IpNet;
 use crate::{
     config::internal::proxy::OutboundWireguard,
     proxy::{
-        wg::{Handler, HandlerOptions},
-        AnyOutboundHandler, CommonOption,
+        wg::{Handler, HandlerOptions}, CommonOption,
     },
     Error,
 };

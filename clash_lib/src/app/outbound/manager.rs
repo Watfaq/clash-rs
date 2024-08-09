@@ -2,7 +2,7 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
 use std::{
-    borrow::BorrowMut, collections::HashMap, path::PathBuf, sync::Arc,
+    collections::HashMap, path::PathBuf, sync::Arc,
     time::Duration,
 };
 use tokio::sync::{Mutex, RwLock};

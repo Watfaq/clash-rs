@@ -2,7 +2,6 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
-use futures::TryFutureExt;
 use sha2::{Digest, Sha224};
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
@@ -25,8 +24,7 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     options::{GrpcOption, WsOption},
     transport::{self, TLSOptions},
-    utils::{new_tcp_stream, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, DialWithConnector,
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR}, AnyStream, CommonOption, ConnectorType, DialWithConnector,
     OutboundHandler, OutboundType,
 };
 

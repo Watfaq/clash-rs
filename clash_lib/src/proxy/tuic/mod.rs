@@ -3,10 +3,7 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use crate::{
-    impl_default_connector,
-    proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
-};
+use crate::proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket};
 use anyhow::Result;
 use axum::async_trait;
 
@@ -57,9 +54,8 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
     datagram::UdpPacket,
-    utils::{get_outbound_interface, Interface, RemoteConnector},
-    AnyOutboundDatagram, AnyOutboundHandler, CommonOption, ConnectorType,
-    OutboundHandler, OutboundType,
+    utils::{get_outbound_interface, Interface},
+    AnyOutboundDatagram, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -83,6 +79,7 @@ pub struct HandlerOptions {
     pub send_window: u64,
     pub receive_window: VarInt,
 
+    #[allow(dead_code)]
     pub common_opts: CommonOption,
 
     /// not used

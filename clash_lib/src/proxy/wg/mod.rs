@@ -21,7 +21,7 @@ use crate::{
 use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{
-    utils::RemoteConnector, AnyOutboundHandler, CommonOption, ConnectorType,
+    utils::RemoteConnector, CommonOption, ConnectorType,
     DialWithConnector, OutboundHandler, OutboundType,
 };
 

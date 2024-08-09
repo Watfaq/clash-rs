@@ -1,7 +1,6 @@
-use std::{collections::HashMap, io, net::IpAddr, sync::Arc};
+use std::{collections::HashMap, io, sync::Arc};
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
 use tracing::debug;
 
 mod vmess_impl;
@@ -14,9 +13,8 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::errors::{map_io_error, new_io_error},
     impl_default_connector,
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use self::vmess_impl::OutboundDatagramVmess;
@@ -24,8 +22,7 @@ use self::vmess_impl::OutboundDatagramVmess;
 use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
-    utils::{new_tcp_stream, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, DialWithConnector,
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR}, AnyStream, CommonOption, ConnectorType, DialWithConnector,
     OutboundHandler, OutboundType,
 };
 

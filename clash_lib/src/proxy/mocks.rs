@@ -15,10 +15,7 @@ use crate::{
     session::Session,
 };
 
-use super::{
-    utils::RemoteConnector, AnyOutboundHandler, DialWithConnector, OutboundHandler,
-    OutboundType,
-};
+use super::{AnyOutboundHandler, DialWithConnector, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}
