@@ -18,12 +18,14 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{
-        direct, reject, shadowsocks, socks, tor, trojan, tuic, vmess, wg,
-        AnyOutboundHandler,
-    },
+    proxy::{direct, reject, socks, tor, trojan, vmess, wg, AnyOutboundHandler},
     Error,
 };
+
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {

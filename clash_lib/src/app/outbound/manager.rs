@@ -25,7 +25,7 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, shadowsocks, socks, tor, trojan, tuic,
+        fallback, loadbalance, selector, socks, tor, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg,
     },
@@ -41,6 +41,11 @@ use crate::{
 };
 
 use super::utils::proxy_groups_dag_sort;
+
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
