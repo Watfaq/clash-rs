@@ -296,6 +296,7 @@ impl Suite {
     }
 
     // some outbound handlers doesn't support udp
+    #[allow(dead_code)]
     pub const fn tcp_tests() -> &'static [Suite] {
         &[Suite::PingPongTcp, Suite::LatencyTcp]
     }
