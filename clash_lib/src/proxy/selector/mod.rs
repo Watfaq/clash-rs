@@ -17,7 +17,8 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[async_trait]
@@ -96,6 +97,8 @@ impl SelectorControl for Handler {
         self.inner.read().await.current.to_owned()
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

@@ -24,8 +24,8 @@ use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
     utils::{new_tcp_stream, RemoteConnector},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
-    OutboundType,
+    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, DialWithConnector,
+    OutboundHandler, OutboundType,
 };
 
 pub enum VmessTransport {
@@ -155,6 +155,8 @@ impl Handler {
         vmess_builder.proxy_stream(underlying).await
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

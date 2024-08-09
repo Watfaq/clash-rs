@@ -24,7 +24,10 @@ use crate::{
     config::internal::proxy::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
-    proxy::{fallback, loadbalance, selector},
+    proxy::{
+        fallback, loadbalance, selector, shadowsocks,
+        utils::{DirectConnector, ProxyConnector},
+    },
 };
 
 use crate::{
@@ -89,12 +92,15 @@ impl OutboundManager {
         )
         .await?;
 
-        Ok(Self {
+        let mut v = Self {
             handlers,
             proxy_manager,
             selector_control,
             proxy_providers: provider_registry,
-        })
+        };
+
+        v.initialize_proxy_dialers().await?;
+        Ok(v)
     }
 
     pub fn get_outbound(&self, name: &str) -> Option<AnyOutboundHandler> {
@@ -174,6 +180,28 @@ impl OutboundManager {
 
     // API handlers end
 
+    async fn initialize_proxy_dialers(&mut self) -> Result<(), Error> {
+        let mut connectors = HashMap::new();
+        for handler in self.handlers.values() {
+            if let Some(dialer_name) = handler.support_dialer() {
+                let dialer = connectors.entry(dialer_name.to_owned()).or_insert({
+                    let h = self.handlers.get(dialer_name).ok_or(
+                        Error::InvalidConfig(format!(
+                            "dialer {} not found",
+                            dialer_name
+                        )),
+                    )?;
+                    Arc::new(ProxyConnector::new(
+                        h.clone(),
+                        Box::new(DirectConnector::new()),
+                    ))
+                });
+                handler.register_dialer(dialer.clone()).await;
+            }
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn load_handlers(
         outbounds: Vec<OutboundProxyProtocol>,
@@ -190,34 +218,41 @@ impl OutboundManager {
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
-                    handlers
-                        .insert(PROXY_DIRECT.to_string(), direct::Handler::new());
+                    handlers.insert(PROXY_DIRECT.to_string(), {
+                        let h = direct::Handler::new();
+                        Arc::new(h)
+                    });
                 }
 
                 OutboundProxyProtocol::Reject => {
-                    handlers
-                        .insert(PROXY_REJECT.to_string(), reject::Handler::new());
+                    handlers.insert(PROXY_REJECT.to_string(), {
+                        let h = reject::Handler::new();
+                        Arc::new(h)
+                    });
                 }
                 #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => {
-                    handlers.insert(s.name.clone(), s.try_into()?);
+                    handlers.insert(s.common_opts.name.clone(), {
+                        let h: shadowsocks::Handler = s.try_into()?;
+                        Arc::new(h) as _
+                    });
                 }
 
                 OutboundProxyProtocol::Socks5(s) => {
-                    handlers.insert(s.name.clone(), s.try_into()?);
+                    handlers.insert(s.common_opts.name.clone(), s.try_into()?);
                 }
 
                 OutboundProxyProtocol::Vmess(v) => {
-                    handlers.insert(v.name.clone(), v.try_into()?);
+                    handlers.insert(v.common_opts.name.clone(), v.try_into()?);
                 }
 
                 OutboundProxyProtocol::Trojan(v) => {
-                    handlers.insert(v.name.clone(), v.try_into()?);
+                    handlers.insert(v.common_opts.name.clone(), v.try_into()?);
                 }
 
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
-                    handlers.insert(wg.name.clone(), wg.try_into()?);
+                    handlers.insert(wg.common_opts.name.clone(), wg.try_into()?);
                 }
 
                 OutboundProxyProtocol::Tor(tor) => {
@@ -225,7 +260,7 @@ impl OutboundManager {
                 }
                 #[cfg(feature = "tuic")]
                 OutboundProxyProtocol::Tuic(tuic) => {
-                    handlers.insert(tuic.name.clone(), tuic.try_into()?);
+                    handlers.insert(tuic.common_opts.name.clone(), tuic.try_into()?);
                 }
             }
         }

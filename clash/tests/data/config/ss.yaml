@@ -50,6 +50,8 @@ proxies:
     cipher: aes-256-gcm
     password: "password"
     udp: true
+    connect-via: ss-02
+    # dialer-proxy: ss-02
 
   - name: "ss-02"
     type: ss

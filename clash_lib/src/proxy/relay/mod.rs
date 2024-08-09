@@ -23,7 +23,8 @@ use super::{
         provider_helper::get_proxies_from_providers, DirectConnector,
         ProxyConnector, RemoteConnector,
     },
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default)]
@@ -49,6 +50,8 @@ impl Handler {
         get_proxies_from_providers(&self.providers, touch).await
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -215,7 +218,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -252,7 +256,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 

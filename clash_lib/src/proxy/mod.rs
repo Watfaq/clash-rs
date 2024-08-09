@@ -2,6 +2,7 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
+        outbound::manager::ThreadSafeOutboundManager,
     },
     proxy::{datagram::UdpPacket, utils::Interface},
     session::Session,
@@ -101,6 +102,7 @@ pub struct CommonOption {
     #[allow(dead_code)]
     so_mark: Option<u32>,
     iface: Option<Interface>,
+    connector: Option<String>,
 }
 
 #[async_trait]
@@ -167,7 +169,7 @@ pub enum ConnectorType {
 }
 
 #[async_trait]
-pub trait OutboundHandler: Sync + Send + Unpin {
+pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector {
     /// The name of the outbound handler
     fn name(&self) -> &str;
 
@@ -231,3 +233,14 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     }
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;
+
+#[async_trait]
+pub trait DialWithConnector {
+    fn support_dialer(&self) -> Option<&str> {
+        None
+    }
+
+    /// register a dialer for the outbound handler
+    /// this must be called before the outbound handler is used
+    async fn register_dialer(&self, _: Arc<dyn RemoteConnector>) {}
+}

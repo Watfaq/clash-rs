@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{fmt::Debug, net::SocketAddr};
 
 use async_trait::async_trait;
 use tracing::trace;
@@ -22,7 +22,7 @@ use super::{new_tcp_stream, new_udp_socket, Interface};
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
-pub trait RemoteConnector: Send + Sync {
+pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_stream(
         &self,
         resolver: ThreadSafeDNSResolver,
@@ -46,6 +46,7 @@ pub trait RemoteConnector: Send + Sync {
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
+#[derive(Debug)]
 pub struct DirectConnector;
 
 impl DirectConnector {
@@ -112,6 +113,14 @@ impl ProxyConnector {
         connector: Box<dyn RemoteConnector>,
     ) -> Self {
         Self { proxy, connector }
+    }
+}
+
+impl Debug for ProxyConnector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyConnector")
+            .field("proxy", &self.proxy.name())
+            .finish()
     }
 }
 

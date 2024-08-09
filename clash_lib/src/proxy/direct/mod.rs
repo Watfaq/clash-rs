@@ -10,26 +10,28 @@ use crate::{
     proxy::{
         datagram::OutboundDatagramImpl,
         utils::{new_tcp_stream, new_udp_socket},
-        AnyOutboundHandler, OutboundHandler,
+        OutboundHandler,
     },
     session::Session,
 };
 
 use async_trait::async_trait;
 use serde::Serialize;
-use std::sync::Arc;
 
-use super::{utils::RemoteConnector, ConnectorType, OutboundType};
+use super::{
+    utils::RemoteConnector, ConnectorType, DialWithConnector, OutboundType,
+};
 
 #[derive(Serialize)]
 pub struct Handler;
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> AnyOutboundHandler {
-        Arc::new(Self)
+    pub fn new() -> Self {
+        Self
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

@@ -19,7 +19,10 @@ use crate::{
 
 use self::stream::StreamWrapper;
 
-use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
+use super::{
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
+};
 
 pub struct HandlerOptions {
     pub name: String,
@@ -44,6 +47,9 @@ impl Handler {
         })
     }
 }
+
+impl DialWithConnector for Handler {}
+
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {

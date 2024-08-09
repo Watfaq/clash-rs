@@ -15,7 +15,7 @@ use crate::{
     session::Session,
 };
 
-use super::{AnyOutboundHandler, OutboundHandler, OutboundType};
+use super::{AnyOutboundHandler, DialWithConnector, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}
@@ -73,4 +73,6 @@ mock! {
         /// relay related
         async fn support_connector(&self) -> crate::proxy::ConnectorType;
     }
+
+    impl DialWithConnector for DummyOutboundHandler {}
 }
