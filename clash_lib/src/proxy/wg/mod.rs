@@ -167,6 +167,7 @@ impl Handler {
                     },
                     recv_pair.0,
                     send_pair.1,
+                    resolver.clone(),
                     self.connector.lock().await.as_ref().cloned(),
                 )
                 .await
