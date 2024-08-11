@@ -17,7 +17,8 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[async_trait]
@@ -43,6 +44,14 @@ pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
     inner: Arc<RwLock<HandlerInner>>,
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Selector")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
@@ -96,6 +105,8 @@ impl SelectorControl for Handler {
         self.inner.read().await.current.to_owned()
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {

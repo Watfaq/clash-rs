@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, fmt::Debug, io};
 
 use erased_serde::Serialize;
 use tracing::debug;
@@ -16,7 +16,8 @@ use crate::{
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default, Clone)]
@@ -29,6 +30,14 @@ pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
+}
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fallback")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
@@ -59,6 +68,8 @@ impl Handler {
         proxies[0].clone()
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait::async_trait]
 impl OutboundHandler for Handler {

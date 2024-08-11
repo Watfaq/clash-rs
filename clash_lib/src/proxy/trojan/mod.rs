@@ -2,9 +2,9 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
-use futures::TryFutureExt;
 use sha2::{Digest, Sha224};
 use tokio::io::AsyncWriteExt;
+use tracing::debug;
 
 use crate::{
     app::{
@@ -15,6 +15,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::utils,
+    impl_default_connector,
     session::Session,
 };
 
@@ -22,10 +23,9 @@ use self::datagram::OutboundDatagramTrojan;
 
 use super::{
     options::{GrpcOption, WsOption},
-    transport,
-    transport::TLSOptions,
-    utils::{new_tcp_stream, RemoteConnector},
-    AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
+    transport::{self, TLSOptions},
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
     OutboundType,
 };
 
@@ -53,12 +53,26 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+}
+
+impl_default_connector!(Handler);
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Trojan")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            opts,
+            connector: tokio::sync::Mutex::new(None),
+        }
     }
 
     /// TCP: 0x01,
@@ -147,30 +161,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+        let dialer = self.connector.lock().await;
+
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_stream_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
-
-        let stream = self.inner_proxy_stream(stream, sess, false).await?;
-
-        let chained = ChainedStreamWrapper::new(stream);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        .await
     }
 
     async fn connect_datagram(
@@ -178,32 +183,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+        let dialer = self.connector.lock().await;
+
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_datagram_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
-
-        let stream = self.inner_proxy_stream(stream, sess, true).await?;
-
-        let d = OutboundDatagramTrojan::new(stream, sess.destination.clone());
-
-        let chained = ChainedDatagramWrapper::new(d);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        .await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -321,7 +315,10 @@ mod tests {
                 early_data_header_name: "".to_owned(),
             })),
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         // ignore the udp test
         run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::all())
             .await
@@ -362,7 +359,10 @@ mod tests {
                 service_name: "example".to_owned(),
             })),
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
             .await
     }

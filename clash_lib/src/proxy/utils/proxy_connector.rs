@@ -1,6 +1,7 @@
-use std::net::SocketAddr;
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use tracing::trace;
 
 use crate::{
@@ -22,7 +23,7 @@ use super::{new_tcp_stream, new_udp_socket, Interface};
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
-pub trait RemoteConnector: Send + Sync {
+pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_stream(
         &self,
         resolver: ThreadSafeDNSResolver,
@@ -46,12 +47,20 @@ pub trait RemoteConnector: Send + Sync {
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
+#[derive(Debug)]
 pub struct DirectConnector;
 
 impl DirectConnector {
     pub fn new() -> Self {
         Self
     }
+}
+
+pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn RemoteConnector>> =
+    Lazy::new(global_direct_connector);
+
+fn global_direct_connector() -> Arc<dyn RemoteConnector> {
+    Arc::new(DirectConnector::new())
 }
 
 #[async_trait]
@@ -109,9 +118,18 @@ pub struct ProxyConnector {
 impl ProxyConnector {
     pub fn new(
         proxy: AnyOutboundHandler,
+        // TODO: make this Arc
         connector: Box<dyn RemoteConnector>,
     ) -> Self {
         Self { proxy, connector }
+    }
+}
+
+impl Debug for ProxyConnector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyConnector")
+            .field("proxy", &self.proxy.name())
+            .finish()
     }
 }
 

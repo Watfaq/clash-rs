@@ -75,14 +75,16 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Direct => PROXY_DIRECT,
             OutboundProxyProtocol::Reject => PROXY_REJECT,
             #[cfg(feature = "shadowsocks")]
-            OutboundProxyProtocol::Ss(ss) => &ss.name,
-            OutboundProxyProtocol::Socks5(socks5) => &socks5.name,
-            OutboundProxyProtocol::Trojan(trojan) => &trojan.name,
-            OutboundProxyProtocol::Vmess(vmess) => &vmess.name,
-            OutboundProxyProtocol::Wireguard(wireguard) => &wireguard.name,
+            OutboundProxyProtocol::Ss(ss) => &ss.common_opts.name,
+            OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
+            OutboundProxyProtocol::Trojan(trojan) => &trojan.common_opts.name,
+            OutboundProxyProtocol::Vmess(vmess) => &vmess.common_opts.name,
+            OutboundProxyProtocol::Wireguard(wireguard) => {
+                &wireguard.common_opts.name
+            }
             OutboundProxyProtocol::Tor(tor) => &tor.name,
             #[cfg(feature = "tuic")]
-            OutboundProxyProtocol::Tuic(tuic) => &tuic.name,
+            OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
         }
     }
 }
@@ -121,12 +123,25 @@ impl Display for OutboundProxyProtocol {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub struct OutboundShadowsocks {
+pub struct CommonOption {
     pub name: String,
     pub server: String,
     pub port: u16,
+    /// this can be a proxy name or a group name
+    /// can't be a name in a proxy provider
+    /// only applies to raw proxy, i.e. applying this to a proxy group does
+    /// nothing
+    #[serde(alias = "dialer-proxy")]
+    pub connect_via: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundShadowsocks {
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub cipher: String,
     pub password: String,
     #[serde(default = "default_bool_true")]
@@ -138,9 +153,8 @@ pub struct OutboundShadowsocks {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundSocks5 {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub username: Option<String>,
     pub password: Option<String>,
     #[serde(default = "Default::default")]
@@ -176,9 +190,8 @@ pub struct GrpcOpt {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub password: String,
     pub alpn: Option<Vec<String>>,
     pub sni: Option<String>,
@@ -192,9 +205,8 @@ pub struct OutboundTrojan {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundVmess {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub uuid: String,
     #[serde(alias = "alterId")]
     pub alter_id: u16,
@@ -213,9 +225,8 @@ pub struct OutboundVmess {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundWireguard {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub private_key: String,
     pub public_key: String,
     pub preshared_key: Option<String>,
@@ -238,9 +249,8 @@ pub struct OutboundTor {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTuic {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
+    #[serde(flatten)]
+    pub common_opts: CommonOption,
     pub uuid: Uuid,
     pub password: String,
     /// override field 'server' dns record, not used for now

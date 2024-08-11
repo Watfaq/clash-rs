@@ -1,5 +1,7 @@
 mod datagram;
 
+use std::{fmt::Debug, sync::Arc};
+
 use crate::{
     app::{
         dispatcher::{
@@ -9,10 +11,11 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::new_io_error,
+    impl_default_connector,
     proxy::{
         transport::{self, TLSOptions},
-        utils::{new_tcp_stream, new_udp_socket, RemoteConnector},
-        AnyOutboundHandler, AnyStream, CommonOption, ConnectorType, OutboundHandler,
+        utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+        AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
         OutboundType,
     },
     session::Session,
@@ -20,8 +23,7 @@ use crate::{
 
 use async_trait::async_trait;
 use datagram::Socks5Datagram;
-use std::sync::Arc;
-use tracing::trace;
+use tracing::{debug, trace};
 
 use super::socks5::{client_handshake, socks_command};
 
@@ -41,12 +43,26 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+}
+
+impl_default_connector!(Handler);
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Socks5")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            opts,
+            connector: tokio::sync::Mutex::new(None),
+        }
     }
 
     async fn inner_connect_stream(
@@ -166,21 +182,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
-        let s = new_tcp_stream(
+        let dialer = self.connector.lock().await;
+
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_stream_with_connector(
+            sess,
             resolver,
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
-        .await?;
-
-        let s = self.inner_connect_stream(s, sess).await?;
-
-        let s = ChainedStreamWrapper::new(s);
-        s.append_to_chain(self.name()).await;
-        Ok(Box::new(s))
+        .await
     }
 
     // it;s up to the server to allow full cone UDP
@@ -190,22 +206,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let s = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+        let dialer = self.connector.lock().await;
+
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_datagram_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
         )
-        .await?;
-
-        let d = self.inner_connect_datagram(s, sess, resolver).await?;
-
-        let d = ChainedDatagramWrapper::new(d);
-        d.append_to_chain(self.name()).await;
-
-        Ok(Box::new(d))
+        .await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -264,12 +279,17 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
+    use std::sync::Arc;
+
     use crate::proxy::{
         socks::{Handler, HandlerOptions},
-        utils::test_utils::{
-            consts::{IMAGE_SOCKS5, LOCAL_ADDR},
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup, Suite,
+        utils::{
+            test_utils::{
+                consts::{IMAGE_SOCKS5, LOCAL_ADDR},
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup, Suite,
+            },
+            GLOBAL_DIRECT_CONNECTOR,
         },
     };
 
@@ -318,7 +338,7 @@ mod tests {
             ..Default::default()
         };
         let port = opts.port;
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(
             handler,
             get_socks5_runner(port, None, None).await?,
@@ -330,6 +350,8 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_auth() -> anyhow::Result<()> {
+        use crate::proxy::DialWithConnector;
+
         let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
@@ -342,7 +364,10 @@ mod tests {
             ..Default::default()
         };
         let port = opts.port;
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         run_test_suites_and_cleanup(
             handler,
             get_socks5_runner(

@@ -13,13 +13,17 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::{map_io_error, new_io_error},
+    impl_default_connector,
     session::Session,
     Error,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
 
-use super::{AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType};
+use super::{
+    utils::RemoteConnector, CommonOption, ConnectorType, DialWithConnector,
+    OutboundHandler, OutboundType,
+};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -38,6 +42,7 @@ mod wireguard;
 
 pub struct HandlerOptions {
     pub name: String,
+    pub common_opts: CommonOption,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,
@@ -64,15 +69,28 @@ struct Inner {
 pub struct Handler {
     opts: HandlerOptions,
     inner: OnceCell<Inner>,
+
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
 }
 
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WireGuard")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
+impl_default_connector!(Handler);
+
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self {
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
             opts,
             inner: OnceCell::new(),
-        })
+
+            connector: tokio::sync::Mutex::new(None),
+        }
     }
 
     async fn initialize_inner(
@@ -110,7 +128,6 @@ impl Handler {
                     .transpose()?
                     .unwrap_or_default();
 
-                // we shouldn't create a new tunnel for each connection
                 let wg = wireguard::WireguardTunnel::new(
                     Config {
                         private_key: self
@@ -150,6 +167,8 @@ impl Handler {
                     },
                     recv_pair.0,
                     send_pair.1,
+                    resolver.clone(),
+                    self.connector.lock().await.as_ref().cloned(),
                 )
                 .await
                 .map_err(map_io_error)?;
@@ -296,9 +315,12 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use crate::proxy::utils::test_utils::{
-        config_helper::test_config_base_dir, docker_runner::DockerTestRunnerBuilder,
-        Suite,
+    use crate::proxy::utils::{
+        test_utils::{
+            config_helper::test_config_base_dir,
+            docker_runner::DockerTestRunnerBuilder, Suite,
+        },
+        GLOBAL_DIRECT_CONNECTOR,
     };
 
     use super::super::utils::test_utils::{
@@ -342,6 +364,7 @@ mod tests {
     async fn test_wg() -> anyhow::Result<()> {
         let opts = HandlerOptions {
             name: "wg".to_owned(),
+            common_opts: Default::default(),
             server: "127.0.0.1".to_owned(),
             port: 10002,
             ip: Ipv4Addr::new(10, 13, 13, 2),
@@ -358,7 +381,10 @@ mod tests {
             allowed_ips: Some(vec!["0.0.0.0/0".to_owned()]),
             reserved_bits: None,
         };
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
 
         // cannot run the ping pong test, since the wireguard server is running
         // on bridge network mode and the `net.ipv4.conf.all.

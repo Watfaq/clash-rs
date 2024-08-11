@@ -4,14 +4,11 @@ mod simple_obfs;
 mod stream;
 mod v2ray;
 
-use async_trait::async_trait;
-use futures::TryFutureExt;
-use shadowsocks::{
-    config::ServerType, context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
-    ServerConfig,
+use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
+use super::{
+    utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
-
 use crate::{
     app::{
         dispatcher::{
@@ -20,18 +17,18 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    impl_default_connector,
     proxy::{CommonOption, OutboundHandler},
     session::Session,
-    Error,
 };
-use std::{collections::HashMap, io, sync::Arc};
-
-use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
-
-use super::{
-    utils::{new_tcp_stream, new_udp_socket, RemoteConnector},
-    AnyOutboundHandler, AnyStream, ConnectorType, OutboundType,
+use async_trait::async_trait;
+use shadowsocks::{
+    config::ServerType, context::Context, crypto::CipherKind,
+    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
+    ServerConfig,
 };
+use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
+use tracing::debug;
 
 #[derive(Clone, Copy)]
 pub enum SimpleOBFSMode {
@@ -42,35 +39,6 @@ pub enum SimpleOBFSMode {
 pub struct SimpleOBFSOption {
     pub mode: SimpleOBFSMode,
     pub host: String,
-}
-
-impl TryFrom<HashMap<String, serde_yaml::Value>> for SimpleOBFSOption {
-    type Error = crate::Error;
-
-    fn try_from(
-        value: HashMap<String, serde_yaml::Value>,
-    ) -> Result<Self, Self::Error> {
-        let host = value
-            .get("host")
-            .and_then(|x| x.as_str())
-            .unwrap_or("bing.com");
-        let mode = value
-            .get("mode")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
-
-        match mode {
-            "http" => Ok(SimpleOBFSOption {
-                mode: SimpleOBFSMode::Http,
-                host: host.to_owned(),
-            }),
-            "tls" => Ok(SimpleOBFSOption {
-                mode: SimpleOBFSMode::Tls,
-                host: host.to_owned(),
-            }),
-            _ => Err(Error::InvalidConfig(format!("invalid obfs mode: {}", mode))),
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -84,94 +52,11 @@ pub struct V2RayOBFSOption {
     pub mux: bool,
 }
 
-impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
-    type Error = crate::Error;
-
-    fn try_from(
-        value: HashMap<String, serde_yaml::Value>,
-    ) -> Result<Self, Self::Error> {
-        let host = value
-            .get("host")
-            .and_then(|x| x.as_str())
-            .unwrap_or("bing.com");
-        let mode = value
-            .get("mode")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
-
-        if mode != "websocket" {
-            return Err(Error::InvalidConfig(format!(
-                "invalid obfs mode: {}",
-                mode
-            )));
-        }
-
-        let path = value
-            .get("path")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig("obfs path is required".to_owned()))?;
-        let mux = value.get("mux").and_then(|x| x.as_bool()).unwrap_or(false);
-        let tls = value.get("tls").and_then(|x| x.as_bool()).unwrap_or(false);
-        let skip_cert_verify = value
-            .get("skip-cert-verify")
-            .and_then(|x| x.as_bool())
-            .unwrap_or(false);
-
-        let mut headers = HashMap::new();
-        if let Some(h) = value.get("headers") {
-            if let Some(h) = h.as_mapping() {
-                for (k, v) in h {
-                    if let (Some(k), Some(v)) = (k.as_str(), v.as_str()) {
-                        headers.insert(k.to_owned(), v.to_owned());
-                    }
-                }
-            }
-        }
-
-        Ok(V2RayOBFSOption {
-            mode: mode.to_owned(),
-            host: host.to_owned(),
-            path: path.to_owned(),
-            tls,
-            headers,
-            skip_cert_verify,
-            mux,
-        })
-    }
-}
-
 #[derive(Debug)]
 pub struct ShadowTlsOption {
     pub host: String,
     pub password: String,
     pub strict: bool,
-}
-
-impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
-    type Error = crate::Error;
-
-    fn try_from(
-        value: HashMap<String, serde_yaml::Value>,
-    ) -> Result<Self, Self::Error> {
-        let host = value
-            .get("host")
-            .and_then(|x| x.as_str())
-            .unwrap_or("bing.com");
-        let password = value
-            .get("password")
-            .and_then(|x| x.as_str().to_owned())
-            .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
-        let strict = value
-            .get("strict")
-            .and_then(|x| x.as_bool())
-            .unwrap_or(true);
-
-        Ok(Self {
-            host: host.to_string(),
-            password: password.to_string(),
-            strict,
-        })
-    }
 }
 
 pub enum OBFSOption {
@@ -193,12 +78,26 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+
+    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+}
+
+impl_default_connector!(Handler);
+
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Shadowsocks")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> AnyOutboundHandler {
-        Arc::new(Self { opts })
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            opts,
+            connector: tokio::sync::Mutex::new(None),
+        }
     }
 
     async fn proxy_stream(
@@ -285,29 +184,21 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let stream = new_tcp_stream(
-            resolver.clone(),
-            self.opts.server.as_str(),
-            self.opts.port,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "dial outbound {}:{}: {}",
-                    self.opts.server, self.opts.port, x
-                ),
-            )
-        })
-        .await?;
+        let dialer = self.connector.lock().await;
 
-        let s = self.proxy_stream(stream, sess, resolver).await?;
-        let chained = ChainedStreamWrapper::new(s);
-        chained.append_to_chain(self.name()).await;
-        Ok(Box::new(chained))
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
+
+        self.connect_stream_with_connector(
+            sess,
+            resolver,
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
+        )
+        .await
     }
 
     async fn connect_datagram(
@@ -421,7 +312,10 @@ mod tests {
             udp: false,
         };
         let port = opts.port;
-        let handler = Handler::new(opts);
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
@@ -476,7 +370,7 @@ mod tests {
             })),
             udp: false,
         };
-        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
@@ -532,7 +426,7 @@ mod tests {
             udp: false,
         };
 
-        let handler: Arc<dyn OutboundHandler> = Handler::new(opts);
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
         chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;

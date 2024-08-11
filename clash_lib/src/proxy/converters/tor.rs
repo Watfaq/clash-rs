@@ -1,12 +1,9 @@
 use crate::{
     config::internal::proxy::OutboundTor,
-    proxy::{
-        tor::{Handler, HandlerOptions},
-        AnyOutboundHandler,
-    },
+    proxy::tor::{Handler, HandlerOptions},
 };
 
-impl TryFrom<OutboundTor> for AnyOutboundHandler {
+impl TryFrom<OutboundTor> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundTor) -> Result<Self, Self::Error> {
@@ -14,7 +11,7 @@ impl TryFrom<OutboundTor> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundTor> for AnyOutboundHandler {
+impl TryFrom<&OutboundTor> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundTor) -> Result<Self, Self::Error> {

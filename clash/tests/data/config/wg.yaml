@@ -46,16 +46,25 @@ proxies:
     type: wireguard
     server: engage.cloudflareclient.com
     port: 2408
-    private-key: uIwDn4c7656E/1pHkJu23ZOe/4SuCnL+vL+jE2s4MHE=
+    private-key: 0LQye/+HjLvgnXLs5ETQcHe5AcR7G4Bv78xu6Qja230=
     ip: 172.16.0.2/32
-    ipv6: 2606:4700:110:8e5e:fa1:3f30:c077:e17c/128
+    ipv6: 2606:4700:110:82f3:873f:ed26:e24d:c2cb/128
     public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
     allowed-ips: ['0.0.0.0/0', '::/0']
     remote-dns-resolve: true
     dns:
       - 1.1.1.1
     udp: true
-
+    connect-via: plain-vmess
+  - name: plain-vmess
+    type: vmess
+    server: 10.0.0.13
+    port: 16823
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    udp: true
+    skip-cert-verify: true
 
 rules:
   - MATCH, wg

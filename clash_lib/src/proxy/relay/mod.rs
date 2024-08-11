@@ -23,7 +23,8 @@ use super::{
         provider_helper::get_proxies_from_providers, DirectConnector,
         ProxyConnector, RemoteConnector,
     },
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default)]
@@ -34,6 +35,14 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Relay")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
@@ -50,6 +59,8 @@ impl Handler {
     }
 }
 
+impl DialWithConnector for Handler {}
+
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
@@ -61,7 +72,16 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        false
+        for proxy in self.get_proxies(false).await {
+            match proxy.support_connector().await {
+                ConnectorType::All => return true,
+                ConnectorType::None | ConnectorType::Tcp => (),
+            }
+            if !proxy.support_udp().await {
+                return false;
+            }
+        }
+        true
     }
 
     async fn connect_stream(
@@ -215,7 +235,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -252,7 +273,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 

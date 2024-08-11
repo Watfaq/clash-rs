@@ -30,7 +30,6 @@ pub mod http;
 pub mod mixed;
 
 pub(crate) mod datagram;
-mod options;
 
 pub mod converters;
 #[cfg(feature = "shadowsocks")]
@@ -51,6 +50,8 @@ pub mod relay;
 pub mod selector;
 pub mod urltest;
 
+mod common;
+mod options;
 mod transport;
 
 #[cfg(test)]
@@ -101,6 +102,7 @@ pub struct CommonOption {
     #[allow(dead_code)]
     so_mark: Option<u32>,
     iface: Option<Interface>,
+    connector: Option<String>,
 }
 
 #[async_trait]
@@ -161,13 +163,12 @@ impl Display for OutboundType {
 
 pub enum ConnectorType {
     Tcp,
-    Udp,
     All,
     None,
 }
 
 #[async_trait]
-pub trait OutboundHandler: Sync + Send + Unpin {
+pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// The name of the outbound handler
     fn name(&self) -> &str;
 
@@ -231,3 +232,14 @@ pub trait OutboundHandler: Sync + Send + Unpin {
     }
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;
+
+#[async_trait]
+pub trait DialWithConnector {
+    fn support_dialer(&self) -> Option<&str> {
+        None
+    }
+
+    /// register a dialer for the outbound handler
+    /// this must be called before the outbound handler is used
+    async fn register_connector(&self, _: Arc<dyn RemoteConnector>) {}
+}

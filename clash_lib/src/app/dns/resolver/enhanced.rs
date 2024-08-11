@@ -577,15 +577,6 @@ impl ClashResolver for EnhancedResolver {
         fake_dns.is_fake_ip(ip).await
     }
 
-    async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool {
-        if !self.fake_ip_enabled() {
-            return false;
-        }
-
-        let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
-        fake_dns.exist(ip).await
-    }
-
     async fn reverse_lookup(&self, ip: net::IpAddr) -> Option<String> {
         debug!("reverse lookup: {}", ip);
         if !self.fake_ip_enabled() {
