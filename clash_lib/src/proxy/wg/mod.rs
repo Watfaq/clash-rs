@@ -315,9 +315,12 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, not(ci)))]
 mod tests {
 
-    use crate::proxy::utils::test_utils::{
-        config_helper::test_config_base_dir, docker_runner::DockerTestRunnerBuilder,
-        Suite,
+    use crate::proxy::utils::{
+        test_utils::{
+            config_helper::test_config_base_dir,
+            docker_runner::DockerTestRunnerBuilder, Suite,
+        },
+        GLOBAL_DIRECT_CONNECTOR,
     };
 
     use super::super::utils::test_utils::{
@@ -379,6 +382,9 @@ mod tests {
             reserved_bits: None,
         };
         let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
 
         // cannot run the ping pong test, since the wireguard server is running
         // on bridge network mode and the `net.ipv4.conf.all.

@@ -28,7 +28,7 @@ use crate::{
     app::dns::ThreadSafeDNSResolver,
     proxy::{
         datagram::UdpPacket,
-        utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+        utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyOutboundDatagram,
     },
     session::SocksAddr,
