@@ -1,10 +1,7 @@
 use std::{
-    borrow::BorrowMut,
-    cell::{Cell, RefCell},
     fmt::Debug,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
-    thread::Thread,
     time::Duration,
 };
 
@@ -17,16 +14,13 @@ use boringtun::{
 use bytes::Bytes;
 use futures::{
     stream::{SplitSink, SplitStream},
-    Sink, SinkExt, Stream, StreamExt,
+    SinkExt, StreamExt,
 };
 use ipnet::IpNet;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
-use tokio::{
-    net::UdpSocket,
-    sync::{
-        mpsc::{Receiver, Sender},
-        Mutex,
-    },
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
 };
 use tracing::{enabled, error, trace, trace_span, warn, Instrument};
 
@@ -101,14 +95,6 @@ impl WireguardTunnel {
 
         let remote_endpoint = config.remote_endpoint;
 
-        let udp = new_udp_socket(
-            None,
-            None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await?;
-
         let connector = connector.unwrap_or(GLOBAL_DIRECT_CONNECTOR.clone());
         let udp = connector
             .connect_datagram(
@@ -139,7 +125,7 @@ impl WireguardTunnel {
         })
     }
 
-    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), Error> {
+    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), std::io::Error> {
         if packet.len() > 3 {
             packet[1] = self.reserved_bits[0];
             packet[2] = self.reserved_bits[1];
@@ -153,8 +139,7 @@ impl WireguardTunnel {
                 src_addr: SocksAddr::any_ipv4(),
                 dst_addr: self.endpoint.into(),
             })
-            .await;
-        Ok(())
+            .await
     }
 
     pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
