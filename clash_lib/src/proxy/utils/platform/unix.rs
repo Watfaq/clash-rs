@@ -1,4 +1,8 @@
-fn must_bind_socket_on_interface(
+use std::{io, net::SocketAddr};
+
+use crate::proxy::utils::Interface;
+
+pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,
     iface: &Interface,
     family: socket2::Domain,

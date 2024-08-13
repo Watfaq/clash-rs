@@ -1,7 +1,9 @@
 #[cfg(target_vendor = "apple")]
 mod apple;
 #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
-mod unix;
+pub(crate) mod unix;
+#[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
+pub(crate) use unix::must_bind_socket_on_interface;
 #[cfg(windows)]
 pub(crate) mod win;
 #[cfg(windows)]
