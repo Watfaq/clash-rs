@@ -111,6 +111,9 @@ async fn handle_inbound_datagram(
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
+            if dst_addr.ip().is_multicast() {
+                continue;
+            }
             let pkt = UdpPacket {
                 data,
                 src_addr: src_addr.into(),
