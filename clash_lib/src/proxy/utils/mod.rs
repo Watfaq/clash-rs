@@ -6,6 +6,8 @@ use std::{
 #[cfg(all(test, not(ci)))]
 pub mod test_utils;
 
+mod platform;
+
 pub mod provider_helper;
 mod proxy_connector;
 mod socket_helpers;
@@ -24,6 +26,8 @@ pub struct OutboundInterface {
     pub addr_v4: Option<Ipv4Addr>,
     #[allow(unused)]
     pub addr_v6: Option<Ipv6Addr>,
+    #[allow(unused)]
+    pub index: u32,
 }
 
 pub fn get_outbound_interface() -> Option<OutboundInterface> {
@@ -77,6 +81,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
                 name: x.name,
                 addr_v4: addr.0,
                 addr_v6: addr.1,
+                index: x.index,
             }
         })
         .collect::<Vec<_>>();
@@ -124,21 +129,21 @@ impl Interface {
     pub fn into_ip_addr(self) -> Option<IpAddr> {
         match self {
             Interface::IpAddr(ip) => Some(ip),
-            Interface::Name(_) => None,
+            _ => None,
         }
     }
 
     pub fn into_socket_addr(self) -> Option<SocketAddr> {
         match self {
             Interface::IpAddr(ip) => Some(SocketAddr::new(ip, 0)),
-            Interface::Name(_) => None,
+            _ => None,
         }
     }
 
     pub fn into_iface_name(self) -> Option<String> {
         match self {
             Interface::IpAddr(_) => None,
-            Interface::Name(iface) => Some(iface),
+            Interface::Name(name) => Some(name),
         }
     }
 }
