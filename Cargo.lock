@@ -4765,9 +4765,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.20.1"
+version = "1.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "019ae0dd3a7dbf10d4ea2ee8aab9b0f808332979dac8bb09d09b227614a222a6"
+checksum = "06b6af20f0f009894644c9fb149ce6244c69b0a264ffcf7a53cbb3dd4883e4a3"
 dependencies = [
  "aes",
  "arc-swap",
@@ -4798,7 +4798,7 @@ dependencies = [
  "tokio",
  "tokio-tfo",
  "url",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
