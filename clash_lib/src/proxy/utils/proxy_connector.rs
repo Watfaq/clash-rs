@@ -84,7 +84,7 @@ impl RemoteConnector for DirectConnector {
 
         new_tcp_stream(
             (dial_addr, port).into(),
-            iface.map(|x| x.clone()),
+            iface.cloned(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
         )
