@@ -68,7 +68,7 @@ pub(crate) fn must_bind_socket_on_interface(
                     if errno != 0 {
                         let err = unsafe { GetLastError().to_hresult().message() };
                         error!("bind socket to interface failed: {}", err);
-                        return Err(new_io_error(&err));
+                        return Err(new_io_error(err));
                     }
                     Ok(())
                 }
