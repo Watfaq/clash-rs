@@ -137,9 +137,10 @@ impl Config {
                 }
             }
 
+            let net = net.parse()?;
             nameservers.push(NameServer {
                 address: addr,
-                net: net.parse()?,
+                net,
                 interface: iface.map(String::from),
             });
         }

@@ -101,7 +101,9 @@ pub fn setup_logging(
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::builder()
         .with_default_directive(
-            format!("clash={}", level).parse::<Directive>().unwrap(),
+            format!("{}={}", env!("CARGO_PKG_NAME"), level)
+                .parse::<Directive>()
+                .unwrap(),
         )
         .from_env_lossy();
 
