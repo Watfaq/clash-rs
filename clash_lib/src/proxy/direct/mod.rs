@@ -82,7 +82,7 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedDatagram> {
         let d = new_udp_socket(
             None,
-            sess.iface.as_ref(),
+            sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -129,8 +129,8 @@ impl OutboundHandler for Handler {
             .connect_datagram(
                 resolver,
                 None,
-                &sess.destination,
-                sess.iface.as_ref(),
+                sess.destination.clone(),
+                sess.iface.clone(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

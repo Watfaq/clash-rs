@@ -3,4 +3,4 @@ target-dir = "target"
 rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
-RUST_LOG = { value = "clash=trace" }
+RUST_LOG = { value = "clash-rs=trace" }

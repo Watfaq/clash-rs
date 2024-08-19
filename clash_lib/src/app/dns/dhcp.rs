@@ -186,8 +186,8 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     };
 
     new_udp_socket(
-        Some(&listen_addr.parse().expect("must parse")),
-        Some(&Interface::Name(iface.to_string())),
+        Some(listen_addr.parse().expect("must parse")),
+        Some(Interface::Name(iface.to_string())),
         #[cfg(any(target_os = "linux", target_os = "android"))]
         None,
     )

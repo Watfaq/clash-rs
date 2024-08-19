@@ -38,9 +38,9 @@ pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -89,9 +89,9 @@ impl RemoteConnector for DirectConnector {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        _destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        _destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -175,9 +175,9 @@ impl RemoteConnector for ProxyConnector {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        _src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        _src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -185,7 +185,7 @@ impl RemoteConnector for ProxyConnector {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
-            iface: iface.cloned(),
+            iface,
             destination: destination.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,

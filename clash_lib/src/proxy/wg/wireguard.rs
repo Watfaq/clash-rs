@@ -100,7 +100,7 @@ impl WireguardTunnel {
             .connect_datagram(
                 resolver,
                 None,
-                &remote_endpoint.into(),
+                remote_endpoint.into(),
                 None,
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,

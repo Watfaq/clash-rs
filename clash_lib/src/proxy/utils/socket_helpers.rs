@@ -39,6 +39,52 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
+pub async fn new_simple_tcp_stream(
+    endpoint: SocketAddr,
+    iface: Option<Interface>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+) -> io::Result<TcpStream> {
+    let (socket, family) = match endpoint {
+        SocketAddr::V4(_) => (
+            socket2::Socket::new(
+                socket2::Domain::IPV4,
+                socket2::Type::STREAM,
+                None,
+            )?,
+            socket2::Domain::IPV4,
+        ),
+        SocketAddr::V6(_) => (
+            socket2::Socket::new(
+                socket2::Domain::IPV6,
+                socket2::Type::STREAM,
+                None,
+            )?,
+            socket2::Domain::IPV6,
+        ),
+    };
+
+    if let Some(iface) = iface {
+        debug!("binding tcp socket to interface: {:?}", iface);
+        must_bind_socket_on_interface(&socket, &iface, family)?;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(packet_mark) = packet_mark {
+        socket.set_mark(packet_mark)?;
+    }
+
+    socket.set_keepalive(true)?;
+    socket.set_nodelay(true)?;
+    socket.set_nonblocking(true)?;
+
+    timeout(
+        Duration::from_secs(10),
+        TcpSocket::from_std_stream(socket.into()).connect(endpoint),
+    )
+    .await?
+}
+
+/// This should get replaced with `new_simple_tcp_stream` in the future
 pub async fn new_tcp_stream<'a>(
     resolver: ThreadSafeDNSResolver,
     address: &'a str,
@@ -112,8 +158,8 @@ pub async fn new_tcp_stream<'a>(
 }
 
 pub async fn new_udp_socket(
-    src: Option<&SocketAddr>,
-    iface: Option<&Interface>,
+    src: Option<SocketAddr>,
+    iface: Option<Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let (socket, family) = match src {
@@ -147,7 +193,7 @@ pub async fn new_udp_socket(
     match (src, iface) {
         (Some(_), Some(iface)) => {
             debug!("both src and iface are set, iface will be used: {:?}", src);
-            must_bind_socket_on_interface(&socket, iface, family).inspect_err(
+            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
                 |x| {
                     error!("failed to bind socket to interface: {}", x);
                 },
@@ -155,11 +201,11 @@ pub async fn new_udp_socket(
         }
         (Some(src), None) => {
             debug!("binding socket to: {:?}", src);
-            socket.bind(&(*src).into())?;
+            socket.bind(&src.into())?;
         }
         (None, Some(iface)) => {
             debug!("binding udp socket to interface: {:?}", iface);
-            must_bind_socket_on_interface(&socket, iface, family).inspect_err(
+            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
                 |x| {
                     error!("failed to bind socket to interface: {}", x);
                 },

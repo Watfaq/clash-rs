@@ -50,7 +50,7 @@ impl TuicEndpoint {
                     let iface = get_outbound_interface();
                     new_udp_socket(
                         None,
-                        iface.map(|x| Interface::Name(x.name)).as_ref(),
+                        iface.map(|x| Interface::Name(x.name)),
                         #[cfg(any(target_os = "linux", target_os = "android"))]
                         None,
                     )
