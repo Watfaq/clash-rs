@@ -40,8 +40,8 @@ dns:
   # All DNS questions are sent directly to the nameserver, without proxies
   # involved. Clash answers the DNS question with the first result gathered.
   nameserver:
-    - 114.114.114.114 # default value
-    - 1.1.1.1#auto # default value
+    # - 114.114.114.114 # default value
+    # - 1.1.1.1#auto # default value
     - tls://1.1.1.1:853#en0 # DNS over TLS
 #    - dhcp://en0 # dns from dhcp
 
@@ -280,7 +280,7 @@ rule-providers:
 rules:
   - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
-  - DOMAIN,ipinfo.io,trojan-grpc
+  - DOMAIN,ipinfo.io,DIRECT
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT

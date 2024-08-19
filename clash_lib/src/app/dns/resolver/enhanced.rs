@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use hickory_proto::{op, rr};
 
@@ -212,7 +212,7 @@ impl EnhancedResolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            debug!(
+                            error!(
                                 "DNS client {} resolve error: {}",
                                 c.id(),
                                 x.to_string()

@@ -39,9 +39,15 @@ impl Service<Uri> for LocalConnector {
         let dns = self.0.clone();
 
         Box::pin(async move {
-            new_tcp_stream(
-                dns,
-                host.as_str(),
+            let remote_ip = dns
+                .resolve(host.as_str(), false)
+                .await
+                .map_err(|v| std::io::Error::new(std::io::ErrorKind::Other, v))?
+                .ok_or(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "no dns result",
+                ))?;
+            let remote_port =
                 remote.port_u16().unwrap_or(match remote.scheme_str() {
                     None => 80,
                     Some(s) => match s {
@@ -49,12 +55,15 @@ impl Service<Uri> for LocalConnector {
                         "https" => 443,
                         _ => panic!("invalid url: {}", remote),
                     },
-                }),
+                });
+            new_tcp_stream(
+                (remote_ip, remote_port).into(),
                 None,
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )
             .await
+            .map(|x| Box::new(x) as _)
         })
     }
 }

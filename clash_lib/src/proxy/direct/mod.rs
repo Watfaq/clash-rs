@@ -8,6 +8,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::map_io_error,
     config::internal::proxy::PROXY_DIRECT,
     proxy::{
         datagram::OutboundDatagramImpl,
@@ -18,6 +19,7 @@ use crate::{
 };
 
 use async_trait::async_trait;
+use futures::TryFutureExt;
 use serde::Serialize;
 
 use super::{
@@ -60,11 +62,17 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
+        let remote_ip = resolver
+            .resolve(sess.destination.host().as_str(), false)
+            .map_err(map_io_error)
+            .await?
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::Other, "no dns result")
+            })?;
+
         let s = new_tcp_stream(
-            resolver,
-            sess.destination.host().as_str(),
-            sess.destination.port(),
-            sess.iface.as_ref(),
+            (remote_ip, sess.destination.port()).into(),
+            sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )

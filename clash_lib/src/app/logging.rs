@@ -101,9 +101,7 @@ pub fn setup_logging(
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::builder()
         .with_default_directive(
-            format!("{}={}", env!("CARGO_PKG_NAME"), level)
-                .parse::<Directive>()
-                .unwrap(),
+            format!("clash={}", level).parse::<Directive>().unwrap(),
         )
         .from_env_lossy();
 
@@ -170,7 +168,7 @@ pub fn setup_logging(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
-                .with_target(true)
+                .with_target(false)
                 .with_file(true)
                 .with_line_number(true)
                 .with_level(true)

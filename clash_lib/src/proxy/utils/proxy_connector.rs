@@ -12,6 +12,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     proxy::{
         datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
         AnyStream,
@@ -75,15 +76,20 @@ impl RemoteConnector for DirectConnector {
             u32,
         >,
     ) -> std::io::Result<AnyStream> {
+        let dial_addr = resolver
+            .resolve(address, false)
+            .await
+            .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
+            .ok_or(new_io_error("no dns result"))?;
+
         new_tcp_stream(
-            resolver,
-            address,
-            port,
-            iface,
+            (dial_addr, port).into(),
+            iface.map(|x| x.clone()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
         )
         .await
+        .map(|x| Box::new(x) as _)
     }
 
     async fn connect_datagram(

@@ -1,8 +1,4 @@
-use std::{
-    io,
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::{io, net::SocketAddr, time::Duration};
 
 use socket2::TcpKeepalive;
 use tokio::{
@@ -13,7 +9,6 @@ use tokio::{
 use tracing::{debug, error};
 
 use super::{platform::must_bind_socket_on_interface, Interface};
-use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
@@ -39,7 +34,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
-pub async fn new_simple_tcp_stream(
+pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
@@ -82,79 +77,6 @@ pub async fn new_simple_tcp_stream(
         TcpSocket::from_std_stream(socket.into()).connect(endpoint),
     )
     .await?
-}
-
-/// This should get replaced with `new_simple_tcp_stream` in the future
-pub async fn new_tcp_stream<'a>(
-    resolver: ThreadSafeDNSResolver,
-    address: &'a str,
-    port: u16,
-    iface: Option<&'a Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-) -> io::Result<AnyStream> {
-    let dial_addr = resolver
-        .resolve(address, false)
-        .await
-        .map_err(|v| {
-            io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v))
-        })?
-        .ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("can't resolve dns: {}", address),
-        ))?;
-
-    debug!(
-        "dialing {}[{}]:{} via iface {:?}",
-        address, dial_addr, port, iface
-    );
-
-    let (socket, family) = match (dial_addr, resolver.ipv6()) {
-        (IpAddr::V4(_), _) => (
-            socket2::Socket::new(
-                socket2::Domain::IPV4,
-                socket2::Type::STREAM,
-                None,
-            )?,
-            socket2::Domain::IPV4,
-        ),
-        (IpAddr::V6(_), true) => (
-            socket2::Socket::new(
-                socket2::Domain::IPV6,
-                socket2::Type::STREAM,
-                None,
-            )?,
-            socket2::Domain::IPV6,
-        ),
-        (IpAddr::V6(_), false) => {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("ipv6 is disabled, can't dial {}", address),
-            ))
-        }
-    };
-
-    if let Some(iface) = iface {
-        debug!("binding tcp socket to interface: {:?}", iface);
-        must_bind_socket_on_interface(&socket, iface, family)?;
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
-        socket.set_mark(packet_mark)?;
-    }
-
-    socket.set_keepalive(true)?;
-    socket.set_nodelay(true)?;
-    socket.set_nonblocking(true)?;
-
-    let stream = timeout(
-        Duration::from_secs(10),
-        TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),
-    )
-    .await??;
-
-    debug!("connected to {}[{}]:{}", address, dial_addr, port);
-    Ok(Box::new(stream))
 }
 
 pub async fn new_udp_socket(
