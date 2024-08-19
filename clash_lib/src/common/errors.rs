@@ -2,7 +2,7 @@ use std::io;
 
 pub fn new_io_error<T>(msg: T) -> io::Error
 where
-    T: Into<String>,
+    T: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     io::Error::new(io::ErrorKind::Other, msg.into())
 }
