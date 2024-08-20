@@ -180,7 +180,7 @@ pub fn get_runner(
     tun_cfg.up();
 
     let tun = tun::create_as_async(&tun_cfg)
-        .map_err(|x| new_io_error(&format!("failed to create tun device: {}", x)))?;
+        .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);

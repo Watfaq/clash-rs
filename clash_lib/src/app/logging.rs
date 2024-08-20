@@ -168,7 +168,7 @@ pub fn setup_logging(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
-                .with_target(true)
+                .with_target(false)
                 .with_file(true)
                 .with_line_number(true)
                 .with_level(true)

@@ -9,11 +9,14 @@ use std::{
 
 use async_trait::async_trait;
 
+use futures::{future::BoxFuture, TryFutureExt};
 use hickory_client::{
     client, client::AsyncClient, proto::iocompat::AsyncIoTokioAsStd,
     tcp::TcpClientStream, udp::UdpClientStream,
 };
-use hickory_proto::error::ProtoError;
+use hickory_proto::{
+    error::ProtoError, rustls::tls_client_stream::tls_client_connect_with_future,
+};
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
@@ -21,11 +24,11 @@ use tracing::{info, warn};
 use crate::{
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
+    proxy::utils::{new_tcp_stream, new_udp_socket},
 };
 use hickory_proto::{
     h2::HttpsClientStreamBuilder,
     op::Message,
-    rustls::tls_client_connect_with_bind_addr,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
     DnsHandle,
 };
@@ -93,28 +96,28 @@ impl Display for DnsConfig {
             DnsConfig::Udp(addr, iface) => {
                 write!(f, "UDP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {}", iface)?;
+                    write!(f, "bind: {} ", iface)?;
                 }
                 Ok(())
             }
             DnsConfig::Tcp(addr, iface) => {
                 write!(f, "TCP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {}", iface)?;
+                    write!(f, "bind: {} ", iface)?;
                 }
                 Ok(())
             }
             DnsConfig::Tls(addr, host, iface) => {
                 write!(f, "TLS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {}", iface)?;
+                    write!(f, "bind: {} ", iface)?;
                 }
                 write!(f, "host: {}", host)
             }
             DnsConfig::Https(addr, host, iface) => {
                 write!(f, "HTTPS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {}", iface)?;
+                    write!(f, "bind: {} ", iface)?;
                 }
                 write!(f, "host: {}", host)
             }
@@ -317,32 +320,48 @@ async fn dns_stream_builder(
 ) -> Result<(AsyncClient, JoinHandle<Result<(), ProtoError>>), Error> {
     match cfg {
         DnsConfig::Udp(addr, iface) => {
-            let stream =
-                UdpClientStream::<TokioUdpSocket>::with_bind_addr_and_timeout(
-                    net::SocketAddr::new(addr.ip(), addr.port()),
-                    // TODO: simplify this match
-                    match iface {
-                        Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
-                        _ => None,
-                    },
-                    Duration::from_secs(5),
-                );
+            let iface = iface.clone();
+
+            let closure = move |_: SocketAddr,
+                                _: SocketAddr|
+                  -> BoxFuture<
+                'static,
+                std::io::Result<tokio::net::UdpSocket>,
+            > {
+                Box::pin(new_udp_socket(
+                    None,
+                    iface.clone(),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    None,
+                ))
+            };
+            let stream = UdpClientStream::<TokioUdpSocket>::with_creator(
+                net::SocketAddr::new(addr.ip(), addr.port()),
+                None,
+                Duration::from_secs(5),
+                Arc::new(closure),
+            );
+
             client::AsyncClient::connect(stream)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
         DnsConfig::Tcp(addr, iface) => {
-            let (stream, sender) = TcpClientStream::<
-                AsyncIoTokioAsStd<TokioTcpStream>,
-            >::with_bind_addr_and_timeout(
-                net::SocketAddr::new(addr.ip(), addr.port()),
-                match iface {
-                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
-                    _ => None,
-                },
-                Duration::from_secs(5),
-            );
+            let fut = new_tcp_stream(
+                *addr,
+                iface.clone(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .map_ok(AsyncIoTokioAsStd);
+
+            let (stream, sender) =
+                TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_future(
+                    fut,
+                    net::SocketAddr::new(addr.ip(), addr.port()),
+                    Duration::from_secs(5),
+                );
 
             client::AsyncClient::new(stream, sender, None)
                 .await
@@ -356,14 +375,23 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into()];
 
-            let (stream, sender) = tls_client_connect_with_bind_addr::<
+            let fut = new_tcp_stream(
+                *addr,
+                iface.clone(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .map_ok(AsyncIoTokioAsStd);
+
+            let (stream, sender) = tls_client_connect_with_future::<
                 AsyncIoTokioAsStd<TokioTcpStream>,
+                BoxFuture<
+                    'static,
+                    std::io::Result<AsyncIoTokioAsStd<TokioTcpStream>>,
+                >,
             >(
+                Box::pin(fut),
                 net::SocketAddr::new(addr.ip(), addr.port()),
-                match iface {
-                    Some(Interface::IpAddr(ip)) => Some(SocketAddr::new(*ip, 0)),
-                    _ => None,
-                },
                 host.clone(),
                 Arc::new(tls_config),
             );
@@ -391,13 +419,18 @@ async fn dns_stream_builder(
                     .set_certificate_verifier(Arc::new(tls::NoHostnameTlsVerifier));
             }
 
-            let mut stream_builder =
-                HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config));
-            if let Some(Interface::IpAddr(ip)) = iface {
-                stream_builder.bind_addr(net::SocketAddr::new(*ip, 0));
-            }
-            let stream = stream_builder.build::<AsyncIoTokioAsStd<TokioTcpStream>>(
-                net::SocketAddr::new(addr.ip(), addr.port()),
+            let fut = new_tcp_stream(
+                *addr,
+                iface.clone(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .map_ok(AsyncIoTokioAsStd);
+
+            let stream = HttpsClientStreamBuilder::build_with_future(
+                Box::pin(fut),
+                Arc::new(tls_config),
+                *addr,
                 host.clone(),
             );
 

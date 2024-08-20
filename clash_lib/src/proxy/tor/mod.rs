@@ -83,7 +83,7 @@ impl OutboundHandler for Handler {
                 StreamPrefs::new().any_exit_country(),
             )
             .await
-            .map_err(|x| new_io_error(&x.to_string()))?;
+            .map_err(|x| new_io_error(x.to_string()))?;
         let s = ChainedStreamWrapper::new(StreamWrapper::new(s));
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))

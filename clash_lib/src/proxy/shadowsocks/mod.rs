@@ -224,7 +224,7 @@ impl OutboundHandler for Handler {
         );
         let socket = new_udp_socket(
             None,
-            self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+            self.opts.common_opts.iface.clone().or(sess.iface.clone()),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )

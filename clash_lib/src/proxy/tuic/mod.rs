@@ -202,16 +202,16 @@ impl Handler {
 
             if resolver.ipv6() {
                 new_udp_socket(
-                    Some((Ipv6Addr::UNSPECIFIED, 0).into()).as_ref(),
-                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                    Some((Ipv6Addr::UNSPECIFIED, 0).into()),
+                    iface.map(|x| Interface::Name(x.name.clone())),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     None,
                 )
                 .await?
             } else {
                 new_udp_socket(
-                    Some((Ipv4Addr::UNSPECIFIED, 0).into()).as_ref(),
-                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                    Some((Ipv4Addr::UNSPECIFIED, 0).into()),
+                    iface.map(|x| Interface::Name(x.name.clone())),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     None,
                 )

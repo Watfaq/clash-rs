@@ -12,6 +12,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     proxy::{
         datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
         AnyStream,
@@ -38,9 +39,9 @@ pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -75,23 +76,28 @@ impl RemoteConnector for DirectConnector {
             u32,
         >,
     ) -> std::io::Result<AnyStream> {
+        let dial_addr = resolver
+            .resolve(address, false)
+            .await
+            .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
+            .ok_or(new_io_error("no dns result"))?;
+
         new_tcp_stream(
-            resolver,
-            address,
-            port,
-            iface,
+            (dial_addr, port).into(),
+            iface.cloned(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
         )
         .await
+        .map(|x| Box::new(x) as _)
     }
 
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        _destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        _destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -175,9 +181,9 @@ impl RemoteConnector for ProxyConnector {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        _src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        _src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -185,7 +191,7 @@ impl RemoteConnector for ProxyConnector {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
-            iface: iface.cloned(),
+            iface,
             destination: destination.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
