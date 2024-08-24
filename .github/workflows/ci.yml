@@ -13,6 +13,8 @@ concurrency:
 
 env:
   PACKAGE: "clash"
+  DOCKER_REGUSTRY: "ghcr.io"
+  IMAGE_NAME: "watfaq/clash-rs"
 
 jobs:
   compile:
@@ -52,6 +54,12 @@ jobs:
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Linux x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            release-name: x86_64-unknown-linux-musl
+            cross: true
+            extra-args: "--all-features"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
@@ -272,3 +280,58 @@ jobs:
           files: |
             packages/*
             LICENSE
+  docker-image:
+    needs: [compile]
+    name: Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Get the current Git commit hash
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            echo "TAG_VERSION=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME#v}" >> $GITHUB_ENV
+            echo "TAG_LATEST=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_ENV
+          fi
+          echo "TAG=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGUSTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-unknown-linux-musl
+          path: ./clash-rs
+      - name: Install UPX
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          install-only: true
+      - name: Optimize Binary by UPX
+        run: |
+          chmod +x ./clash-rs/clash-x86_64-unknown-linux-musl
+          upx '--strip-relocs=0' --best -f -o clash-rs-upx ./clash-rs/clash-x86_64-unknown-linux-musl
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.TAG }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        if: github.ref_type == 'tag'
+        with:
+          context: .
+          push: true
+          tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
+
+
+

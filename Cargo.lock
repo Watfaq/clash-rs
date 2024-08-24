@@ -770,6 +770,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "camellia"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3264e2574e9ef2b53ce6f536dea83a69ac0bc600b762d1523ff83fe07230ce30"
+dependencies = [
+ "byteorder",
+ "cipher",
+]
+
+[[package]]
 name = "caret"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4811,8 +4821,11 @@ dependencies = [
  "aes-gcm",
  "blake3",
  "bytes",
+ "camellia",
  "cfg-if",
+ "chacha20",
  "chacha20poly1305",
+ "ctr",
  "hkdf",
  "md-5",
  "rand",
