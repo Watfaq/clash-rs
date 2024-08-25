@@ -13,8 +13,6 @@ concurrency:
 
 env:
   PACKAGE: "clash"
-  DOCKER_REGUSTRY: "ghcr.io"
-  IMAGE_NAME: "watfaq/clash-rs"
 
 jobs:
   compile:
@@ -228,7 +226,7 @@ jobs:
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
-          
+
       - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
@@ -236,11 +234,11 @@ jobs:
           detached: true
           timeout-minutes: 15
           limit-access-to-actor: true
-          
+
   release:
     name: Release
 
-    needs: [compile]
+    needs: [ compile ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -281,57 +279,66 @@ jobs:
             packages/*
             LICENSE
   docker-image:
-    needs: [compile]
+    needs: [ compile ]
     name: Docker Image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
       - name: Get the current Git commit hash
+        id: get-info
         run: |
-          if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "TAG_VERSION=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:${TAG_NAME#v}" >> $GITHUB_ENV
-            echo "TAG_LATEST=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_ENV
-          fi
-          echo "TAG=${{ env.DOCKER_REGUSTRY }}/${{ env.IMAGE_NAME }}:${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_OUTPUT
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          echo "TAG_VERSION=ghcr.io/${GITHUB_REPOSITORY_OWNER@L}/clash-rs:${VERSION}" >> $GITHUB_ENV
+          echo "TAG_LATEST=ghcr.io/${GITHUB_REPOSITORY_OWNER@L}/clash-rs:latest" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log in to Docker Hub
+
+      - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.DOCKER_REGUSTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ steps.get-info.outputs.OWNER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
           name: x86_64-unknown-linux-musl
           path: ./clash-rs
-      - name: Install UPX
-        uses: crazy-max/ghaction-upx@v3
-        with:
-          install-only: true
-      - name: Optimize Binary by UPX
-        run: |
-          chmod +x ./clash-rs/clash-x86_64-unknown-linux-musl
-          upx '--strip-relocs=0' --best -f -o clash-rs-upx ./clash-rs/clash-x86_64-unknown-linux-musl
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ env.TAG }}
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        if: github.ref_type == 'tag'
-        with:
-          context: .
-          push: true
-          tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
 
+      - name: Build and push latest
+        uses: docker/build-push-action@v5
+        if: startsWith(github.ref, 'refs/heads/dev')
+        with:
+          context: .
+          file: .github/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.TAG_LATEST }}
+
+      - name: Build and push release
+        uses: docker/build-push-action@v5
+        if: startsWith(github.ref, 'refs/heads/v')
+        with:
+          context: .
+          file: .github/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.TAG_VERSION }}
+
+      - name: Delete all images from package without tags
+        uses: pcasteran/ghcr-cleaning-action@v1
+        with:
+          user: ${{ steps.get-info.outputs.OWNER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          package: clash-rs
 
 
