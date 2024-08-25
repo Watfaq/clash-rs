@@ -1,6 +1,7 @@
-# A base image built by an ops bigwig, open source
-FROM wener/base:latest
-COPY ./clash-rs/clash-x86_64-unknown-linux-musl /usr/local/bin/clash
-RUN apk add --no-cache -f yq && mkdir -p /root/.config/clash/
+FROM alpine:latest
+COPY ./clash-rs/clash-x86_64-unknown-linux-musl /usr/bin/clash
+# The yq library installed here is used to rewrite the config.yaml configuration file for clash, merge it, and other related operations.
+RUN apk update && apk add --no-cache -f yq && mkdir -p /root/.config/clash/
 WORKDIR /root
-CMD ["/usr/local/bin/clash","-d", "/root/.config/clash/"]
+ENTRYPOINT [ "/usr/bin/clash" ]
+CMD [ "-d", "/root/.config/clash/" ]
