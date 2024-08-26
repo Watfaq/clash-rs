@@ -346,11 +346,5 @@ jobs:
           push: true
           tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
 
-      - name: Delete all images from package without tags
-        uses: pcasteran/ghcr-cleaning-action@v1
-        with:
-          user: ${{ steps.get-info.outputs.OWNER }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-          package: clash-rs
 
 
