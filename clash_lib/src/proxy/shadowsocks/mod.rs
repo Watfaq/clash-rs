@@ -138,21 +138,7 @@ impl Handler {
         };
 
         let ctx = Context::new_shared(ServerType::Local);
-        let cfg = ServerConfig::new(
-            (self.opts.server.to_owned(), self.opts.port),
-            self.opts.password.to_owned(),
-            match self.opts.cipher.as_str() {
-                "aes-128-gcm" => CipherKind::AES_128_GCM,
-                "aes-256-gcm" => CipherKind::AES_256_GCM,
-                "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "unsupported cipher",
-                    ))
-                }
-            },
-        );
+        let cfg = self.server_config()?;
 
         let stream = ProxyClientStream::from_stream(
             ctx,
@@ -162,6 +148,26 @@ impl Handler {
         );
 
         Ok(Box::new(ShadowSocksStream(stream)))
+    }
+
+    fn server_config(&self) -> Result<ServerConfig, io::Error> {
+        let cfg = ServerConfig::new(
+            (self.opts.server.to_owned(), self.opts.port),
+            self.opts.password.to_owned(),
+            match self.opts.cipher.as_str() {
+                "aes-128-gcm" => CipherKind::AES_128_GCM,
+                "aes-256-gcm" => CipherKind::AES_256_GCM,
+                "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
+                "rc4-md5" => CipherKind::SS_RC4_MD5,
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "unsupported cipher",
+                    ))
+                }
+            },
+        );
+        Ok(cfg)
     }
 }
 
@@ -207,21 +213,8 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         let ctx = Context::new_shared(ServerType::Local);
-        let cfg = ServerConfig::new(
-            (self.opts.server.to_owned(), self.opts.port),
-            self.opts.password.to_owned(),
-            match self.opts.cipher.as_str() {
-                "aes-128-gcm" => CipherKind::AES_128_GCM,
-                "aes-256-gcm" => CipherKind::AES_256_GCM,
-                "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "unsupported cipher",
-                    ))
-                }
-            },
-        );
+        let cfg = self.server_config()?;
+
         let socket = new_udp_socket(
             None,
             self.opts.common_opts.iface.clone().or(sess.iface.clone()),
