@@ -1,7 +1,13 @@
 use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+    u32,
+};
 
 use futures::{SinkExt, StreamExt};
+use ipnet::IpNet;
+use network_interface::NetworkInterfaceConfig;
 use tracing::{debug, error, info, trace, warn};
 use tun::{Device, TunPacket};
 use url::Url;
@@ -10,7 +16,11 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, utils::get_outbound_interface},
+    proxy::{
+        datagram::UdpPacket,
+        tun::routes::add_route,
+        utils::{get_outbound_interface, OutboundInterface},
+    },
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -177,13 +187,55 @@ pub fn get_runner(
         }
     }
 
-    tun_cfg.up();
+    let gw = cfg.gateway;
+    tun_cfg.address(gw.addr()).netmask(gw.netmask()).up();
 
     let tun = tun::create_as_async(&tun_cfg)
         .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
+
+    #[cfg(target_os = "windows")]
+    if cfg.route_all || !cfg.routes.is_empty() {
+        let tun_iface = network_interface::NetworkInterface::show()
+            .map_err(map_io_error)?
+            .into_iter()
+            .find(|iface| iface.name == tun_name)
+            .map(|x| OutboundInterface {
+                name: x.name,
+                addr_v4: x.addr.iter().find_map(|addr| match addr {
+                    network_interface::Addr::V4(addr) => Some(addr.ip),
+                    _ => None,
+                }),
+                addr_v6: x.addr.iter().find_map(|addr| match addr {
+                    network_interface::Addr::V6(addr) => Some(addr.ip),
+                    _ => None,
+                }),
+                index: x.index,
+            })
+            .expect("tun interface not found");
+
+        if cfg.route_all {
+            warn!(
+                "route_all is enabled, all traffic will be routed through the tun \
+                 interface"
+            );
+            let default_routes = vec![
+                IpNet::new(std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1)
+                    .unwrap(),
+                IpNet::new(std::net::IpAddr::V4(Ipv4Addr::new(128, 0, 0, 0)), 1)
+                    .unwrap(),
+            ];
+            for r in default_routes {
+                add_route(&tun_iface, &r).map_err(map_io_error)?;
+            }
+        } else {
+            for r in cfg.routes {
+                add_route(&tun_iface, &r).map_err(map_io_error)?;
+            }
+        }
+    }
 
     let (stack, mut tcp_listener, udp_socket) =
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
