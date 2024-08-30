@@ -1,9 +1,5 @@
 use network_interface::NetworkInterfaceConfig;
-use std::{
-    io,
-    net::SocketAddr,
-    os::windows::io::AsRawSocket,
-};
+use std::{io, net::SocketAddr, os::windows::io::AsRawSocket};
 use tracing::{error, trace, warn};
 use windows::Win32::{
     Foundation::GetLastError,
@@ -12,10 +8,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{
-    common::errors::new_io_error,
-    proxy::Interface,
-};
+use crate::{common::errors::new_io_error, proxy::Interface};
 
 pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,
