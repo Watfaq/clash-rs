@@ -1,5 +1,5 @@
 use ipnet::IpNet;
-use std::{f32::INFINITY, io, ptr::null_mut};
+use std::{io, ptr::null_mut};
 use tracing::{error, info};
 use windows::Win32::{
     Foundation::{GetLastError, ERROR_SUCCESS},
@@ -34,7 +34,7 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
     info!("executing: {}", cmd);
 
     let output = std::process::Command::new("cmd")
-        .args(&["/C", &cmd])
+        .args(["/C", &cmd])
         .output()
         .map_err(|e| new_io_error(e.to_string().as_str()))?;
 
@@ -50,7 +50,7 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
 
 /// Add a route to the routing table.
 /// https://learn.microsoft.com/en-us/windows/win32/rras/add-and-update-routes-using-rtmaddroutetodest
-/// FIXME: nothing fucking happens with this https://stackoverflow.com/questions/43632619/how-to-properly-use-rtmv2-and-rtmaddroutetodest
+/// FIXME: figure out why this doesn't work https://stackoverflow.com/questions/43632619/how-to-properly-use-rtmv2-and-rtmaddroutetodest
 #[allow(dead_code)]
 pub fn add_route_that_does_not_work(
     via: &OutboundInterface,
@@ -104,17 +104,18 @@ pub fn add_route_that_does_not_work(
         }
     }
 
-    let mut next_hop_info = RTM_NEXTHOP_INFO::default();
-
-    next_hop_info.InterfaceIndex = via.index;
-    next_hop_info.NextHopAddress = RTM_NET_ADDRESS {
-        AddressFamily: AF_INET.0,
-        NumBits: 32,
-        AddrBits: via
-            .addr_v4
-            .expect("tun interface has no ipv4 address")
-            .to_ipv6_compatible()
-            .octets(),
+    let mut next_hop_info = RTM_NEXTHOP_INFO {
+        InterfaceIndex: via.index,
+        NextHopAddress: RTM_NET_ADDRESS {
+            AddressFamily: AF_INET.0,
+            NumBits: 32,
+            AddrBits: via
+                .addr_v4
+                .expect("tun interface has no ipv4 address")
+                .to_ipv6_compatible()
+                .octets(),
+        },
+        ..Default::default()
     };
 
     let mut next_hop_handle: isize = 0;
@@ -169,7 +170,7 @@ pub fn add_route_that_does_not_work(
             null_mut() as _,
             &mut net_address,
             &mut route_info,
-            INFINITY as _,
+            f32::INFINITY as _,
             0,
             0,
             0,

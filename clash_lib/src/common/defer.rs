@@ -18,8 +18,8 @@ macro_rules! expr {
 #[macro_export]
 macro_rules! defer {
     ($($data: tt)*) => (
-        let _scope_call = crate::common::defer::ScopeCall {
-            c: Some(|| -> () { crate::expr!({ $($data)* }) })
+        let _scope_call = $crate::common::defer::ScopeCall {
+            c: Some(|| -> () { $crate::expr!({ $($data)* }) })
         };
     )
 }
