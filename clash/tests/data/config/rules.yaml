@@ -6,7 +6,9 @@ mixed-port: 8899
 tun:
   enable: true
   device-id: "dev://utun1989"
-  route-all: true
+  route-all: false
+  routes:
+    - 2000::/7
 
 ipv6: true
 
