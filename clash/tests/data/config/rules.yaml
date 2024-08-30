@@ -8,7 +8,8 @@ tun:
   device-id: "dev://utun1989"
   route-all: false
   routes:
-    - 2000::/7
+    - 0.0.0.0/1
+    - 128.0.0.0/1
 
 ipv6: true
 

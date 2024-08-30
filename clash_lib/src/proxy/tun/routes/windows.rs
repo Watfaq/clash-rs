@@ -1,13 +1,6 @@
 use ipnet::IpNet;
-use network_interface::NetworkInterfaceConfig;
-use std::{
-    f32::INFINITY,
-    io,
-    net::SocketAddr,
-    os::windows::{io::AsRawSocket, raw::HANDLE},
-    ptr::null_mut,
-};
-use tracing::{error, info, trace, warn};
+use std::{f32::INFINITY, io, ptr::null_mut};
+use tracing::{error, info};
 use windows::Win32::{
     Foundation::{GetLastError, ERROR_SUCCESS},
     NetworkManagement::Rras::{
@@ -17,17 +10,10 @@ use windows::Win32::{
         RTM_ROUTE_CHANGE_NEW, RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST,
         RTM_VIEW_MASK_UCAST,
     },
-    Networking::WinSock::{
-        AF_INET, AF_INET6, IPPROTO_IP, IPPROTO_IPV6, IP_UNICAST_IF, PROTO_IP_RIP,
-        SOCKET,
-    },
+    Networking::WinSock::{AF_INET, AF_INET6, PROTO_IP_RIP},
 };
 
-use crate::{
-    common::errors::new_io_error,
-    defer,
-    proxy::{utils::OutboundInterface, Interface},
-};
+use crate::{common::errors::new_io_error, defer, proxy::utils::OutboundInterface};
 
 const PROTO_TYPE_UCAST: u32 = 0;
 const PROTO_VENDOR_ID: u32 = 0xFFFF;
@@ -37,6 +23,39 @@ fn protocol_id(typ: u32, vendor_id: u32, protocol_id: u32) -> u32 {
 }
 
 pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
+    let cmd = format!(
+        "route add {} mask {} {} if {}",
+        dest.addr(),
+        dest.netmask(),
+        via.addr_v4.expect("tun interface has no ipv4 address"),
+        via.index,
+    );
+
+    info!("executing: {}", cmd);
+
+    let output = std::process::Command::new("cmd")
+        .args(&["/C", &cmd])
+        .output()
+        .map_err(|e| new_io_error(e.to_string().as_str()))?;
+
+    if output.status.success() {
+        info!("{} is now routed through {}", dest, via.name);
+        Ok(())
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr);
+        error!("failed to add route: {}", err);
+        Err(new_io_error(err.to_string().as_str()))
+    }
+}
+
+/// Add a route to the routing table.
+/// https://learn.microsoft.com/en-us/windows/win32/rras/add-and-update-routes-using-rtmaddroutetodest
+/// FIXME: nothing fucking happens with this https://stackoverflow.com/questions/43632619/how-to-properly-use-rtmv2-and-rtmaddroutetodest
+#[allow(dead_code)]
+pub fn add_route_that_does_not_work(
+    via: &OutboundInterface,
+    dest: &IpNet,
+) -> io::Result<()> {
     let address_family = match dest {
         IpNet::V4(_) => AF_INET,
         IpNet::V6(_) => AF_INET6,

@@ -1,30 +1,20 @@
-use ipnet::IpNet;
 use network_interface::NetworkInterfaceConfig;
 use std::{
-    f32::INFINITY,
     io,
     net::SocketAddr,
-    os::windows::{io::AsRawSocket, raw::HANDLE},
-    ptr::null_mut,
+    os::windows::io::AsRawSocket,
 };
-use tracing::{error, info, trace, warn};
+use tracing::{error, trace, warn};
 use windows::Win32::{
-    Foundation::{GetLastError, ERROR_SUCCESS},
-    NetworkManagement::Rras::{
-        RtmAddNextHop, RtmAddRouteToDest, RtmRegisterEntity, RtmReleaseNextHops,
-        RTM_ENTITY_INFO, RTM_NET_ADDRESS, RTM_NEXTHOP_INFO, RTM_REGN_PROFILE,
-        RTM_ROUTE_CHANGE_NEW, RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST,
-        RTM_VIEW_MASK_UCAST,
-    },
+    Foundation::GetLastError,
     Networking::WinSock::{
-        setsockopt, AF_INET, AF_INET6, IPPROTO_IP, IPPROTO_IPV6, IP_UNICAST_IF,
-        PROTO_IP_RIP, SOCKET,
+        setsockopt, IPPROTO_IP, IPPROTO_IPV6, IP_UNICAST_IF, SOCKET,
     },
 };
 
 use crate::{
     common::errors::new_io_error,
-    proxy::{utils::OutboundInterface, Interface},
+    proxy::Interface,
 };
 
 pub(crate) fn must_bind_socket_on_interface(

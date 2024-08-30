@@ -2,7 +2,6 @@ use super::{datagram::TunDatagram, netstack};
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::Arc,
-    u32,
 };
 
 use futures::{SinkExt, StreamExt};
