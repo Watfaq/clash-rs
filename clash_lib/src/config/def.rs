@@ -17,6 +17,7 @@ pub struct TunConfig {
     #[serde(default = "default_tun_address")]
     pub gateway: String,
     pub routes: Option<Vec<String>>,
+    #[serde(default)]
     pub route_all: bool,
 }
 
