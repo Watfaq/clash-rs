@@ -24,6 +24,7 @@ pub struct WsOption {
     pub early_data_header_name: String,
 }
 
+// TODO: merge this with CommonOptions
 #[derive(Clone, Default)]
 pub struct HandlerSharedOptions {
     pub icon: Option<String>,
