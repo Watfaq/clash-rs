@@ -651,9 +651,7 @@ impl OutboundManager {
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
                 udp: true,
-                shared_opts: crate::proxy::HandlerSharedOptions {
-                    icon: None,
-                },
+                shared_opts: crate::proxy::HandlerSharedOptions { icon: None },
             },
             vec![pd.clone()],
             stored_selection,
