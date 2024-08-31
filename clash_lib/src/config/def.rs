@@ -571,9 +571,7 @@ allow-lan: false
 tun:
   enable: true
   stack: system
-  device-url: dev://clash0
-  dns-hijack:
-    - 10.0.0.5
+  device-id: dev://clash0
 
 # This is only applicable when `allow-lan` is `true`
 # '*': bind all IP addresses
