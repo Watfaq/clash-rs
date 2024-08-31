@@ -26,6 +26,7 @@ impl From<LogLevel> for filter::LevelFilter {
             LogLevel::Warning => filter::LevelFilter::WARN,
             LogLevel::Info => filter::LevelFilter::INFO,
             LogLevel::Debug => filter::LevelFilter::DEBUG,
+            LogLevel::Trace => filter::LevelFilter::TRACE,
             LogLevel::Silent => filter::LevelFilter::OFF,
         }
     }
@@ -65,7 +66,7 @@ where
                 tracing::Level::WARN => LogLevel::Warning,
                 tracing::Level::INFO => LogLevel::Info,
                 tracing::Level::DEBUG => LogLevel::Debug,
-                tracing::Level::TRACE => LogLevel::Debug,
+                tracing::Level::TRACE => LogLevel::Trace,
             },
             msg: strs.join(" "),
         };

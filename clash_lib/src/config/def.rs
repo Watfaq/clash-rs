@@ -4,6 +4,23 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
+fn default_tun_address() -> String {
+    "198.18.0.1/32".to_string()
+}
+
+#[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct TunConfig {
+    pub enable: bool,
+    pub device_id: String,
+    /// tun interface address
+    #[serde(default = "default_tun_address")]
+    pub gateway: String,
+    pub routes: Option<Vec<String>>,
+    #[serde(default)]
+    pub route_all: bool,
+}
+
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum RunMode {
@@ -29,6 +46,7 @@ impl Display for RunMode {
 #[derive(PartialEq, Serialize, Deserialize, Default, Copy, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
+    Trace,
     Debug,
     #[default]
     Info,
@@ -41,6 +59,7 @@ pub enum LogLevel {
 impl Display for LogLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            LogLevel::Trace => write!(f, "trace"),
             LogLevel::Debug => write!(f, "debug"),
             LogLevel::Info => write!(f, "info"),
             LogLevel::Warning => write!(f, "warn"),
@@ -313,7 +332,7 @@ pub struct Config {
     ///   enable: true
     ///   device-id: "dev://utun1989"
     /// ```
-    pub tun: Option<HashMap<String, Value>>,
+    pub tun: Option<TunConfig>,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -553,9 +572,7 @@ allow-lan: false
 tun:
   enable: true
   stack: system
-  device-url: dev://clash0
-  dns-hijack:
-    - 10.0.0.5
+  device-id: dev://clash0
 
 # This is only applicable when `allow-lan` is `true`
 # '*': bind all IP addresses
