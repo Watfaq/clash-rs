@@ -31,7 +31,7 @@ http = { version = "1.1" }
 httparse = "1.9.4"
 h2 = "0.4.6"
 prost = "0.13"
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 libc = "0.2"
 foreign-types-shared = "0.3.1"
 network-interface = "2.0.0"
