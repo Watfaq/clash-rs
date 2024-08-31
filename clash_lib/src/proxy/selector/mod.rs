@@ -236,6 +236,7 @@ mod tests {
             super::HandlerOptions {
                 name: "test".to_owned(),
                 udp: false,
+                ..Default::default()
             },
             vec![Arc::new(RwLock::new(mock_provider))],
             None,
