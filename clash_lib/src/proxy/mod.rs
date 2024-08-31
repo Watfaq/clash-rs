@@ -52,6 +52,7 @@ pub mod urltest;
 
 mod common;
 mod options;
+pub use options::HandlerSharedOptions;
 mod transport;
 
 #[cfg(test)]
@@ -229,6 +230,10 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         m.insert("type".to_string(), Box::new(self.proto()) as _);
 
         m
+    }
+
+    fn icon(&self) -> Option<String> {
+        None
     }
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;

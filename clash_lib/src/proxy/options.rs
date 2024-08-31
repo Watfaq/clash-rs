@@ -23,3 +23,9 @@ pub struct WsOption {
     pub max_early_data: usize,
     pub early_data_header_name: String,
 }
+
+
+#[derive(Clone, Default)]
+pub struct HandlerSharedOptions {
+    pub icon: Option<String>,
+}
