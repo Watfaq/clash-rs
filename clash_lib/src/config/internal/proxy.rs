@@ -349,6 +349,7 @@ pub struct OutboundGroupRelay {
     pub proxies: Option<Vec<String>>,
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
+    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
@@ -364,6 +365,7 @@ pub struct OutboundGroupUrlTest {
     pub interval: u64,
     pub lazy: Option<bool>,
     pub tolerance: Option<u16>,
+    pub icon: Option<String>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupFallback {
@@ -377,6 +379,7 @@ pub struct OutboundGroupFallback {
     #[serde(deserialize_with = "utils::deserialize_u64")]
     pub interval: u64,
     pub lazy: Option<bool>,
+    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
@@ -392,6 +395,7 @@ pub struct OutboundGroupLoadBalance {
     pub interval: u64,
     pub lazy: Option<bool>,
     pub strategy: Option<LoadBalanceStrategy>,
+    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
@@ -411,6 +415,7 @@ pub struct OutboundGroupSelect {
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
     pub udp: Option<bool>,
+    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

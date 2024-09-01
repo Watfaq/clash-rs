@@ -29,6 +29,7 @@ use super::{
 
 #[derive(Default)]
 pub struct HandlerOptions {
+    pub shared_opts: super::options::HandlerSharedOptions,
     pub name: String,
 }
 
@@ -188,6 +189,10 @@ impl OutboundHandler for Handler {
         );
 
         m
+    }
+
+    fn icon(&self) -> Option<String> {
+        self.opts.shared_opts.icon.clone()
     }
 }
 

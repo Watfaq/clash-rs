@@ -35,6 +35,7 @@ struct HandlerInner {
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
+    pub shared_opts: super::options::HandlerSharedOptions,
     pub name: String,
     pub udp: bool,
 }
@@ -199,6 +200,10 @@ impl OutboundHandler for Handler {
         );
         m
     }
+
+    fn icon(&self) -> Option<String> {
+        self.opts.shared_opts.icon.clone()
+    }
 }
 
 #[cfg(test)]
@@ -231,6 +236,7 @@ mod tests {
             super::HandlerOptions {
                 name: "test".to_owned(),
                 udp: false,
+                ..Default::default()
             },
             vec![Arc::new(RwLock::new(mock_provider))],
             None,
