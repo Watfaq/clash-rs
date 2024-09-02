@@ -1,15 +1,10 @@
 use once_cell::sync::Lazy;
 use rustls::{
-    client::{
-        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-        WebPkiVerifier,
-    },
-    DigitallySignedStruct, OwnedTrustAnchor, RootCertStore,
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    RootCertStore,
 };
-use tracing::warn;
 
-use rustls::{Certificate, ServerName};
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
 pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> =
     Lazy::new(global_root_store);
@@ -28,70 +23,58 @@ fn global_root_store() -> Arc<RootCertStore> {
 }
 
 /// Warning: NO validation on certs.
-pub struct DummyTlsVerifier;
+#[derive(Debug)]
+pub struct DummyTlsVerifier(Arc<rustls::crypto::CryptoProvider>);
 
-impl ServerCertVerifier for DummyTlsVerifier {
+impl DummyTlsVerifier {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self(Arc::new(rustls::crypto::ring::default_provider())))
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for DummyTlsVerifier {
     fn verify_server_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
-        _server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: SystemTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        Ok(ServerCertVerified::assertion())
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp: &[u8],
+        _now: UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
-pub struct NoHostnameTlsVerifier;
-
-impl ServerCertVerifier for NoHostnameTlsVerifier {
-    fn verify_server_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
-        now: SystemTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        let verifier =
-            WebPkiVerifier::new(rustls::RootCertStore { roots: vec![] }, None);
-        match verifier.verify_server_cert(
-            end_entity,
-            intermediates,
-            server_name,
-            scts,
-            ocsp_response,
-            now,
-        ) {
-            Err(rustls::Error::UnsupportedNameType) => {
-                warn!(
-                    "skipping TLS cert name verification for server name: {:?}",
-                    server_name
-                );
-                Ok(ServerCertVerified::assertion())
-            }
-            other => other,
-        }
-    }
-}
+// TODO pub struct NoHostnameTlsVerifier;

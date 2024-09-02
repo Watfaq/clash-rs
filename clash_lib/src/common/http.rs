@@ -3,11 +3,17 @@ use std::{
     task::{Context, Poll},
 };
 
+use bytes::Bytes;
 use futures::Future;
 
-use hyper::{
-    client::connect::{Connected, Connection},
-    Uri,
+use http_body_util::Empty;
+use hyper::Uri;
+use hyper_util::{
+    client::legacy::{
+        connect::{Connected, Connection},
+        Client,
+    },
+    rt::TokioExecutor,
 };
 use tower::Service;
 
@@ -74,7 +80,8 @@ impl Connection for AnyStream {
     }
 }
 
-pub type HttpClient = hyper::Client<hyper_rustls::HttpsConnector<LocalConnector>>;
+pub type HttpClient =
+    Client<hyper_rustls::HttpsConnector<LocalConnector>, Empty<Bytes>>;
 
 pub fn new_http_client(
     dns_resolver: ThreadSafeDNSResolver,
@@ -83,13 +90,12 @@ pub fn new_http_client(
 
     use super::tls::GLOBAL_ROOT_STORE;
 
-    let connector = LocalConnector(dns_resolver);
-
     let mut tls_config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+    let connector = LocalConnector(dns_resolver);
 
     let connector = hyper_rustls::HttpsConnectorBuilder::new()
         .with_tls_config(tls_config)
@@ -97,5 +103,5 @@ pub fn new_http_client(
         .enable_all_versions()
         .wrap_connector(connector);
 
-    Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
+    Ok(Client::builder(TokioExecutor::new()).build(connector))
 }

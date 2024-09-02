@@ -89,10 +89,7 @@ async fn query_dns(
                 data.insert("name".to_owned(), rr.name().to_string().into());
                 data.insert("type".to_owned(), u16::from(rr.record_type()).into());
                 data.insert("ttl".to_owned(), rr.ttl().into());
-                data.insert(
-                    "data".to_owned(),
-                    rr.data().map(|x| x.to_string()).unwrap_or_default().into(),
-                );
+                data.insert("data".to_owned(), rr.data().to_string().into());
                 data.into()
             };
 

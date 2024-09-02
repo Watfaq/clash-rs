@@ -21,7 +21,6 @@ pub async fn wrap_stream(
     use crate::common::tls::{self, GLOBAL_ROOT_STORE};
 
     let mut tls_config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
     tls_config.alpn_protocols = opt
@@ -34,14 +33,15 @@ pub async fn wrap_stream(
     if opt.skip_cert_verify {
         tls_config
             .dangerous()
-            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier {}));
+            .set_certificate_verifier(tls::DummyTlsVerifier::new());
     }
 
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
-    let dns_name = rustls::ServerName::try_from(opt.sni.as_str())
-        .unwrap_or_else(|_| panic!("invalid server name: {}", opt.sni));
+    let dns_name =
+        rustls::pki_types::ServerName::try_from(opt.sni.as_str().to_owned())
+            .unwrap_or_else(|_| panic!("invalid server name: {}", opt.sni));
 
     let c = connector.connect(dns_name, stream).await.and_then(|x| {
         if let Some(expected_alpn) = expected_alpn {

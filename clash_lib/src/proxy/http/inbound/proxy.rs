@@ -3,10 +3,13 @@ use std::{
     sync::Arc,
 };
 
+use bytes::Bytes;
 use futures::{future::BoxFuture, TryFutureExt};
 
-use hyper::{server::conn::Http, Body, Client, Method, Request, Response, Uri};
+use http_body_util::{Empty, Full};
+use hyper::{body::Body, Method, Request, Response, Uri};
 
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use tower::Service;
 use tracing::{instrument, warn};
 
@@ -38,18 +41,18 @@ pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
 }
 
 async fn proxy(
-    req: Request<Body>,
+    req: Request<Full<Bytes>>,
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
-) -> Result<Response<Body>, ProxyError> {
+) -> Result<Response<Full<Bytes>>, ProxyError> {
     if authenticator.enabled() {
         if let Some(res) = authenticate_req(&req, authenticator) {
             return Ok(res);
         }
     }
 
-    let client = Client::builder()
+    let client = Client::builder(TokioExecutor::new())
         .http1_title_case_headers(true)
         .http1_preserve_header_case(true)
         .build(Connector::new(src, dispatcher.clone()));
@@ -75,7 +78,7 @@ async fn proxy(
                 }
             });
 
-            Ok(Response::new(Body::empty()))
+            Ok(Response::new(Empty::new()))
         } else {
             Ok(Response::builder()
                 .status(hyper::StatusCode::BAD_REQUEST)
@@ -93,7 +96,7 @@ async fn proxy(
                 warn!("http proxy error: {}", e);
                 Ok(Response::builder()
                     .status(hyper::StatusCode::BAD_GATEWAY)
-                    .body(Body::empty())
+                    .body(Empty::new())
                     .unwrap())
             }
         }
@@ -106,10 +109,10 @@ struct ProxyService {
     authenticator: ThreadSafeAuthenticator,
 }
 
-impl Service<Request<Body>> for ProxyService {
+impl<T> Service<Request<T>> for ProxyService {
     type Error = ProxyError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-    type Response = Response<Body>;
+    type Response = Response<T>;
 
     fn poll_ready(
         &mut self,
@@ -118,7 +121,7 @@ impl Service<Request<Body>> for ProxyService {
         std::task::Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request<T>) -> Self::Future {
         Box::pin(proxy(
             req,
             self.src,

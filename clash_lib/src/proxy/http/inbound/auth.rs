@@ -1,11 +1,13 @@
 use base64::Engine;
 
-use hyper::{Body, Request, Response};
+use bytes::Bytes;
+use http_body_util::Full;
+use hyper::{Request, Response};
 use tracing::warn;
 
 use crate::common::auth::ThreadSafeAuthenticator;
 
-fn parse_basic_proxy_authorization(req: &Request<Body>) -> Option<&str> {
+fn parse_basic_proxy_authorization(req: &Request<Full<Bytes>>) -> Option<&str> {
     req.headers()
         .get(hyper::header::PROXY_AUTHORIZATION)
         .map(|v| v.to_str().unwrap_or_default())
@@ -26,9 +28,9 @@ fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
 
 /// returns a auth required response on auth failure
 pub fn authenticate_req(
-    req: &Request<Body>,
+    req: &Request<Full<Bytes>>,
     authenticator: ThreadSafeAuthenticator,
-) -> Option<Response<Body>> {
+) -> Option<Response<Full<Bytes>>> {
     let auth_resp = Response::builder()
         .status(hyper::StatusCode::PROXY_AUTHENTICATION_REQUIRED)
         .header(hyper::header::PROXY_AUTHENTICATE, "Basic")
