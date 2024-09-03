@@ -1022,7 +1022,7 @@ rules:
                 .unwrap()
                 .as_mapping()
                 .unwrap()
-                .get(&Value::String("mode".into()))
+                .get(Value::String("mode".into()))
                 .unwrap()
                 .as_str(),
             Some("websocket")

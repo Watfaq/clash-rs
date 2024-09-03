@@ -70,22 +70,22 @@ mod tests {
     #[test]
     fn test_matchers() {
         let full_matcher = FullMatcher("https://google.com".to_string());
-        assert_eq!(full_matcher.matches("https://google.com"), true);
-        assert_eq!(full_matcher.matches("https://www.google.com"), false);
+        assert!(full_matcher.matches("https://google.com"));
+        assert!(!full_matcher.matches("https://www.google.com"));
 
         let sub_str_matcher = SubStrMatcher("google".to_string());
-        assert_eq!(sub_str_matcher.matches("https://www.google.com"), true);
-        assert_eq!(sub_str_matcher.matches("https://www.youtube.com"), false);
+        assert!(sub_str_matcher.matches("https://www.google.com"));
+        assert!(!sub_str_matcher.matches("https://www.youtube.com"));
 
         let domain_matcher = DomainMatcher("google.com".to_string());
-        assert_eq!(domain_matcher.matches("https://www.google.com"), true);
-        assert_eq!(domain_matcher.matches("https://www.fakegoogle.com"), false);
-        assert_eq!(domain_matcher.matches("https://wwwgoogle.com"), false);
+        assert!(domain_matcher.matches("https://www.google.com"));
+        assert!(!domain_matcher.matches("https://www.fakegoogle.com"));
+        assert!(!domain_matcher.matches("https://wwwgoogle.com"));
 
         let regex_matcher =
             RegexMatcher(regex::Regex::new(r".*google\..*").unwrap());
-        assert_eq!(regex_matcher.matches("https://www.google.com"), true);
-        assert_eq!(regex_matcher.matches("https://www.fakegoogle.com"), true);
-        assert_eq!(regex_matcher.matches("https://goo.gle.com"), false);
+        assert!(regex_matcher.matches("https://www.google.com"));
+        assert!(regex_matcher.matches("https://www.fakegoogle.com"));
+        assert!(!regex_matcher.matches("https://goo.gle.com"));
     }
 }
