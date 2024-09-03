@@ -223,7 +223,7 @@ impl OutboundHandler for Handler {
         )
         .await?;
 
-        let socket =
+        let socket: ProxySocket =
             ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
         let d = OutboundDatagramShadowsocks::new(
             socket,
