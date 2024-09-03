@@ -4,9 +4,11 @@ use maxminddb::geoip2;
 use tracing::{debug, info, warn};
 
 use crate::{
-    common::{errors::map_io_error, http::HttpClient, utils::download},
+    common::{errors::map_io_error, utils::download},
     Error,
 };
+
+use super::http::HttpClient;
 
 pub struct Mmdb {
     reader: maxminddb::Reader<Vec<u8>>,

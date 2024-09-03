@@ -7,10 +7,13 @@ use std::{
     time::Duration,
 };
 
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 
 use futures::{stream::FuturesUnordered, StreamExt};
+use http_body_util::Empty;
 use hyper::Request;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace};
@@ -141,7 +144,6 @@ impl ProxyManager {
                 use crate::common::tls::GLOBAL_ROOT_STORE;
 
                 let mut tls_config = rustls::ClientConfig::builder()
-                    .with_safe_defaults()
                     .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                     .with_no_client_auth();
 
@@ -158,12 +160,14 @@ impl ProxyManager {
                 connector.clone()
             };
 
-            let client = hyper::Client::builder().build::<_, hyper::Body>(connector);
+            // Build the hyper client from the HTTPS connector.
+            let client: Client<_, Empty<Bytes>> =
+                Client::builder(TokioExecutor::new()).build(connector);
 
             let req = Request::get(url)
                 .header("Connection", "Close")
                 .version(hyper::Version::HTTP_11)
-                .body(hyper::Body::empty())
+                .body(Empty::new())
                 .unwrap();
 
             let resp = TimedFuture::new(client.request(req), None);
@@ -204,7 +208,7 @@ impl ProxyManager {
             let req2 = Request::get(url)
                 .header("Connection", "Close")
                 .version(hyper::Version::HTTP_11)
-                .body(hyper::Body::empty())
+                .body(Empty::new())
                 .unwrap();
             let resp2 = TimedFuture::new(client.request(req2), None);
 

@@ -256,7 +256,7 @@ impl DockerTestRunnerBuilder {
     pub fn sysctls(mut self, sysctls: &[(&str, &str)]) -> Self {
         self.host_config.sysctls = Some(
             sysctls
-                .into_iter()
+                .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect::<HashMap<_, _>>(),
         );

@@ -1,18 +1,26 @@
 use std::{
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
+use bytes::Bytes;
 use futures::Future;
 
-use hyper::{
-    client::connect::{Connected, Connection},
-    Uri,
+use http_body_util::Empty;
+use hyper::Uri;
+use hyper_util::{
+    client::legacy::{
+        connect::{Connected, Connection},
+        Client,
+    },
+    rt::TokioExecutor,
 };
 use tower::Service;
 
 use crate::{
     app::dns::ThreadSafeDNSResolver,
+    common::tls::GLOBAL_ROOT_STORE,
     proxy::{utils::new_tcp_stream, AnyStream},
 };
 
@@ -74,28 +82,70 @@ impl Connection for AnyStream {
     }
 }
 
-pub type HttpClient = hyper::Client<hyper_rustls::HttpsConnector<LocalConnector>>;
+impl hyper::rt::Read for AnyStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        mut buf: hyper::rt::ReadBufCursor<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        let n = unsafe {
+            let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
+            match tokio::io::AsyncRead::poll_read(self, cx, &mut tbuf) {
+                Poll::Ready(Ok(())) => tbuf.filled().len(),
+                other => return other,
+            }
+        };
+
+        unsafe {
+            buf.advance(n);
+        }
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl hyper::rt::Write for AnyStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        tokio::io::AsyncWrite::poll_write(self, cx, buf)
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        tokio::io::AsyncWrite::poll_flush(self, cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        tokio::io::AsyncWrite::poll_shutdown(self, cx)
+    }
+}
+
+pub type HttpClient =
+    Client<hyper_rustls::HttpsConnector<LocalConnector>, Empty<Bytes>>;
 
 pub fn new_http_client(
     dns_resolver: ThreadSafeDNSResolver,
 ) -> std::io::Result<HttpClient> {
-    use std::sync::Arc;
-
-    use super::tls::GLOBAL_ROOT_STORE;
-
-    let connector = LocalConnector(dns_resolver);
-
     let mut tls_config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    let connector = hyper_rustls::HttpsConnectorBuilder::new()
-        .with_tls_config(tls_config)
-        .https_or_http()
-        .enable_all_versions()
-        .wrap_connector(connector);
+    let connector = LocalConnector(dns_resolver);
 
-    Ok(hyper::Client::builder().build::<_, hyper::Body>(connector))
+    let connector: hyper_rustls::HttpsConnector<LocalConnector> =
+        hyper_rustls::HttpsConnectorBuilder::new()
+            .with_tls_config(tls_config)
+            .https_or_http()
+            .enable_all_versions()
+            .wrap_connector(connector);
+
+    Ok(Client::builder(TokioExecutor::new()).build(connector))
 }

@@ -223,7 +223,7 @@ impl OutboundHandler for Handler {
         )
         .await?;
 
-        let socket =
+        let socket: ProxySocket =
             ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
         let d = OutboundDatagramShadowsocks::new(
             socket,
@@ -394,7 +394,7 @@ mod tests {
                 "-p",
                 &port,
                 "--obfs",
-                &mode,
+                mode,
                 "-r",
                 &ss_server_env,
             ])
@@ -423,7 +423,7 @@ mod tests {
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await;
         chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;
-        run_test_suites_and_cleanup(handler, chained, &Suite::tcp_tests()).await
+        run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 
     #[tokio::test]

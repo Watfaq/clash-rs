@@ -1,10 +1,9 @@
-use crate::{
-    common::{http::HttpClient, utils::download},
-    Error,
-};
+use crate::{common::utils::download, Error};
 use prost::Message;
 use std::path::Path;
 use tracing::{debug, info};
+
+use super::http::HttpClient;
 
 pub(crate) mod geodata_proto {
     include!(concat!(env!("OUT_DIR"), "/geodata.rs"));

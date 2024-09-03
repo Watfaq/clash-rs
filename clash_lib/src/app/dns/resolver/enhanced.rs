@@ -430,12 +430,9 @@ impl EnhancedResolver {
                     || r.record_type() == rr::RecordType::AAAA
             })
             .map(|r| match r.data() {
-                Some(data) => match data {
-                    rr::RData::A(v4) => net::IpAddr::V4(**v4),
-                    rr::RData::AAAA(v6) => net::IpAddr::V6(**v6),
-                    _ => unreachable!("should be only A/AAAA"),
-                },
-                None => unreachable!("should only be A/AAAA"),
+                rr::RData::A(v4) => net::IpAddr::V4(**v4),
+                rr::RData::AAAA(v6) => net::IpAddr::V6(**v6),
+                _ => unreachable!("should be only A/AAAA"),
             })
             .collect()
     }

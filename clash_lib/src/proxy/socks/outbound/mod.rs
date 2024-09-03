@@ -304,7 +304,7 @@ mod tests {
         let host = format!("0.0.0.0:{}", port);
         let username = username.unwrap_or_default();
         let password = password.unwrap_or_default();
-        let cmd = if username != "" && password != "" {
+        let cmd = if !username.is_empty() && !password.is_empty() {
             vec![
                 "-a",
                 &host,
