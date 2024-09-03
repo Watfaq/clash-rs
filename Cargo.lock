@@ -4775,14 +4775,12 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.20.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06b6af20f0f009894644c9fb149ce6244c69b0a264ffcf7a53cbb3dd4883e4a3"
+version = "1.17.1"
 dependencies = [
  "aes",
  "arc-swap",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.21.7",
  "blake3",
  "byte_string",
  "bytes",
@@ -4808,7 +4806,7 @@ dependencies = [
  "tokio",
  "tokio-tfo",
  "url",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5302,9 +5300,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tfo"
-version = "0.3.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb4382c6371e29365853d2b71e915d5398df46312a2158097d8bb3f54d0f1b4"
+checksum = "f30b433f102de6c9b0546dc73398ba3d38d8a556f29f731268451e0b1b3aab9e"
 dependencies = [
  "cfg-if",
  "futures",
@@ -5314,7 +5312,7 @@ dependencies = [
  "pin-project",
  "socket2",
  "tokio",
- "windows-sys 0.52.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
