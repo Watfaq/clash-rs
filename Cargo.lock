@@ -4073,7 +4073,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.8",
+ "rustls 0.21.12",
  "thiserror",
  "tokio",
  "tracing",
@@ -4089,7 +4089,7 @@ dependencies = [
  "rand",
  "ring 0.16.20",
  "rustc-hash",
- "rustls 0.21.8",
+ "rustls 0.21.12",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4410,8 +4410,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.8"
-source = "git+https://github.com/Watfaq/rustls.git?rev=43ecd5c610741668488e6d57857f9900a2087a5b#43ecd5c610741668488e6d57857f9900a2087a5b"
+version = "0.21.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
  "ring 0.17.8",
  "rustls-webpki 0.101.7",
@@ -4421,8 +4422,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
+source = "git+https://github.com/Watfaq/rustls.git?rev=f84c0f8020b252978e9b157179e9a99233cd33aa#f84c0f8020b252978e9b157179e9a99233cd33aa"
 dependencies = [
  "log",
  "once_cell",
@@ -5288,8 +5288,7 @@ dependencies = [
 [[package]]
 name = "tokio-rustls"
 version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a#6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a"
 dependencies = [
  "rustls 0.23.12",
  "rustls-pki-types",
@@ -7279,8 +7278,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "tokio-rustls"
-version = "0.24.1"
-source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=fcda89f6348c1e696b239bc7e0b168015cfb8c08#fcda89f6348c1e696b239bc7e0b168015cfb8c08"

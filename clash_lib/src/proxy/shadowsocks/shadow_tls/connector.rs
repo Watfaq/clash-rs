@@ -43,7 +43,7 @@ impl Connector {
         let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
 
         let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
-        let sni_name = rustls::pki_types::ServerName::try_from(opts.host.as_str())
+        let sni_name = rustls::pki_types::ServerName::try_from(opts.host.clone())
             .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
