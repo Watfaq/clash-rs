@@ -1,4 +1,6 @@
 use async_recursion::async_recursion;
+use futures::StreamExt;
+use http_body_util::{BodyDataStream, BodyExt};
 use std::{fmt::Write, num::ParseIntError, path::Path};
 
 use crate::{common::errors::new_io_error, Error};
@@ -75,7 +77,7 @@ where
     let uri = url.parse::<hyper::Uri>()?;
     let mut out = std::fs::File::create(&path)?;
 
-    let mut res = http_client.get(uri).await?;
+    let res = http_client.get(uri).await?;
 
     if res.status().is_redirection() {
         return download(
@@ -101,7 +103,8 @@ where
 
     debug!("downloading data to {}", path.as_ref().to_string_lossy());
 
-    while let Some(chunk) = res.body_mut().data().await {
+    let mut stream = BodyDataStream::new(res.into_body());
+    while let Some(chunk) = stream.next().await {
         out.write_all(&chunk?)?;
     }
 

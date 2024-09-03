@@ -33,7 +33,7 @@ pub async fn wrap_stream(
     if opt.skip_cert_verify {
         tls_config
             .dangerous()
-            .set_certificate_verifier(tls::DummyTlsVerifier::new());
+            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
     }
 
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());

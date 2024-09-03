@@ -412,10 +412,9 @@ async fn dns_stream_builder(
             tls_config.alpn_protocols = vec!["h2".into()];
 
             if host == &addr.ip().to_string() {
-                tls_config
-                    .dangerous()
-                    // TODO use NoHostnameTlsVerifier
-                    .set_certificate_verifier(tls::DummyTlsVerifier::new());
+                tls_config.dangerous().set_certificate_verifier(Arc::new(
+                    tls::NoHostnameTlsVerifier::new(),
+                ));
             }
 
             let fut = new_tcp_stream(

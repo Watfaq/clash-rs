@@ -19,9 +19,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace};
 
 use crate::{
-    common::{
-        errors::new_io_error, timed_future::TimedFuture, tls::GLOBAL_ROOT_STORE,
-    },
+    common::{errors::new_io_error, timed_future::TimedFuture},
     proxy::AnyOutboundHandler,
 };
 

@@ -35,12 +35,6 @@ pub trait ChainedStream:
     async fn append_to_chain(&self, name: &str);
 }
 
-impl Connection for BoxedChainedStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
-    }
-}
-
 pub type BoxedChainedStream = Box<dyn ChainedStream>;
 
 #[derive(Debug)]
