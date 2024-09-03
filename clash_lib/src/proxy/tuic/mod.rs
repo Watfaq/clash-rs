@@ -166,10 +166,6 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> Result<TuicEndpoint> {
         let mut crypto = TlsConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be
