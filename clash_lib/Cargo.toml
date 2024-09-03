@@ -127,8 +127,8 @@ arti-client = { version = "0.21", default-features = false, features = ["tokio",
 tor-rtcompat = { version = "0.21", default-features = false, features = ["rustls"] }
 
 # tuic
-tuic = { rev = "82fab62", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { rev = "82fab62", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.1.2-fix1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.1.2-fix1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 quinn = { version = "0.11", optional = true, default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
 register-count = { version = "0.1", optional = true }
 

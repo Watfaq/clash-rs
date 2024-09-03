@@ -9,6 +9,7 @@ use axum::async_trait;
 
 use quinn::{
     congestion::{BbrConfig, NewRenoConfig},
+    crypto::rustls::QuicClientConfig,
     EndpointConfig, TokioRuntime,
 };
 use tracing::debug;
@@ -174,7 +175,9 @@ impl Handler {
         crypto.alpn_protocols.clone_from(&opts.alpn);
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
-        let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
+
+        let mut quinn_config =
+            QuinnConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
         let mut transport_config = QuinnTransportConfig::default();
         transport_config
             .max_concurrent_bidi_streams(opts.max_open_stream)
