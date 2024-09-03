@@ -1,6 +1,6 @@
 use async_recursion::async_recursion;
 use futures::StreamExt;
-use http_body_util::{BodyDataStream, BodyExt};
+use http_body_util::BodyDataStream;
 use std::{fmt::Write, num::ParseIntError, path::Path};
 
 use crate::{common::errors::new_io_error, Error};

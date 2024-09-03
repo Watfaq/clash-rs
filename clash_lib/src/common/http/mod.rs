@@ -1,5 +1,5 @@
-pub mod http;
+pub mod client;
 pub mod hyper;
 
-pub use http::*;
+pub use client::*;
 pub use hyper::HyperResponseBody;

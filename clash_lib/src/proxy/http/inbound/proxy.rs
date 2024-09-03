@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use futures::{future::BoxFuture, StreamExt, TryFutureExt};
+use futures::{future::BoxFuture, TryFutureExt};
 
 use http_body_util::{BodyExt, Empty, Full};
 use hyper::{body::Incoming, server::conn::http1, Method, Request, Response, Uri};

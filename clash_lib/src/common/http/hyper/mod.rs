@@ -19,6 +19,7 @@ impl<T> TokioIo<T> {
         Self { inner }
     }
 
+    #[allow(dead_code)]
     pub fn inner(self) -> T {
         self.inner
     }
