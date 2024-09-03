@@ -166,9 +166,10 @@ impl Handler {
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<TuicEndpoint> {
-        let mut crypto = TlsConfig::builder()
-            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-            .with_no_client_auth();
+        let mut crypto =
+            TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
