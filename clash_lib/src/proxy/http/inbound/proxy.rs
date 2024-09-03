@@ -5,14 +5,8 @@ use std::{
 
 use futures::{future::BoxFuture, StreamExt, TryFutureExt};
 
-use http_body_util::{
-    BodyExt, Empty, Full,
-};
-use hyper::{
-    body::Incoming,
-    server::conn::http1,
-    Method, Request, Response, Uri,
-};
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::{body::Incoming, server::conn::http1, Method, Request, Response, Uri};
 
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use tracing::{instrument, warn};
