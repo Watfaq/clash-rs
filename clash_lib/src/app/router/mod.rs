@@ -81,9 +81,9 @@ impl Router {
         }
     }
 
-    pub async fn match_route<'a>(
-        &'a self,
-        sess: &'a Session,
+    pub async fn match_route(
+        &self,
+        sess: &Session,
     ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
         let mut sess_resolved = false;
         let mut sess_dup = sess.clone();

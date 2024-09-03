@@ -1,7 +1,6 @@
 use base64::Engine;
 
-use bytes::Bytes;
-use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response};
 use tracing::warn;
 

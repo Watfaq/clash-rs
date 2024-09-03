@@ -3,20 +3,18 @@ use std::{
     sync::Arc,
 };
 
-use bytes::Bytes;
 use futures::{future::BoxFuture, StreamExt, TryFutureExt};
 
 use http_body_util::{
-    combinators::BoxBody, BodyDataStream, BodyExt, Either, Empty, Full, StreamBody,
+    BodyExt, Empty, Full,
 };
 use hyper::{
-    body::{Body, Incoming},
+    body::Incoming,
     server::conn::http1,
     Method, Request, Response, Uri,
 };
 
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use tower::Service;
 use tracing::{instrument, warn};
 
 use crate::{

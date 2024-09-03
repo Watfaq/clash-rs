@@ -2,7 +2,6 @@ use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
 use futures::{Sink, Stream};
-use hyper_util::client::legacy::connect::{Connected, Connection};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::oneshot::{error::TryRecvError, Receiver},

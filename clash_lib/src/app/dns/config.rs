@@ -1,17 +1,13 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    io::BufReader,
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
 
 use ipnet::AddrParseError;
 use regex::Regex;
-use rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer},
-    RootCertStore,
-};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use url::Url;
 
 use crate::{
