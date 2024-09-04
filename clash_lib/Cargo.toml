@@ -124,7 +124,7 @@ public-suffix = "0.1"
 murmur3 = "0.5"
 
 arti-client = { version = "0.21", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.21", default-features = false, features = ["rustls"] }
+tor-rtcompat = { version = "0.22", default-features = false, features = ["rustls"] }
 
 # tuic
 tuic = { tag = "v1.1.2-fix1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
