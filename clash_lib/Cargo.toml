@@ -103,28 +103,22 @@ hickory-resolver = "0.25.0-alpha.2"
 hickory-server = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls"]}
 
-
-
 dhcproto = "0.12"
 ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.8"
-
-
-
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2"
-
 
 shadowsocks = { version = "1", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.21", default-features = false, features = ["tokio", "rustls", "compression", "static-sqlite"] }
-tor-rtcompat = { version = "0.21", default-features = false, features = ["rustls"] }
+arti-client = { version = "0.22", default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.22", default-features = false }
 
 # tuic
 tuic = { tag = "v1.1.2-fix1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
