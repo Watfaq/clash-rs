@@ -182,7 +182,11 @@ pub fn get_runner(
     }
 
     let gw = cfg.gateway;
-    tun_cfg.address(gw.addr()).netmask(gw.netmask()).up();
+    tun_cfg
+        .address(gw.addr())
+        .netmask(gw.netmask())
+        .mtu(cfg.mtu.unwrap_or(if cfg!(windows) { 65535 } else { 1500 }))
+        .up();
 
     let tun = tun::create_as_async(&tun_cfg)
         .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
