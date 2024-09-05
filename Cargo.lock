@@ -784,9 +784,9 @@ dependencies = [
 
 [[package]]
 name = "caret"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ac3ae35de516b8ee4bfb6affc72bd6c121d2967206f307c026890f99c7875a0"
+checksum = "8c979a125c4d00f63d49b648530a952c6cc42e3387cc96f41f9a4687ee6b9273"
 
 [[package]]
 name = "cast"
@@ -796,9 +796,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.1.15"
+version = "1.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57b6a275aa2903740dc87da01c62040406b8812552e97129a63ea8850a17c6e6"
+checksum = "e9d013ecb737093c0e86b151a7b837993cf9ec6c502946cfb44bedc392421e0b"
 dependencies = [
  "shlex",
 ]
@@ -1950,9 +1950,9 @@ checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
 
 [[package]]
 name = "fs-mistrust"
-version = "0.7.12"
+version = "0.7.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2492d7196a25acaf48f197574ddf3b90e98c3a0c6b1f9ed9be7df0d9a8a9ec85"
+checksum = "43de34e45ddb3fc314aeae5c5b078b8e3549980cd45836f8364d7cca8d85aead"
 dependencies = [
  "derive_builder_fork_arti",
  "dirs",
@@ -4260,9 +4260,9 @@ dependencies = [
 
 [[package]]
 name = "retry-error"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b960f1dc847b9e4383ca73b4e8002f725b2f562addb9ade88a6ba109b305e96d"
+checksum = "eeb501c6079c6e2a1c9761b76ddb12ecb6818b8773748f5e0394b95f838e4a38"
 
 [[package]]
 name = "rfc6979"
@@ -4454,9 +4454,9 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
 name = "safelog"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a1e9cd092ef5e122f1a34f3fe15de8e9685f8f610e31c4c0643976aa5e31737"
+checksum = "cabd7492c13678058e680f161cf94ba34d9d9e48419d1fbc6c21a32926c23764"
 dependencies = [
  "derive_more",
  "educe",
