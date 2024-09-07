@@ -8,7 +8,7 @@ on:
     branches: [ "master" ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -251,8 +251,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
-
+          fetch-depth: 0
+          fetch-tags: true
       - name: Merge binaries
         uses: actions/upload-artifact/merge@v4
         with:
@@ -266,26 +266,54 @@ jobs:
           name: binaries
           path: ./packages
 
+      - name: Delete previous latest tag
+        run: |
+          git tag -d latest || true
+          git push origin :refs/tags/latest || true
+          gh release list | grep Draft |  awk '{print $1 " \t"}' |  while read -r line; do gh release delete -y "$line"; done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create new latest tag
+        if: startsWith(github.ref, 'refs/heads/master')
+        run: |
+          git tag latest
+          git push origin latest
+
+
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@main
+        id: git-cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header 
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+
       - name: Github stable release
-        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          generate_release_notes: false
+          body: "${{ steps.git-cliff.outputs.content }}"
           files: |
             packages/*
-            LICENSE
+            LICENSE*
 
       - name: Github nightly release
-        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: true
-          automatic_release_tag: "latest"
+          tag_name: "latest"
+          generate_release_notes: false
+          body: "${{ steps.git-cliff.outputs.content }}"
           files: |
             packages/*
-            LICENSE
+            LICENSE*
   docker-image:
     needs: [ compile ]
     name: Docker Image
