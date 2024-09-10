@@ -19,6 +19,7 @@ pub struct TunConfig {
     pub routes: Option<Vec<String>>,
     #[serde(default)]
     pub route_all: bool,
+    pub mtu: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
@@ -1022,7 +1023,7 @@ rules:
                 .unwrap()
                 .as_mapping()
                 .unwrap()
-                .get(&Value::String("mode".into()))
+                .get(Value::String("mode".into()))
                 .unwrap()
                 .as_str(),
             Some("websocket")

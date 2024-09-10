@@ -266,7 +266,7 @@ pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
             continue;
         }
         let pkt = pkt.unwrap();
-        assert!(pkt.data.len() > 0);
+        assert!(!pkt.data.is_empty());
         let end_time = Instant::now();
         tracing::debug!(
             "dns test time cost:{:?}",

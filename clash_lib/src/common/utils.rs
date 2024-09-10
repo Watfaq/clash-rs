@@ -1,11 +1,9 @@
 use async_recursion::async_recursion;
-use hyper::body::HttpBody;
+use futures::StreamExt;
+use http_body_util::BodyDataStream;
 use std::{fmt::Write, num::ParseIntError, path::Path};
 
-use crate::{
-    common::{errors::new_io_error, http::HttpClient},
-    Error,
-};
+use crate::{common::errors::new_io_error, Error};
 use rand::{
     distributions::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
@@ -79,7 +77,7 @@ where
     let uri = url.parse::<hyper::Uri>()?;
     let mut out = std::fs::File::create(&path)?;
 
-    let mut res = http_client.get(uri).await?;
+    let res = http_client.get(uri).await?;
 
     if res.status().is_redirection() {
         return download(
@@ -105,9 +103,43 @@ where
 
     debug!("downloading data to {}", path.as_ref().to_string_lossy());
 
-    while let Some(chunk) = res.body_mut().data().await {
+    let mut stream = BodyDataStream::new(res.into_body());
+    while let Some(chunk) = stream.next().await {
         out.write_all(&chunk?)?;
     }
 
     Ok(())
+}
+
+use anyhow::Context;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use std::fs;
+
+use super::http::HttpClient;
+
+pub fn load_cert_chain(
+    cert_path: &Path,
+) -> anyhow::Result<Vec<CertificateDer<'static>>> {
+    let cert_chain =
+        fs::read(cert_path).context("failed to read certificate chain")?;
+    let cert_chain = if cert_path.extension().map_or(false, |x| x == "der") {
+        vec![CertificateDer::from(cert_chain)]
+    } else {
+        rustls_pemfile::certs(&mut &*cert_chain)
+            .collect::<Result<_, _>>()
+            .context("invalid PEM-encoded certificate")?
+    };
+    Ok(cert_chain)
+}
+
+pub fn load_priv_key(key_path: &Path) -> anyhow::Result<PrivateKeyDer<'static>> {
+    let key = fs::read(key_path).context("failed to read private key")?;
+    let key = if key_path.extension().map_or(false, |x| x == "der") {
+        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key))
+    } else {
+        rustls_pemfile::private_key(&mut &*key)
+            .context("malformed PKCS #1 private key")?
+            .ok_or_else(|| anyhow::Error::msg("no private keys found"))?
+    };
+    Ok(key)
 }

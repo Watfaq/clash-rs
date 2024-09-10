@@ -7,6 +7,7 @@ tun:
   enable: false
   device-id: "dev://utun1989"
   route-all: false
+  gateway: "198.19.0.1/32"
   routes:
     - 0.0.0.0/1
     - 128.0.0.0/1

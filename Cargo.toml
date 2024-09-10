@@ -9,7 +9,7 @@ members = [
 
 
 [workspace.package]
-version = "0.3.0"
+version = "0.3.1"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2021"
 
@@ -20,5 +20,5 @@ lto = true
 strip = true
 
 [patch.crates-io]
-tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "fcda89f6348c1e696b239bc7e0b168015cfb8c08"}
-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "43ecd5c610741668488e6d57857f9900a2087a5b"}
+tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a"}
+rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "f84c0f8020b252978e9b157179e9a99233cd33aa"}

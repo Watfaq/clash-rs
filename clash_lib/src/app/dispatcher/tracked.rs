@@ -2,7 +2,6 @@ use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
 use futures::{Sink, Stream};
-use hyper::client::connect::{Connected, Connection};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::oneshot::{error::TryRecvError, Receiver},
@@ -33,12 +32,6 @@ pub trait ChainedStream:
 {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
-}
-
-impl Connection for BoxedChainedStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
-    }
 }
 
 pub type BoxedChainedStream = Box<dyn ChainedStream>;

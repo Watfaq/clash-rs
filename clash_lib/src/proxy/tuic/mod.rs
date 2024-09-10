@@ -9,6 +9,7 @@ use axum::async_trait;
 
 use quinn::{
     congestion::{BbrConfig, NewRenoConfig},
+    crypto::rustls::QuicClientConfig,
     EndpointConfig, TokioRuntime,
 };
 use tracing::debug;
@@ -165,20 +166,19 @@ impl Handler {
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<TuicEndpoint> {
-        let mut crypto = TlsConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
-            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-            .with_no_client_auth();
+        let mut crypto =
+            TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
         crypto.alpn_protocols.clone_from(&opts.alpn);
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
-        let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
+
+        let mut quinn_config =
+            QuinnConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
         let mut transport_config = QuinnTransportConfig::default();
         transport_config
             .max_concurrent_bidi_streams(opts.max_open_stream)
