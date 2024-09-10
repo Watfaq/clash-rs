@@ -4,18 +4,19 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{ready, Sink, Stream};
+use futures::{ready, Sink, SinkExt, Stream, StreamExt};
 use shadowsocks::ProxySocket;
 use tokio::io::ReadBuf;
 use tracing::{debug, instrument, trace};
 
 use crate::{
     app::dns::ThreadSafeDNSResolver,
-    proxy::{datagram::UdpPacket, AnyOutboundDatagram},
+    common::errors::new_io_error,
+    proxy::{datagram::UdpPacket, AnyOutboundDatagram, MaybeUdpSocketWrapper},
     session::SocksAddr,
 };
 
-#[must_use = "sinks do nothing unless polled"]
+/// the outbound datagram for that shadowsocks returns to us
 pub struct OutboundDatagramShadowsocks {
     inner: ProxySocket,
     remote_addr: SocksAddr,
@@ -32,7 +33,7 @@ impl OutboundDatagramShadowsocks {
         remote_addr: (String, u16),
         resolver: ThreadSafeDNSResolver,
     ) -> AnyOutboundDatagram {
-        let s = Self {
+        let s: OutboundDatagramShadowsocks = Self {
             inner,
             flushed: true,
             pkt: None,
@@ -41,6 +42,18 @@ impl OutboundDatagramShadowsocks {
             resolver,
         };
         Box::new(s) as _
+    }
+}
+
+impl MaybeUdpSocketWrapper for OutboundDatagramShadowsocks {
+    fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
+        self.inner.local_addr()
+    }
+}
+
+impl std::os::fd::AsRawFd for OutboundDatagramShadowsocks {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.inner.as_raw_fd()
     }
 }
 
@@ -131,10 +144,10 @@ impl Sink<UdpPacket> for OutboundDatagramShadowsocks {
             let res = if wrote_all {
                 Ok(())
             } else {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "failed to write entire datagram",
-                ))
+                Err(new_io_error(format!(
+                    "failed to write entire datagram, written: {}",
+                    n
+                )))
             };
             Poll::Ready(res)
         } else {
@@ -181,6 +194,81 @@ impl Stream for OutboundDatagramShadowsocks {
                 dst_addr: SocksAddr::any_ipv4(),
             })),
             Err(_) => Poll::Ready(None),
+        }
+    }
+}
+
+/// Shadowsocks UDP I/O that is passed to shadowsocks relay
+pub(crate) struct ShadowsocksUdpIo {
+    inner: AnyOutboundDatagram,
+}
+
+impl ShadowsocksUdpIo {
+    pub fn new(inner: AnyOutboundDatagram) -> Self {
+        Self { inner }
+    }
+}
+
+impl Sink<shadowsocks::relay::udprelay::proxy_socket::UdpPacket>
+    for ShadowsocksUdpIo
+{
+    type Error = io::Error;
+
+    fn poll_ready(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready_unpin(cx)
+    }
+
+    fn start_send(
+        mut self: Pin<&mut Self>,
+        item: shadowsocks::relay::udprelay::proxy_socket::UdpPacket,
+    ) -> Result<(), Self::Error> {
+        self.inner.start_send_unpin(UdpPacket {
+            data: item.data.to_vec(),
+            src_addr: item.src.into(),
+            dst_addr: item.dst.into(),
+        })
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_flush_unpin(cx)
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_close_unpin(cx)
+    }
+}
+
+impl Stream for ShadowsocksUdpIo {
+    type Item = shadowsocks::relay::udprelay::proxy_socket::UdpPacket;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        match ready!(self.inner.poll_next_unpin(cx)) {
+            Some(pkt) => {
+                let (src, dst) = (
+                    pkt.src_addr.must_into_socket_addr(),
+                    pkt.dst_addr.must_into_socket_addr(),
+                );
+                Poll::Ready(Some(
+                    shadowsocks::relay::udprelay::proxy_socket::UdpPacket {
+                        data: pkt.data.into(),
+                        src,
+                        dst,
+                    },
+                ))
+            }
+            None => Poll::Ready(None),
         }
     }
 }

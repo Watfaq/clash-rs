@@ -16,10 +16,14 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display},
     io,
+    net::SocketAddr,
     sync::Arc,
 };
 
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::UdpSocket,
+};
 
 use self::utils::RemoteConnector;
 
@@ -85,13 +89,17 @@ pub trait InboundDatagram<Item>:
 pub type AnyInboundDatagram =
     Box<dyn InboundDatagram<UdpPacket, Error = io::Error, Item = UdpPacket>>;
 
+pub trait MaybeUdpSocketWrapper {
+    fn local_addr(&self) -> io::Result<SocketAddr>;
+}
+
 pub trait OutboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin
+    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + 'static
 {
 }
 
 impl<T, U> OutboundDatagram<U> for T where
-    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin
+    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin + 'static
 {
 }
 

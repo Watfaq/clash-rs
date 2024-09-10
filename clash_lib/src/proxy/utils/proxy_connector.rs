@@ -208,6 +208,6 @@ impl RemoteConnector for ProxyConnector {
 
         let stream = ChainedDatagramWrapper::new(s);
         stream.append_to_chain(self.proxy.name()).await;
-        Ok(Box::new(stream))
+        Ok(Box::new(stream) as _)
     }
 }

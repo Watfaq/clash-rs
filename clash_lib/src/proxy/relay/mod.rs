@@ -158,6 +158,8 @@ impl OutboundHandler for Handler {
                     connector =
                         Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+
+                debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let d = last[0]
                     .connect_datagram_with_connector(
                         sess,

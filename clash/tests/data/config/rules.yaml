@@ -4,7 +4,7 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
   route-all: false
   routes:
@@ -86,7 +86,7 @@ proxy-groups:
       # - "h2-vmess"
       # - "tls-vmess"
       # - "grpc-vmess"
-      # - "ss-simple"
+      - "ss-simple"
       # - "trojan"
       # - "auto"
       # - "fallback-auto"
@@ -282,6 +282,8 @@ rule-providers:
     behavior: domain
 
 rules:
+  - IP-CIDR,1.1.1.1/32,udp-relay
+  - IP-CIDR,8.8.8.8/32,udp-relay
   - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,DIRECT
