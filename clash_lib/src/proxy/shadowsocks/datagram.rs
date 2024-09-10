@@ -33,7 +33,7 @@ impl OutboundDatagramShadowsocks {
         remote_addr: (String, u16),
         resolver: ThreadSafeDNSResolver,
     ) -> AnyOutboundDatagram {
-        let s: OutboundDatagramShadowsocks = Self {
+        let s = Self {
             inner,
             flushed: true,
             pkt: None,
