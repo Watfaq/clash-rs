@@ -113,7 +113,7 @@ tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-os
 tracing-appender = "0.2"
 
 
-shadowsocks = { path = "../../../gallery/shadowsocks-rust/crates/shadowsocks", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust", branch = "udp-relay", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24.0"
 public-suffix = "0.1.0"
 murmur3 = "0.5.2"

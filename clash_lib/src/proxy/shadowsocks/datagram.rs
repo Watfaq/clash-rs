@@ -12,7 +12,7 @@ use tracing::{debug, instrument, trace};
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::errors::new_io_error,
-    proxy::{datagram::UdpPacket, AnyOutboundDatagram, MaybeUdpSocketWrapper},
+    proxy::{datagram::UdpPacket, AnyOutboundDatagram},
     session::SocksAddr,
 };
 
@@ -42,18 +42,6 @@ impl OutboundDatagramShadowsocks {
             resolver,
         };
         Box::new(s) as _
-    }
-}
-
-impl MaybeUdpSocketWrapper for OutboundDatagramShadowsocks {
-    fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
-        self.inner.local_addr()
-    }
-}
-
-impl std::os::fd::AsRawFd for OutboundDatagramShadowsocks {
-    fn as_raw_fd(&self) -> std::os::fd::RawFd {
-        self.inner.as_raw_fd()
     }
 }
 
