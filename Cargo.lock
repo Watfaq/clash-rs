@@ -4739,7 +4739,7 @@ dependencies = [
 [[package]]
 name = "shadowsocks"
 version = "1.20.3"
-source = "git+https://github.com/Watfaq/shadowsocks-rust?branch=udp-relay#8c1380fe0e1f78464868b033f6020966cda0fe4e"
+source = "git+https://github.com/Watfaq/shadowsocks-rust?rev=450da0c#450da0c32447568d8062a27bf328a8472c6aaf30"
 dependencies = [
  "aes",
  "arc-swap",
