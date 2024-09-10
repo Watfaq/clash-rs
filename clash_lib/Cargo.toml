@@ -114,9 +114,9 @@ tracing-appender = "0.2"
 
 
 shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust", branch = "udp-relay", optional = true, features=["aead-cipher-2022","stream-cipher"] }
-maxminddb = "0.24.0"
-public-suffix = "0.1.0"
-murmur3 = "0.5.2"
+maxminddb = "0.24"
+public-suffix = "0.1"
+murmur3 = "0.5"
 
 arti-client = { version = "0.22", default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
 tor-rtcompat = { version = "0.22", default-features = false }
