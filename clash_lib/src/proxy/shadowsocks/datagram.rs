@@ -227,8 +227,8 @@ impl Sink<shadowsocks::relay::udprelay::proxy_socket::UdpPacket>
     ) -> Result<(), Self::Error> {
         self.inner.start_send_unpin(UdpPacket {
             data: item.data.to_vec(),
-            src_addr: item.src.into(),
-            dst_addr: item.dst.into(),
+            src_addr: item.src.map(|x| x.into()).unwrap_or_default(),
+            dst_addr: item.dst.map(|x| x.into()).unwrap_or_default(),
         })
     }
 
@@ -263,8 +263,8 @@ impl Stream for ShadowsocksUdpIo {
                 Poll::Ready(Some(
                     shadowsocks::relay::udprelay::proxy_socket::UdpPacket {
                         data: pkt.data.into(),
-                        src,
-                        dst,
+                        src: src.into(),
+                        dst: dst.into(),
                     },
                 ))
             }

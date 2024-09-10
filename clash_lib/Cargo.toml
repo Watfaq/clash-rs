@@ -9,7 +9,7 @@ default = []
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:quinn", "dep:register-count"]
 tracing = []
-bench = ["criterion"]
+bench = ["dep:criterion"]
 onion = ["arti-client/onion-service-client"]
 
 [dependencies]

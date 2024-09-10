@@ -4,7 +4,15 @@ repository = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
 
+[features]
+default = []
+shadowsocks = ["clash_lib/shadowsocks"]
+tuic = ["clash_lib/tuic"]
+tracing = ["clash_lib/tracing"]
+bench = ["clash_lib/bench"]
+onion = ["clash_lib/onion"]
+
 [dependencies]
 clap = { version = "4.5.16", features = ["derive"] }
 
-clash_lib = { path = "../clash_lib", version = "*" }
+clash_lib = { path = "../clash_lib", version = "*", default-features = false }
