@@ -294,6 +294,7 @@ impl OutboundHandler for Handler {
             &cfg,
             Box::new(ShadowsocksUdpIo::new(socket)),
             None,
+            #[cfg(unix)]
             None,
         );
         let d = OutboundDatagramShadowsocks::new(
