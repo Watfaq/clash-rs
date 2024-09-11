@@ -4737,7 +4737,7 @@ dependencies = [
 [[package]]
 name = "shadowsocks"
 version = "1.20.3"
-source = "git+https://github.com/Watfaq/shadowsocks-rust?rev=450da0c#450da0c32447568d8062a27bf328a8472c6aaf30"
+source = "git+https://github.com/Watfaq/shadowsocks-rust?rev=c6cb7fd906fe9f4126f724ae252f8a67cc1926b1#c6cb7fd906fe9f4126f724ae252f8a67cc1926b1"
 dependencies = [
  "aes",
  "arc-swap",
