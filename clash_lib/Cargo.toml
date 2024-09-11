@@ -9,7 +9,7 @@ default = []
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:quinn", "dep:register-count"]
 tracing = []
-bench = ["criterion"]
+bench = ["dep:criterion"]
 onion = ["arti-client/onion-service-client"]
 
 [dependencies]
@@ -112,7 +112,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2"
 
-shadowsocks = { version = "1", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { git = "https://github.com/Watfaq/shadowsocks-rust", rev = "c6cb7fd906fe9f4126f724ae252f8a67cc1926b1", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"

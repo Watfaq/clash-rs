@@ -158,6 +158,8 @@ impl OutboundHandler for Handler {
                     connector =
                         Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+
+                debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let d = last[0]
                     .connect_datagram_with_connector(
                         sess,
@@ -228,7 +230,7 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_relay_1_tcp() -> anyhow::Result<()> {
+    async fn test_relay_1() -> anyhow::Result<()> {
         let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -259,14 +261,14 @@ mod tests {
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
-            Suite::tcp_tests(),
+            Suite::all(),
         )
         .await
     }
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_relay_2_tcp() -> anyhow::Result<()> {
+    async fn test_relay_2() -> anyhow::Result<()> {
         let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -298,7 +300,7 @@ mod tests {
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
-            Suite::tcp_tests(),
+            Suite::all(),
         )
         .await
     }

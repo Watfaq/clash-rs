@@ -101,7 +101,7 @@ impl WireguardTunnel {
                 resolver,
                 None,
                 remote_endpoint.into(),
-                None,
+                None, // TODO: wg outbound interface https://github.com/Watfaq/clash-rs/issues/580
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

@@ -22,6 +22,7 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use datagram::ShadowsocksUdpIo;
 use shadowsocks::{
     config::ServerType, context::Context, crypto::CipherKind,
     relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
@@ -236,7 +237,7 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_connector(&self) -> ConnectorType {
-        ConnectorType::Tcp
+        ConnectorType::All
     }
 
     async fn connect_stream_with_connector(
@@ -260,6 +261,50 @@ impl OutboundHandler for Handler {
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
+    }
+
+    async fn connect_datagram_with_connector(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+        connector: &dyn RemoteConnector,
+    ) -> io::Result<BoxedChainedDatagram> {
+        let ctx = Context::new_shared(ServerType::Local);
+        let cfg = self.server_config()?;
+
+        let socket = connector
+            .connect_datagram(
+                resolver.clone(),
+                None,
+                (self.opts.server.clone(), self.opts.port).try_into()?,
+                self.opts
+                    .common_opts
+                    .iface
+                    .as_ref()
+                    .or(sess.iface.as_ref())
+                    .cloned(),
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let socket = ProxySocket::from_io(
+            UdpSocketType::Client,
+            ctx,
+            &cfg,
+            Box::new(ShadowsocksUdpIo::new(socket)),
+            None,
+            #[cfg(unix)]
+            None,
+        );
+        let d = OutboundDatagramShadowsocks::new(
+            socket,
+            (self.opts.server.to_owned(), self.opts.port),
+            resolver,
+        );
+        let d = ChainedDatagramWrapper::new(d);
+        d.append_to_chain(self.name()).await;
+        Ok(Box::new(d))
     }
 }
 
