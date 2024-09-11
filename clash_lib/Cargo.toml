@@ -39,12 +39,12 @@ webpki-roots = "0.26"
 # Error handing & logging
 thiserror = "1"
 anyhow = "1"
-opentelemetry = "0.24"
-opentelemetry_sdk = { version = "0.24", default-features = false, features = ["trace", "rt-tokio"] }
-tracing-opentelemetry = "0.25"
-opentelemetry-jaeger-propagator = "0.3"
-opentelemetry-otlp = { version = "0.17" }
-opentelemetry-semantic-conventions = "0.16"
+opentelemetry = "0.25"
+opentelemetry_sdk = { version = "0.25", default-features = false, features = ["trace", "rt-tokio"] }
+tracing-opentelemetry = "0.26"
+opentelemetry-jaeger-propagator = "0.25"
+opentelemetry-otlp = { version = "0.25" }
+opentelemetry-semantic-conventions = "0.25"
 
 # Data structures
 url = "2"
