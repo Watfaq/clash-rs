@@ -245,7 +245,7 @@ jobs:
 
   release:
     name: Release
-
+    if: github.event_name != 'pull_request'
     needs: [ compile ]
     runs-on: ubuntu-latest
     steps:
@@ -253,6 +253,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+
       - name: Merge binaries
         uses: actions/upload-artifact/merge@v4
         with:
@@ -280,12 +281,11 @@ jobs:
           git tag latest
           git push origin latest
 
-
       - name: Generate a changelog
         uses: orhun/git-cliff-action@main
         id: git-cliff
         with:
-          config: cliff.toml
+          config: .github/cliff.toml
           args: --latest --strip header 
         env:
           GITHUB_REPO: ${{ github.repository }}
