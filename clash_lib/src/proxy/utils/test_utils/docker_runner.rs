@@ -85,6 +85,7 @@ impl MultiDockerTestRunner {
         Self { runners }
     }
 
+    #[allow(unused)]
     pub async fn add(
         &mut self,
         creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,
@@ -229,6 +230,7 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    #[allow(unused)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self
@@ -254,7 +256,7 @@ impl DockerTestRunnerBuilder {
     pub fn sysctls(mut self, sysctls: &[(&str, &str)]) -> Self {
         self.host_config.sysctls = Some(
             sysctls
-                .into_iter()
+                .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect::<HashMap<_, _>>(),
         );

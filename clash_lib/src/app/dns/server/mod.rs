@@ -204,14 +204,13 @@ pub async fn get_dns_listener(
     cfg: Config,
     resolver: ThreadSafeDNSResolver,
 ) -> Option<Runner> {
-    if !cfg.enable {
-        return None;
-    }
-
     let h = DnsHandler { resolver };
     let mut s = ServerFuture::new(h);
 
+    let mut has_server = false;
+
     if let Some(addr) = cfg.listen.udp {
+        has_server = true;
         UdpSocket::bind(addr)
             .await
             .map(|x| {
@@ -221,6 +220,7 @@ pub async fn get_dns_listener(
             .ok()?;
     }
     if let Some(addr) = cfg.listen.tcp {
+        has_server = true;
         TcpListener::bind(addr)
             .await
             .map(|x| {
@@ -230,6 +230,7 @@ pub async fn get_dns_listener(
             .ok()?;
     }
     if let Some(c) = cfg.listen.doh {
+        has_server = true;
         TcpListener::bind(c.0)
             .await
             .and_then(|x| {
@@ -245,6 +246,7 @@ pub async fn get_dns_listener(
             .ok()?;
     }
     if let Some(c) = cfg.listen.dot {
+        has_server = true;
         TcpListener::bind(c.0)
             .await
             .and_then(|x| {
@@ -257,6 +259,10 @@ pub async fn get_dns_listener(
                 Ok(())
             })
             .ok()?;
+    }
+
+    if !has_server {
+        return None;
     }
 
     let mut l = DnsListener { server: s };

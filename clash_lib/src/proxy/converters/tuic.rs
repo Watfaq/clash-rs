@@ -6,11 +6,11 @@ use crate::{
     config::internal::proxy::OutboundTuic,
     proxy::{
         tuic::{types::CongestionControl, Handler, HandlerOptions},
-        AnyOutboundHandler,
+        CommonOption,
     },
 };
 
-impl TryFrom<OutboundTuic> for AnyOutboundHandler {
+impl TryFrom<OutboundTuic> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundTuic) -> Result<Self, Self::Error> {
@@ -18,14 +18,18 @@ impl TryFrom<OutboundTuic> for AnyOutboundHandler {
     }
 }
 
-impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
+impl TryFrom<&OutboundTuic> for Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundTuic) -> Result<Self, Self::Error> {
-        Handler::new(HandlerOptions {
-            name: s.name.to_owned(),
-            server: s.server.to_owned(),
-            port: s.port,
+        Ok(Handler::new(HandlerOptions {
+            name: s.common_opts.name.to_owned(),
+            server: s.common_opts.server.to_owned(),
+            common_opts: CommonOption {
+                connector: s.common_opts.connect_via.clone(),
+                ..Default::default()
+            },
+            port: s.common_opts.port,
             uuid: s.uuid.to_owned(),
             password: s.password.to_owned(),
             udp_relay_mode: s
@@ -67,6 +71,6 @@ impl TryFrom<&OutboundTuic> for AnyOutboundHandler {
                 s.receive_window.unwrap_or(8 * 1024 * 1024),
             )
             .unwrap_or(VarInt::MAX),
-        })
+        }))
     }
 }

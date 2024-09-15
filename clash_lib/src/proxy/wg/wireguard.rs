@@ -12,18 +12,28 @@ use boringtun::{
 };
 
 use bytes::Bytes;
+use futures::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use ipnet::IpNet;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
-use tokio::{
-    net::UdpSocket,
-    sync::{
-        mpsc::{Receiver, Sender},
-        Mutex,
-    },
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
 };
 use tracing::{enabled, error, trace, trace_span, warn, Instrument};
 
-use crate::{proxy::utils::new_udp_socket, Error};
+use crate::{
+    app::dns::ThreadSafeDNSResolver,
+    proxy::{
+        datagram::UdpPacket,
+        utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+        AnyOutboundDatagram,
+    },
+    session::SocksAddr,
+    Error,
+};
 
 use super::events::PortProtocol;
 
@@ -31,10 +41,13 @@ pub struct WireguardTunnel {
     pub(crate) source_peer_ip: Ipv4Addr,
     pub(crate) source_peer_ipv6: Option<Ipv6Addr>,
     peer: Arc<Mutex<Tunn>>,
-    udp: UdpSocket,
     pub(crate) endpoint: SocketAddr,
     allowed_ips: Vec<IpNet>,
     reserved_bits: [u8; 3],
+
+    // UDP socket to the remote WireGuard endpoint
+    tx: tokio::sync::Mutex<SplitSink<AnyOutboundDatagram, UdpPacket>>,
+    rx: tokio::sync::Mutex<SplitStream<AnyOutboundDatagram>>,
 
     // send side packet going out of the tunnel
     packet_writer: Sender<(PortProtocol, Bytes)>,
@@ -68,6 +81,8 @@ impl WireguardTunnel {
         config: Config,
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
+        resolver: ThreadSafeDNSResolver,
+        connector: Option<Arc<dyn RemoteConnector>>,
     ) -> Result<Self, Error> {
         let peer = Tunn::new(
             config.private_key,
@@ -80,35 +95,51 @@ impl WireguardTunnel {
 
         let remote_endpoint = config.remote_endpoint;
 
-        let udp = new_udp_socket(
-            None,
-            None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await?;
+        let connector = connector.unwrap_or(GLOBAL_DIRECT_CONNECTOR.clone());
+        let udp = connector
+            .connect_datagram(
+                resolver,
+                None,
+                remote_endpoint.into(),
+                None, // TODO: wg outbound interface https://github.com/Watfaq/clash-rs/issues/580
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                None,
+            )
+            .await?;
+
+        let (tx, rx) = udp.split();
 
         Ok(Self {
             source_peer_ip: config.source_peer_ip,
             source_peer_ipv6: config.source_peer_ipv6,
             peer: Arc::new(Mutex::new(peer)),
-            udp,
             endpoint: remote_endpoint,
             allowed_ips: config.allowed_ips,
             reserved_bits: config.reserved_bits,
+
+            tx: tokio::sync::Mutex::new(tx),
+            rx: tokio::sync::Mutex::new(rx),
+
             packet_writer,
             packet_reader: Arc::new(Mutex::new(packet_reader)),
         })
     }
 
-    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), Error> {
+    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), std::io::Error> {
         if packet.len() > 3 {
             packet[1] = self.reserved_bits[0];
             packet[2] = self.reserved_bits[1];
             packet[3] = self.reserved_bits[2];
         }
-        self.udp.send_to(packet, self.endpoint).await?;
-        Ok(())
+        self.tx
+            .lock()
+            .await
+            .send(UdpPacket {
+                data: packet.to_vec(),
+                src_addr: SocksAddr::any_ipv4(),
+                dst_addr: self.endpoint.into(),
+            })
+            .await
     }
 
     pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
@@ -176,28 +207,28 @@ impl WireguardTunnel {
 
     #[tracing::instrument]
     pub async fn start_receiving(&self) {
-        let mut recv_buf = vec![0u8; 65535];
         let mut send_buf = vec![0u8; 65535];
 
         loop {
-            let size = match self
-                .udp
-                .recv(&mut recv_buf)
+            let mut item = match self
+                .rx
+                .lock()
+                .await
+                .next()
                 .instrument(trace_span!(
                     "wg_receive",
                     endpoint = %self.endpoint,
                 ))
                 .await
             {
-                Ok(size) => size,
-                Err(e) => {
-                    error!("failed to receive packet: {}", e);
+                Some(item) => item,
+                None => {
                     continue;
                 }
             };
 
             let mut peer = self.peer.lock().await;
-            let data = &mut recv_buf[..size];
+            let data = &mut item.data;
             if data.len() > 3 {
                 data[1] = 0;
                 data[2] = 0;

@@ -4,8 +4,13 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
+  route-all: false
+  gateway: "198.19.0.1/32"
+  routes:
+    - 0.0.0.0/1
+    - 128.0.0.0/1
 
 ipv6: true
 
@@ -40,9 +45,9 @@ dns:
   # All DNS questions are sent directly to the nameserver, without proxies
   # involved. Clash answers the DNS question with the first result gathered.
   nameserver:
-    - 114.114.114.114 # default value
-    - 1.1.1.1 # default value
-    - tls://1.1.1.1:853 # DNS over TLS
+    # - 114.114.114.114 # default value
+    # - 1.1.1.1#auto # default value
+    - tls://1.1.1.1:853#auto # DNS over TLS
 #    - dhcp://en0 # dns from dhcp
 
 allow-lan: true
@@ -82,7 +87,7 @@ proxy-groups:
       # - "h2-vmess"
       # - "tls-vmess"
       # - "grpc-vmess"
-      # - "ss-simple"
+      - "ss-simple"
       # - "trojan"
       # - "auto"
       # - "fallback-auto"
@@ -147,6 +152,7 @@ proxies:
     cipher: auto
     udp: true
     skip-cert-verify: true
+    connect-via: auto
 
   - name: ws-vmess
     type: vmess
@@ -277,9 +283,11 @@ rule-providers:
     behavior: domain
 
 rules:
+  - IP-CIDR,1.1.1.1/32,udp-relay
+  - IP-CIDR,8.8.8.8/32,udp-relay
   - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
-  - DOMAIN,ipinfo.io,trojan-grpc
+  - DOMAIN,ipinfo.io,DIRECT
 #  - RULE-SET,file-provider,trojan
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT

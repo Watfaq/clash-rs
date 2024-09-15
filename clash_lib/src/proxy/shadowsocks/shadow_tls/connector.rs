@@ -30,7 +30,6 @@ impl Connector {
         use crate::common::tls::GLOBAL_ROOT_STORE;
 
         let tls_config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
             .with_root_certificates(GLOBAL_ROOT_STORE.clone())
             .with_no_client_auth();
 
@@ -44,7 +43,7 @@ impl Connector {
         let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
 
         let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
-        let sni_name = rustls::ServerName::try_from(opts.host.as_str())
+        let sni_name = rustls::pki_types::ServerName::try_from(opts.host.clone())
             .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);

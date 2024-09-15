@@ -2,6 +2,7 @@ use super::{datagram::TunDatagram, netstack};
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
+
 use tracing::{debug, error, info, trace, warn};
 use tun::{Device, TunPacket};
 use url::Url;
@@ -10,7 +11,10 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, utils::get_outbound_interface},
+    proxy::{
+        datagram::UdpPacket, tun::routes::maybe_add_routes,
+        utils::get_outbound_interface,
+    },
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
@@ -111,6 +115,9 @@ async fn handle_inbound_datagram(
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
         while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
+            if dst_addr.ip().is_multicast() {
+                continue;
+            }
             let pkt = UdpPacket {
                 data,
                 src_addr: src_addr.into(),
@@ -145,9 +152,9 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = cfg.device_id;
+    let device_id = &cfg.device_id;
 
-    let u = Url::parse(&device_id)
+    let u = Url::parse(device_id)
         .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
 
     let mut tun_cfg = tun::Configuration::default();
@@ -174,13 +181,20 @@ pub fn get_runner(
         }
     }
 
-    tun_cfg.up();
+    let gw = cfg.gateway;
+    tun_cfg
+        .address(gw.addr())
+        .netmask(gw.netmask())
+        .mtu(cfg.mtu.unwrap_or(if cfg!(windows) { 65535 } else { 1500 }))
+        .up();
 
     let tun = tun::create_as_async(&tun_cfg)
-        .map_err(|x| new_io_error(&format!("failed to create tun device: {}", x)))?;
+        .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
 
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
+
+    maybe_add_routes(&cfg, &tun_name)?;
 
     let (stack, mut tcp_listener, udp_socket) =
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;

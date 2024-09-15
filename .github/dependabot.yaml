@@ -1,11 +1,19 @@
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "daily"
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 100
+      interval: weekly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
+

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use std::{fmt::Display, net::IpAddr, str::FromStr};
 
+use ipnet::IpNet;
 use serde::{de::value::MapDeserializer, Deserialize, Serialize};
 use serde_yaml::Value;
 
@@ -80,7 +81,7 @@ impl TryFrom<def::Config> for Config {
                 },
                 mode: c.mode,
                 log_level: c.log_level,
-                ipv6: c.ipv6.unwrap_or(false),
+                ipv6: c.ipv6,
                 interface: c.interface.as_ref().map(|iface| {
                     if let Ok(addr) = iface.parse::<IpAddr>() {
                         Interface::IpAddr(addr)
@@ -97,15 +98,27 @@ impl TryFrom<def::Config> for Config {
             dns: (&c).try_into()?,
             experimental: c.experimental,
             tun: match c.tun {
-                Some(mapping) => {
-                    TunConfig::deserialize(MapDeserializer::new(mapping.into_iter()))
-                        .map_err(|e| {
-                            Error::InvalidConfig(format!(
-                                "invalid tun config: {}",
-                                e
-                            ))
+                Some(t) => TunConfig {
+                    enable: t.enable,
+                    device_id: t.device_id,
+                    route_all: t.route_all,
+                    routes: t
+                        .routes
+                        .map(|r| {
+                            r.into_iter()
+                                .map(|x| x.parse())
+                                .collect::<Result<Vec<_>, _>>()
+                        })
+                        .transpose()
+                        .map_err(|x| {
+                            Error::InvalidConfig(format!("parse tun routes: {}", x))
                         })?
-                }
+                        .unwrap_or_default(),
+                    gateway: t.gateway.parse().map_err(|x| {
+                        Error::InvalidConfig(format!("parse tun gateway: {}", x))
+                    })?,
+                    mtu: t.mtu,
+                },
                 None => TunConfig::default(),
             },
             profile: Profile {
@@ -279,19 +292,14 @@ pub struct Profile {
     // store_fake_ip: bool,
 }
 
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub struct TunConfig {
     pub enable: bool,
-    /// tun device id, could be
-    /// dev://utun886 # Linux
-    /// fd://3 # file descriptor
-    #[serde(alias = "device-url")]
     pub device_id: String,
-    /// tun device address
-    /// default: 198.18.0.0/16
-    pub network: Option<String>,
-    pub gateway: Option<IpAddr>,
+    pub route_all: bool,
+    pub routes: Vec<IpNet>,
+    pub gateway: IpNet,
+    pub mtu: Option<i32>,
 }
 
 #[derive(Clone, Default)]

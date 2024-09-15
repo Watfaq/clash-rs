@@ -7,6 +7,7 @@ use std::{
 };
 
 use chrono::Utc;
+use memory_stats::memory_stats;
 use serde::Serialize;
 use tokio::sync::{oneshot::Sender, Mutex, RwLock};
 
@@ -55,6 +56,7 @@ pub struct Snapshot {
     download_total: i64,
     upload_total: i64,
     connections: Vec<TrackerInfo>,
+    memory: usize,
 }
 
 type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
@@ -176,6 +178,7 @@ impl Manager {
                 .upload_total
                 .load(std::sync::atomic::Ordering::Relaxed),
             connections,
+            memory: self.memory_usage(),
         }
     }
 
@@ -187,6 +190,10 @@ impl Manager {
         self.download_temp.store(0, Ordering::Relaxed);
         self.download_blip.store(0, Ordering::Relaxed);
         self.download_total.store(0, Ordering::Relaxed);
+    }
+
+    pub fn memory_usage(&self) -> usize {
+        memory_stats().map(|x| x.physical_mem).unwrap_or(0)
     }
 
     async fn kick_off(&self) {

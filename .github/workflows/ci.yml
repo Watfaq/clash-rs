@@ -8,11 +8,14 @@ on:
     branches: [ "master" ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha || github.ref }}
   cancel-in-progress: true
 
 env:
   PACKAGE: "clash"
+  REGISTRY: "ghcr.io"
+  IMAGE_NAME: "clash-rs"
+
 
 jobs:
   compile:
@@ -52,6 +55,12 @@ jobs:
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Linux x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            release-name: x86_64-unknown-linux-musl
+            cross: true
+            extra-args: "--all-features"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
@@ -78,6 +87,11 @@ jobs:
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            release-name: aarch64-unknown-linux-musl
+            cross: true
+            extra-args: "--all-features"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
@@ -220,7 +234,7 @@ jobs:
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
-          
+
       - name: Setup tmate session
         if: ${{ failure() }}
         uses: mxschmitt/action-tmate@v3
@@ -228,16 +242,17 @@ jobs:
           detached: true
           timeout-minutes: 15
           limit-access-to-actor: true
-          
+
   release:
     name: Release
-
-    needs: [compile]
+    if: github.event_name != 'pull_request'
+    needs: [ compile ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Merge binaries
         uses: actions/upload-artifact/merge@v4
@@ -252,23 +267,111 @@ jobs:
           name: binaries
           path: ./packages
 
+      - name: Delete previous latest tag
+        run: |
+          git tag -d latest || true
+          git push origin :refs/tags/latest || true
+          gh release list | grep Draft |  awk '{print $1 " \t"}' |  while read -r line; do gh release delete -y "$line"; done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create new latest tag
+        if: startsWith(github.ref, 'refs/heads/master')
+        run: |
+          git tag latest
+          git push origin latest
+
+      - name: Generate a changelog
+        uses: orhun/git-cliff-action@main
+        id: git-cliff
+        with:
+          config: .github/cliff.toml
+          args: --latest --strip header 
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+
       - name: Github stable release
-        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
+          generate_release_notes: false
+          body: "${{ steps.git-cliff.outputs.content }}"
           files: |
             packages/*
-            LICENSE
+            LICENSE*
 
       - name: Github nightly release
-        uses: "mathieucarbou/marvinpinto-action-automatic-releases@master"
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: true
-          automatic_release_tag: "latest"
+          tag_name: "latest"
+          generate_release_notes: false
+          body: "${{ steps.git-cliff.outputs.content }}"
           files: |
             packages/*
-            LICENSE
+            LICENSE*
+  docker-image:
+    needs: [ compile ]
+    name: Docker Image
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Get the current Git commit hash
+        id: get-info
+        run: |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_OUTPUT
+          echo "TAG_VERSION=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          echo "TAG_LATEST=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:latest" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ steps.get-info.outputs.OWNER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download binaries amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: x86_64-unknown-linux-musl
+          path: ./clash-rs
+
+      - name: Download binaries arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: aarch64-unknown-linux-musl
+          path: ./clash-rs
+
+      - name: Rename binary
+        run: |
+          mv ./clash-rs/clash-x86_64-unknown-linux-musl ./clash-rs/clash-amd64
+          mv ./clash-rs/clash-aarch64-unknown-linux-musl ./clash-rs/clash-arm64
+
+      - name: Build and push release
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
+
+
+

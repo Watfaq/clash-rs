@@ -192,36 +192,34 @@ impl DeviceManager {
             trace!("got dns response: {:?}", msg);
             for ans in msg.answers().iter() {
                 if ans.record_type() == rtype {
-                    if let Some(data) = ans.data() {
-                        match (rtype, data) {
-                            (_, hickory_proto::rr::RData::CNAME(cname)) => {
-                                debug!(
-                                    "{} resolved to CNAME {}, asking recursively",
-                                    host, cname.0
-                                );
-                                return query(
-                                    rtype,
-                                    &cname.0.to_ascii(),
-                                    server,
-                                    socket,
-                                )
-                                .await;
-                            }
-                            (
-                                hickory_proto::rr::RecordType::A,
-                                hickory_proto::rr::RData::A(addr),
-                            ) => {
-                                return Some(std::net::IpAddr::V4(addr.0));
-                            }
-                            (
-                                hickory_proto::rr::RecordType::AAAA,
-                                hickory_proto::rr::RData::AAAA(addr),
-                            ) => {
-                                return Some(std::net::IpAddr::V6(addr.0));
-                            }
-                            _ => return None,
+                    match (rtype, ans.data()) {
+                        (_, hickory_proto::rr::RData::CNAME(cname)) => {
+                            debug!(
+                                "{} resolved to CNAME {}, asking recursively",
+                                host, cname.0
+                            );
+                            return query(
+                                rtype,
+                                &cname.0.to_ascii(),
+                                server,
+                                socket,
+                            )
+                            .await;
                         }
-                    };
+                        (
+                            hickory_proto::rr::RecordType::A,
+                            hickory_proto::rr::RData::A(addr),
+                        ) => {
+                            return Some(std::net::IpAddr::V4(addr.0));
+                        }
+                        (
+                            hickory_proto::rr::RecordType::AAAA,
+                            hickory_proto::rr::RData::AAAA(addr),
+                        ) => {
+                            return Some(std::net::IpAddr::V6(addr.0));
+                        }
+                        _ => return None,
+                    }
                 }
             }
             None

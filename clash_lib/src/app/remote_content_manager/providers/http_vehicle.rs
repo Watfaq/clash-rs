@@ -9,7 +9,8 @@ use crate::{
 
 use async_trait::async_trait;
 
-use hyper::{body, Uri};
+use http_body_util::BodyExt;
+use hyper::Uri;
 
 use std::io;
 
@@ -44,15 +45,15 @@ impl Vehicle {
 #[async_trait]
 impl ProviderVehicle for Vehicle {
     async fn read(&self) -> std::io::Result<Vec<u8>> {
-        body::to_bytes(
-            self.http_client
-                .get(self.url.clone())
-                .await
-                .map_err(|x| io::Error::new(io::ErrorKind::Other, x.to_string()))?,
-        )
-        .await
-        .map_err(map_io_error)
-        .map(|x| x.into_iter().collect::<Vec<u8>>())
+        self.http_client
+            .get(self.url.clone())
+            .await
+            .map_err(|x| io::Error::new(io::ErrorKind::Other, x.to_string()))?
+            .into_body()
+            .collect()
+            .await
+            .map(|x| x.to_bytes().to_vec())
+            .map_err(map_io_error)
     }
 
     fn path(&self) -> &str {
@@ -71,7 +72,7 @@ mod tests {
 
     use hyper::Uri;
 
-    use crate::app::dns::{Resolver, ThreadSafeDNSResolver};
+    use crate::app::dns::{EnhancedResolver, ThreadSafeDNSResolver};
 
     #[tokio::test]
     async fn test_http_vehicle() {
@@ -79,7 +80,7 @@ mod tests {
             .parse::<Uri>()
             .unwrap();
         let p = std::env::temp_dir().join("test_http_vehicle");
-        let r = Arc::new(Resolver::new_default().await);
+        let r = Arc::new(EnhancedResolver::new_default().await);
         let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
 
         let data = v.read().await.unwrap();

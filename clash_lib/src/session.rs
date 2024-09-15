@@ -18,6 +18,12 @@ pub enum SocksAddr {
     Domain(String, u16),
 }
 
+impl Default for SocksAddr {
+    fn default() -> Self {
+        Self::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
+    }
+}
+
 impl Display for SocksAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(

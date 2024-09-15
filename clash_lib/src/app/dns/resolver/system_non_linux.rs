@@ -1,15 +1,24 @@
+use std::sync::atomic::AtomicBool;
+
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 
-use crate::app::dns::{ClashResolver, ResolverKind};
+use crate::{
+    app::dns::{ClashResolver, ResolverKind},
+    Error,
+};
 
-pub struct SystemResolver;
+pub struct SystemResolver {
+    ipv6: AtomicBool,
+}
 
 /// SystemResolver is a resolver that uses libc getaddrinfo to resolve
 /// hostnames.
 impl SystemResolver {
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(Self)
+    pub fn new(ipv6: bool) -> anyhow::Result<Self> {
+        Ok(Self {
+            ipv6: AtomicBool::new(ipv6),
+        })
     }
 }
 
@@ -22,11 +31,15 @@ impl ClashResolver for SystemResolver {
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
+            .filter_map(|x| {
+                if self.ipv6() || x.is_ipv4() {
+                    Some(x.ip())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<_>>();
-        Ok(response
-            .iter()
-            .map(|x| x.ip())
-            .choose(&mut rand::thread_rng()))
+        Ok(response.into_iter().choose(&mut rand::thread_rng()))
     }
 
     async fn resolve_v4(
@@ -36,15 +49,12 @@ impl ClashResolver for SystemResolver {
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
-            .collect::<Vec<_>>();
-        Ok(response
-            .iter()
-            .map(|x| x.ip())
-            .filter_map(|ip| match ip {
+            .filter_map(|ip| match ip.ip() {
                 std::net::IpAddr::V4(ip) => Some(ip),
                 _ => None,
             })
-            .choose(&mut rand::thread_rng()))
+            .collect::<Vec<_>>();
+        Ok(response.into_iter().choose(&mut rand::thread_rng()))
     }
 
     async fn resolve_v6(
@@ -52,17 +62,17 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+        if !self.ipv6() {
+            return Err(Error::DNSError("ipv6 disabled".into()).into());
+        }
         let response = tokio::net::lookup_host(format!("{}:0", host))
             .await?
-            .collect::<Vec<_>>();
-        Ok(response
-            .iter()
-            .map(|x| x.ip())
-            .filter_map(|ip| match ip {
+            .filter_map(|x| match x.ip() {
                 std::net::IpAddr::V6(ip) => Some(ip),
                 _ => None,
             })
-            .choose(&mut rand::thread_rng()))
+            .collect::<Vec<_>>();
+        Ok(response.into_iter().choose(&mut rand::thread_rng()))
     }
 
     async fn exchange(
@@ -73,11 +83,11 @@ impl ClashResolver for SystemResolver {
     }
 
     fn ipv6(&self) -> bool {
-        true
+        self.ipv6.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    fn set_ipv6(&self, _: bool) {
-        // NOOP
+    fn set_ipv6(&self, val: bool) {
+        self.ipv6.store(val, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn kind(&self) -> ResolverKind {
@@ -89,10 +99,6 @@ impl ClashResolver for SystemResolver {
     }
 
     async fn is_fake_ip(&self, _: std::net::IpAddr) -> bool {
-        false
-    }
-
-    async fn fake_ip_exists(&self, _: std::net::IpAddr) -> bool {
         false
     }
 
@@ -121,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_system_resolver_default_config() {
-        let resolver = SystemResolver::new().unwrap();
+        let resolver = SystemResolver::new(false).unwrap();
         let response = resolver.resolve("www.google.com", false).await.unwrap();
         assert!(response.is_some());
     }

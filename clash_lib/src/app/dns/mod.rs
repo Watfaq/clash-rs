@@ -18,11 +18,10 @@ mod helper;
 pub mod resolver;
 mod server;
 
-pub use resolver::SystemResolver;
-
 pub use config::Config;
 
-pub use resolver::Resolver;
+pub use resolver::{new as new_resolver, EnhancedResolver, SystemResolver};
+
 pub use server::get_dns_listener;
 
 #[async_trait]
@@ -69,7 +68,6 @@ pub trait ClashResolver: Sync + Send {
     /// Only used for look up fake IP
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool;
-    async fn fake_ip_exists(&self, ip: std::net::IpAddr) -> bool;
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);

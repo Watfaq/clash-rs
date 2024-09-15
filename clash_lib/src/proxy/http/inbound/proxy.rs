@@ -5,14 +5,19 @@ use std::{
 
 use futures::{future::BoxFuture, TryFutureExt};
 
-use hyper::{server::conn::Http, Body, Client, Method, Request, Response, Uri};
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::{body::Incoming, server::conn::http1, Method, Request, Response, Uri};
 
-use tower::Service;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use tracing::{instrument, warn};
 
 use crate::{
     app::dispatcher::Dispatcher,
-    common::auth::ThreadSafeAuthenticator,
+    common::{
+        auth::ThreadSafeAuthenticator,
+        errors::map_io_error,
+        http::{hyper::TokioIo, HyperResponseBody},
+    },
     proxy::{AnyStream, ProxyError},
     session::{Network, Session, SocksAddr, Type},
 };
@@ -38,18 +43,18 @@ pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
 }
 
 async fn proxy(
-    req: Request<Body>,
+    req: Request<hyper::body::Incoming>,
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
-) -> Result<Response<Body>, ProxyError> {
+) -> Result<Response<HyperResponseBody>, ProxyError> {
     if authenticator.enabled() {
         if let Some(res) = authenticate_req(&req, authenticator) {
             return Ok(res);
         }
     }
 
-    let client = Client::builder()
+    let client = Client::builder(TokioExecutor::new())
         .http1_title_case_headers(true)
         .http1_preserve_header_case(true)
         .build(Connector::new(src, dispatcher.clone()));
@@ -69,17 +74,23 @@ async fn proxy(
                             ..Default::default()
                         };
 
-                        dispatcher.dispatch_stream(sess, upgraded).await
+                        dispatcher
+                            .dispatch_stream(sess, TokioIo::new(upgraded))
+                            .await
                     }
                     Err(e) => warn!("HTTP handshake failure, {}", e),
                 }
             });
 
-            Ok(Response::new(Body::empty()))
+            Ok(Response::new(Empty::new().map_err(map_io_error).boxed()))
         } else {
             Ok(Response::builder()
                 .status(hyper::StatusCode::BAD_REQUEST)
-                .body(format!("invalid request uri: {}", req.uri()).into())
+                .body(
+                    Full::new(format!("invalid request uri: {}", req.uri()).into())
+                        .map_err(map_io_error)
+                        .boxed(),
+                )
                 .unwrap())
         }
     } else {
@@ -88,12 +99,12 @@ async fn proxy(
             .map_err(|x| ProxyError::General(x.to_string()))
             .await
         {
-            Ok(res) => Ok(res),
+            Ok(res) => Ok(res.map(|b| b.map_err(map_io_error).boxed())),
             Err(e) => {
                 warn!("http proxy error: {}", e);
                 Ok(Response::builder()
                     .status(hyper::StatusCode::BAD_GATEWAY)
-                    .body(Body::empty())
+                    .body(Empty::new().map_err(map_io_error).boxed())
                     .unwrap())
             }
         }
@@ -106,19 +117,12 @@ struct ProxyService {
     authenticator: ThreadSafeAuthenticator,
 }
 
-impl Service<Request<Body>> for ProxyService {
+impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
     type Error = ProxyError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-    type Response = Response<Body>;
+    type Response = Response<HyperResponseBody>;
 
-    fn poll_ready(
-        &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&self, req: Request<Incoming>) -> Self::Future {
         Box::pin(proxy(
             req,
             self.src,
@@ -136,9 +140,9 @@ pub async fn handle(
     authenticator: ThreadSafeAuthenticator,
 ) {
     tokio::task::spawn(async move {
-        if let Err(http_err) = Http::new()
-            .http1_only(true)
-            .http1_keep_alive(true)
+        if let Err(http_err) = http1::Builder::new()
+            .preserve_header_case(true)
+            .title_case_headers(true)
             .serve_connection(
                 stream,
                 ProxyService {

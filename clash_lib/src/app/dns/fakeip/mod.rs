@@ -95,6 +95,7 @@ impl FakeDns {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn exist(&mut self, ip: net::IpAddr) -> bool {
         if !ip.is_ipv4() {
             false

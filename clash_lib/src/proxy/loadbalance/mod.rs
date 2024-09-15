@@ -20,11 +20,13 @@ use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
 use super::{
     utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
+    pub shared_opts: super::options::HandlerSharedOptions,
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,
@@ -40,6 +42,14 @@ pub struct Handler {
     providers: Vec<ThreadSafeProxyProvider>,
 
     inner: Arc<Mutex<HandlerInner>>,
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoadBalance")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
@@ -63,6 +73,8 @@ impl Handler {
         get_proxies_from_providers(&self.providers, touch).await
     }
 }
+
+impl DialWithConnector for Handler {}
 
 #[async_trait::async_trait]
 impl OutboundHandler for Handler {
@@ -142,5 +154,9 @@ impl OutboundHandler for Handler {
                 as _,
         );
         m
+    }
+
+    fn icon(&self) -> Option<String> {
+        self.opts.shared_opts.icon.clone()
     }
 }

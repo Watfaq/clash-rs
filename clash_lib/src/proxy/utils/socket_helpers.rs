@@ -1,8 +1,4 @@
-use std::{
-    io,
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::{io, net::SocketAddr, time::Duration};
 
 use socket2::TcpKeepalive;
 use tokio::{
@@ -10,12 +6,9 @@ use tokio::{
     time::timeout,
 };
 
-#[cfg(target_os = "windows")]
-use tracing::warn;
 use tracing::{debug, error};
 
-use super::Interface;
-use crate::{app::dns::ThreadSafeDNSResolver, proxy::AnyStream};
+use super::{platform::must_bind_socket_on_interface, Interface};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
@@ -41,82 +34,33 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
-fn must_bind_socket_on_interface(
-    socket: &socket2::Socket,
-    iface: &Interface,
-) -> io::Result<()> {
-    match iface {
-        // TODO: should this be ever used vs. calling .bind(2) from the caller
-        // side?
-        Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(*ip, 0).into()),
-        Interface::Name(name) => {
-            #[cfg(target_vendor = "apple")]
-            {
-                socket.bind_device_by_index_v4(std::num::NonZeroU32::new(unsafe {
-                    libc::if_nametoindex(name.as_str().as_ptr() as *const _)
-                }))
-            }
-            #[cfg(any(
-                target_os = "android",
-                target_os = "fuchsia",
-                target_os = "linux"
-            ))]
-            {
-                socket.bind_device(Some(name.as_bytes()))
-            }
-            #[cfg(target_os = "windows")]
-            {
-                warn!(
-                    "binding to interface[{}] by name is not supported on Windows",
-                    name
-                );
-                Ok(())
-            }
-        }
-    }
-}
-
-pub async fn new_tcp_stream<'a>(
-    resolver: ThreadSafeDNSResolver,
-    address: &'a str,
-    port: u16,
-    iface: Option<&'a Interface>,
+pub async fn new_tcp_stream(
+    endpoint: SocketAddr,
+    iface: Option<Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
-) -> io::Result<AnyStream> {
-    let dial_addr = resolver
-        .resolve(address, false)
-        .await
-        .map_err(|v| {
-            io::Error::new(io::ErrorKind::Other, format!("dns failure: {}", v))
-        })?
-        .ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("can't resolve dns: {}", address),
-        ))?;
-
-    debug!(
-        "dialing {}[{}]:{} via iface {:?}",
-        address, dial_addr, port, iface
-    );
-
-    let socket = match (dial_addr, resolver.ipv6()) {
-        (IpAddr::V4(_), _) => {
-            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?
-        }
-        (IpAddr::V6(_), true) => {
-            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::STREAM, None)?
-        }
-        (IpAddr::V6(_), false) => {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("ipv6 is disabled, can't dial {}", address),
-            ))
-        }
+) -> io::Result<TcpStream> {
+    let (socket, family) = match endpoint {
+        SocketAddr::V4(_) => (
+            socket2::Socket::new(
+                socket2::Domain::IPV4,
+                socket2::Type::STREAM,
+                None,
+            )?,
+            socket2::Domain::IPV4,
+        ),
+        SocketAddr::V6(_) => (
+            socket2::Socket::new(
+                socket2::Domain::IPV6,
+                socket2::Type::STREAM,
+                None,
+            )?,
+            socket2::Domain::IPV6,
+        ),
     };
 
     if let Some(iface) = iface {
         debug!("binding tcp socket to interface: {:?}", iface);
-        must_bind_socket_on_interface(&socket, iface)?;
+        must_bind_socket_on_interface(&socket, &iface, family)?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -128,58 +72,66 @@ pub async fn new_tcp_stream<'a>(
     socket.set_nodelay(true)?;
     socket.set_nonblocking(true)?;
 
-    let stream = timeout(
+    timeout(
         Duration::from_secs(10),
-        TcpSocket::from_std_stream(socket.into()).connect((dial_addr, port).into()),
+        TcpSocket::from_std_stream(socket.into()).connect(endpoint),
     )
-    .await??;
-
-    debug!("connected to {}[{}]:{}", address, dial_addr, port);
-    Ok(Box::new(stream))
+    .await?
 }
 
 pub async fn new_udp_socket(
-    src: Option<&SocketAddr>,
-    iface: Option<&Interface>,
+    src: Option<SocketAddr>,
+    iface: Option<Interface>,
     #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
-    let socket = match src {
+    let (socket, family) = match src {
         Some(src) => {
             if src.is_ipv4() {
-                socket2::Socket::new(
+                (
+                    socket2::Socket::new(
+                        socket2::Domain::IPV4,
+                        socket2::Type::DGRAM,
+                        None,
+                    )?,
                     socket2::Domain::IPV4,
-                    socket2::Type::DGRAM,
-                    None,
-                )?
+                )
             } else {
-                socket2::Socket::new(
+                (
+                    socket2::Socket::new(
+                        socket2::Domain::IPV6,
+                        socket2::Type::DGRAM,
+                        None,
+                    )?,
                     socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?
+                )
             }
         }
-        None => {
-            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?
-        }
+        None => (
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV4,
+        ),
     };
 
     match (src, iface) {
         (Some(_), Some(iface)) => {
             debug!("both src and iface are set, iface will be used: {:?}", src);
-            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
-                error!("failed to bind socket to interface: {}", x);
-            })?;
+            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
+                |x| {
+                    error!("failed to bind socket to interface: {}", x);
+                },
+            )?;
         }
         (Some(src), None) => {
             debug!("binding socket to: {:?}", src);
-            socket.bind(&(*src).into())?;
+            socket.bind(&src.into())?;
         }
         (None, Some(iface)) => {
             debug!("binding udp socket to interface: {:?}", iface);
-            must_bind_socket_on_interface(&socket, iface).inspect_err(|x| {
-                error!("failed to bind socket to interface: {}", x);
-            })?;
+            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
+                |x| {
+                    error!("failed to bind socket to interface: {}", x);
+                },
+            )?;
         }
         (None, None) => {
             debug!("not binding socket to any address or interface");

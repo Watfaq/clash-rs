@@ -18,7 +18,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_ready_unpin(cx)
-            .map_err(|v| new_io_error(&format!("{v:?}")))
+            .map_err(|v| new_io_error(format!("{v:?}")))
     }
 
     fn start_send(
@@ -27,7 +27,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Result<(), Self::Error> {
         self.send_tx
             .start_send_unpin(item)
-            .map_err(|v| new_io_error(&format!("{v:?}")))
+            .map_err(|v| new_io_error(format!("{v:?}")))
     }
 
     fn poll_flush(
@@ -36,7 +36,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_flush_unpin(cx)
-            .map_err(|v| new_io_error(&format!("{v:?}")))
+            .map_err(|v| new_io_error(format!("{v:?}")))
     }
 
     fn poll_close(
@@ -45,7 +45,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_close_unpin(cx)
-            .map_err(|v| new_io_error(&format!("{v:?}")))
+            .map_err(|v| new_io_error(format!("{v:?}")))
     }
 }
 

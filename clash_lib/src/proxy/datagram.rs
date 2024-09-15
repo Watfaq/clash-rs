@@ -1,5 +1,6 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
+    common::errors::new_io_error,
     proxy::{socks::Socks5UDPCodec, AnyOutboundDatagram, InboundDatagram},
     session::SocksAddr,
 };
@@ -242,10 +243,10 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let res = if wrote_all {
                 Ok(())
             } else {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "failed to write entire datagram",
-                ))
+                Err(new_io_error(format!(
+                    "failed to send all data, only sent {} bytes",
+                    n
+                )))
             };
             Poll::Ready(res)
         } else {

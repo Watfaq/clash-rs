@@ -18,9 +18,14 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{direct, reject, AnyOutboundHandler},
+    proxy::{direct, reject, socks, tor, trojan, vmess, wg, AnyOutboundHandler},
     Error,
 };
+
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -108,22 +113,43 @@ impl ProxySetProvider {
                         .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
                         .map(|x| match x {
                             OutboundProxyProtocol::Direct => {
-                                Ok(direct::Handler::new())
+                                Ok(Arc::new(direct::Handler::new()) as _)
                             }
                             OutboundProxyProtocol::Reject => {
-                                Ok(reject::Handler::new())
+                                Ok(Arc::new(reject::Handler::new()) as _)
                             }
                             #[cfg(feature = "shadowsocks")]
-                            OutboundProxyProtocol::Ss(s) => s.try_into(),
-                            OutboundProxyProtocol::Socks5(s) => s.try_into(),
-                            OutboundProxyProtocol::Trojan(tr) => tr.try_into(),
-                            OutboundProxyProtocol::Vmess(vm) => vm.try_into(),
-                            OutboundProxyProtocol::Wireguard(wg) => wg.try_into(),
-                            OutboundProxyProtocol::Tor(tor) => tor.try_into(),
+                            OutboundProxyProtocol::Ss(s) => {
+                                let h: shadowsocks::Handler = s.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
+                            OutboundProxyProtocol::Socks5(s) => {
+                                let h: socks::Handler = s.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
+                            OutboundProxyProtocol::Trojan(tr) => {
+                                let h: trojan::Handler = tr.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
+                            OutboundProxyProtocol::Vmess(vm) => {
+                                let h: vmess::Handler = vm.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
+                            OutboundProxyProtocol::Wireguard(wg) => {
+                                let h: wg::Handler = wg.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
+                            OutboundProxyProtocol::Tor(tor) => {
+                                let h: tor::Handler = tor.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
                             #[cfg(feature = "tuic")]
-                            OutboundProxyProtocol::Tuic(tuic) => tuic.try_into(),
+                            OutboundProxyProtocol::Tuic(tuic) => {
+                                let h: tuic::Handler = tuic.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
                         })
-                        .collect::<Result<Vec<_>, _>>();
+                        .collect::<Result<Vec<_>, crate::Error>>();
                     Ok(proxies?)
                 } else {
                     Err(Error::InvalidConfig(format!("{}: proxies is empty", n))

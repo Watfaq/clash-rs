@@ -23,17 +23,27 @@ use super::{
         provider_helper::get_proxies_from_providers, DirectConnector,
         ProxyConnector, RemoteConnector,
     },
-    AnyOutboundHandler, ConnectorType, OutboundHandler, OutboundType,
+    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Default)]
 pub struct HandlerOptions {
+    pub shared_opts: super::options::HandlerSharedOptions,
     pub name: String,
 }
 
 pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Relay")
+            .field("name", &self.opts.name)
+            .finish()
+    }
 }
 
 impl Handler {
@@ -50,6 +60,8 @@ impl Handler {
     }
 }
 
+impl DialWithConnector for Handler {}
+
 #[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
@@ -61,7 +73,16 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        false
+        for proxy in self.get_proxies(false).await {
+            match proxy.support_connector().await {
+                ConnectorType::All => return true,
+                ConnectorType::None | ConnectorType::Tcp => (),
+            }
+            if !proxy.support_udp().await {
+                return false;
+            }
+        }
+        true
     }
 
     async fn connect_stream(
@@ -137,6 +158,8 @@ impl OutboundHandler for Handler {
                     connector =
                         Box::new(ProxyConnector::new(proxy.clone(), connector));
                 }
+
+                debug!("relay `{}` via proxy `{}`", self.name(), last[0].name());
                 let d = last[0]
                     .connect_datagram_with_connector(
                         sess,
@@ -168,6 +191,10 @@ impl OutboundHandler for Handler {
         );
 
         m
+    }
+
+    fn icon(&self) -> Option<String> {
+        self.opts.shared_opts.icon.clone()
     }
 }
 
@@ -203,7 +230,7 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_relay_1_tcp() -> anyhow::Result<()> {
+    async fn test_relay_1() -> anyhow::Result<()> {
         let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -215,7 +242,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -233,14 +261,14 @@ mod tests {
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
-            Suite::tcp_tests(),
+            Suite::all(),
         )
         .await
     }
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_relay_2_tcp() -> anyhow::Result<()> {
+    async fn test_relay_2() -> anyhow::Result<()> {
         let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -252,7 +280,8 @@ mod tests {
             udp: false,
         };
         let port = ss_opts.port;
-        let ss_handler = crate::proxy::shadowsocks::Handler::new(ss_opts);
+        let ss_handler: AnyOutboundHandler =
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -271,7 +300,7 @@ mod tests {
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner(port).await?,
-            Suite::tcp_tests(),
+            Suite::all(),
         )
         .await
     }

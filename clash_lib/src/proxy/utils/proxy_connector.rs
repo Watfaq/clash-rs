@@ -1,6 +1,7 @@
-use std::net::SocketAddr;
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use tracing::trace;
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     proxy::{
         datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
         AnyStream,
@@ -22,7 +24,7 @@ use super::{new_tcp_stream, new_udp_socket, Interface};
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
-pub trait RemoteConnector: Send + Sync {
+pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_stream(
         &self,
         resolver: ThreadSafeDNSResolver,
@@ -37,21 +39,29 @@ pub trait RemoteConnector: Send + Sync {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
+#[derive(Debug)]
 pub struct DirectConnector;
 
 impl DirectConnector {
     pub fn new() -> Self {
         Self
     }
+}
+
+pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn RemoteConnector>> =
+    Lazy::new(global_direct_connector);
+
+fn global_direct_connector() -> Arc<dyn RemoteConnector> {
+    Arc::new(DirectConnector::new())
 }
 
 #[async_trait]
@@ -66,23 +76,28 @@ impl RemoteConnector for DirectConnector {
             u32,
         >,
     ) -> std::io::Result<AnyStream> {
+        let dial_addr = resolver
+            .resolve(address, false)
+            .await
+            .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
+            .ok_or(new_io_error("no dns result"))?;
+
         new_tcp_stream(
-            resolver,
-            address,
-            port,
-            iface,
+            (dial_addr, port).into(),
+            iface.cloned(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,
         )
         .await
+        .map(|x| Box::new(x) as _)
     }
 
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        src: Option<&SocketAddr>,
-        _destination: &SocksAddr,
-        iface: Option<&Interface>,
+        src: Option<SocketAddr>,
+        _destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -109,9 +124,18 @@ pub struct ProxyConnector {
 impl ProxyConnector {
     pub fn new(
         proxy: AnyOutboundHandler,
+        // TODO: make this Arc
         connector: Box<dyn RemoteConnector>,
     ) -> Self {
         Self { proxy, connector }
+    }
+}
+
+impl Debug for ProxyConnector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyConnector")
+            .field("proxy", &self.proxy.name())
+            .finish()
     }
 }
 
@@ -157,9 +181,9 @@ impl RemoteConnector for ProxyConnector {
     async fn connect_datagram(
         &self,
         resolver: ThreadSafeDNSResolver,
-        _src: Option<&SocketAddr>,
-        destination: &SocksAddr,
-        iface: Option<&Interface>,
+        _src: Option<SocketAddr>,
+        destination: SocksAddr,
+        iface: Option<Interface>,
         #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
             u32,
         >,
@@ -167,7 +191,7 @@ impl RemoteConnector for ProxyConnector {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
-            iface: iface.cloned(),
+            iface,
             destination: destination.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             packet_mark,

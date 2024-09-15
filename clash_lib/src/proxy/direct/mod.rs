@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::{
     app::{
         dispatcher::{
@@ -6,30 +8,40 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::map_io_error,
     config::internal::proxy::PROXY_DIRECT,
     proxy::{
         datagram::OutboundDatagramImpl,
         utils::{new_tcp_stream, new_udp_socket},
-        AnyOutboundHandler, OutboundHandler,
+        OutboundHandler,
     },
     session::Session,
 };
 
 use async_trait::async_trait;
+use futures::TryFutureExt;
 use serde::Serialize;
-use std::sync::Arc;
 
-use super::{utils::RemoteConnector, ConnectorType, OutboundType};
+use super::{
+    utils::RemoteConnector, ConnectorType, DialWithConnector, OutboundType,
+};
 
 #[derive(Serialize)]
 pub struct Handler;
 
-impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> AnyOutboundHandler {
-        Arc::new(Self)
+impl Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Direct").finish()
     }
 }
+
+impl Handler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -50,11 +62,17 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
+        let remote_ip = resolver
+            .resolve(sess.destination.host().as_str(), false)
+            .map_err(map_io_error)
+            .await?
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::Other, "no dns result")
+            })?;
+
         let s = new_tcp_stream(
-            resolver,
-            sess.destination.host().as_str(),
-            sess.destination.port(),
-            sess.iface.as_ref(),
+            (remote_ip, sess.destination.port()).into(),
+            sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -72,7 +90,7 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedDatagram> {
         let d = new_udp_socket(
             None,
-            sess.iface.as_ref(),
+            sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -119,8 +137,8 @@ impl OutboundHandler for Handler {
             .connect_datagram(
                 resolver,
                 None,
-                &sess.destination,
-                sess.iface.as_ref(),
+                sess.destination.clone(),
+                sess.iface.clone(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
             )

@@ -1,6 +1,6 @@
 use crate::{
     dns::{
-        dns_client::DNSNetMode, helper::make_clients, Client, Resolver,
+        dns_client::DNSNetMode, helper::make_clients, Client, EnhancedResolver,
         ThreadSafeDNSClient,
     },
     proxy::utils::{new_udp_socket, Interface},
@@ -63,8 +63,11 @@ impl Client for DhcpClient {
             dbg_str.push(format!("{:?}", c));
         }
         debug!("using clients: {:?}", dbg_str);
-        tokio::time::timeout(DHCP_TIMEOUT, Resolver::batch_exchange(&clients, msg))
-            .await?
+        tokio::time::timeout(
+            DHCP_TIMEOUT,
+            EnhancedResolver::batch_exchange(&clients, msg),
+        )
+        .await?
     }
 }
 
@@ -183,8 +186,8 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
     };
 
     new_udp_socket(
-        Some(&listen_addr.parse().expect("must parse")),
-        Some(&Interface::Name(iface.to_string())),
+        Some(listen_addr.parse().expect("must parse")),
+        Some(Interface::Name(iface.to_string())),
         #[cfg(any(target_os = "linux", target_os = "android"))]
         None,
     )

@@ -1,4 +1,5 @@
 #![feature(ip)]
+#![feature(sync_unsafe_cell)]
 
 #[macro_use]
 extern crate anyhow;
@@ -168,14 +169,23 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
+    let cwd = PathBuf::from(cwd);
+
+    debug!("initializing cache store");
+    let cache_store = profile::ThreadSafeCacheFile::new(
+        cwd.join("cache.db").as_path().to_str().unwrap(),
+        config.profile.store_selected,
+    );
+
     debug!("initializing dns resolver");
-    let system_resolver =
-        Arc::new(SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?);
+    let system_resolver = Arc::new(
+        SystemResolver::new(config.general.ipv6 && config.dns.ipv6)
+            .map_err(|x| Error::DNSError(x.to_string()))?,
+    );
     let client = new_http_client(system_resolver.clone())
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
-    let cwd = PathBuf::from(cwd);
     let mmdb = Arc::new(
         mmdb::Mmdb::new(
             cwd.join(&config.general.mmdb),
@@ -185,26 +195,12 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         .await?,
     );
 
-    let client = new_http_client(system_resolver)
-        .map_err(|x| Error::DNSError(x.to_string()))?;
-    let geodata = Arc::new(
-        geodata::GeoData::new(
-            cwd.join(&config.general.geosite),
-            config.general.geosite_download_url,
-            client,
-        )
-        .await?,
-    );
-
-    debug!("initializing cache store");
-    let cache_store = profile::ThreadSafeCacheFile::new(
-        cwd.join("cache.db").as_path().to_str().unwrap(),
-        config.profile.store_selected,
-    );
-
-    let dns_resolver =
-        dns::Resolver::new_resolver(&config.dns, cache_store.clone(), mmdb.clone())
-            .await;
+    let dns_resolver = dns::new_resolver(
+        &config.dns,
+        Some(cache_store.clone()),
+        Some(mmdb.clone()),
+    )
+    .await;
 
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
@@ -235,6 +231,17 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     );
 
     debug!("initializing router");
+    let client = new_http_client(system_resolver)
+        .map_err(|x| Error::DNSError(x.to_string()))?;
+    let geodata = Arc::new(
+        geodata::GeoData::new(
+            cwd.join(&config.general.geosite),
+            config.general.geosite_download_url,
+            client,
+        )
+        .await?,
+    );
+
     let router = Arc::new(
         Router::new(
             config.rules,
@@ -337,7 +344,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
             debug!("reloading dns resolver");
             let system_resolver = Arc::new(
-                SystemResolver::new().map_err(|x| Error::DNSError(x.to_string()))?,
+                SystemResolver::new(config.dns.ipv6)
+                    .map_err(|x| Error::DNSError(x.to_string()))?,
             );
             let client = new_http_client(system_resolver.clone())
                 .map_err(|x| Error::DNSError(x.to_string()))?;
@@ -369,10 +377,10 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 config.profile.store_selected,
             );
 
-            let dns_resolver = dns::Resolver::new_resolver(
+            let dns_resolver = dns::new_resolver(
                 &config.dns,
-                cache_store.clone(),
-                mmdb.clone(),
+                Some(cache_store.clone()),
+                Some(mmdb.clone()),
             )
             .await;
 

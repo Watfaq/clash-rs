@@ -9,6 +9,7 @@ use axum::async_trait;
 
 use quinn::{
     congestion::{BbrConfig, NewRenoConfig},
+    crypto::rustls::QuicClientConfig,
     EndpointConfig, TokioRuntime,
 };
 use tracing::debug;
@@ -34,7 +35,10 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::tls::GLOBAL_ROOT_STORE,
-    proxy::tuic::types::{ServerAddr, TuicEndpoint},
+    proxy::{
+        tuic::types::{ServerAddr, TuicEndpoint},
+        DialWithConnector,
+    },
     session::Session,
 };
 
@@ -52,8 +56,7 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 use super::{
     datagram::UdpPacket,
     utils::{get_outbound_interface, Interface},
-    AnyOutboundDatagram, AnyOutboundHandler, ConnectorType, OutboundHandler,
-    OutboundType,
+    AnyOutboundDatagram, CommonOption, ConnectorType, OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -77,6 +80,9 @@ pub struct HandlerOptions {
     pub send_window: u64,
     pub receive_window: VarInt,
 
+    #[allow(dead_code)]
+    pub common_opts: CommonOption,
+
     /// not used
     #[allow(dead_code)]
     pub max_udp_relay_packet_size: u64,
@@ -94,6 +100,16 @@ pub struct Handler {
     conn: AsyncMutex<Option<Arc<TuicConnection>>>,
     next_assoc_id: AtomicU16,
 }
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tuic")
+            .field("name", &self.opts.name)
+            .finish()
+    }
+}
+
+impl DialWithConnector for Handler {}
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -137,34 +153,32 @@ impl OutboundHandler for Handler {
 }
 
 impl Handler {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(opts: HandlerOptions) -> Result<AnyOutboundHandler, crate::Error> {
-        Ok(Arc::new(Self {
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
             opts,
             ep: OnceCell::new(),
             conn: AsyncMutex::new(None),
             next_assoc_id: AtomicU16::new(0),
-        }))
+        }
     }
 
     async fn init_endpoint(
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<TuicEndpoint> {
-        let mut crypto = TlsConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
-            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-            .with_no_client_auth();
+        let mut crypto =
+            TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
         crypto.alpn_protocols.clone_from(&opts.alpn);
         crypto.enable_early_data = true;
         crypto.enable_sni = !opts.disable_sni;
-        let mut quinn_config = QuinnConfig::new(Arc::new(crypto));
+
+        let mut quinn_config =
+            QuinnConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
         let mut transport_config = QuinnTransportConfig::default();
         transport_config
             .max_concurrent_bidi_streams(opts.max_open_stream)
@@ -188,16 +202,16 @@ impl Handler {
 
             if resolver.ipv6() {
                 new_udp_socket(
-                    Some((Ipv6Addr::UNSPECIFIED, 0).into()).as_ref(),
-                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                    Some((Ipv6Addr::UNSPECIFIED, 0).into()),
+                    iface.map(|x| Interface::Name(x.name.clone())),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     None,
                 )
                 .await?
             } else {
                 new_udp_socket(
-                    Some((Ipv4Addr::UNSPECIFIED, 0).into()).as_ref(),
-                    iface.map(|x| Interface::Name(x.name.clone())).as_ref(),
+                    Some((Ipv4Addr::UNSPECIFIED, 0).into()),
+                    iface.map(|x| Interface::Name(x.name.clone())),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     None,
                 )
