@@ -1,11 +1,10 @@
 use std::{
-    collections::HashMap,
     ffi::{c_int, CString},
     os::raw::c_char,
     ptr,
 };
 
-use clash_lib::{ClashConfigDef, ClashDNSListen, Config, Error};
+use clash_lib::{ClashConfigDef, ClashDNSListen, ClashTunConfig, Config, Error};
 use error::LAST_ERROR;
 
 mod error;
@@ -53,12 +52,10 @@ fn apply_config_override(
     cfg_def: &mut ClashConfigDef,
 ) -> Option<String> {
     if cfg_override.tun_fd != 0 {
-        let mut tun_cfg = HashMap::new();
-        tun_cfg.insert("enable".to_string(), serde_yaml::Value::Bool(true));
-        tun_cfg.insert(
-            "device-id".to_string(),
-            serde_yaml::Value::String(format!("fd://{}", cfg_override.tun_fd)),
-        );
+        let mut tun_cfg = ClashTunConfig::default();
+        tun_cfg.enable = true;
+        tun_cfg.device_id = format!("fd://{}", cfg_override.tun_fd);
+
         cfg_def.tun = Some(tun_cfg);
     }
 
@@ -238,16 +235,10 @@ pub extern "C" fn parse_general_config(
                 (*general).secret = CString::new(cfg.secret.unwrap_or_default())
                     .expect("invalid secret")
                     .into_raw();
-                (*general).tun_enabled = cfg
-                    .tun
-                    .and_then(|tun| {
-                        tun.get("enable")
-                            .cloned()
-                            .map(|v| v.as_str() == Some("true"))
-                    })
-                    .unwrap_or_default();
+                (*general).tun_enabled =
+                    cfg.tun.map(|tun| tun.enable).unwrap_or_default();
                 (*general).dns_enabled = cfg.dns.enable;
-                (*general).ipv6_enabled = cfg.ipv6.unwrap_or_default();
+                (*general).ipv6_enabled = cfg.ipv6;
             }
             ERR_OK
         }
@@ -412,8 +403,8 @@ mod tests {
             cfg_def.dns.default_nameserver,
             vec!["114.114.114.114", "8.8.8.8"]
         );
-        assert_eq!(cfg_def.tun.as_ref().unwrap()["enable"], true);
-        assert_eq!(cfg_def.tun.unwrap()["device-id"], "fd://1989");
+        assert_eq!(cfg_def.tun.as_ref().unwrap().enable, true);
+        assert_eq!(cfg_def.tun.unwrap().device_id, "fd://1989");
 
         assert!(cfg_def
             .rule

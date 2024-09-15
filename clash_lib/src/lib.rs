@@ -36,7 +36,10 @@ mod session;
 
 use crate::common::geodata;
 pub use config::{
-    def::{Config as ClashConfigDef, DNS as ClashDNSConfigDef},
+    def::{
+        Config as ClashConfigDef, TunConfig as ClashTunConfig,
+        DNS as ClashDNSConfigDef,
+    },
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
 };
 
