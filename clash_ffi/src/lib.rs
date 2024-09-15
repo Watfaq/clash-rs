@@ -54,6 +54,7 @@ fn apply_config_override(
     if cfg_override.tun_fd != 0 {
         let mut tun_cfg = ClashTunConfig::default();
         tun_cfg.enable = true;
+        tun_cfg.gateway = "192.19.0.1/32".into();
         tun_cfg.device_id = format!("fd://{}", cfg_override.tun_fd);
 
         cfg_def.tun = Some(tun_cfg);
