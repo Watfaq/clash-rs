@@ -41,6 +41,10 @@ https://github.com/LibNyanpasu/clash-nyanpasu
 
 Can be found at https://github.com/Watfaq/clash-rs/releases
 
+### Docker Image
+
+https://github.com/Watfaq/clash-rs/pkgs/container/clash-rs
+
 ### Local Build
 
 Dependencies
