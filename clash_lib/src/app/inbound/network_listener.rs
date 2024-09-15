@@ -10,6 +10,7 @@ use network_interface::{Addr, NetworkInterfaceConfig};
 use tracing::{info, warn};
 
 use std::{
+    collections::HashSet,
     net::{IpAddr, Ipv4Addr},
     sync::Arc,
 };
@@ -41,6 +42,8 @@ impl NetworkInboundListener {
                     let all_ifaces = network_interface::NetworkInterface::show()
                         .expect("list interfaces");
 
+                    let mut all_ips = HashSet::new();
+
                     for iface in all_ifaces.into_iter() {
                         let ip = iface
                             .addr
@@ -64,7 +67,15 @@ impl NetworkInboundListener {
                             continue;
                         }
 
-                        self.build_and_insert_listener(&mut runners, ip.unwrap());
+                        let ip = ip.unwrap();
+
+                        if all_ips.contains(&ip) {
+                            continue;
+                        }
+
+                        all_ips.insert(ip);
+
+                        self.build_and_insert_listener(&mut runners, ip);
                     }
                 }
                 #[cfg(not(target_os = "ios"))]
