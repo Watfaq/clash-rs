@@ -11,8 +11,10 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
+    defer,
     proxy::{
-        datagram::UdpPacket, tun::routes::maybe_add_routes,
+        datagram::UdpPacket,
+        tun::routes::{self, maybe_add_routes},
         utils::get_outbound_interface,
     },
     session::{Network, Session, SocksAddr, Type},
@@ -200,6 +202,13 @@ pub fn get_runner(
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
 
     Ok(Some(Box::pin(async move {
+        #[cfg(target_os = "macos")]
+        defer! {
+            warn!("cleaning up routes");
+
+            let _ = routes::del_default_route();
+        }
+
         let framed = tun.into_framed();
 
         let (mut tun_sink, mut tun_stream) = framed.split();

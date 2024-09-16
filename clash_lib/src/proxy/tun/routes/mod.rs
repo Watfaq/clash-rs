@@ -7,6 +7,8 @@ use windows::add_route;
 mod macos;
 #[cfg(target_os = "macos")]
 use macos::add_route;
+#[cfg(target_os = "macos")]
+pub use macos::del_default_route;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -63,6 +65,11 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
             ];
             for r in default_routes {
                 add_route(&tun_iface, &r).map_err(map_io_error)?;
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                macos::maybe_add_default_route()?;
             }
         } else {
             for r in &cfg.routes {
