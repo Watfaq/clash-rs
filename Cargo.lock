@@ -205,9 +205,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.87"
+version = "1.0.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10f00e1f6e58a40e807377c75c6a7f97bf9044fab57816f2414e6f5f4499d7b8"
+checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
 name = "arc-swap"
@@ -1049,7 +1049,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-test",
- "tokio-tungstenite 0.23.1",
+ "tokio-tungstenite 0.24.0",
  "tokio-util",
  "tor-rtcompat",
  "tower 0.5.1",
@@ -1060,7 +1060,7 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-timing",
- "tuic",
+ "tuic 5.0.0",
  "tuic-quinn",
  "tun",
  "url",
@@ -3405,9 +3405,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.19.0"
+version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+checksum = "33ea5043e58958ee56f3e15a90aee535795cd7dfd319846288d93c5b57d85cbe"
 
 [[package]]
 name = "oneshot-fused-workaround"
@@ -5293,14 +5293,14 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.23.1"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6989540ced10490aaf14e6bad2e3d33728a2813310a0c71d1574304c49631cd"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
 dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite 0.23.0",
+ "tungstenite 0.24.0",
 ]
 
 [[package]]
@@ -6425,8 +6425,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tuic"
-version = "5.0.0"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.1.2-fix1#d6e1416d923cbc5f80fafc51927823ada3693901"
+version = "1.2.0"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.2.0#da9118b323fa5d365a72e20a3d95eb4e79227365"
 dependencies = [
  "bytes",
  "futures-util",
@@ -6437,15 +6437,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "tuic-quinn"
-version = "0.1.0"
+name = "tuic"
+version = "5.0.0"
 source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.1.2-fix1#d6e1416d923cbc5f80fafc51927823ada3693901"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
+name = "tuic-quinn"
+version = "1.2.0"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.2.0#da9118b323fa5d365a72e20a3d95eb4e79227365"
 dependencies = [
  "bytes",
  "futures-util",
  "quinn",
  "thiserror",
- "tuic",
+ "tuic 1.2.0",
  "uuid",
 ]
 
@@ -6487,9 +6495,9 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.23.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e2e2ce1e47ed2994fd43b04c8f618008d4cabdd5ee34027cf14f9d918edd9c8"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
 dependencies = [
  "byteorder",
  "bytes",
