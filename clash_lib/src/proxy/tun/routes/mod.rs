@@ -8,7 +8,7 @@ mod macos;
 #[cfg(target_os = "macos")]
 use macos::add_route;
 #[cfg(target_os = "macos")]
-pub use macos::del_default_route;
+pub use macos::maybe_routes_clean_up;
 
 #[cfg(target_os = "linux")]
 mod linux;

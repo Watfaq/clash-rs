@@ -206,7 +206,7 @@ pub fn get_runner(
         defer! {
             warn!("cleaning up routes");
 
-            let _ = routes::del_default_route();
+            let _ = routes::maybe_routes_clean_up();
         }
 
         let framed = tun.into_framed();
