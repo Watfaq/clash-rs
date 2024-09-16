@@ -11,15 +11,18 @@ use crate::{
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    defer,
     proxy::{
-        datagram::UdpPacket,
-        tun::routes::{self, maybe_add_routes},
+        datagram::UdpPacket, tun::routes::maybe_add_routes,
         utils::get_outbound_interface,
     },
     session::{Network, Session, SocksAddr, Type},
     Error, Runner,
 };
+
+#[cfg(target_os = "macos")]
+use crate::defer;
+#[cfg(target_os = "macos")]
+use crate::proxy::tun::routes;
 
 async fn handle_inbound_stream(
     stream: netstack::TcpStream,
