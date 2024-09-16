@@ -13,7 +13,7 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> std::io::Result<()> {
     let cmd = std::process::Command::new("route")
         .arg("add")
         .arg("-net")
-        .arg(&dest.to_string())
+        .arg(dest.to_string())
         .arg("-interface")
         .arg(&via.name)
         .output()?;
@@ -65,7 +65,7 @@ pub fn maybe_add_default_route() -> std::io::Result<()> {
             .arg("-ifscope")
             .arg(&default_interface.name)
             .arg("0/0")
-            .arg(&gateway.to_string())
+            .arg(gateway.to_string())
             .output()?;
 
         warn!(
@@ -96,7 +96,7 @@ pub fn maybe_routes_clean_up() -> std::io::Result<()> {
             .arg("-ifscope")
             .arg(&default_interface.name)
             .arg("0/0")
-            .arg(&gateway.to_string())
+            .arg(gateway.to_string())
             .output()?;
 
         warn!(
