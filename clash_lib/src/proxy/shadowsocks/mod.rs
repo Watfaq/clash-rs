@@ -109,23 +109,17 @@ impl Handler {
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin_opts {
             Some(plugin) => match plugin {
-                OBFSOption::Simple(opts) => {
-                    tracing::warn!(
-                        "simple-obfs is deprecated, please use v2ray-plugin instead"
-                    );
-                    match opts.mode {
-                        SimpleOBFSMode::Http => simple_obfs::SimpleObfsHTTP::new(
-                            s,
-                            opts.host.clone(),
-                            self.opts.port,
-                        )
-                        .into(),
-                        SimpleOBFSMode::Tls => {
-                            simple_obfs::SimpleObfsTLS::new(s, opts.host.clone())
-                                .into()
-                        }
+                OBFSOption::Simple(opts) => match opts.mode {
+                    SimpleOBFSMode::Http => simple_obfs::SimpleObfsHTTP::new(
+                        s,
+                        opts.host.clone(),
+                        self.opts.port,
+                    )
+                    .into(),
+                    SimpleOBFSMode::Tls => {
+                        simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
                     }
-                }
+                },
                 OBFSOption::V2Ray(_opt) => {
                     todo!("v2ray-plugin is not implemented yet")
                 }
