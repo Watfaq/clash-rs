@@ -72,9 +72,7 @@ impl RemoteConnector for DirectConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let dial_addr = resolver
             .resolve(address, false)
@@ -86,7 +84,7 @@ impl RemoteConnector for DirectConnector {
             (dial_addr, port).into(),
             iface.cloned(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            packet_mark,
+            so_mark,
         )
         .await
         .map(|x| Box::new(x) as _)
@@ -98,15 +96,13 @@ impl RemoteConnector for DirectConnector {
         src: Option<SocketAddr>,
         _destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,
             iface,
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            packet_mark,
+            so_mark,
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;
@@ -147,9 +143,7 @@ impl RemoteConnector for ProxyConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let sess = Session {
             network: Network::Tcp,
@@ -157,7 +151,7 @@ impl RemoteConnector for ProxyConnector {
             destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
             iface: iface.cloned(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            packet_mark,
+            so_mark,
             ..Default::default()
         };
 
@@ -184,9 +178,7 @@ impl RemoteConnector for ProxyConnector {
         _src: Option<SocketAddr>,
         destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let sess = Session {
             network: Network::Udp,
@@ -194,7 +186,7 @@ impl RemoteConnector for ProxyConnector {
             iface,
             destination: destination.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            packet_mark,
+            so_mark,
             ..Default::default()
         };
         let s = self

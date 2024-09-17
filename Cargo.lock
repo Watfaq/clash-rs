@@ -1060,7 +1060,7 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-timing",
- "tuic 5.0.0",
+ "tuic",
  "tuic-quinn",
  "tun",
  "url",
@@ -6437,14 +6437,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tuic"
-version = "5.0.0"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.1.2-fix1#d6e1416d923cbc5f80fafc51927823ada3693901"
-dependencies = [
- "uuid",
-]
-
-[[package]]
 name = "tuic-quinn"
 version = "1.2.0"
 source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.2.0#da9118b323fa5d365a72e20a3d95eb4e79227365"
@@ -6453,7 +6445,7 @@ dependencies = [
  "futures-util",
  "quinn",
  "thiserror",
- "tuic 1.2.0",
+ "tuic",
  "uuid",
 ]
 

@@ -37,7 +37,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
 ) -> io::Result<TcpStream> {
     let (socket, family) = match endpoint {
         SocketAddr::V4(_) => (
@@ -64,8 +64,8 @@ pub async fn new_tcp_stream(
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
-        socket.set_mark(packet_mark)?;
+    if let Some(so_mark) = so_mark {
+        socket.set_mark(so_mark)?;
     }
 
     socket.set_keepalive(true)?;
@@ -82,7 +82,7 @@ pub async fn new_tcp_stream(
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let (socket, family) = match src {
         Some(src) => {
@@ -139,8 +139,8 @@ pub async fn new_udp_socket(
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
-        socket.set_mark(packet_mark)?;
+    if let Some(so_mark) = so_mark {
+        socket.set_mark(so_mark)?;
     }
 
     socket.set_broadcast(true)?;

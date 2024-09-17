@@ -8,6 +8,7 @@ tun:
   device-id: "dev://utun1989"
   route-all: true
   gateway: "198.19.0.1/32"
+  so-mark: 3389
   # routes:
   #   - 0.0.0.0/1
   #   - 128.0.0.0/1

@@ -48,6 +48,10 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
     }
 }
 
+pub fn maybe_routes_clean_up(_: &TunConfig) -> std::io::Result<()> {
+    Ok(())
+}
+
 /// Add a route to the routing table.
 /// https://learn.microsoft.com/en-us/windows/win32/rras/add-and-update-routes-using-rtmaddroutetodest
 /// FIXME: figure out why this doesn't work https://stackoverflow.com/questions/43632619/how-to-properly-use-rtmv2-and-rtmaddroutetodest

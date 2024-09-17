@@ -19,16 +19,17 @@ use crate::{
     Error, Runner,
 };
 
-#[cfg(target_os = "macos")]
-use crate::defer;
-#[cfg(target_os = "macos")]
-use crate::proxy::tun::routes;
+use crate::{defer, proxy::tun::routes};
+
+const DEFAULT_SO_MARK: u32 = 3389;
+const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 async fn handle_inbound_stream(
     stream: netstack::TcpStream,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    so_mark: u32,
 ) {
     let sess = Session {
         network: Network::Tcp,
@@ -43,6 +44,7 @@ async fn handle_inbound_stream(
                     x
                 );
             }),
+        so_mark: Some(so_mark),
         ..Default::default()
     };
 
@@ -54,6 +56,7 @@ async fn handle_inbound_datagram(
     socket: Box<netstack::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
+    so_mark: u32,
 ) {
     let local_addr = socket.local_addr();
     // tun i/o
@@ -80,7 +83,7 @@ async fn handle_inbound_datagram(
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
             }),
-
+        so_mark: Some(so_mark),
         ..Default::default()
     };
 
@@ -199,18 +202,28 @@ pub fn get_runner(
     let tun_name = tun.get_ref().name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
 
+    let mut cfg = cfg;
+    cfg.route_table = cfg.route_table.or(Some(DEFAULT_ROUTE_TABLE));
+    cfg.so_mark = cfg.so_mark.or(Some(DEFAULT_SO_MARK));
+
     maybe_add_routes(&cfg, &tun_name)?;
 
     let (stack, mut tcp_listener, udp_socket) =
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
 
     Ok(Some(Box::pin(async move {
-        #[cfg(target_os = "macos")]
         defer! {
             warn!("cleaning up routes");
 
-            let _ = routes::maybe_routes_clean_up();
+            match routes::maybe_routes_clean_up(&cfg) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("failed to clean up routes: {}", e);
+                }
+            }
         }
+
+        let so_mark = cfg.so_mark.unwrap();
 
         let framed = tun.into_framed();
 
@@ -273,6 +286,7 @@ pub fn get_runner(
                     local_addr,
                     remote_addr,
                     dsp.clone(),
+                    so_mark,
                 ));
             }
 
@@ -280,7 +294,7 @@ pub fn get_runner(
         }));
 
         futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket, dispatcher, resolver).await;
+            handle_inbound_datagram(udp_socket, dispatcher, resolver, so_mark).await;
             Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
         }));
 

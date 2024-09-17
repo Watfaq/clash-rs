@@ -86,7 +86,7 @@ pub fn maybe_add_default_route() -> std::io::Result<()> {
 }
 
 /// failing to delete the default route won't cause route failure
-pub fn maybe_routes_clean_up() -> std::io::Result<()> {
+pub fn maybe_routes_clean_up(_: &TunConfig) -> std::io::Result<()> {
     let gateway = get_default_gateway()?;
     if let Some(gateway) = gateway {
         let default_interface =

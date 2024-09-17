@@ -23,8 +23,8 @@ use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
     utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
+    AnyStream, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+    HandlerCommonOptions,
 };
 
 pub enum VmessTransport {
@@ -37,7 +37,7 @@ pub enum VmessTransport {
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub uuid: String,
@@ -247,9 +247,9 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -270,9 +270,9 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 

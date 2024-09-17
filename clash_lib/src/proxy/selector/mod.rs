@@ -35,7 +35,7 @@ struct HandlerInner {
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub shared_opts: super::options::HandlerSharedOptions,
+    pub common_opts: super::options::HandlerCommonOptions,
     pub name: String,
     pub udp: bool,
 }
@@ -202,7 +202,7 @@ impl OutboundHandler for Handler {
     }
 
     fn icon(&self) -> Option<String> {
-        self.opts.shared_opts.icon.clone()
+        self.opts.common_opts.icon.clone()
     }
 }
 
