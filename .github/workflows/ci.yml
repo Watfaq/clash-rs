@@ -219,7 +219,7 @@ jobs:
           CROSS_CONTAINER_OPTS: "--network host"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test (no docker test on windows and macos)
+      - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v2
         if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
