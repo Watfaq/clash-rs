@@ -22,6 +22,8 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "only run this test locally, to not deal with the tun device \
+                permission"]
     fn test_individual_routes() {
         let conf = r#"
     socks-port: 7891
