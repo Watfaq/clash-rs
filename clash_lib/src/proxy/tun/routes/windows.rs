@@ -13,7 +13,10 @@ use windows::Win32::{
     Networking::WinSock::{AF_INET, AF_INET6, PROTO_IP_RIP},
 };
 
-use crate::{common::errors::new_io_error, defer, proxy::utils::OutboundInterface};
+use crate::{
+    common::errors::new_io_error, config::internal::config::TunConfig, defer,
+    proxy::utils::OutboundInterface,
+};
 
 const PROTO_TYPE_UCAST: u32 = 0;
 const PROTO_VENDOR_ID: u32 = 0xFFFF;

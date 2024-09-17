@@ -250,7 +250,7 @@ impl Handler {
     async fn get_conn(
         &self,
         resolver: &ThreadSafeDNSResolver,
-        sess: &Session,
+        #[allow(unused)] sess: &Session, // linux only
     ) -> Result<Arc<TuicConnection>> {
         let endpoint = self
             .ep
@@ -302,7 +302,7 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedDatagram> {
-        let conn = self.get_conn(&resolver, &sess).await?;
+        let conn = self.get_conn(&resolver, sess).await?;
         let assos_id = self.next_assoc_id.fetch_add(1, Ordering::SeqCst);
         let quic_udp = TuicDatagramOutbound::new(assos_id, conn, sess.source.into());
         let s = ChainedDatagramWrapper::new(quic_udp);
