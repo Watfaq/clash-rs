@@ -136,6 +136,7 @@ jobs:
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
+            release-name: aarch64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
             extra-args: --features "shadowsocks tuic"
