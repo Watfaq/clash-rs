@@ -85,7 +85,7 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
             }
             #[cfg(target_os = "linux")]
             {
-                linux::setup_policy_routing(&cfg, &tun_iface)?;
+                linux::setup_policy_routing(cfg, &tun_iface)?;
             }
         } else {
             for r in &cfg.routes {

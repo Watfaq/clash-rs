@@ -173,7 +173,7 @@ impl Handler {
                     send_pair.1,
                     resolver.clone(),
                     self.connector.lock().await.as_ref().cloned(),
-                    &sess,
+                    sess,
                 )
                 .await
                 .map_err(map_io_error)?;
