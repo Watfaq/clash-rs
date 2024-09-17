@@ -5,6 +5,7 @@ use tracing::warn;
 
 use crate::{
     common::errors::new_io_error,
+    config::internal::config::TunConfig,
     proxy::utils::{get_outbound_interface, OutboundInterface},
 };
 
