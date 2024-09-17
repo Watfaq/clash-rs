@@ -114,6 +114,11 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            cross: false
+            postfix: ".exe"
+            extra-args: --features "shadowsocks tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -128,6 +133,12 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            cross: false
+            postfix: ".exe"
+            extra-args: --features "shadowsocks tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-12

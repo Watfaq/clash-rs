@@ -1,6 +1,7 @@
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
+#[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;
 #[cfg(feature = "tuic")]
