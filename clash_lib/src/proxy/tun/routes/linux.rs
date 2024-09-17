@@ -124,6 +124,10 @@ pub fn setup_policy_routing(
 /// # ip rule add not fwmark $SO_MARK table $TABLE
 /// # ip rule add table main suppress_prefixlength 0
 pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
+    if !(tun_cfg.enable && tun_cfg.route_all) {
+        return Ok(());
+    }
+
     let cmd = std::process::Command::new("ip")
         .arg("rule")
         .arg("del")

@@ -24,6 +24,8 @@ mod other;
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 use other::add_route;
 
+use tracing::warn;
+
 use crate::{
     common::errors::map_io_error, config::internal::config::TunConfig,
     proxy::utils::OutboundInterface,
@@ -55,18 +57,17 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
             .expect("tun interface not found");
 
         if cfg.route_all {
+            warn!(
+                "route_all is enabled, all traffic will be routed through the tun \
+                 interface"
+            );
+
             #[cfg(not(target_os = "linux"))]
             {
                 use ipnet::IpNet;
 
                 use std::net::Ipv4Addr;
 
-                use tracing::warn;
-
-                warn!(
-                    "route_all is enabled, all traffic will be routed through the \
-                     tun interface"
-                );
                 let default_routes = vec![
                     IpNet::new(std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1)
                         .unwrap(),

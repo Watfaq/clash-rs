@@ -4,3 +4,6 @@ rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
 RUST_LOG = { value = "clash=trace" }
+
+[target.'cfg(target_os = "linux")']
+runner = 'sudo -E'

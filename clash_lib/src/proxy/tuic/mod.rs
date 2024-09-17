@@ -165,7 +165,7 @@ impl Handler {
     async fn init_endpoint(
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
-        so_mark: Option<u32>,
+        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
     ) -> Result<TuicEndpoint> {
         let mut crypto =
             TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -258,6 +258,7 @@ impl Handler {
                 Self::init_endpoint(
                     self.opts.clone(),
                     resolver.clone(),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
                     sess.so_mark,
                 )
             })
