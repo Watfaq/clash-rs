@@ -56,7 +56,7 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 use super::{
     datagram::UdpPacket,
     utils::{get_outbound_interface, Interface},
-    ConnectorType, OutboundHandler, OutboundType, HandlerCommonOptions,
+    ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
 };
 
 #[derive(Debug, Clone)]

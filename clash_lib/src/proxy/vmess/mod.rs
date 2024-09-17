@@ -23,8 +23,8 @@ use super::{
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
     transport::{self, Http2Config},
     utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyStream, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    HandlerCommonOptions,
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
 };
 
 pub enum VmessTransport {

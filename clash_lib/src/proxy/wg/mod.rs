@@ -21,8 +21,8 @@ use crate::{
 use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{
-    utils::RemoteConnector, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType, HandlerCommonOptions,
+    utils::RemoteConnector, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
 };
 
 use async_trait::async_trait;

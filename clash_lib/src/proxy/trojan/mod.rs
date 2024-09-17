@@ -25,8 +25,8 @@ use super::{
     options::{GrpcOption, WsOption},
     transport::{self, TLSOptions},
     utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyStream, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    HandlerCommonOptions,
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
 };
 
 mod datagram;
