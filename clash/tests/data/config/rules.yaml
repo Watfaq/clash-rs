@@ -4,13 +4,13 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: false
+  enable: true
   device-id: "dev://utun1989"
-  route-all: false
+  route-all: true
   gateway: "198.19.0.1/32"
-  routes:
-    - 0.0.0.0/1
-    - 128.0.0.0/1
+  # routes:
+  #   - 0.0.0.0/1
+  #   - 128.0.0.0/1
 
 ipv6: true
 

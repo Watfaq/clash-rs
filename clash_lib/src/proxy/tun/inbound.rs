@@ -19,6 +19,11 @@ use crate::{
     Error, Runner,
 };
 
+#[cfg(target_os = "macos")]
+use crate::defer;
+#[cfg(target_os = "macos")]
+use crate::proxy::tun::routes;
+
 async fn handle_inbound_stream(
     stream: netstack::TcpStream,
     local_addr: SocketAddr,
@@ -200,6 +205,13 @@ pub fn get_runner(
         netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
 
     Ok(Some(Box::pin(async move {
+        #[cfg(target_os = "macos")]
+        defer! {
+            warn!("cleaning up routes");
+
+            let _ = routes::maybe_routes_clean_up();
+        }
+
         let framed = tun.into_framed();
 
         let (mut tun_sink, mut tun_stream) = framed.split();
