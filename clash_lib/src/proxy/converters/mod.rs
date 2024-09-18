@@ -1,3 +1,4 @@
+pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;

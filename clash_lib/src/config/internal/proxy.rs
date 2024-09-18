@@ -67,6 +67,8 @@ pub enum OutboundProxyProtocol {
     #[cfg(feature = "tuic")]
     #[serde(rename = "tuic")]
     Tuic(OutboundTuic),
+    #[serde(rename = "hysteria2")]
+    Hysteria2(OutboundHysteria2),
 }
 
 impl OutboundProxyProtocol {
@@ -85,6 +87,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Tor(tor) => &tor.name,
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
+            OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
         }
     }
 }
@@ -119,6 +122,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
+            OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
         }
     }
 }
@@ -471,4 +475,35 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
         ))
         .map_err(map_serde_error(name))
     }
+}
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundHysteria2 {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    /// port hopping
+    pub ports: Option<String>,
+    pub password: String,
+    pub obfs: Option<Hysteria2Obfs>,
+    pub obfs_password: Option<String>,
+    pub alpn: Option<Vec<String>>,
+    /// set burtal congestion control, need compare with tx which is received by
+    /// auth request
+    pub up: Option<u64>,
+    /// receive_bps: send by auth request
+    pub down: Option<u64>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: bool,
+    pub ca: Option<String>,
+    pub ca_str: Option<String>,
+    pub fingerprint: Option<String>,
+    /// bbr congestion control window
+    pub cwnd: Option<u64>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Hysteria2Obfs {
+    Salamander,
 }
