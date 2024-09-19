@@ -62,6 +62,7 @@ pub enum OutboundProxyProtocol {
     Vmess(OutboundVmess),
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
+    #[cfg(feature = "onion")]
     #[serde(rename = "tor")]
     Tor(OutboundTor),
     #[cfg(feature = "tuic")]
@@ -82,6 +83,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Wireguard(wireguard) => {
                 &wireguard.common_opts.name
             }
+            #[cfg(feature = "onion")]
             OutboundProxyProtocol::Tor(tor) => &tor.name,
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
@@ -116,6 +118,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
+            #[cfg(feature = "onion")]
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
@@ -125,7 +128,7 @@ impl Display for OutboundProxyProtocol {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub struct CommonOption {
+pub struct CommonConfigOptions {
     pub name: String,
     pub server: String,
     pub port: u16,
@@ -141,7 +144,7 @@ pub struct CommonOption {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowsocks {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub cipher: String,
     pub password: String,
     #[serde(default = "default_bool_true")]
@@ -154,7 +157,7 @@ pub struct OutboundShadowsocks {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundSocks5 {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub username: Option<String>,
     pub password: Option<String>,
     #[serde(default = "Default::default")]
@@ -191,7 +194,7 @@ pub struct GrpcOpt {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub password: String,
     pub alpn: Option<Vec<String>>,
     pub sni: Option<String>,
@@ -206,7 +209,7 @@ pub struct OutboundTrojan {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundVmess {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub uuid: String,
     #[serde(alias = "alterId")]
     pub alter_id: u16,
@@ -226,7 +229,7 @@ pub struct OutboundVmess {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundWireguard {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub private_key: String,
     pub public_key: String,
     pub preshared_key: Option<String>,
@@ -250,7 +253,7 @@ pub struct OutboundTor {
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTuic {
     #[serde(flatten)]
-    pub common_opts: CommonOption,
+    pub common_opts: CommonConfigOptions,
     pub uuid: Uuid,
     pub password: String,
     /// override field 'server' dns record, not used for now

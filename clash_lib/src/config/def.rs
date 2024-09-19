@@ -20,6 +20,10 @@ pub struct TunConfig {
     #[serde(default)]
     pub route_all: bool,
     pub mtu: Option<i32>,
+    /// fwmark on Linux only
+    pub so_mark: Option<u32>,
+    /// policy routing table on Linux only
+    pub route_table: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]

@@ -10,7 +10,7 @@ shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:quinn", "dep:register-count"]
 tracing = []
 bench = ["dep:criterion"]
-onion = ["arti-client/onion-service-client"]
+onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 
 [dependencies]
 # Async
@@ -117,8 +117,8 @@ maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.22", default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.22", default-features = false }
+arti-client = { version = "0.22", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.22", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.2.0", optional = true, git = "https://github.com/Itsusinn/tuic.git" }

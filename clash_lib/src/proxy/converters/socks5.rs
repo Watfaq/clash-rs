@@ -2,7 +2,7 @@ use crate::{
     config::internal::proxy::OutboundSocks5,
     proxy::{
         socks::{Handler, HandlerOptions},
-        CommonOption,
+        HandlerCommonOptions,
     },
 };
 
@@ -20,7 +20,7 @@ impl TryFrom<&OutboundSocks5> for Handler {
     fn try_from(s: &OutboundSocks5) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

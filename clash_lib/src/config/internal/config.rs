@@ -118,6 +118,8 @@ impl TryFrom<def::Config> for Config {
                         Error::InvalidConfig(format!("parse tun gateway: {}", x))
                     })?,
                     mtu: t.mtu,
+                    so_mark: t.so_mark,
+                    route_table: t.route_table,
                 },
                 None => TunConfig::default(),
             },
@@ -300,6 +302,8 @@ pub struct TunConfig {
     pub routes: Vec<IpNet>,
     pub gateway: IpNet,
     pub mtu: Option<i32>,
+    pub so_mark: Option<u32>,
+    pub route_table: Option<u32>,
 }
 
 #[derive(Clone, Default)]

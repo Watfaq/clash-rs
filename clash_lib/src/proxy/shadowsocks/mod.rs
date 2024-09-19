@@ -6,7 +6,7 @@ mod v2ray;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     impl_default_connector,
-    proxy::{CommonOption, OutboundHandler},
+    proxy::{HandlerCommonOptions, OutboundHandler},
     session::Session,
 };
 use async_trait::async_trait;
@@ -68,7 +68,7 @@ pub enum OBFSOption {
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,
@@ -204,30 +204,24 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        #[allow(unused_variables)] sess: &Session,
+        sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let ctx = Context::new_shared(ServerType::Local);
-        let cfg = self.server_config()?;
+        let dialer = self.connector.lock().await;
 
-        let socket = new_udp_socket(
-            None,
-            self.opts.common_opts.iface.clone().or(sess.iface.clone()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await?;
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
 
-        let socket: ProxySocket =
-            ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
-        let d = OutboundDatagramShadowsocks::new(
-            socket,
-            (self.opts.server.to_owned(), self.opts.port),
+        self.connect_datagram_with_connector(
+            sess,
             resolver,
-        );
-        let d = ChainedDatagramWrapper::new(d);
-        d.append_to_chain(self.name()).await;
-        Ok(Box::new(d))
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
+        )
+        .await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -245,9 +239,9 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -271,14 +265,9 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
-                self.opts
-                    .common_opts
-                    .iface
-                    .as_ref()
-                    .or(sess.iface.as_ref())
-                    .cloned(),
+                sess.iface.as_ref().cloned(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 

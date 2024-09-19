@@ -17,6 +17,7 @@ env:
   IMAGE_NAME: "clash-rs"
 
 
+# Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
   compile:
     name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
@@ -117,6 +118,11 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            cross: false
+            postfix: ".exe"
+            extra-args: --features "shadowsocks tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -131,6 +137,13 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            release-name: aarch64-pc-windows-msvc-static-crt
+            cross: false
+            postfix: ".exe"
+            extra-args: --features "shadowsocks tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-12
@@ -197,7 +210,7 @@ jobs:
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test
+      - name: Cargo test (docker test on linux)
         uses: clechasseur/rs-cargo@v2
         if: startsWith(matrix.os, 'ubuntu')
         with:
@@ -208,9 +221,9 @@ jobs:
           CROSS_CONTAINER_OPTS: "--network host"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test (no docker test)
+      - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+        if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           use-cross: ${{ matrix.cross }}
           command: test

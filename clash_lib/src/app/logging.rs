@@ -15,7 +15,7 @@ use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
 use tracing::{debug, error};
-use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{filter, filter::Directive, prelude::*, EnvFilter, Layer};
 
@@ -72,24 +72,6 @@ where
         };
         for tx in &self.0 {
             _ = tx.send(event.clone());
-        }
-    }
-}
-
-struct W(Option<NonBlocking>);
-
-impl std::io::Write for W {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self.0 {
-            Some(ref mut w) => w.write(buf),
-            None => Ok(buf.len()),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self.0 {
-            Some(ref mut w) => w.flush(),
-            None => Ok(()),
         }
     }
 }
@@ -165,6 +147,15 @@ pub fn setup_logging(
         .with(filter)
         .with(collector)
         .with(console_layer)
+        .with(appender.map(|x| {
+            tracing_subscriber::fmt::Layer::new()
+                .with_ansi(false)
+                .compact()
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true)
+                .with_writer(x)
+        }))
         .with(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
@@ -174,9 +165,6 @@ pub fn setup_logging(
                 .with_line_number(true)
                 .with_level(true)
                 .with_thread_ids(true)
-                .with_writer(move || -> Box<dyn std::io::Write> {
-                    Box::new(W(appender.clone()))
-                })
                 .with_writer(std::io::stdout),
         )
         .with(ios_os_log);

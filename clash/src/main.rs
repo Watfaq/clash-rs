@@ -39,7 +39,9 @@ struct Cli {
         default_value = "false",
         help = "Print clash-rs version and exit"
     )]
-    version: bool
+    version: bool,
+    #[clap(short, long, help = "Additinally log to file")]
+    log_file: Option<String>,
 }
 
 fn main() {
@@ -79,7 +81,7 @@ fn main() {
         config: clash::Config::File(file),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
-        log_file: None,
+        log_file: cli.log_file,
     }) {
         Ok(_) => {}
         Err(_) => {

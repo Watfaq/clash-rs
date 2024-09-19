@@ -7,7 +7,7 @@ use crate::{
             Handler, HandlerOptions, OBFSOption, ShadowTlsOption, SimpleOBFSMode,
             SimpleOBFSOption, V2RayOBFSOption,
         },
-        CommonOption,
+        HandlerCommonOptions,
     },
     Error,
 };
@@ -26,7 +26,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
     fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },
