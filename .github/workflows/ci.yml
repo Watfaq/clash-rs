@@ -8,7 +8,7 @@ on:
     branches: [ "master" ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -245,7 +245,6 @@ jobs:
 
   release:
     name: Release
-    if: github.event_name != 'pull_request'
     needs: [ compile ]
     runs-on: ubuntu-latest
     steps:
@@ -267,19 +266,22 @@ jobs:
           name: binaries
           path: ./packages
 
-      - name: Delete previous latest tag
+      - name: Clean git tag & release
+        if: startsWith(github.ref, 'refs/heads/master')
         run: |
+          # Deleted latest tag and push it
           git tag -d latest || true
           git push origin :refs/tags/latest || true
+          # Deleted all drafts
           gh release list | grep Draft |  awk '{print $1 " \t"}' |  while read -r line; do gh release delete -y "$line"; done
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Create new latest tag
-        if: startsWith(github.ref, 'refs/heads/master')
+      - name: Clean git tag
+        if: startsWith(github.ref, 'refs/tags/v*')
         run: |
-          git tag latest
-          git push origin latest
+          # Delete latest tag (for git-cliff)
+          git tag -d latest || true
 
       - name: SHA256sums
         run: |
@@ -314,6 +316,7 @@ jobs:
           # YYYYMMDD_hhmmss (UTC)
           TIME=$(date --utc +%Y%m%d_%H%M%SZ)
           echo ${TIME}-${GIT_SHA} >> packages/version.txt
+          cat packages/version.txt
         env:
           GIT_SHA: ${{ github.sha }}
 
