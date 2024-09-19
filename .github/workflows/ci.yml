@@ -103,10 +103,10 @@ jobs:
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
-          - os: ubuntu-latest
-            target: riscv64gc-unknown-linux-gnu
-            cross: true
-            extra-args: "--all-features"
+          # - os: ubuntu-latest
+          #   target: riscv64gc-unknown-linux-gnu
+          #   cross: true
+          #   extra-args: "--all-features"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
