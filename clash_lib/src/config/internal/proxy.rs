@@ -62,6 +62,7 @@ pub enum OutboundProxyProtocol {
     Vmess(OutboundVmess),
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
+    #[cfg(feature = "onion")]
     #[serde(rename = "tor")]
     Tor(OutboundTor),
     #[cfg(feature = "tuic")]
@@ -82,6 +83,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Wireguard(wireguard) => {
                 &wireguard.common_opts.name
             }
+            #[cfg(feature = "onion")]
             OutboundProxyProtocol::Tor(tor) => &tor.name,
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
@@ -116,6 +118,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
+            #[cfg(feature = "onion")]
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),

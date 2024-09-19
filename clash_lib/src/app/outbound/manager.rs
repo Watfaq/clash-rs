@@ -25,7 +25,7 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, tor, trojan,
+        fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg, OutboundType,
     },
@@ -44,6 +44,8 @@ use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
 
@@ -275,6 +277,7 @@ impl OutboundManager {
                     });
                 }
 
+                #[cfg(feature = "onion")]
                 OutboundProxyProtocol::Tor(tor) => {
                     handlers.insert(tor.name.clone(), {
                         let h: tor::Handler = tor.try_into()?;
