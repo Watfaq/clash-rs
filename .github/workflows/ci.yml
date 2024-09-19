@@ -283,18 +283,20 @@ jobs:
           # Delete latest tag (for git-cliff)
           git tag -d latest || true
 
-      - name: SHA256sums
+      - name: Create SHA256Sums.txt and version.txt
         run: |
           cd packages
           sha256sum * >> sha256sums.txt
           cat sha256sums.txt
+          clash-x86_64-unknown-linux-musl -v >> version.txt
+          cat version.txt
 
       - name: Generate a changelog
         uses: orhun/git-cliff-action@main
         id: git-cliff
         with:
           config: .github/cliff.toml
-          args: --latest --strip header 
+          args: --latest --strip header
         env:
           GITHUB_REPO: ${{ github.repository }}
 
@@ -302,33 +304,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: false
           generate_release_notes: false
-          body: "${{ steps.git-cliff.outputs.content }}"
+          body: ${{ steps.git-cliff.outputs.content }}
           files: |
             packages/*
             LICENSE*
-
-      - name: Create version.txt
-        if: startsWith(github.ref, 'refs/heads/master')
-        run: |
-          # YYYYMMDD_hhmmss (UTC)
-          TIME=$(date --utc +%Y%m%d_%H%M%SZ)
-          echo ${TIME}-${GIT_SHA} >> packages/version.txt
-          cat packages/version.txt
-        env:
-          GIT_SHA: ${{ github.sha }}
 
       - name: Github nightly release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: true
           tag_name: "latest"
           generate_release_notes: false
-          body: "${{ steps.git-cliff.outputs.content }}"
+          body: ${{ steps.git-cliff.outputs.content }}
           files: |
             packages/*
             LICENSE*
