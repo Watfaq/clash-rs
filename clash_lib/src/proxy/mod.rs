@@ -3,7 +3,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
     },
-    proxy::{datagram::UdpPacket, utils::Interface},
+    proxy::datagram::UdpPacket,
     session::Session,
 };
 use async_trait::async_trait;
@@ -53,8 +53,9 @@ pub mod urltest;
 
 mod common;
 mod options;
-pub use options::HandlerSharedOptions;
 mod transport;
+
+pub use options::HandlerCommonOptions;
 
 #[cfg(test)]
 pub mod mocks;
@@ -98,14 +99,6 @@ impl<T, U> OutboundDatagram<U> for T where
 
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
-
-#[derive(Default, Debug, Clone)]
-pub struct CommonOption {
-    #[allow(dead_code)]
-    so_mark: Option<u32>,
-    iface: Option<Interface>,
-    connector: Option<String>,
-}
 
 #[async_trait]
 pub trait InboundListener: Send + Sync + Unpin {

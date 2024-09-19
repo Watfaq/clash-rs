@@ -4,7 +4,7 @@ use crate::{
     config::internal::proxy::OutboundWireguard,
     proxy::{
         wg::{Handler, HandlerOptions},
-        CommonOption,
+        HandlerCommonOptions,
     },
     Error,
 };
@@ -23,7 +23,7 @@ impl TryFrom<&OutboundWireguard> for Handler {
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

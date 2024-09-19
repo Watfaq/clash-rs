@@ -6,7 +6,7 @@ use crate::{
         options::{GrpcOption, Http2Option, WsOption},
         transport::TLSOptions,
         vmess::{Handler, HandlerOptions, VmessTransport},
-        CommonOption,
+        HandlerCommonOptions,
     },
     Error,
 };
@@ -33,7 +33,7 @@ impl TryFrom<&OutboundVmess> for Handler {
 
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

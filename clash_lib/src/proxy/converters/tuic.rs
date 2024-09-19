@@ -6,7 +6,7 @@ use crate::{
     config::internal::proxy::OutboundTuic,
     proxy::{
         tuic::{types::CongestionControl, Handler, HandlerOptions},
-        CommonOption,
+        HandlerCommonOptions,
     },
 };
 
@@ -25,7 +25,7 @@ impl TryFrom<&OutboundTuic> for Handler {
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             server: s.common_opts.server.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },
