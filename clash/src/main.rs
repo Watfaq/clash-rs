@@ -48,7 +48,11 @@ fn main() {
     let cli = Cli::parse();
 
     if cli.version {
-        println!("{}", env!("CLASH_VERSION_OVERRIDE"));
+        println!(
+            "{} {}",
+            env!("CARGO_PKG_NAME"),
+            env!("CLASH_VERSION_OVERRIDE")
+        );
         exit(0)
     }
 
