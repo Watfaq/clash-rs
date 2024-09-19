@@ -31,15 +31,15 @@ jobs:
           # when not set, default will be used (except target, cross)
           # - os: ubuntu-latest
           #   target: x86_64-unknown-linux-gnu
-          #   release-name: x86_64-linux
-          #   toolchain: stable
-          #   cross: true
+          #   release-name: $target
+          #   toolchain: nightly
+          #   cross: false
           #   postfix: ""
           #   extra-args: ""
           #   components: ""
-          #   rustflags: ""
+          #   rustflags: "--cfg tokio_unstable"
 
-          # Linux x86
+          # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             cross: true
@@ -48,26 +48,25 @@ jobs:
             target: i686-unknown-linux-gnu
             cross: true
             extra-args: "--all-features"
-          # Linux x86 static-crt
+          # Linux x86 musl
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            cross: true
+            extra-args: "--all-features"
+          # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
-          # Linux x86_64-unknown-linux-musl
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            release-name: x86_64-unknown-linux-musl
-            cross: true
-            extra-args: "--all-features"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
-          # Linux arm
+          # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross: true
@@ -80,7 +79,16 @@ jobs:
             target: armv7-unknown-linux-gnueabihf
             cross: true
             extra-args: "--all-features"
-          # Linux arm static-crt
+          # Linux arm musl
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            cross: true
+            extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            cross: true
+            extra-args: "--all-features"
+          # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
@@ -88,21 +96,16 @@ jobs:
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            release-name: aarch64-unknown-linux-musl
-            cross: true
-            extra-args: "--all-features"
-          - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Linux RISC-V gnu
           - os: ubuntu-latest
-            target: armv7-unknown-linux-musleabihf
+            target: riscv64gc-unknown-linux-gnu
             cross: true
             extra-args: "--all-features"
-            rustflags: "--cfg tokio_unstable"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -152,7 +155,6 @@ jobs:
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux mips: tier-3, pity
-          # Linux risc-v: needs update rustls
           # Windows gnu: tokio dont work
           # Windows aarch: todo
 
