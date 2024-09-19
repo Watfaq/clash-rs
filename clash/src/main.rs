@@ -8,7 +8,7 @@ use std::{
 };
 
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, about, long_about = None)]
 struct Cli {
     #[clap(short, long, value_parser, value_name = "DIRECTORY")]
     directory: Option<PathBuf>,
@@ -31,13 +31,31 @@ struct Cli {
         help = "Test configuration and exit"
     )]
     test_config: bool,
-
+    #[clap(
+        short,
+        long,
+        visible_short_aliases = ['V'],
+        value_parser,
+        default_value = "false",
+        help = "Print clash-rs version and exit"
+    )]
+    version: bool,
     #[clap(short, long, help = "Additinally log to file")]
     log_file: Option<String>,
 }
 
 fn main() {
     let cli = Cli::parse();
+
+    if cli.version {
+        println!(
+            "{} {}",
+            env!("CARGO_PKG_NAME"),
+            env!("CLASH_VERSION_OVERRIDE")
+        );
+        exit(0)
+    }
+
     let file = cli
         .directory
         .as_ref()
