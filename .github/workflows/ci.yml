@@ -281,6 +281,12 @@ jobs:
           git tag latest
           git push origin latest
 
+      - name: SHA256sums
+        run: |
+          cd packages
+          sha256sum * >> sha256sums.txt
+          cat sha256sums.txt
+
       - name: Generate a changelog
         uses: orhun/git-cliff-action@main
         id: git-cliff
@@ -301,6 +307,15 @@ jobs:
           files: |
             packages/*
             LICENSE*
+
+      - name: Create version.txt
+        if: startsWith(github.ref, 'refs/heads/master')
+        run: |
+          # YYYYMMDD_hhmmss (UTC)
+          TIME=$(date --utc +%Y%m%d_%H%M%SZ)
+          echo ${TIME}-${GIT_SHA} >> packages/version.txt
+        env:
+          GIT_SHA: ${{ github.sha }}
 
       - name: Github nightly release
         uses: softprops/action-gh-release@v2
