@@ -1,6 +1,6 @@
 #![feature(let_chains)]
 fn main() {
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
+    println!("cargo:rerun-if-env-changed=GITHUB_REF");
     let version = if let Some("refs/heads/master") = option_env!("GITHUB_REF")
         && let Some(sha) = option_env!("GITHUB_SHA")
     {
