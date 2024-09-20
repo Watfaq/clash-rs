@@ -355,7 +355,6 @@ jobs:
 
       - name: Get the current Git commit hash
         run: |
-          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_ENV
           echo "TAG_VERSION=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
           echo "TAG_LATEST=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:latest" >> $GITHUB_ENV
 
@@ -386,7 +385,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.OWNER }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push release
