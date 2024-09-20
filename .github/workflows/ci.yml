@@ -194,6 +194,15 @@ jobs:
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set environment variables
+        run: |
+          echo "RUSTFLAGS=${RUSTFLAGS}" >> $GITHUB_ENV
+          echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
+          echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
         with:
@@ -207,8 +216,6 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (docker test on linux)
         uses: clechasseur/rs-cargo@v2
@@ -219,7 +226,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+          CLASH_DOCKER_TEST: "true"
 
       - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v2
@@ -228,9 +235,6 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
-        env:
-          CLASH_RS_CI: "true"
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v2
@@ -238,8 +242,6 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: build
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
@@ -353,7 +355,7 @@ jobs:
         with:
           submodules: true
 
-      - name: Get the current Git commit hash
+      - name: Set docker image's tag
         run: |
           echo "TAG_VERSION=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
           echo "TAG_LATEST=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:latest" >> $GITHUB_ENV
@@ -394,7 +396,7 @@ jobs:
           context: .
           file: .github/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: true
           tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
 
 
