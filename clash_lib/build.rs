@@ -1,8 +1,8 @@
 fn main() -> std::io::Result<()> {
-    println!("cargo::rustc-check-cfg=cfg(ci)");
-    println!("cargo:rerun-if-env-changed=CLASH_RS_CI");
-    if std::env::var("CLASH_RS_CI").is_ok() {
-        println!("cargo::rustc-cfg=ci");
+    println!("cargo::rustc-check-cfg=cfg(docker_test)");
+    println!("cargo:rerun-if-env-changed=CLASH_DOCKER_TEST");
+    if let Some("1" | "true") = option_env!("CLASH_DOCKER_TEST") {
+        println!("cargo::rustc-cfg=docker_test");
     }
 
     println!("cargo:rerun-if-changed=src/common/geodata/geodata.proto");
