@@ -151,7 +151,7 @@ jobs:
               -Clink-args=/DEFAULTLIB:libcmt.lib
               -Clink-args=/DEFAULTLIB:libvcruntime.lib
               -Clink-args=/DEFAULTLIB:ucrt.lib
-              --cfg tokio_unstable"
+              --cfg tokio_unstable
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
