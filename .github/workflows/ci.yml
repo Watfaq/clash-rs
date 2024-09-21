@@ -147,7 +147,7 @@ jobs:
               -Clink-args=/NODEFAULTLIB:msvcrtd.lib
               -Clink-args=/NODEFAULTLIB:libucrt.lib
               -Clink-args=/NODEFAULTLIB:libucrtd.lib
-              // Set the libraries we want.
+
               -Clink-args=/DEFAULTLIB:libcmt.lib
               -Clink-args=/DEFAULTLIB:libvcruntime.lib
               -Clink-args=/DEFAULTLIB:ucrt.lib
