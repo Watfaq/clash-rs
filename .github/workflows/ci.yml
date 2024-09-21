@@ -132,7 +132,7 @@ jobs:
             extra-args: "--all-features"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
             
-         - os: windows-latest
+          - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             cross: false
