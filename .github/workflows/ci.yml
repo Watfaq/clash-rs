@@ -137,7 +137,13 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            rustflags: >
+              -Ctarget-feature=+crt-static 
+              -Clink-args=/DEFAULTLIB:ucrt.lib /DEFAULTLIB:libvcruntime.lib libcmt.lib
+              -Clink-args=/NODEFAULTLIB:libvcruntimed.lib /NODEFAULTLIB:vcruntime.lib /NODEFAULTLIB:vcruntimed.lib
+              -Clink-args=/NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib
+              -Clink-args=/NODEFAULTLIB:libucrt.lib /NODEFAULTLIB:libucrtd.lib /NODEFAULTLIB:ucrtd.lib
+              --cfg tokio_unstable"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
