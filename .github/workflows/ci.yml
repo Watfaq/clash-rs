@@ -214,9 +214,6 @@ jobs:
         run: |
           echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
-          echo "RUSTFLAGS=${RUSTFLAGS}" >> $GITHUB_ENV
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
@@ -242,6 +239,7 @@ jobs:
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v2
@@ -250,6 +248,8 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v2
@@ -257,6 +257,8 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: build
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
