@@ -139,18 +139,18 @@ jobs:
             extra-args: "--all-features"
             rustflags: >-
               -Ctarget-feature=+crt-static 
-              -Crustc-link-arg=/NODEFAULTLIB:libvcruntimed.lib
-              -Crustc-link-arg=/NODEFAULTLIB:vcruntime.lib
-              -Crustc-link-arg=/NODEFAULTLIB:vcruntimed.lib
-              -Crustc-link-arg=/NODEFAULTLIB:libcmtd.lib
-              -Crustc-link-arg=/NODEFAULTLIB:msvcrt.lib
-              -Crustc-link-arg=/NODEFAULTLIB:msvcrtd.lib
-              -Crustc-link-arg=/NODEFAULTLIB:libucrt.lib
-              -Crustc-link-arg=/NODEFAULTLIB:libucrtd.lib
+              -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
+              -Clink-args=/NODEFAULTLIB:vcruntime.lib
+              -Clink-args=/NODEFAULTLIB:vcruntimed.lib
+              -Clink-args=/NODEFAULTLIB:libcmtd.lib
+              -Clink-args=/NODEFAULTLIB:msvcrt.lib
+              -Clink-args=/NODEFAULTLIB:msvcrtd.lib
+              -Clink-args=/NODEFAULTLIB:libucrt.lib
+              -Clink-args=/NODEFAULTLIB:libucrtd.lib
               // Set the libraries we want.
-              -Crustc-link-arg=/DEFAULTLIB:libcmt.lib
-              -Crustc-link-arg=/DEFAULTLIB:libvcruntime.lib
-              -Crustc-link-arg=/DEFAULTLIB:ucrt.lib
+              -Clink-args=/DEFAULTLIB:libcmt.lib
+              -Clink-args=/DEFAULTLIB:libvcruntime.lib
+              -Clink-args=/DEFAULTLIB:ucrt.lib
               --cfg tokio_unstable"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
