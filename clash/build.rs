@@ -1,8 +1,12 @@
 #![feature(let_chains)]
 fn main() {
-    println!("cargo:rerun-if-env-changed=GITHUB_REF");
-    let version = if let Some("refs/heads/master") = option_env!("GITHUB_REF")
-        && let Some(sha) = option_env!("GITHUB_SHA")
+    let vars = ["CLASH_GIT_REF", "CLASH_GIT_SHA"];
+    for var in vars {
+        println!("cargo:rerun-if-env-changed={var}");
+    }
+
+    let version = if let Some("refs/heads/master") = option_env!("CLASH_GIT_REF")
+        && let Some(sha) = option_env!("CLASH_GIT_SHA")
     {
         let short_sha = &sha[..7];
         // Nightly relase below

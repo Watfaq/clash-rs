@@ -317,7 +317,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use crate::proxy::utils::{

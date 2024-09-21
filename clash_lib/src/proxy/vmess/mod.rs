@@ -286,7 +286,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
     use crate::proxy::utils::test_utils::{
         config_helper::test_config_base_dir,

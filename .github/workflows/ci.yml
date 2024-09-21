@@ -137,7 +137,21 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            rustflags: >-
+              -Ctarget-feature=+crt-static 
+              -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
+              -Clink-args=/NODEFAULTLIB:vcruntime.lib
+              -Clink-args=/NODEFAULTLIB:vcruntimed.lib
+              -Clink-args=/NODEFAULTLIB:libcmtd.lib
+              -Clink-args=/NODEFAULTLIB:msvcrt.lib
+              -Clink-args=/NODEFAULTLIB:msvcrtd.lib
+              -Clink-args=/NODEFAULTLIB:libucrt.lib
+              -Clink-args=/NODEFAULTLIB:libucrtd.lib
+
+              -Clink-args=/DEFAULTLIB:libcmt.lib
+              -Clink-args=/DEFAULTLIB:libvcruntime.lib
+              -Clink-args=/DEFAULTLIB:ucrt.lib
+              --cfg tokio_unstable
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
@@ -189,11 +203,18 @@ jobs:
           toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set environment variables
+        run: |
+          echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
+          echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
         with:
@@ -207,8 +228,6 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (docker test on linux)
         uses: clechasseur/rs-cargo@v2
@@ -219,6 +238,7 @@ jobs:
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
+          CLASH_DOCKER_TEST: "true"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (no docker test on windows-non-arm and macos)
@@ -229,7 +249,6 @@ jobs:
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
-          CLASH_RS_CI: "true"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
@@ -353,9 +372,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Get the current Git commit hash
+      - name: Set docker image's tag
         run: |
-          echo "OWNER=${GITHUB_REPOSITORY_OWNER@L}" >> $GITHUB_ENV
           echo "TAG_VERSION=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
           echo "TAG_LATEST=${REGISTRY}/${GITHUB_REPOSITORY_OWNER@L}/${IMAGE_NAME}:latest" >> $GITHUB_ENV
 
@@ -386,7 +404,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ env.OWNER }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push release
@@ -395,7 +413,7 @@ jobs:
           context: .
           file: .github/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: true
           tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
 
 
