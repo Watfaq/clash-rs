@@ -137,7 +137,7 @@ jobs:
             cross: false
             postfix: ".exe"
             extra-args: "--all-features"
-            rustflags: >
+            rustflags: >-
               -Ctarget-feature=+crt-static 
               -Clink-args=/DEFAULTLIB:ucrt.lib /DEFAULTLIB:libvcruntime.lib libcmt.lib
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib /NODEFAULTLIB:vcruntime.lib /NODEFAULTLIB:vcruntimed.lib
