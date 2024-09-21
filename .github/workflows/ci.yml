@@ -139,10 +139,18 @@ jobs:
             extra-args: "--all-features"
             rustflags: >-
               -Ctarget-feature=+crt-static 
-              -Clink-args=/DEFAULTLIB:ucrt.lib /DEFAULTLIB:libvcruntime.lib libcmt.lib
-              -Clink-args=/NODEFAULTLIB:libvcruntimed.lib /NODEFAULTLIB:vcruntime.lib /NODEFAULTLIB:vcruntimed.lib
-              -Clink-args=/NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcrtd.lib
-              -Clink-args=/NODEFAULTLIB:libucrt.lib /NODEFAULTLIB:libucrtd.lib /NODEFAULTLIB:ucrtd.lib
+              -Crustc-link-arg=/NODEFAULTLIB:libvcruntimed.lib
+              -Crustc-link-arg=/NODEFAULTLIB:vcruntime.lib
+              -Crustc-link-arg=/NODEFAULTLIB:vcruntimed.lib
+              -Crustc-link-arg=/NODEFAULTLIB:libcmtd.lib
+              -Crustc-link-arg=/NODEFAULTLIB:msvcrt.lib
+              -Crustc-link-arg=/NODEFAULTLIB:msvcrtd.lib
+              -Crustc-link-arg=/NODEFAULTLIB:libucrt.lib
+              -Crustc-link-arg=/NODEFAULTLIB:libucrtd.lib
+              // Set the libraries we want.
+              -Crustc-link-arg=/DEFAULTLIB:libcmt.lib
+              -Crustc-link-arg=/DEFAULTLIB:libvcruntime.lib
+              -Crustc-link-arg=/DEFAULTLIB:ucrt.lib
               --cfg tokio_unstable"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
