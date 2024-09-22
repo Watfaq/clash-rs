@@ -54,9 +54,8 @@ use rustls::client::ClientConfig as TlsConfig;
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
-    datagram::UdpPacket,
-    utils::{get_outbound_interface, Interface},
-    ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
+    datagram::UdpPacket, ConnectorType, HandlerCommonOptions, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -165,7 +164,7 @@ impl Handler {
     async fn init_endpoint(
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
-        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+        sess: &Session,
     ) -> Result<TuicEndpoint> {
         let mut crypto =
             TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -199,22 +198,20 @@ impl Handler {
         quinn_config.transport_config(Arc::new(transport_config));
 
         let socket = {
-            let iface = get_outbound_interface();
-
             if resolver.ipv6() {
                 new_udp_socket(
                     Some((Ipv6Addr::UNSPECIFIED, 0).into()),
-                    iface.map(|x| Interface::Name(x.name.clone())),
+                    sess.iface.clone(),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    so_mark,
+                    sess.so_mark,
                 )
                 .await?
             } else {
                 new_udp_socket(
                     Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    iface.map(|x| Interface::Name(x.name.clone())),
+                    sess.iface.clone(),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    so_mark,
+                    sess.so_mark,
                 )
                 .await?
             }
@@ -250,17 +247,12 @@ impl Handler {
     async fn get_conn(
         &self,
         resolver: &ThreadSafeDNSResolver,
-        #[allow(unused)] sess: &Session, // linux only
+        sess: &Session,
     ) -> Result<Arc<TuicConnection>> {
         let endpoint = self
             .ep
             .get_or_try_init(|| {
-                Self::init_endpoint(
-                    self.opts.clone(),
-                    resolver.clone(),
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    sess.so_mark,
-                )
+                Self::init_endpoint(self.opts.clone(), resolver.clone(), sess)
             })
             .await?;
 

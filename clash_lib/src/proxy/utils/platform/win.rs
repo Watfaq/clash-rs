@@ -1,6 +1,6 @@
 use network_interface::NetworkInterfaceConfig;
 use std::{io, net::SocketAddr, os::windows::io::AsRawSocket};
-use tracing::{error, trace, warn};
+use tracing::{debug, error, warn};
 use windows::Win32::{
     Foundation::GetLastError,
     Networking::WinSock::{
@@ -19,17 +19,18 @@ pub(crate) fn must_bind_socket_on_interface(
         Interface::IpAddr(ip) => socket.bind(&SocketAddr::new(*ip, 0).into()),
         Interface::Name(name) => {
             // TODO: we should avoid calling `show` multiple times
-            let idx = network_interface::NetworkInterface::show()
+            let iface = network_interface::NetworkInterface::show()
                 .map_err(|x| new_io_error(x.to_string().as_str()))?
                 .into_iter()
                 .find_map(|iface| {
                     if &iface.name == name {
-                        Some(iface.index)
+                        Some(iface)
                     } else {
                         None
                     }
-                })
-                .unwrap_or_default();
+                });
+
+            let idx = iface.as_ref().map(|iface| iface.index).unwrap_or_default();
             if idx == 0 {
                 warn!("failed to get interface index for {}", name);
                 return Err(io::Error::new(
@@ -38,7 +39,39 @@ pub(crate) fn must_bind_socket_on_interface(
                 ));
             }
 
-            trace!("interface {} index is {}", name, idx);
+            let ip = match iface {
+                Some(iface) => iface.addr.iter().find_map(|addr| {
+                    if family == socket2::Domain::IPV4 {
+                        if addr.ip().is_ipv4() {
+                            Some(addr.ip())
+                        } else {
+                            None
+                        }
+                    } else {
+                        if addr.ip().is_ipv6() {
+                            Some(addr.ip())
+                        } else {
+                            None
+                        }
+                    }
+                }),
+                None => None,
+            };
+
+            debug!(
+                "binding socket to interface: {}, index {}, ip {:?}",
+                name, idx, ip
+            );
+
+            if let Some(ip) = ip {
+                socket.bind(&SocketAddr::new(ip, 0).into())?;
+            } else {
+                warn!("failed to get address for interface {}", name);
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("failed to get address for interface {}", name),
+                ));
+            }
 
             let handle = SOCKET(socket.as_raw_socket().try_into().unwrap());
 
