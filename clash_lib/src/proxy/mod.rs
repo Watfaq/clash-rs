@@ -32,6 +32,7 @@ pub mod mixed;
 pub(crate) mod datagram;
 
 pub mod converters;
+pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
@@ -121,6 +122,7 @@ pub enum OutboundType {
     Tor,
     Tuic,
     Socks5,
+    Hysteria2,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -143,6 +145,7 @@ impl Display for OutboundType {
             OutboundType::Tor => write!(f, "Tor"),
             OutboundType::Tuic => write!(f, "Tuic"),
             OutboundType::Socks5 => write!(f, "Socks5"),
+            OutboundType::Hysteria2 => write!(f, "Hysteria2"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),
