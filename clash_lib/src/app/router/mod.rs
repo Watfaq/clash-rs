@@ -9,7 +9,7 @@ use crate::{
 use crate::{
     common::mmdb::Mmdb,
     config::internal::{config::RuleProviderDef, rule::RuleType},
-    session::{Session, SocksAddr},
+    session::Session,
 };
 
 use crate::app::router::rules::final_::Final;
@@ -102,8 +102,7 @@ impl Router {
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
                 {
-                    sess_dup.destination =
-                        SocksAddr::from((ip, sess.destination.port()));
+                    sess_dup.resolved_ip = Some(ip);
                     sess_resolved = true;
                 }
             }
@@ -309,9 +308,157 @@ pub fn map_rule_type(
                     .clone(),
             )),
             None => {
-                unreachable!("you shouldn't next rule-set within another rule-set")
+                unreachable!("you shouldn't nest rule-set within another rule-set")
             }
         },
         RuleType::Match { target } => Box::new(Final { target }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use anyhow::Ok;
+
+    use crate::{
+        app::dns::{MockClashResolver, SystemResolver},
+        common::{geodata::GeoData, http::new_http_client, mmdb::Mmdb},
+        config::internal::rule::RuleType,
+        session::Session,
+    };
+
+    const GEO_DATA_DOWNLOAD_URL:&str = "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
+    const MMDB_DOWNLOAD_URL:&str = "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb";
+
+    #[tokio::test]
+    async fn test_route_match() {
+        let mut mock_resolver = MockClashResolver::new();
+        mock_resolver.expect_resolve().returning(|host, _| {
+            if host == "china.com" {
+                Ok(Some("114.114.114.114".parse().unwrap()))
+            } else if host == "t.me" {
+                Ok(Some("149.154.0.1".parse().unwrap()))
+            } else if host == "git.io" {
+                Ok(Some("8.8.8.8".parse().unwrap()))
+            } else {
+                Ok(None)
+            }
+        });
+        let mock_resolver = Arc::new(mock_resolver);
+
+        let real_resolver = Arc::new(SystemResolver::new(false).unwrap());
+
+        let client = new_http_client(real_resolver.clone()).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let mmdb = Mmdb::new(
+            temp_dir.path().join("mmdb.mmdb"),
+            Some(MMDB_DOWNLOAD_URL.to_string()),
+            client,
+        )
+        .await
+        .unwrap();
+
+        let client = new_http_client(real_resolver.clone()).unwrap();
+
+        let geodata = GeoData::new(
+            temp_dir.path().join("geodata.geodata"),
+            Some(GEO_DATA_DOWNLOAD_URL.to_string()),
+            client,
+        )
+        .await
+        .unwrap();
+
+        let router = super::Router::new(
+            vec![
+                RuleType::GeoIP {
+                    target: "DIRECT".to_string(),
+                    country_code: "CN".to_string(),
+                    no_resolve: false,
+                },
+                RuleType::DomainSuffix {
+                    domain_suffix: "t.me".to_string(),
+                    target: "DS".to_string(),
+                },
+                RuleType::IpCidr {
+                    ipnet: "149.154.0.0/16".parse().unwrap(),
+                    target: "IC".to_string(),
+                    no_resolve: false,
+                },
+                RuleType::DomainSuffix {
+                    domain_suffix: "git.io".to_string(),
+                    target: "DS2".to_string(),
+                },
+            ],
+            Default::default(),
+            mock_resolver,
+            Arc::new(mmdb),
+            Arc::new(geodata),
+            temp_dir.path().to_str().unwrap().to_string(),
+        )
+        .await;
+
+        assert_eq!(
+            router
+                .match_route(&Session {
+                    destination: crate::session::SocksAddr::Domain(
+                        "china.com".to_string(),
+                        1111,
+                    ),
+                    ..Default::default()
+                })
+                .await
+                .0,
+            "DIRECT",
+            "should resolve and match IP"
+        );
+
+        assert_eq!(
+            router
+                .match_route(&Session {
+                    destination: crate::session::SocksAddr::Domain(
+                        "t.me".to_string(),
+                        1111,
+                    ),
+                    ..Default::default()
+                })
+                .await
+                .0,
+            "DS",
+            "should match domain"
+        );
+
+        assert_eq!(
+            router
+                .match_route(&Session {
+                    destination: crate::session::SocksAddr::Domain(
+                        "git.io".to_string(),
+                        1111
+                    ),
+                    ..Default::default()
+                })
+                .await
+                .0,
+            "DS2",
+            "should still match domain after previous rule resolved IP and non \
+             match"
+        );
+
+        assert_eq!(
+            router
+                .match_route(&Session {
+                    destination: crate::session::SocksAddr::Domain(
+                        "no-match".to_string(),
+                        1111
+                    ),
+                    ..Default::default()
+                })
+                .await
+                .0,
+            "MATCH",
+            "should fallback to MATCH when nothing matched"
+        );
     }
 }
