@@ -45,6 +45,7 @@ async fn handle_inbound_stream(
                 );
             }),
         so_mark: Some(so_mark),
+        ..Default::default()
     };
 
     debug!("new tun TCP session assigned: {}", sess);
