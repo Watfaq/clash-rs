@@ -1,6 +1,6 @@
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    proxy::{AnyInboundListener, InboundListener},
+    proxy::InboundListener,
     session::{Network, Session},
     Dispatcher,
 };

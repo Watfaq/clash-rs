@@ -3,7 +3,7 @@ mod stream;
 
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, AnyInboundListener, InboundListener},
+    proxy::{utils::apply_tcp_options, InboundListener},
     session::{Network, Session, Type},
     Dispatcher,
 };

@@ -1,7 +1,7 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::errors::new_io_error,
-    proxy::{socks::Socks5UDPCodec, AnyOutboundDatagram, InboundDatagram},
+    proxy::{socks::Socks5UDPCodec, InboundDatagram},
     session::SocksAddr,
 };
 use bytes::Bytes;
