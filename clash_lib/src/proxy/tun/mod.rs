@@ -87,7 +87,7 @@ mod tests {
         let log_path = cwd + "/" + &log_file + "." + &today.to_string();
 
         let logs = std::fs::read_to_string(&log_path)
-            .expect(format!("failed to read log file: {}", log_path).as_str());
+            .unwrap_or_else(|_| panic!("failed to read log file: {}", log_path));
 
         assert!(logs.contains("1.1.1.1:53 to MATCH"));
 
@@ -161,7 +161,7 @@ mod tests {
         let log_path = cwd + "/" + &log_file + "." + &today.to_string();
 
         let logs = std::fs::read_to_string(&log_path)
-            .expect(format!("failed to read log file: {}", log_path).as_str());
+            .unwrap_or_else(|_| panic!("failed to read log file: {}", log_path));
 
         assert!(logs.contains("route_all is enabled"));
         assert!(logs.contains(format!("{} to MATCH", echo_addr).as_str()));
