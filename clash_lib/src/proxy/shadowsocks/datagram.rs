@@ -236,9 +236,7 @@ impl DatagramSend for ShadowsocksUdpIo {
         }
         match w.poll_flush_unpin(cx) {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(buf.len())),
-            Poll::Ready(Err(e)) => {
-                Poll::Ready(Err(new_io_error(e.to_string())))
-            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(new_io_error(e.to_string()))),
             Poll::Pending => Poll::Pending,
         }
     }
