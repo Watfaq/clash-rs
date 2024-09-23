@@ -107,21 +107,21 @@ impl NetworkInboundListener {
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
         let listener: AnyInboundListener = match self.listener_type {
-            ListenerType::Http => http::Listener::new(
+            ListenerType::Http => Arc::new(http::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
-            ListenerType::Socks5 => socks::Listener::new(
+            )),
+            ListenerType::Socks5 => Arc::new(socks::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
-            ListenerType::Mixed => mixed::Listener::new(
+            )),
+            ListenerType::Mixed => Arc::new(mixed::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
+            )),
         };
 
         if listener.handle_tcp() {

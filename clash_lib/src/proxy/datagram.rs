@@ -149,6 +149,8 @@ impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 impl InboundDatagram<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {}
 
 #[must_use = "sinks do nothing unless polled"]
+// TODO: maybe we should use abstract datagram IO interface instead of the
+// Stream + Sink trait
 pub struct OutboundDatagramImpl {
     inner: UdpSocket,
     resolver: ThreadSafeDNSResolver,
@@ -157,18 +159,13 @@ pub struct OutboundDatagramImpl {
 }
 
 impl OutboundDatagramImpl {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(
-        udp: UdpSocket,
-        resolver: ThreadSafeDNSResolver,
-    ) -> AnyOutboundDatagram {
-        let s = Self {
+    pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> Self {
+        Self {
             inner: udp,
             resolver,
             flushed: true,
             pkt: None,
-        };
-        Box::new(s) as _
+        }
     }
 }
 
