@@ -24,7 +24,7 @@ use crate::{
     session::SocksAddr,
 };
 
-/// the outbound datagram for that shadowsocks returns to us
+/// OutboundDatagram wrapper for shadowsocks socket
 pub struct OutboundDatagramShadowsocks<S> {
     inner: ProxySocket<S>,
     remote_addr: SocksAddr,
@@ -198,7 +198,7 @@ where
     }
 }
 
-/// Shadowsocks UDP I/O that is passed to shadowsocks relay
+/// Shadowsocks UDP I/O that ProxySocket required
 pub(crate) struct ShadowsocksUdpIo {
     w: tokio::sync::Mutex<SplitSink<AnyOutboundDatagram, UdpPacket>>,
     r: tokio::sync::Mutex<(SplitStream<AnyOutboundDatagram>, BytesMut)>,
@@ -289,7 +289,7 @@ impl DatagramReceive for ShadowsocksUdpIo {
         Poll::Ready(Err(new_io_error("not supported for shadowsocks udp io")))
     }
 
-    fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_recv_ready(&self, _: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

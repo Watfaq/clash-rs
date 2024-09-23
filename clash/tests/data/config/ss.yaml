@@ -61,6 +61,12 @@ proxies:
     password: "password"
     udp: true
 
+proxy-groups:
+  - name: "udp-relay"
+    type: relay
+    proxies:
+     - ss-01
+     - ss-02  
 rules:
-  - MATCH, ss-01
+  - MATCH, udp-relay
 ...
