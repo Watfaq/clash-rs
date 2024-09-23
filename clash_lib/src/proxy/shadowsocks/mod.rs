@@ -288,7 +288,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test))]
+#[cfg(test)]
 mod tests {
 
     use super::super::utils::test_utils::{

@@ -199,7 +199,7 @@ impl OutboundHandler for Handler {
 }
 
 #[cfg(feature = "shadowsocks")]
-#[cfg(all(test))]
+#[cfg(test)]
 mod tests {
 
     use tokio::sync::RwLock;
@@ -250,11 +250,9 @@ mod tests {
         provider.expect_touch().returning(|| ());
         provider.expect_healthcheck().returning(|| ());
 
-        provider.expect_proxies().returning(move || {
-            let mut proxies = Vec::new();
-            proxies.push(ss_handler.clone());
-            proxies
-        });
+        provider
+            .expect_proxies()
+            .returning(move || vec![ss_handler.clone()]);
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
@@ -288,12 +286,9 @@ mod tests {
         provider.expect_touch().returning(|| ());
         provider.expect_healthcheck().returning(|| ());
 
-        provider.expect_proxies().returning(move || {
-            let mut proxies = Vec::new();
-            proxies.push(ss_handler.clone());
-            proxies.push(ss_handler.clone());
-            proxies
-        });
+        provider
+            .expect_proxies()
+            .returning(move || vec![ss_handler.clone(), ss_handler.clone()]);
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);

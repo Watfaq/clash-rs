@@ -355,8 +355,8 @@ pub async fn run_test_suites_and_cleanup(
                     }
                     Suite::DnsUdp => {
                         let rv = dns_test(handler.clone()).await;
-                        if rv.is_err() {
-                            return Err(rv.unwrap_err());
+                        if let Err(rv) = rv {
+                            return Err(rv);
                         } else {
                             tracing::info!("dns_test success");
                         }
