@@ -47,12 +47,10 @@ pub(crate) fn must_bind_socket_on_interface(
                         } else {
                             None
                         }
+                    } else if addr.ip().is_ipv6() {
+                        Some(addr.ip())
                     } else {
-                        if addr.ip().is_ipv6() {
-                            Some(addr.ip())
-                        } else {
-                            None
-                        }
+                        None
                     }
                 }),
                 None => None,
