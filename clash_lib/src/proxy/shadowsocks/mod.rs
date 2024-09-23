@@ -271,14 +271,11 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let socket = ProxySocket::from_io(
+        let socket = ProxySocket::from_socket(
             UdpSocketType::Client,
             ctx,
             &cfg,
-            Box::new(ShadowsocksUdpIo::new(socket)),
-            None,
-            #[cfg(unix)]
-            None,
+            ShadowsocksUdpIo::new(socket),
         );
         let d = OutboundDatagramShadowsocks::new(
             socket,
