@@ -24,7 +24,8 @@ use crate::{
     session::SocksAddr,
 };
 
-/// OutboundDatagram wrapper for shadowsocks socket
+/// OutboundDatagram wrapper for shadowsocks socket, that takes ShadowsocksUdpIo
+/// as underlying I/O
 pub struct OutboundDatagramShadowsocks<S> {
     inner: ProxySocket<S>,
     remote_addr: SocksAddr,
