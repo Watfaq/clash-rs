@@ -184,13 +184,16 @@ where
 
         let mut buf = ReadBuf::new(buf);
 
-        let rv = ready!(inner.poll_recv_from(cx, &mut buf));
+        let rv = ready!(inner.poll_recv(cx, &mut buf));
         debug!("recv udp packet from remote ss server: {:?}", rv);
 
         match rv {
             Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled()[..n].to_vec(),
-                src_addr: src.into(),
+                src_addr: match src {
+                    shadowsocks::relay::Address::SocketAddress(a) => a.into(),
+                    _ => SocksAddr::any_ipv4(),
+                },
                 dst_addr: SocksAddr::any_ipv4(),
             })),
             Err(_) => Poll::Ready(None),

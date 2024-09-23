@@ -33,7 +33,14 @@ pub async fn ping_pong_test(
     // server(127.0.0.1:port)
 
     let sess = Session {
-        destination: ("127.0.0.1".to_owned(), port)
+        destination: (
+            if cfg!(target_os = "linux") {
+                "127.0.0.1".to_owned()
+            } else {
+                "host.docker.internal".to_owned()
+            },
+            port,
+        )
             .try_into()
             .unwrap_or_else(|_| panic!("")),
         ..Default::default()
@@ -144,7 +151,14 @@ pub async fn ping_pong_udp_test(
     let src = ("127.0.0.1".to_owned(), 10005)
         .try_into()
         .unwrap_or_else(|_| panic!(""));
-    let dst: SocksAddr = ("127.0.0.1".to_owned(), port)
+    let dst: SocksAddr = (
+        if cfg!(target_os = "linux") {
+            "127.0.0.1".to_owned()
+        } else {
+            "host.docker.internal".to_owned()
+        },
+        port,
+    )
         .try_into()
         .unwrap_or_else(|_| panic!(""));
 
