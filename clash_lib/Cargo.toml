@@ -83,7 +83,7 @@ const-fnv1a-hash = "1"
 
 filetime = "0.2"
 axum = { version = "0.7", features = ["ws"] }
-tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
@@ -136,7 +136,7 @@ memory-stats = "1.0.0"
 tempfile = "3.12"
 mockall = "0.13.0"
 tokio-test = "0.4.4"
-axum-macros = "0.4.0"
+axum-macros = "0.4.2"
 bollard = "0.17"
 serial_test = "3.1.1"
 
@@ -144,7 +144,7 @@ serial_test = "3.1.1"
 prost-build = "0.13"
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "2.11.1"
+security-framework = "3.0.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
