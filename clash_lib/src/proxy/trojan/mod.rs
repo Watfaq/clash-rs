@@ -288,10 +288,6 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt()
-            // any additional configuration of the subscriber you might want here..
-            .try_init();
-
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
 

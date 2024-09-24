@@ -271,14 +271,11 @@ impl OutboundHandler for Handler {
             )
             .await?;
 
-        let socket = ProxySocket::from_io(
+        let socket = ProxySocket::from_socket(
             UdpSocketType::Client,
             ctx,
             &cfg,
-            Box::new(ShadowsocksUdpIo::new(socket)),
-            None,
-            #[cfg(unix)]
-            None,
+            ShadowsocksUdpIo::new(socket),
         );
         let d = OutboundDatagramShadowsocks::new(
             socket,
@@ -297,9 +294,12 @@ mod tests {
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
-    use crate::proxy::utils::test_utils::{
-        docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_test_suites_and_cleanup, Suite,
+    use crate::{
+        proxy::utils::test_utils::{
+            docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
+            run_test_suites_and_cleanup, Suite,
+        },
+        tests::initialize,
     };
 
     use super::*;
@@ -320,8 +320,8 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_ss() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt().try_init();
+    async fn test_ss_plain() -> anyhow::Result<()> {
+        initialize();
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -469,9 +469,6 @@ mod tests {
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         if cfg!(target_arch = "x86_64") {
-            let _ = tracing_subscriber::fmt()
-                .with_max_level(tracing::Level::DEBUG)
-                .try_init();
             test_ss_obfs_inner(SimpleOBFSMode::Tls).await
         } else {
             eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");

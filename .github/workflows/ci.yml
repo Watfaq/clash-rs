@@ -15,6 +15,7 @@ env:
   PACKAGE: "clash"
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
+  RUST_LOG: "clash=TRACE"
 
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
@@ -221,13 +222,17 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: fmt
           args: --all -- --check
-
+        env:
+          CLASH_DOCKER_TEST: "true"
+          
       - name: Cargo clippy
         uses: clechasseur/rs-cargo@v2
         with:
           use-cross: ${{ matrix.cross }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+        env:
+          CLASH_DOCKER_TEST: "true"
 
       - name: Cargo test (docker test on linux)
         uses: clechasseur/rs-cargo@v2
@@ -306,7 +311,9 @@ jobs:
           # Deleted latest tag and push it
           git tag -d latest || true
           git push origin :refs/tags/latest || true
-          # Deleted all drafts
+          # Create local tag
+          git tag latest
+          # Delete all drafts
           gh release list | grep Draft |  awk '{print $1 " \t"}' |  while read -r line; do gh release delete -y "$line"; done
         env:
           GH_TOKEN: ${{ github.token }}

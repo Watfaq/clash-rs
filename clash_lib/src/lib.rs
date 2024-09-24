@@ -513,7 +513,15 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use crate::{shutdown, start, Config, Options};
-    use std::{thread, time::Duration};
+    use std::{sync::Once, thread, time::Duration};
+
+    static INIT: Once = Once::new();
+
+    pub fn initialize() {
+        INIT.call_once(|| {
+            env_logger::init();
+        });
+    }
 
     #[test]
     fn start_and_stop() {

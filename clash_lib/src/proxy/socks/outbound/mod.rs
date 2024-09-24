@@ -326,7 +326,6 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
@@ -352,7 +351,6 @@ mod tests {
     async fn test_socks5_auth() -> anyhow::Result<()> {
         use crate::proxy::DialWithConnector;
 
-        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
