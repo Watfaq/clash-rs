@@ -234,9 +234,9 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (on linux and windows with docker)
+      - name: Cargo test (docker test on linux)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ !contains(matrix.os, 'macos')  && matrix.target != 'aarch64-pc-windows-msvc' }}
+        if: startsWith(matrix.os, 'ubuntu')
         with:
           use-cross: ${{ matrix.cross }}
           command: test
@@ -246,9 +246,9 @@ jobs:
           CLASH_DOCKER_TEST: "true"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test (on macos without docker)
+      - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ contains(matrix.os, 'macos') }}
+        if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           use-cross: ${{ matrix.cross }}
           command: test
