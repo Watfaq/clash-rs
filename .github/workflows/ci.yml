@@ -236,7 +236,7 @@ jobs:
 
       - name: Cargo test (on linux and windows with docker)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ !matrix.os.contains('macos')  && matrix.target != 'aarch64-pc-windows-msvc' }}
+        if: ${{ !contains(matrix.os, 'macos')  && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           use-cross: ${{ matrix.cross }}
           command: test
@@ -248,7 +248,7 @@ jobs:
 
       - name: Cargo test (on macos without docker)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ matrix.os.contains('macos') }}
+        if: ${{ contains(matrix.os, 'macos') }}
         with:
           use-cross: ${{ matrix.cross }}
           command: test
