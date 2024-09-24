@@ -199,7 +199,7 @@ impl OutboundHandler for Handler {
 }
 
 #[cfg(feature = "shadowsocks")]
-#[cfg(test)]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use tokio::sync::RwLock;

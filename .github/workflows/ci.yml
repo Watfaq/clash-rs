@@ -222,17 +222,33 @@ jobs:
           use-cross: ${{ matrix.cross }}
           command: fmt
           args: --all -- --check
-
+        env:
+          CLASH_DOCKER_TEST: "true"
+          
       - name: Cargo clippy
         uses: clechasseur/rs-cargo@v2
         with:
           use-cross: ${{ matrix.cross }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+        env:
+          CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (no arm windows)
+      - name: Cargo test (on linux and windows with docker)
         uses: clechasseur/rs-cargo@v2
-        if: ${{ matrix.target != 'aarch64-pc-windows-msvc' }}
+        if: ${{ !matrix.os.contains('macos')  && matrix.target != 'aarch64-pc-windows-msvc' }}
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: test
+          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+        env:
+          CROSS_CONTAINER_OPTS: "--network host"
+          CLASH_DOCKER_TEST: "true"
+          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Cargo test (on macos without docker)
+        uses: clechasseur/rs-cargo@v2
+        if: ${{ matrix.os.contains('macos') }}
         with:
           use-cross: ${{ matrix.cross }}
           command: test

@@ -254,7 +254,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use std::collections::HashMap;
