@@ -254,7 +254,6 @@ jobs:
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
-          CROSS_CONTAINER_OPTS: "--network host"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
