@@ -319,7 +319,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Clean git tag
-        if: startsWith(github.ref, 'refs/tags/v*')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           # Delete latest tag (for git-cliff)
           git tag -d latest || true
