@@ -308,6 +308,9 @@ impl Dispatcher {
 
                 // mutate packet for fake ip
                 let mut packet = packet;
+                // resolve is done in OutboundDatagramImpl so it's fine to have
+                // (Domain, port) here. ideally the OutboundDatagramImpl should only
+                // do Ip though?
                 packet.dst_addr = dest;
 
                 let mode = *mode.lock().unwrap();
