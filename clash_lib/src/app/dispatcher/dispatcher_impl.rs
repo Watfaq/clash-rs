@@ -286,16 +286,14 @@ impl Dispatcher {
                             } else {
                                 (*socket_addr).into()
                             }
+                        } else if let Some(resolved) =
+                            resolver.cached_for(socket_addr.ip()).await
+                        {
+                            (resolved, socket_addr.port())
+                                .try_into()
+                                .expect("must be valid domain")
                         } else {
-                            if let Some(resolved) =
-                                resolver.cached_for(socket_addr.ip()).await
-                            {
-                                (resolved, socket_addr.port())
-                                    .try_into()
-                                    .expect("must be valid domain")
-                            } else {
-                                (*socket_addr).into()
-                            }
+                            (*socket_addr).into()
                         }
                     }
                     crate::session::SocksAddr::Domain(host, port) => {

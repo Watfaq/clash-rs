@@ -289,7 +289,7 @@ impl EnhancedResolver {
                     return Ok(cached.clone());
                 }
             }
-            self.exchange_no_cache(&message).await
+            self.exchange_no_cache(message).await
         } else {
             Err(anyhow!("invalid query"))
         }

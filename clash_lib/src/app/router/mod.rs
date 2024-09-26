@@ -16,7 +16,7 @@ use crate::app::router::rules::final_::Final;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use super::{
     dns::ThreadSafeDNSResolver,

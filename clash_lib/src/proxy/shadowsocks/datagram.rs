@@ -40,7 +40,7 @@ impl<S> OutboundDatagramShadowsocks<S> {
             inner,
             flushed: true,
             pkt: None,
-            remote_addr: remote_addr.try_into().expect("must into socks addr"),
+            remote_addr,
             buf: vec![0u8; 65535],
         }
     }
