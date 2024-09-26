@@ -17,6 +17,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     impl_default_connector,
     proxy::{HandlerCommonOptions, OutboundHandler},
     session::Session,
@@ -277,10 +278,22 @@ impl OutboundHandler for Handler {
             &cfg,
             ShadowsocksUdpIo::new(socket),
         );
+        let server_addr = resolver
+            .resolve(&self.opts.server, false)
+            .await
+            .map_err(|x| {
+                new_io_error(format!(
+                    "failed to resolve {}: {}",
+                    self.opts.server, x
+                ))
+            })?
+            .ok_or(new_io_error(format!(
+                "failed to resolve {}",
+                self.opts.server
+            )))?;
         let d = OutboundDatagramShadowsocks::new(
             socket,
-            (self.opts.server.to_owned(), self.opts.port),
-            resolver,
+            (server_addr, self.opts.port).into(),
         );
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;

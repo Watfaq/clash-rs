@@ -1,5 +1,6 @@
 use std::{
     io,
+    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -15,10 +16,9 @@ use shadowsocks::{
     ProxySocket,
 };
 use tokio::io::ReadBuf;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument};
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
     common::errors::new_io_error,
     proxy::{datagram::UdpPacket, AnyOutboundDatagram},
     session::SocksAddr,
@@ -28,26 +28,20 @@ use crate::{
 /// as underlying I/O
 pub struct OutboundDatagramShadowsocks<S> {
     inner: ProxySocket<S>,
-    remote_addr: SocksAddr,
+    remote_addr: SocketAddr,
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
-    resolver: ThreadSafeDNSResolver,
 }
 
 impl<S> OutboundDatagramShadowsocks<S> {
-    pub fn new(
-        inner: ProxySocket<S>,
-        remote_addr: (String, u16),
-        resolver: ThreadSafeDNSResolver,
-    ) -> Self {
+    pub fn new(inner: ProxySocket<S>, remote_addr: SocketAddr) -> Self {
         Self {
             inner,
             flushed: true,
             pkt: None,
             remote_addr: remote_addr.try_into().expect("must into socks addr"),
             buf: vec![0u8; 65535],
-            resolver,
         }
     }
 }
@@ -93,32 +87,8 @@ where
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
-            ref mut resolver,
             ..
         } = *self;
-
-        let dst = match remote_addr.to_owned() {
-            SocksAddr::Domain(domain, port) => {
-                let domain = domain.to_string();
-                let port = port.to_owned();
-
-                let mut fut = resolver.resolve(domain.as_str(), false);
-                let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
-                    io::Error::new(io::ErrorKind::Other, "resolve domain failed")
-                }))?;
-
-                if let Some(ip) = ip {
-                    trace!("resolve domain {} to {}", domain, ip);
-                    (ip, port).into()
-                } else {
-                    return Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("resolve domain failed: {}", domain),
-                    )));
-                }
-            }
-            SocksAddr::Ip(addr) => addr,
-        };
 
         let pkt_container = pkt;
 
@@ -127,12 +97,12 @@ where
             let addr: shadowsocks::relay::Address =
                 (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
-            let n = ready!(inner.poll_send_to(dst, &addr, data, cx))?;
+            let n = ready!(inner.poll_send_to(*remote_addr, &addr, data, cx))?;
 
             debug!(
                 "send udp packet to remote ss server, len: {}, remote_addr: {}, \
                  dst_addr: {}",
-                n, dst, addr
+                n, remote_addr, addr
             );
 
             let wrote_all = n == data.len();

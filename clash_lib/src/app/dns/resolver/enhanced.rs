@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use hickory_proto::{op, rr};
 
@@ -46,6 +46,9 @@ pub struct EnhancedResolver {
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     fake_dns: Option<ThreadSafeFakeDns>,
+
+    reverse_lookup_cache:
+        Option<Arc<RwLock<lru_time_cache::LruCache<net::IpAddr, String>>>>,
 }
 
 impl EnhancedResolver {
@@ -75,6 +78,8 @@ impl EnhancedResolver {
             policy: None,
 
             fake_dns: None,
+
+            reverse_lookup_cache: None,
         }
     }
 
@@ -94,6 +99,8 @@ impl EnhancedResolver {
             policy: None,
 
             fake_dns: None,
+
+            reverse_lookup_cache: None,
         });
 
         Self {
@@ -199,6 +206,121 @@ impl EnhancedResolver {
                 }
                 _ => None,
             },
+
+            reverse_lookup_cache: Some(Arc::new(RwLock::new(
+                lru_time_cache::LruCache::with_expiry_duration_and_capacity(
+                    Duration::from_secs(3), /* should be shorter than TTL so
+                                             * client won't be connecting to a
+                                             * different server after the ip is
+                                             * reverse mapped to hostname and
+                                             * being resolved again */
+                    4096,
+                ),
+            ))),
+        }
+    }
+
+    async fn resolve_inner(
+        &self,
+        host: &str,
+        enhanced: bool,
+    ) -> anyhow::Result<Option<net::IpAddr>> {
+        match self.ipv6.load(Relaxed) {
+            true => {
+                let fut1 = self
+                    .resolve_v6(host, enhanced)
+                    .map(|x| x.map(|v6| v6.map(net::IpAddr::from)));
+                let fut2 = self
+                    .resolve_v4(host, enhanced)
+                    .map(|x| x.map(|v4| v4.map(net::IpAddr::from)));
+
+                let futs = vec![fut1.boxed(), fut2.boxed()];
+                let r = futures::future::select_ok(futs).await?;
+                if r.0.is_some() {
+                    return Ok(r.0);
+                }
+                let r = futures::future::select_all(r.1).await;
+                return r.0;
+            }
+            false => self
+                .resolve_v4(host, enhanced)
+                .await
+                .map(|ip| ip.map(net::IpAddr::from)),
+        }
+    }
+
+    async fn resolve_v4_inner(
+        &self,
+        host: &str,
+        enhanced: bool,
+    ) -> anyhow::Result<Option<net::Ipv4Addr>> {
+        if enhanced {
+            if let Some(hosts) = &self.hosts {
+                if let Some(v) = hosts.search(host) {
+                    return Ok(v.get_data().map(|v| match v {
+                        net::IpAddr::V4(v4) => *v4,
+                        _ => unreachable!("invalid IP family"),
+                    }));
+                }
+            }
+        }
+
+        if let Ok(ip) = host.parse::<net::Ipv4Addr>() {
+            return Ok(Some(ip));
+        }
+
+        if enhanced && self.fake_ip_enabled() {
+            let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
+            if !fake_dns.should_skip(host) {
+                let ip = fake_dns.lookup(host).await;
+                debug!("fake dns lookup: {} -> {:?}", host, ip);
+                match ip {
+                    net::IpAddr::V4(v4) => return Ok(Some(v4)),
+                    _ => unreachable!("invalid IP family"),
+                }
+            }
+        }
+
+        match self.lookup_ip(host, rr::RecordType::A).await {
+            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+                net::IpAddr::V4(v4) => Ok(Some(*v4)),
+                _ => unreachable!("invalid IP family"),
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn resolve_v6_inner(
+        &self,
+        host: &str,
+        enhanced: bool,
+    ) -> anyhow::Result<Option<net::Ipv6Addr>> {
+        if !self.ipv6.load(Relaxed) {
+            return Err(Error::DNSError("ipv6 disabled".into()).into());
+        }
+
+        if enhanced {
+            if let Some(hosts) = &self.hosts {
+                if let Some(v) = hosts.search(host) {
+                    return Ok(v.get_data().map(|v| match v {
+                        net::IpAddr::V6(v6) => *v6,
+                        _ => unreachable!("invalid IP family"),
+                    }));
+                }
+            }
+        }
+
+        if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
+            return Ok(Some(ip));
+        }
+
+        match self.lookup_ip(host, rr::RecordType::AAAA).await {
+            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+                net::IpAddr::V6(v6) => Ok(Some(*v6)),
+                _ => unreachable!("invalid IP family"),
+            },
+
+            Err(e) => Err(e),
         }
     }
 
@@ -251,7 +373,7 @@ impl EnhancedResolver {
         m.add_query(q);
         m.set_recursion_desired(true);
 
-        match self.exchange(m).await {
+        match self.exchange(&m).await {
             Ok(result) => {
                 let ip_list = EnhancedResolver::ip_list_of_message(&result);
                 if !ip_list.is_empty() {
@@ -264,7 +386,7 @@ impl EnhancedResolver {
         }
     }
 
-    async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
@@ -436,6 +558,13 @@ impl EnhancedResolver {
             })
             .collect()
     }
+
+    async fn save_reverse_lookup(&self, ip: net::IpAddr, domain: String) {
+        if let Some(lru) = &self.reverse_lookup_cache {
+            trace!("reverse lookup cache insert: {} -> {}", ip, domain);
+            lru.write().await.insert(ip, domain);
+        }
+    }
 }
 
 #[async_trait]
@@ -446,28 +575,7 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::IpAddr>> {
-        match self.ipv6.load(Relaxed) {
-            true => {
-                let fut1 = self
-                    .resolve_v6(host, enhanced)
-                    .map(|x| x.map(|v6| v6.map(net::IpAddr::from)));
-                let fut2 = self
-                    .resolve_v4(host, enhanced)
-                    .map(|x| x.map(|v4| v4.map(net::IpAddr::from)));
-
-                let futs = vec![fut1.boxed(), fut2.boxed()];
-                let r = futures::future::select_ok(futs).await?;
-                if r.0.is_some() {
-                    return Ok(r.0);
-                }
-                let r = futures::future::select_all(r.1).await;
-                return r.0;
-            }
-            false => self
-                .resolve_v4(host, enhanced)
-                .await
-                .map(|ip| ip.map(net::IpAddr::from)),
-        }
+        self.resolve_inner(host, enhanced).await
     }
 
     async fn resolve_v4(
@@ -475,40 +583,7 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::Ipv4Addr>> {
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V4(v4) => *v4,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
-            }
-        }
-
-        if let Ok(ip) = host.parse::<net::Ipv4Addr>() {
-            return Ok(Some(ip));
-        }
-
-        if enhanced && self.fake_ip_enabled() {
-            let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
-            if !fake_dns.should_skip(host) {
-                let ip = fake_dns.lookup(host).await;
-                debug!("fake dns lookup: {} -> {:?}", host, ip);
-                match ip {
-                    net::IpAddr::V4(v4) => return Ok(Some(v4)),
-                    _ => unreachable!("invalid IP family"),
-                }
-            }
-        }
-
-        match self.lookup_ip(host, rr::RecordType::A).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
-                net::IpAddr::V4(v4) => Ok(Some(*v4)),
-                _ => unreachable!("invalid IP family"),
-            },
-            Err(e) => Err(e),
-        }
+        self.resolve_v4_inner(host, enhanced).await
     }
 
     async fn resolve_v6(
@@ -516,37 +591,30 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::Ipv6Addr>> {
-        if !self.ipv6.load(Relaxed) {
-            return Err(Error::DNSError("ipv6 disabled".into()).into());
-        }
+        self.resolve_v6_inner(host, enhanced).await
+    }
 
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V6(v6) => *v6,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
+    async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
+        if let Some(lru) = &self.reverse_lookup_cache {
+            if let Some(cached) = lru.read().await.peek(&ip) {
+                trace!("reverse lookup cache hit: {} -> {}", ip, cached);
+                return Some(cached.clone());
             }
         }
 
-        if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
-            return Ok(Some(ip));
-        }
-
-        match self.lookup_ip(host, rr::RecordType::AAAA).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
-                net::IpAddr::V6(v6) => Ok(Some(*v6)),
-                _ => unreachable!("invalid IP family"),
-            },
-
-            Err(e) => Err(e),
-        }
+        None
     }
 
     async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
-        self.exchange(message).await
+        let rv = self.exchange(&message).await?;
+        let hostname = message.query().unwrap().name().to_ascii();
+        let ip_list = EnhancedResolver::ip_list_of_message(&rv);
+        if !ip_list.is_empty() {
+            for ip in ip_list {
+                self.save_reverse_lookup(ip, hostname.clone()).await;
+            }
+        }
+        Ok(rv)
     }
 
     fn ipv6(&self) -> bool {

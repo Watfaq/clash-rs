@@ -93,10 +93,6 @@ impl Router {
                 && r.should_resolve_ip()
                 && !sess_resolved
             {
-                debug!(
-                    "rule `{r}` resolving domain {} locally",
-                    sess.destination.domain().unwrap()
-                );
                 if let Ok(Some(ip)) = self
                     .dns_resolver
                     .resolve(sess.destination.domain().unwrap(), false)
@@ -114,7 +110,6 @@ impl Router {
                     r.target(),
                     r.type_name()
                 );
-                debug!("matched rule details: {}", r);
                 return (r.target(), Some(r));
             }
         }

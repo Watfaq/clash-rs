@@ -6,7 +6,7 @@ mixed-port: 8899
 tun:
   enable: true
   device-id: "dev://utun1989"
-  route-all: true
+  route-all: false
   gateway: "198.19.0.1/32"
   so-mark: 3389
   # routes:
@@ -53,7 +53,7 @@ dns:
 
 allow-lan: true
 mode: rule
-log-level: debug
+log-level: trace
 external-controller: :9090
 external-ui: "public"
 # secret: "clash-rs"
