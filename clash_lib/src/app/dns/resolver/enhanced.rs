@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use hickory_proto::{op, rr};
 
@@ -46,6 +46,9 @@ pub struct EnhancedResolver {
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     fake_dns: Option<ThreadSafeFakeDns>,
+
+    reverse_lookup_cache:
+        Option<Arc<RwLock<lru_time_cache::LruCache<net::IpAddr, String>>>>,
 }
 
 impl EnhancedResolver {
@@ -75,6 +78,8 @@ impl EnhancedResolver {
             policy: None,
 
             fake_dns: None,
+
+            reverse_lookup_cache: None,
         }
     }
 
@@ -94,6 +99,8 @@ impl EnhancedResolver {
             policy: None,
 
             fake_dns: None,
+
+            reverse_lookup_cache: None,
         });
 
         Self {
@@ -199,6 +206,17 @@ impl EnhancedResolver {
                 }
                 _ => None,
             },
+
+            reverse_lookup_cache: Some(Arc::new(RwLock::new(
+                lru_time_cache::LruCache::with_expiry_duration_and_capacity(
+                    Duration::from_secs(3), /* should be shorter than TTL so
+                                             * client won't be connecting to a
+                                             * different server after the ip is
+                                             * reverse mapped to hostname and
+                                             * being resolved again */
+                    4096,
+                ),
+            ))),
         }
     }
 
@@ -251,7 +269,7 @@ impl EnhancedResolver {
         m.add_query(q);
         m.set_recursion_desired(true);
 
-        match self.exchange(m).await {
+        match self.exchange(&m).await {
             Ok(result) => {
                 let ip_list = EnhancedResolver::ip_list_of_message(&result);
                 if !ip_list.is_empty() {
@@ -264,14 +282,14 @@ impl EnhancedResolver {
         }
     }
 
-    async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
                     return Ok(cached.clone());
                 }
             }
-            self.exchange_no_cache(&message).await
+            self.exchange_no_cache(message).await
         } else {
             Err(anyhow!("invalid query"))
         }
@@ -436,6 +454,13 @@ impl EnhancedResolver {
             })
             .collect()
     }
+
+    async fn save_reverse_lookup(&self, ip: net::IpAddr, domain: String) {
+        if let Some(lru) = &self.reverse_lookup_cache {
+            trace!("reverse lookup cache insert: {} -> {}", ip, domain);
+            lru.write().await.insert(ip, domain);
+        }
+    }
 }
 
 #[async_trait]
@@ -545,8 +570,27 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
+        if let Some(lru) = &self.reverse_lookup_cache {
+            if let Some(cached) = lru.read().await.peek(&ip) {
+                trace!("reverse lookup cache hit: {} -> {}", ip, cached);
+                return Some(cached.clone());
+            }
+        }
+
+        None
+    }
+
     async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
-        self.exchange(message).await
+        let rv = self.exchange(&message).await?;
+        let hostname = message.query().unwrap().name().to_ascii();
+        let ip_list = EnhancedResolver::ip_list_of_message(&rv);
+        if !ip_list.is_empty() {
+            for ip in ip_list {
+                self.save_reverse_lookup(ip, hostname.clone()).await;
+            }
+        }
+        Ok(rv)
     }
 
     fn ipv6(&self) -> bool {

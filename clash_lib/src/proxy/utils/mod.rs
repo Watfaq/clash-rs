@@ -17,7 +17,7 @@ pub use proxy_connector::*;
 
 use serde::{Deserialize, Serialize};
 pub use socket_helpers::*;
-use tracing::{debug, trace};
+use tracing::trace;
 
 #[derive(Debug)]
 pub struct OutboundInterface {
@@ -101,7 +101,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         left.cmp(&right)
     });
 
-    debug!(
+    trace!(
         "sorted outbound interfaces: {:?}, took: {}ms",
         all_outbounds,
         now.elapsed().as_millis()

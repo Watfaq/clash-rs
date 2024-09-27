@@ -121,11 +121,11 @@ impl Handler {
             fastest_delay
         );
 
-        return inner
+        inner
             .fastest_proxy
             .as_ref()
             .unwrap_or(proxies.first().unwrap())
-            .clone();
+            .clone()
     }
 }
 

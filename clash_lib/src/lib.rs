@@ -517,6 +517,7 @@ mod tests {
 
     static INIT: Once = Once::new();
 
+    #[allow(dead_code)]
     pub fn initialize() {
         INIT.call_once(|| {
             env_logger::init();

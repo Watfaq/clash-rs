@@ -16,7 +16,7 @@ use crate::app::router::rules::final_::Final;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use super::{
     dns::ThreadSafeDNSResolver,
@@ -93,10 +93,6 @@ impl Router {
                 && r.should_resolve_ip()
                 && !sess_resolved
             {
-                debug!(
-                    "rule `{r}` resolving domain {} locally",
-                    sess.destination.domain().unwrap()
-                );
                 if let Ok(Some(ip)) = self
                     .dns_resolver
                     .resolve(sess.destination.domain().unwrap(), false)
@@ -114,7 +110,6 @@ impl Router {
                     r.target(),
                     r.type_name()
                 );
-                debug!("matched rule details: {}", r);
                 return (r.target(), Some(r));
             }
         }

@@ -10,7 +10,7 @@ use crate::{
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
     proxy::{datagram::UdpPacket, AnyInboundDatagram},
-    session::Session,
+    session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
 use std::{
@@ -75,39 +75,50 @@ impl Dispatcher {
     }
 
     #[instrument(skip(self, sess, lhs))]
-    pub async fn dispatch_stream<S>(&self, sess: Session, mut lhs: S)
+    pub async fn dispatch_stream<S>(&self, mut sess: Session, mut lhs: S)
     where
         S: AsyncRead + AsyncWrite + Unpin + Send,
     {
-        let sess = if self.resolver.fake_ip_enabled() {
-            match sess.destination {
-                crate::session::SocksAddr::Ip(addr) => {
-                    let ip = addr.ip();
+        let dest: SocksAddr = match &sess.destination {
+            crate::session::SocksAddr::Ip(socket_addr) => {
+                if self.resolver.fake_ip_enabled() {
+                    trace!("looking up fake ip: {}", socket_addr.ip());
+                    let ip = socket_addr.ip();
                     if self.resolver.is_fake_ip(ip).await {
                         let host = self.resolver.reverse_lookup(ip).await;
                         match host {
-                            Some(host) => {
-                                let mut sess = sess;
-                                sess.destination = crate::session::SocksAddr::Domain(
-                                    host,
-                                    addr.port(),
-                                );
-                                sess
-                            }
+                            Some(host) => (host, socket_addr.port())
+                                .try_into()
+                                .expect("must be valid domain"),
                             None => {
                                 error!("failed to reverse lookup fake ip: {}", ip);
                                 return;
                             }
                         }
                     } else {
-                        sess
+                        (*socket_addr).into()
+                    }
+                } else {
+                    trace!("looking up resolve cache ip: {}", socket_addr.ip());
+                    if let Some(resolved) =
+                        self.resolver.cached_for(socket_addr.ip()).await
+                    {
+                        (resolved, socket_addr.port())
+                            .try_into()
+                            .expect("must be valid domain")
+                    } else {
+                        (*socket_addr).into()
                     }
                 }
-                crate::session::SocksAddr::Domain(..) => sess,
             }
-        } else {
-            sess
+            crate::session::SocksAddr::Domain(host, port) => {
+                (host.to_owned(), *port)
+                    .try_into()
+                    .expect("must be valid domain")
+            }
         };
+
+        sess.destination = dest.clone();
 
         let mode = *self.mode.lock().unwrap();
         let (outbound_name, rule) = match mode {
@@ -253,28 +264,17 @@ impl Dispatcher {
             while let Some(packet) = local_r.next().await {
                 let mut sess = sess.clone();
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
-                sess.destination = packet.dst_addr.clone();
 
-                // populate fake ip for route matching
-                let sess = if resolver.fake_ip_enabled() {
-                    trace!("looking up fake ip for {sess}");
-                    match sess.destination {
-                        crate::session::SocksAddr::Ip(addr) => {
-                            let ip = addr.ip();
+                let dest: SocksAddr = match &packet.dst_addr {
+                    crate::session::SocksAddr::Ip(socket_addr) => {
+                        if resolver.fake_ip_enabled() {
+                            let ip = socket_addr.ip();
                             if resolver.is_fake_ip(ip).await {
-                                trace!("fake ip detected");
                                 let host = resolver.reverse_lookup(ip).await;
                                 match host {
-                                    Some(host) => {
-                                        trace!("fake ip resolved to {}", host);
-                                        let mut sess = sess;
-                                        sess.destination =
-                                            crate::session::SocksAddr::Domain(
-                                                host,
-                                                addr.port(),
-                                            );
-                                        sess
-                                    }
+                                    Some(host) => (host, socket_addr.port())
+                                        .try_into()
+                                        .expect("must be valid domain"),
                                     None => {
                                         error!(
                                             "failed to reverse lookup fake ip: {}",
@@ -284,18 +284,32 @@ impl Dispatcher {
                                     }
                                 }
                             } else {
-                                sess
+                                (*socket_addr).into()
                             }
+                        } else if let Some(resolved) =
+                            resolver.cached_for(socket_addr.ip()).await
+                        {
+                            (resolved, socket_addr.port())
+                                .try_into()
+                                .expect("must be valid domain")
+                        } else {
+                            (*socket_addr).into()
                         }
-                        crate::session::SocksAddr::Domain(..) => sess,
                     }
-                } else {
-                    sess
+                    crate::session::SocksAddr::Domain(host, port) => {
+                        (host.to_owned(), *port)
+                            .try_into()
+                            .expect("must be valid domain")
+                    }
                 };
+                sess.destination = dest.clone();
 
                 // mutate packet for fake ip
                 let mut packet = packet;
-                packet.dst_addr = sess.destination.clone();
+                // resolve is done in OutboundDatagramImpl so it's fine to have
+                // (Domain, port) here. ideally the OutboundDatagramImpl should only
+                // do Ip though?
+                packet.dst_addr = dest;
 
                 let mode = *mode.lock().unwrap();
 
