@@ -36,8 +36,6 @@ dns:
       ca-key: dns.key
       hostname: dns.example.com
         
-
-
   # ipv6: false # when the false, response to AAAA questions will be empty
 
   # These nameservers are used to resolve the DNS nameserver hostnames below.

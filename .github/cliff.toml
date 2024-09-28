@@ -26,11 +26,18 @@ body = """
 """
 # template for the changelog footer
 footer = """
-{% for release in releases -%}
-  {% for contributor in release.github.contributors | filter(attribute="is_first_time", value=true) %}
-    * @{{ contributor.username }} made their first contribution in #{{ contributor.pr_number }}
-  {%- endfor -%}
-{% endfor %}
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+  ## New Contributors ❤️
+{% endif %}\
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+  * @{{ contributor.username }} made their first contribution
+    {%- if contributor.pr_number %} in \
+      [#{{ contributor.pr_number }}]({{ self::remote_url() }}/pull/{{ contributor.pr_number }}) \
+    {%- endif %}
+{%- endfor -%}
 """
 # remove the leading and trailing s
 trim = true
