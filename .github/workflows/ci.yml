@@ -304,26 +304,7 @@ jobs:
         with:
           name: binaries
           path: ./packages
-
-      - name: Clean git tag & release
-        if: startsWith(github.ref, 'refs/heads/master')
-        run: |
-          # Deleted latest tag and push it
-          git tag -d latest || true
-          git push origin :refs/tags/latest || true
-          # Create local tag
-          git tag latest
-          # Delete all drafts
-          gh release list | grep Draft |  awk '{print $1 " \t"}' |  while read -r line; do gh release delete -y "$line"; done
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Clean git tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          # Delete latest tag (for git-cliff)
-          git tag -d latest || true
-
+          
       - name: Create SHA256Sums.txt and version.txt
         run: |
           cd packages
@@ -353,7 +334,25 @@ jobs:
           files: |
             packages/*
             LICENSE*
+            
+      - name: Delete old latest nightly release
+        if: startsWith(github.ref, 'refs/heads/master')
+      - uses: actions/github-script@v4
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const { owner, repo } = context.repo
+            const { data: { id } } = await github.repos.getLatestRelease({ owner, repo })
+            await github.repos.deleteRelease({ owner, repo, release_id: id })
 
+      - name: Update Latest Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Github nightly release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
@@ -406,13 +405,6 @@ jobs:
         run: |
           mv ./clash-rs/clash-x86_64-unknown-linux-musl ./clash-rs/clash-amd64
           mv ./clash-rs/clash-aarch64-unknown-linux-musl ./clash-rs/clash-arm64
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push release
         uses: docker/build-push-action@v6
