@@ -337,7 +337,7 @@ jobs:
             
       - name: Delete old latest nightly release
         if: startsWith(github.ref, 'refs/heads/master')
-      - uses: actions/github-script@v4
+        uses: actions/github-script@v4
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
@@ -365,6 +365,7 @@ jobs:
           files: |
             packages/*
             LICENSE*
+  
   docker-image:
     needs: [ compile ]
     name: Docker Image
