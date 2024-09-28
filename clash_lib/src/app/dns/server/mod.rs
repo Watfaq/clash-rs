@@ -358,7 +358,7 @@ mod tests {
         if let RData::A(ref ip) = answers[0].data() {
             assert_eq!(*ip, A::new(93, 184, 215, 14))
         } else {
-            assert!(false, "unexpected result")
+            unreachable!("unexpected result")
         }
     }
 
@@ -399,7 +399,7 @@ mod tests {
         let listener = super::get_dns_listener(
             cfg,
             Arc::new(resolver),
-            &std::path::Path::new("."),
+            std::path::Path::new("."),
         )
         .await;
 
