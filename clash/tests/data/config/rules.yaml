@@ -4,7 +4,7 @@ socks-port: 8889
 mixed-port: 8899
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
   route-all: false
   gateway: "198.19.0.1/32"
@@ -18,11 +18,18 @@ ipv6: true
 dns:
   enable: true
   ipv6: true
-  listen: 127.0.0.1:53553
-  #   udp: 127.0.0.1:53553
-  #   tcp: 127.0.0.1:53553
-  #   dot: 127.0.0.1:53554
-  #   doh: 127.0.0.1:53555
+  listen:
+    udp: 127.0.0.1:53553
+    tcp: 127.0.0.1:53553
+    dot:
+      addr: 127.0.0.1:53554
+      hostname: dns.example.com
+      ca-cert: dns.crt
+      ca-key: dns.key
+    doh:
+      addr: 127.0.0.1:53555
+      ca-cert: dns.crt
+      ca-key: dns.key
 
   # ipv6: false # when the false, response to AAAA questions will be empty
 

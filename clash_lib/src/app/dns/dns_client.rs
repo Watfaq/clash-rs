@@ -372,7 +372,7 @@ async fn dns_stream_builder(
             let mut tls_config = ClientConfig::builder()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
-            tls_config.alpn_protocols = vec!["dot".into()];
+            tls_config.alpn_protocols = vec!["dot".into(), "h2".into()];
 
             let fut = new_tcp_stream(
                 *addr,
