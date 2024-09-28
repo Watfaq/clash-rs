@@ -2196,6 +2196,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "h3"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5069de1c2ac82d9e361b07f2b8a2c582ec071750e063530fc7f3b5197e24805"
+dependencies = [
+ "bytes",
+ "fastrand",
+ "futures-util",
+ "http",
+ "pin-project-lite",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "h3-quinn"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c01d99d7cf812fd34ddf135e6c940df9e24f2e759dbc7179fb0e54d4bd6551"
+dependencies = [
+ "bytes",
+ "futures",
+ "h3",
+ "quinn",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "half"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2352,10 +2381,14 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2",
+ "h3",
+ "h3-quinn",
  "http",
  "idna 0.5.0",
  "ipnet",
  "once_cell",
+ "pin-project-lite",
+ "quinn",
  "rand",
  "ring 0.17.8",
  "rustls",
@@ -2426,6 +2459,7 @@ dependencies = [
  "lru-cache",
  "once_cell",
  "parking_lot",
+ "quinn",
  "rand",
  "resolv-conf",
  "rustls",
@@ -2449,6 +2483,8 @@ dependencies = [
  "enum-as-inner 0.6.1",
  "futures-util",
  "h2",
+ "h3",
+ "h3-quinn",
  "hickory-proto 0.25.0-alpha.2",
  "hickory-recursor",
  "hickory-resolver 0.25.0-alpha.2",
