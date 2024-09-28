@@ -1,3 +1,6 @@
+mod dummy_keys;
+mod utils;
+
 use std::{net::IpAddr, time::Duration};
 
 use async_trait::async_trait;
@@ -16,11 +19,12 @@ use hickory_server::{
 };
 use thiserror::Error;
 use tokio::net::{TcpListener, UdpSocket};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+use utils::{load_default_cert, load_default_key};
 
 use crate::Runner;
 
-use super::{Config, ThreadSafeDNSResolver};
+use super::{config::DNSListenAddr, ThreadSafeDNSResolver};
 
 static DEFAULT_DNS_SERVER_TTL: u32 = 60;
 
@@ -201,60 +205,89 @@ impl RequestHandler for DnsHandler {
 static DEFAULT_DNS_SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub async fn get_dns_listener(
-    cfg: Config,
+    listen: DNSListenAddr,
     resolver: ThreadSafeDNSResolver,
+    cwd: &std::path::Path,
 ) -> Option<Runner> {
     let h = DnsHandler { resolver };
     let mut s = ServerFuture::new(h);
 
     let mut has_server = false;
 
-    if let Some(addr) = cfg.listen.udp {
+    if let Some(addr) = listen.udp {
         has_server = true;
         UdpSocket::bind(addr)
             .await
             .map(|x| {
-                info!("dns server listening on udp: {}", addr);
+                info!("UDP dns server listening on: {}", addr);
                 s.register_socket(x);
             })
             .ok()?;
     }
-    if let Some(addr) = cfg.listen.tcp {
+    if let Some(addr) = listen.tcp {
         has_server = true;
         TcpListener::bind(addr)
             .await
             .map(|x| {
-                info!("dns server listening on tcp: {}", addr);
+                info!("TCP dns server listening on: {}", addr);
                 s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
             })
             .ok()?;
     }
-    if let Some(c) = cfg.listen.doh {
+    if let Some(c) = listen.doh {
         has_server = true;
-        TcpListener::bind(c.0)
+        TcpListener::bind(c.addr)
             .await
             .and_then(|x| {
-                info!("dns server listening on doh: {}", c.0);
+                info!("DoH server listening on: {}", c.addr);
+                if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
+                    debug!("using custom key and cert for doh: {}/{}", k, c);
+                }
+
+                let server_key = c
+                    .ca_key
+                    .map(|x| utils::load_priv_key(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_key());
+                let server_cert = c
+                    .ca_cert
+                    .map(|x| utils::load_cert_chain(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_cert());
                 s.register_https_listener(
                     x,
                     DEFAULT_DNS_SERVER_TIMEOUT,
-                    c.1.certificate_and_key,
-                    c.1.dns_hostname,
+                    (server_cert, server_key),
+                    c.hostname,
                 )?;
                 Ok(())
             })
             .ok()?;
     }
-    if let Some(c) = cfg.listen.dot {
+    if let Some(c) = listen.dot {
         has_server = true;
-        TcpListener::bind(c.0)
+        TcpListener::bind(c.addr)
             .await
             .and_then(|x| {
-                info!("dns server listening on dot: {}", c.0);
+                info!("DoT dns server listening on: {}", c.addr);
+                if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
+                    debug!("using custom key and cert for dot: {}/{}", k, c);
+                }
+
+                let server_key = c
+                    .ca_key
+                    .map(|x| utils::load_priv_key(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_key());
+                let server_cert = c
+                    .ca_cert
+                    .map(|x| utils::load_cert_chain(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_cert());
                 s.register_tls_listener(
                     x,
                     DEFAULT_DNS_SERVER_TIMEOUT,
-                    c.1.certificate_and_key,
+                    (server_cert, server_key),
                 )?;
                 Ok(())
             })
@@ -273,4 +306,177 @@ pub async fn get_dns_listener(
             crate::Error::DNSError(format!("dns server error: {}", x))
         })
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use hickory_client::{
+        client::{self, AsyncClient, ClientHandle},
+        proto::iocompat::AsyncIoTokioAsStd,
+    };
+    use hickory_proto::{
+        h2::HttpsClientStreamBuilder,
+        rr::{rdata::A, DNSClass, Name, RData, RecordType},
+        rustls::tls_client_connect,
+        tcp::TcpClientStream,
+        udp::UdpClientStream,
+    };
+    use rustls::ClientConfig;
+    use tokio::net::{TcpStream as TokioTcpStream, UdpSocket as TokioUdpSocket};
+
+    use crate::{
+        app::dns::MockClashResolver,
+        common::tls::{self, GLOBAL_ROOT_STORE},
+        tests::initialize,
+    };
+
+    async fn send_query(client: &mut AsyncClient) {
+        // Specify the name, note the final '.' which specifies it's an FQDN
+        let name = Name::from_ascii("www.example.com.").unwrap();
+
+        // NOTE: see 'Setup a connection' example above
+        // Send the query and get a message response, see RecordType for all
+        // supported options
+        let response = client
+            .query(name, DNSClass::IN, RecordType::A)
+            .await
+            .unwrap();
+
+        // Messages are the packets sent between client and server in DNS.
+        //  there are many fields to a Message, DnsResponse can be dereferenced into
+        //  a Message. It's beyond the scope of these examples
+        //  to explain all the details of a Message. See
+        // hickory_client::op::message::Message for more details.  generally
+        // we will be interested in the Message::answers
+        let answers = response.answers();
+
+        // Records are generic objects which can contain any data.
+        //  In order to access it we need to first check what type of record it is
+        //  In this case we are interested in A, IPv4 address
+        if let RData::A(ref ip) = answers[0].data() {
+            assert_eq!(*ip, A::new(93, 184, 215, 14))
+        } else {
+            unreachable!("unexpected result")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_dns_server() {
+        initialize();
+
+        let mut resolver = MockClashResolver::new();
+        resolver.expect_fake_ip_enabled().returning(|| false);
+        resolver.expect_exchange().returning(|_| {
+            let mut m = hickory_proto::op::Message::new();
+            m.set_response_code(hickory_proto::op::ResponseCode::NoError);
+            m.add_answer(hickory_proto::rr::Record::from_rdata(
+                "www.example.com".parse().unwrap(),
+                60,
+                hickory_proto::rr::RData::A(hickory_proto::rr::rdata::A(
+                    std::net::Ipv4Addr::new(93, 184, 215, 14),
+                )),
+            ));
+            Ok(m)
+        });
+
+        let cfg = crate::app::dns::config::DNSListenAddr {
+            udp: Some("127.0.0.1:53553".parse().unwrap()),
+            tcp: Some("127.0.0.1:53554".parse().unwrap()),
+            dot: Some(crate::app::dns::config::DoTConfig {
+                addr: "127.0.0.1:53555".parse().unwrap(),
+                ca_key: None,
+                ca_cert: None,
+            }),
+            doh: Some(crate::app::dns::config::DoHConfig {
+                addr: "127.0.0.1:53556".parse().unwrap(),
+                hostname: Some("dns.example.com".to_string()),
+                ca_key: None,
+                ca_cert: None,
+            }),
+        };
+        let listener = super::get_dns_listener(
+            cfg,
+            Arc::new(resolver),
+            std::path::Path::new("."),
+        )
+        .await;
+
+        assert!(listener.is_some());
+        tokio::spawn(async move {
+            listener.unwrap().await.unwrap();
+        });
+
+        let stream = UdpClientStream::<TokioUdpSocket>::new(
+            "127.0.0.1:53553".parse().unwrap(),
+        );
+        let (mut client, handle) =
+            client::AsyncClient::connect(stream).await.unwrap();
+        tokio::spawn(handle);
+
+        send_query(&mut client).await;
+
+        let (stream, sender) =
+            TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::new(
+                "127.0.0.1:53554".parse().unwrap(),
+            );
+
+        let (mut client, handle) = client::AsyncClient::new(stream, sender, None)
+            .await
+            .unwrap();
+        tokio::spawn(handle);
+
+        send_query(&mut client).await;
+
+        let mut tls_config = ClientConfig::builder()
+            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+            .with_no_client_auth();
+        tls_config.alpn_protocols = vec!["h2".into()];
+        tls_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
+
+        let (stream, sender) = tls_client_connect::<AsyncIoTokioAsStd<TokioTcpStream>>(
+            "127.0.0.1:53555".parse().unwrap(),
+            "dns.example.com".to_owned(),
+            Arc::new(tls_config),
+        );
+
+        let (mut client, handle) = client::AsyncClient::with_timeout(
+            stream,
+            sender,
+            Duration::from_secs(5),
+            None,
+        )
+        .await
+        .unwrap();
+        tokio::spawn(handle);
+
+        send_query(&mut client).await;
+
+        let mut tls_config = ClientConfig::builder()
+            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+            .with_no_client_auth();
+        tls_config.alpn_protocols = vec!["h2".into()];
+
+        tls_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
+
+        let stream =
+            HttpsClientStreamBuilder::with_client_config(Arc::new(tls_config))
+                .build::<AsyncIoTokioAsStd<TokioTcpStream>>(
+                "127.0.0.1:53556".parse().unwrap(),
+                "dns.example.com".to_owned(),
+            );
+
+        let (mut client, handle) =
+            client::AsyncClient::connect(stream).await.unwrap();
+        tokio::spawn(handle);
+
+        send_query(&mut client).await;
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 }

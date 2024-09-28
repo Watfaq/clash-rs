@@ -111,35 +111,4 @@ where
     Ok(())
 }
 
-use anyhow::Context;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use std::fs;
-
 use super::http::HttpClient;
-
-pub fn load_cert_chain(
-    cert_path: &Path,
-) -> anyhow::Result<Vec<CertificateDer<'static>>> {
-    let cert_chain =
-        fs::read(cert_path).context("failed to read certificate chain")?;
-    let cert_chain = if cert_path.extension().map_or(false, |x| x == "der") {
-        vec![CertificateDer::from(cert_chain)]
-    } else {
-        rustls_pemfile::certs(&mut &*cert_chain)
-            .collect::<Result<_, _>>()
-            .context("invalid PEM-encoded certificate")?
-    };
-    Ok(cert_chain)
-}
-
-pub fn load_priv_key(key_path: &Path) -> anyhow::Result<PrivateKeyDer<'static>> {
-    let key = fs::read(key_path).context("failed to read private key")?;
-    let key = if key_path.extension().map_or(false, |x| x == "der") {
-        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key))
-    } else {
-        rustls_pemfile::private_key(&mut &*key)
-            .context("malformed PKCS #1 private key")?
-            .ok_or_else(|| anyhow::Error::msg("no private keys found"))?
-    };
-    Ok(key)
-}

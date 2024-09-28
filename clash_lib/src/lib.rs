@@ -281,7 +281,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     debug!("initializing dns listener");
     let dns_listener_handle =
-        dns::get_dns_listener(config.dns, dns_resolver.clone())
+        dns::get_dns_listener(config.dns.listen, dns_resolver.clone(), &cwd)
             .await
             .map(tokio::spawn);
 
@@ -476,7 +476,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
             debug!("reloading dns listener");
             let dns_listener_handle =
-                dns::get_dns_listener(config.dns, dns_resolver.clone())
+                dns::get_dns_listener(config.dns.listen, dns_resolver.clone(), &cwd)
                     .await
                     .map(tokio::spawn);
 

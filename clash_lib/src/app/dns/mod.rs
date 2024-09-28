@@ -11,7 +11,6 @@ use mockall::automock;
 mod config;
 mod dhcp;
 mod dns_client;
-mod dummy_keys;
 mod fakeip;
 mod filters;
 mod helper;

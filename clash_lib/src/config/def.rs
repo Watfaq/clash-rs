@@ -408,7 +408,7 @@ impl Default for Config {
 #[serde(untagged)]
 pub enum DNSListen {
     Udp(String),
-    Multiple(HashMap<String, String>),
+    Multiple(HashMap<String, Value>),
 }
 
 /// DNS client/server settings
@@ -419,10 +419,17 @@ pub enum DNSListen {
 ///   enable: true
 ///   ipv6: false # when the false, response to AAAA questions will be empty
 ///   listen:
-///     udp: 127.0.0.1:5353
-///     tcp: 127.0.0.1:5353
-///     doh: 127.0.0.1:5354
-///     dot: 127.0.0.1:5355
+///     udp: 127.0.0.1:53553
+///     tcp: 127.0.0.1:53553
+///     dot:
+///       addr: 127.0.0.1:53554
+///       hostname: dns.clash
+///       ca-cert: dns.crt
+///       ca-key: dns.key
+///     doh:
+///       addr: 127.0.0.1:53555
+///       ca-cert: dns.crt
+///       ca-key: dns.key
 /// ```
 
 #[derive(Serialize, Deserialize)]
