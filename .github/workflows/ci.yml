@@ -347,7 +347,7 @@ jobs:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             const { owner, repo } = context.repo
-            const { data: { id } } = await github.repos.getLatestRelease({ owner, repo })
+            const { data: { id } } = await github.repos.getReleaseByTag({ owner, repo, 'latest' })
             await github.repos.deleteRelease({ owner, repo, release_id: id })
 
       - name: Update Latest Tag
