@@ -100,8 +100,8 @@ erased-serde = "0.4"
 # DNS
 hickory-client = "0.25.0-alpha.2"
 hickory-resolver = "0.25.0-alpha.2"
-hickory-server = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls"]}
+hickory-server = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"] }
+hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"]}
 
 dhcproto = "0.12"
 ring-compat = { version = "0.8", features = ["aead"] }

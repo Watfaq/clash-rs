@@ -23,14 +23,19 @@ dns:
     tcp: 127.0.0.1:53553
     dot:
       addr: 127.0.0.1:53554
-      hostname: dns.example.com
       ca-cert: dns.crt
       ca-key: dns.key
     doh:
       addr: 127.0.0.1:53555
       ca-cert: dns.crt
       ca-key: dns.key
-
+      hostname: dns.example.com
+    doh3:
+      addr: 127.0.0.1:53555
+      ca-cert: dns.crt
+      ca-key: dns.key
+      hostname: dns.example.com
+        
   # ipv6: false # when the false, response to AAAA questions will be empty
 
   # These nameservers are used to resolve the DNS nameserver hostnames below.

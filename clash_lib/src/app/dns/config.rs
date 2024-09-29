@@ -56,6 +56,15 @@ pub struct DoHConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct DoH3Config {
+    pub addr: SocketAddr,
+    pub ca_cert: DnsServerCert,
+    pub ca_key: DnsServerKey,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct DoTConfig {
     pub addr: SocketAddr,
     pub ca_cert: DnsServerCert,
@@ -71,6 +80,7 @@ pub struct DNSListenAddr {
     pub tcp: Option<SocketAddr>,
     pub doh: Option<DoHConfig>,
     pub dot: Option<DoTConfig>,
+    pub doh3: Option<DoH3Config>,
 }
 
 #[derive(Default)]
@@ -280,6 +290,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                         let mut udp = None;
                         let mut tcp = None;
                         let mut doh = None;
+                        let mut doh3 = None;
                         let mut dot = None;
 
                         for (k, v) in map {
@@ -341,6 +352,18 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         })?;
                                     dot = Some(c)
                                 }
+                                "doh3" => {
+                                    let c =
+                                        DoH3Config::deserialize(v).map_err(|x| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid doh3 dns listen config: \
+                                                 {:?}",
+                                                x
+                                            ))
+                                        })?;
+
+                                    doh3 = Some(c)
+                                }
                                 _ => {
                                     return Err(Error::InvalidConfig(format!(
                                         "invalid dns listen address: {}",
@@ -350,7 +373,13 @@ impl TryFrom<&crate::config::def::Config> for Config {
                             }
                         }
 
-                        Ok(DNSListenAddr { udp, tcp, doh, dot })
+                        Ok(DNSListenAddr {
+                            udp,
+                            tcp,
+                            doh,
+                            dot,
+                            doh3,
+                        })
                     }
                 })
                 .transpose()?

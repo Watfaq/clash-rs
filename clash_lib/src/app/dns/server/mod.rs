@@ -294,6 +294,37 @@ pub async fn get_dns_listener(
             .ok()?;
     }
 
+    if let Some(c) = listen.doh3 {
+        has_server = true;
+        UdpSocket::bind(c.addr)
+            .await
+            .and_then(|x| {
+                info!("DoT3 dns server listening on: {}", c.addr);
+                if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
+                    debug!("using custom key and cert for dot: {}/{}", k, c);
+                }
+
+                let server_key = c
+                    .ca_key
+                    .map(|x| utils::load_priv_key(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_key());
+                let server_cert = c
+                    .ca_cert
+                    .map(|x| utils::load_cert_chain(&cwd.join(x)))
+                    .transpose()?
+                    .unwrap_or(load_default_cert());
+                s.register_h3_listener(
+                    x,
+                    DEFAULT_DNS_SERVER_TIMEOUT,
+                    (server_cert, server_key),
+                    c.hostname,
+                )?;
+                Ok(())
+            })
+            .ok()?;
+    }
+
     if !has_server {
         return None;
     }
@@ -318,6 +349,7 @@ mod tests {
     };
     use hickory_proto::{
         h2::HttpsClientStreamBuilder,
+        h3::H3ClientStreamBuilder,
         rr::{rdata::A, DNSClass, Name, RData, RecordType},
         rustls::tls_client_connect,
         tcp::TcpClientStream,
@@ -390,6 +422,12 @@ mod tests {
                 ca_cert: None,
             }),
             doh: Some(crate::app::dns::config::DoHConfig {
+                addr: "127.0.0.1:53556".parse().unwrap(),
+                hostname: Some("dns.example.com".to_string()),
+                ca_key: None,
+                ca_cert: None,
+            }),
+            doh3: Some(crate::app::dns::config::DoH3Config {
                 addr: "127.0.0.1:53556".parse().unwrap(),
                 hostname: Some("dns.example.com".to_string()),
                 ca_key: None,
@@ -477,6 +515,27 @@ mod tests {
 
         send_query(&mut client).await;
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        let mut tls_config = ClientConfig::builder()
+            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+            .with_no_client_auth();
+        tls_config.alpn_protocols = vec!["h3".into()];
+
+        tls_config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
+
+        let stream = H3ClientStreamBuilder::default()
+            .crypto_config(tls_config)
+            .clone()
+            .build(
+                "127.0.0.1:53556".parse().unwrap(),
+                "dns.example.com".to_owned(),
+            );
+
+        let (mut client, handle) =
+            client::AsyncClient::connect(stream).await.unwrap();
+        tokio::spawn(handle);
+
+        send_query(&mut client).await;
     }
 }
