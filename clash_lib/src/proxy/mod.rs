@@ -45,11 +45,8 @@ pub mod utils;
 pub mod vmess;
 pub mod wg;
 
-pub mod fallback;
-pub mod loadbalance;
-pub mod relay;
-pub mod selector;
-pub mod urltest;
+pub mod group;
+pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
 mod options;

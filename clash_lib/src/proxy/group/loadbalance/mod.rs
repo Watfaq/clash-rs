@@ -13,20 +13,19 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     config::internal::proxy::LoadBalanceStrategy,
+    proxy::{
+        utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        OutboundHandler, OutboundType,
+    },
     session::Session,
 };
 
 use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
 
-use super::{
-    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
-};
-
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub common_opts: super::options::HandlerCommonOptions,
+    pub common_opts: HandlerCommonOptions,
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,

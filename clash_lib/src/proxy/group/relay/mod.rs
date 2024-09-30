@@ -15,21 +15,20 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
-    session::Session,
-};
-
-use super::{
-    utils::{
-        provider_helper::get_proxies_from_providers, DirectConnector,
-        ProxyConnector, RemoteConnector,
+    proxy::{
+        utils::{
+            provider_helper::get_proxies_from_providers, DirectConnector,
+            ProxyConnector, RemoteConnector,
+        },
+        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        OutboundHandler, OutboundType,
     },
-    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
+    session::Session,
 };
 
 #[derive(Default)]
 pub struct HandlerOptions {
-    pub common_opts: super::options::HandlerCommonOptions,
+    pub common_opts: HandlerCommonOptions,
     pub name: String,
 }
 
