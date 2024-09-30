@@ -2,7 +2,7 @@ use crate::{
     common::auth::ThreadSafeAuthenticator, config::internal::config::BindAddress,
 };
 
-use crate::proxy::{http, mixed, socks, AnyInboundListener};
+use crate::proxy::{http, mixed, socks, tproxy, AnyInboundListener};
 
 use crate::{proxy::utils::Interface, Dispatcher, Error, Runner};
 use futures::FutureExt;
@@ -19,6 +19,7 @@ pub enum ListenerType {
     Http,
     Socks5,
     Mixed,
+    Tproxy,
 }
 
 pub struct NetworkInboundListener {
@@ -118,6 +119,11 @@ impl NetworkInboundListener {
                 self.authenticator.clone(),
             )),
             ListenerType::Mixed => Arc::new(mixed::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+                self.authenticator.clone(),
+            )),
+            ListenerType::Tproxy => Arc::new(tproxy::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),

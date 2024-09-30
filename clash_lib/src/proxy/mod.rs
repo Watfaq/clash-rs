@@ -28,6 +28,7 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
+pub mod tproxy;
 
 pub(crate) mod datagram;
 
