@@ -25,19 +25,11 @@ impl Listener {
 #[async_trait]
 impl InboundListener for Listener {
     fn handle_tcp(&self) -> bool {
-        if cfg!(target_os = "linux") {
-            true
-        } else {
-            false
-        }
+        cfg!(target_os = "linux")
     }
 
     fn handle_udp(&self) -> bool {
-        if cfg!(target_os = "linux") {
-            true
-        } else {
-            false
-        }
+        cfg!(target_os = "linux")
     }
 
     #[cfg(target_os = "linux")]
