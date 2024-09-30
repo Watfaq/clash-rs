@@ -6,7 +6,7 @@ use crate::{
         dispatcher::Dispatcher,
         inbound::network_listener::{ListenerType, NetworkInboundListener},
     },
-    common::auth::ThreadSafeAuthenticator,
+    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     config::internal::config::{BindAddress, Inbound},
     Error, Runner,
 };
@@ -68,7 +68,21 @@ impl InboundManager {
         }
 
         Ok(Box::pin(async move {
-            futures::future::select_all(runners).await.0
+            let mut errors = Vec::new();
+            let _ = futures::future::join_all(runners)
+                .await
+                .into_iter()
+                .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
+                .collect::<Vec<_>>();
+            if errors.is_empty() {
+                Ok(())
+            } else {
+                Err(new_io_error(format!(
+                    "failed to start inbound listeners: {:?}",
+                    errors
+                ))
+                .into())
+            }
         }))
     }
 

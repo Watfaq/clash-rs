@@ -81,9 +81,8 @@ impl InboundListener for Listener {
 
     #[cfg(not(target_os = "linux"))]
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        use crate::common::errors::new_io_error;
-
-        Err(new_io_error("transparent proxy only support linux"))
+        warn!("tproxy not supported on non Linux");
+        Ok(())
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
