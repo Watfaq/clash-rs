@@ -355,7 +355,7 @@ jobs:
             const tag = 'latest'
             const { owner, repo } = context.repo
             const { data: { id } } = await github.rest.repos.getReleaseByTag({ owner, repo, tag })
-            await github.repos.deleteRelease({ owner, repo, release_id: id })
+            await github.rest.repos.deleteRelease({ owner, repo, release_id: id })
 
       - name: Update Latest Tag
         if: startsWith(github.ref, 'refs/heads/master')
