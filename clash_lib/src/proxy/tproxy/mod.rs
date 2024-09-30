@@ -44,7 +44,7 @@ impl InboundListener for Listener {
     async fn listen_tcp(&self) -> std::io::Result<()> {
         use socket2::Socket;
         use tokio::net::TcpListener;
-        use tracing::info;
+        use tracing::trace;
 
         use crate::{
             proxy::utils::apply_tcp_options,
@@ -75,7 +75,7 @@ impl InboundListener for Listener {
                 ..Default::default()
             };
 
-            info!("tproxy new conn {}", sess);
+            trace!("tproxy new tcp conn {}", sess);
 
             let dispatcher = self.dispather.clone();
             tokio::spawn(async move {
@@ -140,15 +140,15 @@ async fn handle_inbound_datagram(
 
     use super::tun::TunDatagram;
 
-    // dispatcher <-> tun communications
+    // dispatcher <-> tproxy communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
 
-    // forward packets from tun to dispatcher
+    // forward packets from tproxy to dispatcher
     let (d_tx, d_rx) = tokio::sync::mpsc::channel(32);
 
     // for dispatcher - the dispatcher would receive packets from this channel,
     // which is from the stack and send back packets to this channel, which is
-    // to the tun
+    // to the tproxy
     let udp_stream = TunDatagram::new(l_tx, d_rx);
 
     let sess = Session {
