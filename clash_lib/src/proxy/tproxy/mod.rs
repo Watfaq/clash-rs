@@ -1,21 +1,11 @@
-use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::InboundListener,
-    session::{Network, Session},
-    Dispatcher,
-};
+use crate::proxy::InboundListener;
 use async_trait::async_trait;
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
-use tokio::net::TcpListener;
 use tracing::warn;
-
-use super::{http, socks, utils::apply_tcp_options};
 
 pub struct Listener {
     addr: SocketAddr,
-    dispatcher: Arc<Dispatcher>,
-    authenticator: ThreadSafeAuthenticator,
 }
 
 impl Drop for Listener {
@@ -25,16 +15,8 @@ impl Drop for Listener {
 }
 
 impl Listener {
-    pub fn new(
-        addr: SocketAddr,
-        dispatcher: Arc<Dispatcher>,
-        authenticator: ThreadSafeAuthenticator,
-    ) -> Self {
-        Self {
-            addr,
-            dispatcher,
-            authenticator,
-        }
+    pub fn new(addr: SocketAddr) -> Self {
+        Self { addr }
     }
 }
 
