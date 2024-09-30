@@ -20,7 +20,7 @@ use app::{
     profile,
 };
 use common::{auth, http::new_http_client, mmdb};
-use config::{def::LogLevel, internal};
+use config::def::LogLevel;
 use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
 
@@ -178,7 +178,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     // things we need to clone before consuming config
     let controller_cfg = config.general.controller.clone();
-    let log_level = config.general.log_level.clone();
+    let log_level = config.general.log_level;
 
     let components = create_components(cwd.clone(), config).await?;
 
