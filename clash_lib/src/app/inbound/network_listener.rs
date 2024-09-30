@@ -123,9 +123,10 @@ impl NetworkInboundListener {
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             )),
-            ListenerType::Tproxy => {
-                Arc::new(tproxy::Listener::new((ip, self.port).into()))
-            }
+            ListenerType::Tproxy => Arc::new(tproxy::Listener::new(
+                (ip, self.port).into(),
+                self.dispatcher.clone(),
+            )),
         };
 
         if listener.handle_tcp() {
