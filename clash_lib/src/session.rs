@@ -369,6 +369,7 @@ pub enum Type {
     HttpConnect,
     Socks5,
     Tun,
+    Tproxy,
 
     Ignore,
 }

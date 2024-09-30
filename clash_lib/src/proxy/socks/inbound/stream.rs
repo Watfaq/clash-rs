@@ -1,8 +1,8 @@
 use crate::{
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
-        datagram::InboundUdp,
         socks::{
+            inbound::datagram::InboundUdp,
             socks5::{auth_methods, response_code, socks_command},
             Socks5UDPCodec, SOCKS5_VERSION,
         },

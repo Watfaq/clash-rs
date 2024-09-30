@@ -1,11 +1,8 @@
-use std::{net::SocketAddr, task::Poll};
+use std::task::Poll;
 
 use futures::{ready, Sink, Stream};
 
-use crate::{
-    common::errors::new_io_error,
-    proxy::{datagram::UdpPacket, InboundDatagram},
-};
+use crate::{common::errors::new_io_error, proxy::datagram::UdpPacket};
 
 #[derive(Debug)]
 pub struct TunDatagram {
@@ -14,8 +11,6 @@ pub struct TunDatagram {
 
     pkt: Option<UdpPacket>,
     flushed: bool,
-    #[allow(unused)]
-    local_addr: SocketAddr,
 }
 
 impl TunDatagram {
@@ -24,20 +19,15 @@ impl TunDatagram {
         tx: tokio::sync::mpsc::Sender<UdpPacket>,
         // receive from tun
         rx: tokio::sync::mpsc::Receiver<UdpPacket>,
-        // the address of the tun udp socket
-        local_addr: SocketAddr,
     ) -> Self {
         Self {
             rx,
             tx,
             pkt: None,
             flushed: true,
-            local_addr,
         }
     }
 }
-
-impl InboundDatagram<UdpPacket> for TunDatagram {}
 
 impl Stream for TunDatagram {
     type Item = UdpPacket;

@@ -58,9 +58,7 @@ async fn handle_inbound_datagram(
     resolver: ThreadSafeDNSResolver,
     so_mark: u32,
 ) {
-    let local_addr = socket.local_addr();
     // tun i/o
-
     let (ls, mut lr) = socket.split();
     let ls = Arc::new(ls);
 
@@ -73,7 +71,7 @@ async fn handle_inbound_datagram(
     // for dispatcher - the dispatcher would receive packets from this channel,
     // which is from the stack and send back packets to this channel, which
     // is to the tun
-    let udp_stream = TunDatagram::new(l_tx, d_rx, local_addr);
+    let udp_stream = TunDatagram::new(l_tx, d_rx);
 
     let sess = Session {
         network: Network::Udp,
