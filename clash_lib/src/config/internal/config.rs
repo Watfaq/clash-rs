@@ -355,7 +355,7 @@ pub struct Inbound {
     pub bind_address: BindAddress,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Controller {
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,

@@ -101,6 +101,9 @@ impl InboundManager {
                 ListenerType::Mixed => {
                     ports.mixed_port = Some(x.port);
                 }
+                ListenerType::Tproxy => {
+                    ports.tproxy_port = Some(x.port);
+                }
             });
 
         ports
@@ -144,6 +147,20 @@ impl InboundManager {
                     bind_addr: self.bind_address.clone(),
                     port: mixed_port,
                     listener_type: ListenerType::Mixed,
+                    dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
+                },
+            );
+        }
+
+        if let Some(tproxy_port) = ports.tproxy_port {
+            network_listeners.insert(
+                ListenerType::Tproxy,
+                NetworkInboundListener {
+                    name: "TProxy".to_string(),
+                    bind_addr: self.bind_address.clone(),
+                    port: tproxy_port,
+                    listener_type: ListenerType::Tproxy,
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                 },

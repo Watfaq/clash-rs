@@ -11,14 +11,13 @@ use crate::{
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
+    proxy::{
+        utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
+        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        OutboundHandler, OutboundType,
+    },
     session::Session,
     Error,
-};
-
-use super::{
-    utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
-    AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
 };
 
 #[async_trait]
@@ -35,7 +34,7 @@ struct HandlerInner {
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub common_opts: super::options::HandlerCommonOptions,
+    pub common_opts: HandlerCommonOptions,
     pub name: String,
     pub udp: bool,
 }
@@ -213,8 +212,8 @@ mod tests {
     use tokio::sync::{Mutex, RwLock};
 
     use crate::proxy::{
+        group::selector::ThreadSafeSelectorControl,
         mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
-        selector::ThreadSafeSelectorControl,
     };
 
     #[tokio::test]

@@ -247,7 +247,6 @@ pub struct Config {
     /// The redir port
     #[doc(hidden)]
     pub redir_port: Option<u16>,
-    #[doc(hidden)]
     pub tproxy_port: Option<u16>,
     /// The HTTP/SOCKS5 mixed proxy port
     /// # Example

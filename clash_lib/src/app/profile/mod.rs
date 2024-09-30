@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Db {
@@ -119,7 +119,7 @@ impl CacheFile {
                 }
             },
             Err(e) => {
-                error!("failed to read cache file: {}, initializing a new one", e);
+                warn!("failed to read cache file: {}, initializing a new one", e);
                 Db {
                     selected: HashMap::new(),
                     ip_to_host: HashMap::new(),
