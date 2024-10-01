@@ -115,7 +115,7 @@ impl Router {
                         .and_then(|c| c.iso_code)
                         .map(|s| s.to_string());
                 }
-                if !sess.asn.is_some() {
+                if sess.asn.is_none() {
                     match asn_mmdb.lookup_asn(ip) {
                         Ok(asn) => {
                             trace!("asn for {} is {:?}", ip, asn);
@@ -130,7 +130,7 @@ impl Router {
                 }
             }
 
-            if r.apply(&sess) {
+            if r.apply(sess) {
                 info!(
                     "matched {} to target {}[{}]",
                     &sess,
