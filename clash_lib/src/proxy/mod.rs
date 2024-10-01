@@ -28,6 +28,7 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
+#[cfg(target_os = "linux")]
 pub mod tproxy;
 
 pub(crate) mod datagram;
@@ -80,6 +81,10 @@ pub type AnyStream = Box<dyn ProxyStream>;
 
 pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
+{
+}
+impl<T, U> InboundDatagram<U> for T where
+    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin + Debug
 {
 }
 pub type AnyInboundDatagram =

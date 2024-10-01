@@ -47,11 +47,14 @@ impl SocksAddrType {
 
 impl SocksAddr {
     pub fn any_ipv4() -> Self {
-        Self::Ip("0.0.0.0:0".parse().unwrap())
+        Self::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
     }
 
     pub fn any_ipv6() -> Self {
-        Self::Ip("[::]:0".parse().unwrap())
+        Self::Ip(SocketAddr::new(
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+            0,
+        ))
     }
 
     pub fn write_buf<T: BufMut>(&self, buf: &mut T) {
@@ -369,6 +372,8 @@ pub enum Type {
     HttpConnect,
     Socks5,
     Tun,
+    #[cfg(target_os = "linux")]
+    Tproxy,
 
     Ignore,
 }

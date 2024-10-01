@@ -4,6 +4,9 @@ mod datagram;
 pub use inbound::get_runner as get_tun_runner;
 mod routes;
 
+#[cfg(target_os = "linux")] // for tproxy
+pub use datagram::TunDatagram;
+
 #[cfg(test)]
 mod tests {
     use std::thread;

@@ -1,17 +1,9 @@
 ---
-port: 8888
-socks-port: 8889
-mixed-port: 8899
 tproxy-port: 8900
 
 mode: rule
 log-level: debug
 
-
-proxies:
-  - name: "tor"
-    type: tor
-
 rules:
-  - MATCH, tor
+  - MATCH, DIRECT
 ...

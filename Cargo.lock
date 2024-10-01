@@ -1041,7 +1041,7 @@ dependencies = [
  "sha2",
  "shadowsocks",
  "smoltcp",
- "socket2",
+ "socket2 0.5.7",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1061,6 +1061,7 @@ dependencies = [
  "tuic",
  "tuic-quinn",
  "tun",
+ "unix-udp-sock",
  "url",
  "uuid",
  "webpki-roots",
@@ -2692,7 +2693,7 @@ dependencies = [
  "http-body",
  "hyper",
  "pin-project-lite",
- "socket2",
+ "socket2 0.5.7",
  "tokio",
  "tower-service",
  "tracing",
@@ -2864,7 +2865,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b58db92f96b720de98181bbbe63c831e87005ab460c1bf306eb2622b4707997f"
 dependencies = [
- "socket2",
+ "socket2 0.5.7",
  "widestring",
  "windows-sys 0.48.0",
  "winreg",
@@ -4100,7 +4101,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.0.0",
  "rustls",
- "socket2",
+ "socket2 0.5.7",
  "thiserror",
  "tokio",
  "tracing",
@@ -4131,7 +4132,7 @@ checksum = "4fe68c2e9e1a1234e218683dbdf9f9dfcb094113c5ac2b938dfcb9bab4c4140b"
 dependencies = [
  "libc",
  "once_cell",
- "socket2",
+ "socket2 0.5.7",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -4822,7 +4823,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "shadowsocks-crypto",
- "socket2",
+ "socket2 0.5.7",
  "spin 0.9.8",
  "thiserror",
  "tokio",
@@ -4951,6 +4952,16 @@ dependencies = [
  "heapless",
  "log",
  "managed",
+]
+
+[[package]]
+name = "socket2"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -5271,7 +5282,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.5.7",
  "tokio-macros",
  "tracing",
  "windows-sys 0.48.0",
@@ -5334,7 +5345,7 @@ dependencies = [
  "log",
  "once_cell",
  "pin-project",
- "socket2",
+ "socket2 0.5.7",
  "tokio",
  "windows-sys 0.52.0",
 ]
@@ -5431,7 +5442,7 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost",
- "socket2",
+ "socket2 0.5.7",
  "tokio",
  "tokio-stream",
  "tower 0.4.13",
@@ -6598,6 +6609,22 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "unix-udp-sock"
+version = "0.7.0"
+source = "git+https://github.com/Watfaq/unix-udp-sock.git?rev=cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18#cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
+ "libc",
+ "pin-project-lite",
+ "socket2 0.4.10",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

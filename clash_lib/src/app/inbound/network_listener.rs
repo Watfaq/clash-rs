@@ -2,7 +2,10 @@ use crate::{
     common::auth::ThreadSafeAuthenticator, config::internal::config::BindAddress,
 };
 
-use crate::proxy::{http, mixed, socks, tproxy, AnyInboundListener};
+use crate::proxy::{http, mixed, socks, AnyInboundListener};
+
+#[cfg(target_os = "linux")]
+use crate::proxy::tproxy;
 
 use crate::{proxy::utils::Interface, Dispatcher, Error, Runner};
 use futures::FutureExt;
@@ -124,7 +127,18 @@ impl NetworkInboundListener {
                 self.authenticator.clone(),
             )),
             ListenerType::Tproxy => {
-                Arc::new(tproxy::Listener::new((ip, self.port).into()))
+                #[cfg(target_os = "linux")]
+                {
+                    Arc::new(tproxy::Listener::new(
+                        (ip, self.port).into(),
+                        self.dispatcher.clone(),
+                    ))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    warn!("tproxy is not supported on this platform");
+                    return;
+                }
             }
         };
 
