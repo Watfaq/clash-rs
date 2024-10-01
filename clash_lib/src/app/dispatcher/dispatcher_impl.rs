@@ -123,7 +123,7 @@ impl Dispatcher {
         let mode = *self.mode.lock().unwrap();
         let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
-            RunMode::Rule => self.router.match_route(&sess).await,
+            RunMode::Rule => self.router.match_route(&mut sess).await,
             RunMode::Direct => (PROXY_DIRECT, None),
         };
 
@@ -315,7 +315,7 @@ impl Dispatcher {
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
-                    RunMode::Rule => router.match_route(&sess).await,
+                    RunMode::Rule => router.match_route(&mut sess).await,
                     RunMode::Direct => (PROXY_DIRECT, None),
                 };
 

@@ -73,6 +73,8 @@ external-ui: "public"
 experimental:
   ignore-resolve-fail: true
 
+asn-mmdb: Country-asn.mmdb
+
 profile:
   store-selected: true
   store-fake-ip: false
