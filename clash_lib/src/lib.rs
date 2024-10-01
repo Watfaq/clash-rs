@@ -332,22 +332,20 @@ async fn create_components(
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
-    let mmdb = Arc::new(
+    let country_mmdb = Arc::new(
         mmdb::Mmdb::new(
             cwd.join(&config.general.mmdb),
             config.general.mmdb_download_url,
-            client,
+            client.clone(),
         )
         .await?,
     );
 
-    let client = new_http_client(system_resolver)
-        .map_err(|x| Error::DNSError(x.to_string()))?;
     let geodata = Arc::new(
         geodata::GeoData::new(
             cwd.join(&config.general.geosite),
             config.general.geosite_download_url,
-            client,
+            client.clone(),
         )
         .await?,
     );
@@ -362,7 +360,7 @@ async fn create_components(
     let dns_resolver = dns::new_resolver(
         &config.dns,
         Some(cache_store.clone()),
-        Some(mmdb.clone()),
+        Some(country_mmdb.clone()),
     )
     .await;
 
@@ -394,13 +392,25 @@ async fn create_components(
         .await?,
     );
 
+    debug!("initializing country asn mmdb");
+    let p = cwd.join(&config.general.asn_mmdb);
+    let asn_mmdb = if p.exists() || config.general.asn_mmdb_download_url.is_some() {
+        Some(Arc::new(
+            mmdb::Mmdb::new(p, config.general.asn_mmdb_download_url, client.clone())
+                .await?,
+        ))
+    } else {
+        None
+    };
+
     debug!("initializing router");
     let router = Arc::new(
         Router::new(
             config.rules,
             config.rule_providers,
             dns_resolver.clone(),
-            mmdb,
+            country_mmdb,
+            asn_mmdb,
             geodata,
             cwd.to_string_lossy().to_string(),
         )

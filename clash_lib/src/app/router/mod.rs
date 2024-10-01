@@ -16,7 +16,7 @@ use crate::app::router::rules::final_::Final;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use super::{
     dns::ThreadSafeDNSResolver,
@@ -33,9 +33,9 @@ pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
-    #[allow(dead_code)]
-    rule_provider_registry: HashMap<String, ThreadSafeRuleProvider>,
     dns_resolver: ThreadSafeDNSResolver,
+
+    asn_mmdb: Option<Arc<Mmdb>>,
 }
 
 pub type ThreadSafeRouter = Arc<Router>;
@@ -47,7 +47,8 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        mmdb: Arc<Mmdb>,
+        country_mmdb: Arc<Mmdb>,
+        asn_mmdb: Option<Arc<Mmdb>>,
         geodata: Arc<GeoData>,
         cwd: String,
     ) -> Self {
@@ -57,7 +58,7 @@ impl Router {
             rule_providers,
             &mut rule_provider_registry,
             dns_resolver.clone(),
-            mmdb.clone(),
+            country_mmdb.clone(),
             geodata.clone(),
             cwd,
         )
@@ -70,23 +71,24 @@ impl Router {
                 .map(|r| {
                     map_rule_type(
                         r,
-                        mmdb.clone(),
+                        country_mmdb.clone(),
                         geodata.clone(),
                         Some(&rule_provider_registry),
                     )
                 })
                 .collect(),
             dns_resolver,
-            rule_provider_registry,
+
+            asn_mmdb,
         }
     }
 
+    /// this mutates the session, attaching resolved IP and ASN
     pub async fn match_route(
         &self,
-        sess: &Session,
+        sess: &mut Session,
     ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
         let mut sess_resolved = false;
-        let mut sess_dup = sess.clone();
 
         for r in self.rules.iter() {
             if sess.destination.is_domain()
@@ -98,15 +100,40 @@ impl Router {
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
                 {
-                    sess_dup.resolved_ip = Some(ip);
+                    sess.resolved_ip = Some(ip);
                     sess_resolved = true;
                 }
             }
 
-            if r.apply(&sess_dup) {
+            let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
+            if let (Some(ip), Some(asn_mmdb)) = (mayby_ip, &self.asn_mmdb) {
+                // try simplified mmdb first
+                let rv = asn_mmdb.lookup_contry(ip);
+                if let Ok(country) = rv {
+                    sess.asn = country
+                        .country
+                        .and_then(|c| c.iso_code)
+                        .map(|s| s.to_string());
+                }
+                if sess.asn.is_none() {
+                    match asn_mmdb.lookup_asn(ip) {
+                        Ok(asn) => {
+                            trace!("asn for {} is {:?}", ip, asn);
+                            sess.asn = asn
+                                .autonomous_system_organization
+                                .map(|s| s.to_string());
+                        }
+                        Err(e) => {
+                            trace!("failed to lookup ASN for {}: {}", ip, e);
+                        }
+                    }
+                }
+            }
+
+            if r.apply(sess) {
                 info!(
                     "matched {} to target {}[{}]",
-                    &sess_dup,
+                    &sess,
                     r.target(),
                     r.type_name()
                 );
@@ -303,6 +330,8 @@ pub fn map_rule_type(
                     .clone(),
             )),
             None => {
+                // this is called in remote rule provider with no rule provider
+                // registry, in this case, we should panic
                 unreachable!("you shouldn't nest rule-set within another rule-set")
             }
         },
@@ -390,6 +419,7 @@ mod tests {
             Default::default(),
             mock_resolver,
             Arc::new(mmdb),
+            None,
             Arc::new(geodata),
             temp_dir.path().to_str().unwrap().to_string(),
         )
@@ -397,7 +427,7 @@ mod tests {
 
         assert_eq!(
             router
-                .match_route(&Session {
+                .match_route(&mut Session {
                     destination: crate::session::SocksAddr::Domain(
                         "china.com".to_string(),
                         1111,
@@ -412,7 +442,7 @@ mod tests {
 
         assert_eq!(
             router
-                .match_route(&Session {
+                .match_route(&mut Session {
                     destination: crate::session::SocksAddr::Domain(
                         "t.me".to_string(),
                         1111,
@@ -427,7 +457,7 @@ mod tests {
 
         assert_eq!(
             router
-                .match_route(&Session {
+                .match_route(&mut Session {
                     destination: crate::session::SocksAddr::Domain(
                         "git.io".to_string(),
                         1111
@@ -443,7 +473,7 @@ mod tests {
 
         assert_eq!(
             router
-                .match_route(&Session {
+                .match_route(&mut Session {
                     destination: crate::session::SocksAddr::Domain(
                         "no-match".to_string(),
                         1111

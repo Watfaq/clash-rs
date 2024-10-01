@@ -12,6 +12,7 @@ fn default_tun_address() -> String {
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
+    #[serde(alias = "device-url")]
     pub device_id: String,
     /// tun interface address
     #[serde(default = "default_tun_address")]
@@ -293,6 +294,10 @@ pub struct Config {
     pub mmdb: String,
     /// Country database download url
     pub mmdb_download_url: Option<String>,
+    /// Optional ASN database path relative to the $CWD
+    pub asn_mmdb: String,
+    /// Optional ASN database download url
+    pub asn_mmdb_download_url: Option<String>,
     /// Geosite database path relative to the $CWD
     pub geosite: String,
     /// Geosite database download url
@@ -396,6 +401,8 @@ impl Default for Config {
                 "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb"
                     .to_owned(),
             ),
+            asn_mmdb: "Country-asn.mmdb".to_string(),
+            asn_mmdb_download_url: None, // can be downloaded from the same release but let's not make it default
             geosite: "geosite.dat".to_string(),
             geosite_download_url: Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".to_owned()),
             tun: Default::default(),
