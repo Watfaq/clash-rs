@@ -123,10 +123,17 @@ impl NetworkInboundListener {
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             )),
-            ListenerType::Tproxy => Arc::new(tproxy::Listener::new(
-                (ip, self.port).into(),
-                self.dispatcher.clone(),
-            )),
+            ListenerType::Tproxy => {
+                if cfg!(target_os = "linux") {
+                    Arc::new(tproxy::Listener::new(
+                        (ip, self.port).into(),
+                        self.dispatcher.clone(),
+                    ))
+                } else {
+                    warn!("tproxy is not supported on this platform");
+                    return;
+                }
+            }
         };
 
         if listener.handle_tcp() {

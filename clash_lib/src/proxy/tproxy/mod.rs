@@ -25,14 +25,13 @@ impl Listener {
 #[async_trait]
 impl InboundListener for Listener {
     fn handle_tcp(&self) -> bool {
-        cfg!(target_os = "linux")
+        true
     }
 
     fn handle_udp(&self) -> bool {
-        cfg!(target_os = "linux")
+        true
     }
 
-    #[cfg(target_os = "linux")]
     async fn listen_tcp(&self) -> std::io::Result<()> {
         use socket2::Socket;
         use tokio::net::TcpListener;
@@ -46,6 +45,7 @@ impl InboundListener for Listener {
         let socket =
             Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?;
         socket.set_ip_transparent(true)?;
+        socket.set_nonblocking(true)?;
         socket.bind(&self.addr.into())?;
         socket.listen(1024)?;
 
@@ -76,13 +76,6 @@ impl InboundListener for Listener {
         }
     }
 
-    #[cfg(not(target_os = "linux"))]
-    async fn listen_tcp(&self) -> std::io::Result<()> {
-        warn!("tproxy not supported on non Linux");
-        Ok(())
-    }
-
-    #[cfg(target_os = "linux")]
     async fn listen_udp(&self) -> std::io::Result<()> {
         use std::os::fd::{AsFd, AsRawFd};
 
@@ -110,15 +103,8 @@ impl InboundListener for Listener {
 
         handle_inbound_datagram(Arc::new(listener), self.dispather.clone()).await
     }
-
-    #[cfg(not(target_os = "linux"))]
-    async fn listen_udp(&self) -> std::io::Result<()> {
-        warn!("tproxy not supported on non Linux");
-        Ok(())
-    }
 }
 
-#[cfg(target_os = "linux")]
 async fn handle_inbound_datagram(
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
@@ -176,7 +162,12 @@ async fn handle_inbound_datagram(
         while let Ok(meta) = socket.recv_msg(&mut buf).await {
             match meta.orig_dst {
                 Some(orig_dst) => {
-                    if orig_dst.ip().is_multicast() {
+                    if orig_dst.ip().is_multicast()
+                        || match orig_dst.ip() {
+                            std::net::IpAddr::V4(ip) => ip.is_broadcast(),
+                            std::net::IpAddr::V6(_) => false,
+                        }
+                    {
                         continue;
                     }
 

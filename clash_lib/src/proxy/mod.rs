@@ -28,6 +28,7 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
+#[cfg(target_os = "linux")]
 pub mod tproxy;
 
 pub(crate) mod datagram;
