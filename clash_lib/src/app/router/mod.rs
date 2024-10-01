@@ -16,7 +16,7 @@ use crate::app::router::rules::final_::Final;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use super::{
     dns::ThreadSafeDNSResolver,
@@ -107,9 +107,26 @@ impl Router {
 
             let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
             if let (Some(ip), Some(asn_mmdb)) = (mayby_ip, &self.asn_mmdb) {
-                if let Ok(asn) = asn_mmdb.lookup_asn(ip) {
-                    sess.asn =
-                        asn.autonomous_system_organization.map(|s| s.to_string());
+                // try simplified mmdb first
+                let rv = asn_mmdb.lookup_contry(ip);
+                if let Ok(country) = rv {
+                    sess.asn = country
+                        .country
+                        .and_then(|c| c.iso_code)
+                        .map(|s| s.to_string());
+                }
+                if !sess.asn.is_some() {
+                    match asn_mmdb.lookup_asn(ip) {
+                        Ok(asn) => {
+                            trace!("asn for {} is {:?}", ip, asn);
+                            sess.asn = asn
+                                .autonomous_system_organization
+                                .map(|s| s.to_string());
+                        }
+                        Err(e) => {
+                            trace!("failed to lookup ASN for {}: {}", ip, e);
+                        }
+                    }
                 }
             }
 

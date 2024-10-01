@@ -468,6 +468,7 @@ impl Debug for Session {
             .field("destination", &self.destination)
             .field("packet_mark", &self.so_mark)
             .field("iface", &self.iface)
+            .field("asn", &self.asn)
             .finish()
     }
 }

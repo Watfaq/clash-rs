@@ -332,7 +332,7 @@ async fn create_components(
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
-    let contry_mmdb = Arc::new(
+    let country_mmdb = Arc::new(
         mmdb::Mmdb::new(
             cwd.join(&config.general.mmdb),
             config.general.mmdb_download_url,
@@ -360,7 +360,7 @@ async fn create_components(
     let dns_resolver = dns::new_resolver(
         &config.dns,
         Some(cache_store.clone()),
-        Some(contry_mmdb.clone()),
+        Some(country_mmdb.clone()),
     )
     .await;
 
@@ -409,7 +409,7 @@ async fn create_components(
             config.rules,
             config.rule_providers,
             dns_resolver.clone(),
-            contry_mmdb,
+            country_mmdb,
             asn_mmdb,
             geodata,
             cwd.to_string_lossy().to_string(),
