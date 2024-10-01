@@ -1,9 +1,18 @@
-use std::{net::SocketAddr, sync::Arc};
-
-use crate::{app::dispatcher::Dispatcher, proxy::InboundListener};
+use super::tun::TunDatagram;
+use crate::{
+    app::dispatcher::Dispatcher,
+    proxy::{datagram::UdpPacket, utils::apply_tcp_options, InboundListener},
+    session::{Network, Session, Type},
+};
 use async_trait::async_trait;
-
-use tracing::warn;
+use socket2::{Domain, Socket};
+use std::{
+    net::SocketAddr,
+    os::fd::{AsFd, AsRawFd},
+    sync::Arc,
+};
+use tokio::net::TcpListener;
+use tracing::{trace, warn};
 
 pub struct Listener {
     addr: SocketAddr,
@@ -33,15 +42,6 @@ impl InboundListener for Listener {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        use socket2::Socket;
-        use tokio::net::TcpListener;
-        use tracing::trace;
-
-        use crate::{
-            proxy::utils::apply_tcp_options,
-            session::{Network, Session, Type},
-        };
-
         let socket =
             Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?;
         socket.set_ip_transparent(true)?;
@@ -77,10 +77,6 @@ impl InboundListener for Listener {
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        use std::os::fd::{AsFd, AsRawFd};
-
-        use socket2::{Domain, Socket};
-
         let socket = Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)?;
         socket.set_ip_transparent(true)?;
         socket.set_nonblocking(true)?;
@@ -109,15 +105,6 @@ async fn handle_inbound_datagram(
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
 ) -> std::io::Result<()> {
-    use tracing::trace;
-
-    use crate::{
-        proxy::datagram::UdpPacket,
-        session::{Network, Session, Type},
-    };
-
-    use super::tun::TunDatagram;
-
     // dispatcher <-> tproxy communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
 
