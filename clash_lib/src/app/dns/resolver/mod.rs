@@ -17,7 +17,7 @@ use crate::{app::profile::ThreadSafeCacheFile, common::mmdb::Mmdb};
 use super::{Config, ThreadSafeDNSResolver};
 
 pub async fn new(
-    cfg: &Config,
+    cfg: Config,
     store: Option<ThreadSafeCacheFile>,
     mmdb: Option<Arc<Mmdb>>,
 ) -> ThreadSafeDNSResolver {

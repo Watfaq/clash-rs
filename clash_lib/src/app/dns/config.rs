@@ -45,7 +45,7 @@ pub struct FallbackFilter {
     pub domain: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct DoHConfig {
     pub addr: SocketAddr,
@@ -54,7 +54,7 @@ pub struct DoHConfig {
     pub hostname: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct DoH3Config {
     pub addr: SocketAddr,
@@ -63,7 +63,7 @@ pub struct DoH3Config {
     pub hostname: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct DoTConfig {
     pub addr: SocketAddr,
@@ -74,7 +74,7 @@ pub struct DoTConfig {
 pub type DnsServerKey = Option<String>;
 pub type DnsServerCert = Option<String>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DNSListenAddr {
     pub udp: Option<SocketAddr>,
     pub tcp: Option<SocketAddr>,

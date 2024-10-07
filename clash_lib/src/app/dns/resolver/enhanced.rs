@@ -84,7 +84,7 @@ impl EnhancedResolver {
     }
 
     pub async fn new(
-        cfg: &Config,
+        cfg: Config,
         store: ThreadSafeCacheFile,
         mmdb: Arc<Mmdb>,
     ) -> Self {
@@ -110,7 +110,7 @@ impl EnhancedResolver {
                 Some(default_resolver.clone()),
             )
             .await,
-            hosts: cfg.hosts.clone(),
+            hosts: cfg.hosts,
             fallback: if !cfg.fallback.is_empty() {
                 Some(
                     make_clients(
