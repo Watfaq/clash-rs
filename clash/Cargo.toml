@@ -13,6 +13,6 @@ bench = ["clash_lib/bench"]
 onion = ["clash_lib/onion"]
 
 [dependencies]
-clap = { version = "4.5.18", features = ["derive"] }
+clap = { version = "4.5.19", features = ["derive"] }
 
 clash_lib = { path = "../clash_lib", version = "*", default-features = false }
