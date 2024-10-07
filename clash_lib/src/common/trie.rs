@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use std::{collections::HashMap, sync::Arc};
 
 static DOMAIN_STEP: &str = ".";
@@ -7,26 +5,18 @@ static COMPLEX_WILDCARD: &str = "+";
 static DOT_WILDCARD: &str = "";
 static WILDCARD: &str = "*";
 
-#[derive(Clone)]
-pub struct StringTrie<T: Sync + Send + Clone> {
-    root: Node<T>,
-    __type_holder: PhantomData<T>,
-}
-
-#[derive(Clone)]
-pub struct Node<T: Sync + Send + Clone> {
+pub struct Node<T> {
     children: HashMap<String, Node<T>>,
-    // TODO: maybe we only need RefCell here
     data: Option<Arc<T>>,
 }
 
-impl<T: Sync + Send + Clone> Default for Node<T> {
+impl<T> Default for Node<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Sync + Send + Clone> Node<T> {
+impl<T> Node<T> {
     pub fn new() -> Self {
         Node {
             children: HashMap::new(),
@@ -53,20 +43,24 @@ impl<T: Sync + Send + Clone> Node<T> {
     pub fn add_child(&mut self, s: &str, child: Node<T>) {
         self.children.insert(s.to_string(), child);
     }
+
+    pub fn get_children(&self) -> &HashMap<String, Node<T>> {
+        &self.children
+    }
+}
+pub struct StringTrie<T> {
+    root: Node<T>,
 }
 
-impl<T: Sync + Send + Clone> Default for StringTrie<T> {
+impl<T> Default for StringTrie<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Sync + Send + Clone> StringTrie<T> {
+impl<T> StringTrie<T> {
     pub fn new() -> Self {
-        StringTrie {
-            root: Node::new(),
-            __type_holder: PhantomData,
-        }
+        StringTrie { root: Node::new() }
     }
 
     pub fn insert(&mut self, domain: &str, data: Arc<T>) -> bool {
@@ -107,6 +101,53 @@ impl<T: Sync + Send + Clone> StringTrie<T> {
         }
 
         None
+    }
+
+    pub fn traverse<F>(&self, mut f: F)
+    where
+        F: FnMut(&String, &T) -> bool,
+    {
+        for (key, child) in self.root.get_children() {
+            self.traverse_inner(&[key], child, &mut f);
+            if let Some(data) = child.get_data() {
+                if !f(key, data) {
+                    return;
+                }
+            }
+        }
+    }
+
+    fn traverse_inner<'a, F>(
+        &self,
+        keys: &'a [&String],
+        node: &'a Node<T>,
+        f: &mut F,
+    ) -> bool
+    where
+        F: FnMut(&String, &T) -> bool,
+    {
+        for (key, child) in node.get_children() {
+            let keys = vec![&[key], keys].concat();
+
+            let d = keys.iter().map(|x| x.as_str()).collect::<Vec<_>>();
+            if let Some(data) = child.get_data() {
+                let key = if d[0].starts_with(DOT_WILDCARD) {
+                    COMPLEX_WILDCARD.to_string() + d.join(DOMAIN_STEP).as_str()
+                } else {
+                    d.join(DOMAIN_STEP)
+                };
+
+                if !f(&key, data) {
+                    return false;
+                }
+            }
+
+            if !self.traverse_inner(&keys, child, f) {
+                return false;
+            }
+        }
+
+        true
     }
 
     fn insert_inner(&mut self, parts: &[&str], data: Arc<T>) {
