@@ -206,7 +206,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || 'nightly-2024-09-20' }} # until https://github.com/rust-lang/rust-clippy/issues/13457
+          toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
 

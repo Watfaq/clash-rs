@@ -191,7 +191,7 @@ struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
     b_to_a_timeout_duration: Duration,
 }
 
-impl<'a, A, B> Future for CopyBidirectional<'a, A, B>
+impl<A, B> Future for CopyBidirectional<'_, A, B>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
