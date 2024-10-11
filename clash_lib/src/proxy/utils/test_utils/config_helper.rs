@@ -51,7 +51,7 @@ pub async fn load_config() -> anyhow::Result<(
     );
 
     let dns_resolver = Arc::new(
-        dns::EnhancedResolver::new(&config.dns, cache_store.clone(), mmdb.clone())
+        dns::EnhancedResolver::new(config.dns, cache_store.clone(), mmdb.clone())
             .await,
     );
 
