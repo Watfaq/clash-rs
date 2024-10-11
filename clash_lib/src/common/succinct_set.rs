@@ -18,11 +18,228 @@ pub struct DomainSet {
 }
 
 impl DomainSet {
-    pub fn has(&self, key: &str) -> bool {}
+    pub fn has(&self, key: &str) -> bool {
+        let key = key
+            .chars()
+            .rev()
+            .map(|x| x.to_ascii_lowercase())
+            .collect::<Vec<_>>();
+        let mut node_id = 0;
+        let mut bm_idx = 0;
+
+        struct Cursor {
+            bm_idx: usize,
+            index: usize,
+        }
+
+        let mut stack = vec![];
+
+        enum State {
+            Restart,
+            Done,
+        }
+
+        let mut i: usize = 0;
+
+        while i < key.len()
+        // i++
+        {
+            let mut state = State::Restart;
+
+            'ctrl: loop {
+                match state {
+                    State::Restart => {
+                        state = State::Done;
+
+                        let c = key[i];
+                        loop
+                        // bm_idx++
+                        {
+                            if get_bit(&self.label_bit_map, bm_idx) {
+                                if !stack.is_empty() {
+                                    let cursor: Cursor = stack.pop().unwrap();
+                                    let next_node_id = count_zeros(
+                                        &self.label_bit_map,
+                                        &self.ranks,
+                                        cursor.bm_idx + 1,
+                                    );
+                                    let mut next_bm_idx = select_ith_one(
+                                        &self.label_bit_map,
+                                        &self.ranks,
+                                        &self.selects,
+                                        next_node_id - 1,
+                                    ) + 1;
+
+                                    let mut j = cursor.index;
+                                    while j < key.len()
+                                        && key[j] != DOMAIN_STEP as char
+                                    {
+                                        j += 1;
+                                    }
+                                    if j == key.len() {
+                                        if get_bit(
+                                            &self.leaves,
+                                            next_node_id as isize,
+                                        ) {
+                                            return true;
+                                        } else {
+                                            state = State::Restart;
+                                            continue 'ctrl;
+                                        }
+                                    }
+
+                                    while next_bm_idx - next_node_id
+                                        < self.labels.len()
+                                    {
+                                        if self.labels[next_bm_idx - next_node_id]
+                                            == DOMAIN_STEP
+                                        {
+                                            bm_idx = next_bm_idx as isize;
+                                            node_id = next_node_id;
+                                            i = j;
+
+                                            state = State::Restart;
+                                            continue 'ctrl;
+                                        }
+                                        next_bm_idx += 1;
+                                    }
+                                }
+                                return false;
+                            }
+
+                            if self.labels[bm_idx as usize - node_id]
+                                == COMPLEX_WILDCARD
+                            {
+                                return true;
+                            } else if self.labels[bm_idx as usize - node_id]
+                                == WILDCARD
+                            {
+                                let cursor = Cursor {
+                                    bm_idx: bm_idx as usize,
+                                    index: i,
+                                };
+                                stack.push(cursor);
+                            } else if self.labels[bm_idx as usize - node_id]
+                                == c as u8
+                            {
+                                break;
+                            }
+
+                            bm_idx += 1;
+                        }
+
+                        node_id = count_zeros(
+                            &self.label_bit_map,
+                            &self.ranks,
+                            bm_idx as usize + 1,
+                        );
+                        bm_idx = select_ith_one(
+                            &self.label_bit_map,
+                            &self.ranks,
+                            &self.selects,
+                            node_id - 1,
+                        ) as isize
+                            + 1;
+
+                        i += 1;
+                    }
+                    State::Done => {
+                        break;
+                    }
+                }
+            }
+        }
+
+        get_bit(&self.leaves, node_id as isize)
+    }
+
+    pub fn traverse<F>(&self, mut f: F)
+    where
+        F: FnMut(&String) -> bool,
+    {
+        self.keys(|x| f(&x.chars().rev().collect::<String>()));
+    }
 }
 
 impl DomainSet {
-    fn init(&mut self) {}
+    fn init(&mut self) {
+        self.ranks.push(0);
+        for i in 0..self.label_bit_map.len() {
+            let n = self.label_bit_map[i].count_ones();
+            self.ranks.push(self.ranks.last().unwrap() + n as i32);
+        }
+
+        let mut n = 0;
+        for i in 0..self.label_bit_map.len() << 6 {
+            let z = self.label_bit_map[i >> 6] >> (i & 63) & 1;
+            if z == 1 && n & 63 == 0 {
+                self.selects.push(i as i32);
+            }
+            n += z;
+        }
+    }
+
+    fn keys<F>(&self, mut f: F)
+    where
+        F: FnMut(&String) -> bool,
+    {
+        let mut current_key = vec![];
+
+        fn traverse<F>(
+            this: &DomainSet,
+            current_key: &mut Vec<char>,
+            node_id: isize,
+            bm_idx: isize,
+            f: &mut F,
+        ) -> bool
+        where
+            F: FnMut(&String) -> bool,
+        {
+            if get_bit(&this.leaves, node_id) {
+                if !f(&current_key.iter().collect()) {
+                    return false;
+                }
+            }
+
+            let mut bm_idx = bm_idx;
+
+            loop {
+                if get_bit(&this.label_bit_map, bm_idx) {
+                    return true;
+                }
+
+                let next_label = this.labels[(bm_idx - node_id) as usize];
+                current_key.push(next_label as char);
+                let next_node_id = count_zeros(
+                    &this.label_bit_map,
+                    &this.ranks,
+                    bm_idx as usize + 1,
+                );
+                let next_bm_idx = select_ith_one(
+                    &this.label_bit_map,
+                    &this.ranks,
+                    &this.selects,
+                    next_node_id - 1,
+                ) + 1;
+
+                if !traverse(
+                    &this,
+                    current_key,
+                    next_node_id as isize,
+                    next_bm_idx as isize,
+                    f,
+                ) {
+                    return false;
+                }
+
+                current_key.pop();
+
+                bm_idx += 1;
+            }
+        }
+
+        traverse(&self, &mut current_key, 0, 0, &mut f);
+    }
 }
 
 struct QElt {
@@ -32,7 +249,107 @@ struct QElt {
 }
 
 impl<T> From<StringTrie<T>> for DomainSet {
-    fn from(value: StringTrie<T>) -> Self {}
+    fn from(value: StringTrie<T>) -> Self {
+        let mut keys = vec![];
+        value.traverse(|key, _| {
+            keys.push(key.chars().rev().collect::<String>());
+            true
+        });
+        keys.sort();
+
+        let mut rv = DomainSet::default();
+
+        let mut l_idx = 0;
+
+        let mut queue = vec![QElt {
+            s: 0,
+            e: keys.len(),
+            col: 0,
+        }];
+
+        let mut i = 0;
+        loop {
+            let elt = &mut queue[i];
+            if elt.col == keys[elt.s].len() {
+                elt.s += 1;
+                set_bit(&mut rv.leaves, i, true);
+            }
+
+            let mut j = elt.s;
+            let e = elt.e;
+            let col = elt.col;
+            while j < e {
+                let frm = j;
+                while j < e && keys[j].chars().nth(col) == keys[frm].chars().nth(col)
+                {
+                    j += 1;
+                }
+
+                queue.push(QElt {
+                    s: frm,
+                    e: j,
+                    col: col + 1,
+                });
+                rv.labels.push(keys[frm].chars().nth(col).unwrap() as u8);
+                set_bit(&mut rv.label_bit_map, l_idx, false);
+                l_idx += 1;
+            }
+
+            set_bit(&mut rv.label_bit_map, l_idx, true);
+            l_idx += 1;
+
+            if i == queue.len() - 1 {
+                break;
+            }
+            i += 1;
+        }
+
+        rv.init();
+
+        rv
+    }
+}
+
+fn get_bit(bm: &Vec<u64>, i: isize) -> bool {
+    bm[(i >> 6) as usize] & (1 << (i & 63) as usize) != 0
+}
+
+fn set_bit(bm: &mut Vec<u64>, i: usize, v: bool) {
+    while i >> 6 >= (bm.len()) {
+        bm.push(0);
+    }
+    bm[i >> 6] |= ((v as usize) << (i & 63)) as u64;
+}
+
+fn count_zeros(bm: &Vec<u64>, ranks: &Vec<i32>, i: usize) -> usize {
+    i - ranks[i >> 6] as usize
+        - (bm[i >> 6] & (1 << (i & 63)) - 1).count_ones() as usize
+}
+
+fn select_ith_one(
+    bm: &Vec<u64>,
+    ranks: &Vec<i32>,
+    selects: &Vec<i32>,
+    i: usize,
+) -> usize {
+    let base = selects[i >> 6] & !63;
+    let mut find_ith_one = i as isize - ranks[base as usize >> 6] as isize;
+    for i in base as usize >> 6..bm.len() {
+        let mut bit_idx = 0;
+        let mut w = bm[i];
+        while w > 0 {
+            find_ith_one -= (w & 1) as isize;
+            if find_ith_one < 0 {
+                return (i << 6) + bit_idx;
+            }
+
+            let t0 = (w & !1).trailing_zeros();
+            w = w.unbounded_shr(t0);
+            bit_idx += t0 as usize;
+        }
+    }
+
+    unreachable!("invalid data");
 }
 
 #[cfg(test)]
@@ -40,7 +357,7 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
-    fn test_domain_set() {
+    fn test_domain_set_complex_wildcard() {
         let mut tree = super::StringTrie::new();
         let domains = vec![
             "baidu.com",
@@ -48,7 +365,7 @@ mod tests {
             "www.google.com",
             "test.a.net",
             "test.a.oc",
-            "Mijia Cloud",
+            "mijia cloud",
             ".qq.com",
             "+.cn",
         ];
@@ -57,14 +374,72 @@ mod tests {
             tree.insert(d, Arc::new(true));
         }
 
+        let mut key_src = vec![];
+        tree.traverse(|key, _| {
+            key_src.push(key.to_owned());
+            true
+        });
+        key_src.sort();
+
         let set = super::DomainSet::from(tree);
         assert!(set.has("test.cn"));
         assert!(set.has("cn"));
-        assert!(set.has("Mijia Cloud"));
+        assert!(set.has("mijia cloud"));
         assert!(set.has("test.a.net"));
         assert!(set.has("www.qq.com"));
         assert!(set.has("google.com"));
         assert!(!set.has("qq.com"));
         assert!(!set.has("www.baidu.com"));
+
+        test_dump(&key_src, &set);
+    }
+
+    #[test]
+    fn test_domain_set_wildcard() {
+        let mut tree = super::StringTrie::new();
+        let domains = vec![
+            "*.*.*.baidu.com",
+            "www.baidu.*",
+            "stun.*.*",
+            "*.*.qq.com",
+            "test.*.baidu.com",
+            "*.apple.com",
+        ];
+
+        for d in domains {
+            tree.insert(d, Arc::new(true));
+        }
+
+        let mut key_src = vec![];
+        tree.traverse(|key, _| {
+            key_src.push(key.to_owned());
+            true
+        });
+        key_src.sort();
+
+        let set = super::DomainSet::from(tree);
+
+        assert!(set.has("www.baidu.com"));
+        assert!(set.has("test.test.baidu.com"));
+        assert!(set.has("test.test.qq.com"));
+        assert!(set.has("stun.ab.cd"));
+        assert!(!set.has("test.baidu.com"));
+        assert!(!set.has("www.google.com"));
+        assert!(!set.has("a.www.google.com"));
+        assert!(!set.has("test.qq.com"));
+        assert!(!set.has("test.test.test.qq.com"));
+
+        test_dump(&key_src, &set);
+    }
+
+    fn test_dump(data_src: &Vec<String>, set: &super::DomainSet) {
+        let mut data_set = vec![];
+        set.traverse(|key| {
+            data_set.push(key.to_owned());
+            true
+        });
+        data_set.sort();
+
+        assert_eq!(data_src, &data_set);
     }
 }

@@ -131,10 +131,11 @@ impl<T> StringTrie<T> {
 
             let d = keys.iter().map(|x| x.as_str()).collect::<Vec<_>>();
             if let Some(data) = child.get_data() {
-                let key = if d[0].starts_with(DOT_WILDCARD) {
-                    COMPLEX_WILDCARD.to_string() + d.join(DOMAIN_STEP).as_str()
+                let domain = d.join(DOMAIN_STEP);
+                let key = if domain.starts_with(DOMAIN_STEP) {
+                    COMPLEX_WILDCARD.to_string() + domain.as_str()
                 } else {
-                    d.join(DOMAIN_STEP)
+                    domain
                 };
 
                 if !f(&key, data) {
