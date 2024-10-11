@@ -153,6 +153,7 @@ impl DomainSet {
         get_bit(&self.leaves, node_id as isize)
     }
 
+    #[cfg(test)]
     pub fn traverse<F>(&self, mut f: F)
     where
         F: FnMut(&String) -> bool,
@@ -179,6 +180,7 @@ impl DomainSet {
         }
     }
 
+    #[cfg(test)]
     fn keys<F>(&self, mut f: F)
     where
         F: FnMut(&String) -> bool,
@@ -248,6 +250,9 @@ struct QElt {
     col: usize,
 }
 
+/// Convert a `StringTrie` to a `DomainSet`.
+/// TODO: support loading from a binary file.
+/// e.g. the so called 'mrs' file in the MiHoMo project.
 impl<T> From<StringTrie<T>> for DomainSet {
     fn from(value: StringTrie<T>) -> Self {
         let mut keys = vec![];
