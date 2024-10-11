@@ -127,7 +127,7 @@ impl<T> StringTrie<T> {
         F: FnMut(&String, &T) -> bool,
     {
         for (key, child) in node.get_children() {
-            let keys = vec![&[key], keys].concat();
+            let keys = [&[key], keys].concat();
 
             let d = keys.iter().map(|x| x.as_str()).collect::<Vec<_>>();
             if let Some(data) = child.get_data() {

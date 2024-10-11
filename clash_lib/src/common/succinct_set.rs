@@ -197,10 +197,8 @@ impl DomainSet {
         where
             F: FnMut(&String) -> bool,
         {
-            if get_bit(&this.leaves, node_id) {
-                if !f(&current_key.iter().collect()) {
-                    return false;
-                }
+            if get_bit(&this.leaves, node_id) && !f(&current_key.iter().collect()) {
+                return false;
             }
 
             let mut bm_idx = bm_idx;
@@ -225,7 +223,7 @@ impl DomainSet {
                 ) + 1;
 
                 if !traverse(
-                    &this,
+                    this,
                     current_key,
                     next_node_id as isize,
                     next_bm_idx as isize,
@@ -240,7 +238,7 @@ impl DomainSet {
             }
         }
 
-        traverse(&self, &mut current_key, 0, 0, &mut f);
+        traverse(self, &mut current_key, 0, 0, &mut f);
     }
 }
 
@@ -328,7 +326,7 @@ fn set_bit(bm: &mut Vec<u64>, i: usize, v: bool) {
 
 fn count_zeros(bm: &Vec<u64>, ranks: &Vec<i32>, i: usize) -> usize {
     i - ranks[i >> 6] as usize
-        - (bm[i >> 6] & (1 << (i & 63)) - 1).count_ones() as usize
+        - (bm[i >> 6] & ((1 << (i & 63)) - 1)).count_ones() as usize
 }
 
 fn select_ith_one(
