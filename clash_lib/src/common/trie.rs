@@ -108,7 +108,7 @@ impl<T> StringTrie<T> {
         F: FnMut(&String, &T) -> bool,
     {
         for (key, child) in self.root.get_children() {
-            self.traverse_inner(&[key], child, &mut f);
+            Self::traverse_inner(&[key], child, &mut f);
             if let Some(data) = child.get_data() {
                 if !f(key, data) {
                     return;
@@ -118,7 +118,6 @@ impl<T> StringTrie<T> {
     }
 
     fn traverse_inner<'a, F>(
-        &self,
         keys: &'a [&String],
         node: &'a Node<T>,
         f: &mut F,
@@ -143,7 +142,7 @@ impl<T> StringTrie<T> {
                 }
             }
 
-            if !self.traverse_inner(&keys, child, f) {
+            if !Self::traverse_inner(&keys, child, f) {
                 return false;
             }
         }

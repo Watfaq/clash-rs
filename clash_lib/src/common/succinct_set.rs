@@ -34,6 +34,7 @@ impl DomainSet {
 
         let mut stack = vec![];
 
+        #[derive(PartialEq)]
         enum State {
             Restart,
             Done,
@@ -46,107 +47,87 @@ impl DomainSet {
         {
             let mut state = State::Restart;
 
-            'ctrl: loop {
-                match state {
-                    State::Restart => {
-                        state = State::Done;
+            'ctrl: while state == State::Restart {
+                state = State::Done;
 
-                        let c = key[i];
-                        loop
-                        // bm_idx++
-                        {
-                            if get_bit(&self.label_bit_map, bm_idx) {
-                                if !stack.is_empty() {
-                                    let cursor: Cursor = stack.pop().unwrap();
-                                    let next_node_id = count_zeros(
-                                        &self.label_bit_map,
-                                        &self.ranks,
-                                        cursor.bm_idx + 1,
-                                    );
-                                    let mut next_bm_idx = select_ith_one(
-                                        &self.label_bit_map,
-                                        &self.ranks,
-                                        &self.selects,
-                                        next_node_id - 1,
-                                    ) + 1;
+                let c = key[i];
+                loop
+                // bm_idx++
+                {
+                    if get_bit(&self.label_bit_map, bm_idx) {
+                        if !stack.is_empty() {
+                            let cursor: Cursor = stack.pop().unwrap();
+                            let next_node_id = count_zeros(
+                                &self.label_bit_map,
+                                &self.ranks,
+                                cursor.bm_idx + 1,
+                            );
+                            let mut next_bm_idx = select_ith_one(
+                                &self.label_bit_map,
+                                &self.ranks,
+                                &self.selects,
+                                next_node_id - 1,
+                            ) + 1;
 
-                                    let mut j = cursor.index;
-                                    while j < key.len()
-                                        && key[j] != DOMAIN_STEP as char
-                                    {
-                                        j += 1;
-                                    }
-                                    if j == key.len() {
-                                        if get_bit(
-                                            &self.leaves,
-                                            next_node_id as isize,
-                                        ) {
-                                            return true;
-                                        } else {
-                                            state = State::Restart;
-                                            continue 'ctrl;
-                                        }
-                                    }
-
-                                    while next_bm_idx - next_node_id
-                                        < self.labels.len()
-                                    {
-                                        if self.labels[next_bm_idx - next_node_id]
-                                            == DOMAIN_STEP
-                                        {
-                                            bm_idx = next_bm_idx as isize;
-                                            node_id = next_node_id;
-                                            i = j;
-
-                                            state = State::Restart;
-                                            continue 'ctrl;
-                                        }
-                                        next_bm_idx += 1;
-                                    }
+                            let mut j = cursor.index;
+                            while j < key.len() && key[j] != DOMAIN_STEP as char {
+                                j += 1;
+                            }
+                            if j == key.len() {
+                                if get_bit(&self.leaves, next_node_id as isize) {
+                                    return true;
+                                } else {
+                                    state = State::Restart;
+                                    continue 'ctrl;
                                 }
-                                return false;
                             }
 
-                            if self.labels[bm_idx as usize - node_id]
-                                == COMPLEX_WILDCARD
-                            {
-                                return true;
-                            } else if self.labels[bm_idx as usize - node_id]
-                                == WILDCARD
-                            {
-                                let cursor = Cursor {
-                                    bm_idx: bm_idx as usize,
-                                    index: i,
-                                };
-                                stack.push(cursor);
-                            } else if self.labels[bm_idx as usize - node_id]
-                                == c as u8
-                            {
-                                break;
-                            }
+                            while next_bm_idx - next_node_id < self.labels.len() {
+                                if self.labels[next_bm_idx - next_node_id]
+                                    == DOMAIN_STEP
+                                {
+                                    bm_idx = next_bm_idx as isize;
+                                    node_id = next_node_id;
+                                    i = j;
 
-                            bm_idx += 1;
+                                    state = State::Restart;
+                                    continue 'ctrl;
+                                }
+                                next_bm_idx += 1;
+                            }
                         }
-
-                        node_id = count_zeros(
-                            &self.label_bit_map,
-                            &self.ranks,
-                            bm_idx as usize + 1,
-                        );
-                        bm_idx = select_ith_one(
-                            &self.label_bit_map,
-                            &self.ranks,
-                            &self.selects,
-                            node_id - 1,
-                        ) as isize
-                            + 1;
-
-                        i += 1;
+                        return false;
                     }
-                    State::Done => {
+
+                    if self.labels[bm_idx as usize - node_id] == COMPLEX_WILDCARD {
+                        return true;
+                    } else if self.labels[bm_idx as usize - node_id] == WILDCARD {
+                        let cursor = Cursor {
+                            bm_idx: bm_idx as usize,
+                            index: i,
+                        };
+                        stack.push(cursor);
+                    } else if self.labels[bm_idx as usize - node_id] == c as u8 {
                         break;
                     }
+
+                    bm_idx += 1;
                 }
+
+                node_id = count_zeros(
+                    &self.label_bit_map,
+                    &self.ranks,
+                    bm_idx as usize + 1,
+                );
+                bm_idx = select_ith_one(
+                    &self.label_bit_map,
+                    &self.ranks,
+                    &self.selects,
+                    node_id - 1,
+                ) as isize
+                    + 1;
+
+                i += 1;
             }
         }
 
@@ -313,7 +294,7 @@ impl<T> From<StringTrie<T>> for DomainSet {
     }
 }
 
-fn get_bit(bm: &Vec<u64>, i: isize) -> bool {
+fn get_bit(bm: &[u64], i: isize) -> bool {
     bm[(i >> 6) as usize] & (1 << (i & 63) as usize) != 0
 }
 
@@ -324,22 +305,17 @@ fn set_bit(bm: &mut Vec<u64>, i: usize, v: bool) {
     bm[i >> 6] |= ((v as usize) << (i & 63)) as u64;
 }
 
-fn count_zeros(bm: &Vec<u64>, ranks: &Vec<i32>, i: usize) -> usize {
+fn count_zeros(bm: &[u64], ranks: &[i32], i: usize) -> usize {
     i - ranks[i >> 6] as usize
         - (bm[i >> 6] & ((1 << (i & 63)) - 1)).count_ones() as usize
 }
 
-fn select_ith_one(
-    bm: &Vec<u64>,
-    ranks: &Vec<i32>,
-    selects: &Vec<i32>,
-    i: usize,
-) -> usize {
+fn select_ith_one(bm: &[u64], ranks: &[i32], selects: &[i32], i: usize) -> usize {
     let base = selects[i >> 6] & !63;
     let mut find_ith_one = i as isize - ranks[base as usize >> 6] as isize;
-    for i in base as usize >> 6..bm.len() {
+    for (i, w) in bm.iter().enumerate().skip(base as usize >> 6) {
         let mut bit_idx = 0;
-        let mut w = bm[i];
+        let mut w = *w;
         while w > 0 {
             find_ith_one -= (w & 1) as isize;
             if find_ith_one < 0 {
