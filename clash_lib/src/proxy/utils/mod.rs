@@ -89,6 +89,18 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
     let priority = ["eth", "en", "pdp_ip"];
 
     all_outbounds.sort_by(|left, right| {
+        match (left.addr_v6, right.addr_v6) {
+            (Some(_), None) => return std::cmp::Ordering::Less,
+            (None, Some(_)) => return std::cmp::Ordering::Greater,
+            (Some(left), Some(right)) => {
+                if left.is_unicast_global() && !right.is_unicast_global() {
+                    return std::cmp::Ordering::Less;
+                } else if !left.is_unicast_global() && right.is_unicast_global() {
+                    return std::cmp::Ordering::Greater;
+                }
+            }
+            _ => {}
+        }
         let left = priority
             .iter()
             .position(|x| left.name.contains(x))
