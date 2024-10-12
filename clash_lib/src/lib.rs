@@ -1,5 +1,6 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
+#![feature(unbounded_shifts)]
 
 #[macro_use]
 extern crate anyhow;
@@ -356,9 +357,10 @@ async fn create_components(
         config.profile.store_selected,
     );
 
+    let dns_listen = config.dns.listen.clone();
     debug!("initializing dns resolver");
     let dns_resolver = dns::new_resolver(
-        &config.dns,
+        config.dns,
         Some(cache_store.clone()),
         Some(country_mmdb.clone()),
     )
@@ -444,7 +446,7 @@ async fn create_components(
 
     debug!("initializing dns listener");
     let dns_listener =
-        dns::get_dns_listener(config.dns.listen, dns_resolver.clone(), &cwd).await;
+        dns::get_dns_listener(dns_listen, dns_resolver.clone(), &cwd).await;
 
     Ok(RuntimeComponents {
         cache_store,

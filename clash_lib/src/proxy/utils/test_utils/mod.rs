@@ -46,7 +46,7 @@ pub async fn ping_pong_test(
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port).as_str()).await?;
 
@@ -167,7 +167,7 @@ pub async fn ping_pong_udp_test(
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     let listener = UdpSocket::bind(format!("0.0.0.0:{}", port).as_str()).await?;
     info!("target local server started at: {}", listener.local_addr()?);
@@ -242,7 +242,7 @@ pub async fn ping_pong_udp_test(
 pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
 ) -> anyhow::Result<(u16, u16)> {
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
     proxy_manager
         .url_test(handler, "https://example.com", None)
@@ -259,7 +259,7 @@ pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     // we don't need the resolver, so it doesn't matter to create a casual one
     let stream = handler.connect_datagram(&sess, resolver).await?;
