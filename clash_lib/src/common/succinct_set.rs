@@ -302,7 +302,7 @@ fn set_bit(bm: &mut Vec<u64>, i: usize, v: bool) {
     while i >> 6 >= (bm.len()) {
         bm.push(0);
     }
-    bm[i >> 6] |= ((v as usize) << (i & 63)) as u64;
+    bm[i >> 6] |= (v as u64) << (i & 63);
 }
 
 fn count_zeros(bm: &[u64], ranks: &[i32], i: usize) -> usize {
