@@ -181,7 +181,7 @@ pub fn setup_logging(
 
 struct EventVisitor<'a>(&'a mut Vec<String>);
 
-impl<'a> tracing::field::Visit for EventVisitor<'a> {
+impl tracing::field::Visit for EventVisitor<'_> {
     fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
         println!("bool {} = {}", field.name(), value);
     }
