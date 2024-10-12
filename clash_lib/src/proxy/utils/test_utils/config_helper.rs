@@ -24,10 +24,7 @@ pub fn test_config_base_dir() -> PathBuf {
 
 // load the config from test dir
 // and return the dns resolver for the proxy
-pub async fn load_config() -> anyhow::Result<(
-    crate::config::internal::config::Config,
-    Arc<dyn ClashResolver>,
-)> {
+pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     let root = root_dir();
     let test_base_dir = test_config_base_dir();
     let config_path = test_base_dir.join("ss.yaml").to_str().unwrap().to_owned();
@@ -55,5 +52,5 @@ pub async fn load_config() -> anyhow::Result<(
             .await,
     );
 
-    Ok((config, dns_resolver))
+    Ok(dns_resolver)
 }
