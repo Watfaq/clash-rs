@@ -12,7 +12,11 @@ tracing = ["clash_lib/tracing"]
 bench = ["clash_lib/bench"]
 onion = ["clash_lib/onion"]
 
+dhat-heap = ["dep:dhat"]
+
 [dependencies]
 clap = { version = "4.5.19", features = ["derive"] }
 
 clash_lib = { path = "../clash_lib", version = "*", default-features = false }
+
+dhat = { version = "0.3.3", optional = true }
