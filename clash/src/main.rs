@@ -1,3 +1,7 @@
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 extern crate clash_lib as clash;
 
 use clap::Parser;
@@ -45,6 +49,9 @@ struct Cli {
 }
 
 fn main() {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let cli = Cli::parse();
 
     if cli.version {
@@ -81,6 +88,7 @@ fn main() {
             }
         }
     }
+
     match clash::start(clash::Options {
         config: clash::Config::File(file),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
