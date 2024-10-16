@@ -213,9 +213,9 @@ impl AsyncUdpSocket for UdpHop {
         match io.poll_recv(cx, bufs, &mut meta[len..]) {
             Poll::Pending => {
                 if len > 0 {
-                    return Poll::Ready(Ok(len));
+                    Poll::Ready(Ok(len))
                 } else {
-                    return Poll::Pending;
+                    Poll::Pending
                 }
             }
             Poll::Ready(Ok(res)) => {
@@ -223,13 +223,13 @@ impl AsyncUdpSocket for UdpHop {
                     .skip(len)
                     .take(res)
                     .for_each(|m| m.addr.set_port(self.init_port));
-                return Poll::Ready(Ok(len + res));
+                Poll::Ready(Ok(len + res))
             }
             Poll::Ready(Err(e)) => {
                 tracing::trace!("poll cur conn err {}", e);
-                return Poll::Ready(Err(e));
+                Poll::Ready(Err(e))
             }
-        };
+        }
     }
 
     fn local_addr(&self) -> io::Result<std::net::SocketAddr> {

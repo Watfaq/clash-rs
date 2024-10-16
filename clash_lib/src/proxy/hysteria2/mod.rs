@@ -70,10 +70,13 @@ pub struct HystOption {
     pub salamander: Option<String>,
     pub skip_cert_verify: bool,
     pub alpn: Vec<String>,
+    #[allow(dead_code)]
     pub up_down: Option<(u64, u64)>,
     pub fingerprint: Option<String>,
     pub ca: Option<PathBuf>,
+    #[allow(dead_code)]
     pub ca_str: Option<String>,
+    #[allow(dead_code)]
     pub cwnd: Option<u64>,
 }
 
@@ -157,7 +160,7 @@ impl ServerCertVerifier for CertVerifyOption {
 
 enum CcRx {
     Auto,
-    Fixed(u64),
+    Fixed(#[allow(dead_code)] u64),
 }
 
 impl FromStr for CcRx {
@@ -309,10 +312,7 @@ impl Handler {
         ep.set_default_client_config(self.client_config.clone());
 
         let session = ep
-            .connect(
-                server_socket_addr,
-                self.opts.sni.as_ref().map(|s| s.as_str()).unwrap_or(""),
-            )?
+            .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))?
             .await?;
         let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
@@ -426,7 +426,7 @@ impl OutboundHandler for Handler {
                 Some(s) => s.clone(),
                 None => {
                     let (session, h3_conn) = self
-                        .new_authed_session(&sess, resolver)
+                        .new_authed_session(sess, resolver)
                         .await
                         .map_err(|e| {
                             std::io::Error::new(

@@ -123,5 +123,5 @@ fn hy2_resp_parse() {
     let mut src = BytesMut::from(&[0x01, 0x00, 0x00][..]);
     let msg = Hy2TcpCodec.decode(&mut src).unwrap().unwrap();
     assert!(msg.status == 0x1);
-    assert!(msg.msg == "");
+    assert!(msg.msg.is_empty());
 }
