@@ -28,7 +28,10 @@ impl Decoder for Hy2TcpCodec {
     type Error = std::io::Error;
     type Item = Hy2TcpResp;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> Result<Option<Self::Item>, Self::Error> {
         if !src.has_remaining() {
             return Err(ErrorKind::UnexpectedEof.into());
         }
@@ -42,8 +45,8 @@ impl Decoder for Hy2TcpCodec {
         }
 
         let msg: Vec<u8> = src.split_to(msg_len).into();
-        let msg: String =
-            String::from_utf8(msg).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
+        let msg: String = String::from_utf8(msg)
+            .map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
 
         let padding_len = VarInt::decode(src)
             .map_err(|_| ErrorKind::UnexpectedEof)?
@@ -68,7 +71,12 @@ pub fn padding(range: std::ops::RangeInclusive<u32>) -> Vec<u8> {
 
 impl Encoder<&'_ SocksAddr> for Hy2TcpCodec {
     type Error = std::io::Error;
-    fn encode(&mut self, item: &'_ SocksAddr, buf: &mut BytesMut) -> Result<(), Self::Error> {
+
+    fn encode(
+        &mut self,
+        item: &'_ SocksAddr,
+        buf: &mut BytesMut,
+    ) -> Result<(), Self::Error> {
         const REQ_ID: VarInt = VarInt::from_u32(0x401);
 
         let padding = padding(64..=512);
@@ -123,5 +131,5 @@ fn hy2_resp_parse() {
     let mut src = BytesMut::from(&[0x01, 0x00, 0x00][..]);
     let msg = Hy2TcpCodec.decode(&mut src).unwrap().unwrap();
     assert!(msg.status == 0x1);
-    assert!(msg.msg == "");
+    assert!(msg.msg.is_empty());
 }

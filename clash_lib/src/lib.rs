@@ -448,6 +448,7 @@ async fn create_components(
     let dns_listener =
         dns::get_dns_listener(dns_listen, dns_resolver.clone(), &cwd).await;
 
+    info!("all components initialized");
     Ok(RuntimeComponents {
         cache_store,
         dns_resolver,

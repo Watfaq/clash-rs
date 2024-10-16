@@ -42,6 +42,7 @@ pub struct Burtal {
     budget_at_last_sent: u64,
     rtt: u64,
     in_flight: u64,
+    #[allow(dead_code)]
     send_now: Instant,
 
     sess: quinn::Connection,

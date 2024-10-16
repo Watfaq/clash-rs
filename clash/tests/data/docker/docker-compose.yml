@@ -58,3 +58,22 @@ services:
         source: ./v2ray/key.pem
         target: /etc/v2ray/v2ray.key
     restart: unless-stopped
+
+  hysteria2:
+    image: tobyxdd/hysteria
+    network_mode: "host"
+    command:
+      - server
+      - "-c"
+      - "/etc/hysteria/config.yaml"
+    volumes:
+      - type: bind
+        source: ./hysteria2/config.yaml
+        target: /etc/hysteria/config.yaml
+      - type: bind
+        source: ./v2ray/cert.pem
+        target: /etc/hysteria/cert.pem
+      - type: bind
+        source: ./v2ray/key.pem
+        target: /etc/hysteria/key.pem
+    restart: unless-stopped

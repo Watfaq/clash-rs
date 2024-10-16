@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Formatter},
-    net::SocketAddr,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     num::ParseIntError,
     path::PathBuf,
     pin::Pin,
@@ -23,7 +23,10 @@ use quinn::{
 use quinn_proto::TransportConfig;
 
 use rustls::{
-    client::danger::{ServerCertVerified, ServerCertVerifier},
+    client::{
+        danger::{ServerCertVerified, ServerCertVerifier},
+        WebPkiServerVerifier,
+    },
     ClientConfig as RustlsClientConfig,
 };
 use tokio::{
@@ -38,11 +41,14 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::utils::{encode_hex, sha256},
+    common::{
+        tls::GLOBAL_ROOT_STORE,
+        utils::{encode_hex, sha256},
+    },
     // proxy::hysteria2::congestion::DynCongestion,
     session::{Session, SocksAddr},
 };
-use tracing::debug;
+use tracing::{debug, trace, warn};
 
 use self::{
     codec::Hy2TcpCodec,
@@ -50,8 +56,8 @@ use self::{
 };
 
 use super::{
-    converters::hysteria2::PortGenrateor, ConnectorType, DialWithConnector,
-    OutboundHandler, OutboundType,
+    converters::hysteria2::PortGenrateor, utils::new_udp_socket, ConnectorType,
+    DialWithConnector, OutboundHandler, OutboundType,
 };
 
 #[derive(Clone)]
@@ -64,26 +70,35 @@ pub struct HystOption {
     pub salamander: Option<String>,
     pub skip_cert_verify: bool,
     pub alpn: Vec<String>,
+    #[allow(dead_code)]
     pub up_down: Option<(u64, u64)>,
     pub fingerprint: Option<String>,
     pub ca: Option<PathBuf>,
+    #[allow(dead_code)]
     pub ca_str: Option<String>,
+    #[allow(dead_code)]
     pub cwnd: Option<u64>,
 }
 
 #[derive(Debug)]
 struct CertVerifyOption {
     fingerprint: Option<String>,
-    _ca: Option<PathBuf>,
     skip: bool,
+    pki: Arc<WebPkiServerVerifier>,
 }
 
 impl CertVerifyOption {
     fn new(fingerprint: Option<String>, ca: Option<PathBuf>, skip: bool) -> Self {
+        if ca.is_some() {
+            warn!("hysteria2 custom ca option is not supported yet");
+            // TODO: add load the ca and put it into a Store
+        }
         Self {
             fingerprint,
-            _ca: ca,
             skip,
+            pki: WebPkiServerVerifier::builder(GLOBAL_ROOT_STORE.clone())
+                .build()
+                .unwrap(),
         }
     }
 }
@@ -92,10 +107,10 @@ impl ServerCertVerifier for CertVerifyOption {
     fn verify_server_cert(
         &self,
         end_entity: &rustls::pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: rustls::pki_types::UnixTime,
+        intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        server_name: &rustls::pki_types::ServerName<'_>,
+        ocsp_response: &[u8],
+        now: rustls::pki_types::UnixTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
         if let Some(ref fingerprint) = self.fingerprint {
             let cert_hex = encode_hex(&sha256(end_entity.as_ref()));
@@ -110,36 +125,42 @@ impl ServerCertVerifier for CertVerifyOption {
         if self.skip {
             return Ok(ServerCertVerified::assertion());
         }
-        // todo
-        Ok(ServerCertVerified::assertion())
+
+        self.pki.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![]
+        self.pki.supported_verify_schemes()
     }
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        self.pki.verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        self.pki.verify_tls13_signature(message, cert, dss)
     }
 }
 
 enum CcRx {
     Auto,
-    Fixed(u64),
+    Fixed(#[allow(dead_code)] u64),
 }
 
 impl FromStr for CcRx {
@@ -222,6 +243,7 @@ impl Handler {
 
     async fn new_authed_session(
         &self,
+        sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> anyhow::Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
         // Everytime we enstablish a new session, we should lookup the server
@@ -239,18 +261,19 @@ impl Handler {
 
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
         // and port hopping
-        let mut ep = if self.opts.salamander.is_some() || self.opts.ports.is_some() {
-            debug!("Hysteria2 use salamander obfs");
-
+        let mut ep = if self.opts.salamander.is_some() {
             // let udp = salamander::Salamander::new(
             //     udp_socket,
             //     self.opts.salamander.as_ref().map(|s| s.as_bytes().to_vec()),
             //     self.opts.ports.clone(),
             // )?;
-
-            let port_gen = self.opts.ports.as_ref().unwrap().clone();
-            let udp_hop =
-                udp_hop::UdpHop::new(server_socket_addr.port(), port_gen, None)?;
+            unimplemented!("salamander obfs is not implemented yet");
+        } else if let Some(port_gen) = self.opts.ports.as_ref() {
+            let udp_hop = udp_hop::UdpHop::new(
+                server_socket_addr.port(),
+                port_gen.clone(),
+                None,
+            )?;
             quinn::Endpoint::new_with_abstract_socket(
                 self.ep_config.clone(),
                 None,
@@ -258,14 +281,30 @@ impl Handler {
                 Arc::new(TokioRuntime),
             )?
         } else {
-            let udp = SocketAddr::from(([0, 0, 0, 0], 0));
-            // bind to port 0, so the OS will choose a random port for us
-            let udp_socket = std::net::UdpSocket::bind::<SocketAddr>(udp)?;
+            let socket = {
+                if resolver.ipv6() {
+                    new_udp_socket(
+                        Some((Ipv6Addr::UNSPECIFIED, 0).into()),
+                        sess.iface.clone(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        sess.so_mark,
+                    )
+                    .await?
+                } else {
+                    new_udp_socket(
+                        Some((Ipv4Addr::UNSPECIFIED, 0).into()),
+                        sess.iface.clone(),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        sess.so_mark,
+                    )
+                    .await?
+                }
+            };
 
             quinn::Endpoint::new(
                 self.ep_config.clone(),
                 None,
-                udp_socket,
+                socket.into_std()?,
                 Arc::new(TokioRuntime),
             )?
         };
@@ -273,21 +312,24 @@ impl Handler {
         ep.set_default_client_config(self.client_config.clone());
 
         let session = ep
-            .connect(
-                server_socket_addr,
-                self.opts.sni.as_ref().map(|s| s.as_str()).unwrap_or(""),
-            )?
+            .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))?
             .await?;
         let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         // todo set congestion controller according to cc_rx
 
-        let any = session
+        match session
             .congestion_state()
             .into_any()
             .downcast::<DynController>()
-            .unwrap();
-        any.set_controller(Box::new(Burtal::new(0, session.clone())));
+        {
+            Ok(any) => {
+                any.set_controller(Box::new(Burtal::new(0, session.clone())));
+            }
+            Err(_) => {
+                trace!("congestion controller is not set");
+            }
+        }
 
         anyhow::Ok((session, h3_conn))
     }
@@ -383,8 +425,10 @@ impl OutboundHandler for Handler {
             }) {
                 Some(s) => s.clone(),
                 None => {
-                    let (session, h3_conn) =
-                        self.new_authed_session(resolver).await.map_err(|e| {
+                    let (session, h3_conn) = self
+                        .new_authed_session(sess, resolver)
+                        .await
+                        .map_err(|e| {
                             std::io::Error::new(
                                 std::io::ErrorKind::Other,
                                 format!(
