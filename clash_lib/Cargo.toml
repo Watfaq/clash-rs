@@ -7,7 +7,7 @@ edition = { workspace = true }
 [features]
 default = []
 shadowsocks = ["dep:shadowsocks"]
-tuic = ["dep:tuic", "dep:tuic-quinn", "dep:quinn", "dep:register-count"]
+tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]
 tracing = []
 bench = ["dep:criterion"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
@@ -123,14 +123,22 @@ tor-rtcompat = { version = "0.22", optional = true, default-features = false }
 # tuic
 tuic = { tag = "v1.3.1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 tuic-quinn = { tag = "v1.3.1", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-quinn = { version = "0.11", optional = true, default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
 register-count = { version = "0.1", optional = true }
+
+quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
+
+# hysteria2
+h3 = "0.0.6"
+h3-quinn = "0.0.7"
+quinn-proto = "0.11.8"
+blake2 = "0.10.6"
+digest = "0.10.7"
 
 console-subscriber = { version = "0.4" }
 tracing-timing = { version = "0.6" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
-
 memory-stats = "1.0.0"
+
 
 [dev-dependencies]
 tempfile = "3.13"
