@@ -137,6 +137,7 @@ impl ProxySetProvider {
                                 let h: vmess::Handler = vm.try_into()?;
                                 Ok(Arc::new(h) as _)
                             }
+                            OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => {
                                 let h: wg::Handler = wg.try_into()?;
                                 Ok(Arc::new(h) as _)

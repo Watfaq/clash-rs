@@ -268,6 +268,9 @@ impl OutboundManager {
                         Arc::new(h) as _
                     });
                 }
+                OutboundProxyProtocol::Hysteria2(h) => {
+                    handlers.insert(h.name.clone(), h.clone().try_into()?);
+                }
 
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
