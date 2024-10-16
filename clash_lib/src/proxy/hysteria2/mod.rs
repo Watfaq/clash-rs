@@ -445,8 +445,6 @@ impl OutboundHandler for Handler {
             }
         };
 
-        trace!("hysteria2 tcp connected: {}", self.opts.addr);
-
         let (mut tx, mut rx) = authed_conn.open_bi().await?;
 
         tokio_util::codec::FramedWrite::new(&mut tx, Hy2TcpCodec)
