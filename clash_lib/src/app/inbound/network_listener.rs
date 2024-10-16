@@ -4,6 +4,9 @@ use crate::{
 
 use crate::proxy::{http, mixed, socks, AnyInboundListener};
 
+#[cfg(target_os = "linux")]
+use crate::proxy::tproxy;
+
 use crate::{proxy::utils::Interface, Dispatcher, Error, Runner};
 use futures::FutureExt;
 use network_interface::{Addr, NetworkInterfaceConfig};
@@ -19,6 +22,7 @@ pub enum ListenerType {
     Http,
     Socks5,
     Mixed,
+    Tproxy,
 }
 
 pub struct NetworkInboundListener {
@@ -107,21 +111,35 @@ impl NetworkInboundListener {
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
         let listener: AnyInboundListener = match self.listener_type {
-            ListenerType::Http => http::Listener::new(
+            ListenerType::Http => Arc::new(http::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
-            ListenerType::Socks5 => socks::Listener::new(
+            )),
+            ListenerType::Socks5 => Arc::new(socks::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
-            ListenerType::Mixed => mixed::Listener::new(
+            )),
+            ListenerType::Mixed => Arc::new(mixed::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
-            ),
+            )),
+            ListenerType::Tproxy => {
+                #[cfg(target_os = "linux")]
+                {
+                    Arc::new(tproxy::Listener::new(
+                        (ip, self.port).into(),
+                        self.dispatcher.clone(),
+                    ))
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    warn!("tproxy is not supported on this platform");
+                    return;
+                }
+            }
         };
 
         if listener.handle_tcp() {

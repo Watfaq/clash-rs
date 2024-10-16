@@ -47,11 +47,14 @@ impl SocksAddrType {
 
 impl SocksAddr {
     pub fn any_ipv4() -> Self {
-        Self::Ip("0.0.0.0:0".parse().unwrap())
+        Self::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
     }
 
     pub fn any_ipv6() -> Self {
-        Self::Ip("[::]:0".parse().unwrap())
+        Self::Ip(SocketAddr::new(
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+            0,
+        ))
     }
 
     pub fn write_buf<T: BufMut>(&self, buf: &mut T) {
@@ -369,6 +372,8 @@ pub enum Type {
     HttpConnect,
     Socks5,
     Tun,
+    #[cfg(target_os = "linux")]
+    Tproxy,
 
     Ignore,
 }
@@ -392,10 +397,14 @@ pub struct Session {
     pub source: SocketAddr,
     /// The proxy target address of a proxy connection.
     pub destination: SocksAddr,
+    /// The locally resolved IP address of the destination domain.
+    pub resolved_ip: Option<IpAddr>,
     /// The packet mark SO_MARK
-    pub packet_mark: Option<u32>,
+    pub so_mark: Option<u32>,
     /// The bind interface
     pub iface: Option<Interface>,
+    /// The ASN of the destination IP address. Only for display.
+    pub asn: Option<String>,
 }
 
 impl Session {
@@ -405,16 +414,23 @@ impl Session {
         rv.insert("type".to_string(), Box::new(self.typ) as _);
         rv.insert("sourceIP".to_string(), Box::new(self.source.ip()) as _);
         rv.insert("sourcePort".to_string(), Box::new(self.source.port()) as _);
-        rv.insert(
-            "destinationIP".to_string(),
-            Box::new(self.destination.ip()) as _,
-        );
+        rv.insert("destinationIP".to_string(), {
+            let ip = self.resolved_ip.or(self.destination.ip());
+            let asn = self.asn.clone();
+
+            let rv = match (ip, asn) {
+                (Some(ip), Some(asn)) => format!("{}({})", ip, asn),
+                (Some(ip), None) => ip.to_string(),
+                (None, _) => "".to_string(),
+            };
+            Box::new(rv) as _
+        });
         rv.insert(
             "destinationPort".to_string(),
             Box::new(self.destination.port()) as _,
         );
         rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
-
+        rv.insert("asn".to_string(), Box::new(self.asn.clone()) as _);
         rv
     }
 }
@@ -426,8 +442,10 @@ impl Default for Session {
             typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            packet_mark: None,
+            resolved_ip: None,
+            so_mark: None,
             iface: None,
+            asn: None,
         }
     }
 }
@@ -448,8 +466,9 @@ impl Debug for Session {
             .field("network", &self.network)
             .field("source", &self.source)
             .field("destination", &self.destination)
-            .field("packet_mark", &self.packet_mark)
+            .field("packet_mark", &self.so_mark)
             .field("iface", &self.iface)
+            .field("asn", &self.asn)
             .finish()
     }
 }
@@ -461,8 +480,10 @@ impl Clone for Session {
             typ: self.typ,
             source: self.source,
             destination: self.destination.clone(),
-            packet_mark: self.packet_mark,
+            resolved_ip: self.resolved_ip,
+            so_mark: self.so_mark,
             iface: self.iface.as_ref().cloned(),
+            asn: self.asn.clone(),
         }
     }
 }

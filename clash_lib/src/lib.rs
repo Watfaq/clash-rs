@@ -1,5 +1,6 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
+#![feature(unbounded_shifts)]
 
 #[macro_use]
 extern crate anyhow;
@@ -14,7 +15,11 @@ use crate::{
         internal::{proxy::OutboundProxy, InternalConfig},
     },
 };
-use app::{dispatcher::StatisticsManager, dns::SystemResolver, profile};
+use app::{
+    dispatcher::StatisticsManager,
+    dns::{SystemResolver, ThreadSafeDNSResolver},
+    profile,
+};
 use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
 use once_cell::sync::OnceCell;
@@ -95,7 +100,9 @@ impl Config {
 
 pub struct GlobalState {
     log_level: LogLevel,
-    inbound_listener_handle: Option<JoinHandle<Result<(), Error>>>,
+    // must be Some otherwise we'll refuse to start
+    inbound_listener_handle: JoinHandle<Result<(), Error>>,
+
     tunnel_listener_handle: Option<JoinHandle<Result<(), Error>>>,
     api_listener_handle: Option<JoinHandle<Result<(), Error>>>,
     dns_listener_handle: Option<JoinHandle<Result<(), Error>>>,
@@ -170,126 +177,23 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let cwd = PathBuf::from(cwd);
 
-    debug!("initializing cache store");
-    let cache_store = profile::ThreadSafeCacheFile::new(
-        cwd.join("cache.db").as_path().to_str().unwrap(),
-        config.profile.store_selected,
-    );
+    // things we need to clone before consuming config
+    let controller_cfg = config.general.controller.clone();
+    let log_level = config.general.log_level;
 
-    debug!("initializing dns resolver");
-    let system_resolver = Arc::new(
-        SystemResolver::new(config.general.ipv6 && config.dns.ipv6)
-            .map_err(|x| Error::DNSError(x.to_string()))?,
-    );
-    let client = new_http_client(system_resolver.clone())
-        .map_err(|x| Error::DNSError(x.to_string()))?;
+    let components = create_components(cwd.clone(), config).await?;
 
-    debug!("initializing mmdb");
-    let mmdb = Arc::new(
-        mmdb::Mmdb::new(
-            cwd.join(&config.general.mmdb),
-            config.general.mmdb_download_url,
-            client,
-        )
-        .await?,
-    );
-
-    let dns_resolver = dns::new_resolver(
-        &config.dns,
-        Some(cache_store.clone()),
-        Some(mmdb.clone()),
-    )
-    .await;
-
-    debug!("initializing outbound manager");
-    let outbound_manager = Arc::new(
-        OutboundManager::new(
-            config
-                .proxies
-                .into_values()
-                .filter_map(|x| match x {
-                    OutboundProxy::ProxyServer(s) => Some(s),
-                    _ => None,
-                })
-                .collect(),
-            config
-                .proxy_groups
-                .into_values()
-                .filter_map(|x| match x {
-                    OutboundProxy::ProxyGroup(g) => Some(g),
-                    _ => None,
-                })
-                .collect(),
-            config.proxy_providers,
-            config.proxy_names,
-            dns_resolver.clone(),
-            cache_store.clone(),
-            cwd.to_string_lossy().to_string(),
-        )
-        .await?,
-    );
-
-    debug!("initializing router");
-    let client = new_http_client(system_resolver)
-        .map_err(|x| Error::DNSError(x.to_string()))?;
-    let geodata = Arc::new(
-        geodata::GeoData::new(
-            cwd.join(&config.general.geosite),
-            config.general.geosite_download_url,
-            client,
-        )
-        .await?,
-    );
-
-    let router = Arc::new(
-        Router::new(
-            config.rules,
-            config.rule_providers,
-            dns_resolver.clone(),
-            mmdb,
-            geodata,
-            cwd.to_string_lossy().to_string(),
-        )
-        .await,
-    );
-
-    let statistics_manager = StatisticsManager::new();
-
-    let dispatcher = Arc::new(Dispatcher::new(
-        outbound_manager.clone(),
-        router.clone(),
-        dns_resolver.clone(),
-        config.general.mode,
-        statistics_manager.clone(),
-    ));
-
-    let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
-
-    debug!("initializing inbound manager");
-    let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
-        config.general.inbound,
-        dispatcher.clone(),
-        authenticator,
-    )?));
-
-    let inbound_runner = inbound_manager.lock().await.get_runner()?;
+    let inbound_runner = components.inbound_manager.lock().await.get_runner()?;
     let inbound_listener_handle = tokio::spawn(inbound_runner);
 
-    let tun_runner =
-        get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
-    let tun_runner_handle = tun_runner.map(tokio::spawn);
-
-    debug!("initializing dns listener");
-    let dns_listener_handle =
-        dns::get_dns_listener(config.dns, dns_resolver.clone())
-            .await
-            .map(tokio::spawn);
+    let tun_runner_handle = components.tun_runner.map(tokio::spawn);
+    let dns_listener_handle = components.dns_listener.map(tokio::spawn);
 
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
 
     let global_state = Arc::new(Mutex::new(GlobalState {
-        log_level: config.general.log_level,
-        inbound_listener_handle: Some(inbound_listener_handle),
+        log_level,
+        inbound_listener_handle,
         tunnel_listener_handle: tun_runner_handle,
         dns_listener_handle,
         reload_tx,
@@ -298,16 +202,16 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }));
 
     let api_runner = app::api::get_api_runner(
-        config.general.controller,
+        controller_cfg,
         log_tx.clone(),
-        inbound_manager.clone(),
-        dispatcher,
+        components.inbound_manager,
+        components.dispatcher,
         global_state.clone(),
-        dns_resolver,
-        outbound_manager,
-        statistics_manager,
-        cache_store,
-        router,
+        components.dns_resolver,
+        components.outbound_manager,
+        components.statistics_manager,
+        components.cache_store,
+        components.router,
         cwd.to_string_lossy().to_string(),
     );
     if let Some(r) = api_runner {
@@ -341,116 +245,15 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 }
             };
 
-            debug!("reloading dns resolver");
-            let system_resolver = Arc::new(
-                SystemResolver::new(config.dns.ipv6)
-                    .map_err(|x| Error::DNSError(x.to_string()))?,
-            );
-            let client = new_http_client(system_resolver.clone())
-                .map_err(|x| Error::DNSError(x.to_string()))?;
+            let controller_cfg = config.general.controller.clone();
 
-            debug!("reloading mmdb");
-            let mmdb = Arc::new(
-                mmdb::Mmdb::new(
-                    cwd.join(&config.general.mmdb),
-                    config.general.mmdb_download_url,
-                    client,
-                )
-                .await?,
-            );
-
-            let client = new_http_client(system_resolver)
-                .map_err(|x| Error::DNSError(x.to_string()))?;
-            let geodata = Arc::new(
-                geodata::GeoData::new(
-                    cwd.join(&config.general.geosite),
-                    config.general.geosite_download_url,
-                    client,
-                )
-                .await?,
-            );
-
-            debug!("reloading cache store");
-            let cache_store = profile::ThreadSafeCacheFile::new(
-                cwd.join("cache.db").as_path().to_str().unwrap(),
-                config.profile.store_selected,
-            );
-
-            let dns_resolver = dns::new_resolver(
-                &config.dns,
-                Some(cache_store.clone()),
-                Some(mmdb.clone()),
-            )
-            .await;
-
-            debug!("reloading outbound manager");
-            let outbound_manager = Arc::new(
-                OutboundManager::new(
-                    config
-                        .proxies
-                        .into_values()
-                        .filter_map(|x| match x {
-                            OutboundProxy::ProxyServer(s) => Some(s),
-                            _ => None,
-                        })
-                        .collect(),
-                    config
-                        .proxy_groups
-                        .into_values()
-                        .filter_map(|x| match x {
-                            OutboundProxy::ProxyGroup(g) => Some(g),
-                            _ => None,
-                        })
-                        .collect(),
-                    config.proxy_providers,
-                    config.proxy_names,
-                    dns_resolver.clone(),
-                    cache_store.clone(),
-                    cwd.to_string_lossy().to_string(),
-                )
-                .await?,
-            );
-
-            debug!("reloading router");
-            let router = Arc::new(
-                Router::new(
-                    config.rules,
-                    config.rule_providers,
-                    dns_resolver.clone(),
-                    mmdb,
-                    geodata,
-                    cwd.to_string_lossy().to_string(),
-                )
-                .await,
-            );
-
-            let statistics_manager = StatisticsManager::new();
-
-            let dispatcher = Arc::new(Dispatcher::new(
-                outbound_manager.clone(),
-                router.clone(),
-                dns_resolver.clone(),
-                config.general.mode,
-                statistics_manager.clone(),
-            ));
-
-            let authenticator =
-                Arc::new(auth::PlainAuthenticator::new(config.users));
-
-            debug!("reloading inbound manager");
-            let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
-                config.general.inbound,
-                dispatcher.clone(),
-                authenticator,
-            )?));
+            let new_componenets = create_components(cwd.clone(), config).await?;
 
             done.send(()).unwrap();
 
             debug!("stopping listeners");
             let mut g = global_state.lock().await;
-            if let Some(h) = g.inbound_listener_handle.take() {
-                h.abort();
-            }
+            g.inbound_listener_handle.abort();
             if let Some(h) = g.tunnel_listener_handle.take() {
                 h.abort();
             }
@@ -461,42 +264,37 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 h.abort();
             }
 
-            let inbound_listener_handle = inbound_manager
+            debug!("reloading inbound listener");
+            let inbound_listener_handle = new_componenets
+                .inbound_manager
                 .lock()
                 .await
                 .get_runner()
                 .map(tokio::spawn)?;
 
-            let tun_runner_handle = get_tun_runner(
-                config.tun,
-                dispatcher.clone(),
-                dns_resolver.clone(),
-            )?
-            .map(tokio::spawn);
+            debug!("reloading tun runner");
+            let tun_runner_handle = new_componenets.tun_runner.map(tokio::spawn);
 
             debug!("reloading dns listener");
-            let dns_listener_handle =
-                dns::get_dns_listener(config.dns, dns_resolver.clone())
-                    .await
-                    .map(tokio::spawn);
+            let dns_listener_handle = new_componenets.dns_listener.map(tokio::spawn);
 
             debug!("reloading api listener");
             let api_listener_handle = app::api::get_api_runner(
-                config.general.controller,
+                controller_cfg,
                 log_tx.clone(),
-                inbound_manager.clone(),
-                dispatcher,
+                new_componenets.inbound_manager,
+                new_componenets.dispatcher,
                 global_state.clone(),
-                dns_resolver,
-                outbound_manager,
-                statistics_manager,
-                cache_store,
-                router,
+                new_componenets.dns_resolver,
+                new_componenets.outbound_manager,
+                new_componenets.statistics_manager,
+                new_componenets.cache_store,
+                new_componenets.router,
                 cwd.to_string_lossy().to_string(),
             )
             .map(tokio::spawn);
 
-            g.inbound_listener_handle = Some(inbound_listener_handle);
+            g.inbound_listener_handle = inbound_listener_handle;
             g.tunnel_listener_handle = tun_runner_handle;
             g.dns_listener_handle = dns_listener_handle;
             g.api_listener_handle = api_listener_handle;
@@ -510,10 +308,172 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     })
 }
 
+struct RuntimeComponents {
+    cache_store: profile::ThreadSafeCacheFile,
+    dns_resolver: ThreadSafeDNSResolver,
+    outbound_manager: Arc<OutboundManager>,
+    router: Arc<Router>,
+    dispatcher: Arc<Dispatcher>,
+    statistics_manager: Arc<StatisticsManager>,
+    inbound_manager: Arc<Mutex<InboundManager>>,
+
+    tun_runner: Option<Runner>,
+    dns_listener: Option<Runner>,
+}
+
+async fn create_components(
+    cwd: PathBuf,
+    config: InternalConfig,
+) -> Result<RuntimeComponents, Error> {
+    let system_resolver = Arc::new(
+        SystemResolver::new(config.dns.ipv6)
+            .map_err(|x| Error::DNSError(x.to_string()))?,
+    );
+    let client = new_http_client(system_resolver.clone())
+        .map_err(|x| Error::DNSError(x.to_string()))?;
+
+    debug!("initializing mmdb");
+    let country_mmdb = Arc::new(
+        mmdb::Mmdb::new(
+            cwd.join(&config.general.mmdb),
+            config.general.mmdb_download_url,
+            client.clone(),
+        )
+        .await?,
+    );
+
+    let geodata = Arc::new(
+        geodata::GeoData::new(
+            cwd.join(&config.general.geosite),
+            config.general.geosite_download_url,
+            client.clone(),
+        )
+        .await?,
+    );
+
+    debug!("initializing cache store");
+    let cache_store = profile::ThreadSafeCacheFile::new(
+        cwd.join("cache.db").as_path().to_str().unwrap(),
+        config.profile.store_selected,
+    );
+
+    let dns_listen = config.dns.listen.clone();
+    debug!("initializing dns resolver");
+    let dns_resolver = dns::new_resolver(
+        config.dns,
+        Some(cache_store.clone()),
+        Some(country_mmdb.clone()),
+    )
+    .await;
+
+    debug!("initializing outbound manager");
+    let outbound_manager = Arc::new(
+        OutboundManager::new(
+            config
+                .proxies
+                .into_values()
+                .filter_map(|x| match x {
+                    OutboundProxy::ProxyServer(s) => Some(s),
+                    _ => None,
+                })
+                .collect(),
+            config
+                .proxy_groups
+                .into_values()
+                .filter_map(|x| match x {
+                    OutboundProxy::ProxyGroup(g) => Some(g),
+                    _ => None,
+                })
+                .collect(),
+            config.proxy_providers,
+            config.proxy_names,
+            dns_resolver.clone(),
+            cache_store.clone(),
+            cwd.to_string_lossy().to_string(),
+        )
+        .await?,
+    );
+
+    debug!("initializing country asn mmdb");
+    let p = cwd.join(&config.general.asn_mmdb);
+    let asn_mmdb = if p.exists() || config.general.asn_mmdb_download_url.is_some() {
+        Some(Arc::new(
+            mmdb::Mmdb::new(p, config.general.asn_mmdb_download_url, client.clone())
+                .await?,
+        ))
+    } else {
+        None
+    };
+
+    debug!("initializing router");
+    let router = Arc::new(
+        Router::new(
+            config.rules,
+            config.rule_providers,
+            dns_resolver.clone(),
+            country_mmdb,
+            asn_mmdb,
+            geodata,
+            cwd.to_string_lossy().to_string(),
+        )
+        .await,
+    );
+
+    let statistics_manager = StatisticsManager::new();
+
+    debug!("initializing dispatcher");
+    let dispatcher = Arc::new(Dispatcher::new(
+        outbound_manager.clone(),
+        router.clone(),
+        dns_resolver.clone(),
+        config.general.mode,
+        statistics_manager.clone(),
+    ));
+
+    debug!("initializing authenticator");
+    let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
+
+    debug!("initializing inbound manager");
+    let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
+        config.general.inbound,
+        dispatcher.clone(),
+        authenticator,
+    )?));
+
+    debug!("initializing tun runner");
+    let tun_runner =
+        get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
+
+    debug!("initializing dns listener");
+    let dns_listener =
+        dns::get_dns_listener(dns_listen, dns_resolver.clone(), &cwd).await;
+
+    Ok(RuntimeComponents {
+        cache_store,
+        dns_resolver,
+        outbound_manager,
+        router,
+        dispatcher,
+        statistics_manager,
+        inbound_manager,
+        tun_runner,
+        dns_listener,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{shutdown, start, Config, Options};
-    use std::{thread, time::Duration};
+    use std::{sync::Once, thread, time::Duration};
+
+    static INIT: Once = Once::new();
+
+    #[allow(dead_code)]
+    pub fn initialize() {
+        INIT.call_once(|| {
+            env_logger::init();
+        });
+    }
 
     #[test]
     fn start_and_stop() {

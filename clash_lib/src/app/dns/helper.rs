@@ -17,7 +17,7 @@ pub async fn make_clients(
     let mut rv = Vec::new();
 
     for s in servers {
-        debug!("building nameserver: {:?}", s);
+        debug!("building nameserver: {}", s);
 
         let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")

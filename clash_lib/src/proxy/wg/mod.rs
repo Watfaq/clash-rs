@@ -21,7 +21,7 @@ use crate::{
 use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{
-    utils::RemoteConnector, CommonOption, ConnectorType, DialWithConnector,
+    utils::RemoteConnector, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
 };
 
@@ -42,7 +42,7 @@ mod wireguard;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,
@@ -93,9 +93,13 @@ impl Handler {
         }
     }
 
+    /// this is a one time initialization, however in theory sess.so_mark
+    /// and sess.iface should be all the same
+    /// ideally we move the so_mark and iface to a global context
     async fn initialize_inner(
         &self,
         resolver: ThreadSafeDNSResolver,
+        sess: &Session,
     ) -> Result<&Inner, Error> {
         self.inner
             .get_or_try_init(|| async {
@@ -169,6 +173,7 @@ impl Handler {
                     send_pair.1,
                     resolver.clone(),
                     self.connector.lock().await.as_ref().cloned(),
+                    sess,
                 )
                 .await
                 .map_err(map_io_error)?;
@@ -246,7 +251,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
         let inner = self
-            .initialize_inner(resolver.clone())
+            .initialize_inner(resolver.clone(), sess)
             .await
             .map_err(map_io_error)?;
 
@@ -293,11 +298,11 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        _sess: &Session,
+        sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         let inner = self
-            .initialize_inner(resolver)
+            .initialize_inner(resolver, sess)
             .await
             .map_err(map_io_error)?;
 
@@ -312,7 +317,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use crate::proxy::utils::{

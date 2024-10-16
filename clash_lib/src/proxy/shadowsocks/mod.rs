@@ -6,7 +6,7 @@ mod v2ray;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
+    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
 };
 use crate::{
@@ -17,8 +17,9 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     impl_default_connector,
-    proxy::{CommonOption, OutboundHandler},
+    proxy::{HandlerCommonOptions, OutboundHandler},
     session::Session,
 };
 use async_trait::async_trait;
@@ -68,7 +69,7 @@ pub enum OBFSOption {
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,
@@ -204,30 +205,24 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        #[allow(unused_variables)] sess: &Session,
+        sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let ctx = Context::new_shared(ServerType::Local);
-        let cfg = self.server_config()?;
+        let dialer = self.connector.lock().await;
 
-        let socket = new_udp_socket(
-            None,
-            self.opts.common_opts.iface.clone().or(sess.iface.clone()),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
-        )
-        .await?;
+        if let Some(dialer) = dialer.as_ref() {
+            debug!("{:?} is connecting via {:?}", self, dialer);
+        }
 
-        let socket: ProxySocket =
-            ProxySocket::from_socket(UdpSocketType::Client, ctx, &cfg, socket);
-        let d = OutboundDatagramShadowsocks::new(
-            socket,
-            (self.opts.server.to_owned(), self.opts.port),
+        self.connect_datagram_with_connector(
+            sess,
             resolver,
-        );
-        let d = ChainedDatagramWrapper::new(d);
-        d.append_to_chain(self.name()).await;
-        Ok(Box::new(d))
+            dialer
+                .as_ref()
+                .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
+                .as_ref(),
+        )
+        .await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -245,9 +240,9 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -271,30 +266,34 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
-                self.opts
-                    .common_opts
-                    .iface
-                    .as_ref()
-                    .or(sess.iface.as_ref())
-                    .cloned(),
+                sess.iface.as_ref().cloned(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
-        let socket = ProxySocket::from_io(
+        let socket = ProxySocket::from_socket(
             UdpSocketType::Client,
             ctx,
             &cfg,
-            Box::new(ShadowsocksUdpIo::new(socket)),
-            None,
-            #[cfg(unix)]
-            None,
+            ShadowsocksUdpIo::new(socket),
         );
+        let server_addr = resolver
+            .resolve(&self.opts.server, false)
+            .await
+            .map_err(|x| {
+                new_io_error(format!(
+                    "failed to resolve {}: {}",
+                    self.opts.server, x
+                ))
+            })?
+            .ok_or(new_io_error(format!(
+                "failed to resolve {}",
+                self.opts.server
+            )))?;
         let d = OutboundDatagramShadowsocks::new(
             socket,
-            (self.opts.server.to_owned(), self.opts.port),
-            resolver,
+            (server_addr, self.opts.port).into(),
         );
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
@@ -302,15 +301,18 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
-    use crate::proxy::utils::test_utils::{
-        docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_test_suites_and_cleanup, Suite,
+    use crate::{
+        proxy::utils::test_utils::{
+            docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
+            run_test_suites_and_cleanup, Suite,
+        },
+        tests::initialize,
     };
 
     use super::*;
@@ -331,8 +333,8 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_ss() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt().try_init();
+    async fn test_ss_plain() -> anyhow::Result<()> {
+        initialize();
         let opts = HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -480,9 +482,6 @@ mod tests {
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         if cfg!(target_arch = "x86_64") {
-            let _ = tracing_subscriber::fmt()
-                .with_max_level(tracing::Level::DEBUG)
-                .try_init();
             test_ss_obfs_inner(SimpleOBFSMode::Tls).await
         } else {
             eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");

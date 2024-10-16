@@ -31,7 +31,7 @@ use crate::{
         utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyOutboundDatagram,
     },
-    session::SocksAddr,
+    session::{Session, SocksAddr},
     Error,
 };
 
@@ -83,6 +83,7 @@ impl WireguardTunnel {
         packet_reader: Receiver<Bytes>,
         resolver: ThreadSafeDNSResolver,
         connector: Option<Arc<dyn RemoteConnector>>,
+        sess: &Session,
     ) -> Result<Self, Error> {
         let peer = Tunn::new(
             config.private_key,
@@ -101,9 +102,9 @@ impl WireguardTunnel {
                 resolver,
                 None,
                 remote_endpoint.into(),
-                None, // TODO: wg outbound interface https://github.com/Watfaq/clash-rs/issues/580
+                sess.iface.clone(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 

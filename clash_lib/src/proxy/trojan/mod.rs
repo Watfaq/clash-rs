@@ -25,8 +25,8 @@ use super::{
     options::{GrpcOption, WsOption},
     transport::{self, TLSOptions},
     utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-    AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
 };
 
 mod datagram;
@@ -40,7 +40,7 @@ pub enum Transport {
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,
@@ -215,9 +215,9 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -238,9 +238,9 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -254,7 +254,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use std::collections::HashMap;
@@ -288,10 +288,6 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt()
-            // any additional configuration of the subscriber you might want here..
-            .try_init();
-
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
 

@@ -220,13 +220,11 @@ async fn patch_configs(
 
         inbound_manager.rebuild_listeners(ports);
 
-        if let Some(h) = global_state.inbound_listener_handle.take() {
-            h.abort()
-        }
+        global_state.inbound_listener_handle.abort();
 
         let r = inbound_manager.get_runner().unwrap();
 
-        global_state.inbound_listener_handle = Some(tokio::spawn(r));
+        global_state.inbound_listener_handle = tokio::spawn(r);
     }
 
     if let Some(mode) = payload.mode {

@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 pub mod test_utils;
 
 mod platform;
@@ -17,7 +17,7 @@ pub use proxy_connector::*;
 
 use serde::{Deserialize, Serialize};
 pub use socket_helpers::*;
-use tracing::{debug, trace};
+use tracing::trace;
 
 #[derive(Debug)]
 pub struct OutboundInterface {
@@ -89,6 +89,18 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
     let priority = ["eth", "en", "pdp_ip"];
 
     all_outbounds.sort_by(|left, right| {
+        match (left.addr_v6, right.addr_v6) {
+            (Some(_), None) => return std::cmp::Ordering::Less,
+            (None, Some(_)) => return std::cmp::Ordering::Greater,
+            (Some(left), Some(right)) => {
+                if left.is_unicast_global() && !right.is_unicast_global() {
+                    return std::cmp::Ordering::Less;
+                } else if !left.is_unicast_global() && right.is_unicast_global() {
+                    return std::cmp::Ordering::Greater;
+                }
+            }
+            _ => {}
+        }
         let left = priority
             .iter()
             .position(|x| left.name.contains(x))
@@ -101,7 +113,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         left.cmp(&right)
     });
 
-    debug!(
+    trace!(
         "sorted outbound interfaces: {:?}, took: {}ms",
         all_outbounds,
         now.elapsed().as_millis()

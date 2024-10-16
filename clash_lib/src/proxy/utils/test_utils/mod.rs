@@ -33,13 +33,20 @@ pub async fn ping_pong_test(
     // server(127.0.0.1:port)
 
     let sess = Session {
-        destination: ("127.0.0.1".to_owned(), port)
+        destination: (
+            if cfg!(target_os = "linux") {
+                "127.0.0.1".to_owned()
+            } else {
+                "host.docker.internal".to_owned()
+            },
+            port,
+        )
             .try_into()
             .unwrap_or_else(|_| panic!("")),
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port).as_str()).await?;
 
@@ -144,7 +151,14 @@ pub async fn ping_pong_udp_test(
     let src = ("127.0.0.1".to_owned(), 10005)
         .try_into()
         .unwrap_or_else(|_| panic!(""));
-    let dst: SocksAddr = ("127.0.0.1".to_owned(), port)
+    let dst: SocksAddr = (
+        if cfg!(target_os = "linux") {
+            "127.0.0.1".to_owned()
+        } else {
+            "host.docker.internal".to_owned()
+        },
+        port,
+    )
         .try_into()
         .unwrap_or_else(|_| panic!(""));
 
@@ -153,7 +167,7 @@ pub async fn ping_pong_udp_test(
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     let listener = UdpSocket::bind(format!("0.0.0.0:{}", port).as_str()).await?;
     info!("target local server started at: {}", listener.local_addr()?);
@@ -228,7 +242,7 @@ pub async fn ping_pong_udp_test(
 pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
 ) -> anyhow::Result<(u16, u16)> {
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
     proxy_manager
         .url_test(handler, "https://example.com", None)
@@ -245,7 +259,7 @@ pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let (_, resolver) = config_helper::load_config().await?;
+    let resolver = config_helper::build_dns_resolver().await?;
 
     // we don't need the resolver, so it doesn't matter to create a casual one
     let stream = handler.connect_datagram(&sess, resolver).await?;
@@ -341,8 +355,8 @@ pub async fn run_test_suites_and_cleanup(
                     }
                     Suite::DnsUdp => {
                         let rv = dns_test(handler.clone()).await;
-                        if rv.is_err() {
-                            return Err(rv.unwrap_err());
+                        if let Err(rv) = rv {
+                            return Err(rv);
                         } else {
                             tracing::info!("dns_test success");
                         }
