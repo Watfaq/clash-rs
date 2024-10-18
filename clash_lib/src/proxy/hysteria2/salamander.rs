@@ -26,7 +26,6 @@ impl SalamanderObfs {
     ///
     /// new() should init a blake2b256 hasher with key to reduce calculation,
     /// but rust-analyzer can't recognize its type
-    #[allow(dead_code)]
     pub fn new(key: Vec<u8>) -> Self {
         Self { key }
     }
@@ -68,7 +67,6 @@ pub struct Salamander {
 }
 
 impl Salamander {
-    #[allow(dead_code)]
     pub fn new(socket: std::net::UdpSocket, key: Vec<u8>) -> std::io::Result<Self> {
         use quinn::Runtime;
         let inner = TokioRuntime.wrap_udp_socket(socket)?;

@@ -47,11 +47,11 @@ proxies:
     type: hysteria2
     server: 127.0.0.1
     port: 10086
-    password: "passwd"
+    password: passwd
     sni: example.com
     skip-cert-verify: true
-    # obfs: salamander
-    # obfs-password: "obfs"
+    obfs: salamander
+    obfs-password: "passwd"
 
 rules:
   - MATCH, local

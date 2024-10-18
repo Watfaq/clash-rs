@@ -206,8 +206,6 @@ impl DynController {
     }
 }
 
-unsafe impl Send for DynController {}
-
 impl Controller for DynController {
     fn initial_window(&self) -> u64 {
         self.0.read().unwrap().initial_window()
