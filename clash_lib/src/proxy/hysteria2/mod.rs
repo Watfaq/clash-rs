@@ -42,6 +42,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::{
+        errors::new_io_error,
         tls::GLOBAL_ROOT_STORE,
         utils::{encode_hex, sha256},
     },
@@ -61,13 +62,23 @@ use super::{
 };
 
 #[derive(Clone)]
+pub struct SalamanderObfs {
+    pub key: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub enum Obfs {
+    Salamander(SalamanderObfs),
+}
+
+#[derive(Clone)]
 pub struct HystOption {
     pub name: String,
     pub addr: SocksAddr,
     pub ports: Option<PortGenrateor>,
     pub sni: Option<String>,
     pub passwd: String,
-    pub salamander: Option<String>,
+    pub obfs: Option<Obfs>,
     pub skip_cert_verify: bool,
     pub alpn: Vec<String>,
     #[allow(dead_code)]
@@ -181,11 +192,8 @@ pub struct Handler {
     ep_config: quinn::EndpointConfig,
     client_config: quinn::ClientConfig,
     session: Mutex<Option<Arc<quinn::Connection>>>,
-    // h3_conn is a copy of session, because we need h3 crate to send request, but
-    // this crate have not a method to into_inner, we have to keep is
-    // maybe future version of h3 crate will have a method to into_inner, or we send
-    // h3 request manually, it is too complex
-    h3_conn: Mutex<Option<SendRequest<OpenStreams, Bytes>>>,
+    // a send request guard to keep the connection alive
+    guard: Mutex<Option<SendRequest<OpenStreams, Bytes>>>,
     // support udp is decided by server
     support_udp: RwLock<bool>,
 }
@@ -232,11 +240,11 @@ impl Handler {
         let ep_config = quinn::EndpointConfig::default();
 
         Ok(Self {
-            opts: opts.clone(),
+            opts,
             ep_config,
             client_config,
             session: Mutex::new(None),
-            h3_conn: Mutex::new(None),
+            guard: Mutex::new(None),
             support_udp: RwLock::new(true),
         })
     }
@@ -261,13 +269,43 @@ impl Handler {
 
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
         // and port hopping
-        let mut ep = if self.opts.salamander.is_some() {
-            // let udp = salamander::Salamander::new(
-            //     udp_socket,
-            //     self.opts.salamander.as_ref().map(|s| s.as_bytes().to_vec()),
-            //     self.opts.ports.clone(),
-            // )?;
-            unimplemented!("salamander obfs is not implemented yet");
+        let create_socket = || async {
+            if resolver.ipv6() {
+                new_udp_socket(
+                    Some((Ipv6Addr::UNSPECIFIED, 0).into()),
+                    sess.iface.clone(),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    sess.so_mark,
+                )
+                .await
+            } else {
+                new_udp_socket(
+                    Some((Ipv4Addr::UNSPECIFIED, 0).into()),
+                    sess.iface.clone(),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    sess.so_mark,
+                )
+                .await
+            }
+        };
+
+        let mut ep = if let Some(obfs) = self.opts.obfs.as_ref() {
+            match obfs {
+                Obfs::Salamander(salamander_obfs) => {
+                    let socket = create_socket().await?;
+                    let obfs = salamander::Salamander::new(
+                        socket.into_std()?,
+                        salamander_obfs.key.to_vec(),
+                    )?;
+
+                    quinn::Endpoint::new_with_abstract_socket(
+                        self.ep_config.clone(),
+                        None,
+                        Arc::new(obfs),
+                        Arc::new(TokioRuntime),
+                    )?
+                }
+            }
         } else if let Some(port_gen) = self.opts.ports.as_ref() {
             let udp_hop = udp_hop::UdpHop::new(
                 server_socket_addr.port(),
@@ -314,7 +352,7 @@ impl Handler {
         let session = ep
             .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))?
             .await?;
-        let (h3_conn, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
+        let (guard, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         // todo set congestion controller according to cc_rx
 
@@ -331,7 +369,7 @@ impl Handler {
             }
         }
 
-        anyhow::Ok((session, h3_conn))
+        Ok((session, guard))
     }
 
     async fn auth(
@@ -350,6 +388,7 @@ impl Handler {
             .body(())
             .unwrap();
         let mut r = sender.send_request(req).await?;
+        r.finish().await?;
 
         let r = r.recv_response().await?;
 
@@ -374,7 +413,7 @@ impl Handler {
             .to_str()?
             .parse()?;
 
-        anyhow::Ok((sender, cc_rx, support_udp))
+        Ok((sender, cc_rx, support_udp))
     }
 }
 
@@ -404,7 +443,7 @@ impl OutboundHandler for Handler {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        todo!()
+        Err(new_io_error("hysteria2 udp is not implemented yet"))
     }
 
     async fn connect_stream(
@@ -425,7 +464,7 @@ impl OutboundHandler for Handler {
             }) {
                 Some(s) => s.clone(),
                 None => {
-                    let (session, h3_conn) = self
+                    let (session, guard) = self
                         .new_authed_session(sess, resolver)
                         .await
                         .map_err(|e| {
@@ -439,7 +478,7 @@ impl OutboundHandler for Handler {
                         })?;
                     let session = Arc::new(session);
                     *session_lock = Some(session.clone());
-                    *self.h3_conn.lock().await = Some(h3_conn);
+                    *self.guard.lock().await = Some(guard);
                     session
                 }
             }

@@ -7,9 +7,9 @@ use std::{
 use rand::Rng;
 
 use crate::{
-    config::internal::proxy::OutboundHysteria2,
+    config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
     proxy::{
-        hysteria2::{Handler, HystOption},
+        hysteria2::{self, Handler, HystOption, SalamanderObfs},
         AnyOutboundHandler,
     },
     session::SocksAddr,
@@ -85,15 +85,22 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
 
     fn try_from(value: OutboundHysteria2) -> Result<Self, Self::Error> {
         let addr = SocksAddr::try_from((value.server, value.port))?;
-        let obfs_passwd = match value.obfs {
-            Some(_) => value
-                .obfs_password
-                .ok_or(crate::Error::InvalidConfig(
+
+        let obfs = match (value.obfs, value.obfs_password.as_ref()) {
+            (Some(obfs), Some(passwd)) => match obfs {
+                Hysteria2Obfs::Salamander => {
+                    Some(hysteria2::Obfs::Salamander(SalamanderObfs {
+                        key: passwd.to_owned().into(),
+                    }))
+                }
+            },
+            (Some(_), None) => {
+                return Err(crate::Error::InvalidConfig(
                     "hysteria2 found obfs enable, but obfs password is none"
                         .to_owned(),
-                ))?
-                .into(),
-            None => None,
+                ))
+            }
+            _ => None,
         };
 
         let ports_gen = if let Some(ports) = value.ports {
@@ -120,7 +127,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             skip_cert_verify: value.skip_cert_verify,
             passwd: value.password,
             ports: ports_gen,
-            salamander: obfs_passwd,
+            obfs,
             up_down: value.up.zip(value.down),
             ca_str: value.ca_str,
             cwnd: value.cwnd,
