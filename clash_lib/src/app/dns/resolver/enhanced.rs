@@ -582,7 +582,7 @@ impl ClashResolver for EnhancedResolver {
     }
 
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        let rv = self.exchange(&message).await?;
+        let rv = self.exchange(message).await?;
         let hostname = message
             .query()
             .unwrap()

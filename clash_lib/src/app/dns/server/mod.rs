@@ -26,68 +26,64 @@ impl watfaq_dns::DnsMessageExchanger for DnsMessageExchanger {
         self.resolver.ipv6()
     }
 
-    fn exchange(
+    async fn exchange(
         &self,
         message: &Message,
-    ) -> impl Future<Output = Result<Message, watfaq_dns::DNSError>> + Send {
-        async {
-            if self.resolver.fake_ip_enabled() {
-                let name = message
-                    .query()
-                    .ok_or(watfaq_dns::DNSError::InvalidOpQuery(
-                        "malformed query message".to_string(),
-                    ))?
-                    .name();
+    ) -> Result<Message, watfaq_dns::DNSError> {
+        if self.resolver.fake_ip_enabled() {
+            let name = message
+                .query()
+                .ok_or(watfaq_dns::DNSError::InvalidOpQuery(
+                    "malformed query message".to_string(),
+                ))?
+                .name();
 
-                let host = message
-                    .query()
-                    .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
-                    .unwrap();
+            let host = message
+                .query()
+                .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
+                .unwrap();
 
-                let mut message = Message::new();
-                message.set_recursion_available(false);
-                message.set_authoritative(true);
+            let mut message = Message::new();
+            message.set_recursion_available(false);
+            message.set_authoritative(true);
 
-                match self.resolver.resolve(&host, true).await {
-                    Ok(resp) => match resp {
-                        Some(ip) => {
-                            let rdata = match ip {
-                                IpAddr::V4(a) => RData::A(A(a)),
-                                IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
-                            };
+            match self.resolver.resolve(&host, true).await {
+                Ok(resp) => match resp {
+                    Some(ip) => {
+                        let rdata = match ip {
+                            IpAddr::V4(a) => RData::A(A(a)),
+                            IpAddr::V6(aaaa) => RData::AAAA(AAAA(aaaa)),
+                        };
 
-                            let records = vec![Record::from_rdata(
-                                name.clone(),
-                                DEFAULT_DNS_SERVER_TTL,
-                                rdata,
-                            )];
+                        let records = vec![Record::from_rdata(
+                            name.clone(),
+                            DEFAULT_DNS_SERVER_TTL,
+                            rdata,
+                        )];
 
-                            message.set_response_code(ResponseCode::NoError);
-                            message.set_answer_count(records.len() as u16);
+                        message.set_response_code(ResponseCode::NoError);
+                        message.set_answer_count(records.len() as u16);
 
-                            message.add_answers(records);
+                        message.add_answers(records);
 
-                            return Ok(message);
-                        }
-                        None => {
-                            message.set_response_code(ResponseCode::NXDomain);
-                            return Ok(message);
-                        }
-                    },
-                    Err(e) => {
-                        debug!("dns resolve error: {}", e);
-                        return Err(watfaq_dns::DNSError::QueryFailed(
-                            e.to_string(),
-                        ));
+                        return Ok(message);
                     }
-                }
-            }
-            match self.resolver.exchange(message).await {
-                Ok(m) => Ok(m),
+                    None => {
+                        message.set_response_code(ResponseCode::NXDomain);
+                        return Ok(message);
+                    }
+                },
                 Err(e) => {
                     debug!("dns resolve error: {}", e);
-                    Err(watfaq_dns::DNSError::QueryFailed(e.to_string()))
+                    return Err(watfaq_dns::DNSError::QueryFailed(e.to_string()));
                 }
+            }
+        }
+        match self.resolver.exchange(message).await {
+            Ok(m) => Ok(m),
+            Err(e) => {
+                debug!("dns resolve error: {}", e);
+                Err(watfaq_dns::DNSError::QueryFailed(e.to_string()))
             }
         }
     }
