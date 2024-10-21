@@ -184,7 +184,7 @@ impl ServerCertVerifier for CertVerifyOption {
 
         if let Some(ref cert) = self.certificate {
             if cert != end_entity {
-                return Err(rustls::Error::General(format!("cert mismatch",)));
+                return Err(rustls::Error::General("cert mismatch".to_string()));
             } else {
                 return Ok(ServerCertVerified::assertion());
             }
@@ -269,7 +269,7 @@ impl Debug for Handler {
 impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
-    const HOP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+    const HOP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
     pub fn new(opts: HystOption) -> anyhow::Result<Self> {
         let verify = CertVerifyOption::new(
@@ -380,6 +380,7 @@ impl Handler {
                     ticker.tick().await;
                     loop {
                         select! {
+                            // TODO if the connection has no stream, should not rebind
                             _ = ticker.tick() => {
                                 let ep = ep.get().unwrap();
                                 let udp = opts.get_udp_socket(&sess, ep.local_addr().unwrap().is_ipv6()).await?;

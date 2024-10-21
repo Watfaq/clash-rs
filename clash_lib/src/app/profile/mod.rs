@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{error, trace, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Db {
