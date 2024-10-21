@@ -437,7 +437,7 @@ impl EnhancedResolver {
 
     fn domain_name_of_message(m: &op::Message) -> Option<String> {
         m.query()
-            .map(|x| x.name().to_ascii().trim_matches('.').to_owned())
+            .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
     }
 
     pub(crate) fn ip_list_of_message(m: &op::Message) -> Vec<net::IpAddr> {
@@ -581,7 +581,7 @@ impl ClashResolver for EnhancedResolver {
         None
     }
 
-    async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(&message).await?;
         let hostname = message
             .query()

@@ -10,6 +10,7 @@ use regex::Regex;
 
 use serde::Deserialize;
 use url::Url;
+use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
 use crate::{
     common::trie,
@@ -43,44 +44,6 @@ pub struct FallbackFilter {
     pub geo_ip_code: String,
     pub ip_cidr: Option<Vec<ipnet::IpNet>>,
     pub domain: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub struct DoHConfig {
-    pub addr: SocketAddr,
-    pub ca_cert: DnsServerCert,
-    pub ca_key: DnsServerKey,
-    pub hostname: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub struct DoH3Config {
-    pub addr: SocketAddr,
-    pub ca_cert: DnsServerCert,
-    pub ca_key: DnsServerKey,
-    pub hostname: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub struct DoTConfig {
-    pub addr: SocketAddr,
-    pub ca_cert: DnsServerCert,
-    pub ca_key: DnsServerKey,
-}
-
-pub type DnsServerKey = Option<String>;
-pub type DnsServerCert = Option<String>;
-
-#[derive(Debug, Default, Clone)]
-pub struct DNSListenAddr {
-    pub udp: Option<SocketAddr>,
-    pub tcp: Option<SocketAddr>,
-    pub doh: Option<DoHConfig>,
-    pub dot: Option<DoTConfig>,
-    pub doh3: Option<DoH3Config>,
 }
 
 #[derive(Default)]

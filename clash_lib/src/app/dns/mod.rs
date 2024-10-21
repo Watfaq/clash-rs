@@ -65,16 +65,15 @@ pub trait ClashResolver: Sync + Send {
     async fn cached_for(&self, ip: std::net::IpAddr) -> Option<String>;
 
     /// Used for DNS Server
-    async fn exchange(&self, message: op::Message) -> anyhow::Result<op::Message>;
+    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message>;
 
     /// Only used for look up fake IP
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;
     async fn is_fake_ip(&self, ip: std::net::IpAddr) -> bool;
+    fn fake_ip_enabled(&self) -> bool;
 
     fn ipv6(&self) -> bool;
     fn set_ipv6(&self, enable: bool);
 
     fn kind(&self) -> ResolverKind;
-
-    fn fake_ip_enabled(&self) -> bool;
 }
