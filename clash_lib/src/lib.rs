@@ -57,6 +57,8 @@ pub enum Error {
     ProfileError(String),
     #[error("dns error: {0}")]
     DNSError(String),
+    #[error(transparent)]
+    DNSServerError(#[from] watfaq_dns::DNSError),
     #[error("crypto error: {0}")]
     Crypto(String),
     #[error("operation error: {0}")]

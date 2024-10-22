@@ -52,7 +52,7 @@ async fn query_dns(
 
     m.add_query(hickory_proto::op::Query::query(name.unwrap(), typ));
 
-    match state.resolver.exchange(m).await {
+    match state.resolver.exchange(&m).await {
         Ok(response) => {
             let mut resp = Map::new();
             resp.insert("Status".to_owned(), response.response_code().low().into());

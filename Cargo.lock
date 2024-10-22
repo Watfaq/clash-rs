@@ -1002,7 +1002,6 @@ dependencies = [
  "hickory-client",
  "hickory-proto 0.25.0-alpha.2",
  "hickory-resolver 0.25.0-alpha.2",
- "hickory-server",
  "hmac",
  "http",
  "http-body-util",
@@ -1070,6 +1069,7 @@ dependencies = [
  "unix-udp-sock",
  "url",
  "uuid",
+ "watfaq-dns",
  "webpki-roots",
  "windows 0.58.0",
 ]
@@ -6883,6 +6883,27 @@ name = "wasm-bindgen-shared"
 version = "0.2.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65fc09f10666a9f147042251e0dda9c18f166ff7de300607007e96bdebc1068d"
+
+[[package]]
+name = "watfaq-dns"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e4caff90e06dd6f6fdcefbce28fe42ce7d9ab7741639d0db49dca897defe405"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hickory-client",
+ "hickory-proto 0.25.0-alpha.2",
+ "hickory-resolver 0.25.0-alpha.2",
+ "hickory-server",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "webpki-roots",
+]
 
 [[package]]
 name = "weak-table"
