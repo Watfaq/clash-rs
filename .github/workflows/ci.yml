@@ -161,7 +161,7 @@ jobs:
             extra-args: --features "shadowsocks tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
-          - os: macos-12
+          - os: macos-14
             target: x86_64-apple-darwin
             cross: false
             extra-args: "--all-features"
@@ -170,7 +170,7 @@ jobs:
             cross: false
             extra-args: "--all-features"
           # MacOSX static-crt
-          - os: macos-12
+          - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             cross: false
