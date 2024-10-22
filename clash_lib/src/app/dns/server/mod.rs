@@ -1,4 +1,4 @@
-use std::{future::Future, net::IpAddr};
+use std::net::IpAddr;
 
 use hickory_proto::{
     op::{Message, ResponseCode},
