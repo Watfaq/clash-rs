@@ -17,15 +17,19 @@ use rand::Rng;
 
 type Blake2b256 = Blake2b<U32>;
 
-struct SalamanderObfs {
-    key: Vec<u8>,
+#[derive(Clone)]
+pub struct SalamanderObfs {
+    pub key: Vec<u8>,
 }
+
+const SALAMANDER_OBFS_PREFIX_LEN: usize = 8;
 
 impl SalamanderObfs {
     /// create a new obfs
     ///
     /// new() should init a blake2b256 hasher with key to reduce calculation,
     /// but rust-analyzer can't recognize its type
+    #[allow(dead_code)]
     pub fn new(key: Vec<u8>) -> Self {
         Self { key }
     }
@@ -42,9 +46,9 @@ impl SalamanderObfs {
     }
 
     fn encrpyt(&self, data: &mut [u8]) -> Bytes {
-        let salt: [u8; 8] = rand::thread_rng().gen();
+        let salt: [u8; SALAMANDER_OBFS_PREFIX_LEN] = rand::thread_rng().gen();
 
-        let mut res = BytesMut::with_capacity(8 + data.len());
+        let mut res = BytesMut::with_capacity(SALAMANDER_OBFS_PREFIX_LEN + data.len());
         res.put_slice(&salt);
         self.obfs(&salt, data);
         res.put_slice(data);
@@ -53,11 +57,10 @@ impl SalamanderObfs {
     }
 
     fn decrpyt(&self, data: &mut [u8]) {
-        assert!(data.len() > 8, "data len must > 8");
+        assert!(data.len() > SALAMANDER_OBFS_PREFIX_LEN);
 
-        let (salt, data) = data.split_at_mut(8);
+        let (salt, data) = data.split_at_mut(SALAMANDER_OBFS_PREFIX_LEN);
         self.obfs(salt, data);
-        // data.advance(8); // sadlly IoSliceMut::advance is unstable
     }
 }
 
@@ -67,13 +70,13 @@ pub struct Salamander {
 }
 
 impl Salamander {
-    pub fn new(socket: std::net::UdpSocket, key: Vec<u8>) -> std::io::Result<Self> {
+    pub fn new(socket: std::net::UdpSocket, obfs: SalamanderObfs) -> std::io::Result<Self> {
         use quinn::Runtime;
         let inner = TokioRuntime.wrap_udp_socket(socket)?;
 
         std::io::Result::Ok(Self {
             inner,
-            obfs: SalamanderObfs::new(key),
+            obfs,
         })
     }
 }
@@ -107,26 +110,17 @@ impl AsyncUdpSocket for Salamander {
     ) -> Poll<std::io::Result<usize>> {
         // the number of udp packets received
         let packet_nums = ready!(self.inner.poll_recv(cx, bufs, meta))?;
-        meta.iter().take(packet_nums).for_each(|v| {
-            tracing::trace!("meta addr {:?}, dst_ip: {:?}", v.addr, v.dst_ip);
-        });
         bufs.iter_mut()
             .zip(meta.iter_mut())
-            // first step take and then filter
             .take(packet_nums)
-            .filter(|(_, meta)| meta.len > 8)
+            .filter(|(_, meta)| meta.len > SALAMANDER_OBFS_PREFIX_LEN)
             .for_each(|(v, meta)| {
                 let x = &mut v.deref_mut()[..meta.len];
                 // decrypt in place, and drop first 8 bytes
                 self.obfs.decrpyt(x);
-                let data = &mut x[8..];
-                unsafe {
-                    //  because IoSliceMut is transparent and .0 is also transparent, so it is a &[u8]
-                    let b: IoSliceMut<'_> = std::mem::transmute(data);
-                    *v = b;
-                }
+                v.advance(SALAMANDER_OBFS_PREFIX_LEN);
                 // MUST update meta.len
-                meta.len -= 8;
+                meta.len -= SALAMANDER_OBFS_PREFIX_LEN;
             });
 
         Poll::Ready(Ok(packet_nums))

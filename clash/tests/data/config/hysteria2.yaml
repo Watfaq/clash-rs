@@ -3,7 +3,6 @@ port: 8891
 socks-port: 8889
 mixed-port: 8888
 
-
 dns:
   enable: true
   listen: 127.0.0.1:53533
@@ -50,8 +49,19 @@ proxies:
     password: passwd
     sni: example.com
     skip-cert-verify: true
-    obfs: salamander
-    obfs-password: "passwd"
+
+    # fingerprint: "DF:F8:47:B5:6A:A3:8D:E8:A8:09:76:70:DD:1D:BB:DF:EB:3D:FB:07:FB:12:EE:C5:A9:BC:9B:07:26:7A:75:33"
+    # or
+    # fingerprint: "dff847b56aa38de8a8097670dd1dbbdfeb3dfb07fb12eec5a9bc9b07267a7533"
+
+    # obfs: salamander
+    # obfs-password: "passwd"
+
+    # server port hop range
+    # if hysteria2 server is deployed on `localhost` for testing, you can use this iptables commands to redirect the traffic, otherwise https://v2.hysteria.network/docs/advanced/Port-Hopping/#server
+    # sudo iptables -t nat -I PREROUTING   -p udp --dport 15000:16000 -j REDIRECT --to-ports 10086
+    # sudo iptables -t nat -I OUTPUT -o lo -p udp --dport 15000:16000 -j REDIRECT --to-ports 10086
+    ports: "15000-16000"
 
 rules:
   - MATCH, local

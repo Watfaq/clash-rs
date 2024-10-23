@@ -146,7 +146,7 @@ tokio-test = "0.4.4"
 axum-macros = "0.4.2"
 bollard = "0.17"
 serial_test = "3.1"
-env_logger = "0.11"
+env_logger = "*"
 
 [build-dependencies]
 prost-build = "0.13"

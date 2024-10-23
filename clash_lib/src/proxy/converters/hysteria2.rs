@@ -1,10 +1,12 @@
 use std::{
     num::{NonZeroU16, ParseIntError},
     ops::RangeInclusive,
+    path::PathBuf,
     sync::Arc,
 };
 
 use rand::Rng;
+use rustls::pki_types::{pem::PemObject, CertificateDer};
 
 use crate::{
     config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
@@ -40,10 +42,8 @@ impl PortGenrateor {
     }
 
     pub fn get(&self) -> u16 {
-        let mut rng = rand::thread_rng();
-        let len =
-            1 + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
-        let idx = rng.gen_range(0..len);
+        let len = 1 /* default_port */ + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
+        let idx = rand::thread_rng().gen_range(0..len);
         match idx {
             0 => self.default,
             idx if idx <= self.ports.len() => self.ports[idx - 1],
@@ -122,19 +122,52 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             sni: value.sni.or(addr.domain().map(|s| s.to_owned())),
             addr,
             alpn: value.alpn.unwrap_or_default(),
-            ca: value.ca.map(|s| s.into()),
+            ca: parse_certificate(value.ca.as_deref(), value.ca_str.as_ref())?,
             fingerprint: value.fingerprint,
             skip_cert_verify: value.skip_cert_verify,
             passwd: value.password,
             ports: ports_gen,
             obfs,
             up_down: value.up.zip(value.down),
-            ca_str: value.ca_str,
             cwnd: value.cwnd,
         };
 
         let c = Handler::new(opts).unwrap();
         Ok(Arc::new(c))
+    }
+}
+
+fn parse_certificate(
+    ca_str: Option<&str>,
+    ca_path: Option<&PathBuf>,
+) -> Result<Option<CertificateDer<'static>>, crate::Error> {
+    let ca_from_str = ca_str
+        .map(|s| CertificateDer::from_pem_slice(s.as_bytes()).map(|c| c.to_owned()))
+        .transpose()
+        .map_err(|e| {
+            crate::Error::InvalidConfig(format!("parse ca from str error: {:?}", e))
+        })?;
+
+    let ca_from_path = ca_path
+        .map(|p| CertificateDer::from_pem_file(p).map(|c| c.to_owned()))
+        .transpose()
+        .map_err(|e| {
+            crate::Error::InvalidConfig(format!("parse ca from path error: {:?}", e))
+        })?;
+
+    match (ca_from_str, ca_from_path) {
+        (Some(ca), None) => Ok(Some(ca)),
+        (None, Some(ca)) => Ok(Some(ca)),
+        (Some(a), Some(b)) => {
+            if a == b {
+                Ok(a.into())
+            } else {
+                Err(crate::Error::InvalidConfig(
+                    "ca from str and path not equal".to_owned(),
+                ))
+            }
+        }
+        (None, None) => Ok(None),
     }
 }
 
