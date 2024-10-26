@@ -142,14 +142,14 @@ jobs:
             postfix: ".exe"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
-          - os: macos-12
+          - os: macos-14
             target: x86_64-apple-darwin
             cross: false
           - os: macos-14
             target: aarch64-apple-darwin
             cross: false
           # MacOSX static-crt
-          - os: macos-12
+          - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             cross: false

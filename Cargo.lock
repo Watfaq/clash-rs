@@ -205,9 +205,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.89"
+version = "1.0.90"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
+checksum = "37bf3594c4c988a53154954629820791dde498571819ae4ca50ca811e060cc95"
 
 [[package]]
 name = "arc-swap"
@@ -1002,7 +1002,6 @@ dependencies = [
  "hickory-client",
  "hickory-proto 0.25.0-alpha.2",
  "hickory-resolver 0.25.0-alpha.2",
- "hickory-server",
  "hmac",
  "http",
  "http-body-util",
@@ -1070,6 +1069,7 @@ dependencies = [
  "unix-udp-sock",
  "url",
  "uuid",
+ "watfaq-dns",
  "webpki-roots",
  "windows 0.58.0",
 ]
@@ -3059,9 +3059,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.159"
+version = "0.2.161"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "561d97a539a36e26a9a5fad1ea11a3039a67714694aaa379433e580854bc3dc5"
+checksum = "8e9489c2807c139ffd9c1794f4af0ebe86a828db53ecdc7fea2111d0fed085d1"
 
 [[package]]
 name = "libloading"
@@ -4696,9 +4696,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.128"
+version = "1.0.132"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ff5456707a1de34e7e37f2a6fd3d3f808c318259cbd01ab6377795054b483d8"
+checksum = "d726bfaff4b320266d395898905d0eba0345aae23b54aee3a737e260fd46db03"
 dependencies = [
  "itoa",
  "memchr",
@@ -6883,6 +6883,27 @@ name = "wasm-bindgen-shared"
 version = "0.2.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65fc09f10666a9f147042251e0dda9c18f166ff7de300607007e96bdebc1068d"
+
+[[package]]
+name = "watfaq-dns"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e4caff90e06dd6f6fdcefbce28fe42ce7d9ab7741639d0db49dca897defe405"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hickory-client",
+ "hickory-proto 0.25.0-alpha.2",
+ "hickory-resolver 0.25.0-alpha.2",
+ "hickory-server",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "webpki-roots",
+]
 
 [[package]]
 name = "weak-table"
