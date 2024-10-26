@@ -45,63 +45,63 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
           # - os: ubuntu-latest
@@ -113,31 +113,31 @@ jobs:
             target: x86_64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: windows-latest
             target: i686-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: --features "shadowsocks tuic"
+            extra-args: -F "shadowsocks,tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: >-
               -Ctarget-feature=+crt-static 
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
@@ -158,29 +158,29 @@ jobs:
             release-name: aarch64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: --features "shadowsocks tuic"
+            extra-args: -F "shadowsocks, tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-14
             target: x86_64-apple-darwin
             cross: false
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           - os: macos-14
             target: aarch64-apple-darwin
             cross: false
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
           # MacOSX static-crt
           - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             cross: false
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
             cross: false
-            extra-args: "--all-features"
+            extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
