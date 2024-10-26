@@ -38,7 +38,6 @@ jobs:
           #   toolchain: nightly
           #   cross: false
           #   postfix: ""
-          #   extra-args: ""
           #   components: ""
           #   rustflags: "--cfg tokio_unstable"
 
@@ -46,99 +45,81 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
           # - os: ubuntu-latest
           #   target: riscv64gc-unknown-linux-gnu
           #   cross: true
-          #   extra-args: "--all-features"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: windows-latest
             target: i686-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: --features "shadowsocks tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: >-
               -Ctarget-feature=+crt-static 
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
@@ -159,29 +140,24 @@ jobs:
             release-name: aarch64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: --features "shadowsocks tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-12
             target: x86_64-apple-darwin
             cross: false
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: macos-14
             target: aarch64-apple-darwin
             cross: false
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # MacOSX static-crt
           - os: macos-12
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             cross: false
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
             cross: false
-            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
@@ -236,7 +212,7 @@ jobs:
         with:
           use-cross: ${{ matrix.cross }}
           command: clippy
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+          args: --all --target ${{ matrix.target }} -F ${{ env.ENABLED_FEATURES }} -- -D warnings
         env:
           CLASH_DOCKER_TEST: "true"
 
@@ -246,7 +222,7 @@ jobs:
         with:
           use-cross: ${{ matrix.cross }}
           command: test
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --all --target ${{ matrix.target }} -F ${{ env.ENABLED_FEATURES }} 
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
@@ -258,7 +234,7 @@ jobs:
         with:
           use-cross: ${{ matrix.cross }}
           command: test
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --all --target ${{ matrix.target }} -F ${{ env.ENABLED_FEATURES }} 
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
@@ -267,7 +243,7 @@ jobs:
         with:
           use-cross: ${{ matrix.cross }}
           command: build
-          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --release --target ${{ matrix.target }} -F ${{ env.ENABLED_FEATURES }} 
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
