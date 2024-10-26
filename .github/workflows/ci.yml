@@ -123,7 +123,7 @@ jobs:
             target: aarch64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: --F "shadowsocks,tuic"
+            extra-args: -F "shadowsocks,tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
