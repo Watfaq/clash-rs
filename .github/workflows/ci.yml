@@ -16,6 +16,7 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
+  ENABLED_FEATURES: "shadowsocks, tuic, onion"
 
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
@@ -45,63 +46,63 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
             cross: true
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
           # - os: ubuntu-latest
@@ -113,12 +114,12 @@ jobs:
             target: x86_64-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: windows-latest
             target: i686-pc-windows-msvc
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             cross: false
@@ -130,14 +131,14 @@ jobs:
             release-name: x86_64-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             cross: false
             postfix: ".exe"
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: >-
               -Ctarget-feature=+crt-static 
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
@@ -164,23 +165,23 @@ jobs:
           - os: macos-12
             target: x86_64-apple-darwin
             cross: false
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           - os: macos-14
             target: aarch64-apple-darwin
             cross: false
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
           # MacOSX static-crt
           - os: macos-12
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             cross: false
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
             cross: false
-            extra-args: "--all-features"
+            extra-args: "-F ${{ env.ENABLED_FEATURES }}"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
