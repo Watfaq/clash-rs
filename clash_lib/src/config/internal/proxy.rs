@@ -1,9 +1,9 @@
-use crate::{common::utils::default_bool_true, config::utils, Error};
+use crate::{common::utils::{decode_hex, default_bool_true}, config::utils, Error};
 use serde::{de::value::MapDeserializer, Deserialize};
 use serde_yaml::Value;
 use std::{
     collections::HashMap,
-    fmt::{Display, Formatter},
+    fmt::{Display, Formatter}, path::PathBuf,
 };
 use uuid::Uuid;
 
@@ -499,8 +499,11 @@ pub struct OutboundHysteria2 {
     pub sni: Option<String>,
     pub skip_cert_verify: bool,
     pub ca: Option<String>,
-    pub ca_str: Option<String>,
-    pub fingerprint: Option<String>,
+    pub ca_str: Option<PathBuf>,
+    // a hex_encoded sha256 fingerprint of the server certificate
+    #[serde(deserialize_with = "deserialize_sha256")]
+    #[serde(default)]
+    pub fingerprint: Option<[u8; 32]>,
     /// bbr congestion control window
     pub cwnd: Option<u64>,
 }
@@ -509,4 +512,24 @@ pub struct OutboundHysteria2 {
 #[serde(rename_all = "lowercase")]
 pub enum Hysteria2Obfs {
     Salamander,
+}
+
+fn deserialize_sha256<'de, D>(deserializer: D) -> Result<Option<[u8; 32]>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer)?.map(|x| x.replace(':', ""));
+    if let Some(s) = s {
+        let s = decode_hex(&s).map_err(serde::de::Error::custom)?;
+        if s.len() != 32 {
+            return Err(serde::de::Error::custom(
+                "fingerprint must be 32 bytes long",
+            ));
+        }
+        let mut arr = [0; 32];
+        arr.copy_from_slice(&s);
+        Ok(Some(arr))
+    } else {
+        Ok(None)
+    }
 }
