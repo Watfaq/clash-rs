@@ -15,8 +15,8 @@ use crate::{
     proxy::{
         transport::{self, TLSOptions},
         utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
-        AnyStream, CommonOption, ConnectorType, DialWithConnector, OutboundHandler,
-        OutboundType,
+        AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        OutboundHandler, OutboundType,
     },
     session::Session,
 };
@@ -30,7 +30,7 @@ use super::socks5::{client_handshake, socks_command};
 #[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
     pub user: Option<String>,
@@ -149,7 +149,7 @@ impl Handler {
 
         let udp_socket = new_udp_socket(
             None,
-            self.opts.common_opts.iface.clone().or(sess.iface.clone()),
+            sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
             None,
         )
@@ -238,9 +238,9 @@ impl OutboundHandler for Handler {
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -262,9 +262,9 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 self.opts.server.as_str(),
                 self.opts.port,
-                self.opts.common_opts.iface.as_ref().or(sess.iface.as_ref()),
+                sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
 
@@ -276,7 +276,7 @@ impl OutboundHandler for Handler {
     }
 }
 
-#[cfg(all(test, not(ci)))]
+#[cfg(all(test, docker_test))]
 mod tests {
 
     use std::sync::Arc;
@@ -326,7 +326,6 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
-        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
@@ -352,7 +351,6 @@ mod tests {
     async fn test_socks5_auth() -> anyhow::Result<()> {
         use crate::proxy::DialWithConnector;
 
-        let _ = tracing_subscriber::fmt().try_init();
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),

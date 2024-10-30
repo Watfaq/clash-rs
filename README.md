@@ -17,7 +17,7 @@ A custom protocol, rule based network proxy software.
 ## ✨ Features
 
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
-- 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote.
+- 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote, and expose it as a local UDP/TCP/DoH/DoT server.
 - 🛡 Run as an HTTP/Socks5 proxy, or utun device as a home network gateway.
 - ⚙️ Shadowsocks/Trojan/Vmess/Wireguard(userspace)/Tor/Tuic/Socks5(TCP/UDP) outbound support with different underlying trasports(gRPC/TLS/H2/WebSocket/etc.).
 - 🌍 Dynamic remote rule/proxy loader.
@@ -40,6 +40,10 @@ https://github.com/LibNyanpasu/clash-nyanpasu
 ### Download Prebuilt Binary
 
 Can be found at https://github.com/Watfaq/clash-rs/releases
+
+### Docker Image
+
+https://github.com/Watfaq/clash-rs/pkgs/container/clash-rs
 
 ### Local Build
 

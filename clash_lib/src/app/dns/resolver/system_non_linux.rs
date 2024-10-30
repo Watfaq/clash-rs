@@ -75,9 +75,13 @@ impl ClashResolver for SystemResolver {
         Ok(response.into_iter().choose(&mut rand::thread_rng()))
     }
 
+    async fn cached_for(&self, _: std::net::IpAddr) -> Option<String> {
+        None
+    }
+
     async fn exchange(
         &self,
-        _: hickory_proto::op::Message,
+        _: &hickory_proto::op::Message,
     ) -> anyhow::Result<hickory_proto::op::Message> {
         Err(anyhow::anyhow!("unsupported"))
     }

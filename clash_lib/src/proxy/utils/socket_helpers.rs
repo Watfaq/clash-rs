@@ -37,7 +37,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
 ) -> io::Result<TcpStream> {
     let (socket, family) = match endpoint {
         SocketAddr::V4(_) => (
@@ -64,8 +64,8 @@ pub async fn new_tcp_stream(
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
-        socket.set_mark(packet_mark)?;
+    if let Some(so_mark) = so_mark {
+        socket.set_mark(so_mark)?;
     }
 
     socket.set_keepalive(true)?;
@@ -82,7 +82,7 @@ pub async fn new_tcp_stream(
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<u32>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let (socket, family) = match src {
         Some(src) => {
@@ -139,50 +139,12 @@ pub async fn new_udp_socket(
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(packet_mark) = packet_mark {
-        socket.set_mark(packet_mark)?;
+    if let Some(so_mark) = so_mark {
+        socket.set_mark(so_mark)?;
     }
 
     socket.set_broadcast(true)?;
     socket.set_nonblocking(true)?;
 
     UdpSocket::from_std(socket.into())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{net::IpAddr, time::Duration};
-
-    use tokio::{net::TcpSocket, time::timeout};
-
-    #[tokio::test]
-    #[ignore = "not a real test"]
-    async fn test_connect_tcp() {
-        let mut futs = vec![];
-
-        for i in 0..100 {
-            futs.push(tokio::spawn(async move {
-                let now = std::time::Instant::now();
-                let socket = socket2::Socket::new(
-                    socket2::Domain::IPV4,
-                    socket2::Type::DGRAM,
-                    None,
-                )
-                .unwrap();
-
-                timeout(
-                    Duration::from_secs(10),
-                    TcpSocket::from_std_stream(socket.into())
-                        .connect(("1.1.1.1".parse::<IpAddr>().unwrap(), 443).into()),
-                )
-                .await
-                .unwrap()
-                .unwrap();
-
-                println!("fut {} took {:?}", i, now.elapsed().as_millis());
-            }));
-        }
-
-        futures::future::join_all(futs).await;
-    }
 }

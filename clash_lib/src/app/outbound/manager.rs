@@ -25,7 +25,7 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, tor, trojan,
+        fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg, OutboundType,
     },
@@ -44,6 +44,8 @@ use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
 
@@ -266,6 +268,9 @@ impl OutboundManager {
                         Arc::new(h) as _
                     });
                 }
+                OutboundProxyProtocol::Hysteria2(h) => {
+                    handlers.insert(h.name.clone(), h.clone().try_into()?);
+                }
 
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
@@ -275,6 +280,7 @@ impl OutboundManager {
                     });
                 }
 
+                #[cfg(feature = "onion")]
                 OutboundProxyProtocol::Tor(tor) => {
                     handlers.insert(tor.name.clone(), {
                         let h: tor::Handler = tor.try_into()?;
@@ -390,8 +396,9 @@ impl OutboundManager {
                     let relay = relay::Handler::new(
                         relay::HandlerOptions {
                             name: proto.name.clone(),
-                            shared_opts: crate::proxy::HandlerSharedOptions {
+                            common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
+                                ..Default::default()
                             },
                         },
                         providers,
@@ -443,8 +450,9 @@ impl OutboundManager {
                     let url_test = urltest::Handler::new(
                         urltest::HandlerOptions {
                             name: proto.name.clone(),
-                            shared_opts: crate::proxy::HandlerSharedOptions {
+                            common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
+                                ..Default::default()
                             },
                             ..Default::default()
                         },
@@ -499,8 +507,9 @@ impl OutboundManager {
                     let fallback = fallback::Handler::new(
                         fallback::HandlerOptions {
                             name: proto.name.clone(),
-                            shared_opts: crate::proxy::HandlerSharedOptions {
+                            common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
+                                ..Default::default()
                             },
                             ..Default::default()
                         },
@@ -554,8 +563,9 @@ impl OutboundManager {
                     let load_balance = loadbalance::Handler::new(
                         loadbalance::HandlerOptions {
                             name: proto.name.clone(),
-                            shared_opts: crate::proxy::HandlerSharedOptions {
+                            common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
+                                ..Default::default()
                             },
                             ..Default::default()
                         },
@@ -613,8 +623,9 @@ impl OutboundManager {
                         selector::HandlerOptions {
                             name: proto.name.clone(),
                             udp: proto.udp.unwrap_or(true),
-                            shared_opts: crate::proxy::HandlerSharedOptions {
+                            common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
+                                ..Default::default()
                             },
                         },
                         providers,
@@ -651,7 +662,10 @@ impl OutboundManager {
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
                 udp: true,
-                shared_opts: crate::proxy::HandlerSharedOptions { icon: None },
+                common_opts: crate::proxy::HandlerCommonOptions {
+                    icon: None,
+                    ..Default::default()
+                },
             },
             vec![pd.clone()],
             stored_selection,

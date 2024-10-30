@@ -7,19 +7,18 @@ use std::{
 
 use ipnet::AddrParseError;
 use regex::Regex;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+
+use serde::Deserialize;
 use url::Url;
+use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
 use crate::{
-    common::{trie, utils},
+    common::trie,
     config::def::{DNSListen, DNSMode},
     Error,
 };
 
-use super::{
-    dns_client::DNSNetMode,
-    dummy_keys::{TEST_CERT, TEST_KEY},
-};
+use super::dns_client::DNSNetMode;
 
 #[derive(Clone, Debug)]
 pub struct NameServer {
@@ -45,25 +44,6 @@ pub struct FallbackFilter {
     pub geo_ip_code: String,
     pub ip_cidr: Option<Vec<ipnet::IpNet>>,
     pub domain: Vec<String>,
-}
-
-#[derive(Debug)]
-pub struct DoHConfig {
-    pub certificate_and_key: (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
-    pub dns_hostname: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct DoTConfig {
-    pub certificate_and_key: (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
-}
-
-#[derive(Debug, Default)]
-pub struct DNSListenAddr {
-    pub udp: Option<SocketAddr>,
-    pub tcp: Option<SocketAddr>,
-    pub doh: Option<(SocketAddr, DoHConfig)>,
-    pub dot: Option<(SocketAddr, DoTConfig)>,
 }
 
 #[derive(Default)]
@@ -270,48 +250,82 @@ impl TryFrom<&crate::config::def::Config> for Config {
                         })
                     }
                     DNSListen::Multiple(map) => {
-                        use std::path::Path;
                         let mut udp = None;
                         let mut tcp = None;
                         let mut doh = None;
+                        let mut doh3 = None;
                         let mut dot = None;
 
                         for (k, v) in map {
-                            let addr = v.parse::<SocketAddr>().map_err(|_| {
-                                Error::InvalidConfig(format!(
-                                    "invalid DNS listen address: {} -> {}",
-                                    k, v
-                                ))
-                            })?;
                             match k.as_str() {
-                                "udp" => udp = Some(addr),
-                                "tcp" => tcp = Some(addr),
+                                "udp" => {
+                                    let addr = v
+                                        .as_str()
+                                        .ok_or(Error::InvalidConfig(format!(
+                                            "invalid udp dns listen address - must \
+                                             be string: {:?}",
+                                            v
+                                        )))?
+                                        .parse::<SocketAddr>()
+                                        .map_err(|_| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid dns listen address: {:?}",
+                                                v
+                                            ))
+                                        })?;
+                                    udp = Some(addr)
+                                }
+                                "tcp" => {
+                                    let addr = v
+                                        .as_str()
+                                        .ok_or(Error::InvalidConfig(format!(
+                                            "invalid tcp dns listen address - must \
+                                             be string: {:?}",
+                                            v
+                                        )))?
+                                        .parse::<SocketAddr>()
+                                        .map_err(|_| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid dns listen address: {:?}",
+                                                v
+                                            ))
+                                        })?;
+                                    tcp = Some(addr)
+                                }
                                 "doh" => {
-                                    let certs =
-                                        utils::load_cert_chain(Path::new(TEST_CERT))
-                                            .unwrap();
-                                    let priv_key =
-                                        utils::load_priv_key(Path::new(TEST_KEY))
-                                            .unwrap();
-                                    let c = DoHConfig {
-                                        certificate_and_key: (certs, priv_key),
-                                        dns_hostname: Some(
-                                            "dns.example.com".to_owned(),
-                                        ),
-                                    };
-                                    doh = Some((addr, c))
+                                    let c =
+                                        DoHConfig::deserialize(v).map_err(|x| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid doh dns listen config: \
+                                                 {:?}",
+                                                x
+                                            ))
+                                        })?;
+
+                                    doh = Some(c)
                                 }
                                 "dot" => {
-                                    let certs =
-                                        utils::load_cert_chain(Path::new(TEST_CERT))
-                                            .unwrap();
-                                    let priv_key =
-                                        utils::load_priv_key(Path::new(TEST_KEY))
-                                            .unwrap();
-                                    let c = DoTConfig {
-                                        certificate_and_key: (certs, priv_key),
-                                    };
-                                    dot = Some((addr, c))
+                                    let c =
+                                        DoTConfig::deserialize(v).map_err(|x| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid dot dns listen config: \
+                                                 {:?}",
+                                                x
+                                            ))
+                                        })?;
+                                    dot = Some(c)
+                                }
+                                "doh3" => {
+                                    let c =
+                                        DoH3Config::deserialize(v).map_err(|x| {
+                                            Error::InvalidConfig(format!(
+                                                "invalid doh3 dns listen config: \
+                                                 {:?}",
+                                                x
+                                            ))
+                                        })?;
+
+                                    doh3 = Some(c)
                                 }
                                 _ => {
                                     return Err(Error::InvalidConfig(format!(
@@ -322,7 +336,13 @@ impl TryFrom<&crate::config::def::Config> for Config {
                             }
                         }
 
-                        Ok(DNSListenAddr { udp, tcp, doh, dot })
+                        Ok(DNSListenAddr {
+                            udp,
+                            tcp,
+                            doh,
+                            dot,
+                            doh3,
+                        })
                     }
                 })
                 .transpose()?

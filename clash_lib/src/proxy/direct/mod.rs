@@ -74,7 +74,7 @@ impl OutboundHandler for Handler {
             (remote_ip, sess.destination.port()).into(),
             sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.so_mark,
         )
         .await?;
 
@@ -92,7 +92,7 @@ impl OutboundHandler for Handler {
             None,
             sess.iface.clone(),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            None,
+            sess.so_mark,
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;
@@ -119,7 +119,7 @@ impl OutboundHandler for Handler {
                 sess.destination.port(),
                 sess.iface.as_ref(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
         let s = ChainedStreamWrapper::new(s);
@@ -140,7 +140,7 @@ impl OutboundHandler for Handler {
                 sess.destination.clone(),
                 sess.iface.clone(),
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                sess.so_mark,
             )
             .await?;
         let d = ChainedDatagramWrapper::new(d);

@@ -3,7 +3,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
     },
-    proxy::{datagram::UdpPacket, utils::Interface},
+    proxy::datagram::UdpPacket,
     session::Session,
 };
 use async_trait::async_trait;
@@ -28,13 +28,17 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
+#[cfg(target_os = "linux")]
+pub mod tproxy;
 
 pub(crate) mod datagram;
 
 pub mod converters;
+pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+#[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;
 #[cfg(feature = "tuic")]
@@ -44,16 +48,14 @@ pub mod utils;
 pub mod vmess;
 pub mod wg;
 
-pub mod fallback;
-pub mod loadbalance;
-pub mod relay;
-pub mod selector;
-pub mod urltest;
+pub mod group;
+pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
 mod options;
-pub use options::HandlerSharedOptions;
 mod transport;
+
+pub use options::HandlerCommonOptions;
 
 #[cfg(test)]
 pub mod mocks;
@@ -82,6 +84,10 @@ pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
 {
 }
+impl<T, U> InboundDatagram<U> for T where
+    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin + Debug
+{
+}
 pub type AnyInboundDatagram =
     Box<dyn InboundDatagram<UdpPacket, Error = io::Error, Item = UdpPacket>>;
 
@@ -97,14 +103,6 @@ impl<T, U> OutboundDatagram<U> for T where
 
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
-
-#[derive(Default, Debug, Clone)]
-pub struct CommonOption {
-    #[allow(dead_code)]
-    so_mark: Option<u32>,
-    iface: Option<Interface>,
-    connector: Option<String>,
-}
 
 #[async_trait]
 pub trait InboundListener: Send + Sync + Unpin {
@@ -127,6 +125,7 @@ pub enum OutboundType {
     Tor,
     Tuic,
     Socks5,
+    Hysteria2,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -149,6 +148,7 @@ impl Display for OutboundType {
             OutboundType::Tor => write!(f, "Tor"),
             OutboundType::Tuic => write!(f, "Tuic"),
             OutboundType::Socks5 => write!(f, "Socks5"),
+            OutboundType::Hysteria2 => write!(f, "Hysteria2"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),

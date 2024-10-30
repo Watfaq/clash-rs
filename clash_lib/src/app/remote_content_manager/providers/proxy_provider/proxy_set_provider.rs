@@ -18,12 +18,14 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{direct, reject, socks, tor, trojan, vmess, wg, AnyOutboundHandler},
+    proxy::{direct, reject, socks, trojan, vmess, wg, AnyOutboundHandler},
     Error,
 };
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
 
@@ -135,10 +137,12 @@ impl ProxySetProvider {
                                 let h: vmess::Handler = vm.try_into()?;
                                 Ok(Arc::new(h) as _)
                             }
+                            OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
                             OutboundProxyProtocol::Wireguard(wg) => {
                                 let h: wg::Handler = wg.try_into()?;
                                 Ok(Arc::new(h) as _)
                             }
+                            #[cfg(feature = "onion")]
                             OutboundProxyProtocol::Tor(tor) => {
                                 let h: tor::Handler = tor.try_into()?;
                                 Ok(Arc::new(h) as _)

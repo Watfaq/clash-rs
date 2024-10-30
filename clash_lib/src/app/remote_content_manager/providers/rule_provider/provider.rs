@@ -20,7 +20,9 @@ use crate::{
         },
         router::{map_rule_type, RuleMatcher},
     },
-    common::{errors::map_io_error, geodata::GeoData, mmdb::Mmdb, trie},
+    common::{
+        errors::map_io_error, geodata::GeoData, mmdb::Mmdb, succinct_set, trie,
+    },
     config::internal::rule::RuleType,
     session::Session,
     Error,
@@ -52,7 +54,8 @@ impl Display for RuleSetBehavior {
 }
 
 enum RuleContent {
-    Domain(trie::StringTrie<bool>),
+    // the left will converted into a right
+    Domain(succinct_set::DomainSet),
     Ipcidr(Box<CidrTrie>),
     Classical(Vec<Box<dyn RuleMatcher>>),
 }
@@ -91,7 +94,7 @@ impl RuleProviderImpl {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behovior {
                 RuleSetBehavior::Domain => {
-                    RuleContent::Domain(trie::StringTrie::new())
+                    RuleContent::Domain(succinct_set::DomainSet::default())
                 }
                 RuleSetBehavior::Ipcidr => {
                     RuleContent::Ipcidr(Box::new(CidrTrie::new()))
@@ -150,9 +153,7 @@ impl RuleProvider for RuleProviderImpl {
 
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(trie) => {
-                    trie.search(&sess.destination.host()).is_some()
-                }
+                RuleContent::Domain(set) => set.has(&sess.destination.host()),
                 RuleContent::Ipcidr(trie) => trie.contains(
                     sess.destination
                         .ip()
@@ -243,7 +244,8 @@ fn make_rules(
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
-            Ok(RuleContent::Domain(make_domain_rules(rules)?))
+            let s = make_domain_rules(rules)?;
+            Ok(RuleContent::Domain(s.into()))
         }
         RuleSetBehavior::Ipcidr => {
             Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?)))

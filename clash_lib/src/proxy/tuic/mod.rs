@@ -54,9 +54,8 @@ use rustls::client::ClientConfig as TlsConfig;
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
-    datagram::UdpPacket,
-    utils::{get_outbound_interface, Interface},
-    AnyOutboundDatagram, CommonOption, ConnectorType, OutboundHandler, OutboundType,
+    datagram::UdpPacket, ConnectorType, HandlerCommonOptions, OutboundHandler,
+    OutboundType,
 };
 
 #[derive(Debug, Clone)]
@@ -81,7 +80,7 @@ pub struct HandlerOptions {
     pub receive_window: VarInt,
 
     #[allow(dead_code)]
-    pub common_opts: CommonOption,
+    pub common_opts: HandlerCommonOptions,
 
     /// not used
     #[allow(dead_code)]
@@ -165,6 +164,7 @@ impl Handler {
     async fn init_endpoint(
         opts: HandlerOptions,
         resolver: ThreadSafeDNSResolver,
+        sess: &Session,
     ) -> Result<TuicEndpoint> {
         let mut crypto =
             TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -198,22 +198,20 @@ impl Handler {
         quinn_config.transport_config(Arc::new(transport_config));
 
         let socket = {
-            let iface = get_outbound_interface();
-
             if resolver.ipv6() {
                 new_udp_socket(
                     Some((Ipv6Addr::UNSPECIFIED, 0).into()),
-                    iface.map(|x| Interface::Name(x.name.clone())),
+                    sess.iface.clone(),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
+                    sess.so_mark,
                 )
                 .await?
             } else {
                 new_udp_socket(
                     Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    iface.map(|x| Interface::Name(x.name.clone())),
+                    sess.iface.clone(),
                     #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
+                    sess.so_mark,
                 )
                 .await?
             }
@@ -249,11 +247,12 @@ impl Handler {
     async fn get_conn(
         &self,
         resolver: &ThreadSafeDNSResolver,
+        sess: &Session,
     ) -> Result<Arc<TuicConnection>> {
         let endpoint = self
             .ep
             .get_or_try_init(|| {
-                Self::init_endpoint(self.opts.clone(), resolver.clone())
+                Self::init_endpoint(self.opts.clone(), resolver.clone(), sess)
             })
             .await?;
 
@@ -282,7 +281,7 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedStream> {
-        let conn = self.get_conn(&resolver).await?;
+        let conn = self.get_conn(&resolver, sess).await?;
         let dest = sess.destination.clone().into_tuic();
         let tuic_tcp = conn.connect_tcp(dest).await?.compat();
         let s = ChainedStreamWrapper::new(tuic_tcp);
@@ -295,7 +294,7 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> Result<BoxedChainedDatagram> {
-        let conn = self.get_conn(&resolver).await?;
+        let conn = self.get_conn(&resolver, sess).await?;
         let assos_id = self.next_assoc_id.fetch_add(1, Ordering::SeqCst);
         let quic_udp = TuicDatagramOutbound::new(assos_id, conn, sess.source.into());
         let s = ChainedDatagramWrapper::new(quic_udp);
@@ -311,12 +310,11 @@ struct TuicDatagramOutbound {
 }
 
 impl TuicDatagramOutbound {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         assoc_id: u16,
         conn: Arc<TuicConnection>,
         local_addr: ClashSocksAddr,
-    ) -> AnyOutboundDatagram {
+    ) -> Self {
         // TODO not sure about the size of buffer
         let (send_tx, send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
@@ -351,10 +349,10 @@ impl TuicDatagramOutbound {
             udp_sessions.write().await.remove(&assoc_id);
             anyhow::Ok(())
         });
-        let s = Self {
+
+        Self {
             send_tx: tokio_util::sync::PollSender::new(send_tx),
             recv_rx,
-        };
-        Box::new(s)
+        }
     }
 }

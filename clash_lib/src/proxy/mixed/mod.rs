@@ -1,6 +1,6 @@
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    proxy::{AnyInboundListener, InboundListener},
+    proxy::InboundListener,
     session::{Network, Session},
     Dispatcher,
 };
@@ -25,17 +25,16 @@ impl Drop for Listener {
 }
 
 impl Listener {
-    #[allow(clippy::new_ret_no_self)]
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
-    ) -> AnyInboundListener {
-        Arc::new(Self {
+    ) -> Self {
+        Self {
             addr,
             dispatcher,
             authenticator,
-        }) as _
+        }
     }
 }
 

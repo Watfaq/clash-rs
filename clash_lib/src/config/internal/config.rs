@@ -92,6 +92,8 @@ impl TryFrom<def::Config> for Config {
                 routing_mask: c.routing_mask,
                 mmdb: c.mmdb.to_owned(),
                 mmdb_download_url: c.mmdb_download_url.to_owned(),
+                asn_mmdb: c.asn_mmdb.to_owned(),
+                asn_mmdb_download_url: c.asn_mmdb_download_url.to_owned(),
                 geosite: c.geosite.to_owned(),
                 geosite_download_url: c.geosite_download_url.to_owned(),
             },
@@ -118,6 +120,8 @@ impl TryFrom<def::Config> for Config {
                         Error::InvalidConfig(format!("parse tun gateway: {}", x))
                     })?,
                     mtu: t.mtu,
+                    so_mark: t.so_mark,
+                    route_table: t.route_table,
                 },
                 None => TunConfig::default(),
             },
@@ -281,6 +285,8 @@ pub struct General {
     pub routing_mask: Option<u32>,
     pub mmdb: String,
     pub mmdb_download_url: Option<String>,
+    pub asn_mmdb: String,
+    pub asn_mmdb_download_url: Option<String>,
 
     pub geosite: String,
     pub geosite_download_url: Option<String>,
@@ -300,6 +306,8 @@ pub struct TunConfig {
     pub routes: Vec<IpNet>,
     pub gateway: IpNet,
     pub mtu: Option<i32>,
+    pub so_mark: Option<u32>,
+    pub route_table: Option<u32>,
 }
 
 #[derive(Clone, Default)]
@@ -351,7 +359,7 @@ pub struct Inbound {
     pub bind_address: BindAddress,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Controller {
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,

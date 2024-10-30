@@ -7,7 +7,7 @@ use crate::{
             Handler, HandlerOptions, OBFSOption, ShadowTlsOption, SimpleOBFSMode,
             SimpleOBFSOption, V2RayOBFSOption,
         },
-        CommonOption,
+        HandlerCommonOptions,
     },
     Error,
 };
@@ -26,7 +26,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
     fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: CommonOption {
+            common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },
@@ -36,15 +36,20 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
             cipher: s.cipher.to_owned(),
             plugin_opts: match &s.plugin {
                 Some(plugin) => match plugin.as_str() {
-                    "obfs" => s
-                        .plugin_opts
-                        .clone()
-                        .ok_or(Error::InvalidConfig(
-                            "plugin_opts is required for plugin obfs".to_owned(),
-                        ))?
-                        .try_into()
-                        .map(OBFSOption::Simple)
-                        .ok(),
+                    "obfs" => {
+                        tracing::warn!(
+                            "simple-obfs is deprecated, please use v2ray-plugin \
+                             instead"
+                        );
+                        s.plugin_opts
+                            .clone()
+                            .ok_or(Error::InvalidConfig(
+                                "plugin_opts is required for plugin obfs".to_owned(),
+                            ))?
+                            .try_into()
+                            .map(OBFSOption::Simple)
+                            .ok()
+                    }
                     "v2ray-plugin" => s
                         .plugin_opts
                         .clone()

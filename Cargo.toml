@@ -10,7 +10,7 @@ members = [
 
 
 [workspace.package]
-version = "0.3.2"
+version = "0.7.0"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2021"
 
@@ -19,6 +19,7 @@ opt-level = "s"
 codegen-units = 1
 lto = true
 strip = true
+debug = 1
 
 [patch.crates-io]
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a"}
