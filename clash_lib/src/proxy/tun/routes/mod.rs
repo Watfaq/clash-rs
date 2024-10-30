@@ -23,6 +23,8 @@ pub use linux::maybe_routes_clean_up;
 mod other;
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 use other::add_route;
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+pub use other::maybe_routes_clean_up;
 
 use tracing::warn;
 
