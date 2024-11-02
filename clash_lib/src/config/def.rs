@@ -358,7 +358,21 @@ impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_yaml::from_str(s).map_err(|x| {
+        let mut val: Value = serde_yaml::from_str(s).map_err(|x| {
+            Error::InvalidConfig(format!(
+                "cound not parse config content {}: {}",
+                s, x
+            ))
+        })?;
+
+        val.apply_merge().map_err(|x| {
+            Error::InvalidConfig(format!(
+                "failed to process anchors in config content {}: {}",
+                s, x
+            ))
+        })?;
+
+        serde_yaml::from_value(val).map_err(|x| {
             Error::InvalidConfig(format!(
                 "cound not parse config content {}: {}",
                 s, x
