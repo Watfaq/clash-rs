@@ -226,7 +226,10 @@ jobs:
           toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
-
+      - name: Install cross
+        if: ${{ matrix.cross }}
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
