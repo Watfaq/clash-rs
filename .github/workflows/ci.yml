@@ -245,7 +245,6 @@ jobs:
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
         with:
-          use-cross: ${{ matrix.cross }}
           command: fmt
           args: --all -- --check
         env:
