@@ -229,7 +229,7 @@ jobs:
       - name: Install cross
         if: ${{ matrix.cross }}
         run: |
-          rm -f ~/.cargo/bin/cross
+          rm -f ~/.cargo/bin/cross*
           cargo install cross --git https://github.com/cross-rs/cross
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
