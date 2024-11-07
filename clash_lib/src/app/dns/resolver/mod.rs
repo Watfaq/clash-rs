@@ -1,9 +1,9 @@
 mod enhanced;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[path = "system_linux.rs"]
 mod system;
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(target_os = "android")))]
 #[path = "system_non_linux.rs"]
 mod system;
 
