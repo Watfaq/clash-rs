@@ -182,6 +182,23 @@ jobs:
             cross: false
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # Android
+          - os: ubuntu-latest
+            target: aarch64-linux-android
+            cross: true
+            extra-args: -F "shadowsocks, tuic, onion"
+          - os: ubuntu-latest
+            target: armv7-linux-androideabi
+            cross: true
+            extra-args: -F "shadowsocks, tuic, onion"
+          - os: ubuntu-latest
+            target: x86_64-linux-android
+            cross: true
+            extra-args: -F "shadowsocks, tuic, onion"
+          - os: ubuntu-latest
+            target: i686-linux-android
+            cross: true
+            extra-args: -F "shadowsocks, tuic, onion"
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
           # Windows aarch: todo
@@ -209,7 +226,11 @@ jobs:
           toolchain: ${{ matrix.toolchain || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
-
+      - name: Install cross
+        if: ${{ matrix.cross }}
+        run: |
+          rm -f ~/.cargo/bin/cross*
+          cargo install cross --git https://github.com/cross-rs/cross
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -231,7 +252,6 @@ jobs:
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
         with:
-          use-cross: ${{ matrix.cross }}
           command: fmt
           args: --all -- --check
         env:
