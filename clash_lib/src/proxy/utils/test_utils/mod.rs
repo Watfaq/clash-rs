@@ -34,7 +34,7 @@ pub async fn ping_pong_test(
 
     let sess = Session {
         destination: (
-            if cfg!(target_os = "linux") {
+            if cfg!(any(target_os = "linux", target_os = "android")) {
                 "127.0.0.1".to_owned()
             } else {
                 "host.docker.internal".to_owned()
@@ -152,7 +152,7 @@ pub async fn ping_pong_udp_test(
         .try_into()
         .unwrap_or_else(|_| panic!(""));
     let dst: SocksAddr = (
-        if cfg!(target_os = "linux") {
+        if cfg!(any(target_os = "linux", target_os = "android")) {
             "127.0.0.1".to_owned()
         } else {
             "host.docker.internal".to_owned()
