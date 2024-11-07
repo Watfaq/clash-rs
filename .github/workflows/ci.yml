@@ -225,8 +225,8 @@ jobs:
       - name: Set environment variables (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          echo "CLASH_GIT_REF=${GITHUB_REF}" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "CLASH_GIT_SHA=${GITHUB_SHA}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CLASH_GIT_REF=$env:GITHUB_REF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CLASH_GIT_SHA=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
