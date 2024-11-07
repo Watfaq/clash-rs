@@ -216,10 +216,17 @@ jobs:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set environment variables
+      - name: Set environment variables (non Windows)
+        if: matrix.os != 'windows-latest'
         run: |
           echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+
+      - name: Set environment variables (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "CLASH_GIT_REF=$env:GITHUB_REF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CLASH_GIT_SHA=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v2
