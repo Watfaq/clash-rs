@@ -37,7 +37,7 @@ rustls-pemfile = "2"
 webpki-roots = "0.26"
 
 # Error handing & logging
-thiserror = "1"
+thiserror = "2"
 anyhow = "1"
 opentelemetry = "0.26"
 opentelemetry_sdk = { version = "0.26", default-features = false, features = ["trace", "rt-tokio"] }
@@ -121,8 +121,8 @@ arti-client = { version = "0.22", optional = true, default-features = false, fea
 tor-rtcompat = { version = "0.22", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.3.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.3.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.3.4", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.3.4", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -140,12 +140,12 @@ criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optio
 memory-stats = "1.0.0"
 
 [dev-dependencies]
-tempfile = "3.13"
+tempfile = "3.14"
 mockall = "0.13.0"
 tokio-test = "0.4.4"
 axum-macros = "0.4.2"
 bollard = "0.17"
-serial_test = "3.1"
+serial_test = "3.2"
 env_logger = "0.11"
 
 [build-dependencies]
@@ -155,7 +155,7 @@ prost-build = "0.13"
 unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18"}
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "3.0.0"
+security-framework = "3.0.1"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
