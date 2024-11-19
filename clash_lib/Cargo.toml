@@ -39,12 +39,12 @@ webpki-roots = "0.26"
 # Error handing & logging
 thiserror = "2"
 anyhow = "1"
-opentelemetry = "0.26"
-opentelemetry_sdk = { version = "0.26", default-features = false, features = ["trace", "rt-tokio"] }
-tracing-opentelemetry = "0.27"
-opentelemetry-jaeger-propagator = "0.26"
-opentelemetry-otlp = { version = "0.26" }
-opentelemetry-semantic-conventions = { version = "0.26", features = ["semconv_experimental"] }
+opentelemetry = "0.27"
+opentelemetry_sdk = { version = "0.27", default-features = false, features = ["trace", "rt-tokio"] }
+tracing-opentelemetry = "0.28"
+opentelemetry-jaeger-propagator = "0.27"
+opentelemetry-otlp = { version = "0.27" }
+opentelemetry-semantic-conventions = { version = "0.27", features = ["semconv_experimental"] }
 
 # Data structures
 url = "2"
@@ -117,8 +117,8 @@ maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.22", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.22", optional = true, default-features = false }
+arti-client = { version = "0.24", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.24", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.3.4", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
@@ -141,10 +141,10 @@ memory-stats = "1.0.0"
 
 [dev-dependencies]
 tempfile = "3.14"
-mockall = "0.13.0"
+mockall = "0.13.1"
 tokio-test = "0.4.4"
 axum-macros = "0.4.2"
-bollard = "0.17"
+bollard = "0.18"
 serial_test = "3.2"
 env_logger = "0.11"
 

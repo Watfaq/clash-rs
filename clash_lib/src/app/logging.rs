@@ -3,10 +3,14 @@ use std::io::IsTerminal;
 use crate::def::LogLevel;
 use opentelemetry::{
     global::{self},
-    trace::TracerProvider,
+    trace::TracerProvider as _,
     KeyValue,
 };
-use opentelemetry_sdk::{trace, Resource};
+use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::{
+    trace::{Config, TracerProvider},
+    Resource,
+};
 use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
@@ -14,10 +18,14 @@ use opentelemetry_semantic_conventions::{
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::{debug, error};
+use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
-use tracing_subscriber::{filter, filter::Directive, prelude::*, EnvFilter, Layer};
+use tracing_subscriber::{
+    filter::{self, filter_fn, Directive},
+    prelude::*,
+    EnvFilter, Layer,
+};
 
 impl From<LogLevel> for filter::LevelFilter {
     fn from(level: LogLevel) -> Self {
@@ -92,28 +100,23 @@ pub fn setup_logging(
         global::set_text_map_propagator(
             opentelemetry_jaeger_propagator::Propagator::new(),
         );
-        global::set_error_handler(|e| {
-            error!("OpenTelemetry error: {:?}", e);
-        })
-        .unwrap();
 
-        let provider = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-            .with_trace_config(trace::Config::default().with_resource(
-                Resource::from_schema_url(
-                    [
-                        KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
-                        KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-                        KeyValue::new(
-                            DEPLOYMENT_ENVIRONMENT_NAME,
-                            std::env::var("PROFILE").unwrap_or_default(),
-                        ),
-                    ],
-                    SCHEMA_URL,
-                ),
-            ))
-            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        let exporter = SpanExporter::builder().with_tonic().build()?;
+
+        let provider = TracerProvider::builder()
+            .with_config(Config::default().with_resource(Resource::from_schema_url(
+                [
+                    KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
+                    KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+                    KeyValue::new(
+                        DEPLOYMENT_ENVIRONMENT_NAME,
+                        std::env::var("PROFILE").unwrap_or_default(),
+                    ),
+                ],
+                SCHEMA_URL,
+            )))
+            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+            .build();
 
         global::set_tracer_provider(provider.clone());
 
@@ -142,6 +145,12 @@ pub fn setup_logging(
         None
     };
 
+    let opentelemetry_layer = tracing_subscriber::fmt::Layer::new()
+        .with_writer(std::io::stderr)
+        .with_filter(filter_fn(|metadata| {
+            metadata.target().starts_with("opentelemetry")
+        }));
+
     let subscriber = tracing_subscriber::registry()
         .with(jaeger)
         .with(filter)
@@ -167,7 +176,8 @@ pub fn setup_logging(
                 .with_thread_ids(true)
                 .with_writer(std::io::stdout),
         )
-        .with(ios_os_log);
+        .with(ios_os_log)
+        .with(opentelemetry_layer);
 
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
