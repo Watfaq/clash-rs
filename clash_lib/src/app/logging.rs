@@ -6,9 +6,9 @@ use opentelemetry::{
     trace::TracerProvider as _,
     KeyValue,
 };
-use opentelemetry_otlp::{LogExporter, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::{
-    trace::{self, Config, TracerProvider},
+    trace::{Config, TracerProvider},
     Resource,
 };
 use opentelemetry_semantic_conventions::{
@@ -18,7 +18,7 @@ use opentelemetry_semantic_conventions::{
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::{debug, error};
+use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
