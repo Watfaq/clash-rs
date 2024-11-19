@@ -122,6 +122,7 @@ impl TryFrom<def::Config> for Config {
                     mtu: t.mtu,
                     so_mark: t.so_mark,
                     route_table: t.route_table,
+                    dns_hijack: t.dns_hijack,
                 },
                 None => TunConfig::default(),
             },
@@ -308,6 +309,7 @@ pub struct TunConfig {
     pub mtu: Option<i32>,
     pub so_mark: Option<u32>,
     pub route_table: Option<u32>,
+    pub dns_hijack: bool,
 }
 
 #[derive(Clone, Default)]

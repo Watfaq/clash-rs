@@ -301,8 +301,9 @@ impl Client for DnsClient {
         }
 
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
-        req.set_id(rand::random::<u16>());
-
+        if req.id() == 0 {
+            req.set_id(rand::random::<u16>());
+        }
         inner
             .c
             .as_ref()

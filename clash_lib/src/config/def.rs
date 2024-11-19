@@ -25,6 +25,9 @@ pub struct TunConfig {
     pub so_mark: Option<u32>,
     /// policy routing table on Linux only
     pub route_table: Option<u32>,
+    /// Will hijack UDP:53 DNS queries to the Clash DNS server if set to true
+    #[serde(default)]
+    pub dns_hijack: bool,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
