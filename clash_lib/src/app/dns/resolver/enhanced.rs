@@ -286,7 +286,7 @@ impl EnhancedResolver {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
-                    trace!("dns query hit lru cache");
+                    trace!("dns query {} hit lru cache", q.to_string());
                     let mut cached = cached.clone();
                     cached.set_id(message.id());
                     return Ok(cached);

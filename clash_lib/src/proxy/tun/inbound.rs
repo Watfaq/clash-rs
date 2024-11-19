@@ -15,7 +15,7 @@ use crate::{
         datagram::UdpPacket, tun::routes::maybe_add_routes,
         utils::get_outbound_interface,
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, Type},
     Error, Runner,
 };
 
@@ -124,14 +124,30 @@ async fn handle_inbound_datagram(
                 match hickory_proto::op::Message::from_vec(&pkt.data) {
                     Ok(msg) => {
                         trace!("hijack dns request: {:?}", msg);
-                        let resp = match resolver_dns.exchange(&msg).await {
+                        let mut resp = match resolver_dns.exchange(&msg).await {
                             Ok(resp) => resp,
                             Err(e) => {
                                 warn!("failed to exchange dns message: {}", e);
                                 continue;
                             }
                         };
+                        // hickory mutates id sometimes, https://github.com/hickory-dns/hickory-dns/pull/2590
+                        resp.set_id(msg.id());
 
+                        if let Some(edns) = msg.extensions() {
+                            if edns
+                                .option(
+                                    hickory_proto::rr::rdata::opt::EdnsCode::Padding,
+                                )
+                                .is_none()
+                            {
+                                if let Some(edns) = resp.extensions_mut() {
+                                    edns.options_mut().remove(
+                                        hickory_proto::rr::rdata::opt::EdnsCode::Padding,
+                                    );
+                                }
+                            }
+                        }
                         trace!("hijack dns response: {:?}", resp);
 
                         match resp.to_vec() {
