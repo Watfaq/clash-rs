@@ -169,11 +169,11 @@ pub fn setup_logging(
             tracing_subscriber::fmt::Layer::new()
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
-                .with_target(false)
+                .with_target(cfg!(debug_assertions))
                 .with_file(true)
                 .with_line_number(true)
                 .with_level(true)
-                .with_thread_ids(true)
+                .with_thread_ids(cfg!(debug_assertions))
                 .with_writer(std::io::stdout),
         )
         .with(ios_os_log)

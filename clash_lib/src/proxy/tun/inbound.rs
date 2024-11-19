@@ -15,7 +15,7 @@ use crate::{
         datagram::UdpPacket, tun::routes::maybe_add_routes,
         utils::get_outbound_interface,
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, Type},
     Error, Runner,
 };
 
@@ -57,10 +57,13 @@ async fn handle_inbound_datagram(
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
     so_mark: u32,
+    dns_hijack: bool,
 ) {
     // tun i/o
     let (ls, mut lr) = socket.split();
     let ls = Arc::new(ls);
+    let ls_dns = ls.clone(); // for dns hijack
+    let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
@@ -91,26 +94,9 @@ async fn handle_inbound_datagram(
     let fut1 = tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
             trace!("tun <- dispatcher: {:?}", pkt);
-            // populate the correct src_addr, though is it necessary?
-            let src_addr = match pkt.src_addr {
-                SocksAddr::Ip(ip) => ip,
-                SocksAddr::Domain(host, port) => {
-                    match resolver.resolve(&host, resolver.fake_ip_enabled()).await {
-                        Ok(Some(ip)) => (ip, port).into(),
-                        Ok(None) => {
-                            warn!("failed to resolve domain: {}", host);
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!("failed to resolve domain: {}", e);
-                            continue;
-                        }
-                    }
-                }
-            };
             if let Err(e) = ls.send_to(
                 &pkt.data[..],
-                &src_addr,
+                &pkt.src_addr.must_into_socket_addr(),
                 &pkt.dst_addr.must_into_socket_addr(),
             ) {
                 warn!("failed to send udp packet to netstack: {}", e);
@@ -131,6 +117,67 @@ async fn handle_inbound_datagram(
             };
 
             trace!("tun -> dispatcher: {:?}", pkt);
+
+            if dns_hijack && pkt.dst_addr.port() == 53 {
+                trace!("got dns packet: {:?}, returning from Clash DNS server", pkt);
+
+                match hickory_proto::op::Message::from_vec(&pkt.data) {
+                    Ok(msg) => {
+                        trace!("hijack dns request: {:?}", msg);
+                        let mut resp = match resolver_dns.exchange(&msg).await {
+                            Ok(resp) => resp,
+                            Err(e) => {
+                                warn!("failed to exchange dns message: {}", e);
+                                continue;
+                            }
+                        };
+                        // hickory mutates id sometimes, https://github.com/hickory-dns/hickory-dns/pull/2590
+                        resp.set_id(msg.id());
+
+                        if let Some(edns) = msg.extensions() {
+                            if edns
+                                .option(
+                                    hickory_proto::rr::rdata::opt::EdnsCode::Padding,
+                                )
+                                .is_none()
+                            {
+                                if let Some(edns) = resp.extensions_mut() {
+                                    edns.options_mut().remove(
+                                        hickory_proto::rr::rdata::opt::EdnsCode::Padding,
+                                    );
+                                }
+                            }
+                        }
+                        trace!("hijack dns response: {:?}", resp);
+
+                        match resp.to_vec() {
+                            Ok(data) => {
+                                if let Err(e) = ls_dns.send_to(
+                                    &data,
+                                    &pkt.dst_addr.must_into_socket_addr(),
+                                    &pkt.src_addr.must_into_socket_addr(),
+                                ) {
+                                    warn!(
+                                        "failed to send udp packet to netstack: {}",
+                                        e
+                                    );
+                                }
+                                continue;
+                            }
+                            Err(e) => {
+                                warn!("failed to serialize dns response: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            "failed to parse dns packet: {}, putting it back to \
+                             stack",
+                            e
+                        );
+                    }
+                };
+            }
 
             match d_tx.send(pkt).await {
                 Ok(_) => {}
@@ -292,7 +339,14 @@ pub fn get_runner(
         }));
 
         futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket, dispatcher, resolver, so_mark).await;
+            handle_inbound_datagram(
+                udp_socket,
+                dispatcher,
+                resolver,
+                so_mark,
+                cfg.dns_hijack,
+            )
+            .await;
             Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
         }));
 
