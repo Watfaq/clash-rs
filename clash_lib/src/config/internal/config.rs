@@ -5,7 +5,6 @@ use std::{fmt::Display, net::IpAddr, str::FromStr};
 use ipnet::IpNet;
 use serde::{de::value::MapDeserializer, Deserialize, Serialize};
 use serde_yaml::Value;
-use tracing::warn;
 
 use crate::{
     app::{dns, remote_content_manager::providers::rule_provider::RuleSetBehavior},
