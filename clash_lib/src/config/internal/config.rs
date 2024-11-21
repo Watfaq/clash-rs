@@ -122,7 +122,10 @@ impl TryFrom<def::Config> for Config {
                     mtu: t.mtu,
                     so_mark: t.so_mark,
                     route_table: t.route_table,
-                    dns_hijack: t.dns_hijack,
+                    dns_hijack: match t.dns_hijack {
+                        def::DnsHijack::Switch(b) => b,
+                        def::DnsHijack::List(_) => true,
+                    },
                 },
                 None => TunConfig::default(),
             },

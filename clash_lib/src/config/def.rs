@@ -8,6 +8,19 @@ fn default_tun_address() -> String {
     "198.18.0.1/32".to_string()
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DnsHijack {
+    Switch(bool),
+    List(Vec<String>),
+}
+
+impl Default for DnsHijack {
+    fn default() -> Self {
+        DnsHijack::Switch(false)
+    }
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
@@ -26,8 +39,9 @@ pub struct TunConfig {
     /// policy routing table on Linux only
     pub route_table: Option<u32>,
     /// Will hijack UDP:53 DNS queries to the Clash DNS server if set to true
+    /// setting to a list has the same effect as setting to true
     #[serde(default)]
-    pub dns_hijack: bool,
+    pub dns_hijack: DnsHijack,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
