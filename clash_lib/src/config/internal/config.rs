@@ -5,6 +5,7 @@ use std::{fmt::Display, net::IpAddr, str::FromStr};
 use ipnet::IpNet;
 use serde::{de::value::MapDeserializer, Deserialize, Serialize};
 use serde_yaml::Value;
+use tracing::warn;
 
 use crate::{
     app::{dns, remote_content_manager::providers::rule_provider::RuleSetBehavior},
@@ -122,7 +123,10 @@ impl TryFrom<def::Config> for Config {
                     mtu: t.mtu,
                     so_mark: t.so_mark,
                     route_table: t.route_table,
-                    dns_hijack: t.dns_hijack,
+                    dns_hijack: match t.dns_hijack {
+                        def::DnsHijack::Switch(b) => b,
+                        def::DnsHijack::List(_) => true,
+                    },
                 },
                 None => TunConfig::default(),
             },

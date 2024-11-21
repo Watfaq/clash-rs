@@ -7,13 +7,14 @@ tproxy-port: 8900
 tun:
   enable: true
   device-id: "dev://utun1989"
-  route-all: true
+  route-all: false
   gateway: "198.19.0.1/32"
   so-mark: 3389
   dns-hijack: true
-  # routes:
-  #   - 0.0.0.0/1
-  #   - 128.0.0.0/1
+  # dns-hijack:
+  #   - 1.1.1.1:53
+  routes:
+    - 1.1.1.1/32
 
 ipv6: true
 
