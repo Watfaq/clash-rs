@@ -154,6 +154,13 @@ impl Handler {
                 "aes-128-gcm" => CipherKind::AES_128_GCM,
                 "aes-256-gcm" => CipherKind::AES_256_GCM,
                 "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
+
+                "2022-blake3-aes-128-gcm" => CipherKind::AEAD2022_BLAKE3_AES_128_GCM,
+                "2022-blake3-aes-256-gcm" => CipherKind::AEAD2022_BLAKE3_AES_256_GCM,
+                "2022-blake3-chacha20-ietf-poly1305" => {
+                    CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305
+                }
+
                 "rc4-md5" => CipherKind::SS_RC4_MD5,
                 _ => {
                     return Err(io::Error::new(
