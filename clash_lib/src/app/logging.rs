@@ -18,7 +18,7 @@ use opentelemetry_semantic_conventions::{
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::{debug, Subscriber};
+use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
