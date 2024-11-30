@@ -20,6 +20,7 @@ use tokio::sync::broadcast::Sender;
 
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
+#[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
     filter::{self, filter_fn, Directive},
@@ -125,11 +126,10 @@ pub fn setup_logging(
         None
     };
 
-    let ios_os_log = if cfg!(target_os = "ios") {
-        Some(OsLogger::new("com.watfaq.clash", "default"))
-    } else {
-        None
-    };
+    #[cfg(target_os = "ios")]
+    let ios_os_log = Some(OsLogger::new("com.watfaq.clash", "default"));
+    #[cfg(not(target_os = "ios"))]
+    let ios_os_log = None;
 
     let (appender, g) = if let Some(log_file) = log_file {
         let file_appender = tracing_appender::rolling::daily(cwd, log_file);
