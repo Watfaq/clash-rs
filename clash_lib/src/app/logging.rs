@@ -18,7 +18,7 @@ use opentelemetry_semantic_conventions::{
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::debug;
+use tracing::{debug, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
@@ -129,7 +129,8 @@ pub fn setup_logging(
     #[cfg(target_os = "ios")]
     let ios_os_log = Some(OsLogger::new("com.watfaq.clash", "default"));
     #[cfg(not(target_os = "ios"))]
-    let ios_os_log = None;
+    let ios_os_log =
+        tracing_subscriber::fmt::Layer::new().with_writer(std::io::empty);
 
     let (appender, g) = if let Some(log_file) = log_file {
         let file_appender = tracing_appender::rolling::daily(cwd, log_file);
