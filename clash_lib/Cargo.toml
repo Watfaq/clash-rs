@@ -109,7 +109,6 @@ ring-compat = { version = "0.8", features = ["aead"] }
 rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 tracing-appender = "0.2"
 
 shadowsocks = { version="1.21", optional = true, features=["aead-cipher-2022","stream-cipher"] }
@@ -156,6 +155,9 @@ unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "3.0.1"
+
+[target.'cfg(target_os="ios")'.dependencies]
+tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
