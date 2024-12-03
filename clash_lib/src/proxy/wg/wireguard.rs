@@ -380,9 +380,7 @@ impl WireguardTunnel {
         match IpVersion::of_packet(packet) {
             Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| {
-                    Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip
-                })
+                .filter(|packet| packet.dst_addr() == self.source_peer_ip)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),
@@ -394,9 +392,7 @@ impl WireguardTunnel {
                 }),
             Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| {
-                    Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6
-                })
+                .filter(|packet| Some(packet.dst_addr()) == self.source_peer_ipv6)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),

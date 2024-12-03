@@ -7,10 +7,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::SpanExporter;
-use opentelemetry_sdk::{
-    trace::{Config, TracerProvider},
-    Resource,
-};
+use opentelemetry_sdk::{trace::TracerProvider, Resource};
 use opentelemetry_semantic_conventions::{
     resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
@@ -105,7 +102,7 @@ pub fn setup_logging(
         let exporter = SpanExporter::builder().with_tonic().build()?;
 
         let provider = TracerProvider::builder()
-            .with_config(Config::default().with_resource(Resource::from_schema_url(
+            .with_resource(Resource::from_schema_url(
                 [
                     KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
                     KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
@@ -115,7 +112,7 @@ pub fn setup_logging(
                     ),
                 ],
                 SCHEMA_URL,
-            )))
+            ))
             .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
             .build();
 
