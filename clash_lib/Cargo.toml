@@ -116,8 +116,8 @@ maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.24", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.24", optional = true, default-features = false }
+arti-client = { version = "0.25", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.25", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.3.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
