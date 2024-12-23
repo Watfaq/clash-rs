@@ -23,7 +23,6 @@ use std::{
     time::Duration,
 };
 
-use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uuid::Uuid;
 
 use crate::{
@@ -283,7 +282,7 @@ impl Handler {
     ) -> Result<BoxedChainedStream> {
         let conn = self.get_conn(&resolver, sess).await?;
         let dest = sess.destination.clone().into_tuic();
-        let tuic_tcp = conn.connect_tcp(dest).await?.compat();
+        let tuic_tcp = conn.connect_tcp(dest).await?;
         let s = ChainedStreamWrapper::new(tuic_tcp);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
