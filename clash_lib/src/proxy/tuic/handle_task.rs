@@ -159,7 +159,7 @@ impl TuicConnection {
             Ok(()) => Ok(()),
             Err(err) => {
                 tracing::warn!("[udp] [dissociate] [{assoc_id:#06x}] {err}");
-                Err(err)?
+                Err(anyhow::anyhow!(err))
             }
         }
     }
