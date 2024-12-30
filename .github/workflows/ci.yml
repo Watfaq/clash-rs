@@ -16,7 +16,7 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly-2024-12-29"
+  RUST_TOOLCHAIN: "nightly-2024-12-20"
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
@@ -139,7 +139,7 @@ jobs:
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: >-
-              -Ctarget-feature=+crt-static 
+              -Ctarget-feature=+crt-static
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
               -Clink-args=/NODEFAULTLIB:vcruntime.lib
               -Clink-args=/NODEFAULTLIB:vcruntimed.lib
