@@ -16,6 +16,7 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
+  RUST_TOOLCHAIN: "nightly-2024-12-29"
 
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
@@ -223,7 +224,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || 'nightly' }}
+          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
           target: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
       - name: Install cross
@@ -256,7 +257,7 @@ jobs:
           args: --all -- --check
         env:
           CLASH_DOCKER_TEST: "true"
-          
+
       - name: Cargo clippy
         uses: clechasseur/rs-cargo@v2
         with:
@@ -336,7 +337,7 @@ jobs:
         with:
           name: binaries
           path: ./packages
-          
+
       - name: Create SHA256Sums.txt and version.txt
         run: |
           cd packages
@@ -370,7 +371,7 @@ jobs:
           files: |
             packages/*
             LICENSE*
-            
+
       - name: Delete old latest nightly release
         if: startsWith(github.ref, 'refs/heads/master')
         uses: actions/github-script@v7
@@ -389,7 +390,7 @@ jobs:
           tag_name: latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Github nightly release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
@@ -402,7 +403,7 @@ jobs:
           files: |
             packages/*
             LICENSE*
-  
+
   docker-image:
     needs: [ compile ]
     name: Docker Image
@@ -443,14 +444,14 @@ jobs:
         run: |
           mv ./clash-rs/clash-x86_64-unknown-linux-musl ./clash-rs/clash-amd64
           mv ./clash-rs/clash-aarch64-unknown-linux-musl ./clash-rs/clash-arm64
-          
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: watfaq
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Build and push release
         uses: docker/build-push-action@v6
         with:
