@@ -223,7 +223,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
+          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}-${{ matrix.target }}
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
       - name: Install cross
