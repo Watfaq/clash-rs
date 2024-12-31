@@ -223,14 +223,17 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}-${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
-      - name: Install cross
+      - name: Install rust targets & cross
         if: ${{ matrix.cross }}
         run: |
+          rustup target add ${TARGET}
           rm -f ~/.cargo/bin/cross*
           cargo install cross --git https://github.com/cross-rs/cross
+        env:
+          TARGET: ${{ matrix.target }}
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
