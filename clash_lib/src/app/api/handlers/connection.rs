@@ -68,7 +68,7 @@ async fn get_connections(
             let j = serde_json::to_vec(&snapshot).unwrap();
             let body = String::from_utf8(j).unwrap();
 
-            if let Err(e) = socket.send(Message::Text(body)).await {
+            if let Err(e) = socket.send(Message::Text(body.into())).await {
                 // likely client gone
                 debug!("ws send error: {}", e);
                 break;

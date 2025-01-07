@@ -81,7 +81,7 @@ cfb-mode = "0.8"
 const-fnv1a-hash = "1"
 
 filetime = "0.2"
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
@@ -138,10 +138,10 @@ criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optio
 memory-stats = "1.0.0"
 
 [dev-dependencies]
-tempfile = "3.14"
+tempfile = "3.15"
 mockall = "0.13.1"
 tokio-test = "0.4.4"
-axum-macros = "0.4.2"
+axum-macros = "0.5.0"
 bollard = "0.18"
 serial_test = "3.2"
 env_logger = "0.11"

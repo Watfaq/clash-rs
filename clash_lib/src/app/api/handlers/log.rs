@@ -23,7 +23,7 @@ pub async fn handle(
             let res = serde_json::to_vec(&evt).unwrap();
 
             if let Err(e) = socket
-                .send(Message::Text(String::from_utf8(res).unwrap()))
+                .send(Message::Text(String::from_utf8(res).unwrap().into()))
                 .await
             {
                 warn!("ws send error: {}", e);
