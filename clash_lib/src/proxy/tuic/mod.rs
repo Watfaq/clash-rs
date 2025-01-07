@@ -5,7 +5,7 @@ pub(crate) mod types;
 
 use crate::proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket};
 use anyhow::Result;
-use axum::async_trait;
+use async_trait::async_trait;
 
 use quinn::{
     congestion::{BbrConfig, NewRenoConfig},

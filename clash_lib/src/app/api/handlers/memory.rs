@@ -63,7 +63,7 @@ pub async fn handle(
             let j = serde_json::to_vec(&snapshot).unwrap();
             let body = String::from_utf8(j).unwrap();
 
-            if let Err(e) = socket.send(Message::Text(body)).await {
+            if let Err(e) = socket.send(Message::Text(body.into())).await {
                 debug!("send memory snapshot failed: {}", e);
                 break;
             }
