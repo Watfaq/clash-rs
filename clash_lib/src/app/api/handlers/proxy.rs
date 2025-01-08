@@ -37,7 +37,7 @@ pub fn routes(
     Router::new()
         .route("/", get(get_proxies))
         .nest(
-            "/:name",
+            "/{name}",
             Router::new()
                 .route("/", get(get_proxy).put(update_proxy))
                 .route("/delay", get(get_proxy_delay))

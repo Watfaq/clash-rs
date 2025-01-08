@@ -27,12 +27,12 @@ pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppStat
     Router::new()
         .route("/", get(get_providers))
         .nest(
-            "/:provider_name",
+            "/{provider_name}",
             Router::new()
                 .route("/", get(get_provider).put(update_provider))
                 .route("/healthcheck", get(provider_healthcheck))
                 .nest(
-                    "/:proxy_name",
+                    "/{proxy_name}",
                     Router::new()
                         .route("/", get(get_proxy))
                         .route("/healthcheck", get(get_proxy_delay))

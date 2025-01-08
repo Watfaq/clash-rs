@@ -26,7 +26,7 @@ struct ConnectionState {
 pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_connections).delete(close_all_connection))
-        .route("/:id", delete(close_connection))
+        .route("/{id}", delete(close_connection))
         .with_state(ConnectionState { statistics_manager })
 }
 
