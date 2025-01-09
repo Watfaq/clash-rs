@@ -12,11 +12,13 @@ use futures::{
     Sink, SinkExt, Stream, StreamExt,
 };
 use shadowsocks::{
-    relay::udprelay::{DatagramReceive, DatagramSend},
+    relay::udprelay::{
+        options::UdpSocketControlData, DatagramReceive, DatagramSend,
+    },
     ProxySocket,
 };
 use tokio::io::ReadBuf;
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 use crate::{
     common::errors::new_io_error,
@@ -32,16 +34,23 @@ pub struct OutboundDatagramShadowsocks<S> {
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
+
+    ss_control: UdpSocketControlData,
 }
 
 impl<S> OutboundDatagramShadowsocks<S> {
     pub fn new(inner: ProxySocket<S>, remote_addr: SocketAddr) -> Self {
+        let mut ss_control = UdpSocketControlData::default();
+        ss_control.client_session_id = rand::random::<u64>();
+
         Self {
             inner,
             flushed: true,
             pkt: None,
             remote_addr,
             buf: vec![0u8; 65535],
+
+            ss_control,
         }
     }
 }
@@ -87,6 +96,8 @@ where
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
+
+            ref mut ss_control,
             ..
         } = *self;
 
@@ -97,13 +108,30 @@ where
             let addr: shadowsocks::relay::Address =
                 (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
-            let n = ready!(inner.poll_send_to(*remote_addr, &addr, data, cx))?;
+            let n = ready!(inner.poll_send_to_with_ctrl(
+                *remote_addr,
+                &addr,
+                ss_control,
+                data,
+                cx
+            ))?;
 
             debug!(
                 "send udp packet to remote ss server, len: {}, remote_addr: {}, \
                  dst_addr: {}",
                 n, remote_addr, addr
             );
+
+            ss_control.packet_id = match ss_control.packet_id.checked_add(1) {
+                Some(id) => id,
+                None => {
+                    error!("packet_id overflow, closing socket");
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "packet_id overflow",
+                    )));
+                }
+            };
 
             let wrote_all = n == data.len();
             *pkt_container = None;
