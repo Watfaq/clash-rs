@@ -115,12 +115,12 @@ maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.25", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.25", optional = true, default-features = false }
+arti-client = { version = "0.26", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.26", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.4.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.4.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -153,13 +153,13 @@ prost-build = "0.13"
 unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18"}
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "3.1.0"
+security-framework = "3.2.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
 tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
+windows = { version = "0.59", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",
