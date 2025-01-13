@@ -44,69 +44,69 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
           - os: ubuntu-latest
             target: riscv64gc-unknown-linux-gnu
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic"
           # Windows
           - os: windows-latest
@@ -185,19 +185,19 @@ jobs:
           # Android
           - os: ubuntu-latest
             target: aarch64-linux-android
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: armv7-linux-androideabi
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: x86_64-linux-android
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           - os: ubuntu-latest
             target: i686-linux-android
-            cross: true
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
