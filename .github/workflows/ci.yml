@@ -253,7 +253,7 @@ jobs:
           echo "CLASH_GIT_SHA=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cargo fmt
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
           command: fmt
           args: --all -- --check
@@ -261,7 +261,7 @@ jobs:
           CLASH_DOCKER_TEST: "true"
 
       - name: Cargo clippy
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
           use-cross: ${{ matrix.cross }}
           command: clippy
@@ -270,7 +270,7 @@ jobs:
           CLASH_DOCKER_TEST: "true"
 
       - name: Cargo test (docker test on linux)
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         if: startsWith(matrix.os, 'ubuntu')
         with:
           use-cross: ${{ matrix.cross }}
@@ -282,7 +282,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo test (no docker test on windows-non-arm and macos)
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           use-cross: ${{ matrix.cross }}
@@ -292,7 +292,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
           use-cross: ${{ matrix.cross }}
           command: build
