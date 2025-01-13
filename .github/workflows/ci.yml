@@ -2,10 +2,10 @@ name: Build/Test/Release
 
 on:
   push:
-    tags: [ "v*" ]
-    branches: [ "master" ]
+    tags: ["v*"]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -35,7 +35,7 @@ jobs:
           #   target: x86_64-unknown-linux-gnu
           #   release-name: $target
           #   toolchain: nightly
-          #   cross: false
+          #   tool: cargo/cross
           #   postfix: ""
           #   extra-args: ""
           #   components: ""
@@ -111,31 +111,31 @@ jobs:
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic, onion"
           - os: windows-latest
             target: i686-pc-windows-msvc
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic, onion"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks,tuic"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: >-
@@ -156,30 +156,30 @@ jobs:
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
-            cross: false
+            tool: cargo
             postfix: ".exe"
             extra-args: -F "shadowsocks, tuic"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # MacOSX
           - os: macos-14
             target: x86_64-apple-darwin
-            cross: false
+            tool: cargo
             extra-args: -F "shadowsocks, tuic, onion"
           - os: macos-14
             target: aarch64-apple-darwin
-            cross: false
+            tool: cargo
             extra-args: -F "shadowsocks, tuic, onion"
           # MacOSX static-crt
           - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
-            cross: false
+            tool: cargo
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
-            cross: false
+            tool: cargo
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Android
@@ -263,7 +263,7 @@ jobs:
       - name: Cargo clippy
         uses: clechasseur/rs-cargo@v3
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: clippy
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
         env:
@@ -273,7 +273,7 @@ jobs:
         uses: clechasseur/rs-cargo@v3
         if: startsWith(matrix.os, 'ubuntu')
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
@@ -285,7 +285,7 @@ jobs:
         uses: clechasseur/rs-cargo@v3
         if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: test
           args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
@@ -294,7 +294,7 @@ jobs:
       - name: Cargo build
         uses: clechasseur/rs-cargo@v3
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: build
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
@@ -319,7 +319,7 @@ jobs:
 
   release:
     name: Release
-    needs: [ compile ]
+    needs: [compile]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -331,7 +331,7 @@ jobs:
         uses: actions/upload-artifact/merge@v4
         with:
           name: binaries
-          pattern: '*'
+          pattern: "*"
           retention-days: 1
 
       - name: Download binaries
@@ -407,7 +407,7 @@ jobs:
             LICENSE*
 
   docker-image:
-    needs: [ compile ]
+    needs: [compile]
     name: Docker Image
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
@@ -462,6 +462,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
-
-
-
