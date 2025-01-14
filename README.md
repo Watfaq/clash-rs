@@ -85,6 +85,16 @@ Options:
   -V, --version                Print version
 ```
 
+## FFI
+
+To create an FFI for iOS and macOS platforms
+
+```shell
+git clone https://github.com/Watfaq/clash-rs.git
+chmod +x scripts/build_apple.sh
+./scripts/build_apple.sh
+```
+
 ## 🔗 Links
 
 - [Documentation](https://watfaq.gitbook.io/clashrs-user-manual/)
