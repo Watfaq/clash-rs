@@ -9,6 +9,7 @@ venv/
 /bazel-*
 /output/
 rust-project.json
+/build/
 
 # don't check in this real config
 ignore*.yaml
