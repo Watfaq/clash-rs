@@ -91,6 +91,7 @@ To create an FFI for iOS and macOS platforms
 
 ```shell
 git clone https://github.com/Watfaq/clash-rs.git
+cd clash-rs
 chmod +x scripts/build_apple.sh
 ./scripts/build_apple.sh
 ```
