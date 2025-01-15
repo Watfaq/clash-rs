@@ -33,6 +33,7 @@ pub trait Client: Sync + Send + Debug {
 type ThreadSafeDNSClient = Arc<dyn Client>;
 
 pub enum ResolverKind {
+    Noop,
     Clash,
     System,
 }
@@ -76,4 +77,65 @@ pub trait ClashResolver: Sync + Send {
     fn set_ipv6(&self, enable: bool);
 
     fn kind(&self) -> ResolverKind;
+}
+
+pub struct NoopResolver;
+
+#[async_trait]
+impl ClashResolver for NoopResolver {
+    async fn resolve(
+        &self,
+        _host: &str,
+        _enhanced: bool,
+    ) -> anyhow::Result<Option<std::net::IpAddr>> {
+        Ok(None)
+    }
+
+    async fn resolve_v4(
+        &self,
+        _host: &str,
+        _enhanced: bool,
+    ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
+        Ok(None)
+    }
+
+    async fn resolve_v6(
+        &self,
+        _host: &str,
+        _enhanced: bool,
+    ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+        Ok(None)
+    }
+
+    async fn cached_for(&self, _ip: std::net::IpAddr) -> Option<String> {
+        None
+    }
+
+    /// Used for DNS Server
+    async fn exchange(&self, _message: &op::Message) -> anyhow::Result<op::Message> {
+        Err(anyhow::anyhow!("unsupported"))
+    }
+
+    /// Only used for look up fake IP
+    async fn reverse_lookup(&self, _ip: std::net::IpAddr) -> Option<String> {
+        None
+    }
+
+    async fn is_fake_ip(&self, _ip: std::net::IpAddr) -> bool {
+        false
+    }
+
+    fn fake_ip_enabled(&self) -> bool {
+        false
+    }
+
+    fn ipv6(&self) -> bool {
+        false
+    }
+
+    fn set_ipv6(&self, _enable: bool) {}
+
+    fn kind(&self) -> ResolverKind {
+        ResolverKind::Noop
+    }
 }
