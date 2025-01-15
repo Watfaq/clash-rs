@@ -412,6 +412,8 @@ pub enum LoadBalanceStrategy {
     ConsistentHashing,
     #[serde(rename = "round-robin")]
     RoundRobin,
+    #[serde(rename = "sticky-session")]
+    StickySession,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
