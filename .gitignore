@@ -22,3 +22,6 @@ geosite.dat
 # for NixOS direnv
 .envrc
 shell.nix
+
+# macOS
+.DS_Store
