@@ -177,8 +177,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        app::{dns::NoopResolver, remote_content_manager::ProxyManager},
-        proxy::NoopOutboundHandler,
+        app::remote_content_manager::ProxyManager,
+        proxy::utils::test_utils::noop::{NoopOutboundHandler, NoopResolver},
         session::SocksAddr,
     };
 
