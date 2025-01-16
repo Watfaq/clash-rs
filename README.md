@@ -92,9 +92,16 @@ To create an FFI for iOS and macOS platforms
 ```shell
 git clone https://github.com/Watfaq/clash-rs.git
 cd clash-rs
+```
+
+### Compile for apple platforms
+
+```shell
 chmod +x scripts/build_apple.sh
 ./scripts/build_apple.sh
 ```
+
+This command will generate a `clashrs.xcframework` file in the `build` directory.
 
 ## 🔗 Links
 
