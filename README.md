@@ -87,16 +87,13 @@ Options:
 
 ## FFI
 
-To create an FFI for iOS and macOS platforms
+### Compile for apple platforms
+
+To create a framework for iOS and macOS platforms
 
 ```shell
 git clone https://github.com/Watfaq/clash-rs.git
 cd clash-rs
-```
-
-### Compile for apple platforms
-
-```shell
 chmod +x scripts/build_apple.sh
 ./scripts/build_apple.sh
 ```
