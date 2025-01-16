@@ -5,6 +5,7 @@ members = [
     "clash",
     "clash_lib",
     "clash_doc",
+    "clash_ffi",
 ]
 
 

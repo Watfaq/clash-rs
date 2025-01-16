@@ -85,6 +85,21 @@ Options:
   -V, --version                Print version
 ```
 
+## FFI
+
+### Compile for apple platforms
+
+To create a framework for iOS and macOS platforms
+
+```shell
+git clone https://github.com/Watfaq/clash-rs.git
+cd clash-rs
+chmod +x scripts/build_apple.sh
+./scripts/build_apple.sh
+```
+
+This command will generate a `clashrs.xcframework` file in the `build` directory.
+
 ## 🔗 Links
 
 - [Documentation](https://watfaq.gitbook.io/clashrs-user-manual/)
