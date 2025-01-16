@@ -1,6 +1,8 @@
-use clash_lib::{start, shutdown, Config, Options, TokioRuntime};
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use clash_lib::{shutdown, start, Config, Options, TokioRuntime};
+use std::{
+    ffi::{CStr, CString},
+    os::raw::{c_char, c_int},
+};
 
 #[no_mangle]
 pub extern "C" fn clash_start(
@@ -39,7 +41,6 @@ pub extern "C" fn clash_start(
         Err(e) => CString::new(format!("Error: {}", e)).unwrap().into_raw(),
     }
 }
-
 
 #[no_mangle]
 pub extern "C" fn clash_shutdown() -> c_int {
