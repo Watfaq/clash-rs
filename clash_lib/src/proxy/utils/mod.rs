@@ -4,6 +4,7 @@ use std::{
 };
 
 mod platform;
+#[cfg(test)]
 pub mod test_utils;
 
 pub mod provider_helper;
