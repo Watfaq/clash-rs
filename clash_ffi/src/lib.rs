@@ -5,6 +5,7 @@ use std::{
 };
 
 #[no_mangle]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn clash_start(
     config: *const c_char,
     log: *const c_char,
@@ -53,6 +54,7 @@ pub extern "C" fn clash_shutdown() -> c_int {
 
 #[no_mangle]
 #[allow(unused_must_use)]
+#[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn clash_free_string(s: *mut c_char) {
     if s.is_null() {
         return;
