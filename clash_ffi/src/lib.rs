@@ -5,7 +5,7 @@ use std::{
 };
 
 #[no_mangle]
-pub extern "C" fn clash_start(
+pub unsafe extern "C" fn clash_start(
     config: *const c_char,
     log: *const c_char,
     cwd: *const c_char,
@@ -53,7 +53,7 @@ pub extern "C" fn clash_shutdown() -> c_int {
 
 #[no_mangle]
 #[allow(unused_must_use)]
-pub extern "C" fn clash_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn clash_free_string(s: *mut c_char) {
     if s.is_null() {
         return;
     }
