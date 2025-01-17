@@ -3,6 +3,7 @@ mod helpers;
 use std::{collections::HashMap, io, sync::Arc};
 
 use erased_serde::Serialize;
+use helpers::strategy_sticky_session;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -10,7 +11,9 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
-        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::{
+            providers::proxy_provider::ThreadSafeProxyProvider, ProxyManager,
+        },
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
@@ -55,10 +58,14 @@ impl Handler {
     pub fn new(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
+        proxy_manager: ProxyManager,
     ) -> Self {
         let strategy_fn = match opts.strategy {
             LoadBalanceStrategy::ConsistentHashing => strategy_consistent_hashring(),
             LoadBalanceStrategy::RoundRobin => strategy_rr(),
+            LoadBalanceStrategy::StickySession => {
+                strategy_sticky_session(proxy_manager)
+            }
         };
 
         Self {

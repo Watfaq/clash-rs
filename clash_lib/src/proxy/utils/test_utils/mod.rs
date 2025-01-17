@@ -23,6 +23,7 @@ use self::docker_runner::RunAndCleanup;
 pub mod config_helper;
 pub mod consts;
 pub mod docker_runner;
+pub mod noop;
 
 // TODO: add the throughput metrics
 pub async fn ping_pong_test(
