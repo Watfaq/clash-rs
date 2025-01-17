@@ -205,10 +205,10 @@ mod tests {
 
     use crate::proxy::{
         mocks::MockDummyProxyProvider,
-        utils::test_utils::{
+        utils::test_utils::docker::{
             consts::*,
             docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup, Suite,
+            tests::{run_test_suites_and_cleanup, Suite},
         },
     };
 

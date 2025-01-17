@@ -3,10 +3,8 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
-#[cfg(test)]
-pub mod test_utils;
-
 mod platform;
+pub mod test_utils;
 
 pub mod provider_helper;
 mod proxy_connector;

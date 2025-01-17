@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use bollard::{
     container::{Config, LogsOptions, RemoveContainerOptions},
+    image::CreateImageOptions,
     secret::{HostConfig, Mount, PortBinding},
     Docker,
 };
-
-use bollard::image::CreateImageOptions;
 
 use anyhow::Result;
 use futures::{Future, TryStreamExt};

@@ -311,13 +311,13 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use super::super::utils::test_utils::{
+    use super::super::utils::test_utils::docker::{
         consts::*, docker_runner::DockerTestRunner,
     };
     use crate::{
-        proxy::utils::test_utils::{
+        proxy::utils::test_utils::docker::{
             docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-            run_test_suites_and_cleanup, Suite,
+            tests::{run_test_suites_and_cleanup, Suite},
         },
         tests::initialize,
     };

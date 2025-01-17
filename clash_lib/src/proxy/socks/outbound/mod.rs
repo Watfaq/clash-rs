@@ -284,10 +284,10 @@ mod tests {
     use crate::proxy::{
         socks::{Handler, HandlerOptions},
         utils::{
-            test_utils::{
+            test_utils::docker::{
                 consts::{IMAGE_SOCKS5, LOCAL_ADDR},
                 docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-                run_test_suites_and_cleanup, Suite,
+                tests::{run_test_suites_and_cleanup, Suite},
             },
             GLOBAL_DIRECT_CONNECTOR,
         },

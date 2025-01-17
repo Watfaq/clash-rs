@@ -321,17 +321,17 @@ impl OutboundHandler for Handler {
 mod tests {
 
     use crate::proxy::utils::{
-        test_utils::{
+        test_utils::docker::{
             config_helper::test_config_base_dir,
-            docker_runner::DockerTestRunnerBuilder, Suite,
+            docker_runner::DockerTestRunnerBuilder, tests::Suite,
         },
         GLOBAL_DIRECT_CONNECTOR,
     };
 
-    use super::super::utils::test_utils::{
+    use super::super::utils::test_utils::docker::{
         consts::*, docker_runner::DockerTestRunner,
     };
-    use crate::proxy::utils::test_utils::run_test_suites_and_cleanup;
+    use crate::proxy::utils::test_utils::docker::tests::run_test_suites_and_cleanup;
 
     use super::*;
 
