@@ -275,7 +275,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: test
-          args: --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
@@ -287,7 +287,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: test
-          args: --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
