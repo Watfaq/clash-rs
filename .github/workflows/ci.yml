@@ -227,7 +227,7 @@ jobs:
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
       - name: Install rust targets & cross
-        if: ${{ matrix.tool == "cross" }}
+        if: matrix.tool == 'cross'
         run: |
           rustup target add ${TARGET}
           rm -f ~/.cargo/bin/cross*
