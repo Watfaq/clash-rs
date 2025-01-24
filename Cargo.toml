@@ -23,4 +23,4 @@ debug = 1
 
 [patch.crates-io]
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a"}
-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "f84c0f8020b252978e9b157179e9a99233cd33aa"}
+rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "cd79a859109d1fd2ab79f9cf6f230cdbe45593e7"}

@@ -1,7 +1,7 @@
 use std::io;
 
 use async_trait::async_trait;
-use hickory_client::op;
+use hickory_proto::op;
 
 use crate::{
     app::{

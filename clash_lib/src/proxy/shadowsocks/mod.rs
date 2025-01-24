@@ -170,7 +170,7 @@ impl Handler {
                 }
             },
         );
-        Ok(cfg)
+        cfg
     }
 }
 
@@ -479,12 +479,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Http).await
-        } else {
-            eprintln!("test_ss_obfs_http is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
     #[tokio::test]

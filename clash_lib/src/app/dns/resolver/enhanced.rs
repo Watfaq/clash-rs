@@ -641,9 +641,9 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::{client, op};
+    use hickory_client::client;
     use hickory_proto::{
-        rr,
+        op, rr,
         udp::UdpClientStream,
         xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
     };
@@ -676,7 +676,7 @@ mod tests {
             "1.1.1.1:53".parse().unwrap(),
             Duration::from_secs(5),
         );
-        let (client, bg) = client::AsyncClient::connect(stream).await.unwrap();
+        let (client, bg) = client::Client::connect(stream).await.unwrap();
 
         tokio::spawn(bg);
 

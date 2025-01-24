@@ -10,12 +10,10 @@ use std::{
 use async_trait::async_trait;
 
 use futures::{future::BoxFuture, TryFutureExt};
-use hickory_client::{
-    client, client::AsyncClient, proto::iocompat::AsyncIoTokioAsStd,
-    tcp::TcpClientStream, udp::UdpClientStream,
-};
+use hickory_client::client;
 use hickory_proto::{
-    error::ProtoError, rustls::tls_client_stream::tls_client_connect_with_future,
+    rustls::tls_client_stream::tls_client_connect_with_future, tcp::TcpClientStream,
+    udp::UdpClientStream, ProtoError,
 };
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
@@ -126,7 +124,7 @@ impl Display for DnsConfig {
 }
 
 struct Inner {
-    c: Option<client::AsyncClient>,
+    c: Option<client::Client>,
     bg_handle: Option<JoinHandle<Result<(), ProtoError>>>,
 }
 
@@ -318,7 +316,7 @@ impl Client for DnsClient {
 
 async fn dns_stream_builder(
     cfg: &DnsConfig,
-) -> Result<(AsyncClient, JoinHandle<Result<(), ProtoError>>), Error> {
+) -> Result<(Client, JoinHandle<Result<(), ProtoError>>), Error> {
     match cfg {
         DnsConfig::Udp(addr, iface) => {
             let iface = iface.clone();
