@@ -415,10 +415,10 @@ mod tests {
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
-            .await;
+            .await?;
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
@@ -469,8 +469,10 @@ mod tests {
 
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
-        chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
+        chained
+            .add(get_obfs_runner(ss_port, obfs_port, mode))
+            .await?;
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 
@@ -488,11 +490,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Tls).await
-        } else {
-            eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        initialize();
+        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
     }
 }
