@@ -245,7 +245,7 @@ pub async fn latency_test(
     let resolver = config_helper::build_dns_resolver().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
     proxy_manager
-        .url_test(handler, "https://example.com", None)
+        .url_test(handler, "https://google.com", Some(Duration::from_secs(10)))
         .await
         .map_err(Into::into)
 }
