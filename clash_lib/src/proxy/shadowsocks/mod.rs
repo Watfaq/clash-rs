@@ -398,7 +398,7 @@ mod tests {
         // others
         let ss_port = 10004;
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-shadowtls".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: shadow_tls_port,
@@ -454,7 +454,7 @@ mod tests {
         let obfs_port = 10002;
         let ss_port = 10004;
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-obfs".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: obfs_port,
