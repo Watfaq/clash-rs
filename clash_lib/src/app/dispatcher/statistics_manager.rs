@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicI64, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc,
     },
 };
@@ -53,8 +53,8 @@ pub struct TrackerInfo {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    download_total: i64,
-    upload_total: i64,
+    download_total: u64,
+    upload_total: u64,
     connections: Vec<TrackerInfo>,
     memory: usize,
 }
@@ -63,24 +63,24 @@ type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
 
 pub struct Manager {
     connections: Arc<Mutex<ConnectionMap>>,
-    upload_temp: AtomicI64,
-    download_temp: AtomicI64,
-    upload_blip: AtomicI64,
-    download_blip: AtomicI64,
-    upload_total: AtomicI64,
-    download_total: AtomicI64,
+    upload_temp: AtomicU64,
+    download_temp: AtomicU64,
+    upload_blip: AtomicU64,
+    download_blip: AtomicU64,
+    upload_total: AtomicU64,
+    download_total: AtomicU64,
 }
 
 impl Manager {
     pub fn new() -> Arc<Self> {
         let v = Arc::new(Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
-            upload_temp: AtomicI64::new(0),
-            download_temp: AtomicI64::new(0),
-            upload_blip: AtomicI64::new(0),
-            download_blip: AtomicI64::new(0),
-            upload_total: AtomicI64::new(0),
-            download_total: AtomicI64::new(0),
+            upload_temp: AtomicU64::new(0),
+            download_temp: AtomicU64::new(0),
+            upload_blip: AtomicU64::new(0),
+            download_blip: AtomicU64::new(0),
+            upload_total: AtomicU64::new(0),
+            download_total: AtomicU64::new(0),
         });
         let c = v.clone();
         tokio::spawn(async move {
@@ -128,20 +128,19 @@ impl Manager {
 
     pub fn push_uploaded(&self, n: usize) {
         self.upload_temp
-            .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         self.upload_total
-            .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn push_downloaded(&self, n: usize) {
         self.download_temp
-            .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         self.download_total
-            .fetch_add(n as i64, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
     }
 
-    // TODO: make this u64
-    pub fn now(&self) -> (i64, i64) {
+    pub fn now(&self) -> (u64, u64) {
         (
             self.upload_blip.load(std::sync::atomic::Ordering::Relaxed),
             self.download_blip
