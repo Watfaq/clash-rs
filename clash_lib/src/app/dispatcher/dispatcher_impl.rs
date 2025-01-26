@@ -17,7 +17,7 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
@@ -35,7 +35,7 @@ pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    mode: Arc<Mutex<RunMode>>,
+    mode: Arc<RwLock<RunMode>>,
 
     manager: Arc<Manager>,
 }
@@ -59,7 +59,7 @@ impl Dispatcher {
             outbound_manager,
             router,
             resolver,
-            mode: Arc::new(Mutex::new(mode)),
+            mode: Arc::new(RwLock::new(mode)),
             manager: statistics_manager,
         }
     }
@@ -67,11 +67,11 @@ impl Dispatcher {
     pub async fn set_mode(&self, mode: RunMode) {
         info!("run mode switched to {}", mode);
 
-        *self.mode.lock().unwrap() = mode;
+        *self.mode.write().await = mode;
     }
 
     pub async fn get_mode(&self) -> RunMode {
-        *self.mode.lock().unwrap()
+        *self.mode.read().await
     }
 
     #[instrument(skip(self, sess, lhs))]
@@ -120,7 +120,7 @@ impl Dispatcher {
 
         sess.destination = dest.clone();
 
-        let mode = *self.mode.lock().unwrap();
+        let mode = *self.mode.read().await;
         let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&mut sess).await,
@@ -241,7 +241,7 @@ impl Dispatcher {
     /// Dispatch a UDP packet to outbound handler
     /// returns the close sender
     #[instrument]
-    pub fn dispatch_datagram(
+    pub async fn dispatch_datagram(
         &self,
         sess: Session,
         udp_inbound: AnyInboundDatagram,
@@ -311,7 +311,7 @@ impl Dispatcher {
                 // do Ip though?
                 packet.dst_addr = dest;
 
-                let mode = *mode.lock().unwrap();
+                let mode = *mode.read().await;
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
