@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
-use rand::prelude::SliceRandom;
+use rand::seq::IndexedRandom;
 use std::{
     net,
     sync::{
@@ -531,7 +531,7 @@ impl ClashResolver for EnhancedResolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::A).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+            Ok(result) => match result.choose(&mut rand::rng()).unwrap() {
                 net::IpAddr::V4(v4) => Ok(Some(*v4)),
                 _ => unreachable!("invalid IP family"),
             },
@@ -564,7 +564,7 @@ impl ClashResolver for EnhancedResolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::AAAA).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+            Ok(result) => match result.choose(&mut rand::rng()).unwrap() {
                 net::IpAddr::V6(v6) => Ok(Some(*v6)),
                 _ => unreachable!("invalid IP family"),
             },

@@ -2,7 +2,7 @@ use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 
 use rand::Rng;
 
-use rand::distributions::Distribution;
+use rand::distr::Distribution;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
@@ -119,7 +119,7 @@ fn generate_session_id(hmac: &Hmac, buf: &[u8]) -> [u8; TLS_SESSION_ID_SIZE] {
     }
 
     let mut session_id = [0; TLS_SESSION_ID_SIZE];
-    rand::thread_rng().fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
+    rand::rng().fill(&mut session_id[..TLS_SESSION_ID_SIZE - HMAC_SIZE]);
     let mut hmac = hmac.to_owned();
     hmac.update(&buf[0..SESSION_ID_START]);
     hmac.update(&session_id);
@@ -143,13 +143,13 @@ async fn fake_request<S: tokio::io::AsyncRead + AsyncWrite + Unpin>(
 ) -> std::io::Result<()> {
     const HEADER: &[u8; 207] = b"GET / HTTP/1.1\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36\nAccept: gzip, deflate, br\nConnection: Close\nCookie: sessionid=";
     const FAKE_REQUEST_LENGTH_RANGE: (usize, usize) = (16, 64);
-    let cnt = rand::thread_rng()
-        .gen_range(FAKE_REQUEST_LENGTH_RANGE.0..FAKE_REQUEST_LENGTH_RANGE.1);
+    let cnt = rand::rng()
+        .random_range(FAKE_REQUEST_LENGTH_RANGE.0..FAKE_REQUEST_LENGTH_RANGE.1);
     let mut buffer = Vec::with_capacity(cnt + HEADER.len() + 1);
 
     buffer.extend_from_slice(HEADER);
-    rand::distributions::Alphanumeric
-        .sample_iter(rand::thread_rng())
+    rand::distr::Alphanumeric
+        .sample_iter(rand::rng())
         .take(cnt)
         .for_each(|c| buffer.push(c));
     buffer.push(b'\n');

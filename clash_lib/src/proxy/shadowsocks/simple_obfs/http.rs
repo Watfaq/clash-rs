@@ -3,6 +3,7 @@ use std::pin::Pin;
 use crate::proxy::AnyStream;
 use base64::Engine;
 use bytes::{BufMut, BytesMut};
+use rand::Rng;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug)]
@@ -41,8 +42,8 @@ impl AsyncWrite for HTTPObfs {
             buffer.put_slice(
                 format!(
                     "User-Agent: curl/7.{}.{}\r\n",
-                    rand::random::<usize>() % 54,
-                    rand::random::<usize>() % 2
+                    rand::rng().random_range(0..54),
+                    rand::rng().random_range(0..2),
                 )
                 .as_bytes(),
             );
