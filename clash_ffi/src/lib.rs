@@ -11,6 +11,24 @@ pub extern "C" fn clash_start(
     cwd: *const c_char,
     multithread: c_int,
 ) -> *mut c_char {
+    if config.is_null() {
+        return CString::new("Error: config is null pointer")
+            .unwrap()
+            .into_raw();
+    }
+
+    if log.is_null() {
+        return CString::new("Error: log is null pointer")
+            .unwrap()
+            .into_raw();
+    }
+
+    if cwd.is_null() {
+        return CString::new("Error: cwd is null pointer")
+            .unwrap()
+            .into_raw();
+    }
+
     let config_str = unsafe { CStr::from_ptr(config) }
         .to_str()
         .unwrap_or_default()
