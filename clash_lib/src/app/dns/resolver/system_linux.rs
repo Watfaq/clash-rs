@@ -1,16 +1,14 @@
 use std::sync::atomic::AtomicBool;
 
 use async_trait::async_trait;
-use hickory_resolver::{
-    name_server::{GenericConnector, TokioRuntimeProvider},
-    AsyncResolver,
-};
+use hickory_resolver::TokioResolver;
+
 use rand::seq::IteratorRandom;
 
 use crate::app::dns::{ClashResolver, ResolverKind};
 
 pub struct SystemResolver {
-    inner: AsyncResolver<GenericConnector<TokioRuntimeProvider>>,
+    inner: TokioResolver,
     ipv6: AtomicBool,
 }
 
@@ -18,7 +16,7 @@ pub struct SystemResolver {
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
+            inner: TokioResolver::tokio_from_system_conf()?,
             ipv6: AtomicBool::new(ipv6),
         })
     }
