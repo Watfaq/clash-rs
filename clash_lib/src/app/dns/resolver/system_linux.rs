@@ -1,16 +1,14 @@
 use std::sync::atomic::AtomicBool;
 
 use async_trait::async_trait;
-use hickory_resolver::{
-    name_server::{GenericConnector, TokioRuntimeProvider},
-    AsyncResolver,
-};
+use hickory_resolver::TokioResolver;
+
 use rand::seq::IteratorRandom;
 
 use crate::app::dns::{ClashResolver, ResolverKind};
 
 pub struct SystemResolver {
-    inner: AsyncResolver<GenericConnector<TokioRuntimeProvider>>,
+    inner: TokioResolver,
     ipv6: AtomicBool,
 }
 
@@ -18,7 +16,7 @@ pub struct SystemResolver {
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: hickory_resolver::AsyncResolver::tokio_from_system_conf()?,
+            inner: TokioResolver::tokio_from_system_conf()?,
             ipv6: AtomicBool::new(ipv6),
         })
     }
@@ -94,19 +92,18 @@ impl ClashResolver for SystemResolver {
 
 #[cfg(test)]
 mod tests {
-    use hickory_resolver::TokioAsyncResolver;
+    use hickory_resolver::TokioResolver;
 
     use crate::app::dns::{ClashResolver, SystemResolver};
 
     #[tokio::test]
     async fn test_system_resolver_with_bad_labels() {
-        let resolver = TokioAsyncResolver::tokio_from_system_conf().unwrap();
+        let resolver = TokioResolver::tokio_from_system_conf().unwrap();
         let response = resolver.lookup_ip("some_under_store.com").await;
         assert!(response.is_err());
         assert_eq!(
             response.unwrap_err().to_string(),
-            "proto error: Label contains invalid characters: Err(Errors { \
-             invalid_mapping, disallowed_by_std3_ascii_rules })"
+            "proto error: Label contains invalid characters: Err(Errors)"
         );
     }
 
