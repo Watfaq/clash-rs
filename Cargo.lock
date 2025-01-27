@@ -4740,7 +4740,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.21"
-source = "git+https://github.com/Watfaq/rustls.git?rev=cd79a859109d1fd2ab79f9cf6f230cdbe45593e7#cd79a859109d1fd2ab79f9cf6f230cdbe45593e7"
+source = "git+https://github.com/Watfaq/rustls.git?rev=a7d217bf235aeb3ca8d123352d90a27c1ca0f41b#a7d217bf235aeb3ca8d123352d90a27c1ca0f41b"
 dependencies = [
  "log",
  "once_cell",
