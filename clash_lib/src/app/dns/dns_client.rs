@@ -397,11 +397,7 @@ async fn dns_stream_builder(
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(iface.clone()),
             )
-            .build(
-                addr.clone(),
-                host.to_owned(),
-                "/dns-query".to_string(),
-            );
+            .build(*addr, host.to_owned(), "/dns-query".to_string());
 
             client::Client::connect(stream)
                 .await
