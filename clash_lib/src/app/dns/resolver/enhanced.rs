@@ -647,12 +647,12 @@ mod tests {
         udp::UdpClientStream,
         xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
     };
-    use std::{sync::Arc, time::Duration};
-    use tokio::net::UdpSocket;
+    use std::sync::Arc;
 
     use crate::app::dns::{
         dns_client::{DNSNetMode, DnsClient, Opts},
         resolver::enhanced::EnhancedResolver,
+        runtime::DnsRuntimeProvider,
         ThreadSafeDNSClient,
     };
 
@@ -672,10 +672,11 @@ mod tests {
         m.add_query(q);
         m.set_recursion_desired(true);
 
-        let stream = UdpClientStream::<UdpSocket>::with_timeout(
+        let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
-            Duration::from_secs(5),
-        );
+            DnsRuntimeProvider::new(None),
+        )
+        .build();
         let (client, bg) = client::Client::connect(stream).await.unwrap();
 
         tokio::spawn(bg);
