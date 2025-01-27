@@ -33,7 +33,7 @@ impl ClashResolver for SystemResolver {
         Ok(response
             .iter()
             .filter(|x| self.ipv6() || x.is_ipv4())
-            .choose(&mut rand::thread_rng()))
+            .choose(&mut rand::rng()))
     }
 
     async fn resolve_v4(
@@ -42,7 +42,7 @@ impl ClashResolver for SystemResolver {
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
         let response = self.inner.ipv4_lookup(host).await?;
-        Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
+        Ok(response.iter().map(|x| x.0).choose(&mut rand::rng()))
     }
 
     async fn resolve_v6(
@@ -51,7 +51,7 @@ impl ClashResolver for SystemResolver {
         _: bool,
     ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
         let response = self.inner.ipv6_lookup(host).await?;
-        Ok(response.iter().map(|x| x.0).choose(&mut rand::thread_rng()))
+        Ok(response.iter().map(|x| x.0).choose(&mut rand::rng()))
     }
 
     async fn cached_for(&self, _: std::net::IpAddr) -> Option<String> {

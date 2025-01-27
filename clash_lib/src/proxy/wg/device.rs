@@ -8,7 +8,7 @@ use std::{
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::Device,
@@ -488,7 +488,7 @@ impl DeviceManager {
                                                         if let Ok(ip) = domain.parse::<IpAddr>() {
                                                             ip
                                                         } else {
-                                                            let dns_server = self.dns_servers.choose(&mut rand::thread_rng());
+                                                            let dns_server = self.dns_servers.choose(&mut rand::rng());
                                                             if let Some(dns_server) = dns_server {
                                                                 let ip = self.look_up_dns(domain, *dns_server).await;
                                                                 if let Some(ip) = ip {

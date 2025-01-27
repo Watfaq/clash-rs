@@ -40,10 +40,10 @@ impl PortGenrateor {
     }
 
     pub fn get(&self) -> u16 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let len =
             1 + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
-        let idx = rng.gen_range(0..len);
+        let idx = rng.random_range(0..len);
         match idx {
             0 => self.default,
             idx if idx <= self.ports.len() => self.ports[idx - 1],

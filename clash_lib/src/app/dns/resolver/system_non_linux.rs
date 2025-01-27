@@ -39,7 +39,7 @@ impl ClashResolver for SystemResolver {
                 }
             })
             .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::thread_rng()))
+        Ok(response.into_iter().choose(&mut rand::rng()))
     }
 
     async fn resolve_v4(
@@ -54,7 +54,7 @@ impl ClashResolver for SystemResolver {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::thread_rng()))
+        Ok(response.into_iter().choose(&mut rand::rng()))
     }
 
     async fn resolve_v6(
@@ -72,7 +72,7 @@ impl ClashResolver for SystemResolver {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::thread_rng()))
+        Ok(response.into_iter().choose(&mut rand::rng()))
     }
 
     async fn cached_for(&self, _: std::net::IpAddr) -> Option<String> {
