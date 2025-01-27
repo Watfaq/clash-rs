@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    error::Error,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -196,6 +197,14 @@ impl ProxyManager {
                             debug!(
                                 "urltest for proxy {} with url {} failed: {}",
                                 &name, url, e
+                            );
+                            trace!(
+                                "urltest for proxy {} with url {} failed: {:?}, \
+                                 stack: {:?}",
+                                &name,
+                                url,
+                                e,
+                                e.source()
                             );
                             Err(new_io_error(format!("{}: {}", url, e).as_str()))
                         }
