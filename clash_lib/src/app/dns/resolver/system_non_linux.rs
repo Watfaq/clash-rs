@@ -124,8 +124,7 @@ mod tests {
         assert!(response.is_err());
         assert_eq!(
             response.unwrap_err().to_string(),
-            "proto error: Label contains invalid characters: Err(Errors { \
-             invalid_mapping, disallowed_by_std3_ascii_rules })"
+            "proto error: Label contains invalid characters: Err(Errors)"
         );
     }
 
