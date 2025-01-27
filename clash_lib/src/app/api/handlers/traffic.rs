@@ -12,8 +12,8 @@ use crate::app::api::AppState;
 
 #[derive(Serialize)]
 struct TrafficResponse {
-    up: i64,
-    down: i64,
+    up: u64,
+    down: u64,
 }
 pub async fn handle(
     ws: WebSocketUpgrade,
