@@ -5,7 +5,7 @@ use std::{
 };
 
 #[no_mangle]
-pub extern "C" fn clash_start(
+pub unsafe extern "C" fn clash_start(
     config: *const c_char,
     log: *const c_char,
     cwd: *const c_char,
