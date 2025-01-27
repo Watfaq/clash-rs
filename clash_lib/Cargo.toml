@@ -110,7 +110,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
-shadowsocks = { version="1.21", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
@@ -119,8 +119,8 @@ arti-client = { version = "0.26", optional = true, default-features = false, fea
 tor-rtcompat = { version = "0.26", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
