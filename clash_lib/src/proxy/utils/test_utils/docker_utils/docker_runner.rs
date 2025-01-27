@@ -80,19 +80,15 @@ pub struct MultiDockerTestRunner {
 }
 
 impl MultiDockerTestRunner {
-    #[allow(unused)]
-    pub fn new(runners: Vec<DockerTestRunner>) -> Self {
-        Self { runners }
-    }
-
-    #[allow(unused)]
+    #[cfg(docker_test)]
     pub async fn add(
         &mut self,
         creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,
-    ) {
+    ) -> anyhow::Result<()> {
         match creator.await {
             Ok(runner) => {
                 self.runners.push(runner);
+                Ok(())
             }
             Err(e) => {
                 tracing::warn!(
@@ -100,6 +96,7 @@ impl MultiDockerTestRunner {
                      error: {:?}",
                     e
                 );
+                Err(e)
             }
         }
     }
@@ -230,7 +227,7 @@ impl DockerTestRunnerBuilder {
         self
     }
 
-    #[allow(unused)]
+    #[cfg(docker_test)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self

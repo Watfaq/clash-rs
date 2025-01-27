@@ -147,7 +147,7 @@ impl Handler {
     }
 
     fn server_config(&self) -> Result<ServerConfig, io::Error> {
-        let cfg = ServerConfig::new(
+        ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
             self.opts.password.to_owned(),
             match self.opts.cipher.as_str() {
@@ -169,8 +169,8 @@ impl Handler {
                     ))
                 }
             },
-        );
-        Ok(cfg)
+        )
+        .map_err(|e| new_io_error(e.to_string()))
     }
 }
 
@@ -398,7 +398,7 @@ mod tests {
         // others
         let ss_port = 10004;
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-shadowtls".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: shadow_tls_port,
@@ -415,10 +415,10 @@ mod tests {
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
-            .await;
+            .await?;
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
@@ -454,7 +454,7 @@ mod tests {
         let obfs_port = 10002;
         let ss_port = 10004;
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-obfs".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: obfs_port,
@@ -469,30 +469,24 @@ mod tests {
 
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
-        chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
+        chained
+            .add(get_obfs_runner(ss_port, obfs_port, mode))
+            .await?;
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Http).await
-        } else {
-            eprintln!("test_ss_obfs_http is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
+    #[ignore = "fix me in #685"]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Tls).await
-        } else {
-            eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        initialize();
+        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
     }
 }
