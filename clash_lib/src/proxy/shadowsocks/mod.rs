@@ -147,7 +147,7 @@ impl Handler {
     }
 
     fn server_config(&self) -> Result<ServerConfig, io::Error> {
-        let cfg = ServerConfig::new(
+        ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
             self.opts.password.to_owned(),
             match self.opts.cipher.as_str() {
@@ -169,8 +169,8 @@ impl Handler {
                     ))
                 }
             },
-        );
-        cfg
+        )
+        .map_err(|e| new_io_error(e.to_string()))
     }
 }
 
