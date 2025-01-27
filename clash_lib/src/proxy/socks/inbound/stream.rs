@@ -187,7 +187,8 @@ pub async fn handle_tcp<'a>(
 
             tokio::spawn(async move {
                 let handle = dispatcher_cloned
-                    .dispatch_datagram(sess, Box::new(InboundUdp::new(framed))).await;
+                    .dispatch_datagram(sess, Box::new(InboundUdp::new(framed)))
+                    .await;
                 close_listener.await.ok();
                 handle.send(0).ok();
             });
