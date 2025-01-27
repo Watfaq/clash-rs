@@ -97,7 +97,7 @@ serde_json = "1"
 erased-serde = "0.4"
 
 # DNS
-watfaq-dns = { version = "0.1" }
+watfaq-dns = { version = "0.1.1" }
 hickory-client = "0.25.0-alpha.2"
 hickory-resolver = "0.25.0-alpha.2"
 hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"]}
@@ -110,7 +110,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
-shadowsocks = { version="1.21", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
