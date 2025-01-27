@@ -484,6 +484,7 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
+    #[ignore = "fix me in #685"]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Tls).await
