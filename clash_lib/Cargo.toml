@@ -105,7 +105,7 @@ hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dn
 dhcproto = "0.12"
 ring-compat = { version = "0.8", features = ["aead"] }
 
-rand = "0.8"
+rand = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
@@ -119,8 +119,8 @@ arti-client = { version = "0.26", optional = true, default-features = false, fea
 tor-rtcompat = { version = "0.26", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
