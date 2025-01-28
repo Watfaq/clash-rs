@@ -13,18 +13,13 @@ pub unsafe extern "C" fn clash_start(
     cwd: *const c_char,
     multithread: c_int,
 ) -> *mut c_char {
-    let config_str = unsafe { CStr::from_ptr(config) }
+    let config_str = CStr::from_ptr(config)
         .to_str()
         .unwrap_or_default()
         .to_string();
-    let log_str = unsafe { CStr::from_ptr(log) }
-        .to_str()
-        .unwrap_or_default()
-        .to_string();
-    let cwd_str = unsafe { CStr::from_ptr(cwd) }
-        .to_str()
-        .unwrap_or_default()
-        .to_string();
+    let log_str = CStr::from_ptr(log).to_str().unwrap_or_default().to_string();
+    let cwd_str = CStr::from_ptr(cwd).to_str().unwrap_or_default().to_string();
+
     let rt = if multithread != 0 {
         Some(TokioRuntime::MultiThread)
     } else {
