@@ -1,6 +1,23 @@
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+
+use futures::{SinkExt, StreamExt};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    sync::RwLock,
+    task::JoinHandle,
+};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+
 use crate::{
     app::{
         dispatcher::tracked::{TrackedDatagram, TrackedStream},
+        dns::ThreadSafeDNSResolver,
         outbound::manager::ThreadSafeOutboundManager,
         router::ThreadSafeRouter,
     },
@@ -12,22 +29,6 @@ use crate::{
     proxy::{datagram::UdpPacket, AnyInboundDatagram},
     session::{Session, SocksAddr},
 };
-use futures::{SinkExt, StreamExt};
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Formatter},
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
-use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    sync::RwLock,
-    task::JoinHandle,
-};
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
-
-use crate::app::dns::ThreadSafeDNSResolver;
 
 use super::statistics_manager::Manager;
 
