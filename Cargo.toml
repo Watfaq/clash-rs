@@ -28,7 +28,7 @@ rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "a7d217bf235aeb3c
 [workspace.metadata.cross.build]
 pre-build = [
     "apt update",
-    "apt install -y protobuf-compiler"，
+    "apt install -y protobuf-compiler",
     "cargo install cross --git https://github.com/cross-rs/cross",
 ]
 
