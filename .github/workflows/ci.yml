@@ -17,6 +17,7 @@ env:
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
   RUST_TOOLCHAIN: "nightly-2024-12-20"
+  CROSS_NO_WARNINGS: "0"
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
