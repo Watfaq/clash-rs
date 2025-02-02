@@ -240,7 +240,7 @@ pub fn get_runner(
     tun_cfg
         .address(gw.addr())
         .netmask(gw.netmask())
-        // .mtu(cfg.mtu.unwrap_or(if cfg!(windows) { 65535i32 } else { 1500i32 }))
+        .mtu(cfg.mtu.unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }))
         .up();
 
     let tun = tun::create_as_async(&tun_cfg)
