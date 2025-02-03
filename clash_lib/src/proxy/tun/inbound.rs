@@ -1,5 +1,5 @@
 use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, pin::Pin, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
 
@@ -25,7 +25,7 @@ const DEFAULT_SO_MARK: u32 = 3389;
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 async fn handle_inbound_stream(
-    stream: netstack::TcpStream,
+    stream: Pin<Box<netstack::TcpStream>>,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
@@ -53,7 +53,7 @@ async fn handle_inbound_stream(
 }
 
 async fn handle_inbound_datagram(
-    socket: Box<netstack::UdpSocket>,
+    socket: Pin<Box<netstack::UdpSocket>>,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
     so_mark: u32,
