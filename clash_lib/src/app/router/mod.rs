@@ -108,7 +108,7 @@ impl Router {
             let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
             if let (Some(ip), Some(asn_mmdb)) = (mayby_ip, &self.asn_mmdb) {
                 // try simplified mmdb first
-                let rv = asn_mmdb.lookup_contry(ip);
+                let rv = asn_mmdb.lookup_country(ip);
                 if let Ok(country) = rv {
                     sess.asn = country
                         .country

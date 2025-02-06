@@ -91,7 +91,7 @@ impl CopyBuffer {
         })
     }
 
-    pub fn amount_transfered(&self) -> u64 {
+    pub fn amount_transferred(&self) -> u64 {
         self.amt
     }
 
@@ -235,7 +235,7 @@ where
                                 match delay.as_mut().poll(cx) {
                                     Poll::Ready(()) => {
                                         *a_to_b = TransferState::ShuttingDown(
-                                            buf.amount_transfered(),
+                                            buf.amount_transferred(),
                                         );
                                         continue;
                                     }
@@ -285,7 +285,7 @@ where
                                 match delay.as_mut().poll(cx) {
                                     Poll::Ready(()) => {
                                         *b_to_a = TransferState::ShuttingDown(
-                                            buf.amount_transfered(),
+                                            buf.amount_transferred(),
                                         );
                                         continue;
                                     }
