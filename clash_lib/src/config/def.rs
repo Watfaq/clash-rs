@@ -377,7 +377,7 @@ impl FromStr for Config {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut val: Value = serde_yaml::from_str(s).map_err(|x| {
             Error::InvalidConfig(format!(
-                "cound not parse config content {}: {}",
+                "couldn't not parse config content {}: {}",
                 s, x
             ))
         })?;
@@ -391,7 +391,7 @@ impl FromStr for Config {
 
         serde_yaml::from_value(val).map_err(|x| {
             Error::InvalidConfig(format!(
-                "cound not parse config content {}: {}",
+                "counldn't not parse config content {}: {}",
                 s, x
             ))
         })

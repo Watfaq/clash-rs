@@ -49,8 +49,8 @@ pub struct LogEvent {
 pub struct EventCollector(Vec<Sender<LogEvent>>);
 
 impl EventCollector {
-    pub fn new(recivers: Vec<Sender<LogEvent>>) -> Self {
-        Self(recivers)
+    pub fn new(receivers: Vec<Sender<LogEvent>>) -> Self {
+        Self(receivers)
     }
 }
 
@@ -180,8 +180,8 @@ pub fn setup_logging(
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
 
-    if let Ok(jager_endpiont) = std::env::var("JAGER_ENDPOINT") {
-        debug!("jager endpoint: {}", jager_endpiont);
+    if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
+        debug!("jager endpoint: {}", jager_endpoint);
     }
 
     Ok(g)

@@ -58,7 +58,7 @@ impl Handler {
     pub async fn new(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
-        seleted: Option<String>,
+        selected: Option<String>,
     ) -> Self {
         let provider = providers.first().unwrap();
         let proxies = provider.read().await.proxies().await;
@@ -68,7 +68,7 @@ impl Handler {
             opts,
             providers,
             inner: Arc::new(RwLock::new(HandlerInner {
-                current: seleted.unwrap_or(current),
+                current: selected.unwrap_or(current),
             })),
         }
     }

@@ -331,7 +331,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for VerifiedStream<S> {
                         }
 
                         // the application data from the data server
-                        // we need to verfiy and removec the hmac(4 bytes)
+                        // we need to verify and removec the hmac(4 bytes)
                         if verify_appdata(
                             &header,
                             &mut data,
