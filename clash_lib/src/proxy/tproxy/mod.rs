@@ -122,7 +122,9 @@ async fn handle_inbound_datagram(
         ..Default::default()
     };
 
-    let closer = dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
+    let closer = dispatcher
+        .dispatch_datagram(sess, Box::new(udp_stream))
+        .await;
 
     // dispatcher -> tproxy
     let responder = socket.clone();

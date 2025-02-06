@@ -1,5 +1,4 @@
 use std::{
-    mem::MaybeUninit,
     pin::Pin,
     ptr::{copy, copy_nonoverlapping},
     task::{ready, Poll},
@@ -7,7 +6,9 @@ use std::{
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{BufMut, BytesMut};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite};
+
+use crate::common::io::{ReadExactBase, ReadExt};
 
 use super::utils::{prelude::*, *};
 
@@ -24,60 +25,6 @@ pub enum WriteState {
     #[default]
     BuildingData,
     FlushingData(usize, usize, usize),
-}
-
-pub trait AsyncReadUnpin: AsyncRead + Unpin {}
-
-impl<T: AsyncRead + Unpin> AsyncReadUnpin for T {}
-
-pub trait ReadExtBase {
-    fn prepare(&mut self) -> (&mut dyn AsyncReadUnpin, &mut BytesMut, &mut usize);
-}
-
-pub trait ReadExt {
-    fn poll_read_exact(
-        &mut self,
-        cx: &mut std::task::Context,
-        size: usize,
-    ) -> Poll<std::io::Result<()>>;
-}
-
-impl<T: ReadExtBase> ReadExt for T {
-    fn poll_read_exact(
-        &mut self,
-        cx: &mut std::task::Context,
-        size: usize,
-    ) -> Poll<std::io::Result<()>> {
-        let (raw, read_buf, read_pos) = self.prepare();
-        read_buf.reserve(size);
-        // # safety: read_buf has reserved `size`
-        unsafe { read_buf.set_len(size) }
-        loop {
-            if *read_pos < size {
-                // # safety: read_pos<size==read_buf.len(), and
-                // read_buf[0..read_pos] is initialized
-                let dst = unsafe {
-                    &mut *((&mut read_buf[*read_pos..size]) as *mut _
-                        as *mut [MaybeUninit<u8>])
-                };
-                let mut buf = ReadBuf::uninit(dst);
-                let ptr = buf.filled().as_ptr();
-                ready!(Pin::new(&mut *raw).poll_read(cx, &mut buf))?;
-                assert_eq!(ptr, buf.filled().as_ptr());
-                if buf.filled().is_empty() {
-                    return Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "unexpected eof",
-                    )));
-                }
-                *read_pos += buf.filled().len();
-            } else {
-                assert!(*read_pos == size);
-                *read_pos = 0;
-                return Poll::Ready(Ok(()));
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -139,8 +86,10 @@ impl<S> ProxyTlsStream<S> {
     }
 }
 
-impl<S: AsyncReadUnpin> ReadExtBase for ProxyTlsStream<S> {
-    fn prepare(&mut self) -> (&mut dyn AsyncReadUnpin, &mut BytesMut, &mut usize) {
+impl<S: AsyncRead + Unpin> ReadExactBase for ProxyTlsStream<S> {
+    type I = S;
+
+    fn decompose(&mut self) -> (&mut Self::I, &mut BytesMut, &mut usize) {
         (&mut self.raw, &mut self.read_buf, &mut self.read_pos)
     }
 }
@@ -334,8 +283,10 @@ impl<S> VerifiedStream<S> {
     }
 }
 
-impl<S: AsyncReadUnpin> ReadExtBase for VerifiedStream<S> {
-    fn prepare(&mut self) -> (&mut dyn AsyncReadUnpin, &mut BytesMut, &mut usize) {
+impl<S: AsyncRead + Unpin> ReadExactBase for VerifiedStream<S> {
+    type I = S;
+
+    fn decompose(&mut self) -> (&mut Self::I, &mut BytesMut, &mut usize) {
         (&mut self.raw, &mut self.read_buf, &mut self.read_pos)
     }
 }
