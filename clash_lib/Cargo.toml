@@ -137,6 +137,9 @@ tracing-timing = { version = "0.6" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
+russh = { version = "0.50", features = ["async-trait"] }
+dirs = "5.0"
+
 [dev-dependencies]
 tempfile = "3.15"
 mockall = "0.13.1"

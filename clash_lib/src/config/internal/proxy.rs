@@ -70,6 +70,8 @@ pub enum OutboundProxyProtocol {
     Tuic(OutboundTuic),
     #[serde(rename = "hysteria2")]
     Hysteria2(OutboundHysteria2),
+    #[serde(rename = "ssh")]
+    Ssh(OutBoundSsh),
 }
 
 impl OutboundProxyProtocol {
@@ -90,6 +92,7 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
+            OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
         }
     }
 }
@@ -126,6 +129,7 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
+            OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
         }
     }
 }
@@ -283,6 +287,19 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutBoundSsh {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub username: String,
+    pub password: Option<String>,
+    pub private_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
+    pub host_key: Option<Vec<String>>,
+    pub host_key_algorithms: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

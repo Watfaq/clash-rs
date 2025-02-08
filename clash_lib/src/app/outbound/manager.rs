@@ -25,7 +25,7 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, trojan,
+        fallback, loadbalance, selector, socks, ssh, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg, OutboundType,
     },
@@ -276,6 +276,13 @@ impl OutboundManager {
                     warn!("wireguard is experimental");
                     handlers.insert(wg.common_opts.name.clone(), {
                         let h: wg::Handler = wg.try_into()?;
+                        Arc::new(h) as _
+                    });
+                }
+
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    handlers.insert(ssh.common_opts.name.clone(), {
+                        let h: ssh::Handler = ssh.try_into()?;
                         Arc::new(h) as _
                     });
                 }

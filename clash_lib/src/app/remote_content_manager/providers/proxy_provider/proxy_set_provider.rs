@@ -18,7 +18,7 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{direct, reject, socks, trojan, vmess, wg, AnyOutboundHandler},
+    proxy::{direct, reject, socks, ssh, trojan, vmess, wg, AnyOutboundHandler},
     Error,
 };
 
@@ -138,6 +138,10 @@ impl ProxySetProvider {
                                 Ok(Arc::new(h) as _)
                             }
                             OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
+                            OutboundProxyProtocol::Ssh(s) => {
+                                let h: ssh::Handler = s.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
                             OutboundProxyProtocol::Wireguard(wg) => {
                                 let h: wg::Handler = wg.try_into()?;
                                 Ok(Arc::new(h) as _)
