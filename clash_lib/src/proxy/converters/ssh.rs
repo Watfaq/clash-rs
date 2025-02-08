@@ -110,7 +110,7 @@ impl TryFrom<&OutBoundSsh> for Handler {
                     })
                 }
             });
-            
+
         let totp = match totp {
             Some(Ok(t)) => Some(t),
             Some(Err(e)) => return Err(e),

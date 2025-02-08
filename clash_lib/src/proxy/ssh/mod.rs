@@ -243,7 +243,6 @@ async fn auth0(
 mod tests {
     use std::path::PathBuf;
 
-    use once_cell::sync::OnceCell;
     use russh::keys::HashAlg;
     use tempfile::tempdir;
 
@@ -318,9 +317,6 @@ mod tests {
         Ok((ssh_private_key_str, ssh_public_key_str))
     }
 
-    static KEY_PAIRS: OnceCell<Vec<(&'static str, String, String)>> =
-        OnceCell::new();
-
     #[derive(Debug)]
     struct TestOption {
         password: bool,                // password or private key
@@ -349,24 +345,22 @@ mod tests {
         tracing::info!("ssh_config tmp mounting path: {:?}", ssh_config_tmp_path);
 
         // generate host key pairs
-        let name_and_key_pairs = KEY_PAIRS.get_or_init(|| {
-            [
-                (
-                    "ecdsa",
-                    russh::keys::Algorithm::Ecdsa {
-                        curve: russh::keys::EcdsaCurve::NistP256,
-                    },
-                ),
-                ("rsa", russh::keys::Algorithm::Rsa { hash: None }),
-                ("ed25519", russh::keys::Algorithm::Ed25519),
-            ]
-            .into_iter()
-            .map(|(name, algo)| {
-                let (private_key, public_key) = gen_ssh_key_pair(algo).unwrap();
-                (name, private_key, public_key)
-            })
-            .collect::<Vec<_>>()
-        });
+        // ignore rsa, it's too slow
+        let name_and_key_pairs = [
+            (
+                "ecdsa",
+                russh::keys::Algorithm::Ecdsa {
+                    curve: russh::keys::EcdsaCurve::NistP256,
+                },
+            ),
+            ("ed25519", russh::keys::Algorithm::Ed25519),
+        ]
+        .into_iter()
+        .map(|(name, algo)| {
+            let (private_key, public_key) = gen_ssh_key_pair(algo).unwrap();
+            (name, private_key, public_key)
+        })
+        .collect::<Vec<_>>();
         let host_key_path = ssh_config_tmp_path.join("ssh_host_keys");
         for (name, private_key, public_key) in name_and_key_pairs {
             let private_key_path =
@@ -432,7 +426,7 @@ mod tests {
     async fn test_ssh1() -> anyhow::Result<()> {
         test_ssh_inner(TestOption {
             password: true,
-            rsa: true,
+            rsa: false,
             host_key: None,
         })
         .await

@@ -65,8 +65,7 @@ pub async fn authenticate(
           -> Vec<String> {
         tracing::trace!(
             "ssh interactive auth, name: {}, prompts: {:?}",
-            name,
-            prompts
+            name, prompts
         );
         if prompts.iter().any(|p| p.prompt.contains(PASSWORD_PROMPT)) {
             opts.password.clone().map(|p| vec![p]).unwrap_or_default()
@@ -83,14 +82,19 @@ pub async fn authenticate(
             vec![]
         }
     };
-    let config_auth = vec![
+
+    let config_auth = [
         Box::new(PasswordAuth) as Box<dyn Auth>,
         Box::new(PublicKeyAuth) as Box<dyn Auth>,
         Box::new(KeyboardInteractiveAuth {
             handler: prompt_handler,
             mac_retry: 5,
         }) as Box<dyn Auth>,
-    ];
+    ]
+    .into_iter()
+    .map(|auth| (auth.method().into(), auth))
+    .collect::<std::collections::HashMap<MethodKindAdapter, _>>();
+    let mut remaining_methods: Vec<MethodKindAdapter> = vec![];
     loop {
         let result = auth.auth(client, opts).await;
         tracing::trace!(
@@ -98,7 +102,7 @@ pub async fn authenticate(
             auth.method(),
             result
         );
-        let remaining_methods: Vec<MethodKindAdapter> = match result {
+        remaining_methods = match result {
             Ok(AuthResult::Success) => return Ok(AuthResult::Success),
             Ok(AuthResult::Failure {
                 remaining_methods: methods,
@@ -110,24 +114,29 @@ pub async fn authenticate(
                     .map(|m| (*m).into())
                     .collect::<Vec<_>>()
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                if !e.1 {
+                    return Err(e.0);
+                }
+                // just skip this method
+                tried.insert(auth.method().into());
+                remaining_methods
+            }
         };
 
         let mut find = false;
 
         // find next method
-        'outer: for a in &config_auth {
-            let method = a.method().into();
-            if tried.contains(&method) {
+        'outer: for remaining_method in &remaining_methods {
+            // let method = a.method().into();
+            if tried.contains(remaining_method) {
                 continue;
             }
 
-            for remaining_method in &remaining_methods {
-                if *remaining_method == method {
-                    auth = a.as_ref();
-                    find = true;
-                    break 'outer;
-                }
+            if let Some(a) = config_auth.get(remaining_method) {
+                auth = a.as_ref();
+                find = true;
+                break 'outer;
             }
         }
         if !find {
@@ -140,11 +149,23 @@ pub async fn authenticate(
 trait Auth: Send + Sync {
     fn method(&self) -> russh::MethodKind;
 
+    /// return (AuthResult, can skip)
     async fn auth(
         &self,
         client: &mut Handle<Client>,
         opts: &HandlerOptions,
-    ) -> core::result::Result<AuthResult, russh::Error>;
+    ) -> core::result::Result<AuthResult, ErrOrSkip>;
+}
+
+/// if the second field is true, it means the error is not fatal
+/// we could just skip thi auth method
+#[derive(Debug)]
+struct ErrOrSkip(russh::Error, bool);
+
+impl From<russh::Error> for ErrOrSkip {
+    fn from(e: russh::Error) -> Self {
+        ErrOrSkip(e, false)
+    }
 }
 
 struct NoneAuth;
@@ -159,8 +180,11 @@ impl Auth for NoneAuth {
         &self,
         client: &mut Handle<Client>,
         opts: &HandlerOptions,
-    ) -> core::result::Result<AuthResult, russh::Error> {
-        client.authenticate_none(opts.username.clone()).await
+    ) -> core::result::Result<AuthResult, ErrOrSkip> {
+        client
+            .authenticate_none(opts.username.clone())
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -176,14 +200,13 @@ impl Auth for PasswordAuth {
         &self,
         client: &mut Handle<Client>,
         opts: &HandlerOptions,
-    ) -> core::result::Result<AuthResult, russh::Error> {
+    ) -> core::result::Result<AuthResult, ErrOrSkip> {
         match opts.password.clone() {
-            None => return Err(russh::Error::NoAuthMethod),
-            Some(password) => {
-                client
-                    .authenticate_password(opts.username.clone(), password)
-                    .await
-            }
+            None => return Err(ErrOrSkip(russh::Error::NoAuthMethod, true)),
+            Some(password) => client
+                .authenticate_password(opts.username.clone(), password)
+                .await
+                .map_err(Into::into),
         }
     }
 }
@@ -200,25 +223,20 @@ impl Auth for PublicKeyAuth {
         &self,
         client: &mut Handle<Client>,
         opts: &HandlerOptions,
-    ) -> core::result::Result<AuthResult, russh::Error> {
+    ) -> core::result::Result<AuthResult, ErrOrSkip> {
         let private_key = load_private_key(opts);
         match private_key {
-            Err(_) => return Err(russh::Error::CouldNotReadKey),
-            Ok(private_key) => {
-                client
-                    .authenticate_publickey(
-                        &opts.username,
-                        PrivateKeyWithHashAlg::new(
-                            Arc::new(private_key),
-                            client
-                                .best_supported_rsa_hash()
-                                .await
-                                .unwrap()
-                                .flatten(),
-                        ),
-                    )
-                    .await
-            }
+            Err(_) => return Err(ErrOrSkip(russh::Error::CouldNotReadKey, true)),
+            Ok(private_key) => client
+                .authenticate_publickey(
+                    &opts.username,
+                    PrivateKeyWithHashAlg::new(
+                        Arc::new(private_key),
+                        client.best_supported_rsa_hash().await.unwrap().flatten(),
+                    ),
+                )
+                .await
+                .map_err(Into::into),
         }
     }
 }
@@ -271,7 +289,7 @@ where
         &self,
         client: &mut Handle<Client>,
         opts: &HandlerOptions,
-    ) -> core::result::Result<AuthResult, russh::Error> {
+    ) -> core::result::Result<AuthResult, ErrOrSkip> {
         let start_resp = client
             .authenticate_keyboard_interactive_start(&opts.username, None)
             .await;
@@ -280,9 +298,9 @@ where
         let mut tried = 0;
         loop {
             if tried >= self.mac_retry {
-                return Err(russh::Error::NoAuthMethod);
+                return Err(russh::Error::NoAuthMethod.into());
             }
-            tracing::debug!("KeyboardInteractiveAuth loop, resp: {:?}", resp);
+            tracing::trace!("KeyboardInteractiveAuth loop, resp: {:?}", resp);
             match resp {
                 Ok(r) => {
                     match r {
@@ -295,7 +313,7 @@ where
                         },
                     }
                 },
-                Err(e) => return Err(e),
+                Err(e) => return Err(ErrOrSkip(e, false)),
             }
         }
     }
