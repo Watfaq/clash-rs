@@ -300,6 +300,24 @@ pub struct OutBoundSsh {
     pub private_key_passphrase: Option<String>,
     pub host_key: Option<Vec<String>>,
     pub host_key_algorithms: Option<Vec<String>>,
+    pub totp_opt: Option<TotpOption>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum TotpOption {
+    OtpAuth(String),
+    Common(Totp),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct Totp {
+    pub secret: String,
+    pub screw: u8,
+    pub step: u64,
+    pub digits: usize,
+    pub algorithm: totp_rs::Algorithm,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

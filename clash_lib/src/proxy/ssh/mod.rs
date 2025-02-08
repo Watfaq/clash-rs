@@ -2,12 +2,13 @@ use std::{borrow::Cow, io, pin::Pin, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 
+mod auth;
 mod connector;
 use connector::Client;
 use russh::{
     client::{self, Handle, Msg},
     kex::*,
-    keys::{load_secret_key, Algorithm, PrivateKey, PrivateKeyWithHashAlg},
+    keys::Algorithm,
     ChannelStream, Preferred,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -73,7 +74,6 @@ impl AsyncWrite for ChannelStreamWrapper {
         Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
     }
 }
-
 #[derive(Debug)]
 pub struct HandlerOptions {
     pub name: String,
@@ -83,6 +83,7 @@ pub struct HandlerOptions {
     pub username: String,
     /// try public key first, then password
     pub password: Option<String>,
+    pub totp: Option<totp_rs::TOTP>,
     /// key content or path
     /// if contains "PRIVATE KEY", it's raw content, otherwise it's a file path
     /// if so, it can start with "~" to represent home directory,
@@ -192,7 +193,7 @@ impl OutboundHandler for Handler {
                 .await
                 .map_err(|ssh_e| io::Error::new(io::ErrorKind::Other, ssh_e))?;
 
-        auth(&mut session, &self.opts).await?;
+        auth0(&mut session, &self.opts).await?;
 
         let dst = sess.destination.clone();
         let channel = session
@@ -223,63 +224,19 @@ impl OutboundHandler for Handler {
     }
 }
 
-fn load_private_key(opts: &HandlerOptions) -> io::Result<PrivateKey> {
-    let key_path_or_content = match opts.private_key.clone() {
-        Some(key_path) => key_path,
-        None => return Err(new_io_error("private key not found")),
-    };
-    if key_path_or_content.contains("PRIVATE KEY") {
-        // raw content
-        PrivateKey::from_openssh(&key_path_or_content)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    } else {
-        // file path
-        let key_path = if key_path_or_content.starts_with("~") {
-            let home = dirs::home_dir()
-                .ok_or_else(|| new_io_error("home directory not found"))?;
-            key_path_or_content.replacen(
-                "~",
-                home.to_str()
-                    .ok_or_else(|| new_io_error("home directory not found"))?,
-                1,
-            )
-        } else {
-            key_path_or_content
-        };
-        load_secret_key(key_path, opts.private_key_passphrase.as_deref())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
-}
+async fn auth0(
+    client: &mut Handle<Client>,
+    opts: &HandlerOptions,
+) -> io::Result<()> {
+    let res = auth::authenticate(client, opts).await;
 
-async fn auth(client: &mut Handle<Client>, opts: &HandlerOptions) -> io::Result<()> {
-    if let Ok(key_pair) = load_private_key(opts) {
-        let auth_res = client
-            .authenticate_publickey(
-                &opts.username,
-                PrivateKeyWithHashAlg::new(
-                    Arc::new(key_pair),
-                    client.best_supported_rsa_hash().await.unwrap().flatten(),
-                ),
-            )
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-        if auth_res.success() {
-            return Ok(());
-        }
-    };
-
-    if let Some(password) = opts.password.as_ref() {
-        let auth_res = client
-            .authenticate_password(&opts.username, password)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        if auth_res.success() {
-            return Ok(());
+    match res {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            tracing::error!("ssh auth failed: {:?}", e);
+            Err(new_io_error("ssh auth failed"))
         }
     }
-
-    Err(new_io_error("ssh auth failed"))
 }
 
 #[cfg(all(test, docker_test))]
@@ -457,6 +414,7 @@ mod tests {
                     hash: Some(HashAlg::Sha512),
                 },
             ]),
+            totp: None,
         };
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of

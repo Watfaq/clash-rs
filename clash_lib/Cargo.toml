@@ -139,6 +139,7 @@ memory-stats = "1.0.0"
 
 russh = { version = "0.50", features = ["async-trait"] }
 dirs = "5.0"
+totp-rs = { version = "^5.3", features = ["serde_support"] }
 
 [dev-dependencies]
 tempfile = "3.15"
