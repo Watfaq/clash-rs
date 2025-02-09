@@ -42,7 +42,7 @@ impl SalamanderObfs {
     }
 
     fn encrypt(&self, data: &mut [u8]) -> Bytes {
-        let salt: [u8; 8] = rand::thread_rng().gen();
+        let salt: [u8; 8] = rand::rng().random();
 
         let mut res = BytesMut::with_capacity(8 + data.len());
         res.put_slice(&salt);
