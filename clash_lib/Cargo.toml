@@ -98,7 +98,7 @@ erased-serde = "0.4"
 
 # DNS
 watfaq-dns = { version = "0.1.1" }
-hickory-client = "0.25.0-alpha.2"
+hickory-client = "0.25.0-alpha.5"
 hickory-resolver = "0.25.0-alpha.2"
 hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"]}
 
@@ -115,12 +115,12 @@ maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.26", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.26", optional = true, default-features = false }
+arti-client = { version = "0.27", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.27", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.4.3", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -138,7 +138,7 @@ criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optio
 memory-stats = "1.0.0"
 
 [dev-dependencies]
-tempfile = "3.15"
+tempfile = "3.16"
 mockall = "0.13.1"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
