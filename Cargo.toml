@@ -24,3 +24,32 @@ debug = 1
 [patch.crates-io]
 tokio-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "6b9af8ac7bb5abc159d9a67e9ddbf84127559a4a"}
 rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "a7d217bf235aeb3ca8d123352d90a27c1ca0f41b"}
+
+[workspace.metadata.cross.build]
+pre-build = [
+    "apt update",
+    "apt install -y protobuf-compiler",
+    "cargo install cross --git https://github.com/cross-rs/cross",
+]
+
+[workspace.metadata.cross.build.env]
+volumes = ["/var/run/docker.sock=/var/run/docker.sock"] # Docker in docker
+passthrough = ["CLASH_GIT_REF", "CLASH_GIT_SHA", "RUSTFLAGS", "RUST_LOG", "CLASH_DOCKER_TEST"]
+
+[workspace.metadata.cross.target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
+
+[workspace.metadata.cross.target.i686-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
+
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+[workspace.metadata.cross.target.armv7-unknown-linux-gnueabi]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabi:main"
+
+[workspace.metadata.cross.target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
+
+[workspace.metadata.cross.target.armv7-unknown-linux-musleabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:main"
