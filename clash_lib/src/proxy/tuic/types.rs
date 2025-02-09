@@ -146,7 +146,7 @@ impl TuicConnection {
             udp_relay_mode,
             remote_uni_stream_cnt: Counter::new(),
             remote_bi_stream_cnt: Counter::new(),
-            // TODO: seems tuic dynamicly adjust the size of max concurrent
+            // TODO: seems tuic dynamically adjust the size of max concurrent
             // streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),

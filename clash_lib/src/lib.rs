@@ -249,7 +249,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
             let controller_cfg = config.general.controller.clone();
 
-            let new_componenets = create_components(cwd.clone(), config).await?;
+            let new_components = create_components(cwd.clone(), config).await?;
 
             done.send(()).unwrap();
 
@@ -267,7 +267,7 @@ async fn start_async(opts: Options) -> Result<(), Error> {
             }
 
             debug!("reloading inbound listener");
-            let inbound_listener_handle = new_componenets
+            let inbound_listener_handle = new_components
                 .inbound_manager
                 .lock()
                 .await
@@ -275,23 +275,23 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 .map(tokio::spawn)?;
 
             debug!("reloading tun runner");
-            let tun_runner_handle = new_componenets.tun_runner.map(tokio::spawn);
+            let tun_runner_handle = new_components.tun_runner.map(tokio::spawn);
 
             debug!("reloading dns listener");
-            let dns_listener_handle = new_componenets.dns_listener.map(tokio::spawn);
+            let dns_listener_handle = new_components.dns_listener.map(tokio::spawn);
 
             debug!("reloading api listener");
             let api_listener_handle = app::api::get_api_runner(
                 controller_cfg,
                 log_tx.clone(),
-                new_componenets.inbound_manager,
-                new_componenets.dispatcher,
+                new_components.inbound_manager,
+                new_components.dispatcher,
                 global_state.clone(),
-                new_componenets.dns_resolver,
-                new_componenets.outbound_manager,
-                new_componenets.statistics_manager,
-                new_componenets.cache_store,
-                new_componenets.router,
+                new_components.dns_resolver,
+                new_components.outbound_manager,
+                new_components.statistics_manager,
+                new_components.cache_store,
+                new_components.router,
                 cwd.to_string_lossy().to_string(),
             )
             .map(tokio::spawn);

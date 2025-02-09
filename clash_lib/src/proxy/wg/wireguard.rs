@@ -305,7 +305,7 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        warn!("wg stack recevied unkown data");
+                        warn!("wg stack received unknown data");
                     }
                 }
                 TunnResult::WriteToTunnelV6(packet, addr) => {
@@ -331,7 +331,7 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        warn!("wg stack recevied unkown data");
+                        warn!("wg stack received unknown data");
                     }
                 }
             }

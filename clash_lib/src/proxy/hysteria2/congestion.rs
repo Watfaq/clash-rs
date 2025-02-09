@@ -70,7 +70,7 @@ impl Burtal {
         }
     }
 
-    fn get_bandwith(&self) -> f64 {
+    fn get_bandwidth(&self) -> f64 {
         self.bps as f64 / self.ack_rate
     }
 }
@@ -99,14 +99,14 @@ impl Controller for Burtal {
     }
 
     fn on_sent(&mut self, now: Instant, _bytes: u64, _last_packet_number: u64) {
-        let max = (2000000.0 * self.get_bandwith() / 1e9)
+        let max = (2000000.0 * self.get_bandwidth() / 1e9)
             .max((10 * self.max_datagram_size) as f64);
         let budget = if self.last_send_time.is_none() {
             max
         } else {
             let budget = self.budget_at_last_sent.saturating_add(
                 now.duration_since(self.last_send_time.unwrap()).as_secs()
-                    * self.get_bandwith() as u64,
+                    * self.get_bandwidth() as u64,
             );
 
             max.min(budget as f64)
