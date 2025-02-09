@@ -7,6 +7,7 @@ extern crate clash_lib as clash;
 use clap::Parser;
 use clash::TokioRuntime;
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     process::exit,
 };
@@ -72,10 +73,26 @@ fn main() {
         .to_string();
 
     if !Path::new(&file).exists() {
-        // TODO: offer a internal default config, to compatible with clash
-        // behavior
-        panic!("config file not found: {}", file);
+        let default_config = "port: 7890";
+        let mut config_file = if let Ok(config_file) = std::fs::File::create(&file) {
+            config_file
+        } else {
+            eprintln!("default profile cannot be created: {}", file);
+            exit(1);
+        };
+
+        if config_file.write_all(default_config.as_bytes()).is_err() {
+            eprintln!("default profile cannot be written: {}", file);
+            exit(1);
+        };
+
+        println!(
+            "the configuration file cannot be found, the template has been created \
+             and used: {}",
+            file
+        );
     }
+
     if cli.test_config {
         match clash::Config::File(file.clone()).try_parse() {
             Ok(_) => {
