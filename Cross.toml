@@ -1,8 +1,7 @@
 [build]
 pre-build = [
     "apt update",
-    "apt install -y protobuf-compiler",
-    "cargo install cross --git https://github.com/cross-rs/cross",
+    "apt install -y protobuf-compiler"
 ]
 
 [build.env]
