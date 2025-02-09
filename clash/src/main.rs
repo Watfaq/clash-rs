@@ -7,10 +7,10 @@ extern crate clash_lib as clash;
 use clap::Parser;
 use clash::TokioRuntime;
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     process::exit,
 };
-use std::io::Write;
 
 #[derive(Parser)]
 #[clap(author, about, long_about = None)]
@@ -80,15 +80,19 @@ fn main() {
             eprintln!("default profile cannot be created: {}", file);
             exit(1);
         };
-        
+
         if let Err(_) = config_file.write_all(default_config.as_bytes()) {
             eprintln!("default profile cannot be written: {}", file);
             exit(1);
         };
-        
-        println!("the configuration file cannot be found, the template has been created and used: {}", file);
+
+        println!(
+            "the configuration file cannot be found, the template has been created \
+             and used: {}",
+            file
+        );
     }
-    
+
     if cli.test_config {
         match clash::Config::File(file.clone()).try_parse() {
             Ok(_) => {
