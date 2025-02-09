@@ -81,7 +81,7 @@ fn main() {
             exit(1);
         };
 
-        if let Err(_) = config_file.write_all(default_config.as_bytes()) {
+        if config_file.write_all(default_config.as_bytes()).is_err() {
             eprintln!("default profile cannot be written: {}", file);
             exit(1);
         };
