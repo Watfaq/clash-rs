@@ -333,7 +333,7 @@ mod tests {
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
             .entrypoint(&["ssserver"])
-            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
             .build()
             .await
     }
@@ -445,6 +445,7 @@ mod tests {
                 mode,
                 "-r",
                 &ss_server_env,
+                "-vv",
             ])
             .build()
             .await
@@ -484,7 +485,6 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "fix me in #685"]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Tls).await
