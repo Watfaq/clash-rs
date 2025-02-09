@@ -108,7 +108,7 @@ impl CacheFile {
                 Ok(db) => db,
                 Err(e) => {
                     error!(
-                        "failed to parse cache file: {}, initilizing a new one",
+                        "failed to parse cache file: {}, initializing a new one",
                         e
                     );
                     Db {

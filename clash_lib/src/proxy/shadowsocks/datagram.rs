@@ -267,11 +267,11 @@ impl DatagramReceive for ShadowsocksUdpIo {
         } else {
             match r.poll_next_unpin(cx) {
                 Poll::Ready(Some(pkt)) => {
-                    let to_comsume = buf.remaining().min(pkt.data.len());
-                    let consume = pkt.data[..to_comsume].to_vec();
+                    let to_consume = buf.remaining().min(pkt.data.len());
+                    let consume = pkt.data[..to_consume].to_vec();
                     buf.put_slice(&consume);
-                    if to_comsume < pkt.data.len() {
-                        remained.extend_from_slice(&pkt.data[to_comsume..]);
+                    if to_consume < pkt.data.len() {
+                        remained.extend_from_slice(&pkt.data[to_consume..]);
                     }
                     Poll::Ready(Ok(()))
                 }

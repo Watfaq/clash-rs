@@ -29,7 +29,7 @@ impl RuleMatcher for GeoIP {
         };
 
         if let Some(ip) = ip {
-            match self.mmdb.lookup_contry(ip) {
+            match self.mmdb.lookup_country(ip) {
                 Ok(country) => {
                     country
                         .country
