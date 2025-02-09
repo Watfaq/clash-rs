@@ -65,7 +65,8 @@ pub async fn authenticate(
           -> Vec<String> {
         tracing::trace!(
             "ssh interactive auth, name: {}, prompts: {:?}",
-            name, prompts
+            name,
+            prompts
         );
         if prompts.iter().any(|p| p.prompt.contains(PASSWORD_PROMPT)) {
             opts.password.clone().map(|p| vec![p]).unwrap_or_default()

@@ -38,6 +38,7 @@ pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+#[cfg(feature = "ssh")]
 pub mod ssh;
 #[cfg(feature = "onion")]
 pub mod tor;

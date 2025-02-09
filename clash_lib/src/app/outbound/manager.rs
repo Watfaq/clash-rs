@@ -25,7 +25,7 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, ssh, trojan,
+        fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg, OutboundType,
     },
@@ -44,6 +44,8 @@ use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -280,6 +282,7 @@ impl OutboundManager {
                     });
                 }
 
+                #[cfg(feature = "ssh")]
                 OutboundProxyProtocol::Ssh(ssh) => {
                     handlers.insert(ssh.common_opts.name.clone(), {
                         let h: ssh::Handler = ssh.try_into()?;

@@ -71,6 +71,7 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "hysteria2")]
     Hysteria2(OutboundHysteria2),
     #[serde(rename = "ssh")]
+    #[cfg(feature = "ssh")]
     Ssh(OutBoundSsh),
 }
 
@@ -92,6 +93,7 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
+            #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
         }
     }
@@ -129,6 +131,7 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
+            #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
         }
     }
@@ -289,6 +292,7 @@ pub struct OutboundTuic {
     pub receive_window: Option<u64>,
 }
 
+#[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutBoundSsh {
@@ -303,6 +307,7 @@ pub struct OutBoundSsh {
     pub totp_opt: Option<TotpOption>,
 }
 
+#[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum TotpOption {
@@ -310,6 +315,7 @@ pub enum TotpOption {
     Common(Totp),
 }
 
+#[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Totp {
