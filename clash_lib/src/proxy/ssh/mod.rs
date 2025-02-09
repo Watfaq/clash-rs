@@ -31,6 +31,7 @@ use super::{
     OutboundHandler, OutboundType, ProxyStream,
 };
 
+/// Wrapper for `ChannelStream` for `Debug` trait
 struct ChannelStreamWrapper {
     inner: ChannelStream<Msg>,
 }
@@ -83,6 +84,7 @@ pub struct HandlerOptions {
     pub username: String,
     /// try public key first, then password
     pub password: Option<String>,
+    /// TOTP secret, support full config and Rfc6238
     pub totp: Option<totp_rs::TOTP>,
     /// key content or path
     /// if contains "PRIVATE KEY", it's raw content, otherwise it's a file path
@@ -167,6 +169,7 @@ impl OutboundHandler for Handler {
             Some(host_key_algorithms) => Cow::Owned(host_key_algorithms),
             None => Default::default(),
         };
+        // TODO: make inactivity_timeout configurable
         let config = client::Config {
             inactivity_timeout: Some(Duration::from_secs(5)),
             preferred: Preferred {

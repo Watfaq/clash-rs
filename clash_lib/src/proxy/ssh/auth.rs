@@ -11,6 +11,7 @@ use crate::common::errors::new_io_error;
 
 use super::{connector::Client, HandlerOptions};
 
+/// russh::MethodKind is not Debug
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum MethodKindAdapter {
     None,
@@ -48,9 +49,13 @@ impl From<MethodKindAdapter> for MethodKind {
     }
 }
 
+/// TODO: make it configurable?
 const PASSWORD_PROMPT: &str = "Password: ";
 const VERIFICATION_CODE_PROMPT: &str = "Verification code: ";
 
+/// rfc: https://datatracker.ietf.org/doc/html/rfc4252
+/// doc: https://github.com/golang/crypto/blob/9290511cd23ab9813a307b7f2615325e3ca98902/ssh/client_auth.go#L24
+/// currently, we only support password, public key and keyboard interactive
 pub async fn authenticate(
     client: &mut Handle<Client>,
     opts: &HandlerOptions,
