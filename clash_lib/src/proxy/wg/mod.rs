@@ -29,7 +29,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 
 use ipnet::IpNet;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use tokio::sync::OnceCell;
 use tracing::debug;
 
@@ -268,7 +268,7 @@ impl OutboundHandler for Handler {
                 .dns
                 .as_ref()
                 .unwrap()
-                .choose(&mut rand::thread_rng())
+                .choose(&mut rand::rng())
                 .unwrap();
 
             inner

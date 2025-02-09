@@ -5,7 +5,7 @@ use std::{fmt::Write, num::ParseIntError, path::Path};
 
 use crate::{common::errors::new_io_error, Error};
 use rand::{
-    distributions::uniform::{SampleRange, SampleUniform},
+    distr::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
 };
 use sha2::Digest;
@@ -16,15 +16,15 @@ where
     T: SampleUniform,
     R: SampleRange<T>,
 {
-    let mut rng = rand::thread_rng();
-    rng.gen_range(range)
+    let mut rng = rand::rng();
+    rng.random_range(range)
 }
 
 pub fn rand_fill<T>(buf: &mut T)
 where
     T: Fill + ?Sized,
 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.fill(buf)
 }
 

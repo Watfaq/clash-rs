@@ -4,7 +4,7 @@ use bytes::{Bytes, BytesMut};
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::Request;
-use rand::random;
+use rand::Rng;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::error;
 
@@ -20,7 +20,7 @@ pub struct Http2Config {
 
 impl Http2Config {
     fn req(&self) -> std::io::Result<Request<()>> {
-        let uri_idx = random::<usize>() % self.hosts.len();
+        let uri_idx = rand::rng().random_range(0..self.hosts.len());
         let uri = {
             http::Uri::builder()
                 .scheme("https")
