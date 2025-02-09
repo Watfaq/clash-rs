@@ -24,6 +24,8 @@ use crate::{
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -138,6 +140,11 @@ impl ProxySetProvider {
                                 Ok(Arc::new(h) as _)
                             }
                             OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
+                            #[cfg(feature = "ssh")]
+                            OutboundProxyProtocol::Ssh(s) => {
+                                let h: ssh::Handler = s.try_into()?;
+                                Ok(Arc::new(h) as _)
+                            }
                             OutboundProxyProtocol::Wireguard(wg) => {
                                 let h: wg::Handler = wg.try_into()?;
                                 Ok(Arc::new(h) as _)

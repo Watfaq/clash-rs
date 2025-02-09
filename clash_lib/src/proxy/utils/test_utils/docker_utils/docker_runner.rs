@@ -241,7 +241,7 @@ impl DockerTestRunnerBuilder {
                     target: Some(dst.to_string()),
                     source: Some(src.to_string()),
                     typ: Some(bollard::secret::MountTypeEnum::BIND),
-                    read_only: Some(true),
+                    read_only: Some(false),
                     ..Default::default()
                 })
                 .collect::<Vec<_>>(),

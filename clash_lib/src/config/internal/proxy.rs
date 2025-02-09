@@ -70,6 +70,9 @@ pub enum OutboundProxyProtocol {
     Tuic(OutboundTuic),
     #[serde(rename = "hysteria2")]
     Hysteria2(OutboundHysteria2),
+    #[serde(rename = "ssh")]
+    #[cfg(feature = "ssh")]
+    Ssh(OutBoundSsh),
 }
 
 impl OutboundProxyProtocol {
@@ -90,6 +93,8 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
+            #[cfg(feature = "ssh")]
+            OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
         }
     }
 }
@@ -126,6 +131,8 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
+            #[cfg(feature = "ssh")]
+            OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
         }
     }
 }
@@ -283,6 +290,40 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+}
+
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutBoundSsh {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub username: String,
+    pub password: Option<String>,
+    pub private_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
+    pub host_key: Option<Vec<String>>,
+    pub host_key_algorithms: Option<Vec<String>>,
+    pub totp_opt: Option<TotpOption>,
+}
+
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum TotpOption {
+    OtpAuth(String),
+    Common(Totp),
+}
+
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct Totp {
+    pub secret: String,
+    pub screw: u8,
+    pub step: u64,
+    pub digits: usize,
+    pub algorithm: totp_rs::Algorithm,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

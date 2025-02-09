@@ -8,6 +8,7 @@ edition = { workspace = true }
 default = []
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]
+ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 tracing = []
 bench = ["dep:criterion"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
@@ -136,6 +137,11 @@ console-subscriber = { version = "0.4" }
 tracing-timing = { version = "0.6" }
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
+
+# ssh
+russh = { version = "0.50", features = ["async-trait"] , optional = true }
+dirs = { version = "5.0", optional = true }
+totp-rs = { version = "^5.3", features = ["serde_support"] , optional = true }
 
 [dev-dependencies]
 tempfile = "3.15"

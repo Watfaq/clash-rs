@@ -44,6 +44,8 @@ use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -276,6 +278,14 @@ impl OutboundManager {
                     warn!("wireguard is experimental");
                     handlers.insert(wg.common_opts.name.clone(), {
                         let h: wg::Handler = wg.try_into()?;
+                        Arc::new(h) as _
+                    });
+                }
+
+                #[cfg(feature = "ssh")]
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    handlers.insert(ssh.common_opts.name.clone(), {
+                        let h: ssh::Handler = ssh.try_into()?;
                         Arc::new(h) as _
                     });
                 }
