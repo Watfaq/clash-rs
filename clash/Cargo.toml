@@ -6,7 +6,11 @@ edition = { workspace = true }
 
 [features]
 default = []
+standard = ["shadowsocks", "tuic", "ssh"]
+plus = ["standard", "onion"]
+
 shadowsocks = ["clash_lib/shadowsocks"]
+ssh = ["clash_lib/ssh"]
 tuic = ["clash_lib/tuic"]
 tracing = ["clash_lib/tracing"]
 bench = ["clash_lib/bench"]
