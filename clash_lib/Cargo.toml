@@ -152,7 +152,7 @@ bollard = "0.18"
 serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
-rand_chacha = "0.3"
+rand_chacha = "0.9"
 
 [build-dependencies]
 prost-build = "0.13"
