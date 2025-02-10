@@ -95,8 +95,7 @@ pub async fn authenticate(
             .iter()
             .any(|p| p.prompt.contains(VERIFICATION_CODE_PROMPT))
         {
-            totp
-                .clone()
+            totp.clone()
                 .map(|t| t.generate_current().unwrap())
                 .map(|t| vec![t])
                 .unwrap_or_default()
