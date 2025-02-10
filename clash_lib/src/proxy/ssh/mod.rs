@@ -332,21 +332,32 @@ mod tests {
         tracing::info!("testing ssh, using option: {:?}", opt);
         // dirty works: prepare ssh config directory for the docker container &
         // generate host key pairs
-        let temp_dir = tempdir().unwrap();
+        // under /tmp
+        // it's ok for cross test's docker in docker, since we declared volume of
+        // /tmp
+        let temp_dir = tempdir()?;
         let test_config_base_dir = test_config_base_dir();
         let ssh_config_path = test_config_base_dir.join("ssh");
+        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+
         // cp files under ssh_config_path to temp_dir
         tokio::process::Command::new("cp")
             .args([
                 "-r",
                 ssh_config_path.to_str().unwrap(),
-                temp_dir.path().to_str().unwrap(),
+                ssh_config_tmp_path.to_str().unwrap(),
             ])
             .output()
             .await
             .expect("failed to copy ssh config files");
-        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+        tokio::process::Command::new("chmod")
+            .args(["-R", "777", ssh_config_tmp_path.to_str().unwrap()])
+            .output()
+            .await
+            .expect("failed to chmod ssh config files");
         tracing::info!("ssh_config tmp mounting path: {:?}", ssh_config_tmp_path);
+        tokio::fs::create_dir_all(&ssh_config_tmp_path.join("logs").join("openssh"))
+            .await?;
 
         // generate host key pairs
         // ignore rsa, it's too slow
