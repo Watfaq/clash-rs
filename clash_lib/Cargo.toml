@@ -87,7 +87,7 @@ tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 tun = { version = "0.7", features = ["async"] }
-netstack-lwip = { git = "https://github.com/lakako/netstack-lwip.git", rev = "2ecf41c3970ed3c7ccb6e223d038e90bf4c51174" }
+netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "c391c32521b783f32a87cbd511b906b68391f645" }
 
 boringtun = { version = "0.6", git = "https://github.com/kubicek/boringtun.git", rev = "e3eb773003c8f2f127cd7ba0407e524e51aa3455" }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
