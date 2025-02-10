@@ -228,6 +228,7 @@ impl DockerTestRunnerBuilder {
     }
 
     #[cfg(docker_test)]
+    #[allow(unused)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self
