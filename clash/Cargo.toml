@@ -8,6 +8,7 @@ edition = { workspace = true }
 default = []
 standard = ["shadowsocks", "tuic", "ssh"]
 plus = ["standard", "onion"]
+android = ["shadowsocks", "tuic"] # Android build failed with libc
 
 shadowsocks = ["clash_lib/shadowsocks"]
 ssh = ["clash_lib/ssh"]
