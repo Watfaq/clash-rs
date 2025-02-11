@@ -5,25 +5,25 @@ use crate::def::LogLevel;
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
+use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    filter::{self},
     fmt::time::LocalTime,
     prelude::*,
     EnvFilter, Layer,
 };
 
-impl From<LogLevel> for filter::LevelFilter {
+impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
         match level {
-            LogLevel::Error => filter::LevelFilter::ERROR,
-            LogLevel::Warning => filter::LevelFilter::WARN,
-            LogLevel::Info => filter::LevelFilter::INFO,
-            LogLevel::Debug => filter::LevelFilter::DEBUG,
-            LogLevel::Trace => filter::LevelFilter::TRACE,
-            LogLevel::Silent => filter::LevelFilter::OFF,
+            LogLevel::Error => LevelFilter::ERROR,
+            LogLevel::Warning => LevelFilter::WARN,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Trace => LevelFilter::TRACE,
+            LogLevel::Silent => LevelFilter::OFF,
         }
     }
 }
@@ -98,9 +98,10 @@ pub fn setup_logging(
     #[cfg(feature = "tokio-console")]
     let subscriber = subscriber.with(
         console_subscriber::spawn().with_filter(
-            filter::Targets::new()
-                .with_target("tokio", Level::TRACE)
-                .with_target("runtime", Level::TRACE),
+            tracing_subscriber::filter::Targets::new()
+                .with_target("tokio", LevelFilter::TRACE)
+                .with_target("runtime", LevelFilter::TRACE)
+                .with_default(LevelFilter::OFF),
         ),
     );
 
