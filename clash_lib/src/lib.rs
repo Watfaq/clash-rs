@@ -18,6 +18,7 @@ use crate::{
 use app::{
     dispatcher::StatisticsManager,
     dns::{SystemResolver, ThreadSafeDNSResolver},
+    logging::LogEvent,
     profile,
 };
 use common::{auth, http::new_http_client, mmdb};
@@ -118,7 +119,7 @@ pub struct RuntimeController {
 
 static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
 
-pub fn start(opts: Options) -> Result<(), Error> {
+pub fn start_scaffold(opts: Options) -> Result<(), Error> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
         TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -127,34 +128,8 @@ pub fn start(opts: Options) -> Result<(), Error> {
             .enable_all()
             .build()?,
     };
-
-    rt.block_on(async {
-        match start_async(opts).await {
-            Err(e) => {
-                eprintln!("start error: {}", e);
-                Err(e)
-            }
-            Ok(_) => Ok(()),
-        }
-    })
-}
-
-pub fn shutdown() -> bool {
-    match RUNTIME_CONTROLLER.get() {
-        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
-        _ => false,
-    }
-}
-
-async fn start_async(opts: Options) -> Result<(), Error> {
-    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
-
-    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
-
     let config: InternalConfig = opts.config.try_parse()?;
-
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
-
     let (log_tx, _) = broadcast::channel(100);
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
@@ -173,6 +148,33 @@ async fn start_async(opts: Options) -> Result<(), Error> {
         default_panic(info);
         error!("panic hook: {:?}", info);
     }));
+
+    rt.block_on(async {
+        match start(config, cwd, log_tx).await {
+            Err(e) => {
+                eprintln!("start error: {}", e);
+                Err(e)
+            }
+            Ok(_) => Ok(()),
+        }
+    })
+}
+
+pub fn shutdown() -> bool {
+    match RUNTIME_CONTROLLER.get() {
+        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
+        _ => false,
+    }
+}
+
+pub async fn start(
+    config: InternalConfig,
+    cwd: String,
+    log_tx: broadcast::Sender<LogEvent>,
+) -> Result<(), Error> {
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+
+    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
@@ -466,7 +468,7 @@ async fn create_components(
 
 #[cfg(test)]
 mod tests {
-    use crate::{shutdown, start, Config, Options};
+    use crate::{shutdown, start_scaffold, Config, Options};
     use std::{sync::Once, thread, time::Duration};
 
     static INIT: Once = Once::new();
@@ -487,7 +489,7 @@ mod tests {
         "#;
 
         let handle = thread::spawn(|| {
-            start(Options {
+            start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
                 cwd: None,
                 rt: None,

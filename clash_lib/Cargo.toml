@@ -6,12 +6,14 @@ edition = { workspace = true }
 
 [features]
 default = []
+# Protos
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
-tracing = []
 bench = ["dep:criterion"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
+
+tokio-console = ["tokio/tracing"]
 
 [dependencies]
 # Async
@@ -39,12 +41,11 @@ webpki-roots = "0.26"
 # Error handing & logging
 thiserror = "2"
 anyhow = "1"
-opentelemetry = "0.27"
-opentelemetry_sdk = { version = "0.27", default-features = false, features = ["trace", "rt-tokio"] }
-tracing-opentelemetry = "0.28"
-opentelemetry-jaeger-propagator = "0.27"
-opentelemetry-otlp = { version = "0.27" }
-opentelemetry-semantic-conventions = { version = "0.27", features = ["semconv_experimental"] }
+
+# logging
+time = { version = "0.3", features = ["macros", "local-offset"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+tracing-appender = "0.2"
 
 # Data structures
 url = "2"
@@ -108,8 +109,6 @@ ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.9"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-appender = "0.2"
 
 shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"] }
 maxminddb = "0.24"

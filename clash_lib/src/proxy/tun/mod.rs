@@ -11,7 +11,7 @@ pub use datagram::TunDatagram;
 mod tests {
     use std::thread;
 
-    use crate::{shutdown, start, Config, Options};
+    use crate::{shutdown, start_scaffold, Config, Options};
 
     fn wait_port_open(port: u16) {
         let mut count = 0;
@@ -56,7 +56,7 @@ mod tests {
         let log_file_clone = log_file.clone();
 
         let handle = thread::spawn(|| {
-            start(Options {
+            start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
                 cwd: Some(cwd_clone),
                 rt: None,
@@ -127,7 +127,7 @@ mod tests {
         let log_file_clone = log_file.clone();
 
         let handle = thread::spawn(|| {
-            start(Options {
+            start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
                 cwd: Some(cwd_clone),
                 rt: None,
