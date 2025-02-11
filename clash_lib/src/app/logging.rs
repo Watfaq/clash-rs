@@ -9,7 +9,9 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
-use tracing_subscriber::{fmt::time::LocalTime, prelude::*, EnvFilter, Layer};
+use tracing_subscriber::{
+    filter::filter_fn, fmt::time::LocalTime, prelude::*, EnvFilter, Layer,
+};
 
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
@@ -92,17 +94,15 @@ pub fn setup_logging(
     // Collect and expose data about the Tokio runtime (tasks, threads, resources,
     // etc.)
     #[cfg(feature = "tokio-console")]
-    let subscriber = subscriber.with(
-        console_subscriber::spawn().with_filter(
-            tracing_subscriber::filter::Targets::new()
-                .with_target("tokio", LevelFilter::TRACE)
-                .with_target("runtime", LevelFilter::TRACE)
-                .with_default(LevelFilter::OFF),
-        ),
-    );
-
-    // #[cfg(feature = "telemetry")]
-    // let register = register.with(opentelemetry_layer);
+    let subscriber = subscriber.with(console_subscriber::spawn());
+    #[cfg(feature = "tokio-console")]
+    let filter = filter
+        .add_directive("tokio=trace".parse().unwrap())
+        .add_directive("runtime=trace".parse().unwrap());
+    let exclude = filter_fn(|metadata| {
+        !metadata.target().contains("tokio")
+            && !metadata.target().contains("runtime")
+    });
 
     let timer = LocalTime::new(time::macros::format_description!(
         "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]"
@@ -110,7 +110,7 @@ pub fn setup_logging(
 
     let subscriber = subscriber
         .with(filter) // Global filter
-        .with(collector) // Log collector for API controller
+        .with(collector.with_filter(exclude.clone())) // Log collector for API controller
         .with(appender.map(|x| {
             tracing_subscriber::fmt::Layer::new()
                 .with_timer(timer.clone())
@@ -120,6 +120,7 @@ pub fn setup_logging(
                 .with_line_number(true)
                 .with_level(true)
                 .with_writer(x)
+                .with_filter(exclude.clone())
         }))
         .with(
             tracing_subscriber::fmt::Layer::new()
@@ -131,7 +132,8 @@ pub fn setup_logging(
                 .with_line_number(true)
                 .with_level(true)
                 .with_thread_ids(cfg!(debug_assertions))
-                .with_writer(std::io::stdout),
+                .with_writer(std::io::stdout)
+                .with_filter(exclude),
         );
 
     #[cfg(target_os = "ios")]
