@@ -9,11 +9,7 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
-use tracing_subscriber::{
-    fmt::time::LocalTime,
-    prelude::*,
-    EnvFilter, Layer,
-};
+use tracing_subscriber::{fmt::time::LocalTime, prelude::*, EnvFilter, Layer};
 
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
