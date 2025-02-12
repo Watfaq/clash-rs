@@ -109,7 +109,7 @@ ring-compat = { version = "0.8", features = ["aead"] }
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"], git = "https://github.com/shadowsocks/shadowsocks-rust.git", rev = "fe1388da06775e3ebe3f216c96073fa6c6d1ba25" } # has unrelased commit for bsd build
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
