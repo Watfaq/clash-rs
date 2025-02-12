@@ -1,4 +1,4 @@
-use clash_lib::{shutdown, start, Config, Options, TokioRuntime};
+use clash_lib::{shutdown, start_scaffold, Config, Options, TokioRuntime};
 use std::{
     ffi::{CStr, CString},
     os::raw::{c_char, c_int},
@@ -33,7 +33,7 @@ pub unsafe extern "C" fn clash_start(
         log_file: Some(log_str),
     };
 
-    match start(options) {
+    match start_scaffold(options) {
         Ok(_) => CString::new("").unwrap().into_raw(),
         Err(e) => CString::new(format!("Error: {}", e)).unwrap().into_raw(),
     }

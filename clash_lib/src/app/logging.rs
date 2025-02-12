@@ -1,39 +1,27 @@
 use std::io::IsTerminal;
 
 use crate::def::LogLevel;
-use opentelemetry::{
-    global::{self},
-    trace::TracerProvider as _,
-    KeyValue,
-};
-use opentelemetry_otlp::SpanExporter;
-use opentelemetry_sdk::{trace::TracerProvider, Resource};
-use opentelemetry_semantic_conventions::{
-    resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
-    SCHEMA_URL,
-};
+
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 
-use tracing::debug;
+use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    filter::{self, filter_fn, Directive},
-    prelude::*,
-    EnvFilter, Layer,
+    filter::filter_fn, fmt::time::LocalTime, prelude::*, EnvFilter, Layer,
 };
 
-impl From<LogLevel> for filter::LevelFilter {
+impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
         match level {
-            LogLevel::Error => filter::LevelFilter::ERROR,
-            LogLevel::Warning => filter::LevelFilter::WARN,
-            LogLevel::Info => filter::LevelFilter::INFO,
-            LogLevel::Debug => filter::LevelFilter::DEBUG,
-            LogLevel::Trace => filter::LevelFilter::TRACE,
-            LogLevel::Silent => filter::LevelFilter::OFF,
+            LogLevel::Error => LevelFilter::ERROR,
+            LogLevel::Warning => LevelFilter::WARN,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Trace => LevelFilter::TRACE,
+            LogLevel::Silent => LevelFilter::OFF,
         }
     }
 }
@@ -88,48 +76,12 @@ pub fn setup_logging(
     cwd: &str,
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
-    let filter = EnvFilter::builder()
-        .with_default_directive(
-            format!("clash={}", level).parse::<Directive>().unwrap(),
-        )
-        .from_env_lossy();
+    let filter = EnvFilter::from_default_env()
+        .add_directive(format!("clash={}", level).parse().unwrap())
+        .add_directive(format!("clash_lib={}", level).parse().unwrap())
+        .add_directive("warn".parse().unwrap());
 
-    let jaeger = if std::env::var("JAEGER_ENABLED").is_ok() {
-        global::set_text_map_propagator(
-            opentelemetry_jaeger_propagator::Propagator::new(),
-        );
-
-        let exporter = SpanExporter::builder().with_tonic().build()?;
-
-        let provider = TracerProvider::builder()
-            .with_resource(Resource::from_schema_url(
-                [
-                    KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
-                    KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-                    KeyValue::new(
-                        DEPLOYMENT_ENVIRONMENT_NAME,
-                        std::env::var("PROFILE").unwrap_or_default(),
-                    ),
-                ],
-                SCHEMA_URL,
-            ))
-            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
-            .build();
-
-        global::set_tracer_provider(provider.clone());
-
-        Some(tracing_opentelemetry::layer().with_tracer(provider.tracer("clash-rs")))
-    } else {
-        None
-    };
-
-    #[cfg(target_os = "ios")]
-    let ios_os_log = Some(OsLogger::new("com.watfaq.clash", "default"));
-    #[cfg(not(target_os = "ios"))]
-    let ios_os_log =
-        tracing_subscriber::fmt::Layer::new().with_writer(std::io::empty);
-
-    let (appender, g) = if let Some(log_file) = log_file {
+    let (appender, guard) = if let Some(log_file) = log_file {
         let file_appender = tracing_appender::rolling::daily(cwd, log_file);
         let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         (Some(non_blocking), Some(guard))
@@ -137,34 +89,42 @@ pub fn setup_logging(
         (None, None)
     };
 
-    let console_layer = if cfg!(feature = "tracing") {
-        Some(console_subscriber::spawn())
-    } else {
-        None
-    };
+    let subscriber = tracing_subscriber::registry();
 
-    let opentelemetry_layer = tracing_subscriber::fmt::Layer::new()
-        .with_writer(std::io::stderr)
-        .with_filter(filter_fn(|metadata| {
-            metadata.target().starts_with("opentelemetry")
-        }));
+    // Collect and expose data about the Tokio runtime (tasks, threads, resources,
+    // etc.)
+    #[cfg(feature = "tokio-console")]
+    let subscriber = subscriber.with(console_subscriber::spawn());
+    #[cfg(feature = "tokio-console")]
+    let filter = filter
+        .add_directive("tokio=trace".parse().unwrap())
+        .add_directive("runtime=trace".parse().unwrap());
+    let exclude = filter_fn(|metadata| {
+        !metadata.target().contains("tokio")
+            && !metadata.target().contains("runtime")
+    });
 
-    let subscriber = tracing_subscriber::registry()
-        .with(jaeger)
-        .with(filter)
-        .with(collector)
-        .with(console_layer)
+    let timer = LocalTime::new(time::macros::format_description!(
+        "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]"
+    ));
+
+    let subscriber = subscriber
+        .with(filter) // Global filter
+        .with(collector.with_filter(exclude.clone())) // Log collector for API controller
         .with(appender.map(|x| {
             tracing_subscriber::fmt::Layer::new()
+                .with_timer(timer.clone())
                 .with_ansi(false)
                 .compact()
                 .with_file(true)
                 .with_line_number(true)
                 .with_level(true)
                 .with_writer(x)
+                .with_filter(exclude.clone())
         }))
         .with(
             tracing_subscriber::fmt::Layer::new()
+                .with_timer(timer)
                 .with_ansi(std::io::stdout().is_terminal())
                 .compact()
                 .with_target(cfg!(debug_assertions))
@@ -172,19 +132,18 @@ pub fn setup_logging(
                 .with_line_number(true)
                 .with_level(true)
                 .with_thread_ids(cfg!(debug_assertions))
-                .with_writer(std::io::stdout),
-        )
-        .with(ios_os_log)
-        .with(opentelemetry_layer);
+                .with_writer(std::io::stdout)
+                .with_filter(exclude),
+        );
+
+    #[cfg(target_os = "ios")]
+    let subscriber =
+        subscriber.with(Some(OsLogger::new("com.watfaq.clash", "default")));
 
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
 
-    if let Ok(jager_endpoint) = std::env::var("JAGER_ENDPOINT") {
-        debug!("jager endpoint: {}", jager_endpoint);
-    }
-
-    Ok(g)
+    Ok(guard)
 }
 
 struct EventVisitor<'a>(&'a mut Vec<String>);
