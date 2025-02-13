@@ -71,7 +71,7 @@ impl InboundListener for Listener {
 
             let dispatcher = self.dispather.clone();
             tokio::spawn(async move {
-                dispatcher.dispatch_stream(sess, socket).await;
+                dispatcher.dispatch_stream(sess, Box::new(socket)).await;
             });
         }
     }

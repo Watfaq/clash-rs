@@ -12,6 +12,13 @@ use bytes::BytesMut;
 use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+mod splice;
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+pub use splice::zero_copy_bidirectional;
+
+use crate::{app::dispatcher::TrackedStream, proxy::ClientStream};
+
 #[derive(Debug)]
 pub enum CopyBidirectionalError {
     LeftClosed(std::io::Error),
@@ -326,6 +333,58 @@ where
         }
 
         Poll::Ready(Ok((*a_to_b_count, *b_to_a_count)))
+    }
+}
+
+pub async fn copy_bidirectional(
+    mut a: Box<dyn ClientStream>,
+    mut b: TrackedStream,
+    size: usize,
+    a_to_b_timeout_duration: Duration,
+    b_to_a_timeout_duration: Duration,
+) -> Result<(u64, u64), CopyBidirectionalError> {
+    // zero copy is only available on linux
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    {
+        let (r_tracker, w_tracker) = b.rw_trackers();
+        let a_raw = a.downcast_mut::<tokio::net::TcpStream>();
+        let b_raw = b
+            .inner_mut()
+            .downcast_mut::<crate::app::dispatcher::ChainedStreamWrapper<tokio::net::TcpStream>>();
+        return match (a_raw, b_raw) {
+            // zero copy is only available when both streams are raw TcpStream
+            (Some(a), Some(wrapper)) => {
+                tracing::trace!("using zero copy for bidirectional copy");
+                zero_copy_bidirectional(
+                    a,
+                    wrapper.inner_mut(),
+                    r_tracker,
+                    w_tracker,
+                )
+                .await
+            }
+            _ => {
+                copy_buf_bidirectional_with_timeout(
+                    &mut a,
+                    &mut b,
+                    size,
+                    a_to_b_timeout_duration,
+                    b_to_a_timeout_duration,
+                )
+                .await
+            }
+        };
+    }
+    #[cfg(not(all(target_os = "linux", feature = "zero_copy")))]
+    {
+        copy_buf_bidirectional_with_timeout(
+            &mut a,
+            &mut b,
+            size,
+            a_to_b_timeout_duration,
+            b_to_a_timeout_duration,
+        )
+        .await
     }
 }
 

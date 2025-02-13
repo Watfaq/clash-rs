@@ -3,6 +3,8 @@ pub use netstack_lwip as netstack;
 mod datagram;
 pub use inbound::get_runner as get_tun_runner;
 mod routes;
+// TODO: remove netstack_lwip and the stream wrapper
+mod stream;
 
 #[cfg(target_os = "linux")] // for tproxy
 pub use datagram::TunDatagram;

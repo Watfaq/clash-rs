@@ -49,7 +49,7 @@ async fn handle_inbound_stream(
     };
 
     debug!("new tun TCP session assigned: {}", sess);
-    dispatcher.dispatch_stream(sess, stream).await;
+    dispatcher.dispatch_stream(sess, Box::new(super::stream::StreamWrapper::new(stream))).await;
 }
 
 async fn handle_inbound_datagram(

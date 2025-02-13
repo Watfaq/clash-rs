@@ -1,6 +1,7 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast};
 use futures::{Sink, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -28,11 +29,12 @@ impl Tracked {
 
 #[async_trait]
 pub trait ChainedStream:
-    AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync
+    Downcast + AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync
 {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 }
+impl_downcast!(ChainedStream);
 
 pub type BoxedChainedStream = Box<dyn ChainedStream>;
 
@@ -49,12 +51,17 @@ impl<T> ChainedStreamWrapper<T> {
             chain: ProxyChain::default(),
         }
     }
+
+    #[allow(unused)]
+    pub fn inner_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
 }
 
 #[async_trait]
 impl<T> ChainedStream for ChainedStreamWrapper<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync,
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static,
 {
     fn chain(&self) -> &ProxyChain {
         &self.chain
@@ -112,6 +119,7 @@ pub struct TrackedStream {
     close_notify: Receiver<()>,
 }
 
+#[allow(unused)]
 impl TrackedStream {
     #[allow(clippy::borrowed_box)]
     pub async fn new(
@@ -153,8 +161,82 @@ impl TrackedStream {
         self.tracker.uuid
     }
 
-    fn tracker_info(&self) -> Arc<TrackerInfo> {
+    pub fn tracker_info(&self) -> Arc<TrackerInfo> {
         self.tracker.clone()
+    }
+
+    pub fn inner_mut(&mut self) -> &mut BoxedChainedStream {
+        &mut self.inner
+    }
+
+    pub fn rw_trackers(
+        &self,
+    ) -> (
+        Arc<dyn TrackCopy + Send + Sync>,
+        Arc<dyn TrackCopy + Send + Sync>,
+    ) {
+        let r =
+            Arc::new(ReadTracker::new(self.tracker.clone(), self.manager.clone()));
+        let w = Arc::new(WriteTracker::new(
+            self.tracker.clone(),
+            self.manager.clone(),
+        ));
+        (r, w)
+    }
+}
+
+#[allow(unused)]
+pub trait TrackCopy {
+    fn track(&self, total: usize);
+}
+
+impl TrackCopy for ReadTracker {
+    fn track(&self, total: usize) {
+        self.push_downloaded(total);
+    }
+}
+
+impl TrackCopy for WriteTracker {
+    fn track(&self, total: usize) {
+        self.push_uploaded(total);
+    }
+}
+
+#[allow(unused)]
+pub struct ReadTracker {
+    tracker: Arc<TrackerInfo>,
+    manager: Arc<Manager>,
+}
+
+impl ReadTracker {
+    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
+        Self { tracker, manager }
+    }
+
+    fn push_downloaded(&self, download: usize) {
+        self.manager.push_downloaded(download);
+        self.tracker
+            .download_total
+            .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+    }
+}
+
+#[allow(unused)]
+pub struct WriteTracker {
+    tracker: Arc<TrackerInfo>,
+    manager: Arc<Manager>,
+}
+
+impl WriteTracker {
+    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
+        Self { tracker, manager }
+    }
+
+    fn push_uploaded(&self, upload: usize) {
+        self.manager.push_uploaded(upload);
+        self.tracker
+            .upload_total
+            .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
     }
 }
 
