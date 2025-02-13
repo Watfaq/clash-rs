@@ -5,15 +5,17 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["tokio-console", "zero_copy"]
+default = ["zero_copy"]
+
+internal = []
 # Protos
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]
 ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
-bench = ["dep:criterion"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
-zero_copy = []
 
+zero_copy = []
+bench = ["dep:criterion"]
 tokio-console = ["tokio/tracing"]
 
 [dependencies]
