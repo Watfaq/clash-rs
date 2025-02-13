@@ -182,6 +182,15 @@ jobs:
             tool: cargo
             extra-args: -F "shadowsocks, tuic, onion"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # BSD
+          - os: ubuntu-latest
+            target: x86_64-unknown-freebsd
+            tool: cross
+            extra-args: --verbose -F "shadowsocks, tuic"
+          - os: ubuntu-latest
+            target: i686-unknown-freebsd
+            tool: cross
+            extra-args: --verbose -F "shadowsocks, tuic"
           # Android
           - os: ubuntu-latest
             target: aarch64-linux-android
@@ -269,9 +278,9 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (docker test on linux)
+      - name: Cargo test (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
-        if: startsWith(matrix.os, 'ubuntu')
+        if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
           command: test
