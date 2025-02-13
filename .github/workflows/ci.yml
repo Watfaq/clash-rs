@@ -278,9 +278,9 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (docker test on linux)
+      - name: Cargo test (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
-        if: startsWith(matrix.os, 'ubuntu')
+        if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
           command: test
