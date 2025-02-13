@@ -169,7 +169,7 @@ impl TrackedStream {
         &mut self.inner
     }
 
-    pub fn rw_trackers(
+    pub fn trackers(
         &self,
     ) -> (
         Arc<dyn TrackCopy + Send + Sync>,

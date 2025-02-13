@@ -346,12 +346,18 @@ pub async fn copy_bidirectional(
     // zero copy is only available on linux
     #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     {
-        let (r_tracker, w_tracker) = b.rw_trackers();
+        // for zero copy, we need to track the download and upload amount with the
+        // assistance of the tracker it's somehow ugly, but i could not
+        // figure out a better way
+        let (r_tracker, w_tracker) = b.trackers();
+        // for socks5 & http listener, a is a raw TcpStream
         let a_raw = a.downcast_mut::<tokio::net::TcpStream>();
+        // for direct outbound handler **without further chains**, b is a chained
+        // stream wrapper over tcpstream
         let b_raw = b
             .inner_mut()
             .downcast_mut::<crate::app::dispatcher::ChainedStreamWrapper<tokio::net::TcpStream>>();
-        return match (a_raw, b_raw) {
+        match (a_raw, b_raw) {
             // zero copy is only available when both streams are raw TcpStream
             (Some(a), Some(wrapper)) => {
                 tracing::trace!("using zero copy for bidirectional copy");
@@ -360,6 +366,8 @@ pub async fn copy_bidirectional(
                     wrapper.inner_mut(),
                     r_tracker,
                     w_tracker,
+                    a_to_b_timeout_duration,
+                    b_to_a_timeout_duration,
                 )
                 .await
             }
@@ -373,7 +381,7 @@ pub async fn copy_bidirectional(
                 )
                 .await
             }
-        };
+        }
     }
     #[cfg(not(all(target_os = "linux", feature = "zero_copy")))]
     {

@@ -144,7 +144,9 @@ pub async fn handle_tcp<'a>(
             s.write_all(&buf[..]).await?;
             sess.destination = dst;
 
-            dispatcher.dispatch_stream(sess.to_owned(), Box::new(s)).await;
+            dispatcher
+                .dispatch_stream(sess.to_owned(), Box::new(s))
+                .await;
 
             Ok(())
         }

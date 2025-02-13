@@ -1,10 +1,12 @@
+/// ref: https://github.com/Hanaasagi/tokio-splice & clash_lib/src/common/io/mod.rs
 use std::{
-    future::poll_fn,
+    future::Future,
     io::{Error, ErrorKind},
     marker::PhantomData,
     os::unix::io::{AsRawFd, RawFd},
     pin::Pin,
     task::{ready, Context, Poll},
+    time::Duration,
 };
 
 use libc;
@@ -168,6 +170,10 @@ where
             _marker_r: PhantomData,
             _marker_w: PhantomData,
         }
+    }
+
+    fn amount_transferred(&self) -> u64 {
+        self.amt
     }
 
     fn poll_fill_buf(
@@ -344,39 +350,7 @@ where
 enum TransferState<SR, SW> {
     Running(CopyBuffer<SR, SW>),
     ShuttingDown(u64),
-    Done(u64),
-}
-
-fn transfer_one_direction<SL, SR>(
-    cx: &mut Context<'_>,
-    state: &mut TransferState<SL, SR>,
-    r: &mut SL,
-    w: &mut SR,
-    tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
-) -> Poll<Result<u64>>
-where
-    SL: Stream + Unpin,
-    SR: Stream + Unpin,
-{
-    loop {
-        match state {
-            TransferState::Running(buf) => {
-                let count = ready!(buf.poll_copy(cx, r, w))?;
-
-                *state = TransferState::ShuttingDown(count);
-            }
-            TransferState::ShuttingDown(count) => {
-                ready!(Pin::new(&mut *w).poll_shutdown(cx))?;
-
-                *state = TransferState::Done(*count);
-            }
-            TransferState::Done(count) => {
-                tracing::debug!("transfer done: {}", count);
-                tracker.track(*count as _);
-                return Poll::Ready(Ok(*count))
-            }
-        }
-    }
+    Done,
 }
 
 /// `AsyncRead` + `AsyncWrite` + `AsRawFd` Wrapper for stream.
@@ -401,25 +375,23 @@ pub async fn zero_copy_bidirectional<A, B>(
     b: &mut B,
     read_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
     write_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
+    a_to_b_timeout_duration: Duration,
+    b_to_a_timeout_duration: Duration,
 ) -> Result<(u64, u64)>
 where
     A: Stream + Unpin,
     B: Stream + Unpin,
 {
-    let mut a_to_b = TransferState::Running(CopyBuffer::new(Pipe::new()?));
-    let mut b_to_a = TransferState::Running(CopyBuffer::new(Pipe::new()?));
-
-    poll_fn(|cx| {
-        let a_to_b =
-            transfer_one_direction(cx, &mut a_to_b, a, b, write_tracker.clone())?;
-        let b_to_a =
-            transfer_one_direction(cx, &mut b_to_a, b, a, read_tracker.clone())?;
-
-        let a_to_b = ready!(a_to_b);
-        let b_to_a = ready!(b_to_a);
-
-        Poll::Ready(Ok((a_to_b, b_to_a)))
-    })
+    CopyBidirectional::new(
+        a,
+        b,
+        CopyBuffer::new(Pipe::new()?),
+        CopyBuffer::new(Pipe::new()?),
+        a_to_b_timeout_duration,
+        b_to_a_timeout_duration,
+        write_tracker,
+        read_tracker,
+    )
     .await
 }
 
@@ -450,3 +422,189 @@ macro_rules! impl_stream_for {
 
 impl_stream_for!(TcpStream);
 impl_stream_for!(UnixStream);
+
+struct CopyBidirectional<'a, A, B> {
+    a: &'a mut A,
+    b: &'a mut B,
+    a_to_b: TransferState<A, B>,
+    b_to_a: TransferState<B, A>,
+    a_to_b_count: u64,
+    b_to_a_count: u64,
+    a_to_b_delay: Option<Pin<Box<tokio::time::Sleep>>>,
+    b_to_a_delay: Option<Pin<Box<tokio::time::Sleep>>>,
+    a_to_b_timeout_duration: Duration,
+    b_to_a_timeout_duration: Duration,
+    write_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
+    read_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
+}
+
+impl<'a, A, B> CopyBidirectional<'a, A, B> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        a: &'a mut A,
+        b: &'a mut B,
+        a_to_b_buffer: CopyBuffer<A, B>,
+        b_to_a_buffer: CopyBuffer<B, A>,
+        a_to_b_timeout_duration: Duration,
+        b_to_a_timeout_duration: Duration,
+        write_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
+        read_tracker: std::sync::Arc<dyn TrackCopy + Send + Sync>,
+    ) -> Self
+    where
+        A: Stream + Unpin,
+        B: Stream + Unpin,
+    {
+        Self {
+            a,
+            b,
+            a_to_b: TransferState::Running(a_to_b_buffer),
+            b_to_a: TransferState::Running(b_to_a_buffer),
+            a_to_b_count: 0,
+            b_to_a_count: 0,
+            a_to_b_delay: None,
+            b_to_a_delay: None,
+            a_to_b_timeout_duration,
+            b_to_a_timeout_duration,
+            write_tracker,
+            read_tracker,
+        }
+    }
+}
+
+impl<A, B> Future for CopyBidirectional<'_, A, B>
+where
+    A: Stream + Unpin + Sized,
+    B: Stream + Unpin + Sized,
+{
+    type Output = std::result::Result<(u64, u64), CopyBidirectionalError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let CopyBidirectional {
+            a,
+            b,
+            a_to_b,
+            b_to_a,
+            a_to_b_count,
+            b_to_a_count,
+            a_to_b_delay,
+            b_to_a_delay,
+            a_to_b_timeout_duration,
+            b_to_a_timeout_duration,
+            write_tracker,
+            read_tracker,
+        } = &mut *self;
+
+        loop {
+            match a_to_b {
+                TransferState::Running(buf) => {
+                    let res = buf.poll_copy(cx, *a, *b);
+                    match res {
+                        Poll::Ready(Ok(count)) => {
+                            *a_to_b = TransferState::ShuttingDown(count);
+                            continue;
+                        }
+                        Poll::Ready(Err(err)) => {
+                            write_tracker.track(buf.amount_transferred() as _);
+                            return Poll::Ready(Err(err));
+                        }
+                        Poll::Pending => {
+                            if let Some(delay) = a_to_b_delay {
+                                match delay.as_mut().poll(cx) {
+                                    Poll::Ready(()) => {
+                                        *a_to_b = TransferState::ShuttingDown(
+                                            buf.amount_transferred(),
+                                        );
+                                        continue;
+                                    }
+                                    Poll::Pending => (),
+                                }
+                            }
+                        }
+                    }
+                }
+                TransferState::ShuttingDown(count) => {
+                    let res = Pin::new(&mut *b).poll_shutdown(cx);
+                    match res {
+                        Poll::Ready(Ok(())) => {
+                            *a_to_b_count += *count;
+                            write_tracker.track(*count as _);
+                            *a_to_b = TransferState::Done;
+                            b_to_a_delay.replace(Box::pin(tokio::time::sleep(
+                                *b_to_a_timeout_duration,
+                            )));
+                            continue;
+                        }
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::LeftClosed(err),
+                            ))
+                        }
+                        Poll::Pending => (),
+                    }
+                }
+                TransferState::Done => (),
+            }
+
+            match b_to_a {
+                TransferState::Running(buf) => {
+                    let res = buf.poll_copy(cx, *b, *a);
+                    match res {
+                        Poll::Ready(Ok(count)) => {
+                            *b_to_a = TransferState::ShuttingDown(count);
+                            continue;
+                        }
+                        // crucial for down/up load counting
+                        // the copy & write are done by kernel
+                        // we still need to track the amount of data when error
+                        // occurs such as broken pipe
+                        Poll::Ready(Err(err)) => {
+                            read_tracker.track(buf.amount_transferred() as _);
+                            return Poll::Ready(Err(err));
+                        }
+                        Poll::Pending => {
+                            if let Some(delay) = b_to_a_delay {
+                                match delay.as_mut().poll(cx) {
+                                    Poll::Ready(()) => {
+                                        *b_to_a = TransferState::ShuttingDown(
+                                            buf.amount_transferred(),
+                                        );
+                                        continue;
+                                    }
+                                    Poll::Pending => (),
+                                }
+                            }
+                        }
+                    }
+                }
+                TransferState::ShuttingDown(count) => {
+                    let res = Pin::new(&mut *a).poll_shutdown(cx);
+                    match res {
+                        Poll::Ready(Ok(())) => {
+                            *b_to_a_count += *count;
+                            read_tracker.track(*count as _);
+                            *b_to_a = TransferState::Done;
+                            a_to_b_delay.replace(Box::pin(tokio::time::sleep(
+                                *a_to_b_timeout_duration,
+                            )));
+                            continue;
+                        }
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(Err(
+                                CopyBidirectionalError::RightClosed(err),
+                            ))
+                        }
+                        Poll::Pending => (),
+                    }
+                }
+                TransferState::Done => (),
+            }
+
+            match (&a_to_b, &b_to_a) {
+                (TransferState::Done, TransferState::Done) => break,
+                _ => return Poll::Pending,
+            }
+        }
+
+        Poll::Ready(Ok((*a_to_b_count, *b_to_a_count)))
+    }
+}
