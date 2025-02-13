@@ -186,11 +186,12 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-freebsd
             tool: cross
-            extra-args: --verbose -F "shadowsocks, tuic"
+            extra-args: --verbose -F "standard"
           - os: ubuntu-latest
             target: i686-unknown-freebsd
             tool: cross
-            extra-args: --verbose -F "shadowsocks, tuic"
+            extra-args: --verbose -F "standard"
+            
           # Android
           - os: ubuntu-latest
             target: aarch64-linux-android
