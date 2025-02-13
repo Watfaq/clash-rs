@@ -575,7 +575,11 @@ impl Default for FallbackFilter {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct Experimental {}
+#[serde(rename_all = "kebab-case")]
+pub struct Experimental {
+    /// buffer size for tcp stream bidirectional copy
+    pub tcp_buffer_size: Option<usize>,
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
