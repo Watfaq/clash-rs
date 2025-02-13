@@ -83,14 +83,8 @@ impl<T> ProxyStream for T where
 }
 pub type AnyStream = Box<dyn ProxyStream>;
 
-pub trait ClientStream:
-    Downcast + AsyncRead + AsyncWrite + Send + Unpin + Debug
-{
-}
-impl<T> ClientStream for T where
-    T: Downcast + AsyncRead + AsyncWrite + Send + Unpin + Debug
-{
-}
+pub trait ClientStream: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
 impl_downcast!(ClientStream);
 
 pub trait InboundDatagram<Item>:
