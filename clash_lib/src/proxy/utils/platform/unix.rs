@@ -16,7 +16,7 @@ pub(crate) fn must_bind_socket_on_interface(
                 target_os = "linux",
             ))]
             {
-                return socket.bind_device(Some(name.as_bytes()));
+                socket.bind_device(Some(name.as_bytes()))
             }
             #[cfg(not(any(
                 target_os = "android",
