@@ -33,7 +33,7 @@ pub struct TunConfig {
     pub routes: Option<Vec<String>>,
     #[serde(default)]
     pub route_all: bool,
-    pub mtu: Option<i32>,
+    pub mtu: Option<u16>,
     /// fwmark on Linux only
     pub so_mark: Option<u32>,
     /// policy routing table on Linux only

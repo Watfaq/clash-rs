@@ -56,7 +56,7 @@ byteorder = "1"
 lru_time_cache ="0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 foreign-types-shared = "0.3"
-network-interface = "2"
+network-interface = { version = "2", git = "https://github.com/Watfaq/network-interface.git", rev = "db9f1bcd2faa5122f694283bd300bf42d166d2f3" } # temp workaround for https://github.com/cross-rs/cross/issues/1627
 base64 = "0.22"
 
 httparse = "1"
@@ -87,10 +87,9 @@ axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
-tun = { git = "https://github.com/Watfaq/rust-tun.git", rev = "8f7568190f1200d3e272ca534baf8d1578147e18",  features = ["async"] }
-netstack-lwip = { git = "https://github.com/Watfaq/netstack-lwip.git", rev = "2817bf82740e04bbee6b7bf1165f55657a6ed163" }
-
-boringtun = { version = "0.6", git = "https://github.com/cloudflare/boringtun.git", rev = "f672bb6c1e1e371240a8d151f15854687eb740bb" }
+tun = { version = "0.7", features = ["async"] }
+netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp.git", rev = "62260478079d96b42fa524caa855609312c2cf43" }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e01409626a15a987b0174d8c78b8181031c37309", package = "boring-noise" }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
 serde = { version = "1", features=["derive"] }
@@ -110,7 +109,7 @@ ring-compat = { version = "0.8", features = ["aead"] }
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { version="1.22", optional = true, features=["aead-cipher-2022","stream-cipher"], git = "https://github.com/shadowsocks/shadowsocks-rust.git", rev = "fe1388da06775e3ebe3f216c96073fa6c6d1ba25" } # has unrelased commit for bsd build
 maxminddb = "0.24"
 public-suffix = "0.1"
 murmur3 = "0.5"
