@@ -66,11 +66,27 @@ impl TryFrom<def::Config> for Config {
         Self {
             general: General {
                 inbound: Inbound {
-                    port: c.port,
-                    socks_port: c.socks_port,
-                    redir_port: c.redir_port,
-                    tproxy_port: c.tproxy_port,
-                    mixed_port: c.mixed_port,
+                    port: c.port.clone().map(|x| x.try_into()).transpose()?,
+                    socks_port: c
+                        .socks_port
+                        .clone()
+                        .map(|x| x.try_into())
+                        .transpose()?,
+                    redir_port: c
+                        .redir_port
+                        .clone()
+                        .map(|x| x.try_into())
+                        .transpose()?,
+                    tproxy_port: c
+                        .tproxy_port
+                        .clone()
+                        .map(|x| x.try_into())
+                        .transpose()?,
+                    mixed_port: c
+                        .mixed_port
+                        .clone()
+                        .map(|x| x.try_into())
+                        .transpose()?,
                     authentication: c.authentication.clone(),
                     bind_address: c.bind_address.parse()?,
                 },
@@ -271,11 +287,17 @@ mod tests {
     fn from_def_config() {
         let cfg = r#"
         port: 9090
+        mixed-port: "9091"
         "#;
         let c = cfg.parse::<def::Config>().expect("should parse");
-        assert_eq!(c.port, Some(9090));
+        assert_eq!(c.port.clone().map(|x| x.try_into().unwrap()), Some(9090));
+        assert_eq!(
+            c.mixed_port.clone().map(|x| x.try_into().unwrap()),
+            Some(9091)
+        );
         let cc: Config = c.try_into().expect("should into");
         assert_eq!(cc.general.inbound.port, Some(9090));
+        assert_eq!(cc.general.inbound.mixed_port, Some(9091));
     }
 }
 
@@ -309,7 +331,7 @@ pub struct TunConfig {
     pub route_all: bool,
     pub routes: Vec<IpNet>,
     pub gateway: IpNet,
-    pub mtu: Option<i32>,
+    pub mtu: Option<u16>,
     pub so_mark: Option<u32>,
     pub route_table: Option<u32>,
     pub dns_hijack: bool,

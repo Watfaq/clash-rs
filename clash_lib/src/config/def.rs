@@ -33,7 +33,7 @@ pub struct TunConfig {
     pub routes: Option<Vec<String>>,
     #[serde(default)]
     pub route_all: bool,
-    pub mtu: Option<i32>,
+    pub mtu: Option<u16>,
     /// fwmark on Linux only
     pub so_mark: Option<u32>,
     /// policy routing table on Linux only
@@ -88,6 +88,26 @@ impl Display for LogLevel {
             LogLevel::Warning => write!(f, "warn"),
             LogLevel::Error => write!(f, "error"),
             LogLevel::Silent => write!(f, "off"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[serde(untagged)]
+pub enum Port {
+    Str(String),
+    Num(u16),
+}
+
+impl TryInto<u16> for Port {
+    type Error = Error;
+
+    fn try_into(self) -> Result<u16, Self::Error> {
+        match self {
+            Port::Num(x) => Ok(x),
+            Port::Str(x) => x
+                .parse()
+                .map_err(|_| Error::InvalidConfig(format!("invalid port: {}", x))),
         }
     }
 }
@@ -259,19 +279,19 @@ impl Display for LogLevel {
 #[serde(rename_all = "kebab-case", default)]
 pub struct Config {
     /// The HTTP proxy port
-    pub port: Option<u16>,
+    pub port: Option<Port>,
     /// The SOCKS5 proxy port
-    pub socks_port: Option<u16>,
+    pub socks_port: Option<Port>,
     /// The redir port
     #[doc(hidden)]
-    pub redir_port: Option<u16>,
-    pub tproxy_port: Option<u16>,
+    pub redir_port: Option<Port>,
+    pub tproxy_port: Option<Port>,
     /// The HTTP/SOCKS5 mixed proxy port
     /// # Example
     /// ```yaml
     /// mixed-port: 7892
     /// ```
-    pub mixed_port: Option<u16>,
+    pub mixed_port: Option<Port>,
 
     /// HTTP and SOCKS5 proxy authentication
     pub authentication: Vec<String>,
@@ -580,6 +600,8 @@ impl Default for Profile {
 mod tests {
     use serde_yaml::Value;
 
+    use crate::config::def::Port;
+
     use super::Config;
 
     #[test]
@@ -588,7 +610,16 @@ mod tests {
         port: 9090
         "#;
         let c = cfg.parse::<Config>().expect("should parse");
-        assert_eq!(c.port, Some(9090));
+        assert_eq!(c.port, Some(Port::Num(9090)));
+    }
+
+    #[test]
+    fn test_str_port() {
+        let cfg = r#"
+        port: "9090"
+        "#;
+        let c = cfg.parse::<Config>().expect("should parse");
+        assert_eq!(c.port, Some(Port::Str("9090".to_string())));
     }
 
     #[test]
@@ -1061,7 +1092,7 @@ rules:
 
         let des: Config =
             serde_yaml::from_str(example_cfg).expect("should parse yaml");
-        assert_eq!(des.port.expect("invalid port"), 7890);
+        assert_eq!(des.port.expect("invalid port"), Port::Num(7890));
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
         assert_eq!(des.proxy.len(), 14);
         assert_eq!(des.proxy[2].get("name").unwrap().as_str(), Some("ss3"));

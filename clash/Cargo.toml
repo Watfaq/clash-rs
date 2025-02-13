@@ -13,15 +13,16 @@ android = ["shadowsocks", "tuic"] # Android build failed with libc
 shadowsocks = ["clash_lib/shadowsocks"]
 ssh = ["clash_lib/ssh"]
 tuic = ["clash_lib/tuic"]
-tracing = ["clash_lib/tracing"]
 bench = ["clash_lib/bench"]
 onion = ["clash_lib/onion"]
 
 dhat-heap = ["dep:dhat"]
 
+tokio-console = ["clash_lib/tokio-console"]
+
 [dependencies]
 clap = { version = "4.5.28", features = ["derive"] }
 
-clash_lib = { path = "../clash_lib", version = "*", default-features = false }
+clash_lib = { path = "../clash_lib", default-features = false }
 
 dhat = { version = "0.3.3", optional = true }
