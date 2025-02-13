@@ -79,8 +79,9 @@ pub struct MultiDockerTestRunner {
     runners: Vec<DockerTestRunner>,
 }
 
+#[cfg(docker_test)]
 impl MultiDockerTestRunner {
-    #[cfg(docker_test)]
+    #[allow(unused)]
     pub async fn add(
         &mut self,
         creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,

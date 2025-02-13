@@ -4,12 +4,12 @@ use crate::{
         outbound::manager::ThreadSafeOutboundManager,
         router::ThreadSafeRouter,
     },
-    common::io::copy_buf_bidirectional_with_timeout,
+    common::io::copy_bidirectional,
     config::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{datagram::UdpPacket, AnyInboundDatagram},
+    proxy::{datagram::UdpPacket, AnyInboundDatagram, ClientStream},
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -20,11 +20,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    sync::RwLock,
-    task::JoinHandle,
-};
+use tokio::{io::AsyncWriteExt, sync::RwLock, task::JoinHandle};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 use crate::app::dns::ThreadSafeDNSResolver;
@@ -75,10 +71,11 @@ impl Dispatcher {
     }
 
     #[instrument(skip(self, sess, lhs))]
-    pub async fn dispatch_stream<S>(&self, mut sess: Session, mut lhs: S)
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
+    pub async fn dispatch_stream(
+        &self,
+        mut sess: Session,
+        mut lhs: Box<dyn ClientStream>,
+    ) {
         let dest: SocksAddr = match &sess.destination {
             crate::session::SocksAddr::Ip(socket_addr) => {
                 if self.resolver.fake_ip_enabled() {
@@ -142,16 +139,16 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let mut rhs = TrackedStream::new(
+                let rhs = TrackedStream::new(
                     rhs,
                     self.manager.clone(),
                     sess.clone(),
                     rule,
                 )
                 .await;
-                match copy_buf_bidirectional_with_timeout(
-                    &mut lhs,
-                    &mut rhs,
+                match copy_bidirectional(
+                    lhs,
+                    rhs,
                     4096,
                     Duration::from_secs(10),
                     Duration::from_secs(10),

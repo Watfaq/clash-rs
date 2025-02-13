@@ -75,7 +75,7 @@ async fn proxy(
                         };
 
                         dispatcher
-                            .dispatch_stream(sess, TokioIo::new(upgraded))
+                            .dispatch_stream(sess, Box::new(TokioIo::new(upgraded)))
                             .await
                     }
                     Err(e) => warn!("HTTP handshake failure, {}", e),
