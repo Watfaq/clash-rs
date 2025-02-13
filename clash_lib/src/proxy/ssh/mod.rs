@@ -450,7 +450,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "failed on github actions"]
     async fn test_ssh2() -> anyhow::Result<()> {
         test_ssh_inner(TestOption {
             password: false,
