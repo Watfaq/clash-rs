@@ -36,6 +36,9 @@ use tracing::{debug, error, info};
 
 mod app;
 mod common;
+#[cfg(feature = "internal")]
+pub mod config;
+#[cfg(not(feature = "internal"))]
 mod config;
 mod proxy;
 mod session;
