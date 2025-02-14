@@ -54,6 +54,10 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             tool: cross
+            extra-args: -F "shadowsocks, tuic, onion, jemallocator"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            tool: cross
             extra-args: -F "shadowsocks, tuic, onion"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
@@ -85,7 +89,7 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "shadowsocks, tuic, onion, jemallocator"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             tool: cross
@@ -186,11 +190,11 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-freebsd
             tool: cross
-            extra-args: --verbose -F "shadowsocks, tuic"
+            extra-args: -F "shadowsocks, tuic"
           - os: ubuntu-latest
             target: i686-unknown-freebsd
             tool: cross
-            extra-args: --verbose -F "shadowsocks, tuic"
+            extra-args: -F "shadowsocks, tuic"
           # Android
           - os: ubuntu-latest
             target: aarch64-linux-android
