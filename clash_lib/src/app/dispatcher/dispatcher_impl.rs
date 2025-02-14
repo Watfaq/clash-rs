@@ -27,13 +27,15 @@ use crate::app::dns::ThreadSafeDNSResolver;
 
 use super::statistics_manager::Manager;
 
+const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
+
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
     mode: Arc<RwLock<RunMode>>,
-
     manager: Arc<Manager>,
+    tcp_buffer_size: usize,
 }
 
 impl Debug for Dispatcher {
@@ -48,8 +50,8 @@ impl Dispatcher {
         router: ThreadSafeRouter,
         resolver: ThreadSafeDNSResolver,
         mode: RunMode,
-
         statistics_manager: Arc<Manager>,
+        tcp_buffer_size: Option<usize>,
     ) -> Self {
         Self {
             outbound_manager,
@@ -57,6 +59,7 @@ impl Dispatcher {
             resolver,
             mode: Arc::new(RwLock::new(mode)),
             manager: statistics_manager,
+            tcp_buffer_size: tcp_buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE),
         }
     }
 
@@ -149,7 +152,7 @@ impl Dispatcher {
                 match copy_bidirectional(
                     lhs,
                     rhs,
-                    4096,
+                    self.tcp_buffer_size,
                     Duration::from_secs(10),
                     Duration::from_secs(10),
                 )

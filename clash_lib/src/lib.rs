@@ -435,6 +435,7 @@ async fn create_components(
         dns_resolver.clone(),
         config.general.mode,
         statistics_manager.clone(),
+        config.experimental.and_then(|e| e.tcp_buffer_size),
     ));
 
     debug!("initializing authenticator");
