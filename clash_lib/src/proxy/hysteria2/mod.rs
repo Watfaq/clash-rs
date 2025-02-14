@@ -10,10 +10,18 @@ use std::{
 };
 mod codec;
 mod congestion;
+mod error;
 mod salamander;
 mod udp_hop;
 
+type Result<T> = std::result::Result<T, error::Error>;
+
 use bytes::Bytes;
+use error::{
+    AuthOtherSnafu, AuthSnafu, DnsSnafu, DsnEmptySnafu, H3Snafu, IoSnafu,
+    ParseBoolSnafu, ParseIntSnafu, QuinnConnectSnafu, QuinnConnectionSnafu,
+    ToStrSnafu,
+};
 use futures::{SinkExt, StreamExt};
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
@@ -29,6 +37,7 @@ use rustls::{
     },
     ClientConfig as RustlsClientConfig,
 };
+use snafu::{OptionExt, ResultExt};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::Mutex,
@@ -122,7 +131,7 @@ impl ServerCertVerifier for CertVerifyOption {
         server_name: &rustls::pki_types::ServerName<'_>,
         ocsp_response: &[u8],
         now: rustls::pki_types::UnixTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
+    ) -> std::result::Result<ServerCertVerified, rustls::Error> {
         if let Some(ref fingerprint) = self.fingerprint {
             let cert_hex = encode_hex(&sha256(end_entity.as_ref()));
             if &cert_hex != fingerprint {
@@ -155,7 +164,10 @@ impl ServerCertVerifier for CertVerifyOption {
         message: &[u8],
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+    ) -> std::result::Result<
+        rustls::client::danger::HandshakeSignatureValid,
+        rustls::Error,
+    > {
         self.pki.verify_tls12_signature(message, cert, dss)
     }
 
@@ -164,7 +176,10 @@ impl ServerCertVerifier for CertVerifyOption {
         message: &[u8],
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+    ) -> std::result::Result<
+        rustls::client::danger::HandshakeSignatureValid,
+        rustls::Error,
+    > {
         self.pki.verify_tls13_signature(message, cert, dss)
     }
 }
@@ -177,7 +192,7 @@ enum CcRx {
 impl FromStr for CcRx {
     type Err = ParseIntError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         if s.eq_ignore_ascii_case("auto") {
             Ok(Self::Auto)
         } else {
@@ -208,7 +223,7 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> anyhow::Result<Self> {
+    pub fn new(opts: HystOption) -> Result<Self> {
         let verify = CertVerifyOption::new(
             opts.fingerprint.clone(),
             opts.ca.clone(),
@@ -253,7 +268,7 @@ impl Handler {
         &self,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
-    ) -> anyhow::Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
+    ) -> Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
         // Everytime we enstablish a new session, we should lookup the server
         // address. maybe it changed since it use ddns
         let server_socket_addr = match self.opts.addr.clone() {
@@ -261,8 +276,9 @@ impl Handler {
             SocksAddr::Domain(d, port) => {
                 let ip = resolver
                     .resolve(d.as_str(), true)
-                    .await?
-                    .ok_or_else(|| anyhow!("resolve domain {} failed", d))?;
+                    .await
+                    .context(DnsSnafu)?
+                    .context(DsnEmptySnafu)?;
                 SocketAddr::new(ip, port)
             }
         };
@@ -292,18 +308,20 @@ impl Handler {
         let mut ep = if let Some(obfs) = self.opts.obfs.as_ref() {
             match obfs {
                 Obfs::Salamander(salamander_obfs) => {
-                    let socket = create_socket().await?;
+                    let socket = create_socket().await.context(IoSnafu)?;
                     let obfs = salamander::Salamander::new(
-                        socket.into_std()?,
+                        socket.into_std().context(IoSnafu)?,
                         salamander_obfs.key.to_vec(),
-                    )?;
+                    )
+                    .context(IoSnafu)?;
 
                     quinn::Endpoint::new_with_abstract_socket(
                         self.ep_config.clone(),
                         None,
                         Arc::new(obfs),
                         Arc::new(TokioRuntime),
-                    )?
+                    )
+                    .context(IoSnafu)?
                 }
             }
         } else if let Some(port_gen) = self.opts.ports.as_ref() {
@@ -311,13 +329,15 @@ impl Handler {
                 server_socket_addr.port(),
                 port_gen.clone(),
                 None,
-            )?;
+            )
+            .context(IoSnafu)?;
             quinn::Endpoint::new_with_abstract_socket(
                 self.ep_config.clone(),
                 None,
                 Arc::new(udp_hop),
                 Arc::new(TokioRuntime),
-            )?
+            )
+            .context(IoSnafu)?
         } else {
             let socket = {
                 if resolver.ipv6() {
@@ -327,7 +347,8 @@ impl Handler {
                         #[cfg(any(target_os = "linux", target_os = "android"))]
                         sess.so_mark,
                     )
-                    .await?
+                    .await
+                    .context(IoSnafu)?
                 } else {
                     new_udp_socket(
                         Some((Ipv4Addr::UNSPECIFIED, 0).into()),
@@ -335,23 +356,27 @@ impl Handler {
                         #[cfg(any(target_os = "linux", target_os = "android"))]
                         sess.so_mark,
                     )
-                    .await?
+                    .await
+                    .context(IoSnafu)?
                 }
             };
 
             quinn::Endpoint::new(
                 self.ep_config.clone(),
                 None,
-                socket.into_std()?,
+                socket.into_std().context(IoSnafu)?,
                 Arc::new(TokioRuntime),
-            )?
+            )
+            .context(IoSnafu)?
         };
 
         ep.set_default_client_config(self.client_config.clone());
 
         let session = ep
-            .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))?
-            .await?;
+            .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))
+            .context(QuinnConnectSnafu)?
+            .await
+            .context(QuinnConnectionSnafu)?;
         let (guard, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
         *self.support_udp.write().unwrap() = udp;
         // todo set congestion controller according to cc_rx
@@ -375,11 +400,13 @@ impl Handler {
     async fn auth(
         conn: &quinn::Connection,
         passwd: &str,
-    ) -> anyhow::Result<(SendRequest<OpenStreams, Bytes>, CcRx, bool)> {
+    ) -> Result<(SendRequest<OpenStreams, Bytes>, CcRx, bool)> {
         let h3_conn = h3_quinn::Connection::new(conn.clone());
 
-        let (_, mut sender) =
-            h3::client::builder().build::<_, _, Bytes>(h3_conn).await?;
+        let (_, mut sender) = h3::client::builder()
+            .build::<_, _, Bytes>(h3_conn)
+            .await
+            .context(H3Snafu)?;
 
         let req = http::Request::post("https://hysteria/auth")
             .header("Hysteria-Auth", passwd)
@@ -387,14 +414,14 @@ impl Handler {
             .header("Hysteria-Padding", codec::padding(64..=512))
             .body(())
             .unwrap();
-        let mut r = sender.send_request(req).await?;
-        r.finish().await?;
+        let mut r = sender.send_request(req).await.context(H3Snafu)?;
+        r.finish().await.context(H3Snafu)?;
 
-        let r = r.recv_response().await?;
+        let r = r.recv_response().await.context(H3Snafu)?;
 
         const HYSTERIA_STATUS_OK: u16 = 233;
         if r.status() != HYSTERIA_STATUS_OK {
-            return Err(anyhow!("auth failed: response status code {}", r.status()));
+            return AuthSnafu { status: r.status() }.fail();
         }
 
         // MUST have Hysteria-CC-RX and Hysteria-UDP headers according to hysteria2
@@ -402,16 +429,24 @@ impl Handler {
         let cc_rx = r
             .headers()
             .get("Hysteria-CC-RX")
-            .ok_or_else(|| anyhow!("auth failed: missing Hysteria-CC-RX header"))?
-            .to_str()?
-            .parse()?;
+            .context(AuthOtherSnafu {
+                msg: "missing Hysteria-CC-RX header".to_owned(),
+            })?
+            .to_str()
+            .context(ToStrSnafu)?
+            .parse()
+            .context(ParseIntSnafu)?;
 
         let support_udp = r
             .headers()
             .get("Hysteria-UDP")
-            .ok_or_else(|| anyhow!("auth failed: missing Hysteria-UDP header"))?
-            .to_str()?
-            .parse()?;
+            .context(AuthOtherSnafu {
+                msg: "missing Hysteria-UDP header".to_owned(),
+            })?
+            .to_str()
+            .context(ToStrSnafu)?
+            .parse()
+            .context(ParseBoolSnafu)?;
 
         Ok((sender, cc_rx, support_udp))
     }

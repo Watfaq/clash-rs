@@ -16,12 +16,14 @@ use hickory_proto::{
     udp::UdpClientStream, ProtoError,
 };
 use rustls::ClientConfig;
+use snafu::ResultExt;
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
 use crate::{
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
+    error::dns::ProtoSnafu,
     proxy::utils::new_tcp_stream,
 };
 use hickory_proto::{
@@ -277,7 +279,7 @@ impl Client for DnsClient {
         format!("{}#{}:{}", &self.net, &self.host, &self.port)
     }
 
-    async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
+    async fn exchange(&self, msg: &Message) -> crate::error::DnsResult<Message> {
         let mut inner = self.inner.write().await;
 
         if let Some(bg) = &inner.bg_handle {
@@ -309,14 +311,14 @@ impl Client for DnsClient {
             .send(req)
             .first_answer()
             .await
-            .map_err(|x| Error::DNSError(x.to_string()).into())
+            .context(ProtoSnafu)
             .map(|x| x.into())
     }
 }
 
 async fn dns_stream_builder(
     cfg: &DnsConfig,
-) -> Result<(client::Client, JoinHandle<Result<(), ProtoError>>), Error> {
+) -> crate::error::DnsResult<(client::Client, JoinHandle<Result<(), ProtoError>>)> {
     match cfg {
         DnsConfig::Udp(addr, iface) => {
             let stream = UdpClientStream::builder(
@@ -329,7 +331,7 @@ async fn dns_stream_builder(
             client::Client::connect(stream)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+                .context(ProtoSnafu)
         }
         DnsConfig::Tcp(addr, iface) => {
             let (stream, sender) = TcpClientStream::new(
@@ -342,7 +344,7 @@ async fn dns_stream_builder(
             client::Client::new(stream, sender, None)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+                .context(ProtoSnafu)
         }
         DnsConfig::Tls(addr, host, iface) => {
             let mut tls_config = ClientConfig::builder()
@@ -379,7 +381,7 @@ async fn dns_stream_builder(
             )
             .await
             .map(|(x, y)| (x, tokio::spawn(y)))
-            .map_err(|x| Error::DNSError(x.to_string()))
+            .context(ProtoSnafu)
         }
         DnsConfig::Https(addr, host, iface) => {
             let mut tls_config = ClientConfig::builder()
@@ -402,7 +404,7 @@ async fn dns_stream_builder(
             client::Client::connect(stream)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
-                .map_err(|x| Error::DNSError(x.to_string()))
+                .context(ProtoSnafu)
         }
     }
 }

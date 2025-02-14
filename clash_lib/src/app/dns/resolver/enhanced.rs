@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
 use rand::seq::IndexedRandom;
+use snafu::ResultExt;
 use std::{
     net,
     sync::{
@@ -19,7 +20,10 @@ use crate::{
     common::{mmdb::Mmdb, trie},
     config::def::DNSMode,
     dns::{helper::make_clients, ThreadSafeDNSClient},
-    Error,
+    error::dns::{
+        ProtoSnafu, IPV6DisabledSnafu, InvalidQuerySnafu, NoRecordSnafu,
+        TimeoutSnafu,
+    },
 };
 
 use crate::dns::{
@@ -223,7 +227,7 @@ impl EnhancedResolver {
     pub async fn batch_exchange(
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
-    ) -> anyhow::Result<op::Message> {
+    ) -> crate::error::DnsResult<op::Message> {
         let mut queries = Vec::new();
         for c in clients {
             queries.push(
@@ -249,7 +253,7 @@ impl EnhancedResolver {
                 Ok(r) => Ok(r.0),
                 Err(e) => Err(e),
             },
-            _ = timeout => Err(Error::DNSError("DNS query timeout".into()).into())
+            _ = timeout => TimeoutSnafu.fail(),
         }
     }
 
@@ -258,12 +262,13 @@ impl EnhancedResolver {
         &self,
         host: &str,
         record_type: rr::record_type::RecordType,
-    ) -> anyhow::Result<Vec<net::IpAddr>> {
+    ) -> crate::error::DnsResult<Vec<net::IpAddr>> {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
         let name = rr::Name::from_str_relaxed(host)
-            .map_err(|_x| anyhow!("invalid domain: {}", host))?
-            .append_domain(&rr::Name::root())?; // makes it FQDN
+            .context(ProtoSnafu)?
+            .append_domain(&rr::Name::root())
+            .context(ProtoSnafu)?; // makes it FQDN
         q.set_name(name);
         q.set_query_type(record_type);
         m.add_query(q);
@@ -275,14 +280,20 @@ impl EnhancedResolver {
                 if !ip_list.is_empty() {
                     Ok(ip_list)
                 } else {
-                    Err(anyhow!("no record for hostname: {}", host))
+                    NoRecordSnafu {
+                        host: host.to_owned(),
+                    }
+                    .fail()
                 }
             }
             Err(e) => Err(e),
         }
     }
 
-    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(
+        &self,
+        message: &op::Message,
+    ) -> crate::error::DnsResult<op::Message> {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
@@ -294,14 +305,17 @@ impl EnhancedResolver {
             }
             self.exchange_no_cache(message).await
         } else {
-            Err(anyhow!("invalid query"))
+            InvalidQuerySnafu {
+                queries: message.queries().to_vec(),
+            }
+            .fail()
         }
     }
 
     async fn exchange_no_cache(
         &self,
         message: &op::Message,
-    ) -> anyhow::Result<op::Message> {
+    ) -> crate::error::DnsResult<op::Message> {
         let q = message.query().unwrap();
 
         let query = async move {
@@ -367,7 +381,7 @@ impl EnhancedResolver {
     async fn ip_exchange(
         &self,
         message: &op::Message,
-    ) -> anyhow::Result<op::Message> {
+    ) -> crate::error::DnsResult<op::Message> {
         if let Some(matched) = self.match_policy(message) {
             return EnhancedResolver::batch_exchange(matched, message).await;
         }
@@ -473,7 +487,7 @@ impl ClashResolver for EnhancedResolver {
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<net::IpAddr>> {
+    ) -> crate::error::DnsResult<Option<net::IpAddr>> {
         match self.ipv6.load(Relaxed) {
             true => {
                 let fut1 = self
@@ -502,7 +516,7 @@ impl ClashResolver for EnhancedResolver {
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<net::Ipv4Addr>> {
+    ) -> crate::error::DnsResult<Option<net::Ipv4Addr>> {
         if enhanced {
             if let Some(hosts) = &self.hosts {
                 if let Some(v) = hosts.search(host) {
@@ -543,9 +557,9 @@ impl ClashResolver for EnhancedResolver {
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<net::Ipv6Addr>> {
+    ) -> crate::error::DnsResult<Option<net::Ipv6Addr>> {
         if !self.ipv6.load(Relaxed) {
-            return Err(Error::DNSError("ipv6 disabled".into()).into());
+            return IPV6DisabledSnafu.fail();
         }
 
         if enhanced {
@@ -584,7 +598,10 @@ impl ClashResolver for EnhancedResolver {
         None
     }
 
-    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(
+        &self,
+        message: &op::Message,
+    ) -> crate::error::DnsResult<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message
             .query()
