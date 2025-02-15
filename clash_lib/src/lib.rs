@@ -36,6 +36,9 @@ use tracing::{debug, error, info};
 
 mod app;
 mod common;
+#[cfg(feature = "internal")]
+pub mod config;
+#[cfg(not(feature = "internal"))]
 mod config;
 mod proxy;
 mod session;
@@ -432,6 +435,7 @@ async fn create_components(
         dns_resolver.clone(),
         config.general.mode,
         statistics_manager.clone(),
+        config.experimental.and_then(|e| e.tcp_buffer_size),
     ));
 
     debug!("initializing authenticator");

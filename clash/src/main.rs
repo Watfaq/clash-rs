@@ -2,6 +2,13 @@
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
+#[cfg(all(feature = "jemallocator", not(feature = "dhat-heap")))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(all(feature = "jemallocator", not(feature = "dhat-heap")))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 extern crate clash_lib as clash;
 
 use clap::Parser;

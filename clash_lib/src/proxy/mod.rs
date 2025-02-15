@@ -7,6 +7,7 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast};
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
@@ -81,6 +82,10 @@ impl<T> ProxyStream for T where
 {
 }
 pub type AnyStream = Box<dyn ProxyStream>;
+
+pub trait ClientStream: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
+impl_downcast!(ClientStream);
 
 pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
