@@ -285,25 +285,25 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Cargo test (docker test on linux, non BSD)
+      - name: Cargo test and coverage (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
         if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
-          command: llvm-cov
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}  --codecov --output-path codecov.json
+          command: ${{ matrix.tool == 'cross' && 'test' || 'llvm-cov' }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.tool == 'cross' && '' || '--codecov --output-path codecov.json' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test (no docker test on windows-non-arm and macos)
+      - name: Cargo test and coverage (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v3
         if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           tool: ${{ matrix.tool }}
-          command: llvm-cov
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}  --codecov --output-path codecov.json
+          command: ${{ matrix.tool == 'cross' && 'test' || 'llvm-cov' }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.tool == 'cross' && '' || '--codecov --output-path codecov.json' }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
