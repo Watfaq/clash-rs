@@ -44,8 +44,9 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            tool: cross
+            tool: cargo # report code coverage
             extra-args: -F "plus"
+            coverage: true
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
@@ -283,13 +284,16 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (docker test on linux, non BSD)
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cargo test and coverage (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
         if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
-          command: test
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          command: ${{ matrix.coverage && 'llvm-cov' || 'test' }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.coverage && '--codecov --output-path codecov.json' || '' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
@@ -304,6 +308,14 @@ jobs:
           args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: ${{ !cancelled() && matrix.coverage }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: codecov.json
+          fail_ci_if_error: true
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v3
