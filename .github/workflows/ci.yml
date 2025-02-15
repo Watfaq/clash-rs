@@ -314,7 +314,6 @@ jobs:
         if: ${{ !cancelled() && matrix.coverage }}
         with:
           files: codecov.json
-          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
 
       - name: Cargo build
