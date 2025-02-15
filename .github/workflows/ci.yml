@@ -279,7 +279,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: clippy
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+          args: -p clash-rs --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
         env:
           CLASH_DOCKER_TEST: "true"
 

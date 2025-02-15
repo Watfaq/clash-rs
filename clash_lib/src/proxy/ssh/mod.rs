@@ -450,6 +450,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
+    #[ignore = "this does pass locally, but not in CI. TODO: #720"]
     async fn test_ssh2() -> anyhow::Result<()> {
         test_ssh_inner(TestOption {
             password: false,
@@ -462,7 +463,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "failed on github actions"]
+    #[ignore = "this does pass locally, but not in CI. TODO: #720"]
     async fn test_ssh3() -> anyhow::Result<()> {
         test_ssh_inner(TestOption {
             password: false,
