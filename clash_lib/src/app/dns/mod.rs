@@ -28,7 +28,10 @@ pub use server::get_dns_listener;
 pub trait Client: Sync + Send + Debug {
     /// used to identify the client for logging
     fn id(&self) -> String;
-    async fn exchange(&self, msg: &op::Message) -> anyhow::Result<op::Message>;
+    async fn exchange(
+        &self,
+        msg: &op::Message,
+    ) -> crate::error::DnsResult<op::Message>;
 }
 
 type ThreadSafeDNSClient = Arc<dyn Client>;
@@ -51,22 +54,25 @@ pub trait ClashResolver: Sync + Send {
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::IpAddr>>;
+    ) -> std::result::Result<Option<std::net::IpAddr>, crate::error::DnsError>;
     async fn resolve_v4(
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv4Addr>>;
+    ) -> std::result::Result<Option<std::net::Ipv4Addr>, crate::error::DnsError>;
     async fn resolve_v6(
         &self,
         host: &str,
         enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv6Addr>>;
+    ) -> std::result::Result<Option<std::net::Ipv6Addr>, crate::error::DnsError>;
 
     async fn cached_for(&self, ip: std::net::IpAddr) -> Option<String>;
 
     /// Used for DNS Server
-    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message>;
+    async fn exchange(
+        &self,
+        message: &op::Message,
+    ) -> std::result::Result<op::Message, crate::error::DnsError>;
 
     /// Only used for look up fake IP
     async fn reverse_lookup(&self, ip: std::net::IpAddr) -> Option<String>;

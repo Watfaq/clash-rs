@@ -4,8 +4,12 @@ use async_trait::async_trait;
 use hickory_resolver::TokioResolver;
 
 use rand::seq::IteratorRandom;
+use snafu::ResultExt;
 
-use crate::app::dns::{ClashResolver, ResolverKind};
+use crate::{
+    app::dns::{ClashResolver, ResolverKind},
+    error::dns::{ResolveSnafu, UnsupportedSnafu},
+};
 
 pub struct SystemResolver {
     inner: TokioResolver,
@@ -14,9 +18,9 @@ pub struct SystemResolver {
 
 /// Bug in libc, use tokio impl instead: https://sourceware.org/bugzilla/show_bug.cgi?id=10652
 impl SystemResolver {
-    pub fn new(ipv6: bool) -> anyhow::Result<Self> {
+    pub fn new(ipv6: bool) -> crate::error::DnsResult<Self> {
         Ok(Self {
-            inner: TokioResolver::tokio_from_system_conf()?,
+            inner: TokioResolver::tokio_from_system_conf().context(ResolveSnafu)?,
             ipv6: AtomicBool::new(ipv6),
         })
     }
@@ -28,8 +32,8 @@ impl ClashResolver for SystemResolver {
         &self,
         host: &str,
         _: bool,
-    ) -> anyhow::Result<Option<std::net::IpAddr>> {
-        let response = self.inner.lookup_ip(host).await?;
+    ) -> crate::error::DnsResult<Option<std::net::IpAddr>> {
+        let response = self.inner.lookup_ip(host).await.context(ResolveSnafu)?;
         Ok(response
             .iter()
             .filter(|x| self.ipv6() || x.is_ipv4())
@@ -40,8 +44,8 @@ impl ClashResolver for SystemResolver {
         &self,
         host: &str,
         _: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
-        let response = self.inner.ipv4_lookup(host).await?;
+    ) -> crate::error::DnsResult<Option<std::net::Ipv4Addr>> {
+        let response = self.inner.ipv4_lookup(host).await.context(ResolveSnafu)?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::rng()))
     }
 
@@ -49,8 +53,8 @@ impl ClashResolver for SystemResolver {
         &self,
         host: &str,
         _: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
-        let response = self.inner.ipv6_lookup(host).await?;
+    ) -> crate::error::DnsResult<Option<std::net::Ipv6Addr>> {
+        let response = self.inner.ipv6_lookup(host).await.context(ResolveSnafu)?;
         Ok(response.iter().map(|x| x.0).choose(&mut rand::rng()))
     }
 
@@ -61,8 +65,8 @@ impl ClashResolver for SystemResolver {
     async fn exchange(
         &self,
         _: &hickory_proto::op::Message,
-    ) -> anyhow::Result<hickory_proto::op::Message> {
-        Err(anyhow::anyhow!("unsupported"))
+    ) -> crate::error::DnsResult<hickory_proto::op::Message> {
+        UnsupportedSnafu.fail()
     }
 
     fn ipv6(&self) -> bool {

@@ -8,6 +8,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::{ClashResolver, ResolverKind, ThreadSafeDNSResolver},
     },
+    error::dns::UnsupportedSnafu,
     proxy::{ConnectorType, DialWithConnector, OutboundHandler, OutboundType},
     session::Session,
 };
@@ -20,7 +21,7 @@ impl ClashResolver for NoopResolver {
         &self,
         _host: &str,
         _enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::IpAddr>> {
+    ) -> crate::error::DnsResult<Option<std::net::IpAddr>> {
         Ok(None)
     }
 
@@ -28,7 +29,7 @@ impl ClashResolver for NoopResolver {
         &self,
         _host: &str,
         _enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv4Addr>> {
+    ) -> crate::error::DnsResult<Option<std::net::Ipv4Addr>> {
         Ok(None)
     }
 
@@ -36,7 +37,7 @@ impl ClashResolver for NoopResolver {
         &self,
         _host: &str,
         _enhanced: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
+    ) -> crate::error::DnsResult<Option<std::net::Ipv6Addr>> {
         Ok(None)
     }
 
@@ -45,8 +46,11 @@ impl ClashResolver for NoopResolver {
     }
 
     /// Used for DNS Server
-    async fn exchange(&self, _message: &op::Message) -> anyhow::Result<op::Message> {
-        Err(anyhow::anyhow!("unsupported"))
+    async fn exchange(
+        &self,
+        _message: &op::Message,
+    ) -> crate::error::DnsResult<op::Message> {
+        UnsupportedSnafu {}.fail()
     }
 
     /// Only used for look up fake IP

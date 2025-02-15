@@ -343,8 +343,6 @@ pub fn map_rule_type(
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::Ok;
-
     use crate::{
         app::dns::{MockClashResolver, SystemResolver},
         common::{geodata::GeoData, http::new_http_client, mmdb::Mmdb},

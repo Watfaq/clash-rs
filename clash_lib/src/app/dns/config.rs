@@ -149,7 +149,7 @@ impl Config {
 
     pub fn parse_fallback_ip_cidr(
         ipcidr: &[String],
-    ) -> anyhow::Result<Vec<ipnet::IpNet>> {
+    ) -> std::result::Result<Vec<ipnet::IpNet>, crate::Error> {
         let mut output = vec![];
 
         for ip in ipcidr.iter() {
@@ -164,7 +164,7 @@ impl Config {
 
     pub fn parse_hosts(
         hosts_mapping: &HashMap<String, String>,
-    ) -> anyhow::Result<trie::StringTrie<IpAddr>> {
+    ) -> std::result::Result<trie::StringTrie<IpAddr>, crate::Error> {
         let mut tree = trie::StringTrie::new();
         tree.insert(
             "localhost",
@@ -172,7 +172,7 @@ impl Config {
         );
 
         for (host, ip_str) in hosts_mapping.iter() {
-            let ip = ip_str.parse::<IpAddr>()?;
+            let ip = ip_str.parse::<IpAddr>().map_err(Error::StdNet)?;
             tree.insert(host.as_str(), Arc::new(ip));
         }
 

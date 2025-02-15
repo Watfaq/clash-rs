@@ -1223,7 +1223,10 @@ dependencies = [
  "sha2",
  "shadowsocks",
  "smoltcp 0.12.0",
+ "snafu",
  "socket2 0.5.8",
+ "stack-error",
+ "stack-error-macro",
  "tempfile",
  "thiserror 2.0.11",
  "time",
@@ -1729,7 +1732,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "sha3",
- "strum",
+ "strum 0.26.3",
  "syn 2.0.96",
  "void",
 ]
@@ -5648,6 +5651,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "snafu"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "223891c85e2a29c3fe8fb900c1fae5e69c2e42415e3177752e8718475efa5019"
+dependencies = [
+ "snafu-derive",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5748,6 +5772,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
+name = "stack-error"
+version = "0.1.0"
+dependencies = [
+ "snafu",
+ "strum 0.25.0",
+]
+
+[[package]]
+name = "stack-error-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+ "syn 2.0.96",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5767,11 +5809,33 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "strum"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
+dependencies = [
+ "strum_macros 0.25.3",
+]
+
+[[package]]
+name = "strum"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.25.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.96",
 ]
 
 [[package]]
@@ -6406,7 +6470,7 @@ dependencies = [
  "serde",
  "serde-value",
  "serde_ignored",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "toml",
  "tor-basic-utils",
@@ -6502,7 +6566,7 @@ dependencies = [
  "scopeguard",
  "serde",
  "signature",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "time",
  "tor-async-utils",
@@ -6535,7 +6599,7 @@ dependencies = [
  "paste",
  "retry-error",
  "static_assertions",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "tracing",
  "void",
@@ -6576,7 +6640,7 @@ dependencies = [
  "rand 0.8.5",
  "safelog",
  "serde",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "tor-async-utils",
  "tor-basic-utils",
@@ -6613,7 +6677,7 @@ dependencies = [
  "retry-error",
  "safelog",
  "slotmap-careful",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "tor-async-utils",
  "tor-basic-utils",
@@ -6740,7 +6804,7 @@ dependencies = [
  "safelog",
  "serde",
  "serde_with",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "tor-basic-utils",
  "tor-bytes",
@@ -6846,7 +6910,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "static_assertions",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "time",
  "tor-basic-utils",
@@ -7057,7 +7121,7 @@ dependencies = [
  "pin-project",
  "priority-queue",
  "slotmap-careful",
- "strum",
+ "strum 0.26.3",
  "thiserror 2.0.11",
  "tor-error",
  "tor-general-addr",

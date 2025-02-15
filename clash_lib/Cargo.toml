@@ -19,6 +19,11 @@ bench = ["dep:criterion"]
 tokio-console = ["tokio/tracing"]
 
 [dependencies]
+
+stack-error-macro = { path = "../crates/stack-error-macro" }
+stack-error =  { path = "../crates/stack-error" }
+snafu = "0.8"
+
 # Async
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }

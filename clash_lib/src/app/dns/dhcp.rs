@@ -3,12 +3,14 @@ use crate::{
         dns_client::DNSNetMode, helper::make_clients, Client, EnhancedResolver,
         ThreadSafeDNSClient,
     },
+    error::dns::{ClientTimeoutSnafu, IoSnafu},
     proxy::utils::{new_udp_socket, Interface},
 };
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use network_interface::{Addr, NetworkInterfaceConfig};
+use snafu::ResultExt;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -56,8 +58,8 @@ impl Client for DhcpClient {
         format!("dhcp#{}", self.iface)
     }
 
-    async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
-        let clients = self.resolve().await?;
+    async fn exchange(&self, msg: &Message) -> crate::error::DnsResult<Message> {
+        let clients = self.resolve().await.context(IoSnafu)?;
         let mut dbg_str = vec![];
         for c in &clients {
             dbg_str.push(format!("{:?}", c));
@@ -67,7 +69,8 @@ impl Client for DhcpClient {
             DHCP_TIMEOUT,
             EnhancedResolver::batch_exchange(&clients, msg),
         )
-        .await?
+        .await
+        .context(ClientTimeoutSnafu)?
     }
 }
 
