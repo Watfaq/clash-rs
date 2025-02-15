@@ -201,15 +201,15 @@ impl Handler {
                 new_udp_socket(
                     Some((Ipv6Addr::UNSPECIFIED, 0).into()),
                     sess.iface.clone(),
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    #[cfg(target_os = "linux")]
                     sess.so_mark,
                 )
                 .await?
             } else {
                 new_udp_socket(
                     Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    sess.iface.clone(),
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    None,
+                    #[cfg(target_os = "linux")]
                     sess.so_mark,
                 )
                 .await?

@@ -155,7 +155,7 @@ pub async fn handle_tcp<'a>(
             let udp_inbound = new_udp_socket(
                 Some(udp_addr),
                 None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 None,
             )
             .await?;
