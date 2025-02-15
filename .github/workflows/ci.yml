@@ -310,7 +310,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         if: ${{ !cancelled() && matrix.coverage }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
