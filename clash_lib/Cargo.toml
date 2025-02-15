@@ -5,7 +5,11 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["zero_copy"]
+default = ["standard"]
+standard = ["shadowsocks", "tuic", "ssh", "zero_copy"]
+plus = ["standard", "onion"]
+android = ["shadowsocks", "tuic"]
+perf = ["standard", "jemallocator"]
 
 internal = []
 # Protos
