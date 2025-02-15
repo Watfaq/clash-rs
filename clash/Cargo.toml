@@ -5,10 +5,11 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = []
-standard = ["shadowsocks", "tuic", "ssh"]
+default = ["standard"]
+standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy"]
 plus = ["standard", "onion"]
 android = ["shadowsocks", "tuic"] # Android build failed with libc
+perf = ["plus", "jemallocator"]
 
 shadowsocks = ["clash_lib/shadowsocks"]
 ssh = ["clash_lib/ssh"]
