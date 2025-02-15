@@ -53,7 +53,7 @@ jobs:
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            tool: cross
+            tool: cargo # report code coverage
             extra-args: -F "shadowsocks, tuic, onion, jemallocator"
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
@@ -290,20 +290,20 @@ jobs:
         if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
-          command: ${{ matrix.tool == 'cross' && 'test' || 'llvm-cov' }}
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.tool == 'cross' && '' || '--codecov --output-path codecov.json' }}
+          command: ${{ matrix.target == 'x86_64-unknown-linux-musl' && 'llvm-cov' || 'test' }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.tool == 'x86_64-unknown-linux-musl' && '--codecov --output-path codecov.json' || '' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
-      - name: Cargo test and coverage (no docker test on windows-non-arm and macos)
+      - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v3
         if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
         with:
           tool: ${{ matrix.tool }}
-          command: ${{ matrix.tool == 'cross' && 'test' || 'llvm-cov' }}
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.tool == 'cross' && '' || '--codecov --output-path codecov.json' }}
+          command: test
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
