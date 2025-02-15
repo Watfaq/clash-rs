@@ -313,6 +313,7 @@ jobs:
         uses: codecov/codecov-action@v3
         if: ${{ !cancelled() && matrix.coverage }}
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: codecov.json
           fail_ci_if_error: true
 
