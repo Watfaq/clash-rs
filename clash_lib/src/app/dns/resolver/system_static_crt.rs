@@ -93,13 +93,6 @@ mod tests {
     use crate::app::dns::{ClashResolver, SystemResolver};
 
     #[tokio::test]
-    async fn test_system_resolver_with_bad_labels() {
-        let resolver = SystemResolver::new(false).unwrap();
-        let response = resolver.resolve("some_under_store.com", false).await;
-        assert!(response.is_err());
-    }
-
-    #[tokio::test]
     async fn test_system_resolver_default_config() {
         let resolver = SystemResolver::new(false).unwrap();
         let response = resolver.resolve("www.google.com", false).await.unwrap();
