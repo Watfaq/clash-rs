@@ -1,0 +1,14 @@
+{
+    "server": "0.0.0.0:10002",
+    "users": {
+        "00000000-0000-0000-0000-000000000001": "passwd"
+    },
+    "certificate": "/opt/tuic/fullchain.pem",
+    "private_key": "/opt/tuic/privkey.pem",
+    "ip": "0.0.0.0",
+    "dual_stack": false,
+    "congestion_controller": "bbr",
+    "alpn": [
+        "h3"
+    ]
+}

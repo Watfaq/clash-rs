@@ -13,3 +13,5 @@ pub const IMAGE_XRAY: &str = "teddysun/xray:latest";
 pub const IMAGE_SOCKS5: &str = "ghcr.io/wzshiming/socks5/socks5:v0.4.3";
 #[cfg(feature = "ssh")]
 pub const IMAGE_OPENSSH: &str = "docker.io/linuxserver/openssh-server:latest";
+#[cfg(feature = "tuic")]
+pub const IMAGE_TUIC: &str = "ghcr.io/itsusinn/tuic-server:latest";
