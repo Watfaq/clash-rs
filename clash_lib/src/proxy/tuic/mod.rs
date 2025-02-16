@@ -3,7 +3,10 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use crate::proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket};
+use crate::{
+    common::tls::SkipVerifier,
+    proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
+};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -33,7 +36,6 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::tls::GLOBAL_ROOT_STORE,
     proxy::{
         tuic::types::{ServerAddr, TuicEndpoint},
         DialWithConnector,
@@ -47,8 +49,6 @@ use quinn::{
     TransportConfig as QuinnTransportConfig, VarInt,
 };
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
-
-use rustls::client::ClientConfig as TlsConfig;
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
@@ -77,6 +77,7 @@ pub struct HandlerOptions {
     pub gc_lifetime: Duration,
     pub send_window: u64,
     pub receive_window: VarInt,
+    pub skip_cert_verify: bool,
 
     #[allow(dead_code)]
     pub common_opts: HandlerCommonOptions,
@@ -86,8 +87,6 @@ pub struct HandlerOptions {
     pub max_udp_relay_packet_size: u64,
     #[allow(dead_code)]
     pub ip: Option<String>,
-    #[allow(dead_code)]
-    pub skip_cert_verify: bool,
     #[allow(dead_code)]
     pub sni: Option<String>,
 }
@@ -165,10 +164,14 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<TuicEndpoint> {
+        let verifier = SkipVerifier::new(None, opts.skip_cert_verify);
         let mut crypto =
-            TlsConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                .with_no_client_auth();
+            rustls::client::ClientConfig::builder_with_protocol_versions(&[
+                &rustls::version::TLS13,
+            ])
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(verifier))
+            .with_no_client_auth();
         // TODO(error-handling) if alpn not match the following error will be
         // throw: aborted by peer: the cryptographic handshake failed: error
         // 120: peer doesn't support any known protocol
@@ -353,5 +356,110 @@ impl TuicDatagramOutbound {
             send_tx: tokio_util::sync::PollSender::new(send_tx),
             recv_rx,
         }
+    }
+}
+
+#[cfg(all(test, docker_test))]
+mod tests {
+
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner,
+    };
+    use crate::{
+        proxy::utils::{
+            test_utils::{
+                config_helper::test_config_base_dir,
+                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+            },
+            GLOBAL_DIRECT_CONNECTOR,
+        },
+        tests::initialize,
+    };
+
+    use super::*;
+    async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("tuic.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_TUIC)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/tuic/config.json"),
+                (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
+                (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    const PORT: u16 = 10002;
+
+    fn gen_options(skip_cert_verify: bool) -> anyhow::Result<HandlerOptions> {
+        Ok(HandlerOptions {
+            name: "test-tuic".to_owned(),
+            server: LOCAL_ADDR.into(),
+            port: PORT,
+            common_opts: Default::default(),
+            uuid: "00000000-0000-0000-0000-000000000001".parse()?,
+            password: "passwd".into(),
+            udp_relay_mode: UdpRelayMode::Native,
+            disable_sni: true,
+            alpn: vec!["h3".into()],
+            heartbeat_interval: Duration::from_millis(3000),
+            reduce_rtt: false,
+            request_timeout: Duration::from_millis(4000),
+            idle_timeout: Duration::from_millis(4000),
+            congestion_controller: CongestionControl::Bbr,
+            max_udp_relay_packet_size: 1500,
+            max_open_stream: VarInt::from_u64(32)?,
+            ip: None,
+            skip_cert_verify,
+            sni: Some("example.org".to_owned()),
+            gc_interval: Duration::from_millis(3000),
+            gc_lifetime: Duration::from_millis(15000),
+            send_window: 8 * 1024 * 1024 * 2,
+            receive_window: VarInt::from_u64(8 * 1024 * 1024)?,
+        })
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_tuic_skip_cert_verify() -> anyhow::Result<()> {
+        initialize();
+        let opts = gen_options(true)?;
+
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(handler, get_tuic_runner().await?, Suite::all())
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_tuic_cert_verify_expect_fail() -> anyhow::Result<()> {
+        initialize();
+        let opts = gen_options(false)?;
+
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        let res = run_test_suites_and_cleanup(
+            handler,
+            get_tuic_runner().await?,
+            Suite::all(),
+        )
+        .await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains(
+            "the cryptographic handshake failed: error 45: invalid peer \
+             certificate: Expired"
+        ));
+        Ok(())
     }
 }
