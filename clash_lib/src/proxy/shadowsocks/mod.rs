@@ -31,8 +31,9 @@ use shadowsocks::{
 };
 use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
 use tracing::debug;
+use v2ray::new_websocket_stream;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum SimpleOBFSMode {
     Http,
     Tls,
@@ -47,14 +48,14 @@ pub struct SimpleOBFSOption {
 pub struct V2RayOBFSOption {
     pub mode: String,
     pub host: String,
+    pub port: u16,
     pub path: String,
-    pub tls: bool,
     pub headers: HashMap<String, String>,
+    pub tls: bool,
     pub skip_cert_verify: bool,
     pub mux: bool,
 }
 
-#[derive(Debug)]
 pub struct ShadowTlsOption {
     pub host: String,
     pub password: String,
@@ -106,7 +107,7 @@ impl Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
+        _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin_opts {
             Some(plugin) => match plugin {
@@ -121,12 +122,16 @@ impl Handler {
                         simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
                     }
                 },
-                OBFSOption::V2Ray(_opt) => {
-                    todo!("v2ray-plugin is not implemented yet")
+                OBFSOption::V2Ray(opt) => {
+                    new_websocket_stream(
+                        s,
+                        self.opts.server.clone(),
+                        self.opts.port,
+                        opt,
+                    )
+                    .await?
                 }
                 OBFSOption::ShadowTls(opts) => {
-                    tracing::trace!("using shadow-tls");
-
                     (shadow_tls::Connector::wrap(opts, s).await?) as _
                 }
             },
