@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicBool;
 
 use async_trait::async_trait;
+use hickory_resolver::TokioResolver;
 use rand::seq::IteratorRandom;
 
 use crate::app::dns::{ClashResolver, ResolverKind};
