@@ -126,6 +126,11 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             .get("mode")
             .and_then(|x| x.as_str())
             .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
+        let port = value
+            .get("port")
+            .and_then(|x| x.as_u64())
+            .ok_or(Error::InvalidConfig("obfs port is required".to_owned()))?
+            as u16;
 
         if mode != "websocket" {
             return Err(Error::InvalidConfig(format!(
@@ -134,10 +139,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             )));
         }
 
-        let path = value
-            .get("path")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig("obfs path is required".to_owned()))?;
+        let path = value.get("path").and_then(|x| x.as_str()).unwrap_or("");
         let mux = value.get("mux").and_then(|x| x.as_bool()).unwrap_or(false);
         let tls = value.get("tls").and_then(|x| x.as_bool()).unwrap_or(false);
         let skip_cert_verify = value
@@ -159,6 +161,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
         Ok(V2RayOBFSOption {
             mode: mode.to_owned(),
             host: host.to_owned(),
+            port,
             path: path.to_owned(),
             tls,
             headers,
