@@ -11,7 +11,7 @@ use std::{
 
 use quinn::{udp::Transmit, AsyncUdpSocket, Runtime, TokioRuntime, UdpPoller};
 
-use crate::proxy::converters::hysteria2::PortGenrateor;
+use crate::proxy::converters::hysteria2::PortGenerator;
 
 struct HopState {
     prev_conn: Option<Arc<dyn AsyncUdpSocket>>,
@@ -33,7 +33,7 @@ pub struct UdpHop {
     /// source of the data packet and discard the unknown source data.
     init_port: u16,
     /// generate new port used to hop
-    port_range: PortGenrateor,
+    port_range: PortGenerator,
     /// interval to hop
     interval: Duration,
 }
@@ -43,7 +43,7 @@ impl UdpHop {
 
     pub fn new(
         port: u16,
-        port_range: PortGenrateor,
+        port_range: PortGenerator,
         interval: Option<Duration>,
     ) -> io::Result<Self> {
         let socket =

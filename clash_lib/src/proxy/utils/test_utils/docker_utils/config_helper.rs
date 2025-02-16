@@ -27,7 +27,11 @@ pub fn test_config_base_dir() -> PathBuf {
 pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     let root = root_dir();
     let test_base_dir = test_config_base_dir();
-    let config_path = test_base_dir.join("ss.yaml").to_str().unwrap().to_owned();
+    let config_path = test_base_dir
+        .join("empty.yaml")
+        .to_str()
+        .unwrap()
+        .to_owned();
     let config = Config::File(config_path).try_parse()?;
     let mmdb_path = test_base_dir.join("Country.mmdb");
     let system_resolver = Arc::new(

@@ -353,7 +353,7 @@ async fn dns_stream_builder(
             let fut = new_tcp_stream(
                 *addr,
                 iface.clone(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 None,
             )
             .map_ok(AsyncIoTokioAsStd);

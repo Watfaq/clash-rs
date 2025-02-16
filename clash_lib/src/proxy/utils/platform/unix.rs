@@ -2,6 +2,7 @@ use std::{io, net::SocketAddr};
 
 use crate::proxy::utils::Interface;
 
+#[allow(dead_code)]
 pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,
     iface: &Interface,

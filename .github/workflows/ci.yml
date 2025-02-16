@@ -44,68 +44,69 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cargo # report code coverage
+            extra-args: -F "plus"
+            coverage: true
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion, jemallocator"
+            extra-args: -F "perf"
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion, jemallocator"
+            extra-args: -F "perf"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
           - os: ubuntu-latest
@@ -117,31 +118,31 @@ jobs:
             target: x86_64-pc-windows-msvc
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: windows-latest
             target: i686-pc-windows-msvc
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks,tuic"
+            extra-args: -F "standard"
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: >-
               -Ctarget-feature=+crt-static
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
@@ -168,50 +169,39 @@ jobs:
           - os: macos-14
             target: x86_64-apple-darwin
             tool: cargo
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: macos-14
             target: aarch64-apple-darwin
             tool: cargo
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # MacOSX static-crt
           - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
             tool: cargo
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
             tool: cargo
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # BSD
           - os: ubuntu-latest
             target: x86_64-unknown-freebsd
             tool: cross
-            extra-args: -F "shadowsocks, tuic"
+            extra-args: --no-default-features -F "bsd"
           - os: ubuntu-latest
             target: i686-unknown-freebsd
             tool: cross
-            extra-args: -F "shadowsocks, tuic"
-          # Android
-          - os: ubuntu-latest
-            target: aarch64-linux-android
-            tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
-          - os: ubuntu-latest
-            target: armv7-linux-androideabi
-            tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: --no-default-features -F "bsd"
+          # Android (no release)
           - os: ubuntu-latest
             target: x86_64-linux-android
             tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
-          - os: ubuntu-latest
-            target: i686-linux-android
-            tool: cross
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: --no-default-features -F "android"
+            no-release: true
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
           # Windows aarch: todo
@@ -278,17 +268,20 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: clippy
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+          args: -p clash-rs --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (docker test on linux, non BSD)
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cargo test and coverage (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
         if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
         with:
           tool: ${{ matrix.tool }}
-          command: test
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          command: ${{ matrix.coverage && 'llvm-cov' || 'test' }}
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.coverage && '--codecov --output-path codecov.json' || '' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: "true"
@@ -304,6 +297,14 @@ jobs:
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: ${{ !cancelled() && matrix.coverage }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: codecov.json
+          fail_ci_if_error: true
+
       - name: Cargo build
         uses: clechasseur/rs-cargo@v3
         with:
@@ -318,6 +319,7 @@ jobs:
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
+        if: ${{ !matrix.no-release }}
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}

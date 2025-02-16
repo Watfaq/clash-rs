@@ -6,9 +6,10 @@ use tokio::{
     time::timeout,
 };
 
-use tracing::{debug, error};
-
+#[allow(unused_imports)]
 use super::{platform::must_bind_socket_on_interface, Interface};
+#[allow(unused_imports)]
+use tracing::{debug, error};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
@@ -34,10 +35,11 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
+#[allow(unused_variables)]
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+    #[cfg(target_os = "linux")] so_mark: Option<u32>,
 ) -> io::Result<TcpStream> {
     let (socket, family) = match endpoint {
         SocketAddr::V4(_) => (
@@ -58,12 +60,13 @@ pub async fn new_tcp_stream(
         ),
     };
 
+    #[cfg(not(target_os = "android"))]
     if let Some(iface) = iface {
         debug!("binding tcp socket to interface: {:?}", iface);
         must_bind_socket_on_interface(&socket, &iface, family)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     if let Some(so_mark) = so_mark {
         socket.set_mark(so_mark)?;
     }
@@ -79,10 +82,11 @@ pub async fn new_tcp_stream(
     .await?
 }
 
+#[allow(unused_variables)]
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<Interface>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+    #[cfg(target_os = "linux")] so_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let (socket, family) = match src {
         Some(src) => {
@@ -112,6 +116,7 @@ pub async fn new_udp_socket(
         ),
     };
 
+    #[cfg(not(target_os = "android"))]
     match (src, iface) {
         (Some(_), Some(iface)) => {
             debug!("both src and iface are set, iface will be used: {:?}", src);
@@ -138,7 +143,7 @@ pub async fn new_udp_socket(
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(target_os = "linux")]
     if let Some(so_mark) = so_mark {
         socket.set_mark(so_mark)?;
     }
