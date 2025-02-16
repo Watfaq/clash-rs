@@ -51,7 +51,7 @@ impl TuicEndpoint {
                     new_udp_socket(
                         None,
                         iface.map(|x| Interface::Name(x.name)),
-                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        #[cfg(target_os = "linux")]
                         None,
                     )
                     .await?
