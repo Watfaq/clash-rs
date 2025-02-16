@@ -22,13 +22,7 @@ use quinn::{
 };
 use quinn_proto::TransportConfig;
 
-use rustls::{
-    client::{
-        danger::{ServerCertVerified, ServerCertVerifier},
-        WebPkiServerVerifier,
-    },
-    ClientConfig as RustlsClientConfig,
-};
+use rustls::{self, ClientConfig as RustlsClientConfig};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::Mutex,
@@ -41,11 +35,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
-    common::{
-        errors::new_io_error,
-        tls::GLOBAL_ROOT_STORE,
-        utils::{encode_hex, sha256},
-    },
+    common::{errors::new_io_error, tls::DefaultTlsVerifier},
     // proxy::hysteria2::congestion::DynCongestion,
     session::{Session, SocksAddr},
 };
@@ -91,84 +81,6 @@ pub struct HystOption {
     pub cwnd: Option<u64>,
 }
 
-#[derive(Debug)]
-struct CertVerifyOption {
-    fingerprint: Option<String>,
-    skip: bool,
-    pki: Arc<WebPkiServerVerifier>,
-}
-
-impl CertVerifyOption {
-    fn new(fingerprint: Option<String>, ca: Option<PathBuf>, skip: bool) -> Self {
-        if ca.is_some() {
-            warn!("hysteria2 custom ca option is not supported yet");
-            // TODO: add load the ca and put it into a Store
-        }
-        Self {
-            fingerprint,
-            skip,
-            pki: WebPkiServerVerifier::builder(GLOBAL_ROOT_STORE.clone())
-                .build()
-                .unwrap(),
-        }
-    }
-}
-
-impl ServerCertVerifier for CertVerifyOption {
-    fn verify_server_cert(
-        &self,
-        end_entity: &rustls::pki_types::CertificateDer<'_>,
-        intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        server_name: &rustls::pki_types::ServerName<'_>,
-        ocsp_response: &[u8],
-        now: rustls::pki_types::UnixTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        if let Some(ref fingerprint) = self.fingerprint {
-            let cert_hex = encode_hex(&sha256(end_entity.as_ref()));
-            if &cert_hex != fingerprint {
-                return Err(rustls::Error::General(format!(
-                    "cert hash mismatch: found: {}\nexcept: {}",
-                    cert_hex, fingerprint
-                )));
-            }
-        }
-
-        if self.skip {
-            return Ok(ServerCertVerified::assertion());
-        }
-
-        self.pki.verify_server_cert(
-            end_entity,
-            intermediates,
-            server_name,
-            ocsp_response,
-            now,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.pki.supported_verify_schemes()
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        self.pki.verify_tls12_signature(message, cert, dss)
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &rustls::pki_types::CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        self.pki.verify_tls13_signature(message, cert, dss)
-    }
-}
-
 enum CcRx {
     Auto,
     Fixed(#[allow(dead_code)] u64),
@@ -209,11 +121,11 @@ impl Handler {
         std::time::Duration::from_secs(300);
 
     pub fn new(opts: HystOption) -> anyhow::Result<Self> {
-        let verify = CertVerifyOption::new(
-            opts.fingerprint.clone(),
-            opts.ca.clone(),
-            opts.skip_cert_verify,
-        );
+        if opts.ca.is_some() {
+            warn!("hysteria2 does not support ca yet");
+        }
+        let verify =
+            DefaultTlsVerifier::new(opts.fingerprint.clone(), opts.skip_cert_verify);
         let mut tls_config = RustlsClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(verify))
@@ -267,26 +179,22 @@ impl Handler {
             }
         };
 
+        let src = if resolver.ipv6() {
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
+        } else {
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        };
+
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
         // and port hopping
         let create_socket = || async {
-            if resolver.ipv6() {
-                new_udp_socket(
-                    Some((Ipv6Addr::UNSPECIFIED, 0).into()),
-                    sess.iface.clone(),
-                    #[cfg(target_os = "linux")]
-                    sess.so_mark,
-                )
-                .await
-            } else {
-                new_udp_socket(
-                    Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    sess.iface.clone(),
-                    #[cfg(target_os = "linux")]
-                    sess.so_mark,
-                )
-                .await
-            }
+            new_udp_socket(
+                Some(src),
+                sess.iface.clone(),
+                #[cfg(target_os = "linux")]
+                sess.so_mark,
+            )
+            .await
         };
 
         let mut ep = if let Some(obfs) = self.opts.obfs.as_ref() {
@@ -319,25 +227,7 @@ impl Handler {
                 Arc::new(TokioRuntime),
             )?
         } else {
-            let socket = {
-                if resolver.ipv6() {
-                    new_udp_socket(
-                        Some((Ipv6Addr::UNSPECIFIED, 0).into()),
-                        sess.iface.clone(),
-                        #[cfg(target_os = "linux")]
-                        sess.so_mark,
-                    )
-                    .await?
-                } else {
-                    new_udp_socket(
-                        Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                        sess.iface.clone(),
-                        #[cfg(target_os = "linux")]
-                        sess.so_mark,
-                    )
-                    .await?
-                }
-            };
+            let socket = create_socket().await?;
 
             quinn::Endpoint::new(
                 self.ep_config.clone(),
