@@ -57,7 +57,7 @@ use self::{
 };
 
 use super::{
-    converters::hysteria2::PortGenrateor, utils::new_udp_socket, ConnectorType,
+    converters::hysteria2::PortGenerator, utils::new_udp_socket, ConnectorType,
     DialWithConnector, OutboundHandler, OutboundType,
 };
 
@@ -75,7 +75,7 @@ pub enum Obfs {
 pub struct HystOption {
     pub name: String,
     pub addr: SocksAddr,
-    pub ports: Option<PortGenrateor>,
+    pub ports: Option<PortGenerator>,
     pub sni: Option<String>,
     pub passwd: String,
     pub obfs: Option<Obfs>,
@@ -570,5 +570,91 @@ impl AsyncWrite for HystStream {
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.get_mut().send).poll_shutdown(cx)
+    }
+}
+
+#[cfg(all(test, docker_test))]
+mod tests {
+
+    use std::net::IpAddr;
+
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner,
+    };
+    use crate::{
+        proxy::utils::{
+            test_utils::{
+                config_helper::test_config_base_dir,
+                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+            },
+            GLOBAL_DIRECT_CONNECTOR,
+        },
+        tests::initialize,
+    };
+
+    use super::*;
+
+    async fn get_hysteria_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("hysteria.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_HYSTERIA)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/config.json"),
+                (cert.to_str().unwrap(), "/home/ubuntu/my.crt"),
+                (key.to_str().unwrap(), "/home/ubuntu/my.key"),
+            ])
+            .cmd(&["server"])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_hysteria() -> anyhow::Result<()> {
+        initialize();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let port = 10002;
+
+        let obfs = Some(Obfs::Salamander(SalamanderObfs {
+            key: "beauty will save the world".to_owned().into(),
+        }));
+
+        let ports_gen = Some(
+            PortGenerator::new(port)
+                .parse_ports_str("")
+                .map_err(|_| crate::Error::InvalidConfig("".into()))?,
+        );
+
+        let opts = HystOption {
+            name: "test-hysteria".to_owned(),
+            sni: "example.org".to_owned().into(),
+            addr: (ip, port).into(),
+            alpn: vec![],
+            ca: None,
+            fingerprint: None,
+            skip_cert_verify: true,
+            passwd: "passwd".to_owned(),
+            ports: ports_gen,
+            obfs,
+            up_down: Some((100, 100)),
+            ca_str: None,
+            cwnd: None,
+        };
+
+        let handler = Arc::new(Handler::new(opts)?);
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(
+            handler,
+            get_hysteria_runner().await?,
+            Suite::tcp_tests(),
+        )
+        .await
     }
 }
