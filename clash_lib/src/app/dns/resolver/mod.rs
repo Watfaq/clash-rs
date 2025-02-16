@@ -1,10 +1,11 @@
 mod enhanced;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[path = "system_linux.rs"]
+#[cfg(all(target_feature = "crt-static", target_env = "gnu"))]
+#[path = "system_static_crt.rs"]
 mod system;
-#[cfg(all(not(target_os = "linux"), not(target_os = "android")))]
-#[path = "system_non_linux.rs"]
+
+#[cfg(not(all(target_feature = "crt-static", target_env = "gnu")))]
+#[path = "system.rs"]
 mod system;
 
 use std::sync::Arc;
