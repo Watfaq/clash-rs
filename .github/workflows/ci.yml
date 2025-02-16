@@ -196,6 +196,12 @@ jobs:
             target: i686-unknown-freebsd
             tool: cross
             extra-args: --no-default-features -F "bsd"
+          # Android (no release)
+          - os: ubuntu-latest
+            target: x86_64-linux-android
+            tool: cross
+            extra-args: --no-default-features -F "android"
+            no-release: true
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
           # Windows aarch: todo
@@ -313,6 +319,7 @@ jobs:
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
+        if: ${{ !matrix.no-release }}
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
