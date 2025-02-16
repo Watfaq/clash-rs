@@ -25,3 +25,5 @@ shell.nix
 
 # macOS
 .DS_Store
+
+codecov.json
