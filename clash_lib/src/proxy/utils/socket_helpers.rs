@@ -7,9 +7,9 @@ use tokio::{
 };
 
 #[allow(unused_imports)]
-use tracing::{debug, error};
-#[allow(unused_imports)]
 use super::{platform::must_bind_socket_on_interface, Interface};
+#[allow(unused_imports)]
+use tracing::{debug, error};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     #[cfg(not(target_os = "windows"))]
