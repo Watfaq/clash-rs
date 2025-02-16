@@ -67,7 +67,7 @@ impl Service<Uri> for LocalConnector {
             new_tcp_stream(
                 (remote_ip, remote_port).into(),
                 None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 None,
             )
             .await

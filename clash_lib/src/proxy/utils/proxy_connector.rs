@@ -31,9 +31,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(target_os = "linux")] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyStream>;
 
     async fn connect_datagram(
@@ -42,9 +40,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
         src: Option<SocketAddr>,
         destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] packet_mark: Option<
-            u32,
-        >,
+        #[cfg(target_os = "linux")] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
 
@@ -72,7 +68,7 @@ impl RemoteConnector for DirectConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let dial_addr = resolver
             .resolve(address, false)
@@ -83,7 +79,7 @@ impl RemoteConnector for DirectConnector {
         new_tcp_stream(
             (dial_addr, port).into(),
             iface.cloned(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             so_mark,
         )
         .await
@@ -96,12 +92,12 @@ impl RemoteConnector for DirectConnector {
         src: Option<SocketAddr>,
         _destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,
             iface,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             so_mark,
         )
         .await
@@ -143,14 +139,14 @@ impl RemoteConnector for ProxyConnector {
         address: &str,
         port: u16,
         iface: Option<&Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let sess = Session {
             network: Network::Tcp,
             typ: Type::Ignore,
             destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
             iface: iface.cloned(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             so_mark,
             ..Default::default()
         };
@@ -178,14 +174,14 @@ impl RemoteConnector for ProxyConnector {
         _src: Option<SocketAddr>,
         destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(any(target_os = "linux", target_os = "android"))] so_mark: Option<u32>,
+        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
             iface,
             destination: destination.clone(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             so_mark,
             ..Default::default()
         };

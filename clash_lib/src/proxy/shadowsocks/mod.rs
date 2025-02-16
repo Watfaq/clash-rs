@@ -248,7 +248,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -274,7 +274,7 @@ impl OutboundHandler for Handler {
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
                 sess.iface.as_ref().cloned(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
