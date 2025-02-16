@@ -279,7 +279,7 @@ jobs:
           args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.coverage && '--codecov --output-path codecov.json' || '' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          CLASH_DOCKER_TEST: ${{ matrix.no-docker-test && 'false' || 'true' }}
+          CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Upload coverage to Codecov
