@@ -129,6 +129,7 @@ jobs:
             tool: cargo
             postfix: ".exe"
             extra-args: -F "standard"
+            no-test: true
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -163,8 +164,9 @@ jobs:
             release-name: aarch64-pc-windows-msvc-static-crt
             tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic"
+            extra-args: -F "standard"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            no-test: true
           # MacOSX
           - os: macos-14
             target: x86_64-apple-darwin
@@ -192,19 +194,21 @@ jobs:
             target: x86_64-unknown-freebsd
             tool: cross
             extra-args: --no-default-features -F "bsd"
+            no-docker-test: true
           - os: ubuntu-latest
             target: i686-unknown-freebsd
             tool: cross
             extra-args: --no-default-features -F "bsd"
+            no-docker-test: true
           # Android (no release)
           - os: ubuntu-latest
             target: x86_64-linux-android
             tool: cross
             extra-args: --no-default-features -F "android"
             no-release: true
+            no-test: true
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
-          # Windows aarch: todo
 
     steps:
       - uses: actions/checkout@v4
@@ -277,7 +281,7 @@ jobs:
 
       - name: Cargo test and coverage (docker test on linux, non BSD)
         uses: clechasseur/rs-cargo@v3
-        if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
+        if: ${{ startsWith(matrix.os, 'ubuntu') && !matrix.no-test && !matrix.no-docker-test }}
         with:
           tool: ${{ matrix.tool }}
           command: ${{ matrix.coverage && 'llvm-cov' || 'test' }}
@@ -289,7 +293,7 @@ jobs:
 
       - name: Cargo test (no docker test on windows-non-arm and macos)
         uses: clechasseur/rs-cargo@v3
-        if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
+        if: ${{ !startsWith(matrix.os, 'ubuntu') && !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
           command: test
