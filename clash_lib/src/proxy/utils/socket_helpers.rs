@@ -6,8 +6,9 @@ use tokio::{
     time::timeout,
 };
 
+#[allow(unused_imports)]
 use tracing::{debug, error};
-
+#[allow(unused_imports)]
 use super::{platform::must_bind_socket_on_interface, Interface};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
