@@ -15,16 +15,16 @@ use crate::{
     session::SocksAddr,
 };
 #[derive(Clone)]
-pub struct PortGenrateor {
+pub struct PortGenerator {
     // must have a default port
     pub default: u16,
     ports: Vec<u16>,
     range: Vec<RangeInclusive<u16>>,
 }
 
-impl PortGenrateor {
+impl PortGenerator {
     pub fn new(port: u16) -> Self {
-        PortGenrateor {
+        PortGenerator {
             default: port,
             ports: vec![],
             range: vec![],
@@ -105,7 +105,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
 
         let ports_gen = if let Some(ports) = value.ports {
             Some(
-                PortGenrateor::new(value.port)
+                PortGenerator::new(value.port)
                     .parse_ports_str(&ports)
                     .map_err(|e| {
                         crate::Error::InvalidConfig(format!(
@@ -140,7 +140,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
 
 #[test]
 fn test_port_gen() {
-    let p = PortGenrateor::new(1000).parse_ports_str("").unwrap();
+    let p = PortGenerator::new(1000).parse_ports_str("").unwrap();
     let p = p.parse_ports_str("1001,1002,1003, 5000-5001").unwrap();
 
     for _ in 0..100 {
