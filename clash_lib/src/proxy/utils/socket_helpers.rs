@@ -34,6 +34,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
     }
 }
 
+#[allow(unused_variables)]
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
@@ -80,6 +81,7 @@ pub async fn new_tcp_stream(
     .await?
 }
 
+#[allow(unused_variables)]
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<Interface>,
