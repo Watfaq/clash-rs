@@ -58,6 +58,7 @@ pub async fn new_tcp_stream(
         ),
     };
 
+    #[cfg(not(target_os = "android"))]
     if let Some(iface) = iface {
         debug!("binding tcp socket to interface: {:?}", iface);
         must_bind_socket_on_interface(&socket, &iface, family)?;
@@ -112,6 +113,7 @@ pub async fn new_udp_socket(
         ),
     };
 
+    #[cfg(not(target_os = "android"))]
     match (src, iface) {
         (Some(_), Some(iface)) => {
             debug!("both src and iface are set, iface will be used: {:?}", src);
