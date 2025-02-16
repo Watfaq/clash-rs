@@ -435,12 +435,8 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            get_tuic_runner().await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, get_tuic_runner().await?, Suite::all())
+            .await
     }
 
     #[tokio::test]
