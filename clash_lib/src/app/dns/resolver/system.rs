@@ -113,19 +113,13 @@ impl ClashResolver for SystemResolver {
 
 #[cfg(test)]
 mod tests {
-    use hickory_resolver::TokioResolver;
-
     use crate::app::dns::{resolver::SystemResolver, ClashResolver};
 
     #[tokio::test]
     async fn test_system_resolver_with_bad_labels() {
-        let resolver = TokioResolver::tokio_from_system_conf().unwrap();
-        let response = resolver.lookup_ip("some_under_store.com").await;
+        let resolver = SystemResolver::new(false).unwrap();
+        let response = resolver.resolve("some_under_store.com", false).await;
         assert!(response.is_err());
-        assert_eq!(
-            response.unwrap_err().to_string(),
-            "proto error: Label contains invalid characters: Err(Errors)"
-        );
     }
 
     #[tokio::test]
