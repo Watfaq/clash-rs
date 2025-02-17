@@ -131,6 +131,8 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             up_down: value.up.zip(value.down),
             ca_str: value.ca_str,
             cwnd: value.cwnd,
+            udp_mtu: value.udp_mtu,
+            disable_mtu_discovery: value.disable_mtu_discovery.unwrap_or(false),
         };
 
         let c = Handler::new(opts).unwrap();
