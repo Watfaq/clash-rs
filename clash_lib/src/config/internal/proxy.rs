@@ -544,6 +544,8 @@ pub struct OutboundHysteria2 {
     pub ca: Option<String>,
     pub ca_str: Option<String>,
     pub fingerprint: Option<String>,
+    pub udp_mtu: Option<u32>,
+    pub disable_mtu_discovery: Option<bool>,
     /// bbr congestion control window
     pub cwnd: Option<u64>,
 }
