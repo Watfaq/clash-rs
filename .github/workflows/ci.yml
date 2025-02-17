@@ -220,6 +220,7 @@ jobs:
             ${{ matrix.release-name || matrix.target }}
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@0.5.0
+        if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test)
         with:
           key: docker-${{ matrix.release-name || matrix.target }}
 
