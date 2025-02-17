@@ -116,31 +116,27 @@ jobs:
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            tool: cargo
             postfix: ".exe"
             extra-args: -F "plus"
           - os: windows-latest
             target: i686-pc-windows-msvc
-            tool: cargo
             postfix: ".exe"
             extra-args: -F "plus"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-            tool: cargo
             postfix: ".exe"
             extra-args: -F "standard"
+            no-test: true
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
-            tool: cargo
             postfix: ".exe"
             extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
-            tool: cargo
             postfix: ".exe"
             extra-args: -F "plus"
             rustflags: >-
@@ -161,24 +157,21 @@ jobs:
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
-            tool: cargo
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic"
+            extra-args: -F "standard"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            no-test: true
           # MacOSX
           - os: macos-14
             target: x86_64-apple-darwin
-            tool: cargo
             extra-args: -F "plus"
           - os: macos-14
             target: aarch64-apple-darwin
-            tool: cargo
             extra-args: -F "plus"
           # MacOSX static-crt
           - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
-            tool: cargo
             extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
@@ -192,19 +185,21 @@ jobs:
             target: x86_64-unknown-freebsd
             tool: cross
             extra-args: --no-default-features -F "bsd"
+            no-test: true
           - os: ubuntu-latest
             target: i686-unknown-freebsd
             tool: cross
             extra-args: --no-default-features -F "bsd"
+            no-test: true
           # Android (no release)
           - os: ubuntu-latest
             target: x86_64-linux-android
             tool: cross
             extra-args: --no-default-features -F "android"
             no-release: true
+            no-test: true
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
-          # Windows aarch: todo
 
     steps:
       - uses: actions/checkout@v4
@@ -219,16 +214,22 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
+            /target
           key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ matrix.release-name || matrix.target }}
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
+        with:
+          key: matrix.os
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
+
       - name: Install rust targets & cross
         if: matrix.tool == 'cross'
         run: |
@@ -274,27 +275,16 @@ jobs:
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Cargo test and coverage (docker test on linux, non BSD)
+      - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v3
-        if: ${{ startsWith(matrix.os, 'ubuntu') && !contains(matrix.target, 'freebsd') }}
+        if: ${{ !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
           command: ${{ matrix.coverage && 'llvm-cov' || 'test' }}
           args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.coverage && '--codecov --output-path codecov.json' || '' }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          CLASH_DOCKER_TEST: "true"
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
-
-      - name: Cargo test (no docker test on windows-non-arm and macos)
-        uses: clechasseur/rs-cargo@v3
-        if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
-        with:
-          tool: ${{ matrix.tool }}
-          command: test
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
-        env:
+          CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Upload coverage to Codecov
