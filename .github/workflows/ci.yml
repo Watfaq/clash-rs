@@ -214,16 +214,21 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
+            /target
           key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ matrix.release-name || matrix.target }}
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ matrix.release-name || matrix.target }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
+
       - name: Install rust targets & cross
         if: matrix.tool == 'cross'
         run: |
@@ -269,7 +274,6 @@ jobs:
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v3
         if: ${{ !matrix.no-test }}
