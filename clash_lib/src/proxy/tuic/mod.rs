@@ -4,7 +4,7 @@ mod handle_task;
 pub(crate) mod types;
 
 use crate::{
-    common::tls::SkipVerifier,
+    common::tls::DefaultTlsVerifier,
     proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
 };
 use anyhow::Result;
@@ -164,7 +164,7 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<TuicEndpoint> {
-        let verifier = SkipVerifier::new(None, opts.skip_cert_verify);
+        let verifier = DefaultTlsVerifier::new(None, opts.skip_cert_verify);
         let mut crypto =
             rustls::client::ClientConfig::builder_with_protocol_versions(&[
                 &rustls::version::TLS13,
