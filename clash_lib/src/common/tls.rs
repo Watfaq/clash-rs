@@ -16,63 +16,14 @@ fn global_root_store() -> Arc<RootCertStore> {
     Arc::new(root_store)
 }
 
-/// Warning: NO validation on certs.
 #[derive(Debug)]
-pub struct DummyTlsVerifier(Arc<WebPkiServerVerifier>);
-
-impl DummyTlsVerifier {
-    pub fn new() -> Self {
-        Self(
-            WebPkiServerVerifier::builder(GLOBAL_ROOT_STORE.clone())
-                .build()
-                .unwrap(),
-        )
-    }
-}
-
-impl rustls::client::danger::ServerCertVerifier for DummyTlsVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp: &[u8],
-        _now: UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.0.supported_verify_schemes()
-    }
-}
-
-#[derive(Debug)]
-pub struct SkipVerifier {
+pub struct DefaultTlsVerifier {
     fingerprint: Option<String>,
     skip: bool,
     pki: Arc<WebPkiServerVerifier>,
 }
 
-impl SkipVerifier {
+impl DefaultTlsVerifier {
     pub fn new(fingerprint: Option<String>, skip: bool) -> Self {
         Self {
             fingerprint,
@@ -84,7 +35,7 @@ impl SkipVerifier {
     }
 }
 
-impl ServerCertVerifier for SkipVerifier {
+impl ServerCertVerifier for DefaultTlsVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &rustls::pki_types::CertificateDer<'_>,
