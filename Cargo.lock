@@ -251,7 +251,7 @@ dependencies = [
  "derive-deftly",
  "derive_builder_fork_arti",
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "fs-mistrust",
  "futures",
  "hostname-validator",
@@ -1171,6 +1171,7 @@ dependencies = [
  "digest",
  "dirs 6.0.0",
  "downcast-rs",
+ "educe 0.6.0",
  "env_logger",
  "erased-serde",
  "filetime",
@@ -1989,10 +1990,22 @@ version = "0.4.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f0042ff8246a363dbe77d2ceedb073339e85a804b9a47636c6e016a9a32c05f"
 dependencies = [
- "enum-ordinalize",
+ "enum-ordinalize 3.1.15",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "educe"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d7bc049e1bd8cdeb31b68bbd586a9464ecf9f3944af3958a7a9d0f8b9799417"
+dependencies = [
+ "enum-ordinalize 4.3.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
 ]
 
 [[package]]
@@ -2060,6 +2073,26 @@ checksum = "1bf1fa3f06bbff1ea5b1a9c7b14aa992a39657db60a2759457328d7e058f49ee"
 dependencies = [
  "num-bigint",
  "num-traits",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "enum-ordinalize"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea0dcfa4e54eeb516fe454635a95753ddd39acda650ce703031c6973e315dd5"
+dependencies = [
+ "enum-ordinalize-derive",
+]
+
+[[package]]
+name = "enum-ordinalize-derive"
+version = "4.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d28318a75d4aead5c4db25382e8ef717932d0346600cacae6357eb5941bc5ff"
+dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.96",
@@ -5148,7 +5181,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78c9c2fb898b8b41e90b84234baf8075a7f30cf120101e42afe34acbf4c50ac8"
 dependencies = [
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "either",
  "fluid-let",
  "thiserror 2.0.11",
@@ -6193,7 +6226,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ebea3f15b119f60ac4de81fe2e57ed281040bf1ce6e520b38c913fcbeb02b68"
 dependencies = [
  "derive-deftly",
- "educe",
+ "educe 0.4.23",
  "futures",
  "oneshot-fused-workaround",
  "pin-project",
@@ -6230,7 +6263,7 @@ dependencies = [
  "bytes",
  "derive-deftly",
  "digest",
- "educe",
+ "educe 0.4.23",
  "getrandom 0.2.15",
  "safelog",
  "thiserror 2.0.11",
@@ -6251,7 +6284,7 @@ dependencies = [
  "caret",
  "derive-deftly",
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "paste",
  "rand 0.8.5",
  "smallvec",
@@ -6294,7 +6327,7 @@ dependencies = [
  "caret",
  "derive_builder_fork_arti",
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "futures",
  "oneshot-fused-workaround",
  "postage",
@@ -6345,7 +6378,7 @@ dependencies = [
  "derive_more",
  "downcast-rs",
  "dyn-clone",
- "educe",
+ "educe 0.4.23",
  "futures",
  "humantime-serde",
  "itertools 0.14.0",
@@ -6389,7 +6422,7 @@ dependencies = [
  "cfg-if",
  "derive-deftly",
  "derive_builder_fork_arti",
- "educe",
+ "educe 0.4.23",
  "either",
  "figment",
  "fs-mistrust",
@@ -6479,7 +6512,7 @@ dependencies = [
  "derive_builder_fork_arti",
  "derive_more",
  "digest",
- "educe",
+ "educe 0.4.23",
  "event-listener",
  "fs-mistrust",
  "fslock",
@@ -6561,7 +6594,7 @@ dependencies = [
  "derive_builder_fork_arti",
  "derive_more",
  "dyn-clone",
- "educe",
+ "educe 0.4.23",
  "futures",
  "humantime",
  "humantime-serde",
@@ -6600,7 +6633,7 @@ dependencies = [
  "async-trait",
  "derive-deftly",
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "either",
  "futures",
  "itertools 0.14.0",
@@ -6762,7 +6795,7 @@ dependencies = [
  "derive_more",
  "digest",
  "ed25519-dalek",
- "educe",
+ "educe 0.4.23",
  "getrandom 0.2.15",
  "hex",
  "rand_core 0.6.4",
@@ -6806,7 +6839,7 @@ dependencies = [
  "derive-deftly",
  "derive_more",
  "dyn-clone",
- "educe",
+ "educe 0.4.23",
  "futures",
  "itertools 0.14.0",
  "paste",
@@ -6871,7 +6904,7 @@ dependencies = [
  "derive_builder_fork_arti",
  "derive_more",
  "digest",
- "educe",
+ "educe 0.4.23",
  "hex",
  "humantime",
  "itertools 0.14.0",
@@ -6946,7 +6979,7 @@ dependencies = [
  "derive_builder_fork_arti",
  "derive_more",
  "digest",
- "educe",
+ "educe 0.4.23",
  "futures",
  "hkdf",
  "hmac",
@@ -7019,7 +7052,7 @@ dependencies = [
  "coarsetime",
  "derive_more",
  "dyn-clone",
- "educe",
+ "educe 0.4.23",
  "futures",
  "futures-rustls",
  "libc",
@@ -7046,7 +7079,7 @@ dependencies = [
  "async-trait",
  "derive-deftly",
  "derive_more",
- "educe",
+ "educe 0.4.23",
  "futures",
  "humantime",
  "itertools 0.14.0",
@@ -7073,7 +7106,7 @@ dependencies = [
  "amplify",
  "caret",
  "derive-deftly",
- "educe",
+ "educe 0.4.23",
  "safelog",
  "subtle",
  "thiserror 2.0.11",

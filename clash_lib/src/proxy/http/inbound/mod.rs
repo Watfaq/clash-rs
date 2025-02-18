@@ -4,7 +4,7 @@ mod proxy;
 
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, InboundListener},
+    proxy::{utils::apply_tcp_options, InboundHandler},
     Dispatcher,
 };
 use async_trait::async_trait;
@@ -43,7 +43,7 @@ impl Listener {
 }
 
 #[async_trait]
-impl InboundListener for Listener {
+impl InboundHandler for Listener {
     fn handle_tcp(&self) -> bool {
         true
     }

@@ -99,6 +99,7 @@ serde = { version = "1", features=["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
 erased-serde = "0.4"
+educe = { version = "0.6", features = ["Default"] }
 
 # DNS
 watfaq-dns = { version = "0.1.1" }

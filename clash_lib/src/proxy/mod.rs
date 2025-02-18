@@ -112,7 +112,7 @@ pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
 #[async_trait]
-pub trait InboundListener: Send + Sync + Unpin {
+pub trait InboundHandler: Send + Sync + Unpin {
     /// support tcp or not
     fn handle_tcp(&self) -> bool;
     /// support udp or not
@@ -121,7 +121,7 @@ pub trait InboundListener: Send + Sync + Unpin {
     async fn listen_udp(&self) -> io::Result<()>;
 }
 
-pub type AnyInboundListener = Arc<dyn InboundListener>;
+pub type AnyInboundHandler = Arc<dyn InboundHandler>;
 
 #[derive(Serialize, Deserialize)]
 pub enum OutboundType {

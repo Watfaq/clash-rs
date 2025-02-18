@@ -2,7 +2,7 @@ use crate::{
     common::auth::ThreadSafeAuthenticator, config::internal::config::BindAddress,
 };
 
-use crate::proxy::{http, mixed, socks, AnyInboundListener};
+use crate::proxy::{http, mixed, socks, AnyInboundHandler};
 
 #[cfg(target_os = "linux")]
 use crate::proxy::tproxy;
@@ -110,7 +110,7 @@ impl NetworkInboundListener {
     }
 
     fn build_and_insert_listener(&self, runners: &mut Vec<Runner>, ip: Ipv4Addr) {
-        let listener: AnyInboundListener = match self.listener_type {
+        let listener: AnyInboundHandler = match self.listener_type {
             ListenerType::Http => Arc::new(http::Listener::new(
                 (ip, self.port).into(),
                 self.dispatcher.clone(),

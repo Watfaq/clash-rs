@@ -20,6 +20,7 @@ use crate::{
     Error,
 };
 
+use super::listener::InboundListener;
 use super::proxy::{
     map_serde_error, OutboundProxyProtocol, OutboundProxyProviderDef,
 };
@@ -38,6 +39,7 @@ pub struct Config {
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
+    pub listeners: HashMap<String, InboundListener>
 }
 
 impl Config {
@@ -272,6 +274,7 @@ impl TryFrom<def::Config> for Config {
                         .expect("proxy provider parse error")
                 })
                 .unwrap_or_default(),
+            listeners: HashMap::new(),
         }
         .validate()
     }

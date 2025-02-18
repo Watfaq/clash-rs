@@ -1,6 +1,6 @@
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    proxy::InboundListener,
+    proxy::InboundHandler,
     session::{Network, Session},
     Dispatcher,
 };
@@ -39,7 +39,7 @@ impl Listener {
 }
 
 #[async_trait]
-impl InboundListener for Listener {
+impl InboundHandler for Listener {
     fn handle_tcp(&self) -> bool {
         true
     }
