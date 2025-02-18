@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::proxy::utils::{new_tcp_stream, new_udp_socket, Interface};
+use crate::{
+    app::net::Interface,
+    proxy::utils::{new_tcp_stream, new_udp_socket},
+};
 use hickory_proto::runtime::{
     iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime,
 };

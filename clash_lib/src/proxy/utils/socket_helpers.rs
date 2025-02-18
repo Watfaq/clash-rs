@@ -6,8 +6,10 @@ use tokio::{
     time::timeout,
 };
 
+use crate::app::net::Interface;
+
 #[allow(unused_imports)]
-use super::{platform::must_bind_socket_on_interface, Interface};
+use super::platform::must_bind_socket_on_interface;
 #[allow(unused_imports)]
 use tracing::{debug, error};
 

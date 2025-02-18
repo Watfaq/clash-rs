@@ -20,6 +20,7 @@ use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
 use crate::{
+    app::net::Interface,
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
     proxy::utils::new_tcp_stream,
@@ -32,7 +33,7 @@ use hickory_proto::{
 };
 use tokio::net::TcpStream as TokioTcpStream;
 
-use crate::{proxy::utils::Interface, Error};
+use crate::Error;
 
 use super::{runtime::DnsRuntimeProvider, ClashResolver, Client};
 

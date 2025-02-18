@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
 fn default_tun_address() -> String {
-    "198.18.0.1/32".to_string()
+    "198.18.0.1/24".to_string()
 }
 
 #[derive(Serialize, Deserialize)]
