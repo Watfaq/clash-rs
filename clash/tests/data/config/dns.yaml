@@ -7,6 +7,8 @@ tun:
   route-all: true
   device-id: dev://utun1989
   dns-hijack: true
+  routes:
+    - 10.0.0.5/32
 
 dns:
   enable: true
@@ -15,8 +17,8 @@ dns:
     udp: 127.0.0.1:53
   fake-ip-range: 198.18.0.1/16
   nameserver:
-    - 223.5.5.5#auto
-    - 180.184.1.1#auto
+    - 223.5.5.5
+    - 180.184.1.1
 
 rules:
   - MATCH,DIRECT

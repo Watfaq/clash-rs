@@ -1,5 +1,5 @@
 use crate::{
-    app::net::get_outbound_interface,
+    app::net::{get_outbound_interface, DEFAULT_OUTBOUND_INTERFACE},
     dns::{
         dns_client::{DNSNetMode, DnsClient, Opts},
         ClashResolver, ThreadSafeDNSClient,
@@ -46,6 +46,11 @@ pub async fn make_clients(
                     }
                     _ => Some(x.as_str().into()),
                 })
+                .or(DEFAULT_OUTBOUND_INTERFACE
+                    .read()
+                    .await
+                    .as_ref()
+                    .map(|x| x.name.as_str().into()))
                 .inspect(|x| debug!("DNS client interface: {:?}", x)),
         })
         .await

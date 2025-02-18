@@ -7,7 +7,10 @@ use serde::{de::value::MapDeserializer, Deserialize, Serialize};
 use serde_yaml::Value;
 
 use crate::{
-    app::{dns, remote_content_manager::providers::rule_provider::RuleSetBehavior},
+    app::{
+        dns, net::Interface,
+        remote_content_manager::providers::rule_provider::RuleSetBehavior,
+    },
     common::auth,
     config::{
         def::{self, LogLevel, RunMode},
@@ -16,7 +19,6 @@ use crate::{
             rule::RuleType,
         },
     },
-    proxy::utils::Interface,
     Error,
 };
 
@@ -100,9 +102,9 @@ impl TryFrom<def::Config> for Config {
                 ipv6: c.ipv6,
                 interface: c.interface.as_ref().map(|iface| {
                     if let Ok(addr) = iface.parse::<IpAddr>() {
-                        Interface::IpAddr(addr)
+                        addr.into()
                     } else {
-                        Interface::Name(iface.to_string())
+                        iface.as_str().into()
                     }
                 }),
                 routing_mask: c.routing_mask,

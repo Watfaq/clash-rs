@@ -1,8 +1,7 @@
 use std::{
     fmt::Display,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    str::FromStr,
-    sync::{LazyLock, Mutex},
+    sync::{Arc, LazyLock},
 };
 
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
@@ -10,16 +9,19 @@ use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-pub static DEFAULT_OUTBOUND_INTERFACE: LazyLock<Mutex<Option<OutboundInterface>>> =
-    LazyLock::new(|| Mutex::new(None));
+pub static DEFAULT_OUTBOUND_INTERFACE: LazyLock<
+    Arc<tokio::sync::RwLock<Option<OutboundInterface>>>,
+> = LazyLock::new(|| Default::default());
 
 /// Initialize network configuration
 /// globally manage default outbound interface
-pub fn init_net_config() {
-    *DEFAULT_OUTBOUND_INTERFACE.lock().unwrap() = get_outbound_interface();
+/// This function should be called as early as possible
+/// so that other config initialization can use the default outbound interface
+pub async fn init_net_config() {
+    *DEFAULT_OUTBOUND_INTERFACE.write().await = get_outbound_interface();
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutboundInterface {
     pub name: String,
     #[allow(unused)]
@@ -131,6 +133,12 @@ pub enum Interface {
 impl From<&str> for Interface {
     fn from(s: &str) -> Self {
         Self::Name(s.to_owned())
+    }
+}
+
+impl From<IpAddr> for Interface {
+    fn from(ip: IpAddr) -> Self {
+        Self::IpAddr(ip)
     }
 }
 

@@ -2,8 +2,8 @@ use ipnet::IpNet;
 use tracing::warn;
 
 use crate::{
-    common::errors::new_io_error, config::internal::config::TunConfig,
-    proxy::utils::OutboundInterface,
+    app::net::OutboundInterface, common::errors::new_io_error,
+    config::internal::config::TunConfig,
 };
 
 /// TODO: get rid of command execution

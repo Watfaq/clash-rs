@@ -12,13 +12,13 @@ use tun::AbstractDevice;
 use url::Url;
 
 use crate::{
-    app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
+    app::{
+        dispatcher::Dispatcher, dns::ThreadSafeDNSResolver,
+        net::get_outbound_interface,
+    },
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{
-        datagram::UdpPacket, tun::routes::maybe_add_routes,
-        utils::get_outbound_interface,
-    },
+    proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
     session::{Network, Session, Type},
     Error, Runner,
 };
@@ -41,7 +41,7 @@ async fn handle_inbound_stream(
         source: local_addr,
         destination: remote_addr.into(),
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
@@ -94,7 +94,7 @@ async fn handle_inbound_datagram(
         network: Network::Udp,
         typ: Type::Tun,
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
             }),

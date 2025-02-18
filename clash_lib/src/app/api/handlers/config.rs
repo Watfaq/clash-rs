@@ -18,6 +18,7 @@ use crate::{
         dispatcher,
         dns::ThreadSafeDNSResolver,
         inbound::manager::{Ports, ThreadSafeInboundManager},
+        net::Interface,
     },
     config::{def, internal::config::BindAddress},
     GlobalState,
@@ -72,8 +73,8 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
         allow_lan: Some(match inbound_manager.get_bind_address() {
             BindAddress::Any => true,
             BindAddress::One(one) => match one {
-                crate::proxy::utils::Interface::IpAddr(ip) => !ip.is_loopback(),
-                crate::proxy::utils::Interface::Name(iface) => iface != "lo",
+                Interface::IpAddr(ip) => !ip.is_loopback(),
+                Interface::Name(iface) => iface != "lo",
             },
         }),
     })
