@@ -55,8 +55,11 @@ pub mod group;
 pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
+pub mod inbound;
 mod options;
+mod outbound;
 mod transport;
+pub mod tunnel;
 
 pub use options::HandlerCommonOptions;
 
@@ -110,18 +113,6 @@ impl<T, U> OutboundDatagram<U> for T where
 
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
-
-#[async_trait]
-pub trait InboundHandler: Send + Sync + Unpin {
-    /// support tcp or not
-    fn handle_tcp(&self) -> bool;
-    /// support udp or not
-    fn handle_udp(&self) -> bool;
-    async fn listen_tcp(&self) -> io::Result<()>;
-    async fn listen_udp(&self) -> io::Result<()>;
-}
-
-pub type AnyInboundHandler = Arc<dyn InboundHandler>;
 
 #[derive(Serialize, Deserialize)]
 pub enum OutboundType {

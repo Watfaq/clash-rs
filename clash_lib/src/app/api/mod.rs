@@ -19,9 +19,12 @@ use tracing::{error, info};
 use crate::{config::internal::config::Controller, GlobalState, Runner};
 
 use super::{
-    dispatcher, dispatcher::StatisticsManager, dns::ThreadSafeDNSResolver,
-    inbound::manager::ThreadSafeInboundManager, logging::LogEvent,
-    outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+    dispatcher::{self, StatisticsManager},
+    dns::ThreadSafeDNSResolver,
+    inbound::manager::InboundManager,
+    logging::LogEvent,
+    outbound::manager::ThreadSafeOutboundManager,
+    profile::ThreadSafeCacheFile,
     router::ThreadSafeRouter,
 };
 
@@ -37,7 +40,7 @@ pub struct AppState {
 pub fn get_api_runner(
     controller_cfg: Controller,
     log_source: Sender<LogEvent>,
-    inbound_manager: ThreadSafeInboundManager,
+    inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,

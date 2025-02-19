@@ -121,4 +121,12 @@ mod tests {
         let response = resolver.resolve("www.google.com", false).await.unwrap();
         assert!(response.is_some());
     }
+
+    #[tokio::test]
+    async fn test_plain_ip() {
+        let resolver = SystemResolver::new(false).unwrap();
+        let response = resolver.resolve("127.0.0.1", false).await.unwrap();
+        println!("{:#?}", response);
+        assert!(response.is_some());
+    }
 }
