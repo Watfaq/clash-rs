@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     body::Body,
     extract::{
-        ws::Message, FromRequest, Path, Query, Request, State, WebSocketUpgrade,
+        FromRequest, Path, Query, Request, State, WebSocketUpgrade, ws::Message,
     },
     response::IntoResponse,
     routing::{delete, get},
-    Json, Router,
 };
 use http::HeaderMap;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::app::{
-    api::{handlers::utils::is_request_websocket, AppState},
+    api::{AppState, handlers::utils::is_request_websocket},
     dispatcher::StatisticsManager,
 };
 

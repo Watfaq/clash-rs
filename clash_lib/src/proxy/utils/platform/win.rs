@@ -4,7 +4,7 @@ use tracing::{debug, error, warn};
 use windows::Win32::{
     Foundation::GetLastError,
     Networking::WinSock::{
-        setsockopt, IPPROTO_IP, IPPROTO_IPV6, IP_UNICAST_IF, SOCKET,
+        IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, SOCKET, setsockopt,
     },
 };
 

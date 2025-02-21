@@ -20,7 +20,7 @@ mod server;
 
 pub use config::Config;
 
-pub use resolver::{new as new_resolver, EnhancedResolver, SystemResolver};
+pub use resolver::{EnhancedResolver, SystemResolver, new as new_resolver};
 
 pub use server::get_dns_listener;
 

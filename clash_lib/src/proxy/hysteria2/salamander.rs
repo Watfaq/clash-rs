@@ -10,8 +10,8 @@ use bytes::{BufMut, Bytes, BytesMut};
 use digest::consts::U32;
 use futures::ready;
 use quinn::{
-    udp::{RecvMeta, Transmit},
     AsyncUdpSocket, TokioRuntime,
+    udp::{RecvMeta, Transmit},
 };
 use rand::Rng;
 

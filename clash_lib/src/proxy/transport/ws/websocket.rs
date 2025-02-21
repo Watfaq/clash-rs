@@ -1,9 +1,9 @@
 use std::{fmt::Debug, pin::Pin, task::Poll};
 
 use bytes::{Bytes, BytesMut};
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, ready};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},

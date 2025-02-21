@@ -9,7 +9,7 @@ use crate::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{datagram::UdpPacket, AnyInboundDatagram, ClientStream},
+    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -21,7 +21,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{io::AsyncWriteExt, sync::RwLock, task::JoinHandle};
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 use crate::app::dns::ThreadSafeDNSResolver;
 
@@ -100,14 +100,11 @@ impl Dispatcher {
                     }
                 } else {
                     trace!("looking up resolve cache ip: {}", socket_addr.ip());
-                    if let Some(resolved) =
-                        self.resolver.cached_for(socket_addr.ip()).await
-                    {
-                        (resolved, socket_addr.port())
+                    match self.resolver.cached_for(socket_addr.ip()).await {
+                        Some(resolved) => (resolved, socket_addr.port())
                             .try_into()
-                            .expect("must be valid domain")
-                    } else {
-                        (*socket_addr).into()
+                            .expect("must be valid domain"),
+                        _ => (*socket_addr).into(),
                     }
                 }
             }
@@ -286,14 +283,13 @@ impl Dispatcher {
                             } else {
                                 (*socket_addr).into()
                             }
-                        } else if let Some(resolved) =
-                            resolver.cached_for(socket_addr.ip()).await
-                        {
-                            (resolved, socket_addr.port())
-                                .try_into()
-                                .expect("must be valid domain")
                         } else {
-                            (*socket_addr).into()
+                            match resolver.cached_for(socket_addr.ip()).await {
+                                Some(resolved) => (resolved, socket_addr.port())
+                                    .try_into()
+                                    .expect("must be valid domain"),
+                                _ => (*socket_addr).into(),
+                            }
                         }
                     }
                     crate::session::SocksAddr::Domain(host, port) => {
@@ -523,8 +519,7 @@ impl TimeoutUdpSessionManager {
                 });
                 trace!(
                     "timeout udp session cleaner finished, alived: {}, expired: {}",
-                    alived,
-                    expired
+                    alived, expired
                 );
             }
         });

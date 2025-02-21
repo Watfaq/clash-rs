@@ -8,12 +8,12 @@ use std::{
 
 use async_trait::async_trait;
 
-use futures::{future::BoxFuture, TryFutureExt};
+use futures::{TryFutureExt, future::BoxFuture};
 use hickory_client::client;
 use hickory_proto::{
-    runtime::iocompat::AsyncIoTokioAsStd,
+    ProtoError, runtime::iocompat::AsyncIoTokioAsStd,
     rustls::tls_client_stream::tls_client_connect_with_future, tcp::TcpClientStream,
-    udp::UdpClientStream, ProtoError,
+    udp::UdpClientStream,
 };
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
@@ -21,20 +21,20 @@ use tracing::{info, warn};
 
 use crate::{
     common::tls::{self, GLOBAL_ROOT_STORE},
-    dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
+    dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
     proxy::utils::new_tcp_stream,
 };
 use hickory_proto::{
+    DnsHandle,
     h2::HttpsClientStreamBuilder,
     op::Message,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
-    DnsHandle,
 };
 use tokio::net::TcpStream as TokioTcpStream;
 
-use crate::{proxy::utils::Interface, Error};
+use crate::{Error, proxy::utils::Interface};
 
-use super::{runtime::DnsRuntimeProvider, ClashResolver, Client};
+use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
@@ -148,27 +148,27 @@ impl DnsClient {
             DNSNetMode::Dhcp => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
 
             other => {
-                let ip = if let Some(r) = opts.r {
-                    if let Some(ip) =
-                        r.resolve(&opts.host, false).await.map_err(|x| {
+                let ip = match opts.r {
+                    Some(r) => {
+                        match r.resolve(&opts.host, false).await.map_err(|x| {
                             anyhow!("resolve hostname failure: {}", x.to_string())
-                        })?
-                    {
-                        ip
-                    } else {
-                        return Err(Error::InvalidConfig(format!(
-                            "can't resolve default DNS: {}",
-                            opts.host
-                        ))
-                        .into());
+                        })? {
+                            Some(ip) => ip,
+                            _ => {
+                                return Err(Error::InvalidConfig(format!(
+                                    "can't resolve default DNS: {}",
+                                    opts.host
+                                ))
+                                .into());
+                            }
+                        }
                     }
-                } else {
-                    opts.host.parse::<net::IpAddr>().map_err(|x| {
+                    _ => opts.host.parse::<net::IpAddr>().map_err(|x| {
                         Error::DNSError(format!(
                             "resolve DNS hostname error: {}, {}",
                             x, opts.host
                         ))
-                    })?
+                    })?,
                 };
 
                 match other {
@@ -280,22 +280,25 @@ impl Client for DnsClient {
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let mut inner = self.inner.write().await;
 
-        if let Some(bg) = &inner.bg_handle {
-            if bg.is_finished() {
-                warn!(
-                    "dns client background task is finished, likely connection \
-                     closed, restarting a new one"
-                );
+        match &inner.bg_handle {
+            Some(bg) => {
+                if bg.is_finished() {
+                    warn!(
+                        "dns client background task is finished, likely connection \
+                         closed, restarting a new one"
+                    );
+                    let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                    inner.c.replace(client);
+                    inner.bg_handle.replace(bg);
+                }
+            }
+            _ => {
+                // initializing client
+                info!("initializing dns client: {}", &self.cfg);
                 let (client, bg) = dns_stream_builder(&self.cfg).await?;
                 inner.c.replace(client);
                 inner.bg_handle.replace(bg);
             }
-        } else {
-            // initializing client
-            info!("initializing dns client: {}", &self.cfg);
-            let (client, bg) = dns_stream_builder(&self.cfg).await?;
-            inner.c.replace(client);
-            inner.bg_handle.replace(bg);
         }
 
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());

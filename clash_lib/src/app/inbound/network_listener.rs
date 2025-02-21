@@ -2,12 +2,12 @@ use crate::{
     common::auth::ThreadSafeAuthenticator, config::internal::config::BindAddress,
 };
 
-use crate::proxy::{http, mixed, socks, AnyInboundListener};
+use crate::proxy::{AnyInboundListener, http, mixed, socks};
 
 #[cfg(target_os = "linux")]
 use crate::proxy::tproxy;
 
-use crate::{proxy::utils::Interface, Dispatcher, Error, Runner};
+use crate::{Dispatcher, Error, Runner, proxy::utils::Interface};
 use futures::FutureExt;
 use network_interface::{Addr, NetworkInterfaceConfig};
 use tracing::{info, warn};

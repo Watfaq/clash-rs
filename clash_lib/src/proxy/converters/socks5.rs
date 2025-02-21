@@ -1,8 +1,8 @@
 use crate::{
     config::internal::proxy::OutboundSocks5,
     proxy::{
-        socks::{Handler, HandlerOptions},
         HandlerCommonOptions,
+        socks::{Handler, HandlerOptions},
     },
 };
 

@@ -4,8 +4,8 @@ use rand::seq::IndexedRandom;
 use std::{
     net,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
     time::Duration,
 };
@@ -15,20 +15,20 @@ use tracing::{debug, error, instrument, trace, warn};
 use hickory_proto::{op, rr};
 
 use crate::{
+    Error,
     app::profile::ThreadSafeCacheFile,
     common::{mmdb::Mmdb, trie},
     config::def::DNSMode,
-    dns::{helper::make_clients, ThreadSafeDNSClient},
-    Error,
+    dns::{ThreadSafeDNSClient, helper::make_clients},
 };
 
 use crate::dns::{
+    ClashResolver, Config, ResolverKind,
     fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
     filters::{
         DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
         IPNetFilter,
     },
-    ClashResolver, Config, ResolverKind,
 };
 
 static TTL: Duration = Duration::from_secs(60);
@@ -650,10 +650,10 @@ mod tests {
     use std::sync::Arc;
 
     use crate::app::dns::{
+        ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
         resolver::enhanced::EnhancedResolver,
         runtime::DnsRuntimeProvider,
-        ThreadSafeDNSClient,
     };
 
     #[tokio::test]

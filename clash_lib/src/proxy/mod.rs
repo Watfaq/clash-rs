@@ -7,7 +7,7 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
-use downcast_rs::{impl_downcast, Downcast};
+use downcast_rs::{Downcast, impl_downcast};
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};

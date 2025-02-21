@@ -11,17 +11,17 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use quinn::{
+    EndpointConfig, TokioRuntime,
     congestion::{BbrConfig, NewRenoConfig},
     crypto::rustls::QuicClientConfig,
-    EndpointConfig, TokioRuntime,
 };
 use tracing::debug;
 
 use std::{
     net::{Ipv4Addr, Ipv6Addr},
     sync::{
-        atomic::{AtomicU16, Ordering},
         Arc,
+        atomic::{AtomicU16, Ordering},
     },
     time::Duration,
 };
@@ -37,24 +37,24 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     proxy::{
-        tuic::types::{ServerAddr, TuicEndpoint},
         DialWithConnector,
+        tuic::types::{ServerAddr, TuicEndpoint},
     },
     session::Session,
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
 use quinn::{
-    congestion::CubicConfig, ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
-    TransportConfig as QuinnTransportConfig, VarInt,
+    ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
+    TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
 };
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
-    datagram::UdpPacket, ConnectorType, HandlerCommonOptions, OutboundHandler,
-    OutboundType,
+    ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
+    datagram::UdpPacket,
 };
 
 #[derive(Debug, Clone)]
@@ -367,12 +367,11 @@ mod tests {
     };
     use crate::{
         proxy::utils::{
-            test_utils::{
-                config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
-                Suite,
-            },
             GLOBAL_DIRECT_CONNECTOR,
+            test_utils::{
+                Suite, config_helper::test_config_base_dir,
+                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+            },
         },
         tests::initialize,
     };

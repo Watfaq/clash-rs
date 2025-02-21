@@ -1,8 +1,8 @@
 use crate::{
+    Dispatcher,
     common::auth::ThreadSafeAuthenticator,
     proxy::InboundListener,
     session::{Network, Session},
-    Dispatcher,
 };
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};

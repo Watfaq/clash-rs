@@ -142,7 +142,7 @@ pub(crate) fn support_tls13(frame: &[u8]) -> bool {
     }
     let mut cursor = std::io::Cursor::new(&frame[SESSION_ID_LEN_IDX..]);
     macro_rules! read_ok {
-        ($res:expr) => {
+        ($res:expr_2021) => {
             match $res {
                 Ok(r) => r,
                 Err(_) => {

@@ -3,9 +3,9 @@ mod connector;
 mod proxy;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, InboundListener},
     Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{InboundListener, utils::apply_tcp_options},
 };
 use async_trait::async_trait;
 

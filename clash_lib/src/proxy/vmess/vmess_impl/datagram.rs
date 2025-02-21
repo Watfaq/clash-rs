@@ -1,13 +1,13 @@
 use std::{io, pin::Pin, task::Poll};
 
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, ready};
 use tracing::{debug, error, instrument};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     common::errors::new_io_error,
-    proxy::{datagram::UdpPacket, AnyStream},
+    proxy::{AnyStream, datagram::UdpPacket},
     session::SocksAddr,
 };
 

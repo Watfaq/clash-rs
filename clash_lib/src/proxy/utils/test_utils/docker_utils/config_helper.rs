@@ -3,12 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use tracing::debug;
 
 use crate::{
+    Config,
     app::{
         dns::{self, ClashResolver, SystemResolver},
         profile,
     },
     common::{http::new_http_client, mmdb},
-    Config,
 };
 
 pub fn root_dir() -> PathBuf {

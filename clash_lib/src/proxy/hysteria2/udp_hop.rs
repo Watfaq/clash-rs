@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use quinn::{udp::Transmit, AsyncUdpSocket, Runtime, TokioRuntime, UdpPoller};
+use quinn::{AsyncUdpSocket, Runtime, TokioRuntime, UdpPoller, udp::Transmit};
 
 use crate::proxy::converters::hysteria2::PortGenerator;
 

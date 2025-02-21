@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
+    Error,
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
+        HandlerCommonOptions,
         shadowsocks::{
             Handler, HandlerOptions, OBFSOption, ShadowTlsOption, SimpleOBFSMode,
             SimpleOBFSOption, V2RayOBFSOption,
         },
-        HandlerCommonOptions,
     },
-    Error,
 };
 
 impl TryFrom<OutboundShadowsocks> for Handler {

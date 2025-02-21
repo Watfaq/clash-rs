@@ -9,17 +9,17 @@ use tracing::debug;
 
 use super::ProxyProvider;
 use crate::{
+    Error,
     app::remote_content_manager::{
         healthcheck::HealthCheck,
         providers::{
-            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
-            ThreadSafeProviderVehicle,
+            Provider, ProviderType, ProviderVehicleType, ThreadSafeProviderVehicle,
+            fetcher::Fetcher,
         },
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{direct, reject, socks, trojan, vmess, wg, AnyOutboundHandler},
-    Error,
+    proxy::{AnyOutboundHandler, direct, reject, socks, trojan, vmess, wg},
 };
 
 #[cfg(feature = "shadowsocks")]
@@ -111,60 +111,63 @@ impl ProxySetProvider {
                         ))
                     })?;
                 let proxies = scheme.proxies;
-                if let Some(proxies) = proxies {
-                    let proxies = proxies
-                        .into_iter()
-                        .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
-                        .map(|x| match x {
-                            OutboundProxyProtocol::Direct => {
-                                Ok(Arc::new(direct::Handler::new()) as _)
-                            }
-                            OutboundProxyProtocol::Reject => {
-                                Ok(Arc::new(reject::Handler::new()) as _)
-                            }
-                            #[cfg(feature = "shadowsocks")]
-                            OutboundProxyProtocol::Ss(s) => {
-                                let h: shadowsocks::Handler = s.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            OutboundProxyProtocol::Socks5(s) => {
-                                let h: socks::Handler = s.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            OutboundProxyProtocol::Trojan(tr) => {
-                                let h: trojan::Handler = tr.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            OutboundProxyProtocol::Vmess(vm) => {
-                                let h: vmess::Handler = vm.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
-                            #[cfg(feature = "ssh")]
-                            OutboundProxyProtocol::Ssh(s) => {
-                                let h: ssh::Handler = s.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            OutboundProxyProtocol::Wireguard(wg) => {
-                                let h: wg::Handler = wg.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            #[cfg(feature = "onion")]
-                            OutboundProxyProtocol::Tor(tor) => {
-                                let h: tor::Handler = tor.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                            #[cfg(feature = "tuic")]
-                            OutboundProxyProtocol::Tuic(tuic) => {
-                                let h: tuic::Handler = tuic.try_into()?;
-                                Ok(Arc::new(h) as _)
-                            }
-                        })
-                        .collect::<Result<Vec<_>, crate::Error>>();
-                    Ok(proxies?)
-                } else {
-                    Err(Error::InvalidConfig(format!("{}: proxies is empty", n))
-                        .into())
+                match proxies {
+                    Some(proxies) => {
+                        let proxies = proxies
+                            .into_iter()
+                            .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
+                            .map(|x| match x {
+                                OutboundProxyProtocol::Direct => {
+                                    Ok(Arc::new(direct::Handler::new()) as _)
+                                }
+                                OutboundProxyProtocol::Reject => {
+                                    Ok(Arc::new(reject::Handler::new()) as _)
+                                }
+                                #[cfg(feature = "shadowsocks")]
+                                OutboundProxyProtocol::Ss(s) => {
+                                    let h: shadowsocks::Handler = s.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Socks5(s) => {
+                                    let h: socks::Handler = s.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Trojan(tr) => {
+                                    let h: trojan::Handler = tr.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Vmess(vm) => {
+                                    let h: vmess::Handler = vm.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
+                                #[cfg(feature = "ssh")]
+                                OutboundProxyProtocol::Ssh(s) => {
+                                    let h: ssh::Handler = s.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Wireguard(wg) => {
+                                    let h: wg::Handler = wg.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                #[cfg(feature = "onion")]
+                                OutboundProxyProtocol::Tor(tor) => {
+                                    let h: tor::Handler = tor.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                #[cfg(feature = "tuic")]
+                                OutboundProxyProtocol::Tuic(tuic) => {
+                                    let h: tuic::Handler = tuic.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                            })
+                            .collect::<Result<Vec<_>, crate::Error>>();
+                        Ok(proxies?)
+                    }
+                    _ => {
+                        Err(Error::InvalidConfig(format!("{}: proxies is empty", n))
+                            .into())
+                    }
                 }
             },
         );
@@ -257,14 +260,14 @@ mod tests {
     use crate::app::{
         dns::MockClashResolver,
         remote_content_manager::{
+            ProxyManager,
             healthcheck::HealthCheck,
             providers::{
-                proxy_provider::{
-                    proxy_set_provider::ProxySetProvider, ProxyProvider,
-                },
                 MockProviderVehicle, Provider, ProviderVehicleType,
+                proxy_provider::{
+                    ProxyProvider, proxy_set_provider::ProxySetProvider,
+                },
             },
-            ProxyManager,
         },
     };
 

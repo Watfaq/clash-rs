@@ -5,8 +5,8 @@ use quinn::VarInt;
 use crate::{
     config::internal::proxy::OutboundTuic,
     proxy::{
-        tuic::{types::CongestionControl, Handler, HandlerOptions},
         HandlerCommonOptions,
+        tuic::{Handler, HandlerOptions, types::CongestionControl},
     },
 };
 

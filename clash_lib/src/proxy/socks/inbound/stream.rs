@@ -1,15 +1,15 @@
 use crate::{
+    Dispatcher,
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
         socks::{
+            SOCKS5_VERSION, Socks5UDPCodec,
             inbound::datagram::InboundUdp,
             socks5::{auth_methods, response_code, socks_command},
-            Socks5UDPCodec, SOCKS5_VERSION,
         },
         utils::new_udp_socket,
     },
     session::{Network, Session, SocksAddr, Type},
-    Dispatcher,
 };
 use bytes::{BufMut, BytesMut};
 

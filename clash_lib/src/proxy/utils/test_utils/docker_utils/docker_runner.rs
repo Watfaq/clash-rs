@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use bollard::{
+    Docker,
     container::{Config, LogsOptions, RemoveContainerOptions},
     secret::{HostConfig, Mount, PortBinding},
-    Docker,
 };
 
 use bollard::image::CreateImageOptions;

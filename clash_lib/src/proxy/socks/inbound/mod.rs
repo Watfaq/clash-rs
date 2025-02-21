@@ -2,10 +2,10 @@ mod datagram;
 mod stream;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, InboundListener},
-    session::{Network, Session, Type},
     Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{InboundListener, utils::apply_tcp_options},
+    session::{Network, Session, Type},
 };
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};

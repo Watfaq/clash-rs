@@ -7,7 +7,7 @@ use tokio::{
 };
 
 #[allow(unused_imports)]
-use super::{platform::must_bind_socket_on_interface, Interface};
+use super::{Interface, platform::must_bind_socket_on_interface};
 #[allow(unused_imports)]
 use tracing::{debug, error};
 

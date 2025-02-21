@@ -19,6 +19,8 @@ use crate::{
 };
 
 use super::{
+    CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
+    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security, VERSION,
     cipher::{AeadCipher, VmessSecurity},
     header,
     kdf::{
@@ -28,8 +30,6 @@ use super::{
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
     user::ID,
-    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM,
-    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
 
 pub struct VmessStream<S> {
@@ -158,7 +158,7 @@ where
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "unsupported security",
-                ))
+                ));
             }
         };
 
@@ -198,7 +198,7 @@ where
     async fn send_handshake_request(&mut self) -> std::io::Result<()> {
         use hmac::{Hmac, Mac};
         type HmacMd5 = Hmac<Md5>;
-        let Self {
+        let &mut Self {
             ref mut stream,
             ref req_body_key,
             ref req_body_iv,
@@ -434,13 +434,17 @@ where
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, size))?;
 
-                    if let Some(ref mut cipher) = this.aead_read_cipher {
-                        cipher.decrypt_inplace(&mut this.read_buf)?;
-                        let data_len = size - cipher.security.overhead_len();
-                        this.read_buf.truncate(data_len);
-                        this.read_state = ReadState::StreamFlushingData(data_len);
-                    } else {
-                        this.read_state = ReadState::StreamFlushingData(size);
+                    match this.aead_read_cipher {
+                        Some(ref mut cipher) => {
+                            cipher.decrypt_inplace(&mut this.read_buf)?;
+                            let data_len = size - cipher.security.overhead_len();
+                            this.read_buf.truncate(data_len);
+                            this.read_state =
+                                ReadState::StreamFlushingData(data_len);
+                        }
+                        _ => {
+                            this.read_state = ReadState::StreamFlushingData(size);
+                        }
                     }
                 }
 
@@ -549,7 +553,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        let Self { ref mut stream, .. } = self.get_mut();
+        let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_flush(cx)
     }
 
@@ -557,7 +561,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        let Self { ref mut stream, .. } = self.get_mut();
+        let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_shutdown(cx)
     }
 }

@@ -6,7 +6,7 @@ use tracing::warn;
 use crate::{
     common::errors::new_io_error,
     config::internal::config::TunConfig,
-    proxy::utils::{get_outbound_interface, OutboundInterface},
+    proxy::utils::{OutboundInterface, get_outbound_interface},
 };
 
 /// let's assume that the `route` command is available on macOS

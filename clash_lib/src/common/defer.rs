@@ -10,7 +10,7 @@ impl<F: FnOnce()> Drop for ScopeCall<F> {
 
 #[macro_export]
 macro_rules! expr {
-    ($e:expr) => {
+    ($e:expr_2021) => {
         $e
     };
 } // tt hack

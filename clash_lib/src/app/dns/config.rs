@@ -13,9 +13,9 @@ use url::Url;
 use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
 use crate::{
+    Error,
     common::trie,
     config::def::{DNSListen, DNSMode},
-    Error,
 };
 
 use super::dns_client::DNSNetMode;
@@ -331,7 +331,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                     return Err(Error::InvalidConfig(format!(
                                         "invalid dns listen address: {}",
                                         k
-                                    )))
+                                    )));
                                 }
                             }
                         }

@@ -13,10 +13,10 @@ use crate::{
     common::errors::new_io_error,
     impl_default_connector,
     proxy::{
-        transport::{self, TLSOptions},
-        utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        transport::{self, TLSOptions},
+        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
     },
     session::Session,
 };
@@ -73,9 +73,7 @@ impl Handler {
         let mut s = if self.opts.tls {
             trace!(
                 "TLS config - enabled: {}, skip_cert_verify: {}, sni: {}",
-                self.opts.tls,
-                self.opts.skip_cert_verify,
-                self.opts.sni
+                self.opts.tls, self.opts.skip_cert_verify, self.opts.sni
             );
             let tls_opt = TLSOptions {
                 skip_cert_verify: self.opts.skip_cert_verify,
@@ -284,12 +282,13 @@ mod tests {
     use crate::proxy::{
         socks::{Handler, HandlerOptions},
         utils::{
+            GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
+                Suite,
                 consts::{IMAGE_SOCKS5, LOCAL_ADDR},
                 docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-                run_test_suites_and_cleanup, Suite,
+                run_test_suites_and_cleanup,
             },
-            GLOBAL_DIRECT_CONNECTOR,
         },
     };
 

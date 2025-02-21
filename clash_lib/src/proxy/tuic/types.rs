@@ -1,6 +1,6 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
-    proxy::utils::{get_outbound_interface, new_udp_socket, Interface},
+    proxy::utils::{Interface, get_outbound_interface, new_udp_socket},
     session::SocksAddr as ClashSocksAddr,
 };
 
@@ -12,7 +12,7 @@ use register_count::Counter;
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::{atomic::AtomicU32, Arc},
+    sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
 use tokio::sync::RwLock as AsyncRwLock;

@@ -10,7 +10,7 @@ pub use datagram::TunDatagram;
 mod tests {
     use std::thread;
 
-    use crate::{shutdown, start_scaffold, Config, Options};
+    use crate::{Config, Options, shutdown, start_scaffold};
 
     fn wait_port_open(port: u16) {
         let mut count = 0;

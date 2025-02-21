@@ -8,8 +8,8 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::{
-            proxy_provider::ProxyProvider, Provider, ProviderType,
-            ProviderVehicleType,
+            Provider, ProviderType, ProviderVehicleType,
+            proxy_provider::ProxyProvider,
         },
     },
     session::Session,
