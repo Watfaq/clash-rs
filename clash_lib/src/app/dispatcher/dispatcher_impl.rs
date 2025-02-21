@@ -463,10 +463,12 @@ impl Dispatcher {
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
 
         tokio::spawn(async move {
-            let _ = close_receiver.await;
-            trace!("UDP close signal for {} received", s);
-            t1.abort();
-            t2.abort();
+            if let Ok(_) = close_receiver.await {
+                trace!("UDP close signal for {} received", s);
+                t1.abort();
+                t2.abort();
+            }
+
         });
 
         return close_sender;

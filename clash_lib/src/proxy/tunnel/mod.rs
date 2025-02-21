@@ -89,7 +89,7 @@ impl InboundHandlerTrait for TunnelInbound {
         };
         let inbound = UdpSession::new(socket, self.target.clone());
 
-        self.dispatcher.dispatch_datagram(sess, Box::new(inbound)).await;
+        _ = self.dispatcher.dispatch_datagram(sess, Box::new(inbound)).await;
         Ok(())
     }
 }
@@ -107,7 +107,7 @@ impl UdpSession {
         Self {
             socket,
             dst_addr,
-            read_buf: Vec::with_capacity(1600),
+            read_buf: Vec::with_capacity(64000),
             send_buf: None
         }
     }
