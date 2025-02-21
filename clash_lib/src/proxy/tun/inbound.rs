@@ -6,6 +6,7 @@ use std::{
 
 use futures::{SinkExt, StreamExt};
 
+use hickory_proto::rr::RecordType;
 use netstack_smoltcp::StackBuilder;
 use tracing::{debug, error, info, trace, warn};
 use tun::AbstractDevice;
@@ -13,7 +14,8 @@ use url::Url;
 
 use crate::{
     app::{
-        dispatcher::Dispatcher, dns::ThreadSafeDNSResolver,
+        dispatcher::Dispatcher,
+        dns::{exchange_with_resolver, ThreadSafeDNSResolver},
         net::get_outbound_interface,
     },
     common::errors::{map_io_error, new_io_error},
@@ -142,54 +144,70 @@ async fn handle_inbound_datagram(
 
                 match hickory_proto::op::Message::from_vec(&pkt.data) {
                     Ok(msg) => {
-                        trace!("hijack dns request: {:?}", msg);
-                        let mut resp = match resolver_dns.exchange(&msg).await {
-                            Ok(resp) => resp,
-                            Err(e) => {
-                                warn!("failed to exchange dns message: {}", e);
-                                continue;
-                            }
-                        };
-                        // hickory mutates id sometimes, https://github.com/hickory-dns/hickory-dns/pull/2590
-                        resp.set_id(msg.id());
-
-                        if let Some(edns) = msg.extensions() {
-                            if edns
-                                .option(
-                                    hickory_proto::rr::rdata::opt::EdnsCode::Padding,
-                                )
-                                .is_none()
-                            {
-                                if let Some(edns) = resp.extensions_mut() {
-                                    edns.options_mut().remove(
-                                        hickory_proto::rr::rdata::opt::EdnsCode::Padding,
-                                    );
+                        let send_response =
+                            async |msg: hickory_proto::op::Message,
+                                   pkt: &UdpPacket| {
+                                match msg.to_vec() {
+                                    Ok(data) => {
+                                        if let Err(e) = ls_dns
+                                            .send((
+                                                data,
+                                                pkt.dst_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                                pkt.src_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                            ))
+                                            .await
+                                        {
+                                            warn!(
+                                                "failed to send udp packet to \
+                                                 netstack: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "failed to serialize dns response: {}",
+                                            e
+                                        );
+                                    }
                                 }
-                            }
+                            };
+
+                        trace!("hijack dns request: {:?}", msg);
+                        if msg.query().map(|q| q.query_type())
+                            == Some(RecordType::AAAA)
+                        {
+                            trace!("dns hijack does not support AAAA query");
+                            let mut resp = hickory_proto::op::Message::new();
+                            resp.set_id(msg.id());
+                            resp.set_recursion_available(false);
+                            resp.set_authoritative(true);
+                            resp.set_response_code(
+                                hickory_proto::op::ResponseCode::NXDomain,
+                            );
+                            send_response(resp, &pkt).await;
+                            continue;
                         }
+
+                        let mut resp =
+                            match exchange_with_resolver(&resolver_dns, &msg, true)
+                                .await
+                            {
+                                Ok(resp) => resp,
+                                Err(e) => {
+                                    warn!("failed to exchange dns message: {}", e);
+                                    continue;
+                                }
+                            };
+
+                        resp.set_id(msg.id());
                         trace!("hijack dns response: {:?}", resp);
 
-                        match resp.to_vec() {
-                            Ok(data) => {
-                                if let Err(e) = ls_dns
-                                    .send((
-                                        data,
-                                        pkt.dst_addr.must_into_socket_addr(),
-                                        pkt.src_addr.must_into_socket_addr(),
-                                    ))
-                                    .await
-                                {
-                                    warn!(
-                                        "failed to send udp packet to netstack: {}",
-                                        e
-                                    );
-                                }
-                                continue;
-                            }
-                            Err(e) => {
-                                warn!("failed to serialize dns response: {}", e);
-                            }
-                        }
+                        send_response(resp, &pkt).await;
                     }
                     Err(e) => {
                         warn!(

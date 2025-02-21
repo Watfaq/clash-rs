@@ -7,8 +7,6 @@ tun:
   route-all: true
   device-id: dev://utun1989
   dns-hijack: true
-  routes:
-    - 10.0.0.5/32
 
 dns:
   enable: true

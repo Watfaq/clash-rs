@@ -117,12 +117,40 @@ pub fn setup_policy_routing(
         )));
     }
 
+    if tun_cfg.dns_hijack {
+        // route all dport 53 to tun interface with ip rule
+        let cmd = std::process::Command::new("ip")
+            .arg("rule")
+            .arg("add")
+            .arg("dport")
+            .arg("53")
+            .arg("table")
+            .arg(
+                tun_cfg
+                    .route_table
+                    .expect("route_table not set")
+                    .to_string(),
+            )
+            .output()?;
+        warn!(
+            "executing: ip rule add dport 53 table {}",
+            tun_cfg.route_table.unwrap()
+        );
+        if !cmd.status.success() {
+            return Err(new_io_error(format!(
+                "add rule failed: {}",
+                String::from_utf8_lossy(&cmd.stderr)
+            )));
+        }
+    }
+
     Ok(())
 }
 
 /// three rules to clean up:
-/// # ip rule add not fwmark $SO_MARK table $TABLE
-/// # ip rule add table main suppress_prefixlength 0
+/// # ip rule del not fwmark $SO_MARK table $TABLE
+/// # ip rule del table main suppress_prefixlength 0
+/// # ip rule del dport 53 table $TABLE
 pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     if !(tun_cfg.enable && tun_cfg.route_all) {
         return Ok(());
@@ -170,5 +198,32 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
             String::from_utf8_lossy(&cmd.stderr)
         )));
     }
+
+    if tun_cfg.dns_hijack {
+        let cmd = std::process::Command::new("ip")
+            .arg("rule")
+            .arg("del")
+            .arg("dport")
+            .arg("53")
+            .arg("table")
+            .arg(
+                tun_cfg
+                    .route_table
+                    .expect("route_table not set")
+                    .to_string(),
+            )
+            .output()?;
+        warn!(
+            "executing: ip rule del dport 53 table {}",
+            tun_cfg.route_table.unwrap()
+        );
+        if !cmd.status.success() {
+            return Err(new_io_error(format!(
+                "delete rule failed: {}",
+                String::from_utf8_lossy(&cmd.stderr)
+            )));
+        }
+    }
+
     Ok(())
 }
