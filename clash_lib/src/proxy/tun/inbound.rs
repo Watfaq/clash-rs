@@ -27,9 +27,6 @@ use crate::{
 
 use crate::{defer, proxy::tun::routes};
 
-const DEFAULT_SO_MARK: u32 = 3389;
-const DEFAULT_ROUTE_TABLE: u32 = 2468;
-
 async fn handle_inbound_stream(
     stream: netstack_smoltcp::TcpStream,
     local_addr: SocketAddr,
@@ -66,6 +63,8 @@ async fn handle_inbound_datagram(
     dns_hijack: bool,
 ) {
     // tun i/o
+    // lr: app packets went into tun will be accessed from lr
+    // ls: packet writen into ls will go back to app from tun
     let (mut lr, mut ls) = socket.split();
     // ideally we clone the WriteHalf ls, but it's not Clone and it's a Sink so the
     // send method is mut
@@ -82,6 +81,8 @@ async fn handle_inbound_datagram(
     let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
+    // l_tx: dispatcher write packet responsed from remote proxy
+    // l_rx: in fut1 items are forwared to ls
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
     // forward packets from tun to dispatcher
@@ -291,8 +292,8 @@ pub fn get_runner(
     info!("tun started at {}", tun_name);
 
     let mut cfg = cfg;
-    cfg.route_table = cfg.route_table.or(Some(DEFAULT_ROUTE_TABLE));
-    cfg.so_mark = cfg.so_mark.or(Some(DEFAULT_SO_MARK));
+    cfg.route_table = cfg.route_table;
+    cfg.so_mark = cfg.so_mark;
 
     maybe_add_routes(&cfg, &tun_name)?;
 
@@ -324,7 +325,7 @@ pub fn get_runner(
             }
         }
 
-        let so_mark = cfg.so_mark.unwrap();
+        let so_mark = cfg.so_mark;
 
         let framed = tun.into_framed();
 

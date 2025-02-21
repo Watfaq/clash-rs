@@ -56,17 +56,11 @@ pub fn setup_policy_routing(
         .arg("dev")
         .arg(via.name.as_str())
         .arg("table")
-        .arg(
-            tun_cfg
-                .route_table
-                .expect("route_table not set")
-                .to_string(),
-        )
+        .arg(tun_cfg.route_table.to_string())
         .output()?;
     warn!(
         "executing: ip route add default dev {} table {}",
-        via.name,
-        tun_cfg.route_table.unwrap()
+        via.name, tun_cfg.route_table
     );
     if !cmd.status.success() {
         return Err(new_io_error(format!(
@@ -80,19 +74,13 @@ pub fn setup_policy_routing(
         .arg("add")
         .arg("not")
         .arg("fwmark")
-        .arg(tun_cfg.so_mark.expect("so_mark not set").to_string())
+        .arg(tun_cfg.so_mark.to_string())
         .arg("table")
-        .arg(
-            tun_cfg
-                .route_table
-                .expect("route_table not set")
-                .to_string(),
-        )
+        .arg(tun_cfg.route_table.to_string())
         .output()?;
     warn!(
         "executing: ip rule add not fwmark {} table {}",
-        tun_cfg.so_mark.unwrap(),
-        tun_cfg.route_table.unwrap()
+        tun_cfg.so_mark, tun_cfg.route_table
     );
     if !cmd.status.success() {
         return Err(new_io_error(format!(
@@ -125,16 +113,11 @@ pub fn setup_policy_routing(
             .arg("dport")
             .arg("53")
             .arg("table")
-            .arg(
-                tun_cfg
-                    .route_table
-                    .expect("route_table not set")
-                    .to_string(),
-            )
+            .arg(tun_cfg.route_table.to_string())
             .output()?;
         warn!(
             "executing: ip rule add dport 53 table {}",
-            tun_cfg.route_table.unwrap()
+            tun_cfg.route_table
         );
         if !cmd.status.success() {
             return Err(new_io_error(format!(
@@ -161,19 +144,13 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
         .arg("del")
         .arg("not")
         .arg("fwmark")
-        .arg(tun_cfg.so_mark.expect("so_mark not set").to_string())
+        .arg(tun_cfg.so_mark.to_string())
         .arg("table")
-        .arg(
-            tun_cfg
-                .route_table
-                .expect("route_table not set")
-                .to_string(),
-        )
+        .arg(tun_cfg.route_table.to_string())
         .output()?;
     warn!(
         "executing: ip rule del not fwmark {} table {}",
-        tun_cfg.so_mark.unwrap(),
-        tun_cfg.route_table.unwrap()
+        tun_cfg.so_mark, tun_cfg.route_table
     );
     if !cmd.status.success() {
         return Err(new_io_error(format!(
@@ -206,16 +183,11 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
             .arg("dport")
             .arg("53")
             .arg("table")
-            .arg(
-                tun_cfg
-                    .route_table
-                    .expect("route_table not set")
-                    .to_string(),
-            )
+            .arg(tun_cfg.route_table.to_string())
             .output()?;
         warn!(
             "executing: ip rule del dport 53 table {}",
-            tun_cfg.route_table.unwrap()
+            tun_cfg.route_table
         );
         if !cmd.status.success() {
             return Err(new_io_error(format!(

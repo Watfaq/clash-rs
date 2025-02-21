@@ -335,7 +335,7 @@ async fn create_components(
 ) -> Result<RuntimeComponents, Error> {
     if config.tun.enable {
         debug!("tun enabled, initializing default outbound interface");
-        init_net_config().await;
+        init_net_config(config.tun.so_mark).await;
     }
     let system_resolver = Arc::new(
         SystemResolver::new(config.dns.ipv6)

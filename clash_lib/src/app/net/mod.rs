@@ -12,13 +12,22 @@ use tracing::trace;
 pub static DEFAULT_OUTBOUND_INTERFACE: LazyLock<
     Arc<tokio::sync::RwLock<Option<OutboundInterface>>>,
 > = LazyLock::new(|| Default::default());
+pub static TUN_SOMARK: LazyLock<tokio::sync::RwLock<Option<u32>>> =
+    LazyLock::new(|| Default::default());
 
 /// Initialize network configuration
 /// globally manage default outbound interface
 /// This function should be called as early as possible
-/// so that other config initialization can use the default outbound interface
-pub async fn init_net_config() {
+/// so that other config initializa'tion can use the default outbound interface
+pub async fn init_net_config(tun_somark: u32) {
     *DEFAULT_OUTBOUND_INTERFACE.write().await = get_outbound_interface();
+    *TUN_SOMARK.write().await = Some(tun_somark);
+
+    trace!(
+        "default outbound interface: {:?}, tun somark: {:?}",
+        *DEFAULT_OUTBOUND_INTERFACE.read().await,
+        *TUN_SOMARK.read().await
+    );
 }
 
 #[derive(Debug, Clone)]

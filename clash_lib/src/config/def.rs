@@ -4,8 +4,18 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
+const DEFAULT_SO_MARK: u32 = 3389;
+const DEFAULT_ROUTE_TABLE: u32 = 2468;
+
 fn default_tun_address() -> String {
     "198.18.0.1/24".to_string()
+}
+fn default_tun_so_mark() -> u32 {
+    DEFAULT_SO_MARK
+}
+
+fn default_route_table() -> u32 {
+    DEFAULT_ROUTE_TABLE
 }
 
 #[derive(Serialize, Deserialize)]
@@ -35,9 +45,11 @@ pub struct TunConfig {
     pub route_all: bool,
     pub mtu: Option<u16>,
     /// fwmark on Linux only
-    pub so_mark: Option<u32>,
+    #[serde(default = "default_tun_so_mark")]
+    pub so_mark: u32,
     /// policy routing table on Linux only
-    pub route_table: Option<u32>,
+    #[serde(default = "default_route_table")]
+    pub route_table: u32,
     /// Will hijack UDP:53 DNS queries to the Clash DNS server if set to true
     /// setting to a list has the same effect as setting to true
     #[serde(default)]

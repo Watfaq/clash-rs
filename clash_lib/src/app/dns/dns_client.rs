@@ -20,7 +20,7 @@ use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
 use crate::{
-    app::net::Interface,
+    app::net::{Interface, TUN_SOMARK},
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
     proxy::utils::new_tcp_stream,
@@ -325,7 +325,7 @@ async fn dns_stream_builder(
         DnsConfig::Udp(addr, iface) => {
             let stream = UdpClientStream::builder(
                 *addr,
-                DnsRuntimeProvider::new(iface.clone()),
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
             )
             .with_timeout(Some(Duration::from_secs(5)))
             .build();
@@ -340,7 +340,7 @@ async fn dns_stream_builder(
                 *addr,
                 None,
                 Some(Duration::from_secs(5)),
-                DnsRuntimeProvider::new(iface.clone()),
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
             );
 
             client::Client::new(stream, sender, None)
@@ -358,7 +358,7 @@ async fn dns_stream_builder(
                 *addr,
                 iface.clone(),
                 #[cfg(target_os = "linux")]
-                None,
+                *TUN_SOMARK.read().await,
             )
             .map_ok(AsyncIoTokioAsStd);
 
@@ -399,7 +399,7 @@ async fn dns_stream_builder(
 
             let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),
-                DnsRuntimeProvider::new(iface.clone()),
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
             )
             .build(*addr, host.to_owned(), "/dns-query".to_string());
 
