@@ -7,22 +7,21 @@ use std::{
 
 use bytes::BytesMut;
 use futures::{
-    ready,
+    Sink, SinkExt, Stream, StreamExt, ready,
     stream::{SplitSink, SplitStream},
-    Sink, SinkExt, Stream, StreamExt,
 };
 use shadowsocks::{
-    relay::udprelay::{
-        options::UdpSocketControlData, DatagramReceive, DatagramSend,
-    },
     ProxySocket,
+    relay::udprelay::{
+        DatagramReceive, DatagramSend, options::UdpSocketControlData,
+    },
 };
 use tokio::io::ReadBuf;
 use tracing::{debug, error, instrument};
 
 use crate::{
     common::errors::new_io_error,
-    proxy::{datagram::UdpPacket, AnyOutboundDatagram},
+    proxy::{AnyOutboundDatagram, datagram::UdpPacket},
     session::SocksAddr,
 };
 

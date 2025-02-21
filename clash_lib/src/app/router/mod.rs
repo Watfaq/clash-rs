@@ -1,9 +1,9 @@
 use crate::{
+    Error,
     app::router::rules::{
         domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
         ipcidr::IpCidr, ruleset::RuleSet,
     },
-    Error,
 };
 
 use crate::{

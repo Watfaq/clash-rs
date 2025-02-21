@@ -20,10 +20,10 @@ use smoltcp::{
     wire::IpCidr,
 };
 use tokio::sync::{
-    mpsc::{Receiver, Sender},
     Mutex,
+    mpsc::{Receiver, Sender},
 };
-use tracing::{debug, error, trace, trace_span, warn, Instrument};
+use tracing::{Instrument, debug, error, trace, trace_span, warn};
 
 use crate::{
     app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr,
@@ -34,7 +34,7 @@ use super::{
     ports::PortPool,
     stack::{
         tcp::SocketPair,
-        udp::{UdpPair, MAX_PACKET},
+        udp::{MAX_PACKET, UdpPair},
     },
 };
 
@@ -666,13 +666,15 @@ impl VirtualIpDevice {
             loop {
                 let span = trace_span!("receive_packet");
 
-                match packet_receiver.recv().instrument(span).await
-                { Some((proto, data)) => {
-                    inner_packet_sender.send((proto, data)).await.unwrap();
-                    let _ = packet_notifier.try_send(());
-                } _ => {
-                    break;
-                }}
+                match packet_receiver.recv().instrument(span).await {
+                    Some((proto, data)) => {
+                        inner_packet_sender.send((proto, data)).await.unwrap();
+                        let _ = packet_notifier.try_send(());
+                    }
+                    _ => {
+                        break;
+                    }
+                }
             }
         });
 

@@ -1,4 +1,4 @@
-use crate::{common::utils::download, Error};
+use crate::{Error, common::utils::download};
 use prost::Message;
 use std::path::Path;
 use tracing::{debug, info};

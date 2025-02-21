@@ -1,13 +1,13 @@
 use tracing::warn;
 
 use crate::{
+    Error,
     config::internal::proxy::OutboundTrojan,
     proxy::{
+        HandlerCommonOptions,
         options::{GrpcOption, WsOption},
         trojan::{Handler, HandlerOptions, Transport},
-        HandlerCommonOptions,
     },
-    Error,
 };
 
 impl TryFrom<OutboundTrojan> for Handler {

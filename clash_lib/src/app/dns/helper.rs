@@ -1,9 +1,9 @@
 use crate::{
     dns::{
-        dns_client::{DNSNetMode, DnsClient, Opts},
         ClashResolver, ThreadSafeDNSClient,
+        dns_client::{DNSNetMode, DnsClient, Opts},
     },
-    proxy::utils::{get_outbound_interface, Interface},
+    proxy::utils::{Interface, get_outbound_interface},
 };
 use std::sync::Arc;
 use tracing::{debug, warn};

@@ -40,11 +40,14 @@ impl ThreadSafeCacheFile {
                         }
                     };
 
-                    match tokio::fs::write(&path, s).await { Err(e) => {
-                        error!("failed to write cache file: {}", e);
-                    } _ => {
-                        trace!("cache file flushed to {}", path);
-                    }}
+                    match tokio::fs::write(&path, s).await {
+                        Err(e) => {
+                            error!("failed to write cache file: {}", e);
+                        }
+                        _ => {
+                            trace!("cache file flushed to {}", path);
+                        }
+                    }
                 }
             });
         }

@@ -9,8 +9,8 @@ use rand::Rng;
 use crate::{
     config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
     proxy::{
-        hysteria2::{self, Handler, HystOption, SalamanderObfs},
         AnyOutboundHandler,
+        hysteria2::{self, Handler, HystOption, SalamanderObfs},
     },
     session::SocksAddr,
 };
@@ -98,7 +98,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
                 return Err(crate::Error::InvalidConfig(
                     "hysteria2 found obfs enable, but obfs password is none"
                         .to_owned(),
-                ))
+                ));
             }
             _ => None,
         };

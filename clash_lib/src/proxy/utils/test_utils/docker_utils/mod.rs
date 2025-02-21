@@ -8,12 +8,12 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, ChainedStream},
         remote_content_manager::ProxyManager,
     },
-    proxy::{datagram::UdpPacket, OutboundHandler},
+    proxy::{OutboundHandler, datagram::UdpPacket},
     session::{Session, SocksAddr},
 };
-use futures::{future::select_all, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, future::select_all};
 use tokio::{
-    io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split},
     net::{TcpListener, UdpSocket},
 };
 use tracing::info;

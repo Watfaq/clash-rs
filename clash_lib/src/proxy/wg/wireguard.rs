@@ -7,32 +7,32 @@ use std::{
 
 use async_recursion::async_recursion;
 use boringtun::{
-    noise::{errors::WireGuardError, Tunn, TunnResult},
+    noise::{Tunn, TunnResult, errors::WireGuardError},
     x25519::{PublicKey, StaticSecret},
 };
 
 use bytes::Bytes;
 use futures::{
-    stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
 use ipnet::IpNet;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
 use tokio::sync::{
-    mpsc::{Receiver, Sender},
     Mutex,
+    mpsc::{Receiver, Sender},
 };
-use tracing::{enabled, error, trace, trace_span, warn, Instrument};
+use tracing::{Instrument, enabled, error, trace, trace_span, warn};
 
 use crate::{
+    Error,
     app::dns::ThreadSafeDNSResolver,
     proxy::{
-        datagram::UdpPacket,
-        utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyOutboundDatagram,
+        datagram::UdpPacket,
+        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
     session::{Session, SocksAddr},
-    Error,
 };
 
 use super::events::PortProtocol;

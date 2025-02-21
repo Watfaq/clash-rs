@@ -10,7 +10,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    filter::filter_fn, fmt::time::LocalTime, prelude::*, EnvFilter, Layer,
+    EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
 };
 
 impl From<LogLevel> for LevelFilter {

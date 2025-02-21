@@ -6,8 +6,8 @@ mod v2ray;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 use crate::{
     app::{
@@ -25,9 +25,9 @@ use crate::{
 use async_trait::async_trait;
 use datagram::ShadowsocksUdpIo;
 use shadowsocks::{
-    config::ServerType, context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
-    ServerConfig,
+    ProxyClientStream, ProxySocket, ServerConfig, config::ServerType,
+    context::Context, crypto::CipherKind,
+    relay::udprelay::proxy_socket::UdpSocketType,
 };
 use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
 use tracing::debug;
@@ -171,7 +171,7 @@ impl Handler {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         "unsupported cipher",
-                    ))
+                    ));
                 }
             },
         )
@@ -321,8 +321,9 @@ mod tests {
     };
     use crate::{
         proxy::utils::test_utils::{
+            Suite,
             docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-            run_test_suites_and_cleanup, Suite,
+            run_test_suites_and_cleanup,
         },
         tests::initialize,
     };

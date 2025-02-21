@@ -10,7 +10,7 @@ use futures::{SinkExt, StreamExt};
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
 use quinn::{
-    crypto::rustls::QuicClientConfig, ClientConfig, Connection, TokioRuntime,
+    ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
 };
 use quinn_proto::TransportConfig;
 use std::{
@@ -21,7 +21,7 @@ use std::{
     path::PathBuf,
     pin::Pin,
     str::FromStr,
-    sync::{atomic::AtomicU32, Arc, RwLock},
+    sync::{Arc, RwLock, atomic::AtomicU32},
     task::{Context, Poll},
 };
 
@@ -45,9 +45,9 @@ use crate::{
 use tracing::{debug, trace, warn};
 
 use super::{
+    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
     converters::hysteria2::PortGenerator, datagram::UdpPacket,
-    utils::new_udp_socket, ConnectorType, DialWithConnector, OutboundHandler,
-    OutboundType,
+    utils::new_udp_socket,
 };
 
 use self::{
@@ -529,20 +529,23 @@ impl HysteriaConnection {
         let pkt = codec::HysUdpPacket::decode(&mut buf).unwrap();
         let session_id = pkt.session_id;
         let mut udp_sessions = self.udp_sessions.lock().await;
-        match udp_sessions.get_mut(&session_id) { Some(session) => {
-            if let Some(pkt) = session.feed(pkt) {
-                let _ = session
-                    .incoming
-                    .send(UdpPacket {
-                        data: pkt.data,
-                        src_addr: pkt.addr,
-                        dst_addr: session.local_addr.clone(),
-                    })
-                    .await;
+        match udp_sessions.get_mut(&session_id) {
+            Some(session) => {
+                if let Some(pkt) = session.feed(pkt) {
+                    let _ = session
+                        .incoming
+                        .send(UdpPacket {
+                            data: pkt.data,
+                            src_addr: pkt.addr,
+                            dst_addr: session.local_addr.clone(),
+                        })
+                        .await;
+                }
             }
-        } _ => {
-            tracing::warn!("hysteria2 udp session not found: {}", session_id);
-        }}
+            _ => {
+                tracing::warn!("hysteria2 udp session not found: {}", session_id);
+            }
+        }
     }
 }
 
@@ -606,12 +609,11 @@ mod tests {
     };
     use crate::{
         proxy::utils::{
-            test_utils::{
-                config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
-                Suite,
-            },
             GLOBAL_DIRECT_CONNECTOR,
+            test_utils::{
+                Suite, config_helper::test_config_base_dir,
+                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+            },
         },
         tests::initialize,
     };

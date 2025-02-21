@@ -10,7 +10,7 @@ use tokio_util::udp::UdpFramed;
 use tracing::{error, trace};
 
 use crate::{
-    proxy::{datagram::UdpPacket, socks::Socks5UDPCodec, AnyStream},
+    proxy::{AnyStream, datagram::UdpPacket, socks::Socks5UDPCodec},
     session::SocksAddr,
 };
 
@@ -65,8 +65,7 @@ impl Sink<UdpPacket> for Socks5Datagram {
         let remote = self.remote;
         trace!(
             "sending UDP packet to {}, item dst: {}",
-            remote,
-            item.dst_addr
+            remote, item.dst_addr
         );
         let pin = self.get_mut();
         pin.inner

@@ -1,7 +1,7 @@
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use axum::{response::IntoResponse, Json};
+use axum::{Json, response::IntoResponse};
 use serde_json::Map;
 
 pub async fn handle() -> impl IntoResponse {

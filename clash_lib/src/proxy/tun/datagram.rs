@@ -1,6 +1,6 @@
 use std::task::Poll;
 
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, ready};
 
 use crate::{common::errors::new_io_error, proxy::datagram::UdpPacket};
 

@@ -12,7 +12,7 @@ use crate::{
     },
     config::{
         def,
-        internal::{proxy::OutboundProxy, InternalConfig},
+        internal::{InternalConfig, proxy::OutboundProxy},
     },
 };
 use app::{
@@ -29,7 +29,7 @@ use proxy::tun::get_tun_runner;
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{
-    sync::{broadcast, mpsc, oneshot, Mutex},
+    sync::{Mutex, broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
 use tracing::{debug, error, info};
@@ -45,8 +45,8 @@ mod session;
 
 use crate::common::geodata;
 pub use config::{
-    def::{Config as ClashConfigDef, DNS as ClashDNSConfigDef},
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
+    def::{Config as ClashConfigDef, DNS as ClashDNSConfigDef},
 };
 
 #[derive(Error, Debug)]
@@ -472,7 +472,7 @@ async fn create_components(
 
 #[cfg(test)]
 mod tests {
-    use crate::{shutdown, start_scaffold, Config, Options};
+    use crate::{Config, Options, shutdown, start_scaffold};
     use std::{sync::Once, thread, time::Duration};
 
     static INIT: Once = Once::new();

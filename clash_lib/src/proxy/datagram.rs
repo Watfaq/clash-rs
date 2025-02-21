@@ -2,7 +2,7 @@ use crate::{
     app::dns::ThreadSafeDNSResolver, common::errors::new_io_error,
     session::SocksAddr,
 };
-use futures::{ready, Sink, Stream};
+use futures::{Sink, Stream, ready};
 use std::{
     fmt::{Debug, Display, Formatter},
     io,

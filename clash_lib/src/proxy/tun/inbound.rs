@@ -12,6 +12,7 @@ use tun::AbstractDevice;
 use url::Url;
 
 use crate::{
+    Error, Runner,
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
@@ -20,7 +21,6 @@ use crate::{
         utils::get_outbound_interface,
     },
     session::{Network, Session, Type},
-    Error, Runner,
 };
 
 use crate::{defer, proxy::tun::routes};

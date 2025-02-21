@@ -5,12 +5,12 @@ use erased_serde::Serialize;
 use tracing::debug;
 
 use crate::{
+    Error,
     app::remote_content_manager::{
         healthcheck::HealthCheck,
         providers::{Provider, ProviderType, ProviderVehicleType},
     },
     proxy::AnyOutboundHandler,
-    Error,
 };
 
 use super::ProxyProvider;

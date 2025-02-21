@@ -6,7 +6,7 @@ use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::{decode_varint, encode_varint};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tracing::warn;
 
 use std::{

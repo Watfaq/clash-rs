@@ -19,6 +19,8 @@ use crate::{
 };
 
 use super::{
+    CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
+    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security, VERSION,
     cipher::{AeadCipher, VmessSecurity},
     header,
     kdf::{
@@ -28,8 +30,6 @@ use super::{
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
     user::ID,
-    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM,
-    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
 
 pub struct VmessStream<S> {
@@ -158,7 +158,7 @@ where
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "unsupported security",
-                ))
+                ));
             }
         };
 
@@ -434,14 +434,18 @@ where
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, size))?;
 
-                    match this.aead_read_cipher { Some(ref mut cipher) => {
-                        cipher.decrypt_inplace(&mut this.read_buf)?;
-                        let data_len = size - cipher.security.overhead_len();
-                        this.read_buf.truncate(data_len);
-                        this.read_state = ReadState::StreamFlushingData(data_len);
-                    } _ => {
-                        this.read_state = ReadState::StreamFlushingData(size);
-                    }}
+                    match this.aead_read_cipher {
+                        Some(ref mut cipher) => {
+                            cipher.decrypt_inplace(&mut this.read_buf)?;
+                            let data_len = size - cipher.security.overhead_len();
+                            this.read_buf.truncate(data_len);
+                            this.read_state =
+                                ReadState::StreamFlushingData(data_len);
+                        }
+                        _ => {
+                            this.read_state = ReadState::StreamFlushingData(size);
+                        }
+                    }
                 }
 
                 ReadState::StreamFlushingData(size) => {

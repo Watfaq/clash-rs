@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
+    Extension, Router,
     extract::{Path, Query, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
-    Extension, Router,
 };
 use serde::Deserialize;
 
@@ -79,16 +79,17 @@ async fn find_proxy_provider_by_name(
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    match outbound_manager.get_proxy_provider(&name) { Some(provider) => {
-        req.extensions_mut().insert(provider);
-        next.run(req).await
-    } _ => {
-        (
+    match outbound_manager.get_proxy_provider(&name) {
+        Some(provider) => {
+            req.extensions_mut().insert(provider);
+            next.run(req).await
+        }
+        _ => (
             StatusCode::NOT_FOUND,
             format!("proxy provider {} not found", name),
         )
-            .into_response()
-    }}
+            .into_response(),
+    }
 }
 
 async fn get_provider(

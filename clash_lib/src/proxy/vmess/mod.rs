@@ -20,11 +20,11 @@ use crate::{
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    options::{GrpcOption, Http2Option, HttpOption, WsOption},
-    transport::{self, Http2Config},
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
+    options::{GrpcOption, Http2Option, HttpOption, WsOption},
+    transport::{self, Http2Config},
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
 pub enum VmessTransport {
@@ -289,10 +289,11 @@ impl OutboundHandler for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
     use crate::proxy::utils::test_utils::{
+        Suite,
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_test_suites_and_cleanup, Suite,
+        run_test_suites_and_cleanup,
     };
 
     use super::*;
