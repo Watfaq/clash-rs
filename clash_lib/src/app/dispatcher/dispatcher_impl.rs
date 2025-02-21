@@ -241,6 +241,7 @@ impl Dispatcher {
     /// Dispatch a UDP packet to outbound handler
     /// returns the close sender
     #[instrument]
+    #[must_use]
     pub async fn dispatch_datagram(
         &self,
         sess: Session,
