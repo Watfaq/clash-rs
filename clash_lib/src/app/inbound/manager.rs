@@ -1,7 +1,7 @@
-use arc_swap::{ArcSwap, ArcSwapOption};
+use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    sync::RwLock,
+    sync::{oneshot, RwLock},
     task::{JoinHandle, JoinSet},
 };
 use tracing::error;
@@ -37,7 +37,7 @@ pub struct InboundManager {
     inbounds_opt: RwLock<HashMap<String, InboundOpts>>,
     inbounds_handler: RwLock<HashMap<String, NetworkInboundHandler>>,
 
-    task_handle: ArcSwapOption<JoinHandle<Result<()>>>,
+    task_handle: RwLock<Option<(JoinHandle<Result<()>>, oneshot::Sender<()>)>>,
 }
 
 impl InboundManager {
@@ -54,24 +54,33 @@ impl InboundManager {
             bind_address: ArcSwap::new(bind_address.into()),
             authenticator,
             inbounds_opt: inbounds_opt.into(),
-            task_handle: None.into(),
+            task_handle: RwLock::new(None),
         };
         s.build_handlers().await;
         Ok(s)
     }
 
     pub async fn start(self: &Arc<Self>) {
-        self.task_handle.swap(None).map(|v| v.abort());
+        let mut guard = self.task_handle.write().await;
+        if let Some((handle, signal)) = guard.take() {
+            _ = signal.send(());
+            handle.abort();
+        }
+
         let v = self.clone();
-        let handle = tokio::spawn(async move { v.build_task().await });
-        self.task_handle.swap(Some(handle.into())).map(|v| {
-            error!("Race condition detected");
-            v.abort();
-        });
+        let (signal_tx, signal_rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { v.build_task(signal_rx).await });
+        *guard = Some((handle, signal_tx));
     }
 
+    // FIXME: This is not working if
+    // 1. Inner nested spawned tasks.
+    // 2. spawn_blocking
     pub async fn shutdown(&self) {
-        self.task_handle.swap(None).map(|v| v.abort());
+        if let Some((handle, signal)) = self.task_handle.write().await.take() {
+            _ = signal.send(());
+            handle.abort();
+        }
     }
 
     pub async fn restart(self: &Arc<Self>) {
@@ -80,20 +89,31 @@ impl InboundManager {
     }
 
     // Build `inbounds_handler` tasks
-    async fn build_task(self: &Arc<Self>) -> Result<()> {
+    async fn build_task(
+        self: &Arc<Self>,
+        mut signal: oneshot::Receiver<()>,
+    ) -> Result<()> {
         let mut runners = JoinSet::new();
         for (_, handler) in self.inbounds_handler.read().await.iter() {
             handler.listen(&mut runners)?;
         }
-        while let Some(result) = runners.join_next().await {
-            match result {
-                Ok(Err(e)) => error!("failed to start inbound listeners: {e:?}"),
-                Err(e) => {
-                    if let Ok(reason) = e.try_into_panic() {
-                        std::panic::resume_unwind(reason);
+        loop {
+            tokio::select! {
+                Some(result) = runners.join_next() => {
+                    match result {
+                        Ok(Err(e)) => error!("failed to start inbound listeners: {e:?}"),
+                        Err(e) => {
+                            if let Ok(reason) = e.try_into_panic() {
+                                std::panic::resume_unwind(reason);
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
+                _ = &mut signal => {
+                    runners.shutdown().await;
+                    break;
+                }
             }
         }
         Ok(())

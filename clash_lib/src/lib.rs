@@ -450,7 +450,6 @@ async fn create_components(
         )
         .await?,
     );
-    inbound_manager.start().await;
 
     debug!("initializing tun runner");
     let tun_runner =
