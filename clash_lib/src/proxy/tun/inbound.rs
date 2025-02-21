@@ -13,6 +13,7 @@ use tun::AbstractDevice;
 use url::Url;
 
 use crate::{
+    Error, Runner,
     app::{
         dispatcher::Dispatcher,
         dns::{ThreadSafeDNSResolver, exchange_with_resolver},
