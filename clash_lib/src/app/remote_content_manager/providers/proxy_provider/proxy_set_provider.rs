@@ -111,7 +111,7 @@ impl ProxySetProvider {
                         ))
                     })?;
                 let proxies = scheme.proxies;
-                if let Some(proxies) = proxies {
+                match proxies { Some(proxies) => {
                     let proxies = proxies
                         .into_iter()
                         .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
@@ -162,10 +162,10 @@ impl ProxySetProvider {
                         })
                         .collect::<Result<Vec<_>, crate::Error>>();
                     Ok(proxies?)
-                } else {
+                } _ => {
                     Err(Error::InvalidConfig(format!("{}: proxies is empty", n))
                         .into())
-                }
+                }}
             },
         );
 

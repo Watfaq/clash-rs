@@ -65,12 +65,12 @@ async fn find_proxy_by_name(
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    if let Some(proxy) = outbound_manager.get_outbound(&name) {
+    match outbound_manager.get_outbound(&name) { Some(proxy) => {
         req.extensions_mut().insert(proxy);
         next.run(req).await
-    } else {
+    } _ => {
         (StatusCode::NOT_FOUND, format!("proxy {} not found", name)).into_response()
-    }
+    }}
 }
 
 async fn get_proxy(
@@ -93,7 +93,7 @@ async fn update_proxy(
     Json(payload): Json<UpdateProxyRequest>,
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
-    if let Some(ctrl) = outbound_manager.get_selector_control(proxy.name()) {
+    match outbound_manager.get_selector_control(proxy.name()) { Some(ctrl) => {
         match ctrl.lock().await.select(&payload.name).await {
             Ok(_) => {
                 let cache_store = state.cache_store;
@@ -113,12 +113,12 @@ async fn update_proxy(
                 ),
             ),
         }
-    } else {
+    } _ => {
         (
             StatusCode::NOT_FOUND,
             format!("proxy {} is not a Select", proxy.name()),
         )
-    }
+    }}
 }
 
 #[derive(Deserialize)]

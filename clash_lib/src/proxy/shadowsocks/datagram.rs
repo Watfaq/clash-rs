@@ -175,7 +175,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let Self {
+        let &mut Self {
             ref mut buf,
             ref inner,
             ..

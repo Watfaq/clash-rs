@@ -6,13 +6,13 @@ use std::{
 
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn clash_start(
     config: *const c_char,
     log: *const c_char,
     cwd: *const c_char,
     multithread: c_int,
-) -> *mut c_char {
+) -> *mut c_char { unsafe {
     let config_str = CStr::from_ptr(config)
         .to_str()
         .unwrap_or_default()
@@ -37,9 +37,9 @@ pub unsafe extern "C" fn clash_start(
         Ok(_) => CString::new("").unwrap().into_raw(),
         Err(e) => CString::new(format!("Error: {}", e)).unwrap().into_raw(),
     }
-}
+}}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn clash_shutdown() -> c_int {
     if shutdown() {
         1 // Success
@@ -50,7 +50,7 @@ pub extern "C" fn clash_shutdown() -> c_int {
 
 /// # Safety
 /// This function is unsafe because it dereferences raw pointers.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(unused_must_use)]
 pub unsafe extern "C" fn clash_free_string(s: *mut c_char) {
     if s.is_null() {

@@ -223,18 +223,18 @@ impl TryFrom<def::Config> for Config {
                 |mut rv, mapping| {
                     let group = OutboundProxy::ProxyGroup(
                         mapping.clone().try_into().map_err(|x: Error| {
-                            if let Some(name) = mapping.get("name") {
+                            match mapping.get("name") { Some(name) => {
                                 Error::InvalidConfig(format!(
                                     "proxy group: {}: {}",
                                     name.as_str()
                                         .expect("proxy group name must be string"),
                                     x
                                 ))
-                            } else {
+                            } _ => {
                                 Error::InvalidConfig(
                                     "proxy group name missing".to_string(),
                                 )
-                            }
+                            }}
                         })?,
                     );
                     proxy_names.push(group.name());

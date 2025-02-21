@@ -100,15 +100,14 @@ impl Dispatcher {
                     }
                 } else {
                     trace!("looking up resolve cache ip: {}", socket_addr.ip());
-                    if let Some(resolved) =
-                        self.resolver.cached_for(socket_addr.ip()).await
-                    {
+                    match self.resolver.cached_for(socket_addr.ip()).await
+                    { Some(resolved) => {
                         (resolved, socket_addr.port())
                             .try_into()
                             .expect("must be valid domain")
-                    } else {
+                    } _ => {
                         (*socket_addr).into()
-                    }
+                    }}
                 }
             }
             crate::session::SocksAddr::Domain(host, port) => {
@@ -286,15 +285,14 @@ impl Dispatcher {
                             } else {
                                 (*socket_addr).into()
                             }
-                        } else if let Some(resolved) =
-                            resolver.cached_for(socket_addr.ip()).await
-                        {
+                        } else { match resolver.cached_for(socket_addr.ip()).await
+                        { Some(resolved) => {
                             (resolved, socket_addr.port())
                                 .try_into()
                                 .expect("must be valid domain")
-                        } else {
+                        } _ => {
                             (*socket_addr).into()
-                        }
+                        }}}
                     }
                     crate::session::SocksAddr::Domain(host, port) => {
                         (host.to_owned(), *port)

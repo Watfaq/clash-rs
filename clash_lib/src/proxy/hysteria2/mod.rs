@@ -529,7 +529,7 @@ impl HysteriaConnection {
         let pkt = codec::HysUdpPacket::decode(&mut buf).unwrap();
         let session_id = pkt.session_id;
         let mut udp_sessions = self.udp_sessions.lock().await;
-        if let Some(session) = udp_sessions.get_mut(&session_id) {
+        match udp_sessions.get_mut(&session_id) { Some(session) => {
             if let Some(pkt) = session.feed(pkt) {
                 let _ = session
                     .incoming
@@ -540,9 +540,9 @@ impl HysteriaConnection {
                     })
                     .await;
             }
-        } else {
+        } _ => {
             tracing::warn!("hysteria2 udp session not found: {}", session_id);
-        }
+        }}
     }
 }
 

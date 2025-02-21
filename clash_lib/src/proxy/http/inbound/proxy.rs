@@ -61,7 +61,7 @@ async fn proxy(
 
     // TODO: handle other upgrades: https://github.com/hyperium/hyper/blob/master/examples/upgrades.rs
     if req.method() == Method::CONNECT {
-        if let Some(addr) = maybe_socks_addr(req.uri()) {
+        match maybe_socks_addr(req.uri()) { Some(addr) => {
             tokio::task::spawn(async move {
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
@@ -83,7 +83,7 @@ async fn proxy(
             });
 
             Ok(Response::new(Empty::new().map_err(map_io_error).boxed()))
-        } else {
+        } _ => {
             Ok(Response::builder()
                 .status(hyper::StatusCode::BAD_REQUEST)
                 .body(
@@ -92,7 +92,7 @@ async fn proxy(
                         .boxed(),
                 )
                 .unwrap())
-        }
+        }}
     } else {
         match client
             .request(req)

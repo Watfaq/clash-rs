@@ -183,7 +183,7 @@ mod tests {
     };
 
     macro_rules! assert_cache_state {
-        ($state:expr) => {
+        ($state:expr_2021) => {
             assert_eq!(
                 TEST_LRU_STATE.load(std::sync::atomic::Ordering::Relaxed),
                 $state

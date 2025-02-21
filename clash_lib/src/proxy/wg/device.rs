@@ -422,7 +422,7 @@ impl DeviceManager {
                                 if socket.may_send() {
                                     if let Some(queue) = tcp_queue.get_mut(handle) {
                                         let data = queue.pop_front();
-                                        if let Some((to_transfer_slice, active)) = data {
+                                        match data { Some((to_transfer_slice, active)) => {
                                             if !active {
                                                 trace!("socket {} closed from local(?), aboring socket", handle);
                                                 socket.abort();
@@ -445,10 +445,10 @@ impl DeviceManager {
                                                     }
                                                 }
                                             }
-                                        } else {
+                                        } _ => {
                                             // the local side has closed, but we don't know if the remote should be closed
                                             // let the dispatcher timeout to close the connection
-                                        }
+                                        }}
                                     }
                                 }
                             }
@@ -666,14 +666,13 @@ impl VirtualIpDevice {
             loop {
                 let span = trace_span!("receive_packet");
 
-                if let Some((proto, data)) =
-                    packet_receiver.recv().instrument(span).await
-                {
+                match packet_receiver.recv().instrument(span).await
+                { Some((proto, data)) => {
                     inner_packet_sender.send((proto, data)).await.unwrap();
                     let _ = packet_notifier.try_send(());
-                } else {
+                } _ => {
                     break;
-                }
+                }}
             }
         });
 

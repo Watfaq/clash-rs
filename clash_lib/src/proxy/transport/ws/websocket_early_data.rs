@@ -136,7 +136,7 @@ impl AsyncWrite for WebsocketEarlyDataConn {
     ) -> Poll<Result<usize, std::io::Error>> {
         if !self.early_data_flushed {
             loop {
-                if let Some(fut) = &mut self.as_mut().stream_future {
+                match &mut self.as_mut().stream_future { Some(fut) => {
                     let stream = ready!(Pin::new(fut).poll(cx))?;
 
                     self.as_mut().stream = Some(stream);
@@ -149,7 +149,7 @@ impl AsyncWrite for WebsocketEarlyDataConn {
                         w.wake();
                     }
                     return Poll::Ready(Ok(self.as_mut().early_data_len));
-                } else {
+                } _ => {
                     let mut req =
                         self.as_mut().req.take().expect("req must be present");
                     if let Some(v) = req
@@ -169,7 +169,7 @@ impl AsyncWrite for WebsocketEarlyDataConn {
                     let config = self.as_mut().ws_config.take();
                     self.as_mut().stream_future =
                         Some(Self::proxy_stream(stream, req, config));
-                }
+                }}
             }
         }
 
