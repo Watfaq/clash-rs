@@ -1,14 +1,11 @@
-use std::{io, net::SocketAddr, time::Duration};
-
+use super::platform::must_bind_socket_on_interface;
+use crate::app::net::Interface;
 use socket2::TcpKeepalive;
+use std::{io, net::SocketAddr, time::Duration};
 use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-
-#[allow(unused_imports)]
-use super::{Interface, platform::must_bind_socket_on_interface};
-#[allow(unused_imports)]
 use tracing::{debug, error};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
