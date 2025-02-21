@@ -12,7 +12,7 @@ use register_count::Counter;
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::{atomic::AtomicU32, Arc},
+    sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
 use tokio::sync::RwLock as AsyncRwLock;

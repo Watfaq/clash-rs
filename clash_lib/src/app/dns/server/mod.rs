@@ -36,8 +36,8 @@ pub async fn get_dns_listener(
 ) -> Option<Runner> {
     let h = DnsMessageExchanger { resolver };
     let r = watfaq_dns::get_dns_listener(listen, h, cwd).await;
-    if let Some(r) = r {
-        Some(Box::pin(async move {
+    match r {
+        Some(r) => Some(Box::pin(async move {
             match r.await {
                 Ok(()) => Ok(()),
                 Err(err) => {
@@ -45,8 +45,7 @@ pub async fn get_dns_listener(
                     Err(err.into())
                 }
             }
-        }))
-    } else {
-        None
+        })),
+        _ => None,
     }
 }

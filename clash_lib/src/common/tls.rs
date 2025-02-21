@@ -1,8 +1,8 @@
 use once_cell::sync::Lazy;
 use rustls::{
-    client::{danger::ServerCertVerifier, WebPkiServerVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
     RootCertStore,
+    client::{WebPkiServerVerifier, danger::ServerCertVerifier},
+    pki_types::{CertificateDer, ServerName, UnixTime},
 };
 use tracing::warn;
 

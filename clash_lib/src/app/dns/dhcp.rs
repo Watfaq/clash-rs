@@ -1,7 +1,7 @@
 use crate::{
     dns::{
-        dns_client::DNSNetMode, helper::make_clients, Client, EnhancedResolver,
-        ThreadSafeDNSClient,
+        Client, EnhancedResolver, ThreadSafeDNSClient, dns_client::DNSNetMode,
+        helper::make_clients,
     },
     proxy::utils::new_udp_socket,
 };

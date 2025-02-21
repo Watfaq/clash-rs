@@ -3,7 +3,7 @@ use crate::{
     config::internal::config::BindAddress,
 };
 
-use crate::proxy::{http, mixed, socks, AnyInboundListener};
+use crate::proxy::{AnyInboundListener, http, mixed, socks};
 
 #[cfg(target_os = "linux")]
 use crate::proxy::tproxy;

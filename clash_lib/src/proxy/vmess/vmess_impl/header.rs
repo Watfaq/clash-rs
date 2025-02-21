@@ -1,4 +1,4 @@
-use aead::{generic_array::GenericArray, KeyInit};
+use aead::{KeyInit, generic_array::GenericArray};
 use aes::cipher::BlockEncrypt;
 use bytes::{Buf, BufMut, BytesMut};
 
@@ -109,7 +109,7 @@ mod tests {
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_LENGTH_AEAD_KEY,
         },
     };
-    use aead::{generic_array::GenericArray, KeyInit};
+    use aead::{KeyInit, generic_array::GenericArray};
     use aes::cipher::BlockEncrypt;
     use bytes::{Buf, BufMut, BytesMut};
 

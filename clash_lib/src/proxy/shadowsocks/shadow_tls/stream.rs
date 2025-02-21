@@ -1,7 +1,7 @@
 use std::{
     pin::Pin,
     ptr::{copy, copy_nonoverlapping},
-    task::{ready, Poll},
+    task::{Poll, ready},
 };
 
 use byteorder::{BigEndian, WriteBytesExt};

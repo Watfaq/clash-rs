@@ -4,8 +4,8 @@ use maxminddb::geoip2;
 use tracing::{debug, info, warn};
 
 use crate::{
-    common::{errors::map_io_error, utils::download},
     Error,
+    common::{errors::map_io_error, utils::download},
 };
 
 use super::http::HttpClient;

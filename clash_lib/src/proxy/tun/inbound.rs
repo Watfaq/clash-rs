@@ -15,14 +15,13 @@ use url::Url;
 use crate::{
     app::{
         dispatcher::Dispatcher,
-        dns::{exchange_with_resolver, ThreadSafeDNSResolver},
+        dns::{ThreadSafeDNSResolver, exchange_with_resolver},
         net::get_outbound_interface,
     },
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
     proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
     session::{Network, Session, Type},
-    Error, Runner,
 };
 
 use crate::{defer, proxy::tun::routes};

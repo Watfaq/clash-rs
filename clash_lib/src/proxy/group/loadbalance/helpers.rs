@@ -6,7 +6,7 @@ use std::{
 
 use futures::future::BoxFuture;
 use murmur3::murmur3_32;
-use public_suffix::{EffectiveTLDProvider, DEFAULT_PROVIDER};
+use public_suffix::{DEFAULT_PROVIDER, EffectiveTLDProvider};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -183,7 +183,7 @@ mod tests {
     };
 
     macro_rules! assert_cache_state {
-        ($state:expr) => {
+        ($state:expr_2021) => {
             assert_eq!(
                 TEST_LRU_STATE.load(std::sync::atomic::Ordering::Relaxed),
                 $state

@@ -1,7 +1,7 @@
 use crate::{
+    Dispatcher,
     proxy::{AnyStream, ProxyError},
     session::{Network, Session, Type},
-    Dispatcher,
 };
 use futures::FutureExt;
 

@@ -15,8 +15,8 @@ use crate::{
     },
     common::errors::new_io_error,
     proxy::{
-        datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
-        AnyStream,
+        AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
+        datagram::OutboundDatagramImpl,
     },
     session::{Network, Session, SocksAddr, Type},
 };

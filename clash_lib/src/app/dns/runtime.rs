@@ -5,7 +5,7 @@ use crate::{
     proxy::utils::{new_tcp_stream, new_udp_socket},
 };
 use hickory_proto::runtime::{
-    iocompat::AsyncIoTokioAsStd, RuntimeProvider, TokioHandle, TokioTime,
+    RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd,
 };
 use tokio::net::UdpSocket as TokioUdpSocket;
 

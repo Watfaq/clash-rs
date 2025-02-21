@@ -2,14 +2,14 @@ use std::{collections::HashSet, io, ops::Deref, sync::Arc};
 
 use async_trait::async_trait;
 use russh::{
-    client::{AuthResult, Handle, Prompt},
-    keys::{load_secret_key, PrivateKey, PrivateKeyWithHashAlg},
     MethodKind,
+    client::{AuthResult, Handle, Prompt},
+    keys::{PrivateKey, PrivateKeyWithHashAlg, load_secret_key},
 };
 
 use crate::common::errors::new_io_error;
 
-use super::{connector::Client, HandlerOptions};
+use super::{HandlerOptions, connector::Client};
 
 /// russh::MethodKind is not Debug
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

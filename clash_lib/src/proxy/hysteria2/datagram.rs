@@ -1,6 +1,6 @@
 use std::{
     pin::Pin,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{Arc, atomic::AtomicU32},
     task::{Context, Poll},
 };
 
@@ -11,8 +11,8 @@ use crate::{
 };
 
 use super::{
-    codec::{Defragger, HysUdpPacket},
     HysteriaConnection,
+    codec::{Defragger, HysUdpPacket},
 };
 
 pub struct UdpSession {

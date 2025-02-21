@@ -1,14 +1,14 @@
 use tracing::warn;
 
 use crate::{
+    Error,
     config::internal::proxy::OutboundVmess,
     proxy::{
+        HandlerCommonOptions,
         options::{GrpcOption, Http2Option, WsOption},
         transport::TLSOptions,
         vmess::{Handler, HandlerOptions, VmessTransport},
-        HandlerCommonOptions,
     },
-    Error,
 };
 
 impl TryFrom<OutboundVmess> for Handler {
@@ -83,10 +83,9 @@ impl TryFrom<&OutboundVmess> for Handler {
                                     .host
                                     .as_ref()
                                     .map(|x| x.to_owned())
-                                    .unwrap_or(vec![s
-                                        .common_opts
-                                        .server
-                                        .to_owned()]),
+                                    .unwrap_or(vec![
+                                        s.common_opts.server.to_owned(),
+                                    ]),
                                 path: x
                                     .path
                                     .as_ref()

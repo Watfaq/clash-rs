@@ -1,12 +1,12 @@
 use ipnet::IpNet;
 
 use crate::{
+    Error,
     config::internal::proxy::OutboundWireguard,
     proxy::{
-        wg::{Handler, HandlerOptions},
         HandlerCommonOptions,
+        wg::{Handler, HandlerOptions},
     },
-    Error,
 };
 
 impl TryFrom<OutboundWireguard> for Handler {

@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::{
+    Error, Runner,
     app::{
         dispatcher::Dispatcher,
         inbound::network_listener::{ListenerType, NetworkInboundListener},
     },
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     config::internal::config::{BindAddress, Inbound},
-    Error, Runner,
 };
 use std::{collections::HashMap, sync::Arc};
 

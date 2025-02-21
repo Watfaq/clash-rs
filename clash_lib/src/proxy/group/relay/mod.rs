@@ -16,12 +16,12 @@ use crate::{
     },
     common::errors::new_io_error,
     proxy::{
-        utils::{
-            provider_helper::get_proxies_from_providers, DirectConnector,
-            ProxyConnector, RemoteConnector,
-        },
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        utils::{
+            DirectConnector, ProxyConnector, RemoteConnector,
+            provider_helper::get_proxies_from_providers,
+        },
     },
     session::Session,
 };
@@ -206,9 +206,10 @@ mod tests {
     use crate::proxy::{
         mocks::MockDummyProxyProvider,
         utils::test_utils::{
+            Suite,
             consts::*,
             docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup, Suite,
+            run_test_suites_and_cleanup,
         },
     };
 

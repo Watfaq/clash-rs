@@ -1,7 +1,7 @@
 use super::tun::TunDatagram;
 use crate::{
     app::dispatcher::Dispatcher,
-    proxy::{datagram::UdpPacket, utils::apply_tcp_options, InboundListener},
+    proxy::{InboundListener, datagram::UdpPacket, utils::apply_tcp_options},
     session::{Network, Session, Type},
 };
 use async_trait::async_trait;

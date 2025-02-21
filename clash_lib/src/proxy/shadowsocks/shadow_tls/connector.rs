@@ -4,9 +4,9 @@ use rand::Rng;
 
 use rand::distr::Distribution;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{client::TlsStream, TlsConnector};
+use tokio_rustls::{TlsConnector, client::TlsStream};
 
-use crate::proxy::{shadowsocks::ShadowTlsOption, AnyStream};
+use crate::proxy::{AnyStream, shadowsocks::ShadowTlsOption};
 
 use super::prelude::*;
 

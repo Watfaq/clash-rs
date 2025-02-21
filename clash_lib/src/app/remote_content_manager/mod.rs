@@ -2,8 +2,8 @@ use std::{
     collections::{HashMap, VecDeque},
     error::Error,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -11,7 +11,7 @@ use std::{
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{StreamExt, stream::FuturesUnordered};
 use http_body_util::Empty;
 use hyper::Request;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};

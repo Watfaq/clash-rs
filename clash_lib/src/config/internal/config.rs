@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use std::{fmt::Display, net::IpAddr, str::FromStr};
 
 use ipnet::IpNet;
-use serde::{de::value::MapDeserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::value::MapDeserializer};
 use serde_yaml::Value;
 
 use crate::{
+    Error,
     app::{
         dns, net::Interface,
         remote_content_manager::providers::rule_provider::RuleSetBehavior,
@@ -19,11 +20,10 @@ use crate::{
             rule::RuleType,
         },
     },
-    Error,
 };
 
 use super::proxy::{
-    map_serde_error, OutboundProxyProtocol, OutboundProxyProviderDef,
+    OutboundProxyProtocol, OutboundProxyProviderDef, map_serde_error,
 };
 
 pub struct Config {
@@ -224,20 +224,19 @@ impl TryFrom<def::Config> for Config {
                 HashMap::<String, OutboundProxy>::new(),
                 |mut rv, mapping| {
                     let group = OutboundProxy::ProxyGroup(
-                        mapping.clone().try_into().map_err(|x: Error| {
-                            if let Some(name) = mapping.get("name") {
-                                Error::InvalidConfig(format!(
+                        mapping.clone().try_into().map_err(
+                            |x: Error| match mapping.get("name") {
+                                Some(name) => Error::InvalidConfig(format!(
                                     "proxy group: {}: {}",
                                     name.as_str()
                                         .expect("proxy group name must be string"),
                                     x
-                                ))
-                            } else {
-                                Error::InvalidConfig(
+                                )),
+                                _ => Error::InvalidConfig(
                                     "proxy group name missing".to_string(),
-                                )
-                            }
-                        })?,
+                                ),
+                            },
+                        )?,
                     );
                     proxy_names.push(group.name());
                     rv.insert(group.name().to_string(), group);

@@ -1,11 +1,11 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc, task::Poll};
 
 use async_trait::async_trait;
-use downcast_rs::{impl_downcast, Downcast};
+use downcast_rs::{Downcast, impl_downcast};
 use futures::{Sink, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::oneshot::{error::TryRecvError, Receiver},
+    sync::oneshot::{Receiver, error::TryRecvError},
 };
 use tracing::debug;
 
@@ -289,7 +289,7 @@ impl AsyncWrite for TrackedStream {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }
@@ -316,7 +316,7 @@ impl AsyncWrite for TrackedStream {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }
@@ -333,7 +333,7 @@ impl AsyncWrite for TrackedStream {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }
@@ -526,7 +526,7 @@ impl Sink<UdpPacket> for TrackedDatagram {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }
@@ -542,7 +542,7 @@ impl Sink<UdpPacket> for TrackedDatagram {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Err(std::io::ErrorKind::BrokenPipe.into())
+                    return Err(std::io::ErrorKind::BrokenPipe.into());
                 }
             },
         }
@@ -564,7 +564,7 @@ impl Sink<UdpPacket> for TrackedDatagram {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }
@@ -581,7 +581,7 @@ impl Sink<UdpPacket> for TrackedDatagram {
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
                 }
             },
         }

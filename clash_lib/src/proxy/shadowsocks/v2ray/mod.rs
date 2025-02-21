@@ -1,8 +1,8 @@
 use std::io;
 
 use crate::proxy::{
-    transport::{self, TLSOptions},
     AnyStream,
+    transport::{self, TLSOptions},
 };
 
 use super::V2RayOBFSOption;
