@@ -1,3 +1,3 @@
 mod inbound;
 
-pub use inbound::{Listener, handle_http};
+pub use inbound::{HttpInbound, handle_http};

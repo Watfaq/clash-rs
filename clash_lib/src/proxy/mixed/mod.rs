@@ -1,30 +1,29 @@
 use crate::{
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
-    proxy::InboundListener,
     session::{Network, Session},
 };
-use async_trait::async_trait;
+
 use std::{net::SocketAddr, sync::Arc};
 
 use tokio::net::TcpListener;
 use tracing::warn;
 
-use super::{http, socks, utils::apply_tcp_options};
+use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
 
-pub struct Listener {
+pub struct MixedInbound {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 }
 
-impl Drop for Listener {
+impl Drop for MixedInbound {
     fn drop(&mut self) {
         warn!("MixedPort inbound listener on {} stopped", self.addr);
     }
 }
 
-impl Listener {
+impl MixedInbound {
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
@@ -38,8 +37,7 @@ impl Listener {
     }
 }
 
-#[async_trait]
-impl InboundListener for Listener {
+impl InboundHandlerTrait for MixedInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -48,7 +46,7 @@ impl InboundListener for Listener {
         false
     }
 
-    async fn listen_tcp(&self) -> std::io::Result<()> {
+    async fn listen_tcp(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -99,7 +97,7 @@ impl InboundListener for Listener {
         }
     }
 
-    async fn listen_udp(&self) -> std::io::Result<()> {
-        unreachable!("don't listen to me :)")
+    async fn listen_udp(&self) -> anyhow::Result<()> {
+        Err(anyhow!("UDP is not supported"))
     }
 }

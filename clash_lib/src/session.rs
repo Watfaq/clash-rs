@@ -3,6 +3,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    str::FromStr,
 };
 
 use crate::proxy::utils::Interface;
@@ -16,6 +17,40 @@ use erased_serde::Serialize as ESerialize;
 pub enum SocksAddr {
     Ip(SocketAddr),
     Domain(String, u16),
+}
+
+impl FromStr for SocksAddr {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut s = s.to_string();
+        if !s.contains(':') {
+            s = format!("{s}:80");
+        }
+        match SocketAddr::from_str(&s) {
+            Ok(v) => Ok(Self::Ip(v)),
+            Err(_) => {
+                let tokens: Vec<_> = s.split(':').collect();
+                if tokens.len() == 2 {
+                    let port: u16 = tokens.get(1).unwrap().parse()?;
+                    Ok(Self::Domain(tokens.first().unwrap().to_string(), port))
+                } else {
+                    Err(anyhow!("SocksAddr parse error, value: {s}"))
+                }
+            }
+        }
+    }
+}
+#[test]
+fn test_from_str() {
+    assert_eq!(
+        SocksAddr::from_str("127.0.0.1").unwrap(),
+        SocksAddr::Ip(SocketAddr::V4("127.0.0.1:80".parse().unwrap()))
+    );
+    assert!(SocksAddr::from_str("127.0.0.1:80").is_ok());
+    assert!(SocksAddr::from_str("hosta.com").is_ok());
+    assert!(SocksAddr::from_str("hosta.com:443").is_ok());
+    assert!(SocksAddr::from_str("hosta.:com:443").is_err());
 }
 
 impl Default for SocksAddr {
@@ -57,6 +92,7 @@ impl SocksAddr {
         ))
     }
 
+    // TODO move to vmess
     pub fn write_buf<T: BufMut>(&self, buf: &mut T) {
         match self {
             Self::Ip(addr) => match addr {
@@ -374,7 +410,7 @@ pub enum Type {
     Tun,
     #[cfg(target_os = "linux")]
     Tproxy,
-
+    Tunnel,
     Ignore,
 }
 

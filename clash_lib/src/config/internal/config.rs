@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
-use std::{fmt::Display, net::IpAddr, str::FromStr};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    str::FromStr,
+};
 
 use ipnet::IpNet;
-use serde::{Deserialize, Serialize, de::value::MapDeserializer};
-use serde_yaml::Value;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     Error,
@@ -12,17 +14,12 @@ use crate::{
     common::auth,
     config::{
         def::{self, LogLevel, RunMode},
-        internal::{
-            proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT},
-            rule::RuleType,
-        },
+        internal::{proxy::OutboundProxy, rule::RuleType},
     },
     proxy::utils::Interface,
 };
 
-use super::proxy::{
-    OutboundProxyProtocol, OutboundProxyProviderDef, map_serde_error,
-};
+use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
 
 pub struct Config {
     pub general: General,
@@ -38,10 +35,11 @@ pub struct Config {
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
+    pub listeners: HashMap<String, InboundOpts>,
 }
 
 impl Config {
-    fn validate(self) -> Result<Self, crate::Error> {
+    pub fn validate(self) -> Result<Self, crate::Error> {
         for r in self.rules.iter() {
             if !self.proxies.contains_key(r.target())
                 && !self.proxy_groups.contains_key(r.target())
@@ -56,252 +54,9 @@ impl Config {
     }
 }
 
-impl TryFrom<def::Config> for Config {
-    type Error = crate::Error;
-
-    fn try_from(c: def::Config) -> Result<Self, Self::Error> {
-        let mut proxy_names =
-            vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
-        #[allow(deprecated)]
-        Self {
-            general: General {
-                inbound: Inbound {
-                    port: c.port.clone().map(|x| x.try_into()).transpose()?,
-                    socks_port: c
-                        .socks_port
-                        .clone()
-                        .map(|x| x.try_into())
-                        .transpose()?,
-                    redir_port: c
-                        .redir_port
-                        .clone()
-                        .map(|x| x.try_into())
-                        .transpose()?,
-                    tproxy_port: c
-                        .tproxy_port
-                        .clone()
-                        .map(|x| x.try_into())
-                        .transpose()?,
-                    mixed_port: c
-                        .mixed_port
-                        .clone()
-                        .map(|x| x.try_into())
-                        .transpose()?,
-                    authentication: c.authentication.clone(),
-                    bind_address: c.bind_address.parse()?,
-                },
-                controller: Controller {
-                    external_controller: c.external_controller.clone(),
-                    external_ui: c.external_ui.clone(),
-                    secret: c.secret.clone(),
-                },
-                mode: c.mode,
-                log_level: c.log_level,
-                ipv6: c.ipv6,
-                interface: c.interface.as_ref().map(|iface| {
-                    if let Ok(addr) = iface.parse::<IpAddr>() {
-                        Interface::IpAddr(addr)
-                    } else {
-                        Interface::Name(iface.to_string())
-                    }
-                }),
-                routing_mask: c.routing_mask,
-                mmdb: c.mmdb.to_owned(),
-                mmdb_download_url: c.mmdb_download_url.to_owned(),
-                asn_mmdb: c.asn_mmdb.to_owned(),
-                asn_mmdb_download_url: c.asn_mmdb_download_url.to_owned(),
-                geosite: c.geosite.to_owned(),
-                geosite_download_url: c.geosite_download_url.to_owned(),
-            },
-            dns: (&c).try_into()?,
-            experimental: c.experimental,
-            tun: match c.tun {
-                Some(t) => TunConfig {
-                    enable: t.enable,
-                    device_id: t.device_id,
-                    route_all: t.route_all,
-                    routes: t
-                        .routes
-                        .map(|r| {
-                            r.into_iter()
-                                .map(|x| x.parse())
-                                .collect::<Result<Vec<_>, _>>()
-                        })
-                        .transpose()
-                        .map_err(|x| {
-                            Error::InvalidConfig(format!("parse tun routes: {}", x))
-                        })?
-                        .unwrap_or_default(),
-                    gateway: t.gateway.parse().map_err(|x| {
-                        Error::InvalidConfig(format!("parse tun gateway: {}", x))
-                    })?,
-                    mtu: t.mtu,
-                    so_mark: t.so_mark,
-                    route_table: t.route_table,
-                    dns_hijack: match t.dns_hijack {
-                        def::DnsHijack::Switch(b) => b,
-                        def::DnsHijack::List(_) => true,
-                    },
-                },
-                None => TunConfig::default(),
-            },
-            profile: Profile {
-                store_selected: c.profile.store_selected,
-            },
-            rules: c
-                .rule
-                .into_iter()
-                .map(|x| {
-                    x.parse::<RuleType>()
-                        .map_err(|x| Error::InvalidConfig(x.to_string()))
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            rule_providers: c
-                .rule_provider
-                .map(|m| {
-                    m.into_iter()
-                            .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                                body.insert(
-                                    "name".to_owned(),
-                                    serde_yaml::Value::String(name.clone()),
-                                );
-                                let provider = RuleProviderDef::try_from(body)
-                                    .map_err(|x| {
-                                        Error::InvalidConfig(format!(
-                                            "invalid rule provider {}: {}",
-                                            name, x
-                                        ))
-                                    })?;
-                                rv.insert(name, provider);
-                                Ok::<
-                                    HashMap<std::string::String, RuleProviderDef>,
-                                    Error,
-                                >(rv)
-                            })
-                            .expect("proxy provider parse error")
-                })
-                .unwrap_or_default(),
-            users: c
-                .authentication
-                .into_iter()
-                .map(|u| {
-                    let mut parts = u.splitn(2, ':');
-                    let username = parts.next().unwrap().to_string();
-                    let password = parts.next().unwrap_or("").to_string();
-                    auth::User::new(username, password)
-                })
-                .collect(),
-            proxies: c.proxy.into_iter().try_fold(
-                HashMap::from([
-                    (
-                        String::from(PROXY_DIRECT),
-                        OutboundProxy::ProxyServer(OutboundProxyProtocol::Direct),
-                    ),
-                    (
-                        String::from(PROXY_REJECT),
-                        OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject),
-                    ),
-                ]),
-                |mut rv, x| {
-                    let proxy = OutboundProxy::ProxyServer(
-                        OutboundProxyProtocol::try_from(x)?,
-                    );
-                    let name = proxy.name();
-                    if rv.contains_key(name.as_str()) {
-                        return Err(Error::InvalidConfig(format!(
-                            "duplicated proxy name: {}",
-                            name,
-                        )));
-                    }
-                    proxy_names.push(name.clone());
-                    rv.insert(name, proxy);
-                    Ok(rv)
-                },
-            )?,
-            proxy_groups: c.proxy_group.into_iter().try_fold(
-                HashMap::<String, OutboundProxy>::new(),
-                |mut rv, mapping| {
-                    let group = OutboundProxy::ProxyGroup(
-                        mapping.clone().try_into().map_err(
-                            |x: Error| match mapping.get("name") {
-                                Some(name) => Error::InvalidConfig(format!(
-                                    "proxy group: {}: {}",
-                                    name.as_str()
-                                        .expect("proxy group name must be string"),
-                                    x
-                                )),
-                                _ => Error::InvalidConfig(
-                                    "proxy group name missing".to_string(),
-                                ),
-                            },
-                        )?,
-                    );
-                    proxy_names.push(group.name());
-                    rv.insert(group.name().to_string(), group);
-                    Ok::<HashMap<String, OutboundProxy>, Error>(rv)
-                },
-            )?,
-            // https://stackoverflow.com/a/62001313/1109167
-            proxy_names,
-            proxy_providers: c
-                .proxy_provider
-                .map(|m| {
-                    m.into_iter()
-                        .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
-                            body.insert(
-                                "name".to_owned(),
-                                serde_yaml::Value::String(name.clone()),
-                            );
-                            let provider = OutboundProxyProviderDef::try_from(body)
-                                .map_err(|x| {
-                                    Error::InvalidConfig(format!(
-                                        "invalid proxy provider {}: {}",
-                                        name, x
-                                    ))
-                                })?;
-                            rv.insert(name, provider);
-                            Ok::<
-                                HashMap<
-                                    std::string::String,
-                                    OutboundProxyProviderDef,
-                                >,
-                                Error,
-                            >(rv)
-                        })
-                        .expect("proxy provider parse error")
-                })
-                .unwrap_or_default(),
-        }
-        .validate()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::def;
-
-    use super::Config;
-
-    #[test]
-    fn from_def_config() {
-        let cfg = r#"
-        port: 9090
-        mixed-port: "9091"
-        "#;
-        let c = cfg.parse::<def::Config>().expect("should parse");
-        assert_eq!(c.port.clone().map(|x| x.try_into().unwrap()), Some(9090));
-        assert_eq!(
-            c.mixed_port.clone().map(|x| x.try_into().unwrap()),
-            Some(9091)
-        );
-        let cc: Config = c.try_into().expect("should into");
-        assert_eq!(cc.general.inbound.port, Some(9090));
-        assert_eq!(cc.general.inbound.mixed_port, Some(9091));
-    }
-}
-
 pub struct General {
-    pub inbound: Inbound,
+    pub authentication: Vec<String>,
+    pub bind_address: BindAddress,
     pub(crate) controller: Controller,
     pub mode: RunMode,
     pub log_level: LogLevel,
@@ -336,53 +91,62 @@ pub struct TunConfig {
     pub dns_hijack: bool,
 }
 
-#[derive(Clone, Default)]
-pub enum BindAddress {
-    #[default]
-    Any,
-    One(Interface),
-}
+#[derive(Serialize, Clone, Debug, Copy, PartialEq)]
+#[serde(transparent)]
+pub struct BindAddress(pub IpAddr);
+impl BindAddress {
+    pub fn all() -> Self {
+        Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
+    }
 
-impl Display for BindAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BindAddress::Any => write!(f, "*"),
-            BindAddress::One(one) => match one {
-                Interface::IpAddr(ip) => write!(f, "{}", ip),
-                Interface::Name(name) => write!(f, "{}", name),
-            },
-        }
+    pub fn local() -> Self {
+        Self(IpAddr::V4(Ipv4Addr::LOCALHOST))
+    }
+}
+impl Default for BindAddress {
+    fn default() -> Self {
+        Self::local()
     }
 }
 
-impl FromStr for BindAddress {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "*" => Ok(Self::Any),
-            "localhost" => {
-                Ok(Self::One(Interface::IpAddr(IpAddr::from([127, 0, 0, 1]))))
-            }
+impl<'de> Deserialize<'de> for BindAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let str = String::deserialize(deserializer)?;
+        match str.as_str() {
+            "*" => Ok(Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))),
+            "localhost" => Ok(Self(IpAddr::from([127, 0, 0, 1]))),
             _ => {
-                if let Ok(ip) = s.parse::<IpAddr>() {
-                    Ok(BindAddress::One(Interface::IpAddr(ip)))
+                if let Ok(ip) = str.parse::<IpAddr>() {
+                    Ok(Self(ip))
                 } else {
-                    Ok(BindAddress::One(Interface::Name(s.to_string())))
+                    Err(serde::de::Error::custom(format!(
+                        "Invalid BindAddress value {str}"
+                    )))
                 }
             }
         }
     }
 }
 
-pub struct Inbound {
-    pub port: Option<u16>,
-    pub socks_port: Option<u16>,
-    pub redir_port: Option<u16>,
-    pub tproxy_port: Option<u16>,
-    pub mixed_port: Option<u16>,
-    pub authentication: Vec<String>,
-    pub bind_address: BindAddress,
+impl FromStr for BindAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        match str {
+            "*" => Ok(Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))),
+            "localhost" => Ok(Self(IpAddr::from([127, 0, 0, 1]))),
+            _ => {
+                if let Ok(ip) = str.parse::<IpAddr>() {
+                    Ok(Self(ip))
+                } else {
+                    Err(anyhow!("Invalid BindAddress value {str}"))
+                }
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -415,18 +179,42 @@ pub struct FileRuleProvider {
     pub behavior: RuleSetBehavior,
 }
 
-impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
-    type Error = crate::Error;
+#[cfg(test)]
+mod tests {
+    use crate::config::{def, internal::convert::convert, listener::InboundOpts};
+    #[test]
+    fn from_def_config() {
+        let cfg = r#"
+        port: 9090
+        mixed-port: "9091"
+        "#;
+        let c = cfg.parse::<def::Config>().expect("should parse");
+        assert_eq!(c.port.clone().map(|x| x.try_into().unwrap()), Some(9090));
+        assert_eq!(
+            c.mixed_port.clone().map(|x| x.try_into().unwrap()),
+            Some(9091)
+        );
+        let cc = convert(c).expect("should convert");
 
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        let name = mapping
-            .get("name")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig(
-                "rule provider name is required".to_owned(),
-            ))?
-            .to_owned();
-        RuleProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
+        assert!(
+            cc.listeners
+                .iter()
+                .find(|(_, listener)| match listener {
+                    InboundOpts::Http { common_opts, .. } =>
+                        common_opts.port == 9090,
+                    _ => false,
+                })
+                .is_some()
+        );
+        assert!(
+            cc.listeners
+                .iter()
+                .find(|(_, listener)| match listener {
+                    InboundOpts::Mixed { common_opts, .. } =>
+                        common_opts.port == 9091,
+                    _ => false,
+                })
+                .is_some()
+        );
     }
 }
