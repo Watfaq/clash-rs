@@ -145,7 +145,8 @@ impl Sink<UdpPacket> for UdpSession {
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         let this = self.deref_mut();
-        // "背压"机制，只有缓冲区为空时才允许新数据写入
+        // "Back pressure" mechanism, new data is allowed to be written only when the
+        // buffer is empty
         match this.send_buf {
             Some(_) => Poll::Pending,
             None => Poll::Ready(Ok(())),
@@ -167,8 +168,8 @@ impl Sink<UdpPacket> for UdpSession {
             }
         };
 
-        // 立即尝试发送，
-        // 如果阻塞则进入缓冲区， 等待 poll_flush 处理
+        // Try to send immediately, if blocked, enter the buffer and wait for
+        // poll_flush to process
         match socket.try_send_to(&item.data, dst_addr) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -193,7 +194,7 @@ impl Sink<UdpPacket> for UdpSession {
                     Poll::Ready(Ok(()))
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    // 注册 Waker 以便在 socket 可写时唤醒
+                    // Register Waker to wake up when the socket is writable
                     socket.poll_send_ready(cx)
                 }
                 Err(e) => Poll::Ready(Err(e)),
