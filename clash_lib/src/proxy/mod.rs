@@ -57,7 +57,6 @@ pub use group::{fallback, loadbalance, relay, selector, urltest};
 mod common;
 pub mod inbound;
 mod options;
-mod outbound;
 mod transport;
 pub mod tunnel;
 
