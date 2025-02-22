@@ -8,7 +8,7 @@ pub fn concert(
     before: Option<Vec<HashMap<String, Value>>>,
     proxy_names: &mut Vec<String>,
 ) -> Result<HashMap<String, OutboundProxy>, crate::Error> {
-    Ok(before.unwrap_or_default().into_iter().try_fold(
+    before.unwrap_or_default().into_iter().try_fold(
         HashMap::<String, OutboundProxy>::new(),
         |mut rv, mapping| {
             let group = OutboundProxy::ProxyGroup(
@@ -24,5 +24,5 @@ pub fn concert(
             rv.insert(group.name().to_string(), group);
             Ok::<HashMap<String, OutboundProxy>, Error>(rv)
         },
-    )?)
+    )
 }

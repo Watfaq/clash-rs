@@ -29,56 +29,51 @@ pub(super) fn convert(
             let inbound = InboundOpts::try_from(raw)?;
             let mut duplicate = false;
             match &inbound {
-                InboundOpts::Http { common_opts, .. } => match http_port {
-                    Some(Port(port)) => {
+                InboundOpts::Http { common_opts, .. } => {
+                    if let Some(Port(port)) = http_port {
                         if port == common_opts.port
                             && c.bind_address == common_opts.listen
                         {
                             duplicate = true;
                         }
                     }
-                    None => {}
-                },
-                InboundOpts::Socks { common_opts, .. } => match socks_port {
-                    Some(Port(port)) => {
+                }
+                InboundOpts::Socks { common_opts, .. } => {
+                    if let Some(Port(port)) = socks_port {
                         if port == common_opts.port
                             && c.bind_address == common_opts.listen
                         {
                             duplicate = true;
                         }
                     }
-                    None => {}
-                },
-                InboundOpts::Mixed { common_opts, .. } => match mixed_port {
-                    Some(Port(port)) => {
+                }
+                InboundOpts::Mixed { common_opts, .. } => {
+                    if let Some(Port(port)) = mixed_port {
                         if port == common_opts.port
                             && c.bind_address == common_opts.listen
                         {
                             duplicate = true;
                         }
                     }
-                    None => {}
-                },
-                InboundOpts::TProxy { common_opts, .. } => match mixed_port {
-                    Some(Port(port)) => {
+                }
+                InboundOpts::TProxy { common_opts, .. } => {
+                    if let Some(Port(port)) = mixed_port {
                         if port == common_opts.port
                             && c.bind_address == common_opts.listen
                         {
                             duplicate = true;
                         }
                     }
-                    None => {}
-                },
-                InboundOpts::Redir { common_opts, .. } => match mixed_port {
-                    Some(Port(port)) => {
+                }
+                InboundOpts::Redir { common_opts, .. } => {
+                    if let Some(Port(port)) = mixed_port {
                         if port == common_opts.port
                             && c.bind_address == common_opts.listen
                         {
                             duplicate = true;
                         }
                     }
-                    None => {}
-                },
+                }
                 _ => {}
             }
             if !duplicate {

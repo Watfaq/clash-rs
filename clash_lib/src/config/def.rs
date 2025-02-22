@@ -529,9 +529,9 @@ impl Default for Profile {
 #[derive(PartialEq, Debug, Clone, Serialize, Copy)]
 pub struct Port(pub u16);
 
-impl Into<u16> for Port {
-    fn into(self) -> u16 {
-        self.0
+impl From<Port> for u16 {
+    fn from(val: Port) -> Self {
+        val.0
     }
 }
 
@@ -552,7 +552,7 @@ impl<'de> Deserialize<'de> for Port {
 
         match value {
             StrOrNum::Num(num) => u16::try_from(num)
-                .map(|v| Port(v))
+                .map(Port)
                 .map_err(|_| serde::de::Error::custom("Port number out of range")),
 
             StrOrNum::Str(s) => {

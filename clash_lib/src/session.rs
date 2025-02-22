@@ -33,7 +33,7 @@ impl FromStr for SocksAddr {
                 let tokens: Vec<_> = s.split(':').collect();
                 if tokens.len() == 2 {
                     let port: u16 = tokens.get(1).unwrap().parse()?;
-                    Ok(Self::Domain(tokens.get(0).unwrap().to_string(), port))
+                    Ok(Self::Domain(tokens.first().unwrap().to_string(), port))
                 } else {
                     Err(anyhow!("SocksAddr parse error, value: {s}"))
                 }

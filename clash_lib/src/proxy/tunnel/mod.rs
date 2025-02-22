@@ -169,14 +169,14 @@ impl Sink<UdpPacket> for UdpSession {
 
         // 立即尝试发送，
         // 如果阻塞则进入缓冲区， 等待 poll_flush 处理
-        return match socket.try_send_to(&item.data, dst_addr) {
+        match socket.try_send_to(&item.data, dst_addr) {
             Ok(_) => Ok(()),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 this.send_buf = Some((item.data, dst_addr));
                 Ok(())
             }
             Err(e) => Err(e),
-        };
+        }
     }
 
     fn poll_flush(
@@ -191,7 +191,7 @@ impl Sink<UdpPacket> for UdpSession {
                 Ok(_) => {
                     this.send_buf.take();
                     Poll::Ready(Ok(()))
-                },
+                }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // 注册 Waker 以便在 socket 可写时唤醒
                     socket.poll_send_ready(cx)
@@ -209,8 +209,6 @@ impl Sink<UdpPacket> for UdpSession {
     ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
-
-
 }
 
 impl Stream for UdpSession {

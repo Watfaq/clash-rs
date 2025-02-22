@@ -29,6 +29,8 @@ pub struct Ports {
     pub mixed_port: Option<u16>,
 }
 
+type TaskHandle = RwLock<Option<(JoinHandle<Result<()>>, oneshot::Sender<()>)>>;
+
 pub struct InboundManager {
     dispatcher: Arc<Dispatcher>,
     bind_address: ArcSwap<BindAddress>,
@@ -37,7 +39,7 @@ pub struct InboundManager {
     inbounds_opt: RwLock<HashMap<String, InboundOpts>>,
     inbounds_handler: RwLock<HashMap<String, NetworkInboundHandler>>,
 
-    task_handle: RwLock<Option<(JoinHandle<Result<()>>, oneshot::Sender<()>)>>,
+    task_handle: TaskHandle,
 }
 
 impl InboundManager {
