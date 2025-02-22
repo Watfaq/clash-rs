@@ -121,5 +121,4 @@ mod tests {
         let response = resolver.resolve("www.google.com", false).await.unwrap();
         assert!(response.is_some());
     }
-
 }
