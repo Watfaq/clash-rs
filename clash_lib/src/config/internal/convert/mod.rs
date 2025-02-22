@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use serde::{de::value::MapDeserializer, Deserialize};
+use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
 
 use crate::{
+    Error,
     common::auth,
     config::{
         def,
@@ -12,7 +13,6 @@ use crate::{
             rule::RuleType,
         },
     },
-    Error,
 };
 
 mod general;
@@ -24,8 +24,8 @@ mod tun;
 use super::{
     config::{self, BindAddress, Profile},
     proxy::{
-        map_serde_error, OutboundGroupProtocol, OutboundProxyProtocol,
-        OutboundProxyProviderDef,
+        OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
+        map_serde_error,
     },
 };
 

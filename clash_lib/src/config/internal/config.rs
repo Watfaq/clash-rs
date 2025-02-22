@@ -196,21 +196,25 @@ mod tests {
         );
         let cc = convert(c).expect("should convert");
 
-        assert!(cc
-            .listeners
-            .iter()
-            .find(|(_, listener)| match listener {
-                InboundOpts::Http { common_opts, .. } => common_opts.port == 9090,
-                _ => false,
-            })
-            .is_some());
-        assert!(cc
-            .listeners
-            .iter()
-            .find(|(_, listener)| match listener {
-                InboundOpts::Mixed { common_opts, .. } => common_opts.port == 9091,
-                _ => false,
-            })
-            .is_some());
+        assert!(
+            cc.listeners
+                .iter()
+                .find(|(_, listener)| match listener {
+                    InboundOpts::Http { common_opts, .. } =>
+                        common_opts.port == 9090,
+                    _ => false,
+                })
+                .is_some()
+        );
+        assert!(
+            cc.listeners
+                .iter()
+                .find(|(_, listener)| match listener {
+                    InboundOpts::Mixed { common_opts, .. } =>
+                        common_opts.port == 9091,
+                    _ => false,
+                })
+                .is_some()
+        );
     }
 }

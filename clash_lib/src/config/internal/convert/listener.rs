@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use serde::{de::value::MapDeserializer, Deserialize as _};
+use serde::{Deserialize as _, de::value::MapDeserializer};
 use serde_yaml::Value;
 use tracing::warn;
 
 use crate::{
+    Error,
     config::{
         def::{self, Port},
         listener::{CommonInboundOpts, InboundOpts},
         proxy::map_serde_error,
     },
-    Error,
 };
 
 pub(super) fn convert(

@@ -464,7 +464,6 @@ impl Dispatcher {
                 t1.abort();
                 t2.abort();
             }
-
         });
 
         return close_sender;

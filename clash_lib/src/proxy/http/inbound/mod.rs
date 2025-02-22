@@ -3,11 +3,9 @@ mod connector;
 mod proxy;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
-    proxy::{InboundListener, utils::apply_tcp_options},
+    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
 };
 
 pub use proxy::handle as handle_http;

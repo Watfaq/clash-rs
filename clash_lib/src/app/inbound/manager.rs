@@ -1,19 +1,18 @@
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    sync::{oneshot, RwLock},
+    sync::{RwLock, oneshot},
     task::{JoinHandle, JoinSet},
 };
 use tracing::error;
 
 use crate::{
-    Error, Runner,
+    Result,
     app::{
         dispatcher::Dispatcher, inbound::network_listener::NetworkInboundHandler,
     },
     common::auth::ThreadSafeAuthenticator,
     config::internal::{config::BindAddress, listener::InboundOpts},
-    Result,
 };
 use std::{collections::HashMap, sync::Arc};
 

@@ -1,6 +1,6 @@
 use crate::{
-    config::{config, def},
     Error,
+    config::{config, def},
 };
 
 pub fn convert(

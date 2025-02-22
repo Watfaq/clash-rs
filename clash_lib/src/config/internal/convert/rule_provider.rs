@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use serde::{de::value::MapDeserializer, Deserialize as _};
+use serde::{Deserialize as _, de::value::MapDeserializer};
 use serde_yaml::Value;
 
 use crate::{
-    config::{config::RuleProviderDef, proxy::map_serde_error},
     Error,
+    config::{config::RuleProviderDef, proxy::map_serde_error},
 };
 
 pub(super) fn convert(

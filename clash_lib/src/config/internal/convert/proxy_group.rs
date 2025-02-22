@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde_yaml::Value;
 
-use crate::{config::proxy::OutboundProxy, Error};
+use crate::{Error, config::proxy::OutboundProxy};
 
 pub fn concert(
     before: Option<Vec<HashMap<String, Value>>>,
