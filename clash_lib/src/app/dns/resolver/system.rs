@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 
 use crate::{
-    app::dns::{ClashResolver, ResolverKind},
     Error,
+    app::dns::{ClashResolver, ResolverKind},
 };
 
 pub struct SystemResolver {
@@ -113,7 +113,7 @@ impl ClashResolver for SystemResolver {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::dns::{resolver::SystemResolver, ClashResolver};
+    use crate::app::dns::{ClashResolver, resolver::SystemResolver};
 
     #[tokio::test]
     async fn test_system_resolver_default_config() {

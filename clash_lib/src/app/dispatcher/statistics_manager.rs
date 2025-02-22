@@ -1,15 +1,15 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
 use chrono::Utc;
 use memory_stats::memory_stats;
 use serde::Serialize;
-use tokio::sync::{oneshot::Sender, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, oneshot::Sender};
 
 use crate::session::Session;
 

@@ -2,10 +2,10 @@ mod datagram;
 mod stream;
 
 use crate::{
+    Dispatcher,
     common::auth::ThreadSafeAuthenticator,
     proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
     session::{Network, Session, Type},
-    Dispatcher,
 };
 
 use std::{net::SocketAddr, sync::Arc};

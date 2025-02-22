@@ -1,7 +1,7 @@
 use std::{io::ErrorKind, str::FromStr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use quinn_proto::{coding::Codec, VarInt};
+use quinn_proto::{VarInt, coding::Codec};
 use rand::distr::Alphanumeric;
 use tokio_util::codec::{Decoder, Encoder};
 

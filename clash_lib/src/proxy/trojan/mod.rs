@@ -22,11 +22,11 @@ use crate::{
 use self::datagram::OutboundDatagramTrojan;
 
 use super::{
-    options::{GrpcOption, WsOption},
-    transport::{self, TLSOptions},
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
+    options::{GrpcOption, WsOption},
+    transport::{self, TLSOptions},
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
 mod datagram;
@@ -260,10 +260,11 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::proxy::utils::test_utils::{
+        Suite,
         config_helper::test_config_base_dir,
         consts::*,
         docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_test_suites_and_cleanup, Suite,
+        run_test_suites_and_cleanup,
     };
 
     use super::*;

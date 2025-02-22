@@ -13,19 +13,19 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
 use crate::{
+    Error,
     app::{
         remote_content_manager::providers::{
-            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
-            ThreadSafeProviderVehicle,
+            Provider, ProviderType, ProviderVehicleType, ThreadSafeProviderVehicle,
+            fetcher::Fetcher,
         },
-        router::{map_rule_type, RuleMatcher},
+        router::{RuleMatcher, map_rule_type},
     },
     common::{
         errors::map_io_error, geodata::GeoData, mmdb::Mmdb, succinct_set, trie,
     },
     config::internal::rule::RuleType,
     session::Session,
-    Error,
 };
 
 use super::cidr_trie::CidrTrie;

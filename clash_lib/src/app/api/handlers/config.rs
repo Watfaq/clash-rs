@@ -1,10 +1,10 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
+    Json, Router,
     extract::{Query, State},
     response::IntoResponse,
     routing::get,
-    Json, Router,
 };
 
 use http::StatusCode;
@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use tracing::warn;
 
 use crate::{
+    GlobalState,
     app::{
         api::AppState,
         dispatcher,
@@ -20,7 +21,6 @@ use crate::{
         inbound::manager::{InboundManager, Ports},
     },
     config::{def, internal::config::BindAddress},
-    GlobalState,
 };
 
 #[derive(Clone)]

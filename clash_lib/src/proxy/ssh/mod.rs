@@ -6,10 +6,10 @@ mod auth;
 mod connector;
 use connector::Client;
 use russh::{
+    ChannelStream, Preferred,
     client::{self, Handle, Msg},
     kex::*,
     keys::Algorithm,
-    ChannelStream, Preferred,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -27,8 +27,8 @@ use crate::{
 };
 
 use super::{
-    utils::RemoteConnector, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType, ProxyStream,
+    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    OutboundType, ProxyStream, utils::RemoteConnector,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait
@@ -254,9 +254,10 @@ mod tests {
         consts::*, docker_runner::DockerTestRunner,
     };
     use crate::proxy::utils::test_utils::{
+        Suite,
         config_helper::test_config_base_dir,
         docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_test_suites_and_cleanup, Suite,
+        run_test_suites_and_cleanup,
     };
 
     use super::*;

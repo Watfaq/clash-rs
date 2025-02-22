@@ -1,7 +1,7 @@
 use crate::{
+    Dispatcher,
     common::auth::ThreadSafeAuthenticator,
     session::{Network, Session},
-    Dispatcher,
 };
 
 use std::{net::SocketAddr, sync::Arc};

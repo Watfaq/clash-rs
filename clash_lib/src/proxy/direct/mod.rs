@@ -11,9 +11,9 @@ use crate::{
     common::errors::map_io_error,
     config::internal::proxy::PROXY_DIRECT,
     proxy::{
+        OutboundHandler,
         datagram::OutboundDatagramImpl,
         utils::{new_tcp_stream, new_udp_socket},
-        OutboundHandler,
     },
     session::Session,
 };
@@ -23,7 +23,7 @@ use futures::TryFutureExt;
 use serde::Serialize;
 
 use super::{
-    utils::RemoteConnector, ConnectorType, DialWithConnector, OutboundType,
+    ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
 };
 
 #[derive(Serialize)]

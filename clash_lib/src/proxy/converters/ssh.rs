@@ -4,8 +4,8 @@ use totp_rs::{Rfc6238, Secret, TOTP};
 use crate::{
     config::internal::proxy::{OutBoundSsh, Totp},
     proxy::{
-        ssh::{Handler, HandlerOptions},
         HandlerCommonOptions,
+        ssh::{Handler, HandlerOptions},
     },
 };
 

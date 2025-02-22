@@ -81,11 +81,12 @@ fn main() {
 
     if !Path::new(&file).exists() {
         let default_config = "port: 7890";
-        let mut config_file = if let Ok(config_file) = std::fs::File::create(&file) {
-            config_file
-        } else {
-            eprintln!("default profile cannot be created: {}", file);
-            exit(1);
+        let mut config_file = match std::fs::File::create(&file) {
+            Ok(config_file) => config_file,
+            _ => {
+                eprintln!("default profile cannot be created: {}", file);
+                exit(1);
+            }
         };
 
         if config_file.write_all(default_config.as_bytes()).is_err() {

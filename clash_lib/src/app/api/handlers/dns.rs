@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     extract::{Query, State},
     response::IntoResponse,
     routing::get,
-    Json, Router,
 };
 use hickory_proto::{op::Message, rr::RecordType};
 use http::StatusCode;

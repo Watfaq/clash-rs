@@ -5,7 +5,7 @@ use std::{
     marker::PhantomData,
     os::unix::io::{AsRawFd, RawFd},
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 
@@ -537,7 +537,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::LeftClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => (),
                     }
@@ -591,7 +591,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::RightClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => (),
                     }

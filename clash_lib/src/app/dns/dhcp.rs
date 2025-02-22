@@ -1,9 +1,9 @@
 use crate::{
     dns::{
-        dns_client::DNSNetMode, helper::make_clients, Client, EnhancedResolver,
-        ThreadSafeDNSClient,
+        Client, EnhancedResolver, ThreadSafeDNSClient, dns_client::DNSNetMode,
+        helper::make_clients,
     },
-    proxy::utils::{new_udp_socket, Interface},
+    proxy::utils::{Interface, new_udp_socket},
 };
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};

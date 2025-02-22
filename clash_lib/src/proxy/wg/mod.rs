@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    Error,
     app::{
         dispatcher::{
             BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
@@ -15,14 +16,13 @@ use crate::{
     common::errors::{map_io_error, new_io_error},
     impl_default_connector,
     session::Session,
-    Error,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{
-    utils::RemoteConnector, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    OutboundType, utils::RemoteConnector,
 };
 
 use async_trait::async_trait;
@@ -321,11 +321,11 @@ impl OutboundHandler for Handler {
 mod tests {
 
     use crate::proxy::utils::{
-        test_utils::{
-            config_helper::test_config_base_dir,
-            docker_runner::DockerTestRunnerBuilder, Suite,
-        },
         GLOBAL_DIRECT_CONNECTOR,
+        test_utils::{
+            Suite, config_helper::test_config_base_dir,
+            docker_runner::DockerTestRunnerBuilder,
+        },
     };
 
     use super::super::utils::test_utils::{

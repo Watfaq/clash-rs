@@ -3,10 +3,10 @@ use futures::StreamExt;
 use http_body_util::BodyDataStream;
 use std::{fmt::Write, num::ParseIntError, path::Path};
 
-use crate::{common::errors::new_io_error, Error};
+use crate::{Error, common::errors::new_io_error};
 use rand::{
-    distr::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
+    distr::uniform::{SampleRange, SampleUniform},
 };
 use sha2::Digest;
 use tracing::debug;

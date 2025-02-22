@@ -6,13 +6,13 @@ use std::{
 };
 
 use bytes::{Buf, BufMut, BytesMut};
-use futures::{pin_mut, ready, Future, Sink, Stream};
+use futures::{Future, Sink, Stream, pin_mut, ready};
 use tracing::{debug, trace};
 
 use tokio::io::{AsyncReadExt, AsyncWrite};
 
 use crate::{
-    proxy::{datagram::UdpPacket, AnyStream},
+    proxy::{AnyStream, datagram::UdpPacket},
     session::{SocksAddr, SocksAddrType},
 };
 

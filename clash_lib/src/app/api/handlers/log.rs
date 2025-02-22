@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    extract::{ws::Message, ConnectInfo, State, WebSocketUpgrade},
+    extract::{ConnectInfo, State, WebSocketUpgrade, ws::Message},
     response::IntoResponse,
 };
 

@@ -1,4 +1,4 @@
-use crate::{app::router::RuleMatcher, session::Session, Error};
+use crate::{Error, app::router::RuleMatcher, session::Session};
 use std::fmt::{Display, Formatter};
 
 use crate::{
@@ -116,6 +116,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        Error,
         app::{
             dns::SystemResolver,
             router::rules::geodata::matcher_group::{
@@ -123,7 +124,6 @@ mod tests {
             },
         },
         common::{geodata::GeoData, http::new_http_client, utils::download},
-        Error,
     };
 
     const GEOSITE_URL: &str =

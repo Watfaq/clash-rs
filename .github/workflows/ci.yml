@@ -16,7 +16,7 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly-2024-12-20"
+  RUST_TOOLCHAIN: "nightly"
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:

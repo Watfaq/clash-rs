@@ -1,4 +1,4 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::Ordering};
 
 use bytes::Bytes;
 use quinn::{RecvStream, SendStream, VarInt};

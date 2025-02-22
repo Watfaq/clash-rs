@@ -237,7 +237,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::LeftClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => {
                             if let Some(delay) = a_to_b_delay {
@@ -268,7 +268,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::LeftClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => (),
                     }
@@ -287,7 +287,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::RightClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => {
                             if let Some(delay) = b_to_a_delay {
@@ -318,7 +318,7 @@ where
                         Poll::Ready(Err(err)) => {
                             return Poll::Ready(Err(
                                 CopyBidirectionalError::RightClosed(err),
-                            ))
+                            ));
                         }
                         Poll::Pending => (),
                     }

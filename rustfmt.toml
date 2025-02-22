@@ -1,4 +1,4 @@
-edition = "2021"
+edition = "2024"
 reorder_modules = true
 reorder_impl_items = true
 reorder_imports = true

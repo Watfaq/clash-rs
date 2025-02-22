@@ -1,5 +1,5 @@
-use crate::{common::utils::default_bool_true, config::utils, Error};
-use serde::{de::value::MapDeserializer, Deserialize};
+use crate::{Error, common::utils::default_bool_true, config::utils};
+use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
 use std::{
     collections::HashMap,

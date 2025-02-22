@@ -11,9 +11,9 @@ use crate::app::{
     dns::ThreadSafeDNSResolver,
     profile::ThreadSafeCacheFile,
     remote_content_manager::{
+        ProxyManager,
         healthcheck::HealthCheck,
         providers::{file_vehicle, http_vehicle},
-        ProxyManager,
     },
 };
 
@@ -25,19 +25,19 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, trojan,
+        OutboundType, fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
-        vmess, wg, OutboundType,
+        vmess, wg,
     },
 };
 
 use crate::{
+    Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        direct, reject, relay, selector::ThreadSafeSelectorControl, urltest,
-        AnyOutboundHandler,
+        AnyOutboundHandler, direct, reject, relay,
+        selector::ThreadSafeSelectorControl, urltest,
     },
-    Error,
 };
 
 use super::utils::proxy_groups_dag_sort;

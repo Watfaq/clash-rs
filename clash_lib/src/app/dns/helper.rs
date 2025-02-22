@@ -1,9 +1,9 @@
 use crate::{
     dns::{
-        dns_client::{DNSNetMode, DnsClient, Opts},
         ClashResolver, ThreadSafeDNSClient,
+        dns_client::{DNSNetMode, DnsClient, Opts},
     },
-    proxy::utils::{get_outbound_interface, Interface},
+    proxy::utils::{Interface, get_outbound_interface},
 };
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -22,7 +22,7 @@ pub async fn make_clients(
         let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")
         } else {
-            let port = s.address.split(':').last().unwrap();
+            let port = s.address.split(':').next_back().unwrap();
             let host = s
                 .address
                 .strip_suffix(format!(":{}", port).as_str())

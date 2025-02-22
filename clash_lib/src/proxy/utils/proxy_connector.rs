@@ -14,13 +14,13 @@ use crate::{
     },
     common::errors::new_io_error,
     proxy::{
-        datagram::OutboundDatagramImpl, AnyOutboundDatagram, AnyOutboundHandler,
-        AnyStream,
+        AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
+        datagram::OutboundDatagramImpl,
     },
     session::{Network, Session, SocksAddr, Type},
 };
 
-use super::{new_tcp_stream, new_udp_socket, Interface};
+use super::{Interface, new_tcp_stream, new_udp_socket};
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
