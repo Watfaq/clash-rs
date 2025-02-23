@@ -36,7 +36,7 @@ pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<Interface>,
-    so_mark: Option<u32>,
+    #[cfg(target_os = "linux")] so_mark: Option<u32>,
 ) -> io::Result<TcpStream> {
     let (socket, family) = match endpoint {
         SocketAddr::V4(_) => (
@@ -83,7 +83,7 @@ pub async fn new_tcp_stream(
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<Interface>,
-    so_mark: Option<u32>,
+    #[cfg(target_os = "linux")] so_mark: Option<u32>,
 ) -> io::Result<UdpSocket> {
     let (socket, family) = match src {
         Some(src) => {

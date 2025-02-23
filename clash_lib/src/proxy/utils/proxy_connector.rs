@@ -80,7 +80,7 @@ impl RemoteConnector for DirectConnector {
         new_tcp_stream(
             (dial_addr, port).into(),
             iface.cloned(),
-            so_mark,
+            #[cfg(target_os = "linux")] so_mark,
         )
         .await
         .map(|x| Box::new(x) as _)
@@ -92,12 +92,11 @@ impl RemoteConnector for DirectConnector {
         src: Option<SocketAddr>,
         _destination: SocksAddr,
         iface: Option<Interface>,
-        so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,
             iface,
-            so_mark,
+            #[cfg(target_os = "linux")] so_mark,
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;

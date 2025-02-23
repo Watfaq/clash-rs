@@ -50,12 +50,12 @@ impl RuntimeProvider for DnsRuntimeProvider {
         >,
     > {
         let iface = self.iface.clone();
-        let so_mark = self.so_mark;
+        let _so_mark = self.so_mark;
         Box::pin(async move {
             new_tcp_stream(
                 server_addr,
                 iface,
-                so_mark,
+                #[cfg(target_os = "linux")] _so_mark,
             )
             .await
             .map(AsyncIoTokioAsStd)
@@ -73,12 +73,12 @@ impl RuntimeProvider for DnsRuntimeProvider {
         >,
     > {
         let iface = self.iface.clone();
-        let so_mark = self.so_mark;
+        let _so_mark = self.so_mark;
         Box::pin(async move {
             new_udp_socket(
                 None,
                 iface.clone(),
-                so_mark,
+                #[cfg(target_os = "linux")] _so_mark,
             )
             .await
         })
