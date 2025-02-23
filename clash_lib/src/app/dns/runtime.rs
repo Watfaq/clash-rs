@@ -55,7 +55,8 @@ impl RuntimeProvider for DnsRuntimeProvider {
             new_tcp_stream(
                 server_addr,
                 iface,
-                #[cfg(target_os = "linux")] _so_mark,
+                #[cfg(target_os = "linux")]
+                _so_mark,
             )
             .await
             .map(AsyncIoTokioAsStd)
@@ -78,7 +79,8 @@ impl RuntimeProvider for DnsRuntimeProvider {
             new_udp_socket(
                 None,
                 iface.clone(),
-                #[cfg(target_os = "linux")] _so_mark,
+                #[cfg(target_os = "linux")]
+                _so_mark,
             )
             .await
         })

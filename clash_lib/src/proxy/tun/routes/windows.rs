@@ -14,7 +14,8 @@ use windows::Win32::{
 };
 
 use crate::{
-    app::net::OutboundInterface, common::errors::new_io_error, config::internal::config::TunConfig, defer
+    app::net::OutboundInterface, common::errors::new_io_error,
+    config::internal::config::TunConfig, defer,
 };
 
 const PROTO_TYPE_UCAST: u32 = 0;

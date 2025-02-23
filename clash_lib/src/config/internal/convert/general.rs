@@ -1,10 +1,11 @@
 use std::net::IpAddr;
 
 use crate::{
-    app::net::Interface, config::{
+    app::net::Interface,
+    config::{
         config::{Controller, General},
         def,
-    }
+    },
 };
 
 pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {

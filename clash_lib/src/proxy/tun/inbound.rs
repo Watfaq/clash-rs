@@ -185,6 +185,9 @@ async fn handle_inbound_datagram(
                             trace!("dns hijack does not support AAAA query");
                             let mut resp = hickory_proto::op::Message::new();
                             resp.set_id(msg.id());
+                            resp.set_message_type(
+                                hickory_proto::op::MessageType::Response,
+                            );
                             resp.set_recursion_available(false);
                             resp.set_authoritative(true);
                             resp.set_response_code(
