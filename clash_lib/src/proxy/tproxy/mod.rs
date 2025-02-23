@@ -1,10 +1,10 @@
-use super::tun::TunDatagram;
+use super::{inbound::InboundHandlerTrait, tun::TunDatagram};
 use crate::{
     app::dispatcher::Dispatcher,
-    proxy::{InboundListener, datagram::UdpPacket, utils::apply_tcp_options},
+    proxy::{datagram::UdpPacket, utils::apply_tcp_options},
     session::{Network, Session, Type},
 };
-use async_trait::async_trait;
+
 use socket2::{Domain, Socket};
 use std::{
     net::SocketAddr,
@@ -14,25 +14,24 @@ use std::{
 use tokio::net::TcpListener;
 use tracing::{trace, warn};
 
-pub struct Listener {
+pub struct TproxyInbound {
     addr: SocketAddr,
     dispather: Arc<Dispatcher>,
 }
 
-impl Drop for Listener {
+impl Drop for TproxyInbound {
     fn drop(&mut self) {
         warn!("Tproxy inbound listener on {} stopped", self.addr);
     }
 }
 
-impl Listener {
+impl TproxyInbound {
     pub fn new(addr: SocketAddr, dispather: Arc<Dispatcher>) -> Self {
         Self { addr, dispather }
     }
 }
 
-#[async_trait]
-impl InboundListener for Listener {
+impl InboundHandlerTrait for TproxyInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -41,7 +40,7 @@ impl InboundListener for Listener {
         true
     }
 
-    async fn listen_tcp(&self) -> std::io::Result<()> {
+    async fn listen_tcp(&self) -> anyhow::Result<()> {
         let socket =
             Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?;
         socket.set_ip_transparent(true)?;
@@ -76,7 +75,7 @@ impl InboundListener for Listener {
         }
     }
 
-    async fn listen_udp(&self) -> std::io::Result<()> {
+    async fn listen_udp(&self) -> anyhow::Result<()> {
         let socket = Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)?;
         socket.set_ip_transparent(true)?;
         socket.set_nonblocking(true)?;
@@ -104,7 +103,7 @@ impl InboundListener for Listener {
 async fn handle_inbound_datagram(
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
-) -> std::io::Result<()> {
+) -> anyhow::Result<()> {
     // dispatcher <-> tproxy communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
 

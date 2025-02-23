@@ -18,22 +18,21 @@ use crate::{
         api::AppState,
         dispatcher,
         dns::ThreadSafeDNSResolver,
-        inbound::manager::{Ports, ThreadSafeInboundManager},
-        net::Interface,
+        inbound::manager::{InboundManager, Ports},
     },
     config::{def, internal::config::BindAddress},
 };
 
 #[derive(Clone)]
 struct ConfigState {
-    inbound_manager: ThreadSafeInboundManager,
+    inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
 }
 
 pub fn routes(
-    inbound_manager: ThreadSafeInboundManager,
+    inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
@@ -52,12 +51,11 @@ pub fn routes(
 }
 
 async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
-    let inbound_manager = state.inbound_manager.lock().await;
     let run_mode = state.dispatcher.get_mode().await;
     let global_state = state.global_state.lock().await;
     let dns_resolver = state.dns_resolver;
 
-    let ports = inbound_manager.get_ports();
+    let ports = state.inbound_manager.get_ports().await;
 
     axum::response::Json(PatchConfigRequest {
         port: ports.port,
@@ -65,18 +63,12 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
         redir_port: ports.redir_port,
         tproxy_port: ports.tproxy_port,
         mixed_port: ports.mixed_port,
-        bind_address: Some(inbound_manager.get_bind_address().to_string()),
+        bind_address: Some(state.inbound_manager.get_bind_address().0.to_string()),
 
         mode: Some(run_mode),
         log_level: Some(global_state.log_level),
         ipv6: Some(dns_resolver.ipv6()),
-        allow_lan: Some(match inbound_manager.get_bind_address() {
-            BindAddress::Any => true,
-            BindAddress::One(one) => match one {
-                Interface::IpAddr(ip) => !ip.is_loopback(),
-                Interface::Name(iface) => iface != "lo",
-            },
-        }),
+        allow_lan: Some(state.inbound_manager.get_bind_address().0.is_unspecified()),
     })
 }
 
@@ -188,12 +180,13 @@ async fn patch_configs(
         );
     }
 
-    let mut inbound_manager = state.inbound_manager.lock().await;
-
+    let inbound_manager = state.inbound_manager.clone();
+    let mut need_restart = false;
     if let Some(bind_address) = payload.bind_address.clone() {
         match bind_address.parse::<BindAddress>() {
             Ok(bind_address) => {
-                inbound_manager.set_bind_address(bind_address);
+                inbound_manager.set_bind_address(bind_address).await;
+                need_restart = true;
             }
             Err(_) => {
                 return (
@@ -209,7 +202,7 @@ async fn patch_configs(
 
     if payload.rebuild_listeners() {
         // TODO: maybe buggy
-        let current_ports = inbound_manager.get_ports();
+        let current_ports = inbound_manager.get_ports().await;
 
         let ports = Ports {
             port: payload.port.or(current_ports.port),
@@ -218,14 +211,11 @@ async fn patch_configs(
             tproxy_port: payload.tproxy_port.or(current_ports.tproxy_port),
             mixed_port: payload.mixed_port.or(current_ports.mixed_port),
         };
-
-        inbound_manager.rebuild_listeners(ports);
-
-        global_state.inbound_listener_handle.abort();
-
-        let r = inbound_manager.get_runner().unwrap();
-
-        global_state.inbound_listener_handle = tokio::spawn(r);
+        inbound_manager.change_ports(ports).await;
+        need_restart = true;
+    }
+    if need_restart {
+        inbound_manager.restart().await;
     }
 
     if let Some(mode) = payload.mode {

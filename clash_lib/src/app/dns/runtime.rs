@@ -55,7 +55,6 @@ impl RuntimeProvider for DnsRuntimeProvider {
             new_tcp_stream(
                 server_addr,
                 iface,
-                #[cfg(target_os = "linux")]
                 so_mark,
             )
             .await
@@ -79,7 +78,6 @@ impl RuntimeProvider for DnsRuntimeProvider {
             new_udp_socket(
                 None,
                 iface.clone(),
-                #[cfg(target_os = "linux")]
                 so_mark,
             )
             .await
