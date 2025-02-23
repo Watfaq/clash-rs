@@ -1,5 +1,4 @@
 mod datagram;
-mod shadow_tls;
 mod simple_obfs;
 mod stream;
 mod v2ray;
@@ -7,6 +6,7 @@ mod v2ray;
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
+    transport::shadow_tls,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 use crate::{
@@ -132,7 +132,7 @@ impl Handler {
                     .await?
                 }
                 OBFSOption::ShadowTls(opts) => {
-                    (shadow_tls::Connector::wrap(opts, s).await?) as _
+                    shadow_tls::wrap_shadow_tls_stream(opts, s).await?
                 }
             },
             None => s,
