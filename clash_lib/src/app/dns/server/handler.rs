@@ -2,7 +2,7 @@ use std::future::Future;
 
 use hickory_proto::{
     op::{Message, ResponseCode},
-    rr::{rdata::A, RData, Record},
+    rr::{RData, Record, rdata::A},
 };
 use tracing::debug;
 
