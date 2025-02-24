@@ -16,8 +16,7 @@ use super::{
     utils::Hmac,
 };
 
-pub static ROOT_STORE: Lazy<Arc<RootCertStore>> =
-    Lazy::new(root_store);
+static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
 
 fn root_store() -> Arc<RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
