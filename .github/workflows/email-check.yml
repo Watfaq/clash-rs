@@ -57,7 +57,10 @@ jobs:
 
             ${{ steps.check.outputs.violations }}
 
-            **Correction steps**:
+            <details>
+            
+            <summary>Correction steps</summary>
+            
             1. Modifying author information using interactive rebase
             ```bash
             git rebase -i HEAD~${{ github.event.pull_request.commits }}
@@ -74,6 +77,8 @@ jobs:
             ```bash
             git push --force-with-lease
             ```
+            
+            </details>
 
       - name: Delete comment
         if: ${{ steps.find-comment.outputs.comment-id != '' && steps.check.outputs.violations == '' }}
