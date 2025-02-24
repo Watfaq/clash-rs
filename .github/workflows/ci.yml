@@ -44,9 +44,8 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            tool: cargo # report code coverage
+            tool: cargo
             extra-args: -F "plus"
-            coverage: true
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
@@ -218,6 +217,7 @@ jobs:
           key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ matrix.release-name || matrix.target }}
+
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@0.5.0
         if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
@@ -238,6 +238,7 @@ jobs:
           cargo install cross --git https://github.com/cross-rs/cross
         env:
           TARGET: ${{ matrix.target }}
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -273,27 +274,17 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
       - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v3
         if: ${{ !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
-          command: ${{ matrix.coverage && 'llvm-cov' || 'test' }}
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} ${{ matrix.coverage && '--codecov --output-path codecov.json' || '' }}
+          command: 'test'
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        if: ${{ !cancelled() && matrix.coverage }}
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: codecov.json
-          fail_ci_if_error: true
 
       - name: Cargo build
         uses: clechasseur/rs-cargo@v3
