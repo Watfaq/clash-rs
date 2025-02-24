@@ -3,30 +3,8 @@ use std::{io::Read, ptr::copy_nonoverlapping};
 use byteorder::{BigEndian, ReadBytesExt};
 use hmac::Mac;
 
-use prelude::*;
+use super::prelude::*;
 use sha2::{Digest, Sha256};
-
-pub(crate) mod prelude {
-    pub(crate) const TLS_MAJOR: u8 = 0x03;
-    pub(crate) const TLS_MINOR: (u8, u8) = (0x03, 0x01);
-    pub(crate) const SUPPORTED_VERSIONS_TYPE: u16 = 43;
-    pub(crate) const TLS_RANDOM_SIZE: usize = 32;
-    pub(crate) const TLS_HEADER_SIZE: usize = 5;
-    pub(crate) const TLS_SESSION_ID_SIZE: usize = 32;
-    pub(crate) const TLS_13: u16 = 0x0304;
-
-    pub(crate) const SERVER_HELLO: u8 = 0x02;
-    pub(crate) const HANDSHAKE: u8 = 0x16;
-    pub(crate) const APPLICATION_DATA: u8 = 0x17;
-
-    pub(crate) const SERVER_RANDOM_OFFSET: usize = 1 + 3 + 2;
-    pub(crate) const SESSION_ID_LEN_IDX: usize =
-        TLS_HEADER_SIZE + 1 + 3 + 2 + TLS_RANDOM_SIZE;
-    pub(crate) const TLS_HMAC_HEADER_SIZE: usize = TLS_HEADER_SIZE + HMAC_SIZE;
-
-    pub(crate) const COPY_BUF_SIZE: usize = 4096;
-    pub(crate) const HMAC_SIZE: usize = 4;
-}
 
 #[derive(Clone)]
 pub(crate) struct Hmac(hmac::Hmac<sha1::Sha1>);

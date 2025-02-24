@@ -10,7 +10,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::common::io::{ReadExactBase, ReadExt};
 
-use super::utils::{prelude::*, *};
+use super::{prelude::*, utils::*};
 
 #[derive(Default, Debug)]
 pub enum ReadState {

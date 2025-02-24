@@ -14,3 +14,5 @@ pub mod tls {
     pub use super::internal_tls::wrap_stream;
 }
 pub use internal_tls::TLSOptions;
+
+pub mod shadow_tls;
