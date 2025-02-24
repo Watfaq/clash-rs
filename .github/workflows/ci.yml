@@ -346,12 +346,19 @@ jobs:
           cat version.txt
 
       - name: Clean git tag & release
+        if: startsWith(github.ref, 'refs/heads/master')
         run: |
           gh release delete latest --cleanup-tag --yes --repo $GITHUB_REPOSITORY || true
           # Move latest tag to current commit locally
-          git tag latest -f
+          git tag latest -f || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Delete latest tag locally (for git-cliff)
+          git tag -d latest || true
 
       - name: Generate a changelog
         uses: orhun/git-cliff-action@main

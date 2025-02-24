@@ -1,0 +1,71 @@
+name: Commit Email Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract commit emails
+        run: |
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+          git log --format='%ae' $BASE_SHA..$HEAD_SHA | sort -u > commit-emails.txt
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: check-commits-email
+
+      - name: Run validation
+        id: check
+        run: |
+          check-commits-email \
+            --rules .github/email-blacklist.txt \
+            --emails commit-emails.txt \
+            --output github >> $GITHUB_OUTPUT
+
+      - name: Post comment
+        if: steps.check.outputs.violations != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: email-check-${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ### ⚠️ Violation of email address detected
+            The following mailboxes match the blacklist rule:
+
+            ${{ steps.check.outputs.violations }}
+
+            **Correction steps**：
+            1. Close pull request and wait for delete @Watfaq/clash-rs-devs
+
+            2. Modifying author information using interactive rebase
+            ```bash
+            git rebase -i HEAD~${{ github.event.pull_request.commits }}
+            # Mark the commit that needs to be modified as edit
+            ```
+
+            3. For each marked commit, execute:
+            ```bash
+            git commit --amend --author="合法姓名 <正确邮箱>"
+            git rebase --continue
+            ```
+            4. Force push update branch
+            ```bash
+            git push --force-with-lease
+            ```
+            5. Open another pull request
+

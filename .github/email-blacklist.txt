@@ -1,0 +1,6 @@
+*@qq.com
+*@foxmail.com
+*@126.com
+*@163.com
+*@sina.com
+MX:mxbiz1.qq.com
