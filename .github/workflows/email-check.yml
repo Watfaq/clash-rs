@@ -75,3 +75,10 @@ jobs:
             git push --force-with-lease
             ```
 
+      - name: Delete comment
+        if: ${{ steps.find-comment.outputs.comment-id != '' && steps.check.outputs.violations == '' }}
+        uses: detomarco/delete-comment@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+
