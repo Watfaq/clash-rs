@@ -11,6 +11,7 @@ use crate::{
             ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
+        net::Interface,
     },
     common::errors::new_io_error,
     proxy::{
@@ -20,7 +21,7 @@ use crate::{
     session::{Network, Session, SocksAddr, Type},
 };
 
-use super::{Interface, new_tcp_stream, new_udp_socket};
+use super::{new_tcp_stream, new_udp_socket};
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
@@ -92,7 +93,6 @@ impl RemoteConnector for DirectConnector {
         src: Option<SocketAddr>,
         _destination: SocksAddr,
         iface: Option<Interface>,
-        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,

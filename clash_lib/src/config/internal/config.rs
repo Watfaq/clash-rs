@@ -10,13 +10,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Error,
-    app::{dns, remote_content_manager::providers::rule_provider::RuleSetBehavior},
+    app::{
+        dns, net::Interface,
+        remote_content_manager::providers::rule_provider::RuleSetBehavior,
+    },
     common::auth,
     config::{
         def::{self, LogLevel, RunMode},
         internal::{proxy::OutboundProxy, rule::RuleType},
     },
-    proxy::utils::Interface,
 };
 
 use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
@@ -86,8 +88,8 @@ pub struct TunConfig {
     pub routes: Vec<IpNet>,
     pub gateway: IpNet,
     pub mtu: Option<u16>,
-    pub so_mark: Option<u32>,
-    pub route_table: Option<u32>,
+    pub so_mark: u32,
+    pub route_table: u32,
     pub dns_hijack: bool,
 }
 

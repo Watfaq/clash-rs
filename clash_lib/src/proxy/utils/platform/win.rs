@@ -8,7 +8,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{common::errors::new_io_error, proxy::utils::Interface};
+use crate::{app::net::Interface, common::errors::new_io_error};
 
 pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,

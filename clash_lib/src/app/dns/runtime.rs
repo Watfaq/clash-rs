@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
-use crate::proxy::utils::{Interface, new_tcp_stream, new_udp_socket};
+use crate::{
+    app::net::Interface,
+    proxy::utils::{new_tcp_stream, new_udp_socket},
+};
 use hickory_proto::runtime::{
     RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd,
 };
@@ -10,13 +13,15 @@ use tokio::net::UdpSocket as TokioUdpSocket;
 pub struct DnsRuntimeProvider {
     handle: TokioHandle,
     iface: Option<Interface>,
+    so_mark: Option<u32>,
 }
 
 impl DnsRuntimeProvider {
-    pub fn new(iface: Option<Interface>) -> Self {
+    pub fn new(iface: Option<Interface>, so_mark: Option<u32>) -> Self {
         Self {
             handle: TokioHandle::default(),
             iface,
+            so_mark,
         }
     }
 }
@@ -45,12 +50,13 @@ impl RuntimeProvider for DnsRuntimeProvider {
         >,
     > {
         let iface = self.iface.clone();
+        let _so_mark = self.so_mark;
         Box::pin(async move {
             new_tcp_stream(
                 server_addr,
                 iface,
                 #[cfg(target_os = "linux")]
-                None,
+                _so_mark,
             )
             .await
             .map(AsyncIoTokioAsStd)
@@ -68,12 +74,13 @@ impl RuntimeProvider for DnsRuntimeProvider {
         >,
     > {
         let iface = self.iface.clone();
+        let _so_mark = self.so_mark;
         Box::pin(async move {
             new_udp_socket(
                 None,
                 iface.clone(),
                 #[cfg(target_os = "linux")]
-                None,
+                _so_mark,
             )
             .await
         })

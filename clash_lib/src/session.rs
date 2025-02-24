@@ -6,12 +6,13 @@ use std::{
     str::FromStr,
 };
 
-use crate::proxy::utils::Interface;
 use bytes::{Buf, BufMut};
 use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use erased_serde::Serialize as ESerialize;
+
+use crate::app::net::Interface;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {

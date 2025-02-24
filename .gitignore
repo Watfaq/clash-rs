@@ -5,7 +5,7 @@ target/
 .idea/
 .vscode/
 .config/
-venv/
+.venv/
 /bazel-*
 /output/
 rust-project.json
