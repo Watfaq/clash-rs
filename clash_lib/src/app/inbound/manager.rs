@@ -1,27 +1,22 @@
+use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::{
+    sync::{RwLock, oneshot},
+    task::{JoinHandle, JoinSet},
+};
+use tracing::error;
 
 use crate::{
-    Error, Runner,
+    Result,
     app::{
-        dispatcher::Dispatcher,
-        inbound::network_listener::{ListenerType, NetworkInboundListener},
+        dispatcher::Dispatcher, inbound::network_listener::NetworkInboundHandler,
     },
-    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
-    config::internal::config::{BindAddress, Inbound},
+    common::auth::ThreadSafeAuthenticator,
+    config::internal::{config::BindAddress, listener::InboundOpts},
 };
 use std::{collections::HashMap, sync::Arc};
 
-pub struct InboundManager {
-    network_listeners: HashMap<ListenerType, NetworkInboundListener>,
-    dispatcher: Arc<Dispatcher>,
-    bind_address: BindAddress,
-    authenticator: ThreadSafeAuthenticator,
-}
-
-pub type ThreadSafeInboundManager = Arc<Mutex<InboundManager>>;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Ports {
     pub port: Option<u16>,
     #[serde(rename = "socks-port")]
@@ -34,153 +29,217 @@ pub struct Ports {
     pub mixed_port: Option<u16>,
 }
 
+type TaskHandle = RwLock<Option<(JoinHandle<Result<()>>, oneshot::Sender<()>)>>;
+
+pub struct InboundManager {
+    dispatcher: Arc<Dispatcher>,
+    bind_address: ArcSwap<BindAddress>,
+    authenticator: ThreadSafeAuthenticator,
+
+    inbounds_opt: RwLock<HashMap<String, InboundOpts>>,
+    inbounds_handler: RwLock<HashMap<String, NetworkInboundHandler>>,
+
+    task_handle: TaskHandle,
+}
+
 impl InboundManager {
-    pub fn new(
-        inbound: Inbound,
+    pub async fn new(
+        bind_address: BindAddress,
+        _authentication: Vec<String>, // TODO
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
-    ) -> Result<Self, Error> {
-        let network_listeners = HashMap::new();
-
-        let mut s = Self {
-            network_listeners,
+        inbounds_opt: HashMap<String, InboundOpts>,
+    ) -> Result<Self> {
+        let s = Self {
+            inbounds_handler: HashMap::with_capacity(3).into(),
             dispatcher,
-            bind_address: inbound.bind_address,
+            bind_address: ArcSwap::new(bind_address.into()),
             authenticator,
+            inbounds_opt: inbounds_opt.into(),
+            task_handle: RwLock::new(None),
         };
-
-        let ports = Ports {
-            port: inbound.port,
-            socks_port: inbound.socks_port,
-            redir_port: inbound.redir_port,
-            tproxy_port: inbound.tproxy_port,
-            mixed_port: inbound.mixed_port,
-        };
-
-        s.rebuild_listeners(ports);
+        s.build_handlers().await;
         Ok(s)
     }
 
-    pub fn get_runner(&self) -> Result<Runner, Error> {
-        let mut runners = Vec::new();
-        for r in self.network_listeners.values() {
-            runners.append(&mut r.listen()?);
+    pub async fn start(self: &Arc<Self>) {
+        let mut guard = self.task_handle.write().await;
+        if let Some((handle, signal)) = guard.take() {
+            _ = signal.send(());
+            handle.abort();
         }
 
-        Ok(Box::pin(async move {
-            let mut errors = Vec::new();
-            let _ = futures::future::join_all(runners)
-                .await
-                .into_iter()
-                .filter_map(|r| r.map_err(|e| errors.push(e)).ok())
-                .collect::<Vec<_>>();
-            if errors.is_empty() {
-                Ok(())
-            } else {
-                Err(new_io_error(format!(
-                    "failed to start inbound listeners: {:?}",
-                    errors
-                ))
-                .into())
+        let v = self.clone();
+        let (signal_tx, signal_rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { v.build_task(signal_rx).await });
+        *guard = Some((handle, signal_tx));
+    }
+
+    // FIXME: This is not working if
+    // 1. Inner nested spawned tasks.
+    // 2. spawn_blocking
+    pub async fn shutdown(&self) {
+        if let Some((handle, signal)) = self.task_handle.write().await.take() {
+            _ = signal.send(());
+            handle.abort();
+        }
+    }
+
+    pub async fn restart(self: &Arc<Self>) {
+        self.build_handlers().await;
+        self.start().await;
+    }
+
+    // Build `inbounds_handler` tasks
+    async fn build_task(
+        self: &Arc<Self>,
+        mut signal: oneshot::Receiver<()>,
+    ) -> Result<()> {
+        let mut runners = JoinSet::new();
+        for (_, handler) in self.inbounds_handler.read().await.iter() {
+            handler.listen(&mut runners)?;
+        }
+        loop {
+            tokio::select! {
+                Some(result) = runners.join_next() => {
+                    match result {
+                        Ok(Err(e)) => error!("failed to start inbound listeners: {e:?}"),
+                        Err(e) => {
+                            if let Ok(reason) = e.try_into_panic() {
+                                std::panic::resume_unwind(reason);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                _ = &mut signal => {
+                    runners.shutdown().await;
+                    break;
+                }
             }
-        }))
+        }
+        Ok(())
     }
 
-    /// API handlers below
-    pub fn get_bind_address(&self) -> &BindAddress {
-        &self.bind_address
+    // Sync `inbounds_handler` with `inbounds_opt`
+    async fn build_handlers(&self) {
+        let mut network_listeners = HashMap::with_capacity(3);
+        let guard = self.inbounds_opt.read().await;
+        for (name, inbound) in guard.iter() {
+            network_listeners.insert(
+                name.clone(),
+                NetworkInboundHandler {
+                    name: name.to_string(),
+                    dispatcher: self.dispatcher.clone(),
+                    authenticator: self.authenticator.clone(),
+                    listener: inbound.clone(), // TODO use Arc
+                },
+            );
+        }
+
+        *self.inbounds_handler.write().await = network_listeners;
     }
 
-    pub fn set_bind_address(&mut self, bind_address: BindAddress) {
-        self.bind_address = bind_address;
-    }
-
-    pub fn get_ports(&self) -> Ports {
-        let mut ports = Ports {
-            port: None,
-            socks_port: None,
-            redir_port: None,
-            tproxy_port: None,
-            mixed_port: None,
-        };
-        self.network_listeners
-            .values()
-            .for_each(|x| match x.listener_type {
-                ListenerType::Http => {
-                    ports.port = Some(x.port);
+    // RESTFUL API handlers below
+    pub async fn get_ports(&self) -> Ports {
+        let mut ports = Ports::default();
+        let guard = self.inbounds_opt.read().await;
+        for (_, opts) in guard.iter() {
+            match &opts {
+                InboundOpts::Http {
+                    common_opts,
+                    inherited,
+                } => {
+                    if *inherited {
+                        ports.port = Some(common_opts.port)
+                    }
                 }
-                ListenerType::Socks5 => {
-                    ports.socks_port = Some(x.port);
+                InboundOpts::Socks {
+                    common_opts,
+                    inherited,
+                    ..
+                } => {
+                    if *inherited {
+                        ports.socks_port = Some(common_opts.port)
+                    }
                 }
-                ListenerType::Mixed => {
-                    ports.mixed_port = Some(x.port);
+                InboundOpts::Mixed {
+                    common_opts,
+                    inherited,
+                    ..
+                } => {
+                    if *inherited {
+                        ports.mixed_port = Some(common_opts.port)
+                    }
                 }
-                ListenerType::Tproxy => {
-                    ports.tproxy_port = Some(x.port);
+                InboundOpts::TProxy {
+                    common_opts,
+                    inherited,
+                    ..
+                } => {
+                    if *inherited {
+                        ports.tproxy_port = Some(common_opts.port)
+                    }
                 }
-            });
-
+                InboundOpts::Redir {
+                    common_opts,
+                    inherited,
+                } => {
+                    if *inherited {
+                        ports.redir_port = Some(common_opts.port)
+                    }
+                }
+                _ => {}
+            }
+        }
         ports
     }
 
-    pub fn rebuild_listeners(&mut self, ports: Ports) {
-        let mut network_listeners = HashMap::new();
-        if let Some(http_port) = ports.port {
-            network_listeners.insert(
-                ListenerType::Http,
-                NetworkInboundListener {
-                    name: "HTTP".to_string(),
-                    bind_addr: self.bind_address.clone(),
-                    port: http_port,
-                    listener_type: ListenerType::Http,
-                    dispatcher: self.dispatcher.clone(),
-                    authenticator: self.authenticator.clone(),
-                },
-            );
-        }
+    pub fn get_bind_address(&self) -> BindAddress {
+        **self.bind_address.load()
+    }
 
-        if let Some(socks_port) = ports.socks_port {
-            network_listeners.insert(
-                ListenerType::Socks5,
-                NetworkInboundListener {
-                    name: "SOCKS5".to_string(),
-                    bind_addr: self.bind_address.clone(),
-                    port: socks_port,
-                    listener_type: ListenerType::Socks5,
-                    dispatcher: self.dispatcher.clone(),
-                    authenticator: self.authenticator.clone(),
-                },
-            );
+    pub async fn set_bind_address(&self, bind_address: BindAddress) {
+        self.bind_address.store(Arc::new(bind_address));
+        let mut guard = self.inbounds_opt.write().await;
+        for (_, opts) in guard.iter_mut() {
+            if opts.inherited() {
+                opts.common_opts_mut().listen = bind_address
+            }
         }
+    }
 
-        if let Some(mixed_port) = ports.mixed_port {
-            network_listeners.insert(
-                ListenerType::Mixed,
-                NetworkInboundListener {
-                    name: "Mixed".to_string(),
-                    bind_addr: self.bind_address.clone(),
-                    port: mixed_port,
-                    listener_type: ListenerType::Mixed,
-                    dispatcher: self.dispatcher.clone(),
-                    authenticator: self.authenticator.clone(),
-                },
-            );
+    pub async fn change_ports(&self, ports: Ports) {
+        let mut guard = self.inbounds_opt.write().await;
+        for (_, opts) in guard.iter_mut() {
+            match &opts {
+                InboundOpts::Http { inherited, .. } => {
+                    if *inherited && let Some(port) = ports.port {
+                        *opts.port_mut() = port
+                    }
+                }
+                InboundOpts::Socks { inherited, .. } => {
+                    if *inherited && let Some(port) = ports.socks_port {
+                        *opts.port_mut() = port
+                    }
+                }
+                InboundOpts::Mixed { inherited, .. } => {
+                    if *inherited && let Some(port) = ports.mixed_port {
+                        *opts.port_mut() = port
+                    }
+                }
+                InboundOpts::TProxy { inherited, .. } => {
+                    if *inherited && let Some(port) = ports.tproxy_port {
+                        *opts.port_mut() = port
+                    }
+                }
+                InboundOpts::Redir { inherited, .. } => {
+                    if *inherited && let Some(port) = ports.redir_port {
+                        *opts.port_mut() = port
+                    }
+                }
+                _ => {}
+            }
         }
-
-        if let Some(tproxy_port) = ports.tproxy_port {
-            network_listeners.insert(
-                ListenerType::Tproxy,
-                NetworkInboundListener {
-                    name: "TProxy".to_string(),
-                    bind_addr: self.bind_address.clone(),
-                    port: tproxy_port,
-                    listener_type: ListenerType::Tproxy,
-                    dispatcher: self.dispatcher.clone(),
-                    authenticator: self.authenticator.clone(),
-                },
-            );
-        }
-
-        self.network_listeners = network_listeners;
     }
 }

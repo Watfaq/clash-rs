@@ -238,6 +238,7 @@ impl Dispatcher {
     /// Dispatch a UDP packet to outbound handler
     /// returns the close sender
     #[instrument]
+    #[must_use]
     pub async fn dispatch_datagram(
         &self,
         sess: Session,
@@ -458,10 +459,13 @@ impl Dispatcher {
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
 
         tokio::spawn(async move {
-            let _ = close_receiver.await;
-            trace!("UDP close signal for {} received", s);
-            t1.abort();
-            t2.abort();
+            if (close_receiver.await).is_ok() {
+                trace!("UDP close signal for {} received", s);
+                t1.abort();
+                t2.abort();
+            } else {
+                error!("UDP close signal dropped!");
+            }
         });
 
         return close_sender;

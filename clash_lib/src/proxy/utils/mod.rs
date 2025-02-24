@@ -122,7 +122,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
     all_outbounds.into_iter().next()
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Interface {
     IpAddr(IpAddr),
     Name(String),

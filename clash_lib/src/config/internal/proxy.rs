@@ -363,22 +363,6 @@ impl OutboundGroupProtocol {
     }
 }
 
-impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
-    type Error = Error;
-
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        let name = mapping
-            .get("name")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig(
-                "missing field `name` in outbound proxy grouop".to_owned(),
-            ))?
-            .to_owned();
-        OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
-    }
-}
-
 impl Display for OutboundGroupProtocol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
