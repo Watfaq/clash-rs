@@ -35,13 +35,21 @@ jobs:
             --emails commit-emails.txt \
             --output github >> $GITHUB_OUTPUT
 
+      - name: Find Comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: Violation of email address detected
+
       - name: Post comment
         if: steps.check.outputs.violations != ''
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
-          comment-id: email-check-${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
           edit-mode: replace
           body: |
             ### ⚠️ Violation of email address detected
@@ -50,22 +58,20 @@ jobs:
             ${{ steps.check.outputs.violations }}
 
             **Correction steps**:
-            1. Close pull request and wait for delete @Watfaq/clash-rs-devs
-
-            2. Modifying author information using interactive rebase
+            1. Modifying author information using interactive rebase
             ```bash
             git rebase -i HEAD~${{ github.event.pull_request.commits }}
             # Mark the commit that needs to be modified as edit
             ```
 
-            3. For each marked commit, execute:
+            2. For each marked commit, execute:
             ```bash
             git commit --amend --author="username <other-email.com>"
             git rebase --continue
             ```
-            4. Force push update branch
+
+            3. Force push update branch
             ```bash
             git push --force-with-lease
             ```
-            5. Open another pull request
 
