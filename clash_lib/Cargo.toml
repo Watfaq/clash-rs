@@ -42,8 +42,8 @@ rustls-pemfile = "2"
 webpki-roots = "0.26"
 
 # shadow-tls
-tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "712cd2f707db2284653db3799a4b25c47cb57329"}
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "98d6b2e52f1791690c4c4f5f0bc832924be8c0cb"}
+tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"]}
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false, features=["ring"] }
 
 # Error handing & logging
 thiserror = "2"
