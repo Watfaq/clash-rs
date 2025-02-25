@@ -1,7 +1,7 @@
 use ipnet::IpNet;
 use tracing::warn;
 
-use crate::{config::internal::config::TunConfig, proxy::utils::OutboundInterface};
+use crate::{app::net::OutboundInterface, config::internal::config::TunConfig};
 
 pub fn add_route(_: &OutboundInterface, _: &IpNet) -> std::io::Result<()> {
     warn!("add_route is not implemented on {}", std::env::consts::OS);
