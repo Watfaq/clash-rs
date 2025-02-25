@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 use super::platform::must_bind_socket_on_interface;
 use crate::app::net::Interface;
 use socket2::TcpKeepalive;
@@ -6,6 +7,7 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
+#[cfg(not(target_os = "android"))]
 use tracing::{debug, error};
 
 pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
