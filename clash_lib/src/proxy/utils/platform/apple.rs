@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 
 use tracing::warn;
 
-use crate::{common::errors::new_io_error, proxy::utils::Interface};
+use crate::{app::net::OutboundInterface, common::errors::new_io_error};
 
 pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,
