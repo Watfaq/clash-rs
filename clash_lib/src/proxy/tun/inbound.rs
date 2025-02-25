@@ -6,6 +6,7 @@ use std::{
 
 use futures::{SinkExt, StreamExt};
 
+use hickory_proto::rr::RecordType;
 use netstack_smoltcp::StackBuilder;
 use tracing::{debug, error, info, trace, warn};
 use tun::AbstractDevice;
@@ -13,20 +14,18 @@ use url::Url;
 
 use crate::{
     Error, Runner,
-    app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
+    app::{
+        dispatcher::Dispatcher,
+        dns::{ThreadSafeDNSResolver, exchange_with_resolver},
+        net::get_outbound_interface,
+    },
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{
-        datagram::UdpPacket, tun::routes::maybe_add_routes,
-        utils::get_outbound_interface,
-    },
+    proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
     session::{Network, Session, Type},
 };
 
 use crate::{defer, proxy::tun::routes};
-
-const DEFAULT_SO_MARK: u32 = 3389;
-const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 async fn handle_inbound_stream(
     stream: netstack_smoltcp::TcpStream,
@@ -41,7 +40,7 @@ async fn handle_inbound_stream(
         source: local_addr,
         destination: remote_addr.into(),
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
@@ -64,6 +63,8 @@ async fn handle_inbound_datagram(
     dns_hijack: bool,
 ) {
     // tun i/o
+    // lr: app packets went into tun will be accessed from lr
+    // ls: packet writen into ls will go back to app from tun
     let (mut lr, mut ls) = socket.split();
     // ideally we clone the WriteHalf ls, but it's not Clone and it's a Sink so the
     // send method is mut
@@ -80,6 +81,8 @@ async fn handle_inbound_datagram(
     let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
+    // l_tx: dispatcher write packet responsed from remote proxy
+    // l_rx: in fut1 items are forwared to ls
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
     // forward packets from tun to dispatcher
@@ -94,7 +97,7 @@ async fn handle_inbound_datagram(
         network: Network::Udp,
         typ: Type::Tun,
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
             }),
@@ -125,7 +128,7 @@ async fn handle_inbound_datagram(
 
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
-        while let Some((data, src_addr, dst_addr)) = lr.next().await {
+        'read_packet: while let Some((data, src_addr, dst_addr)) = lr.next().await {
             if dst_addr.ip().is_multicast() {
                 continue;
             }
@@ -142,54 +145,69 @@ async fn handle_inbound_datagram(
 
                 match hickory_proto::op::Message::from_vec(&pkt.data) {
                     Ok(msg) => {
-                        trace!("hijack dns request: {:?}", msg);
-                        let mut resp = match resolver_dns.exchange(&msg).await {
-                            Ok(resp) => resp,
-                            Err(e) => {
-                                warn!("failed to exchange dns message: {}", e);
-                                continue;
-                            }
-                        };
-                        // hickory mutates id sometimes, https://github.com/hickory-dns/hickory-dns/pull/2590
-                        resp.set_id(msg.id());
-
-                        if let Some(edns) = msg.extensions() {
-                            if edns
-                                .option(
-                                    hickory_proto::rr::rdata::opt::EdnsCode::Padding,
-                                )
-                                .is_none()
-                            {
-                                if let Some(edns) = resp.extensions_mut() {
-                                    edns.options_mut().remove(
-                                        hickory_proto::rr::rdata::opt::EdnsCode::Padding,
-                                    );
+                        let send_response =
+                            async |msg: hickory_proto::op::Message,
+                                   pkt: &UdpPacket| {
+                                match msg.to_vec() {
+                                    Ok(data) => {
+                                        if let Err(e) = ls_dns
+                                            .send((
+                                                data,
+                                                pkt.dst_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                                pkt.src_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                            ))
+                                            .await
+                                        {
+                                            warn!(
+                                                "failed to send udp packet to \
+                                                 netstack: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "failed to serialize dns response: {}",
+                                            e
+                                        );
+                                    }
                                 }
-                            }
+                            };
+
+                        trace!("hijack dns request: {:?}", msg);
+                        if msg.query().map(|q| q.query_type())
+                            == Some(RecordType::AAAA)
+                        {
+                            trace!("dns hijack does not support AAAA query");
+                            let resp = hickory_proto::op::Message::error_msg(
+                                msg.id(),
+                                msg.op_code(),
+                                hickory_proto::op::ResponseCode::Refused,
+                            );
+                            send_response(resp, &pkt).await;
+                            continue 'read_packet;
                         }
+
+                        let mut resp =
+                            match exchange_with_resolver(&resolver_dns, &msg, true)
+                                .await
+                            {
+                                Ok(resp) => resp,
+                                Err(e) => {
+                                    warn!("failed to exchange dns message: {}", e);
+                                    continue 'read_packet;
+                                }
+                            };
+
+                        // TODO: figure out where the message id got lost
+                        resp.set_id(msg.id());
                         trace!("hijack dns response: {:?}", resp);
 
-                        match resp.to_vec() {
-                            Ok(data) => {
-                                if let Err(e) = ls_dns
-                                    .send((
-                                        data,
-                                        pkt.dst_addr.must_into_socket_addr(),
-                                        pkt.src_addr.must_into_socket_addr(),
-                                    ))
-                                    .await
-                                {
-                                    warn!(
-                                        "failed to send udp packet to netstack: {}",
-                                        e
-                                    );
-                                }
-                                continue;
-                            }
-                            Err(e) => {
-                                warn!("failed to serialize dns response: {}", e);
-                            }
-                        }
+                        send_response(resp, &pkt).await;
                     }
                     Err(e) => {
                         warn!(
@@ -199,6 +217,9 @@ async fn handle_inbound_datagram(
                         );
                     }
                 };
+
+                // don't forward dns packet to dispatcher
+                continue 'read_packet;
             }
 
             match d_tx.send(pkt).await {
@@ -272,10 +293,6 @@ pub fn get_runner(
     let tun_name = tun.tun_name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
 
-    let mut cfg = cfg;
-    cfg.route_table = cfg.route_table.or(Some(DEFAULT_ROUTE_TABLE));
-    cfg.so_mark = cfg.so_mark.or(Some(DEFAULT_SO_MARK));
-
     maybe_add_routes(&cfg, &tun_name)?;
 
     let mut builder = StackBuilder::default()
@@ -306,7 +323,7 @@ pub fn get_runner(
             }
         }
 
-        let so_mark = cfg.so_mark.unwrap();
+        let so_mark = cfg.so_mark;
 
         let framed = tun.into_framed();
 

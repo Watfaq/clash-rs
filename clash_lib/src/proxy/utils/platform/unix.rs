@@ -1,6 +1,6 @@
 use std::{io, net::SocketAddr};
 
-use crate::proxy::utils::Interface;
+use crate::app::net::Interface;
 
 #[allow(dead_code)]
 pub(crate) fn must_bind_socket_on_interface(

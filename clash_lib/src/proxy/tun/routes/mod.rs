@@ -29,8 +29,8 @@ pub use other::maybe_routes_clean_up;
 use tracing::warn;
 
 use crate::{
-    common::errors::map_io_error, config::internal::config::TunConfig,
-    proxy::utils::OutboundInterface,
+    app::net::OutboundInterface, common::errors::map_io_error,
+    config::internal::config::TunConfig,
 };
 
 use network_interface::NetworkInterfaceConfig;
@@ -88,6 +88,11 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
             #[cfg(target_os = "linux")]
             {
                 linux::setup_policy_routing(cfg, &tun_iface)?;
+
+                // support additional routes on linux when route_all is enabled
+                for r in &cfg.routes {
+                    add_route(&tun_iface, r)?;
+                }
             }
         } else {
             for r in &cfg.routes {

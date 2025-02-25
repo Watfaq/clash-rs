@@ -1,6 +1,6 @@
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    proxy::utils::{Interface, get_outbound_interface, new_udp_socket},
+    app::{dns::ThreadSafeDNSResolver, net::get_outbound_interface},
+    proxy::utils::new_udp_socket,
     session::SocksAddr as ClashSocksAddr,
 };
 
@@ -50,7 +50,7 @@ impl TuicEndpoint {
                     let iface = get_outbound_interface();
                     new_udp_socket(
                         None,
-                        iface.map(|x| Interface::Name(x.name)),
+                        iface.map(|x| x.name.as_str().into()),
                         #[cfg(target_os = "linux")]
                         None,
                     )
