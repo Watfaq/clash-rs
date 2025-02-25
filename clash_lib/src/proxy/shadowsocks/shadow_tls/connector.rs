@@ -1,10 +1,11 @@
-use std::{io, ptr::copy_nonoverlapping, sync::Arc};
-
+use once_cell::sync::Lazy;
 use rand::Rng;
+use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 
 use rand::distr::Distribution;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{TlsConnector, client::TlsStream};
+use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
+use watfaq_rustls::RootCertStore;
 
 use crate::proxy::{AnyStream, shadowsocks::ShadowTlsOption};
 
@@ -14,6 +15,13 @@ use super::{
     stream::{ProxyTlsStream, VerifiedStream},
     utils::Hmac,
 };
+
+static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
+
+fn root_store() -> Arc<RootCertStore> {
+    let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
+    Arc::new(root_store)
+}
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
@@ -27,10 +35,8 @@ pub struct Connector;
 
 impl Connector {
     fn connector() -> TlsConnector {
-        use crate::common::tls::GLOBAL_ROOT_STORE;
-
-        let tls_config = rustls::ClientConfig::builder()
-            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+        let tls_config = watfaq_rustls::ClientConfig::builder()
+            .with_root_certificates(ROOT_STORE.clone())
             .with_no_client_auth();
 
         TlsConnector::from(Arc::new(tls_config.clone()))
@@ -43,8 +49,9 @@ impl Connector {
         let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
 
         let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
-        let sni_name = rustls::pki_types::ServerName::try_from(opts.host.clone())
-            .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
+        let sni_name =
+            watfaq_rustls::pki_types::ServerName::try_from(opts.host.clone())
+                .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
         let connector = Self::connector();
