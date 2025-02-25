@@ -1,6 +1,5 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
-#![feature(unbounded_shifts)]
 #![feature(let_chains)]
 
 #[macro_use]

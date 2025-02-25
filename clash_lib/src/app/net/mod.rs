@@ -11,9 +11,9 @@ use tracing::trace;
 
 pub static DEFAULT_OUTBOUND_INTERFACE: LazyLock<
     Arc<tokio::sync::RwLock<Option<OutboundInterface>>>,
-> = LazyLock::new(|| Default::default());
+> = LazyLock::new(Default::default);
 pub static TUN_SOMARK: LazyLock<tokio::sync::RwLock<Option<u32>>> =
-    LazyLock::new(|| Default::default());
+    LazyLock::new(Default::default);
 
 /// Initialize network configuration
 /// globally manage default outbound interface

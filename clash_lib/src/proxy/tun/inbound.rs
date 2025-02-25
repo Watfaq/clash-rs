@@ -293,10 +293,6 @@ pub fn get_runner(
     let tun_name = tun.tun_name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
 
-    let mut cfg = cfg;
-    cfg.route_table = cfg.route_table;
-    cfg.so_mark = cfg.so_mark;
-
     maybe_add_routes(&cfg, &tun_name)?;
 
     let mut builder = StackBuilder::default()

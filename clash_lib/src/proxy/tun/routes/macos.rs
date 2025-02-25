@@ -4,9 +4,9 @@ use ipnet::IpNet;
 use tracing::warn;
 
 use crate::{
+    app::net::{OutboundInterface, get_outbound_interface},
     common::errors::new_io_error,
     config::internal::config::TunConfig,
-    proxy::utils::{OutboundInterface, get_outbound_interface},
 };
 
 /// let's assume that the `route` command is available on macOS
