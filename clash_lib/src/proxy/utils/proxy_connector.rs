@@ -93,6 +93,7 @@ impl RemoteConnector for DirectConnector {
         src: Option<SocketAddr>,
         _destination: SocksAddr,
         iface: Option<Interface>,
+        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,

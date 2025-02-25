@@ -128,7 +128,7 @@ async fn handle_inbound_datagram(
 
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
-        while let Some((data, src_addr, dst_addr)) = lr.next().await {
+        'read_packet: while let Some((data, src_addr, dst_addr)) = lr.next().await {
             if dst_addr.ip().is_multicast() {
                 continue;
             }
@@ -183,18 +183,13 @@ async fn handle_inbound_datagram(
                             == Some(RecordType::AAAA)
                         {
                             trace!("dns hijack does not support AAAA query");
-                            let mut resp = hickory_proto::op::Message::new();
-                            resp.set_id(msg.id());
-                            resp.set_message_type(
-                                hickory_proto::op::MessageType::Response,
-                            );
-                            resp.set_recursion_available(false);
-                            resp.set_authoritative(true);
-                            resp.set_response_code(
-                                hickory_proto::op::ResponseCode::NXDomain,
+                            let resp = hickory_proto::op::Message::error_msg(
+                                msg.id(),
+                                msg.op_code(),
+                                hickory_proto::op::ResponseCode::Refused,
                             );
                             send_response(resp, &pkt).await;
-                            continue;
+                            continue 'read_packet;
                         }
 
                         let mut resp =
@@ -204,10 +199,11 @@ async fn handle_inbound_datagram(
                                 Ok(resp) => resp,
                                 Err(e) => {
                                     warn!("failed to exchange dns message: {}", e);
-                                    continue;
+                                    continue 'read_packet;
                                 }
                             };
 
+                        // TODO: figure out where the message id got lost
                         resp.set_id(msg.id());
                         trace!("hijack dns response: {:?}", resp);
 
@@ -221,6 +217,9 @@ async fn handle_inbound_datagram(
                         );
                     }
                 };
+
+                // don't forward dns packet to dispatcher
+                continue 'read_packet;
             }
 
             match d_tx.send(pkt).await {

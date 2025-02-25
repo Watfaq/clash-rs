@@ -30,9 +30,16 @@ pub fn exchange_with_resolver<'a>(
                 .unwrap();
 
             let mut res = Message::new();
+            res.set_id(req.id());
+            res.set_message_type(hickory_proto::op::MessageType::Response);
             res.add_queries(req.queries().iter().map(|x| x.to_owned()));
             res.set_recursion_available(false);
             res.set_authoritative(true);
+            res.set_recursion_desired(req.recursion_desired());
+            res.set_checking_disabled(req.checking_disabled());
+            if let Some(edns) = req.extensions().clone() {
+                res.set_edns(edns);
+            }
 
             match resolver.resolve_v4(&host, enhanced).await {
                 Ok(resp) => match resp {
