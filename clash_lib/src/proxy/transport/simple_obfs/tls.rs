@@ -6,6 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::BufMut;
 use chrono::Utc;
@@ -13,8 +14,25 @@ use futures::pin_mut;
 use std::{future::Future, task::ready};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
-use crate::proxy::AnyStream;
+use crate::proxy::{AnyStream, transport::Sip003Plugin};
 const CHUNK_SIZE: isize = 1 << 14; // 2 ** 14 == 16 * 1024
+
+pub struct Client {
+    server: String,
+}
+
+impl Client {
+    pub fn new(server: String) -> Self {
+        Self { server }
+    }
+}
+
+#[async_trait]
+impl Sip003Plugin for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
+        Ok(TLSObfs::new(stream, self.server.clone()).into())
+    }
+}
 
 #[derive(Debug)]
 enum ReadState {

@@ -1,101 +1,139 @@
 use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 
+use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use rand::{Rng, distr::Distribution};
 use stream::{ProxyTlsStream, VerifiedStream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{TlsConnector, client::TlsStream};
+use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
 use utils::Hmac;
-
-use crate::proxy::{AnyStream, shadowsocks::ShadowTlsOption};
+use watfaq_rustls::RootCertStore;
 
 mod prelude;
 mod stream;
 mod utils;
 
+use super::Sip003Plugin;
+use crate::proxy::AnyStream;
 use prelude::*;
 
-#[derive(Clone, Debug)]
-#[allow(unused)]
-pub struct Opts {
-    pub fastopen: bool,
-    pub sni: String,
+static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
+
+fn root_store() -> Arc<RootCertStore> {
+    let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
+    Arc::new(root_store)
+}
+
+pub struct ShadowTlsOption {
+    pub host: String,
+    pub password: String,
     pub strict: bool,
 }
 
-pub async fn wrap_shadow_tls_stream(
-    opts: &ShadowTlsOption,
-    stream: AnyStream,
-) -> std::io::Result<AnyStream> {
-    let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
+impl From<ShadowTlsOption> for Client {
+    fn from(opt: ShadowTlsOption) -> Self {
+        Self::new(opt.host, opt.password, opt.strict)
+    }
+}
 
-    // handshake
-    let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
-    let sni_name = rustls::pki_types::ServerName::try_from(opts.host.clone())
-        .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
-    let session_id_generator =
-        move |data: &_| generate_session_id(&hamc_handshake, data);
-    let connector = new_connector();
-    let mut tls = connector
-        .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
-        .await?;
+pub struct Client {
+    pub host: String,
+    pub password: String,
+    pub strict: bool,
+}
 
-    // check if is authorized
-    let authorized = tls.get_mut().0.authorized();
-    let maybe_server_random_and_hamc = tls
-        .get_mut()
-        .0
-        .state()
-        .as_ref()
-        .map(|s| (s.server_random, s.hmac.to_owned()));
-
-    // whatever the fake_request is successful or not, we should return an
-    // error when strict mode is enabled
-    if (!authorized || maybe_server_random_and_hamc.is_none()) && opts.strict {
-        tracing::warn!(
-            "shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not \
-             supported, perform fake request"
-        );
-
-        tls.get_mut().0.fake_request = true;
-        fake_request(tls).await?;
-
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, fake \
-             request",
-        ));
+impl Client {
+    pub fn new(host: String, password: String, strict: bool) -> Self {
+        Self {
+            host,
+            password,
+            strict,
+        }
     }
 
-    let (server_random, hmac_nop) = match maybe_server_random_and_hamc {
-        Some(inner) => inner,
-        None => {
+    pub async fn wrap_shadow_tls_stream(
+        &self,
+        stream: AnyStream,
+    ) -> std::io::Result<AnyStream> {
+        let proxy_stream = ProxyTlsStream::new(stream, &self.password);
+
+        // handshake
+        let hamc_handshake = Hmac::new(&self.password, (&[], &[]));
+        let sni_name =
+            watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
+                .unwrap_or_else(|_| panic!("invalid server name: {}", self.host));
+        let session_id_generator =
+            move |data: &_| generate_session_id(&hamc_handshake, data);
+        let connector = new_connector();
+        let mut tls = connector
+            .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
+            .await?;
+
+        // check if is authorized
+        let authorized = tls.get_mut().0.authorized();
+        let maybe_server_random_and_hamc = tls
+            .get_mut()
+            .0
+            .state()
+            .as_ref()
+            .map(|s| (s.server_random, s.hmac.to_owned()));
+
+        // whatever the fake_request is successful or not, we should return an
+        // error when strict mode is enabled
+        if (!authorized || maybe_server_random_and_hamc.is_none()) && self.strict {
+            tracing::warn!(
+                "shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not \
+                 supported, perform fake request"
+            );
+
+            tls.get_mut().0.fake_request = true;
+            fake_request(tls).await?;
+
             return Err(io::Error::new(
                 io::ErrorKind::Other,
-                "server random and hmac not extracted from handshake, fail to \
-                 connect",
+                "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, \
+                 fake request",
             ));
         }
-    };
 
-    let hmac_client = Hmac::new(&opts.password, (&server_random, "C".as_bytes()));
-    let hmac_server = Hmac::new(&opts.password, (&server_random, "S".as_bytes()));
+        let (server_random, hmac_nop) = match maybe_server_random_and_hamc {
+            Some(inner) => inner,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "server random and hmac not extracted from handshake, fail to \
+                     connect",
+                ));
+            }
+        };
 
-    // now the shadow tls stream is connected, we can use it to send data
-    let verified_stream = VerifiedStream::new(
-        tls.into_inner().0.raw,
-        hmac_client,
-        hmac_server,
-        Some(hmac_nop),
-    );
+        let hmac_client =
+            Hmac::new(&self.password, (&server_random, "C".as_bytes()));
+        let hmac_server =
+            Hmac::new(&self.password, (&server_random, "S".as_bytes()));
 
-    Ok(Box::new(verified_stream))
+        // now the shadow tls stream is connected, we can use it to send data
+        let verified_stream = VerifiedStream::new(
+            tls.into_inner().0.raw,
+            hmac_client,
+            hmac_server,
+            Some(hmac_nop),
+        );
+
+        Ok(Box::new(verified_stream))
+    }
+}
+
+#[async_trait]
+impl Sip003Plugin for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
+        self.wrap_shadow_tls_stream(stream).await
+    }
 }
 
 fn new_connector() -> TlsConnector {
-    use crate::common::tls::GLOBAL_ROOT_STORE;
-
-    let tls_config = rustls::ClientConfig::builder()
-        .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+    let tls_config = watfaq_rustls::ClientConfig::builder()
+        .with_root_certificates(ROOT_STORE.clone())
         .with_no_client_auth();
 
     TlsConnector::from(Arc::new(tls_config.clone()))

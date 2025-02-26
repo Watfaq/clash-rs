@@ -5,9 +5,10 @@ use crate::{
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
         HandlerCommonOptions,
-        shadowsocks::{
-            Handler, HandlerOptions, OBFSOption, ShadowTlsOption, SimpleOBFSMode,
-            SimpleOBFSOption, V2RayOBFSOption,
+        shadowsocks::{Handler, HandlerOptions},
+        transport::{
+            ShadowTlsOption, ShadowtlsPlugin, SimpleOBFSMode, SimpleOBFSOption,
+            SimpleObfsHttp, SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
         },
     },
 };
@@ -34,40 +35,56 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
             port: s.common_opts.port,
             password: s.password.to_owned(),
             cipher: s.cipher.to_owned(),
-            plugin_opts: match &s.plugin {
+            plugin: match &s.plugin {
                 Some(plugin) => match plugin.as_str() {
                     "obfs" => {
                         tracing::warn!(
                             "simple-obfs is deprecated, please use v2ray-plugin \
                              instead"
                         );
-                        s.plugin_opts
+                        let opt: SimpleOBFSOption = s
+                            .plugin_opts
                             .clone()
                             .ok_or(Error::InvalidConfig(
                                 "plugin_opts is required for plugin obfs".to_owned(),
                             ))?
-                            .try_into()
-                            .map(OBFSOption::Simple)
-                            .ok()
+                            .try_into()?;
+                        let plugin = match opt.mode {
+                            SimpleOBFSMode::Http => Box::new(SimpleObfsHttp::new(
+                                opt.host,
+                                s.common_opts.port,
+                            ))
+                                as _,
+                            SimpleOBFSMode::Tls => {
+                                Box::new(SimpleObfsTLS::new(opt.host)) as _
+                            }
+                        };
+                        Some(plugin)
                     }
-                    "v2ray-plugin" => s
-                        .plugin_opts
-                        .clone()
-                        .ok_or(Error::InvalidConfig(
-                            "plugin_opts is required for plugin obfs".to_owned(),
-                        ))?
-                        .try_into()
-                        .map(OBFSOption::V2Ray)
-                        .ok(),
-                    "shadow-tls" => s
-                        .plugin_opts
-                        .clone()
-                        .ok_or(Error::InvalidConfig(
-                            "plugin_opts is required for plugin obfs".to_owned(),
-                        ))?
-                        .try_into()
-                        .map(OBFSOption::ShadowTls)
-                        .ok(),
+                    "v2ray-plugin" => {
+                        let opt: V2RayOBFSOption = s
+                            .plugin_opts
+                            .clone()
+                            .ok_or(Error::InvalidConfig(
+                                "plugin_opts is required for plugin obfs".to_owned(),
+                            ))?
+                            .try_into()?;
+                        // TODO: support more transport options, replace it with
+                        // `V2rayClient`
+                        let plugin = V2rayWsClient::try_from(opt)?;
+                        Some(Box::new(plugin) as _)
+                    }
+                    "shadow-tls" => {
+                        let opt: ShadowTlsOption = s
+                            .plugin_opts
+                            .clone()
+                            .ok_or(Error::InvalidConfig(
+                                "plugin_opts is required for plugin obfs".to_owned(),
+                            ))?
+                            .try_into()?;
+                        let plugin = ShadowtlsPlugin::from(opt);
+                        Some(Box::new(plugin) as _)
+                    }
                     _ => {
                         return Err(Error::InvalidConfig(format!(
                             "unsupported plugin: {}",

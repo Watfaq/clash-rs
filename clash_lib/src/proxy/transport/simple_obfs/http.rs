@@ -1,10 +1,29 @@
 use std::pin::Pin;
 
-use crate::proxy::AnyStream;
+use crate::proxy::{AnyStream, transport::Sip003Plugin};
+use async_trait::async_trait;
 use base64::Engine;
 use bytes::{BufMut, BytesMut};
 use rand::Rng;
 use tokio::io::{AsyncRead, AsyncWrite};
+
+pub struct Client {
+    host: String,
+    port: u16,
+}
+
+impl Client {
+    pub fn new(host: String, port: u16) -> Self {
+        Self { host, port }
+    }
+}
+
+#[async_trait]
+impl Sip003Plugin for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
+        Ok(HTTPObfs::new(stream, self.host.clone(), self.port).into())
+    }
+}
 
 #[derive(Debug)]
 pub struct HTTPObfs {
