@@ -262,6 +262,7 @@ mod tests {
             transport::*,
             utils::test_utils::{
                 Suite,
+                config_helper::test_config_base_dir,
                 docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
                 run_test_suites_and_cleanup,
             },
@@ -281,6 +282,44 @@ mod tests {
             .image(IMAGE_SS_RUST)
             .entrypoint(&["ssserver"])
             .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
+            .build()
+            .await
+    }
+
+    async fn get_ss_runner_with_plugin(
+        port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        let host = format!("0.0.0.0:{}", port);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .entrypoint(&["ssserver"])
+            .cmd(&[
+                "-s",
+                &host,
+                "-m",
+                CIPHER,
+                "-k",
+                PASSWORD,
+                "-U",
+                "-vvv",
+                "--plugin",
+                "v2ray-plugin",
+                "--plugin-opts",
+                "server;tls;host=example.org;mux=0",
+            ])
+            .mounts(&[
+                (
+                    cert.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/fullchain.cer",
+                ),
+                (
+                    key.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/example.org.key",
+                ),
+            ])
             .build()
             .await
     }
@@ -437,5 +476,40 @@ mod tests {
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_ss_v2ray_plugin() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = 10004;
+        let host = "example.org".to_owned();
+        let plugin = V2rayWsClient::try_new(
+            host,
+            ss_port,
+            "/".to_owned(),
+            Default::default(),
+            true,
+            true,
+            false,
+        )?;
+        let opts = HandlerOptions {
+            name: "test-obfs".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: ss_port,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin: Some(Box::new(plugin)),
+            udp: false,
+        };
+
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        run_test_suites_and_cleanup(
+            handler,
+            get_ss_runner_with_plugin(ss_port).await?,
+            Suite::tcp_tests(),
+        )
+        .await
     }
 }
