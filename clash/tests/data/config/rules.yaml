@@ -2,10 +2,10 @@
 port: 8888
 socks-port: "8889"
 mixed-port: 8899
-tproxy-port: 8900
+# tproxy-port: 8900
 
 tun:
-  enable: true
+  enable: false
   device-id: "dev://utun1989"
   route-all: false
   gateway: "198.19.0.1/32"
@@ -297,14 +297,20 @@ rule-providers:
     path: ./rule-set.yaml
     interval: 300
     behavior: domain
+  file-provider2:
+    type: file
+    path: ./rule-set-classical.yaml
+    interval: 300
+    behavior: classical
 
 rules:
   - IP-CIDR,1.1.1.1/32,udp-relay
   - IP-CIDR,8.8.8.8/32,udp-relay
+  - DOMAIN-REGEX,^www.google.com$,DIRECT
   - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,DIRECT
-  #  - RULE-SET,file-provider,trojan
+  - RULE-SET,file-provider2,DIRECT
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,grpc-vmess
