@@ -1,17 +1,15 @@
-use std::{collections::HashMap, fmt::Debug};
-
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::Request;
 use rand::Rng;
+use std::{collections::HashMap, fmt::Debug};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::error;
 
-use crate::{common::errors::map_io_error, proxy::AnyStream};
-
 use super::Transport;
+use crate::{common::errors::map_io_error, proxy::AnyStream};
 
 pub struct Client {
     pub hosts: Vec<String>,

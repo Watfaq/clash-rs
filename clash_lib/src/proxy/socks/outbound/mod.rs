@@ -15,7 +15,7 @@ use crate::{
     proxy::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
-        transport::{self, TLSOptions},
+        transport::Transport,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
     },
     session::Session,
@@ -36,9 +36,7 @@ pub struct HandlerOptions {
     pub user: Option<String>,
     pub password: Option<String>,
     pub udp: bool,
-    pub tls: bool,
-    pub sni: String,
-    pub skip_cert_verify: bool,
+    pub tls_client: Option<Box<dyn Transport>>,
 }
 
 pub struct Handler {
@@ -70,18 +68,8 @@ impl Handler {
         s: AnyStream,
         sess: &Session,
     ) -> std::io::Result<AnyStream> {
-        let mut s = if self.opts.tls {
-            trace!(
-                "TLS config - enabled: {}, skip_cert_verify: {}, sni: {}",
-                self.opts.tls, self.opts.skip_cert_verify, self.opts.sni
-            );
-            let tls_opt = TLSOptions {
-                skip_cert_verify: self.opts.skip_cert_verify,
-                sni: self.opts.sni.clone(),
-                alpn: None,
-            };
-
-            transport::tls::wrap_stream(s, tls_opt, None).await?
+        let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
+            tls_client.proxy_stream(s).await?
         } else {
             s
         };
@@ -104,14 +92,8 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<Socks5Datagram> {
-        let mut s = if self.opts.tls {
-            let tls_opt = TLSOptions {
-                skip_cert_verify: self.opts.skip_cert_verify,
-                sni: self.opts.sni.clone(),
-                alpn: None,
-            };
-
-            transport::tls::wrap_stream(s, tls_opt, None).await?
+        let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
+            tls_client.proxy_stream(s).await?
         } else {
             s
         };

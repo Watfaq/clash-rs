@@ -4,12 +4,12 @@ use async_trait::async_trait;
 
 use crate::proxy::{
     AnyStream,
-    transport::{self, Sip003Plugin, TLSOptions},
+    transport::{self, TlsClient, Transport},
 };
 
 use super::V2RayOBFSOption;
 
-impl TryFrom<V2RayOBFSOption> for WsClient {
+impl TryFrom<V2RayOBFSOption> for V2rayWsClient {
     type Error = std::io::Error;
 
     fn try_from(opt: V2RayOBFSOption) -> Result<Self, Self::Error> {
@@ -19,7 +19,7 @@ impl TryFrom<V2RayOBFSOption> for WsClient {
                 "v2ray plugin does not support this mode",
             ));
         }
-        Ok(Self::new(
+        Self::try_new(
             opt.host,
             opt.port,
             opt.path,
@@ -27,64 +27,54 @@ impl TryFrom<V2RayOBFSOption> for WsClient {
             opt.tls,
             opt.skip_cert_verify,
             opt.mux,
-        ))
+        )
     }
 }
 
-pub struct WsClient {
-    pub host: String,
-    pub port: u16,
-    pub path: String,
-    pub headers: HashMap<String, String>,
-    pub tls: bool,
-    pub skip_cert_verify: bool,
-    pub mux: bool,
+pub struct V2rayWsClient {
+    pub tls_client: Option<Box<dyn Transport>>,
+    pub ws_client: transport::WsClient,
 }
 
 // TODO: temporarily untested
-impl WsClient {
-    pub fn new(
+impl V2rayWsClient {
+    pub fn try_new(
         host: String,
         port: u16,
         path: String,
-        headers: HashMap<String, String>,
+        mut headers: HashMap<String, String>,
         tls: bool,
         skip_cert_verify: bool,
         mux: bool,
-    ) -> Self {
-        Self {
-            host,
-            port,
-            path,
-            headers,
-            tls,
-            skip_cert_verify,
-            mux,
-        }
-    }
-
-    pub async fn new_v2ray_websocket_stream(
-        &self,
-        mut stream: AnyStream,
-    ) -> std::io::Result<AnyStream> {
-        if self.mux {
+    ) -> std::io::Result<Self> {
+        if mux {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "v2ray plugin does not support mux",
             ));
         }
 
-        let mut headers = self.headers.clone();
+        let tls_client = if tls {
+            Some(Box::new(TlsClient::new(
+                skip_cert_verify,
+                host.clone(),
+                Some(vec!["http/1.1".to_owned()]),
+                None,
+            )) as _)
+        } else {
+            None
+        };
+
         if !headers.contains_key("Host") {
-            headers.insert("Host".to_owned(), self.host.clone());
+            headers.insert("Host".to_owned(), host.clone());
         }
-        let ws_builder = transport::WsClient::new(
-            self.host.clone(),
-            self.port,
-            if self.path.is_empty() {
+        let ws_client = transport::WsClient::new(
+            host.clone(),
+            port,
+            if path.is_empty() {
                 "/".to_owned()
             } else {
-                self.path.clone()
+                path.clone()
             },
             headers,
             None,
@@ -92,25 +82,28 @@ impl WsClient {
             "".to_owned(),
         );
 
-        if self.tls {
-            stream = transport::tls::wrap_stream(
-                stream,
-                TLSOptions {
-                    sni: self.host.clone(),
-                    skip_cert_verify: self.skip_cert_verify,
-                    alpn: Some(vec!["http/1.1".to_owned()]),
-                },
-                None,
-            )
-            .await?;
-        }
+        Ok(Self {
+            tls_client,
+            ws_client,
+        })
+    }
 
-        ws_builder.proxy_stream(stream).await
+    pub async fn new_v2ray_websocket_stream(
+        &self,
+        s: AnyStream,
+    ) -> std::io::Result<AnyStream> {
+        let s = if let Some(tls_client) = self.tls_client.as_ref() {
+            tls_client.proxy_stream(s).await?
+        } else {
+            s
+        };
+
+        self.ws_client.proxy_stream(s).await
     }
 }
 
 #[async_trait]
-impl Sip003Plugin for WsClient {
+impl Transport for V2rayWsClient {
     async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         self.new_v2ray_websocket_stream(stream).await
     }

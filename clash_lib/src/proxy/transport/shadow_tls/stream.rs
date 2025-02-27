@@ -1,16 +1,14 @@
+use byteorder::{BigEndian, WriteBytesExt};
+use bytes::{BufMut, BytesMut};
 use std::{
     pin::Pin,
     ptr::{copy, copy_nonoverlapping},
     task::{Poll, ready},
 };
-
-use byteorder::{BigEndian, WriteBytesExt};
-use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::common::io::{ReadExactBase, ReadExt};
-
 use super::{prelude::*, utils::*};
+use crate::common::io::{ReadExactBase, ReadExt};
 
 #[derive(Default, Debug)]
 pub enum ReadState {

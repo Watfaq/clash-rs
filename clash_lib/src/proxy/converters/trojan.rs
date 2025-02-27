@@ -1,10 +1,13 @@
 use tracing::warn;
 
+static DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
+
 use crate::{
     Error,
     config::internal::proxy::OutboundTrojan,
     proxy::{
-        HandlerCommonOptions, transport,
+        HandlerCommonOptions,
+        transport::{GrpcClient, TlsClient, WsClient},
         trojan::{Handler, HandlerOptions},
     },
 };
@@ -39,13 +42,24 @@ impl TryFrom<&OutboundTrojan> for Handler {
             port: s.common_opts.port,
             password: s.password.clone(),
             udp: s.udp.unwrap_or_default(),
-            sni: s
-                .sni
-                .as_ref()
-                .map(|x| x.to_owned())
-                .unwrap_or(s.common_opts.server.to_owned()),
-            alpn: s.alpn.as_ref().map(|x| x.to_owned()),
-            skip_cert_verify,
+            tls: {
+                let client = TlsClient::new(
+                    skip_cert_verify,
+                    s.sni
+                        .as_ref()
+                        .map(|x| x.to_owned())
+                        .unwrap_or(s.common_opts.server.to_owned()),
+                    s.alpn.clone().or(Some(
+                        DEFAULT_ALPN
+                            .iter()
+                            .copied()
+                            .map(|x| x.to_owned())
+                            .collect::<Vec<String>>(),
+                    )),
+                    None,
+                );
+                Some(Box::new(client))
+            },
             transport: s
                 .network
                 .as_ref()
@@ -54,33 +68,9 @@ impl TryFrom<&OutboundTrojan> for Handler {
                         .ws_opts
                         .as_ref()
                         .map(|x| {
-                            let path = x
-                                .path
-                                .as_ref()
-                                .map(|x| x.to_owned())
-                                .unwrap_or_default();
-                            let headers = x
-                                .headers
-                                .as_ref()
-                                .map(|x| x.to_owned())
-                                .unwrap_or_default();
-                            let max_early_data =
-                                x.max_early_data.unwrap_or_default() as usize;
-                            let early_data_header_name = x
-                                .early_data_header_name
-                                .as_ref()
-                                .map(|x| x.to_owned())
-                                .unwrap_or_default();
-
-                            let client = transport::WsClient::new(
-                                s.common_opts.server.to_owned(),
-                                s.common_opts.port,
-                                path,
-                                headers,
-                                None,
-                                max_early_data,
-                                early_data_header_name,
-                            );
+                            let client: WsClient = (x, &s.common_opts)
+                                .try_into()
+                                .expect("invalid ws_opts");
                             Box::new(client) as _
                         })
                         .ok_or(Error::InvalidConfig(
@@ -90,18 +80,10 @@ impl TryFrom<&OutboundTrojan> for Handler {
                         .grpc_opts
                         .as_ref()
                         .map(|x| {
-                            let client = transport::GrpcClient::new(
-                                s.sni
-                                    .as_ref()
-                                    .unwrap_or(&s.common_opts.server)
-                                    .to_owned(),
-                                x.grpc_service_name
-                                    .as_ref()
-                                    .map(|x| x.to_owned())
-                                    .unwrap_or_default()
+                            let client: GrpcClient =
+                                (s.sni.clone(), x, &s.common_opts)
                                     .try_into()
-                                    .expect("invalid gRPC service path"),
-                            );
+                                    .expect("invalid grpc_opts");
                             Box::new(client) as _
                         })
                         .ok_or(Error::InvalidConfig(

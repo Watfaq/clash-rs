@@ -7,8 +7,8 @@ use crate::{
         HandlerCommonOptions,
         shadowsocks::{Handler, HandlerOptions},
         transport::{
-            ShadowTlsOption, ShadowtlsPlugin, SimpleOBFSMode, SimpleOBFSOption,
-            SimpleObfsHttp, SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
+            Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
+            SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
         },
     },
 };
@@ -75,14 +75,13 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                         Some(Box::new(plugin) as _)
                     }
                     "shadow-tls" => {
-                        let opt: ShadowTlsOption = s
+                        let plugin: Shadowtls = s
                             .plugin_opts
                             .clone()
                             .ok_or(Error::InvalidConfig(
                                 "plugin_opts is required for plugin obfs".to_owned(),
                             ))?
                             .try_into()?;
-                        let plugin = ShadowtlsPlugin::from(opt);
                         Some(Box::new(plugin) as _)
                     }
                     _ => {
@@ -188,7 +187,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
     }
 }
 
-impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
+impl TryFrom<HashMap<String, serde_yaml::Value>> for Shadowtls {
     type Error = crate::Error;
 
     fn try_from(
@@ -207,10 +206,10 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
             .and_then(|x| x.as_bool())
             .unwrap_or(true);
 
-        Ok(Self {
-            host: host.to_string(),
-            password: password.to_string(),
+        Ok(Shadowtls::new(
+            host.to_string(),
+            password.to_string(),
             strict,
-        })
+        ))
     }
 }

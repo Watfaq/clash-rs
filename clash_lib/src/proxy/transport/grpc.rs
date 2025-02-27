@@ -1,15 +1,9 @@
-use crate::{common::errors::map_io_error, proxy::AnyStream};
-
 use async_trait::async_trait;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-
 use futures::ready;
 use h2::{RecvStream, SendStream};
 use http::{Request, Uri, Version};
 use prost::encoding::{decode_varint, encode_varint};
-use tokio::sync::{Mutex, mpsc};
-use tracing::warn;
-
 use std::{
     fmt::Debug,
     io,
@@ -18,9 +12,14 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::{Mutex, mpsc},
+};
+use tracing::warn;
 
 use super::Transport;
+use crate::{common::errors::map_io_error, proxy::AnyStream};
 
 #[derive(Clone)]
 pub struct Client {

@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 
-use crate::proxy::AnyStream;
-
 use super::Transport;
+use crate::proxy::AnyStream;
 
 #[async_trait]
 pub trait Plugin: Send + Sync {

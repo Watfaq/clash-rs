@@ -24,13 +24,11 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
-    transport::{self, TLSOptions, Transport},
+    transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
 mod datagram;
-
-static DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
 
 pub struct HandlerOptions {
     pub name: String,
@@ -39,9 +37,8 @@ pub struct HandlerOptions {
     pub port: u16,
     pub password: String,
     pub udp: bool,
-    pub sni: String,
-    pub alpn: Option<Vec<String>>,
-    pub skip_cert_verify: bool,
+    // might support shadow-tls?
+    pub tls: Option<Box<dyn Transport>>,
     pub transport: Option<Box<dyn Transport>>,
 }
 
@@ -77,19 +74,11 @@ impl Handler {
         sess: &Session,
         udp: bool,
     ) -> io::Result<AnyStream> {
-        let tls_opt = TLSOptions {
-            skip_cert_verify: self.opts.skip_cert_verify,
-            sni: self.opts.sni.clone(),
-            alpn: self.opts.alpn.clone().or(Some(
-                DEFAULT_ALPN
-                    .iter()
-                    .copied()
-                    .map(|x| x.to_owned())
-                    .collect::<Vec<String>>(),
-            )),
+        let s = if let Some(tls_client) = self.opts.tls.as_ref() {
+            tls_client.proxy_stream(s).await?
+        } else {
+            s
         };
-
-        let s = transport::tls::wrap_stream(s, tls_opt, None).await?;
 
         let mut s = if let Some(transport) = self.opts.transport.as_ref() {
             transport.proxy_stream(s).await?
@@ -228,12 +217,15 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::proxy::utils::test_utils::{
-        Suite,
-        config_helper::test_config_base_dir,
-        consts::*,
-        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_test_suites_and_cleanup,
+    use crate::proxy::{
+        transport,
+        utils::test_utils::{
+            Suite,
+            config_helper::test_config_base_dir,
+            consts::*,
+            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+            run_test_suites_and_cleanup,
+        },
     };
 
     use super::*;
@@ -271,6 +263,8 @@ mod tests {
             0,
             "".to_owned(),
         );
+        let tls =
+            transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
@@ -279,9 +273,7 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            sni: "example.org".to_owned(),
-            alpn: None,
-            skip_cert_verify: true,
+            tls: Some(Box::new(tls)),
             transport: Some(Box::new(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
@@ -320,6 +312,13 @@ mod tests {
                 .try_into()
                 .expect("invalid grpc service name"),
         );
+        let tls = transport::TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
+            None,
+        );
+
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
             common_opts: Default::default(),
@@ -327,9 +326,7 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            sni: "example.org".to_owned(),
-            alpn: None,
-            skip_cert_verify: true,
+            tls: Some(Box::new(tls)),
             transport: Some(Box::new(transport)),
         };
         let handler = Arc::new(Handler::new(opts));

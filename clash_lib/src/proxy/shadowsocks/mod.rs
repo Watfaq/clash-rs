@@ -344,12 +344,8 @@ mod tests {
         // not important, you can assign any port that is not conflict with
         // others
         let ss_port = 10004;
-        let opt = ShadowTlsOption {
-            host: "www.feishu.cn".to_owned(),
-            password: "password".to_owned(),
-            strict: true,
-        };
-        let client = ShadowtlsPlugin::from(opt);
+        let client =
+            Shadowtls::new("www.feishu.cn".to_owned(), "password".to_owned(), true);
         let opts = HandlerOptions {
             name: "test-shadowtls".to_owned(),
             common_opts: Default::default(),

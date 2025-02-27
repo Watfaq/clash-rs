@@ -1,10 +1,9 @@
-use std::{io::Read, ptr::copy_nonoverlapping};
-
 use byteorder::{BigEndian, ReadBytesExt};
 use hmac::Mac;
+use sha2::{Digest, Sha256};
+use std::{io::Read, ptr::copy_nonoverlapping};
 
 use super::prelude::*;
-use sha2::{Digest, Sha256};
 
 #[derive(Clone)]
 pub(crate) struct Hmac(hmac::Hmac<sha1::Sha1>);

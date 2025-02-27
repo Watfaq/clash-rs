@@ -1,8 +1,7 @@
-use std::{io, ptr::copy_nonoverlapping, sync::Arc};
-
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use rand::{Rng, distr::Distribution};
+use std::{io, ptr::copy_nonoverlapping, sync::Arc};
 use stream::{ProxyTlsStream, VerifiedStream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
@@ -13,7 +12,7 @@ mod prelude;
 mod stream;
 mod utils;
 
-use super::Sip003Plugin;
+use super::Transport;
 use crate::proxy::AnyStream;
 use prelude::*;
 
@@ -24,22 +23,10 @@ fn root_store() -> Arc<RootCertStore> {
     Arc::new(root_store)
 }
 
-pub struct ShadowTlsOption {
-    pub host: String,
-    pub password: String,
-    pub strict: bool,
-}
-
-impl From<ShadowTlsOption> for Client {
-    fn from(opt: ShadowTlsOption) -> Self {
-        Self::new(opt.host, opt.password, opt.strict)
-    }
-}
-
 pub struct Client {
-    pub host: String,
-    pub password: String,
-    pub strict: bool,
+    host: String,
+    password: String,
+    strict: bool,
 }
 
 impl Client {
@@ -125,7 +112,7 @@ impl Client {
 }
 
 #[async_trait]
-impl Sip003Plugin for Client {
+impl Transport for Client {
     async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         self.wrap_shadow_tls_stream(stream).await
     }

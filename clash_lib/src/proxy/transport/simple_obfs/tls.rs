@@ -1,20 +1,20 @@
 // a rust implementation of https://github.com/MetaCubeX/Clash.Meta/blob/Alpha/transport/simple-obfs/tls.go
 
-use std::{
-    borrow::Cow,
-    pin::Pin,
-    task::{Context, Poll},
-};
-
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::BufMut;
 use chrono::Utc;
 use futures::pin_mut;
-use std::{future::Future, task::ready};
+use std::{
+    borrow::Cow,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll, ready},
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
-use crate::proxy::{AnyStream, transport::Sip003Plugin};
+use crate::proxy::{AnyStream, transport::Transport};
+
 const CHUNK_SIZE: isize = 1 << 14; // 2 ** 14 == 16 * 1024
 
 pub struct Client {
@@ -28,7 +28,7 @@ impl Client {
 }
 
 #[async_trait]
-impl Sip003Plugin for Client {
+impl Transport for Client {
     async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         Ok(TLSObfs::new(stream, self.server.clone()).into())
     }
