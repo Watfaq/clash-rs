@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
+use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use futures::ready;
 use h2::{RecvStream, SendStream};
@@ -10,15 +11,30 @@ use tracing::error;
 
 use crate::{common::errors::map_io_error, proxy::AnyStream};
 
-#[derive(Clone)]
-pub struct Http2Config {
+use super::Transport;
+
+pub struct Client {
     pub hosts: Vec<String>,
     pub headers: HashMap<String, String>,
     pub method: http::Method,
     pub path: http::uri::PathAndQuery,
 }
 
-impl Http2Config {
+impl Client {
+    pub fn new(
+        hosts: Vec<String>,
+        headers: HashMap<String, String>,
+        method: http::Method,
+        path: http::uri::PathAndQuery,
+    ) -> Self {
+        Self {
+            hosts,
+            headers,
+            method,
+            path,
+        }
+    }
+
     fn req(&self) -> std::io::Result<Request<()>> {
         let uri_idx = rand::rng().random_range(0..self.hosts.len());
         let uri = {
@@ -43,11 +59,11 @@ impl Http2Config {
 
         Ok(request.body(()).expect("build req"))
     }
+}
 
-    pub async fn proxy_stream(
-        &self,
-        stream: AnyStream,
-    ) -> std::io::Result<AnyStream> {
+#[async_trait]
+impl Transport for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         let (mut client, h2) =
             h2::client::handshake(stream).await.map_err(map_io_error)?;
         let req = self.req()?;

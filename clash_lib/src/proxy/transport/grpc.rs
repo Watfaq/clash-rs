@@ -1,5 +1,6 @@
 use crate::{common::errors::map_io_error, proxy::AnyStream};
 
+use async_trait::async_trait;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use futures::ready;
@@ -19,13 +20,15 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use super::Transport;
+
 #[derive(Clone)]
-pub struct GrpcStreamBuilder {
+pub struct Client {
     pub host: String,
     pub path: http::uri::PathAndQuery,
 }
 
-impl GrpcStreamBuilder {
+impl Client {
     pub fn new(host: String, path: http::uri::PathAndQuery) -> Self {
         Self { host, path }
     }
@@ -47,8 +50,11 @@ impl GrpcStreamBuilder {
             .header("user-agent", "tonic/0.10");
         Ok(request.body(()).unwrap())
     }
+}
 
-    pub async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
+#[async_trait]
+impl Transport for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         let (client, h2) = h2::client::Builder::new()
             .initial_connection_window_size(0x7FFFFFFF)
             .initial_window_size(0x7FFFFFFF)

@@ -4,9 +4,8 @@ use crate::{
     Error,
     config::internal::proxy::OutboundTrojan,
     proxy::{
-        HandlerCommonOptions,
-        options::{GrpcOption, WsOption},
-        trojan::{Handler, HandlerOptions, Transport},
+        HandlerCommonOptions, transport,
+        trojan::{Handler, HandlerOptions},
     },
 };
 
@@ -55,25 +54,34 @@ impl TryFrom<&OutboundTrojan> for Handler {
                         .ws_opts
                         .as_ref()
                         .map(|x| {
-                            Transport::Ws(WsOption {
-                                path: x
-                                    .path
-                                    .as_ref()
-                                    .map(|x| x.to_owned())
-                                    .unwrap_or_default(),
-                                headers: x
-                                    .headers
-                                    .as_ref()
-                                    .map(|x| x.to_owned())
-                                    .unwrap_or_default(),
-                                max_early_data: x.max_early_data.unwrap_or_default()
-                                    as usize,
-                                early_data_header_name: x
-                                    .early_data_header_name
-                                    .as_ref()
-                                    .map(|x| x.to_owned())
-                                    .unwrap_or_default(),
-                            })
+                            let path = x
+                                .path
+                                .as_ref()
+                                .map(|x| x.to_owned())
+                                .unwrap_or_default();
+                            let headers = x
+                                .headers
+                                .as_ref()
+                                .map(|x| x.to_owned())
+                                .unwrap_or_default();
+                            let max_early_data =
+                                x.max_early_data.unwrap_or_default() as usize;
+                            let early_data_header_name = x
+                                .early_data_header_name
+                                .as_ref()
+                                .map(|x| x.to_owned())
+                                .unwrap_or_default();
+
+                            let client = transport::WsClient::new(
+                                s.common_opts.server.to_owned(),
+                                s.common_opts.port,
+                                path,
+                                headers,
+                                None,
+                                max_early_data,
+                                early_data_header_name,
+                            );
+                            Box::new(client) as _
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
@@ -82,18 +90,19 @@ impl TryFrom<&OutboundTrojan> for Handler {
                         .grpc_opts
                         .as_ref()
                         .map(|x| {
-                            Transport::Grpc(GrpcOption {
-                                host: s
-                                    .sni
+                            let client = transport::GrpcClient::new(
+                                s.sni
                                     .as_ref()
                                     .unwrap_or(&s.common_opts.server)
                                     .to_owned(),
-                                service_name: x
-                                    .grpc_service_name
+                                x.grpc_service_name
                                     .as_ref()
                                     .map(|x| x.to_owned())
-                                    .unwrap_or_default(),
-                            })
+                                    .unwrap_or_default()
+                                    .try_into()
+                                    .expect("invalid gRPC service path"),
+                            );
+                            Box::new(client) as _
                         })
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),

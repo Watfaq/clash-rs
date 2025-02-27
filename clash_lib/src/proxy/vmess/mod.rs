@@ -23,7 +23,7 @@ use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
     options::{GrpcOption, Http2Option, HttpOption, WsOption},
-    transport::{self, Http2Config},
+    transport::{self, H2Client, Transport},
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
@@ -82,7 +82,7 @@ impl Handler {
 
         let underlying = match self.opts.transport {
             Some(VmessTransport::Ws(ref opt)) => {
-                let ws_builder = transport::WebsocketStreamBuilder::new(
+                let ws_builder = transport::WsClient::new(
                     self.opts.server.clone(),
                     self.opts.port,
                     opt.path.clone(),
@@ -114,12 +114,12 @@ impl Handler {
                     None => stream,
                 };
 
-                let h2_builder = Http2Config {
-                    hosts: opt.host.clone(),
-                    method: http::Method::GET,
-                    headers: HashMap::new(),
-                    path: opt.path.to_owned().try_into().expect("invalid H2 path"),
-                };
+                let h2_builder = H2Client::new(
+                    opt.host.clone(),
+                    HashMap::new(),
+                    http::Method::GET,
+                    opt.path.to_owned().try_into().expect("invalid H2 path"),
+                );
 
                 h2_builder.proxy_stream(stream).await?
             }
@@ -132,7 +132,7 @@ impl Handler {
                     None => stream,
                 };
 
-                let grpc_builder = transport::GrpcStreamBuilder::new(
+                let grpc_builder = transport::GrpcClient::new(
                     opt.host.clone(),
                     opt.service_name
                         .to_owned()

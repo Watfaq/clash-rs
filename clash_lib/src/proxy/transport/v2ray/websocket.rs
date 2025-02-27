@@ -78,7 +78,7 @@ impl WsClient {
         if !headers.contains_key("Host") {
             headers.insert("Host".to_owned(), self.host.clone());
         }
-        let ws_builder = transport::WebsocketStreamBuilder::new(
+        let ws_builder = transport::WsClient::new(
             self.host.clone(),
             self.port,
             if self.path.is_empty() {
