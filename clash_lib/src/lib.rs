@@ -1,6 +1,5 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
-#![feature(unbounded_shifts)]
 #![feature(let_chains)]
 
 #[macro_use]
@@ -20,6 +19,7 @@ use app::{
     dispatcher::StatisticsManager,
     dns::{SystemResolver, ThreadSafeDNSResolver},
     logging::LogEvent,
+    net::init_net_config,
     profile,
 };
 use common::{auth, http::new_http_client, mmdb};
@@ -330,6 +330,10 @@ async fn create_components(
     cwd: PathBuf,
     config: InternalConfig,
 ) -> Result<RuntimeComponents> {
+    if config.tun.enable {
+        debug!("tun enabled, initializing default outbound interface");
+        init_net_config(config.tun.so_mark).await;
+    }
     let system_resolver = Arc::new(
         SystemResolver::new(config.dns.ipv6)
             .map_err(|x| Error::DNSError(x.to_string()))?,

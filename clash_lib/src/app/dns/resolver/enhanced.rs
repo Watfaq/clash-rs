@@ -674,7 +674,7 @@ mod tests {
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
-            DnsRuntimeProvider::new(None),
+            DnsRuntimeProvider::new(None, None),
         )
         .build();
         let (client, bg) = client::Client::connect(stream).await.unwrap();
