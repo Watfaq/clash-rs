@@ -1,20 +1,20 @@
+use async_trait::async_trait;
 use once_cell::sync::Lazy;
-use rand::Rng;
+use rand::{Rng, distr::Distribution};
 use std::{io, ptr::copy_nonoverlapping, sync::Arc};
-
-use rand::distr::Distribution;
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use stream::{ProxyTlsStream, VerifiedStream};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
+use utils::Hmac;
 use watfaq_rustls::RootCertStore;
 
-use crate::proxy::{AnyStream, shadowsocks::ShadowTlsOption};
+mod prelude;
+mod stream;
+mod utils;
 
-use super::prelude::*;
-
-use super::{
-    stream::{ProxyTlsStream, VerifiedStream},
-    utils::Hmac,
-};
+use super::Transport;
+use crate::proxy::AnyStream;
+use prelude::*;
 
 static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
 
@@ -23,41 +23,40 @@ fn root_store() -> Arc<RootCertStore> {
     Arc::new(root_store)
 }
 
-#[derive(Clone, Debug)]
-#[allow(unused)]
-pub struct Opts {
-    pub fastopen: bool,
-    pub sni: String,
-    pub strict: bool,
+pub struct Client {
+    host: String,
+    password: String,
+    strict: bool,
 }
 
-pub struct Connector;
-
-impl Connector {
-    fn connector() -> TlsConnector {
-        let tls_config = watfaq_rustls::ClientConfig::builder()
-            .with_root_certificates(ROOT_STORE.clone())
-            .with_no_client_auth();
-
-        TlsConnector::from(Arc::new(tls_config.clone()))
+impl Client {
+    pub fn new(host: String, password: String, strict: bool) -> Self {
+        Self {
+            host,
+            password,
+            strict,
+        }
     }
 
-    pub async fn wrap(
-        opts: &ShadowTlsOption,
+    pub async fn wrap_shadow_tls_stream(
+        &self,
         stream: AnyStream,
     ) -> std::io::Result<AnyStream> {
-        let proxy_stream = ProxyTlsStream::new(stream, &opts.password);
+        let proxy_stream = ProxyTlsStream::new(stream, &self.password);
 
-        let hamc_handshake = Hmac::new(&opts.password, (&[], &[]));
+        // handshake
+        let hamc_handshake = Hmac::new(&self.password, (&[], &[]));
         let sni_name =
-            watfaq_rustls::pki_types::ServerName::try_from(opts.host.clone())
-                .unwrap_or_else(|_| panic!("invalid server name: {}", opts.host));
+            watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
+                .unwrap_or_else(|_| panic!("invalid server name: {}", self.host));
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
-        let connector = Self::connector();
+        let connector = new_connector();
         let mut tls = connector
             .connect_with(sni_name, proxy_stream, Some(session_id_generator), |_| {})
             .await?;
+
+        // check if is authorized
         let authorized = tls.get_mut().0.authorized();
         let maybe_server_random_and_hamc = tls
             .get_mut()
@@ -68,7 +67,7 @@ impl Connector {
 
         // whatever the fake_request is successful or not, we should return an
         // error when strict mode is enabled
-        if (!authorized || maybe_server_random_and_hamc.is_none()) && opts.strict {
+        if (!authorized || maybe_server_random_and_hamc.is_none()) && self.strict {
             tracing::warn!(
                 "shadow-tls V3 strict enabled: traffic hijacked or TLS1.3 is not \
                  supported, perform fake request"
@@ -80,8 +79,7 @@ impl Connector {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "V3 strict enabled: traffic hijacked or TLS1.3 is not supported, \
-                 fake request"
-                    .to_string(),
+                 fake request",
             ));
         }
 
@@ -91,17 +89,17 @@ impl Connector {
                 return Err(io::Error::new(
                     io::ErrorKind::Other,
                     "server random and hmac not extracted from handshake, fail to \
-                     connect"
-                        .to_string(),
+                     connect",
                 ));
             }
         };
 
         let hmac_client =
-            Hmac::new(&opts.password, (&server_random, "C".as_bytes()));
+            Hmac::new(&self.password, (&server_random, "C".as_bytes()));
         let hmac_server =
-            Hmac::new(&opts.password, (&server_random, "S".as_bytes()));
+            Hmac::new(&self.password, (&server_random, "S".as_bytes()));
 
+        // now the shadow tls stream is connected, we can use it to send data
         let verified_stream = VerifiedStream::new(
             tls.into_inner().0.raw,
             hmac_client,
@@ -111,6 +109,21 @@ impl Connector {
 
         Ok(Box::new(verified_stream))
     }
+}
+
+#[async_trait]
+impl Transport for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
+        self.wrap_shadow_tls_stream(stream).await
+    }
+}
+
+fn new_connector() -> TlsConnector {
+    let tls_config = watfaq_rustls::ClientConfig::builder()
+        .with_root_certificates(ROOT_STORE.clone())
+        .with_no_client_auth();
+
+    TlsConnector::from(Arc::new(tls_config.clone()))
 }
 
 /// Take a slice of tls message[5..] and returns signed session id.
@@ -145,7 +158,7 @@ fn generate_session_id(hmac: &Hmac, buf: &[u8]) -> [u8; TLS_SESSION_ID_SIZE] {
 /// Doing fake request.
 ///
 /// Only used by V3 protocol.
-async fn fake_request<S: tokio::io::AsyncRead + AsyncWrite + Unpin>(
+async fn fake_request<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: TlsStream<S>,
 ) -> std::io::Result<()> {
     const HEADER: &[u8; 207] = b"GET / HTTP/1.1\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36\nAccept: gzip, deflate, br\nConnection: Close\nCookie: sessionid=";

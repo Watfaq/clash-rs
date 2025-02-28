@@ -24,19 +24,11 @@ use self::datagram::OutboundDatagramTrojan;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
-    options::{GrpcOption, WsOption},
-    transport::{self, TLSOptions},
+    transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 
 mod datagram;
-
-static DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
-
-pub enum Transport {
-    Ws(WsOption),
-    Grpc(GrpcOption),
-}
 
 pub struct HandlerOptions {
     pub name: String,
@@ -45,10 +37,9 @@ pub struct HandlerOptions {
     pub port: u16,
     pub password: String,
     pub udp: bool,
-    pub sni: String,
-    pub alpn: Option<Vec<String>>,
-    pub skip_cert_verify: bool,
-    pub transport: Option<Transport>,
+    // might support shadow-tls?
+    pub tls: Option<Box<dyn Transport>>,
+    pub transport: Option<Box<dyn Transport>>,
 }
 
 pub struct Handler {
@@ -83,47 +74,14 @@ impl Handler {
         sess: &Session,
         udp: bool,
     ) -> io::Result<AnyStream> {
-        let tls_opt = TLSOptions {
-            skip_cert_verify: self.opts.skip_cert_verify,
-            sni: self.opts.sni.clone(),
-            alpn: self.opts.alpn.clone().or(Some(
-                DEFAULT_ALPN
-                    .iter()
-                    .copied()
-                    .map(|x| x.to_owned())
-                    .collect::<Vec<String>>(),
-            )),
+        let s = if let Some(tls_client) = self.opts.tls.as_ref() {
+            tls_client.proxy_stream(s).await?
+        } else {
+            s
         };
 
-        let s = transport::tls::wrap_stream(s, tls_opt, None).await?;
-
         let mut s = if let Some(transport) = self.opts.transport.as_ref() {
-            match transport {
-                Transport::Ws(ws_opts) => {
-                    let ws_builder = transport::WebsocketStreamBuilder::new(
-                        self.opts.server.clone(),
-                        self.opts.port,
-                        ws_opts.path.clone(),
-                        ws_opts.headers.clone(),
-                        None,
-                        ws_opts.max_early_data,
-                        ws_opts.early_data_header_name.clone(),
-                    );
-
-                    ws_builder.proxy_stream(s).await?
-                }
-                Transport::Grpc(grpc_opts) => {
-                    let grpc_builder = transport::GrpcStreamBuilder::new(
-                        grpc_opts.host.clone(),
-                        grpc_opts
-                            .service_name
-                            .to_owned()
-                            .try_into()
-                            .expect("invalid gRPC service path"),
-                    );
-                    grpc_builder.proxy_stream(s).await?
-                }
-            }
+            transport.proxy_stream(s).await?
         } else {
             s
         };
@@ -259,12 +217,15 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::proxy::utils::test_utils::{
-        Suite,
-        config_helper::test_config_base_dir,
-        consts::*,
-        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_test_suites_and_cleanup,
+    use crate::proxy::{
+        transport,
+        utils::test_utils::{
+            Suite,
+            config_helper::test_config_base_dir,
+            consts::*,
+            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+            run_test_suites_and_cleanup,
+        },
     };
 
     use super::*;
@@ -291,6 +252,19 @@ mod tests {
     async fn test_trojan_ws() -> anyhow::Result<()> {
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
+        let transport = transport::WsClient::new(
+            "".to_owned(),
+            10002,
+            "/".to_owned(),
+            [("Host".to_owned(), "example.org".to_owned())]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            None,
+            0,
+            "".to_owned(),
+        );
+        let tls =
+            transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
@@ -299,18 +273,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            sni: "example.org".to_owned(),
-            alpn: None,
-            skip_cert_verify: true,
-            transport: Some(Transport::Ws(WsOption {
-                path: "".to_owned(),
-                headers: [("Host".to_owned(), "example.org".to_owned())]
-                    .into_iter()
-                    .collect::<HashMap<_, _>>(),
-                // ignore the rest by setting max_early_data to 0
-                max_early_data: 0,
-                early_data_header_name: "".to_owned(),
-            })),
+            tls: Some(Box::new(tls)),
+            transport: Some(Box::new(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler
@@ -341,6 +305,20 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
+        let transport = transport::GrpcClient::new(
+            "example.org".to_owned(),
+            "example"
+                .to_owned()
+                .try_into()
+                .expect("invalid grpc service name"),
+        );
+        let tls = transport::TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
+            None,
+        );
+
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
             common_opts: Default::default(),
@@ -348,13 +326,8 @@ mod tests {
             port: 10002,
             password: "example".to_owned(),
             udp: true,
-            sni: "example.org".to_owned(),
-            alpn: None,
-            skip_cert_verify: true,
-            transport: Some(Transport::Grpc(GrpcOption {
-                host: "example.org".to_owned(),
-                service_name: "example".to_owned(),
-            })),
+            tls: Some(Box::new(tls)),
+            transport: Some(Box::new(transport)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler

@@ -238,7 +238,7 @@ mod tests {
             port: 10002,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin_opts: Default::default(),
+            plugin: Default::default(),
             udp: false,
         };
         let port = ss_opts.port;
@@ -274,7 +274,7 @@ mod tests {
             port: 10002,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin_opts: Default::default(),
+            plugin: Default::default(),
             udp: false,
         };
         let port = ss_opts.port;

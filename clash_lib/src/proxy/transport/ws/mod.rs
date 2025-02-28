@@ -1,19 +1,21 @@
-mod websocket;
-mod websocket_early_data;
-
-use std::collections::HashMap;
-
+use async_trait::async_trait;
 use http::{Request, StatusCode};
+use std::collections::HashMap;
 use tokio_tungstenite::{
     client_async_with_config,
     tungstenite::{handshake::client::generate_key, protocol::WebSocketConfig},
 };
+
+use super::Transport;
+use crate::{common::errors::map_io_error, proxy::AnyStream};
+
+mod websocket;
+mod websocket_early_data;
+
 pub use websocket::WebsocketConn;
 pub use websocket_early_data::WebsocketEarlyDataConn;
 
-use crate::{common::errors::map_io_error, proxy::AnyStream};
-
-pub struct WebsocketStreamBuilder {
+pub struct Client {
     server: String,
     port: u16,
     path: String,
@@ -23,7 +25,7 @@ pub struct WebsocketStreamBuilder {
     early_data_header_name: String,
 }
 
-impl WebsocketStreamBuilder {
+impl Client {
     pub fn new(
         server: String,
         port: u16,
@@ -61,11 +63,11 @@ impl WebsocketStreamBuilder {
         }
         request.body(()).unwrap()
     }
+}
 
-    pub async fn proxy_stream(
-        &self,
-        stream: AnyStream,
-    ) -> std::io::Result<AnyStream> {
+#[async_trait]
+impl Transport for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> std::io::Result<AnyStream> {
         let req = self.req();
         if self.max_early_data > 0 {
             let early_data_conn = WebsocketEarlyDataConn::new(

@@ -1,8 +1,9 @@
 pub const LOCAL_ADDR: &str = "127.0.0.1";
 
 pub const IMAGE_WG: &str = "lscr.io/linuxserver/wireguard:1.0.20210914-legacy";
+// image with v2ray-plugin pre-installed
 #[cfg(feature = "shadowsocks")]
-pub const IMAGE_SS_RUST: &str = "ghcr.io/shadowsocks/ssserver-rust:latest";
+pub const IMAGE_SS_RUST: &str = "teddysun/shadowsocks-rust:alpine-1.22.0";
 #[cfg(feature = "shadowsocks")]
 pub const IMAGE_SHADOW_TLS: &str = "ghcr.io/ihciah/shadow-tls:latest";
 #[cfg(feature = "shadowsocks")]
