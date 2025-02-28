@@ -10,6 +10,10 @@ pub enum RuleType {
         domain_suffix: String,
         target: String,
     },
+    DomainRegex {
+        regex: regex::Regex,
+        target: String,
+    },
     DomainKeyword {
         domain_keyword: String,
         target: String,
@@ -63,6 +67,7 @@ impl RuleType {
         match self {
             RuleType::Domain { target, .. } => target,
             RuleType::DomainSuffix { target, .. } => target,
+            RuleType::DomainRegex { target, .. } => target,
             RuleType::DomainKeyword { target, .. } => target,
             RuleType::GeoIP { target, .. } => target,
             RuleType::GeoSite { target, .. } => target,
@@ -83,6 +88,9 @@ impl Display for RuleType {
         match self {
             RuleType::Domain { domain, target } => {
                 write!(f, "DOMAIN,{},{}", domain, target)
+            }
+            RuleType::DomainRegex { regex, target } => {
+                write!(f, "DOMAIN-REGEX,{},{}", regex, target)
             }
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
             RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
@@ -110,6 +118,11 @@ impl RuleType {
         match proto {
             "DOMAIN" => Ok(RuleType::Domain {
                 domain: payload.to_string(),
+                target: target.to_string(),
+            }),
+            "DOMAIN-REGEX" => Ok(RuleType::DomainRegex {
+                regex: regex::Regex::new(payload)
+                    .map_err(|e| Error::InvalidConfig(e.to_string()))?,
                 target: target.to_string(),
             }),
             "DOMAIN-SUFFIX" => Ok(RuleType::DomainSuffix {

@@ -16,6 +16,7 @@ use crate::app::router::rules::final_::Final;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
+use rules::domain_regex::DomainRegex;
 use tracing::{error, info, trace};
 
 use super::{
@@ -235,6 +236,9 @@ pub fn map_rule_type(
         RuleType::Domain { domain, target } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
         }
+        RuleType::DomainRegex { regex, target } => {
+            Box::new(DomainRegex { regex, target })
+        }
         RuleType::DomainSuffix {
             domain_suffix,
             target,
@@ -402,6 +406,10 @@ mod tests {
                     country_code: "CN".to_string(),
                     no_resolve: false,
                 },
+                RuleType::DomainRegex {
+                    regex: regex::Regex::new(r"^regex").unwrap(),
+                    target: "regex-match".to_string(),
+                },
                 RuleType::DomainSuffix {
                     domain_suffix: "t.me".to_string(),
                     target: "DS".to_string(),
@@ -425,65 +433,39 @@ mod tests {
         )
         .await;
 
-        assert_eq!(
-            router
-                .match_route(&mut Session {
-                    destination: crate::session::SocksAddr::Domain(
-                        "china.com".to_string(),
-                        1111,
-                    ),
-                    ..Default::default()
-                })
-                .await
-                .0,
-            "DIRECT",
-            "should resolve and match IP"
-        );
+        let cases = vec![
+            ("china.com", "DIRECT", "should resolve and match IP"),
+            ("regex", "regex-match", "should match regex"),
+            ("t.me", "DS", "should match domain"),
+            (
+                "git.io",
+                "DS2",
+                "should still match domain after previous rule resolved IP and non \
+                 match",
+            ),
+            (
+                "no-match",
+                "MATCH",
+                "should fallback to MATCH when nothing matched",
+            ),
+        ];
 
-        assert_eq!(
-            router
-                .match_route(&mut Session {
-                    destination: crate::session::SocksAddr::Domain(
-                        "t.me".to_string(),
-                        1111,
-                    ),
-                    ..Default::default()
-                })
-                .await
-                .0,
-            "DS",
-            "should match domain"
-        );
-
-        assert_eq!(
-            router
-                .match_route(&mut Session {
-                    destination: crate::session::SocksAddr::Domain(
-                        "git.io".to_string(),
-                        1111
-                    ),
-                    ..Default::default()
-                })
-                .await
-                .0,
-            "DS2",
-            "should still match domain after previous rule resolved IP and non \
-             match"
-        );
-
-        assert_eq!(
-            router
-                .match_route(&mut Session {
-                    destination: crate::session::SocksAddr::Domain(
-                        "no-match".to_string(),
-                        1111
-                    ),
-                    ..Default::default()
-                })
-                .await
-                .0,
-            "MATCH",
-            "should fallback to MATCH when nothing matched"
-        );
+        for (domain, target, desc) in cases {
+            assert_eq!(
+                router
+                    .match_route(&mut Session {
+                        destination: crate::session::SocksAddr::Domain(
+                            domain.to_string(),
+                            1111
+                        ),
+                        ..Default::default()
+                    })
+                    .await
+                    .0,
+                target,
+                "{}",
+                desc
+            );
+        }
     }
 }
