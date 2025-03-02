@@ -9,22 +9,22 @@ use rand::Rng;
 use crate::{
     config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
     proxy::{
-        hysteria2::{self, Handler, HystOption, SalamanderObfs},
         AnyOutboundHandler,
+        hysteria2::{self, Handler, HystOption, SalamanderObfs},
     },
     session::SocksAddr,
 };
 #[derive(Clone)]
-pub struct PortGenrateor {
+pub struct PortGenerator {
     // must have a default port
     pub default: u16,
     ports: Vec<u16>,
     range: Vec<RangeInclusive<u16>>,
 }
 
-impl PortGenrateor {
+impl PortGenerator {
     pub fn new(port: u16) -> Self {
-        PortGenrateor {
+        PortGenerator {
             default: port,
             ports: vec![],
             range: vec![],
@@ -40,10 +40,10 @@ impl PortGenrateor {
     }
 
     pub fn get(&self) -> u16 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let len =
             1 + self.ports.len() + self.range.iter().map(|r| r.len()).sum::<usize>();
-        let idx = rng.gen_range(0..len);
+        let idx = rng.random_range(0..len);
         match idx {
             0 => self.default,
             idx if idx <= self.ports.len() => self.ports[idx - 1],
@@ -98,14 +98,14 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
                 return Err(crate::Error::InvalidConfig(
                     "hysteria2 found obfs enable, but obfs password is none"
                         .to_owned(),
-                ))
+                ));
             }
             _ => None,
         };
 
         let ports_gen = if let Some(ports) = value.ports {
             Some(
-                PortGenrateor::new(value.port)
+                PortGenerator::new(value.port)
                     .parse_ports_str(&ports)
                     .map_err(|e| {
                         crate::Error::InvalidConfig(format!(
@@ -131,6 +131,8 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             up_down: value.up.zip(value.down),
             ca_str: value.ca_str,
             cwnd: value.cwnd,
+            udp_mtu: value.udp_mtu,
+            disable_mtu_discovery: value.disable_mtu_discovery.unwrap_or(false),
         };
 
         let c = Handler::new(opts).unwrap();
@@ -140,7 +142,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
 
 #[test]
 fn test_port_gen() {
-    let p = PortGenrateor::new(1000).parse_ports_str("").unwrap();
+    let p = PortGenerator::new(1000).parse_ports_str("").unwrap();
     let p = p.parse_ports_str("1001,1002,1003, 5000-5001").unwrap();
 
     for _ in 0..100 {

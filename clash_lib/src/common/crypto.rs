@@ -1,5 +1,5 @@
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
-use aes_gcm::{aes::cipher::Unsigned, AeadInPlace, KeyInit};
+use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
 use anyhow::Ok;
 
 pub fn aes_cfb_encrypt(

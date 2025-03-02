@@ -1,12 +1,12 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
+    Extension, Router,
     extract::{Path, Query, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
-    Extension, Router,
 };
 use serde::Deserialize;
 
@@ -27,12 +27,12 @@ pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppStat
     Router::new()
         .route("/", get(get_providers))
         .nest(
-            "/:provider_name",
+            "/{provider_name}",
             Router::new()
                 .route("/", get(get_provider).put(update_provider))
                 .route("/healthcheck", get(provider_healthcheck))
                 .nest(
-                    "/:proxy_name",
+                    "/{proxy_name}",
                     Router::new()
                         .route("/", get(get_proxy))
                         .route("/healthcheck", get(get_proxy_delay))
@@ -79,15 +79,16 @@ async fn find_proxy_provider_by_name(
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    if let Some(provider) = outbound_manager.get_proxy_provider(&name) {
-        req.extensions_mut().insert(provider);
-        next.run(req).await
-    } else {
-        (
+    match outbound_manager.get_proxy_provider(&name) {
+        Some(provider) => {
+            req.extensions_mut().insert(provider);
+            next.run(req).await
+        }
+        _ => (
             StatusCode::NOT_FOUND,
             format!("proxy provider {} not found", name),
         )
-            .into_response()
+            .into_response(),
     }
 }
 

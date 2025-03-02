@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, ops::Range, sync::Arc};
 
 use anyhow::Context;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::seq::SliceRandom;
 
 const MIN_PORT: u16 = 1025;
 const MAX_PORT: u16 = 60000;
@@ -24,7 +24,7 @@ impl PortPool {
     pub fn new() -> Self {
         let mut inner = TcpPortPoolInner::default();
         let mut ports: Vec<u16> = PORT_RANGE.collect();
-        ports.shuffle(&mut thread_rng());
+        ports.shuffle(&mut rand::rng());
         ports
             .into_iter()
             .for_each(|p| inner.queue.push_back(p) as ());

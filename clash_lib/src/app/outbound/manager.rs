@@ -11,9 +11,9 @@ use crate::app::{
     dns::ThreadSafeDNSResolver,
     profile::ThreadSafeCacheFile,
     remote_content_manager::{
+        ProxyManager,
         healthcheck::HealthCheck,
         providers::{file_vehicle, http_vehicle},
-        ProxyManager,
     },
 };
 
@@ -25,25 +25,27 @@ use crate::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     proxy::{
-        fallback, loadbalance, selector, socks, trojan,
+        OutboundType, fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
-        vmess, wg, OutboundType,
+        vmess, wg,
     },
 };
 
 use crate::{
+    Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        direct, reject, relay, selector::ThreadSafeSelectorControl, urltest,
-        AnyOutboundHandler,
+        AnyOutboundHandler, direct, reject, relay,
+        selector::ThreadSafeSelectorControl, urltest,
     },
-    Error,
 };
 
 use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -276,6 +278,14 @@ impl OutboundManager {
                     warn!("wireguard is experimental");
                     handlers.insert(wg.common_opts.name.clone(), {
                         let h: wg::Handler = wg.try_into()?;
+                        Arc::new(h) as _
+                    });
+                }
+
+                #[cfg(feature = "ssh")]
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    handlers.insert(ssh.common_opts.name.clone(), {
+                        let h: ssh::Handler = ssh.try_into()?;
                         Arc::new(h) as _
                     });
                 }
@@ -570,6 +580,7 @@ impl OutboundManager {
                             ..Default::default()
                         },
                         providers,
+                        proxy_manager.clone(),
                     );
 
                     handlers.insert(proto.name.clone(), Arc::new(load_balance));

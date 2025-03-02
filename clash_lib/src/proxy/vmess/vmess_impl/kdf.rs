@@ -179,11 +179,11 @@ pub fn vmess_kdf_3_one_shot(
 #[cfg(test)]
 mod tests {
     use crate::proxy::vmess::vmess_impl::kdf::{
-        vmess_kdf_1_one_shot, vmess_kdf_3_one_shot,
         KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
         KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
-        KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
+        KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY, vmess_kdf_1_one_shot,
+        vmess_kdf_3_one_shot,
     };
 
     #[test]

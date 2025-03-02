@@ -13,10 +13,10 @@ use crate::{
     common::errors::new_io_error,
     impl_default_connector,
     proxy::{
-        transport::{self, TLSOptions},
-        utils::{new_udp_socket, RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        transport::Transport,
+        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
     },
     session::Session,
 };
@@ -36,9 +36,7 @@ pub struct HandlerOptions {
     pub user: Option<String>,
     pub password: Option<String>,
     pub udp: bool,
-    pub tls: bool,
-    pub sni: String,
-    pub skip_cert_verify: bool,
+    pub tls_client: Option<Box<dyn Transport>>,
 }
 
 pub struct Handler {
@@ -70,20 +68,8 @@ impl Handler {
         s: AnyStream,
         sess: &Session,
     ) -> std::io::Result<AnyStream> {
-        let mut s = if self.opts.tls {
-            trace!(
-                "TLS config - enabled: {}, skip_cert_verify: {}, sni: {}",
-                self.opts.tls,
-                self.opts.skip_cert_verify,
-                self.opts.sni
-            );
-            let tls_opt = TLSOptions {
-                skip_cert_verify: self.opts.skip_cert_verify,
-                sni: self.opts.sni.clone(),
-                alpn: None,
-            };
-
-            transport::tls::wrap_stream(s, tls_opt, None).await?
+        let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
+            tls_client.proxy_stream(s).await?
         } else {
             s
         };
@@ -106,14 +92,8 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<Socks5Datagram> {
-        let mut s = if self.opts.tls {
-            let tls_opt = TLSOptions {
-                skip_cert_verify: self.opts.skip_cert_verify,
-                sni: self.opts.sni.clone(),
-                alpn: None,
-            };
-
-            transport::tls::wrap_stream(s, tls_opt, None).await?
+        let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
+            tls_client.proxy_stream(s).await?
         } else {
             s
         };
@@ -150,7 +130,7 @@ impl Handler {
         let udp_socket = new_udp_socket(
             None,
             sess.iface.clone(),
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(target_os = "linux")]
             None,
         )
         .await?;
@@ -239,7 +219,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -263,7 +243,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -284,12 +264,13 @@ mod tests {
     use crate::proxy::{
         socks::{Handler, HandlerOptions},
         utils::{
+            GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
+                Suite,
                 consts::{IMAGE_SOCKS5, LOCAL_ADDR},
                 docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-                run_test_suites_and_cleanup, Suite,
+                run_test_suites_and_cleanup,
             },
-            GLOBAL_DIRECT_CONNECTOR,
         },
     };
 

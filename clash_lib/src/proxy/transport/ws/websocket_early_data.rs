@@ -5,8 +5,8 @@ use std::{
     task::{Poll, Waker},
 };
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use futures::{ready, Future};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use futures::{Future, ready};
 use http::{HeaderValue, Request, StatusCode};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_tungstenite::{
@@ -136,39 +136,42 @@ impl AsyncWrite for WebsocketEarlyDataConn {
     ) -> Poll<Result<usize, std::io::Error>> {
         if !self.early_data_flushed {
             loop {
-                if let Some(fut) = &mut self.as_mut().stream_future {
-                    let stream = ready!(Pin::new(fut).poll(cx))?;
+                match &mut self.as_mut().stream_future {
+                    Some(fut) => {
+                        let stream = ready!(Pin::new(fut).poll(cx))?;
 
-                    self.as_mut().stream = Some(stream);
-                    self.as_mut().early_data_flushed = true;
+                        self.as_mut().stream = Some(stream);
+                        self.as_mut().early_data_flushed = true;
 
-                    if let Some(w) = self.as_mut().early_waker.take() {
-                        w.wake();
+                        if let Some(w) = self.as_mut().early_waker.take() {
+                            w.wake();
+                        }
+                        if let Some(w) = self.as_mut().flush_waker.take() {
+                            w.wake();
+                        }
+                        return Poll::Ready(Ok(self.as_mut().early_data_len));
                     }
-                    if let Some(w) = self.as_mut().flush_waker.take() {
-                        w.wake();
-                    }
-                    return Poll::Ready(Ok(self.as_mut().early_data_len));
-                } else {
-                    let mut req =
-                        self.as_mut().req.take().expect("req must be present");
-                    if let Some(v) = req
-                        .headers_mut()
-                        .get_mut(&self.as_mut().early_data_header_name)
-                    {
-                        self.as_mut().early_data_len =
-                            cmp::min(self.as_mut().early_data_len, buf.len());
-                        let header_value = URL_SAFE_NO_PAD
-                            .encode(&buf[..self.as_mut().early_data_len]);
-                        *v = HeaderValue::from_str(&header_value)
-                            .expect("bad header value");
-                    }
+                    _ => {
+                        let mut req =
+                            self.as_mut().req.take().expect("req must be present");
+                        if let Some(v) = req
+                            .headers_mut()
+                            .get_mut(&self.as_mut().early_data_header_name)
+                        {
+                            self.as_mut().early_data_len =
+                                cmp::min(self.as_mut().early_data_len, buf.len());
+                            let header_value = URL_SAFE_NO_PAD
+                                .encode(&buf[..self.as_mut().early_data_len]);
+                            *v = HeaderValue::from_str(&header_value)
+                                .expect("bad header value");
+                        }
 
-                    let stream =
-                        self.as_mut().stream.take().expect("msg: bad state");
-                    let config = self.as_mut().ws_config.take();
-                    self.as_mut().stream_future =
-                        Some(Self::proxy_stream(stream, req, config));
+                        let stream =
+                            self.as_mut().stream.take().expect("msg: bad state");
+                        let config = self.as_mut().ws_config.take();
+                        self.as_mut().stream_future =
+                            Some(Self::proxy_stream(stream, req, config));
+                    }
                 }
             }
         }

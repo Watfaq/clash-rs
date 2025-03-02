@@ -7,32 +7,32 @@ use std::{
 
 use async_recursion::async_recursion;
 use boringtun::{
-    noise::{errors::WireGuardError, Tunn, TunnResult},
+    noise::{Tunn, TunnResult, errors::WireGuardError},
     x25519::{PublicKey, StaticSecret},
 };
 
 use bytes::Bytes;
 use futures::{
-    stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
 use ipnet::IpNet;
 use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
 use tokio::sync::{
-    mpsc::{Receiver, Sender},
     Mutex,
+    mpsc::{Receiver, Sender},
 };
-use tracing::{enabled, error, trace, trace_span, warn, Instrument};
+use tracing::{Instrument, enabled, error, trace, trace_span, warn};
 
 use crate::{
+    Error,
     app::dns::ThreadSafeDNSResolver,
     proxy::{
-        datagram::UdpPacket,
-        utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
         AnyOutboundDatagram,
+        datagram::UdpPacket,
+        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
     session::{Session, SocksAddr},
-    Error,
 };
 
 use super::events::PortProtocol;
@@ -103,7 +103,7 @@ impl WireguardTunnel {
                 None,
                 remote_endpoint.into(),
                 sess.iface.clone(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -305,7 +305,7 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        warn!("wg stack recevied unkown data");
+                        warn!("wg stack received unknown data");
                     }
                 }
                 TunnResult::WriteToTunnelV6(packet, addr) => {
@@ -331,7 +331,7 @@ impl WireguardTunnel {
                             error!("failed to send packet to virtual device: {}", e);
                         }
                     } else {
-                        warn!("wg stack recevied unkown data");
+                        warn!("wg stack received unknown data");
                     }
                 }
             }
@@ -380,9 +380,7 @@ impl WireguardTunnel {
         match IpVersion::of_packet(packet) {
             Ok(IpVersion::Ipv4) => Ipv4Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| {
-                    Ipv4Addr::from(packet.dst_addr()) == self.source_peer_ip
-                })
+                .filter(|packet| packet.dst_addr() == self.source_peer_ip)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),
@@ -394,9 +392,7 @@ impl WireguardTunnel {
                 }),
             Ok(IpVersion::Ipv6) => Ipv6Packet::new_checked(&packet)
                 .ok()
-                .filter(|packet| {
-                    Some(Ipv6Addr::from(packet.dst_addr())) == self.source_peer_ipv6
-                })
+                .filter(|packet| Some(packet.dst_addr()) == self.source_peer_ipv6)
                 .and_then(|packet| {
                     match packet.next_header() {
                         IpProtocol::Tcp => Some(PortProtocol::Tcp),

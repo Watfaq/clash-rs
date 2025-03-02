@@ -7,20 +7,21 @@ use std::{
 
 use bytes::BytesMut;
 use futures::{
-    ready,
+    Sink, SinkExt, Stream, StreamExt, ready,
     stream::{SplitSink, SplitStream},
-    Sink, SinkExt, Stream, StreamExt,
 };
 use shadowsocks::{
-    relay::udprelay::{DatagramReceive, DatagramSend},
     ProxySocket,
+    relay::udprelay::{
+        DatagramReceive, DatagramSend, options::UdpSocketControlData,
+    },
 };
 use tokio::io::ReadBuf;
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 use crate::{
     common::errors::new_io_error,
-    proxy::{datagram::UdpPacket, AnyOutboundDatagram},
+    proxy::{AnyOutboundDatagram, datagram::UdpPacket},
     session::SocksAddr,
 };
 
@@ -32,16 +33,23 @@ pub struct OutboundDatagramShadowsocks<S> {
     flushed: bool,
     pkt: Option<UdpPacket>,
     buf: Vec<u8>,
+
+    ss_control: UdpSocketControlData,
 }
 
 impl<S> OutboundDatagramShadowsocks<S> {
     pub fn new(inner: ProxySocket<S>, remote_addr: SocketAddr) -> Self {
+        let mut ss_control = UdpSocketControlData::default();
+        ss_control.client_session_id = rand::random::<u64>();
+
         Self {
             inner,
             flushed: true,
             pkt: None,
             remote_addr,
             buf: vec![0u8; 65535],
+
+            ss_control,
         }
     }
 }
@@ -87,6 +95,8 @@ where
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
+
+            ref mut ss_control,
             ..
         } = *self;
 
@@ -97,13 +107,30 @@ where
             let addr: shadowsocks::relay::Address =
                 (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
-            let n = ready!(inner.poll_send_to(*remote_addr, &addr, data, cx))?;
+            let n = ready!(inner.poll_send_to_with_ctrl(
+                *remote_addr,
+                &addr,
+                ss_control,
+                data,
+                cx
+            ))?;
 
             debug!(
                 "send udp packet to remote ss server, len: {}, remote_addr: {}, \
                  dst_addr: {}",
                 n, remote_addr, addr
             );
+
+            ss_control.packet_id = match ss_control.packet_id.checked_add(1) {
+                Some(id) => id,
+                None => {
+                    error!("packet_id overflow, closing socket");
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "packet_id overflow",
+                    )));
+                }
+            };
 
             let wrote_all = n == data.len();
             *pkt_container = None;
@@ -147,7 +174,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let Self {
+        let &mut Self {
             ref mut buf,
             ref inner,
             ..
@@ -239,11 +266,11 @@ impl DatagramReceive for ShadowsocksUdpIo {
         } else {
             match r.poll_next_unpin(cx) {
                 Poll::Ready(Some(pkt)) => {
-                    let to_comsume = buf.remaining().min(pkt.data.len());
-                    let consume = pkt.data[..to_comsume].to_vec();
+                    let to_consume = buf.remaining().min(pkt.data.len());
+                    let consume = pkt.data[..to_consume].to_vec();
                     buf.put_slice(&consume);
-                    if to_comsume < pkt.data.len() {
-                        remained.extend_from_slice(&pkt.data[to_comsume..]);
+                    if to_consume < pkt.data.len() {
+                        remained.extend_from_slice(&pkt.data[to_consume..]);
                     }
                     Poll::Ready(Ok(()))
                 }

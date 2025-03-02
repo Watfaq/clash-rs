@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Body,
-    extract::{ws::Message, FromRequest, Query, Request, State, WebSocketUpgrade},
-    response::IntoResponse,
     Json,
+    body::Body,
+    extract::{FromRequest, Query, Request, State, WebSocketUpgrade, ws::Message},
+    response::IntoResponse,
 };
 use http::HeaderMap;
 use serde::{Deserialize, Serialize};
@@ -63,7 +63,7 @@ pub async fn handle(
             let j = serde_json::to_vec(&snapshot).unwrap();
             let body = String::from_utf8(j).unwrap();
 
-            if let Err(e) = socket.send(Message::Text(body)).await {
+            if let Err(e) = socket.send(Message::Text(body.into())).await {
                 debug!("send memory snapshot failed: {}", e);
                 break;
             }

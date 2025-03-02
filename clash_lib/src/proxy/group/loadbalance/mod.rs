@@ -3,6 +3,7 @@ mod helpers;
 use std::{collections::HashMap, io, sync::Arc};
 
 use erased_serde::Serialize;
+use helpers::strategy_sticky_session;
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -10,18 +11,20 @@ use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
-        remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
+        remote_content_manager::{
+            ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
+        },
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
-        utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
 
-use self::helpers::{strategy_consistent_hashring, strategy_rr, StrategyFn};
+use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
@@ -55,10 +58,14 @@ impl Handler {
     pub fn new(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
+        proxy_manager: ProxyManager,
     ) -> Self {
         let strategy_fn = match opts.strategy {
             LoadBalanceStrategy::ConsistentHashing => strategy_consistent_hashring(),
             LoadBalanceStrategy::RoundRobin => strategy_rr(),
+            LoadBalanceStrategy::StickySession => {
+                strategy_sticky_session(proxy_manager)
+            }
         };
 
         Self {

@@ -3,10 +3,10 @@ use futures::StreamExt;
 use http_body_util::BodyDataStream;
 use std::{fmt::Write, num::ParseIntError, path::Path};
 
-use crate::{common::errors::new_io_error, Error};
+use crate::{Error, common::errors::new_io_error};
 use rand::{
-    distributions::uniform::{SampleRange, SampleUniform},
     Fill, Rng,
+    distr::uniform::{SampleRange, SampleUniform},
 };
 use sha2::Digest;
 use tracing::debug;
@@ -16,15 +16,15 @@ where
     T: SampleUniform,
     R: SampleRange<T>,
 {
-    let mut rng = rand::thread_rng();
-    rng.gen_range(range)
+    let mut rng = rand::rng();
+    rng.random_range(range)
 }
 
 pub fn rand_fill<T>(buf: &mut T)
 where
     T: Fill + ?Sized,
 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.fill(buf)
 }
 

@@ -3,7 +3,7 @@ use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::{
         errors::map_io_error,
-        http::{new_http_client, HttpClient},
+        http::{HttpClient, new_http_client},
     },
 };
 

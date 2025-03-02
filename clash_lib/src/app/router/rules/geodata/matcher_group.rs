@@ -1,7 +1,7 @@
 use crate::{
-    app::router::rules::geodata::str_matcher::{try_new_matcher, Matcher},
+    app::router::rules::geodata::str_matcher::{Matcher, try_new_matcher},
     common::{
-        geodata::geodata_proto::{domain::Type, Domain},
+        geodata::geodata_proto::{Domain, domain::Type},
         trie,
     },
 };
@@ -59,10 +59,6 @@ impl DomainGroupMatcher for SuccinctMatcherGroup {
                 }
             }
         }
-        if self.not {
-            !is_matched
-        } else {
-            is_matched
-        }
+        if self.not { !is_matched } else { is_matched }
     }
 }

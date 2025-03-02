@@ -1,4 +1,4 @@
-use std::{fmt::Debug, mem::MaybeUninit, pin::Pin, task::Poll, time::SystemTime};
+use std::{fmt::Debug, pin::Pin, task::Poll, time::SystemTime};
 
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
@@ -6,7 +6,7 @@ use chacha20poly1305::ChaCha20Poly1305;
 use futures::ready;
 
 use md5::Md5;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::{
     common::{
@@ -19,6 +19,8 @@ use crate::{
 };
 
 use super::{
+    CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
+    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security, VERSION,
     cipher::{AeadCipher, VmessSecurity},
     header,
     kdf::{
@@ -28,8 +30,6 @@ use super::{
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,
     },
     user::ID,
-    Security, CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM,
-    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, VERSION,
 };
 
 pub struct VmessStream<S> {
@@ -78,52 +78,13 @@ enum WriteState {
     FlushingData(usize, (usize, usize)),
 }
 
-pub trait ReadExt {
-    fn poll_read_exact(
-        &mut self,
-        cx: &mut std::task::Context,
-        size: usize,
-    ) -> Poll<std::io::Result<()>>;
-    #[allow(unused)]
-    fn get_data(&self) -> &[u8];
-}
+use crate::common::io::{ReadExactBase, ReadExt};
 
-impl<S: AsyncRead + Unpin> ReadExt for VmessStream<S> {
-    // Read exactly `size` bytes into `read_buf`, starting from position 0.
-    fn poll_read_exact(
-        &mut self,
-        cx: &mut std::task::Context,
-        size: usize,
-    ) -> Poll<std::io::Result<()>> {
-        self.read_buf.reserve(size);
-        unsafe { self.read_buf.set_len(size) }
-        loop {
-            if self.read_pos < size {
-                let dst = unsafe {
-                    &mut *((&mut self.read_buf[self.read_pos..size]) as *mut _
-                        as *mut [MaybeUninit<u8>])
-                };
-                let mut buf = ReadBuf::uninit(dst);
-                let ptr = buf.filled().as_ptr();
-                ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf))?;
-                assert_eq!(ptr, buf.filled().as_ptr());
-                if buf.filled().is_empty() {
-                    return Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "unexpected eof",
-                    )));
-                }
-                self.read_pos += buf.filled().len();
-            } else {
-                assert!(self.read_pos == size);
-                self.read_pos = 0;
-                return Poll::Ready(Ok(()));
-            }
-        }
-    }
+impl<S: AsyncRead + Unpin> ReadExactBase for VmessStream<S> {
+    type I = S;
 
-    fn get_data(&self) -> &[u8] {
-        self.read_buf.as_ref()
+    fn decompose(&mut self) -> (&mut Self::I, &mut BytesMut, &mut usize) {
+        (&mut self.stream, &mut self.read_buf, &mut self.read_pos)
     }
 }
 
@@ -197,7 +158,7 @@ where
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "unsupported security",
-                ))
+                ));
             }
         };
 
@@ -237,7 +198,7 @@ where
     async fn send_handshake_request(&mut self) -> std::io::Result<()> {
         use hmac::{Hmac, Mac};
         type HmacMd5 = Hmac<Md5>;
-        let Self {
+        let &mut Self {
             ref mut stream,
             ref req_body_key,
             ref req_body_iv,
@@ -473,13 +434,17 @@ where
                     let this = &mut *self;
                     ready!(this.poll_read_exact(cx, size))?;
 
-                    if let Some(ref mut cipher) = this.aead_read_cipher {
-                        cipher.decrypt_inplace(&mut this.read_buf)?;
-                        let data_len = size - cipher.security.overhead_len();
-                        this.read_buf.truncate(data_len);
-                        this.read_state = ReadState::StreamFlushingData(data_len);
-                    } else {
-                        this.read_state = ReadState::StreamFlushingData(size);
+                    match this.aead_read_cipher {
+                        Some(ref mut cipher) => {
+                            cipher.decrypt_inplace(&mut this.read_buf)?;
+                            let data_len = size - cipher.security.overhead_len();
+                            this.read_buf.truncate(data_len);
+                            this.read_state =
+                                ReadState::StreamFlushingData(data_len);
+                        }
+                        _ => {
+                            this.read_state = ReadState::StreamFlushingData(size);
+                        }
                     }
                 }
 
@@ -588,7 +553,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        let Self { ref mut stream, .. } = self.get_mut();
+        let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_flush(cx)
     }
 
@@ -596,7 +561,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        let Self { ref mut stream, .. } = self.get_mut();
+        let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_shutdown(cx)
     }
 }

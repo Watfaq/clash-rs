@@ -6,18 +6,18 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
 
 use crate::{
+    Error,
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     proxy::{
-        utils::{provider_helper::get_proxies_from_providers, RemoteConnector},
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
-    Error,
 };
 
 #[async_trait]
@@ -58,7 +58,7 @@ impl Handler {
     pub async fn new(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
-        seleted: Option<String>,
+        selected: Option<String>,
     ) -> Self {
         let provider = providers.first().unwrap();
         let proxies = provider.read().await.proxies().await;
@@ -68,7 +68,7 @@ impl Handler {
             opts,
             providers,
             inner: Arc::new(RwLock::new(HandlerInner {
-                current: seleted.unwrap_or(current),
+                current: selected.unwrap_or(current),
             })),
         }
     }

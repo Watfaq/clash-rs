@@ -1,8 +1,8 @@
 ---
 port: 8888
-socks-port: 8889
+socks-port: "8889"
 mixed-port: 8899
-tproxy-port: 8900
+# tproxy-port: 8900
 
 tun:
   enable: false
@@ -10,9 +10,11 @@ tun:
   route-all: false
   gateway: "198.19.0.1/32"
   so-mark: 3389
-  # routes:
-  #   - 0.0.0.0/1
-  #   - 128.0.0.0/1
+  dns-hijack: true
+  # dns-hijack:
+  #   - 1.1.1.1:53
+  routes:
+    - 1.1.1.1/32
 
 ipv6: true
 
@@ -36,7 +38,7 @@ dns:
       ca-cert: dns.crt
       ca-key: dns.key
       hostname: dns.example.com
-        
+
   # ipv6: false # when the false, response to AAAA questions will be empty
 
   # These nameservers are used to resolve the DNS nameserver hostnames below.
@@ -47,14 +49,14 @@ dns:
   enhanced-mode: normal
   fake-ip-range: 198.18.0.2/16 # Fake IP addresses pool CIDR
   # use-hosts: true # lookup hosts and return IP record
-  
+
   # Hostnames in this list will not be resolved with fake IPs
   # i.e. questions to these domain names will always be answered with their
   # real IP addresses
   # fake-ip-filter:
   #   - '*.lan'
   #   - localhost.ptlogin2.qq.com
-  
+
   # Supports UDP, TCP, DoT, DoH. You can specify the port to connect to.
   # All DNS questions are sent directly to the nameserver, without proxies
   # involved. Clash answers the DNS question with the first result gathered.
@@ -78,7 +80,6 @@ asn-mmdb: Country-asn.mmdb
 profile:
   store-selected: true
   store-fake-ip: false
-
 
 proxy-groups:
   - name: "relay"
@@ -111,8 +112,7 @@ proxy-groups:
       # - "select"
       # - "wg"
       # - DIRECT
-  
-  
+
   - name: "relay-one"
     type: relay
     use:
@@ -266,7 +266,7 @@ proxies:
     ip: 172.16.0.2/32
     ipv6: 2606:4700:110:8e5e:fa1:3f30:c077:e17c/128
     public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
-    allowed-ips: ['0.0.0.0/0', '::/0']
+    allowed-ips: ["0.0.0.0/0", "::/0"]
     remote-dns-resolve: true
     dns:
       - 1.1.1.1
@@ -297,14 +297,20 @@ rule-providers:
     path: ./rule-set.yaml
     interval: 300
     behavior: domain
+  file-provider2:
+    type: file
+    path: ./rule-set-classical.yaml
+    interval: 300
+    behavior: classical
 
 rules:
   - IP-CIDR,1.1.1.1/32,udp-relay
   - IP-CIDR,8.8.8.8/32,udp-relay
+  - DOMAIN-REGEX,^www.google.com$,DIRECT
   - DOMAIN,google.com,ws-vmess
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,DIRECT
-#  - RULE-SET,file-provider,trojan
+  - RULE-SET,file-provider2,DIRECT
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
   - DOMAIN-KEYWORD,google,grpc-vmess
@@ -315,4 +321,3 @@ rules:
   - DST-PORT,53,ws-vmess
   - SRC-PORT,7777,DIRECT
   - MATCH, DIRECT
-...

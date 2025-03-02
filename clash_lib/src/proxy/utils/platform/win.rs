@@ -4,11 +4,11 @@ use tracing::{debug, error, warn};
 use windows::Win32::{
     Foundation::GetLastError,
     Networking::WinSock::{
-        setsockopt, IPPROTO_IP, IPPROTO_IPV6, IP_UNICAST_IF, SOCKET,
+        IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, SOCKET, setsockopt,
     },
 };
 
-use crate::{common::errors::new_io_error, proxy::utils::Interface};
+use crate::{app::net::Interface, common::errors::new_io_error};
 
 pub(crate) fn must_bind_socket_on_interface(
     socket: &socket2::Socket,

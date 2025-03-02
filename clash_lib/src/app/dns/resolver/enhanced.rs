@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
-use rand::prelude::SliceRandom;
+use rand::seq::IndexedRandom;
 use std::{
     net,
     sync::{
-        atomic::{AtomicBool, Ordering::Relaxed},
         Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
     },
     time::Duration,
 };
@@ -15,20 +15,20 @@ use tracing::{debug, error, instrument, trace, warn};
 use hickory_proto::{op, rr};
 
 use crate::{
+    Error,
     app::profile::ThreadSafeCacheFile,
     common::{mmdb::Mmdb, trie},
     config::def::DNSMode,
-    dns::{helper::make_clients, ThreadSafeDNSClient},
-    Error,
+    dns::{ThreadSafeDNSClient, helper::make_clients},
 };
 
 use crate::dns::{
+    ClashResolver, Config, ResolverKind,
     fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
     filters::{
         DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
         IPNetFilter,
     },
-    ClashResolver, Config, ResolverKind,
 };
 
 static TTL: Duration = Duration::from_secs(60);
@@ -286,7 +286,10 @@ impl EnhancedResolver {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
-                    return Ok(cached.clone());
+                    trace!("dns query {} hit lru cache", q.to_string());
+                    let mut cached = cached.clone();
+                    cached.set_id(message.id());
+                    return Ok(cached);
                 }
             }
             self.exchange_no_cache(message).await
@@ -528,7 +531,7 @@ impl ClashResolver for EnhancedResolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::A).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+            Ok(result) => match result.choose(&mut rand::rng()).unwrap() {
                 net::IpAddr::V4(v4) => Ok(Some(*v4)),
                 _ => unreachable!("invalid IP family"),
             },
@@ -561,7 +564,7 @@ impl ClashResolver for EnhancedResolver {
         }
 
         match self.lookup_ip(host, rr::RecordType::AAAA).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
+            Ok(result) => match result.choose(&mut rand::rng()).unwrap() {
                 net::IpAddr::V6(v6) => Ok(Some(*v6)),
                 _ => unreachable!("invalid IP family"),
             },
@@ -638,19 +641,19 @@ impl ClashResolver for EnhancedResolver {
 #[cfg(test)]
 mod tests {
 
-    use hickory_client::{client, op};
+    use hickory_client::client;
     use hickory_proto::{
-        rr,
+        op, rr,
         udp::UdpClientStream,
         xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
     };
-    use std::{sync::Arc, time::Duration};
-    use tokio::net::UdpSocket;
+    use std::sync::Arc;
 
     use crate::app::dns::{
+        ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
         resolver::enhanced::EnhancedResolver,
-        ThreadSafeDNSClient,
+        runtime::DnsRuntimeProvider,
     };
 
     #[tokio::test]
@@ -669,11 +672,12 @@ mod tests {
         m.add_query(q);
         m.set_recursion_desired(true);
 
-        let stream = UdpClientStream::<UdpSocket>::with_timeout(
+        let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
-            Duration::from_secs(5),
-        );
-        let (client, bg) = client::AsyncClient::connect(stream).await.unwrap();
+            DnsRuntimeProvider::new(None, None),
+        )
+        .build();
+        let (client, bg) = client::Client::connect(stream).await.unwrap();
 
         tokio::spawn(bg);
 

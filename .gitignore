@@ -5,10 +5,11 @@ target/
 .idea/
 .vscode/
 .config/
-venv/
+.venv/
 /bazel-*
 /output/
 rust-project.json
+/build/
 
 # don't check in this real config
 ignore*.yaml
@@ -21,3 +22,8 @@ geosite.dat
 # for NixOS direnv
 .envrc
 shell.nix
+
+# macOS
+.DS_Store
+
+codecov.json

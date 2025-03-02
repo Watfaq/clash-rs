@@ -1,5 +1,5 @@
-use crate::{common::utils::default_bool_true, config::utils, Error};
-use serde::{de::value::MapDeserializer, Deserialize};
+use crate::{Error, common::utils::default_bool_true, config::utils};
+use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
 use std::{
     collections::HashMap,
@@ -70,6 +70,9 @@ pub enum OutboundProxyProtocol {
     Tuic(OutboundTuic),
     #[serde(rename = "hysteria2")]
     Hysteria2(OutboundHysteria2),
+    #[serde(rename = "ssh")]
+    #[cfg(feature = "ssh")]
+    Ssh(OutBoundSsh),
 }
 
 impl OutboundProxyProtocol {
@@ -90,6 +93,8 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(tuic) => &tuic.common_opts.name,
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
+            #[cfg(feature = "ssh")]
+            OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
         }
     }
 }
@@ -126,6 +131,8 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "tuic")]
             OutboundProxyProtocol::Tuic(_) => write!(f, "Tuic"),
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
+            #[cfg(feature = "ssh")]
+            OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
         }
     }
 }
@@ -285,6 +292,40 @@ pub struct OutboundTuic {
     pub receive_window: Option<u64>,
 }
 
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutBoundSsh {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub username: String,
+    pub password: Option<String>,
+    pub private_key: Option<String>,
+    pub private_key_passphrase: Option<String>,
+    pub host_key: Option<Vec<String>>,
+    pub host_key_algorithms: Option<Vec<String>>,
+    pub totp_opt: Option<TotpOption>,
+}
+
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum TotpOption {
+    OtpAuth(String),
+    Common(Totp),
+}
+
+#[cfg(feature = "ssh")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct Totp {
+    pub secret: String,
+    pub screw: u8,
+    pub step: u64,
+    pub digits: usize,
+    pub algorithm: totp_rs::Algorithm,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutboundGroupProtocol {
@@ -319,22 +360,6 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Select(g) => g.proxies.as_ref(),
         }
-    }
-}
-
-impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
-    type Error = Error;
-
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
-        let name = mapping
-            .get("name")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig(
-                "missing field `name` in outbound proxy grouop".to_owned(),
-            ))?
-            .to_owned();
-        OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
     }
 }
 
@@ -412,6 +437,8 @@ pub enum LoadBalanceStrategy {
     ConsistentHashing,
     #[serde(rename = "round-robin")]
     RoundRobin,
+    #[serde(rename = "sticky-session")]
+    StickySession,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
@@ -501,6 +528,8 @@ pub struct OutboundHysteria2 {
     pub ca: Option<String>,
     pub ca_str: Option<String>,
     pub fingerprint: Option<String>,
+    pub udp_mtu: Option<u32>,
+    pub disable_mtu_discovery: Option<bool>,
     /// bbr congestion control window
     pub cwnd: Option<u64>,
 }

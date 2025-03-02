@@ -7,6 +7,7 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use downcast_rs::{Downcast, impl_downcast};
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,8 @@ pub mod hysteria2;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
+#[cfg(feature = "ssh")]
+pub mod ssh;
 #[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;
@@ -52,8 +55,10 @@ pub mod group;
 pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
+pub mod inbound;
 mod options;
 mod transport;
+pub mod tunnel;
 
 pub use options::HandlerCommonOptions;
 
@@ -80,6 +85,10 @@ impl<T> ProxyStream for T where
 }
 pub type AnyStream = Box<dyn ProxyStream>;
 
+pub trait ClientStream: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}
+impl_downcast!(ClientStream);
+
 pub trait InboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
 {
@@ -104,18 +113,6 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[async_trait]
-pub trait InboundListener: Send + Sync + Unpin {
-    /// support tcp or not
-    fn handle_tcp(&self) -> bool;
-    /// support udp or not
-    fn handle_udp(&self) -> bool;
-    async fn listen_tcp(&self) -> io::Result<()>;
-    async fn listen_udp(&self) -> io::Result<()>;
-}
-
-pub type AnyInboundListener = Arc<dyn InboundListener>;
-
 #[derive(Serialize, Deserialize)]
 pub enum OutboundType {
     Shadowsocks,
@@ -126,6 +123,7 @@ pub enum OutboundType {
     Tuic,
     Socks5,
     Hysteria2,
+    Ssh,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -149,6 +147,7 @@ impl Display for OutboundType {
             OutboundType::Tuic => write!(f, "Tuic"),
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
+            OutboundType::Ssh => write!(f, "ssh"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),

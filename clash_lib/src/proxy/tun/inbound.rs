@@ -1,31 +1,34 @@
-use super::{datagram::TunDatagram, netstack};
-use std::{net::SocketAddr, sync::Arc};
+use super::datagram::TunDatagram;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use futures::{SinkExt, StreamExt};
 
+use hickory_proto::rr::RecordType;
+use netstack_smoltcp::StackBuilder;
 use tracing::{debug, error, info, trace, warn};
-use tun::{Device, TunPacket};
+use tun::AbstractDevice;
 use url::Url;
 
 use crate::{
-    app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
+    Error, Runner,
+    app::{
+        dispatcher::Dispatcher,
+        dns::{ThreadSafeDNSResolver, exchange_with_resolver},
+        net::get_outbound_interface,
+    },
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{
-        datagram::UdpPacket, tun::routes::maybe_add_routes,
-        utils::get_outbound_interface,
-    },
-    session::{Network, Session, SocksAddr, Type},
-    Error, Runner,
+    proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
+    session::{Network, Session, Type},
 };
 
 use crate::{defer, proxy::tun::routes};
 
-const DEFAULT_SO_MARK: u32 = 3389;
-const DEFAULT_ROUTE_TABLE: u32 = 2468;
-
 async fn handle_inbound_stream(
-    stream: netstack::TcpStream,
+    stream: netstack_smoltcp::TcpStream,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
@@ -37,7 +40,7 @@ async fn handle_inbound_stream(
         source: local_addr,
         destination: remote_addr.into(),
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
@@ -49,20 +52,37 @@ async fn handle_inbound_stream(
     };
 
     debug!("new tun TCP session assigned: {}", sess);
-    dispatcher.dispatch_stream(sess, stream).await;
+    dispatcher.dispatch_stream(sess, Box::new(stream)).await;
 }
 
 async fn handle_inbound_datagram(
-    socket: Box<netstack::UdpSocket>,
+    socket: netstack_smoltcp::UdpSocket,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
     so_mark: u32,
+    dns_hijack: bool,
 ) {
     // tun i/o
-    let (ls, mut lr) = socket.split();
-    let ls = Arc::new(ls);
+    // lr: app packets went into tun will be accessed from lr
+    // ls: packet writen into ls will go back to app from tun
+    let (mut lr, mut ls) = socket.split();
+    // ideally we clone the WriteHalf ls, but it's not Clone and it's a Sink so the
+    // send method is mut
+    let (dup_ls, mut dup_lr) = tokio::sync::mpsc::channel(32);
+    tokio::spawn(async move {
+        while let Some((data, local, remote)) = dup_lr.recv().await {
+            if let Err(e) = ls.send((data, local, remote)).await {
+                warn!("failed to send udp packet to netstack: {}", e);
+            }
+        }
+    });
+    let ls = dup_ls.clone();
+    let ls_dns = dup_ls.clone(); // for dns hijack
+    let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
+    // l_tx: dispatcher write packet responsed from remote proxy
+    // l_rx: in fut1 items are forwared to ls
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
     // forward packets from tun to dispatcher
@@ -77,7 +97,7 @@ async fn handle_inbound_datagram(
         network: Network::Udp,
         typ: Type::Tun,
         iface: get_outbound_interface()
-            .map(|x| crate::proxy::utils::Interface::Name(x.name))
+            .map(|x| x.name.as_str().into())
             .inspect(|x| {
                 debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
             }),
@@ -85,34 +105,22 @@ async fn handle_inbound_datagram(
         ..Default::default()
     };
 
-    let closer = dispatcher.dispatch_datagram(sess, Box::new(udp_stream));
+    let closer = dispatcher
+        .dispatch_datagram(sess, Box::new(udp_stream))
+        .await;
 
     // dispatcher -> tun
     let fut1 = tokio::spawn(async move {
         while let Some(pkt) = l_rx.recv().await {
             trace!("tun <- dispatcher: {:?}", pkt);
-            // populate the correct src_addr, though is it necessary?
-            let src_addr = match pkt.src_addr {
-                SocksAddr::Ip(ip) => ip,
-                SocksAddr::Domain(host, port) => {
-                    match resolver.resolve(&host, resolver.fake_ip_enabled()).await {
-                        Ok(Some(ip)) => (ip, port).into(),
-                        Ok(None) => {
-                            warn!("failed to resolve domain: {}", host);
-                            continue;
-                        }
-                        Err(e) => {
-                            warn!("failed to resolve domain: {}", e);
-                            continue;
-                        }
-                    }
-                }
-            };
-            if let Err(e) = ls.send_to(
-                &pkt.data[..],
-                &src_addr,
-                &pkt.dst_addr.must_into_socket_addr(),
-            ) {
+            if let Err(e) = ls
+                .send((
+                    pkt.data,
+                    pkt.src_addr.must_into_socket_addr(),
+                    pkt.dst_addr.must_into_socket_addr(),
+                ))
+                .await
+            {
                 warn!("failed to send udp packet to netstack: {}", e);
             }
         }
@@ -120,7 +128,7 @@ async fn handle_inbound_datagram(
 
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
-        while let Ok((data, src_addr, dst_addr)) = lr.recv_from().await {
+        'read_packet: while let Some((data, src_addr, dst_addr)) = lr.next().await {
             if dst_addr.ip().is_multicast() {
                 continue;
             }
@@ -131,6 +139,88 @@ async fn handle_inbound_datagram(
             };
 
             trace!("tun -> dispatcher: {:?}", pkt);
+
+            if dns_hijack && pkt.dst_addr.port() == 53 {
+                trace!("got dns packet: {:?}, returning from Clash DNS server", pkt);
+
+                match hickory_proto::op::Message::from_vec(&pkt.data) {
+                    Ok(msg) => {
+                        let send_response =
+                            async |msg: hickory_proto::op::Message,
+                                   pkt: &UdpPacket| {
+                                match msg.to_vec() {
+                                    Ok(data) => {
+                                        if let Err(e) = ls_dns
+                                            .send((
+                                                data,
+                                                pkt.dst_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                                pkt.src_addr
+                                                    .clone()
+                                                    .must_into_socket_addr(),
+                                            ))
+                                            .await
+                                        {
+                                            warn!(
+                                                "failed to send udp packet to \
+                                                 netstack: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "failed to serialize dns response: {}",
+                                            e
+                                        );
+                                    }
+                                }
+                            };
+
+                        trace!("hijack dns request: {:?}", msg);
+                        if msg.query().map(|q| q.query_type())
+                            == Some(RecordType::AAAA)
+                        {
+                            trace!("dns hijack does not support AAAA query");
+                            let resp = hickory_proto::op::Message::error_msg(
+                                msg.id(),
+                                msg.op_code(),
+                                hickory_proto::op::ResponseCode::Refused,
+                            );
+                            send_response(resp, &pkt).await;
+                            continue 'read_packet;
+                        }
+
+                        let mut resp =
+                            match exchange_with_resolver(&resolver_dns, &msg, true)
+                                .await
+                            {
+                                Ok(resp) => resp,
+                                Err(e) => {
+                                    warn!("failed to exchange dns message: {}", e);
+                                    continue 'read_packet;
+                                }
+                            };
+
+                        // TODO: figure out where the message id got lost
+                        resp.set_id(msg.id());
+                        trace!("hijack dns response: {:?}", resp);
+
+                        send_response(resp, &pkt).await;
+                    }
+                    Err(e) => {
+                        warn!(
+                            "failed to parse dns packet: {}, putting it back to \
+                             stack",
+                            e
+                        );
+                    }
+                };
+
+                // don't forward dns packet to dispatcher
+                continue 'read_packet;
+            }
 
             match d_tx.send(pkt).await {
                 Ok(_) => {}
@@ -177,7 +267,7 @@ pub fn get_runner(
         }
         "dev" => {
             let dev = u.host().expect("tun dev must be provided").to_string();
-            tun_cfg.name(dev);
+            tun_cfg.tun_name(dev);
         }
         _ => {
             return Err(Error::InvalidConfig(format!(
@@ -191,23 +281,35 @@ pub fn get_runner(
     tun_cfg
         .address(gw.addr())
         .netmask(gw.netmask())
-        .mtu(cfg.mtu.unwrap_or(if cfg!(windows) { 65535 } else { 1500 }))
+        .mtu(
+            cfg.mtu
+                .unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }),
+        )
         .up();
 
     let tun = tun::create_as_async(&tun_cfg)
         .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
 
-    let tun_name = tun.get_ref().name().map_err(map_io_error)?;
+    let tun_name = tun.tun_name().map_err(map_io_error)?;
     info!("tun started at {}", tun_name);
-
-    let mut cfg = cfg;
-    cfg.route_table = cfg.route_table.or(Some(DEFAULT_ROUTE_TABLE));
-    cfg.so_mark = cfg.so_mark.or(Some(DEFAULT_SO_MARK));
 
     maybe_add_routes(&cfg, &tun_name)?;
 
-    let (stack, mut tcp_listener, udp_socket) =
-        netstack::NetStack::with_buffer_size(512, 256).map_err(map_io_error)?;
+    let mut builder = StackBuilder::default()
+        .enable_tcp(true)
+        .enable_udp(true)
+        .enable_icmp(true);
+    if let Some(device_broadcast) = get_device_broadcast(&tun) {
+        builder = builder
+            // .add_ip_filter(Box::new(move |src, dst| *src != device_broadcast && *dst != device_broadcast));
+            .add_ip_filter_fn(move |src, dst| *src != device_broadcast && *dst != device_broadcast);
+    }
+    let (stack, runner, udp_socket, tcp_listener) = builder.build().unwrap();
+    let udp_socket = udp_socket.unwrap(); // udp enabled
+    let mut tcp_listener = tcp_listener.unwrap(); // tcp enabled or icmp enabled
+    if let Some(runner) = runner {
+        tokio::spawn(runner);
+    }
 
     Ok(Some(Box::pin(async move {
         defer! {
@@ -221,7 +323,7 @@ pub fn get_runner(
             }
         }
 
-        let so_mark = cfg.so_mark.unwrap();
+        let so_mark = cfg.so_mark;
 
         let framed = tun.into_framed();
 
@@ -235,7 +337,7 @@ pub fn get_runner(
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(TunPacket::new(pkt)).await {
+                        if let Err(e) = tun_sink.send(pkt).await {
                             error!("failed to send pkt to tun: {}", e);
                             break;
                         }
@@ -255,9 +357,7 @@ pub fn get_runner(
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) =
-                            stack_sink.send(pkt.into_bytes().into()).await
-                        {
+                        if let Err(e) = stack_sink.send(pkt).await {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -292,7 +392,14 @@ pub fn get_runner(
         }));
 
         futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket, dispatcher, resolver, so_mark).await;
+            handle_inbound_datagram(
+                udp_socket,
+                dispatcher,
+                resolver,
+                so_mark,
+                cfg.dns_hijack,
+            )
+            .await;
             Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
         }));
 
@@ -301,4 +408,49 @@ pub fn get_runner(
             x
         })
     })))
+}
+
+fn get_device_broadcast(device: &tun::AsyncDevice) -> Option<std::net::Ipv4Addr> {
+    let mtu = device.mtu().unwrap();
+
+    let address = match device.address() {
+        Ok(a) => match a {
+            IpAddr::V4(v4) => v4,
+            IpAddr::V6(_) => return None,
+        },
+        Err(_) => return None,
+    };
+
+    let netmask = match device.netmask() {
+        Ok(n) => match n {
+            IpAddr::V4(v4) => v4,
+            IpAddr::V6(_) => return None,
+        },
+        Err(_) => return None,
+    };
+
+    match smoltcp::wire::Ipv4Cidr::from_netmask(address, netmask) {
+        Ok(address_net) => match address_net.broadcast() {
+            Some(broadcast) => {
+                info!(
+                    "tun device network: {} (address: {}, netmask: {}, broadcast: \
+                     {}, mtu: {})",
+                    address_net, address, netmask, broadcast, mtu,
+                );
+
+                Some(broadcast)
+            }
+            None => {
+                error!("invalid tun address {}, netmask {}", address, netmask);
+                None
+            }
+        },
+        Err(err) => {
+            error!(
+                "invalid tun address {}, netmask {}, error: {}",
+                address, netmask, err
+            );
+            None
+        }
+    }
 }

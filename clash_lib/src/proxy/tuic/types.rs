@@ -1,6 +1,6 @@
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    proxy::utils::{get_outbound_interface, new_udp_socket, Interface},
+    app::{dns::ThreadSafeDNSResolver, net::get_outbound_interface},
+    proxy::utils::new_udp_socket,
     session::SocksAddr as ClashSocksAddr,
 };
 
@@ -12,7 +12,7 @@ use register_count::Counter;
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::{atomic::AtomicU32, Arc},
+    sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
 use tokio::sync::RwLock as AsyncRwLock;
@@ -50,8 +50,8 @@ impl TuicEndpoint {
                     let iface = get_outbound_interface();
                     new_udp_socket(
                         None,
-                        iface.map(|x| Interface::Name(x.name)),
-                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        iface.map(|x| x.name.as_str().into()),
+                        #[cfg(target_os = "linux")]
                         None,
                     )
                     .await?
@@ -146,7 +146,7 @@ impl TuicConnection {
             udp_relay_mode,
             remote_uni_stream_cnt: Counter::new(),
             remote_bi_stream_cnt: Counter::new(),
-            // TODO: seems tuic dynamicly adjust the size of max concurrent
+            // TODO: seems tuic dynamically adjust the size of max concurrent
             // streams, is it necessary to configure the stream size?
             max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
             max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),

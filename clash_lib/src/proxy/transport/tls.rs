@@ -1,8 +1,12 @@
-use std::io;
-
+use async_trait::async_trait;
 use serde::Serialize;
+use std::{io, sync::Arc};
 
-use crate::proxy::AnyStream;
+use super::Transport;
+use crate::{
+    common::tls::{DefaultTlsVerifier, GLOBAL_ROOT_STORE},
+    proxy::AnyStream,
+};
 
 #[derive(Serialize, Clone)]
 pub struct TLSOptions {
@@ -11,53 +15,76 @@ pub struct TLSOptions {
     pub alpn: Option<Vec<String>>,
 }
 
-pub async fn wrap_stream(
-    stream: AnyStream,
-    opt: TLSOptions,
-    expected_alpn: Option<&str>,
-) -> io::Result<AnyStream> {
-    use std::sync::Arc;
-
-    use crate::common::tls::{self, GLOBAL_ROOT_STORE};
-
-    let mut tls_config = rustls::ClientConfig::builder()
-        .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-        .with_no_client_auth();
-    tls_config.alpn_protocols = opt
-        .alpn
-        .unwrap_or_default()
-        .into_iter()
-        .map(|x| x.as_bytes().to_vec())
-        .collect();
-
-    if opt.skip_cert_verify {
-        tls_config
-            .dangerous()
-            .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
+impl From<TLSOptions> for Client {
+    fn from(opt: TLSOptions) -> Self {
+        Self::new(opt.skip_cert_verify, opt.sni, opt.alpn, None)
     }
+}
 
-    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+pub struct Client {
+    pub skip_cert_verify: bool,
+    pub sni: String,
+    pub alpn: Option<Vec<String>>,
+    pub expected_alpn: Option<String>,
+}
 
-    let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
-    let dns_name =
-        rustls::pki_types::ServerName::try_from(opt.sni.as_str().to_owned())
-            .unwrap_or_else(|_| panic!("invalid server name: {}", opt.sni));
-
-    let c = connector.connect(dns_name, stream).await.and_then(|x| {
-        if let Some(expected_alpn) = expected_alpn {
-            if x.get_ref().1.alpn_protocol() != Some(expected_alpn.as_bytes()) {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "unexpected alpn protocol: {:?}, expected: {:?}",
-                        x.get_ref().1.alpn_protocol(),
-                        expected_alpn
-                    ),
-                ));
-            }
+impl Client {
+    pub fn new(
+        skip_cert_verify: bool,
+        sni: String,
+        alpn: Option<Vec<String>>,
+        expected_alpn: Option<String>,
+    ) -> Self {
+        Self {
+            skip_cert_verify,
+            sni,
+            alpn,
+            expected_alpn,
         }
+    }
+}
 
-        Ok(x)
-    });
-    c.map(|x| Box::new(x) as _)
+#[async_trait]
+impl Transport for Client {
+    async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
+        let mut tls_config = rustls::ClientConfig::builder()
+            .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+            .with_no_client_auth();
+        tls_config.alpn_protocols = self
+            .alpn
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|x| x.as_bytes().to_vec())
+            .collect();
+
+        tls_config.dangerous().set_certificate_verifier(Arc::new(
+            DefaultTlsVerifier::new(None, self.skip_cert_verify),
+        ));
+
+        tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+        let dns_name =
+            rustls::pki_types::ServerName::try_from(self.sni.as_str().to_owned())
+                .unwrap_or_else(|_| panic!("invalid server name: {}", self.sni));
+
+        let c = connector.connect(dns_name, stream).await.and_then(|x| {
+            if let Some(expected_alpn) = self.expected_alpn.as_ref() {
+                if x.get_ref().1.alpn_protocol() != Some(expected_alpn.as_bytes()) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "unexpected alpn protocol: {:?}, expected: {:?}",
+                            x.get_ref().1.alpn_protocol(),
+                            expected_alpn
+                        ),
+                    ));
+                }
+            }
+
+            Ok(x)
+        });
+        c.map(|x| Box::new(x) as _)
+    }
 }

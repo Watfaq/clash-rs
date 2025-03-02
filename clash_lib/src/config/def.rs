@@ -1,11 +1,37 @@
 use crate::Error;
 use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
-use serde::{Deserialize, Serialize};
+use educe::Educe;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
 
+const DEFAULT_SO_MARK: u32 = 3389;
+const DEFAULT_ROUTE_TABLE: u32 = 2468;
+
+use super::config::BindAddress;
+
 fn default_tun_address() -> String {
-    "198.18.0.1/32".to_string()
+    "198.18.0.1/24".to_string()
+}
+fn default_tun_so_mark() -> u32 {
+    DEFAULT_SO_MARK
+}
+
+fn default_route_table() -> u32 {
+    DEFAULT_ROUTE_TABLE
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DnsHijack {
+    Switch(bool),
+    List(Vec<String>),
+}
+
+impl Default for DnsHijack {
+    fn default() -> Self {
+        DnsHijack::Switch(false)
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -20,11 +46,17 @@ pub struct TunConfig {
     pub routes: Option<Vec<String>>,
     #[serde(default)]
     pub route_all: bool,
-    pub mtu: Option<i32>,
+    pub mtu: Option<u16>,
     /// fwmark on Linux only
-    pub so_mark: Option<u32>,
+    #[serde(default = "default_tun_so_mark")]
+    pub so_mark: u32,
     /// policy routing table on Linux only
-    pub route_table: Option<u32>,
+    #[serde(default = "default_route_table")]
+    pub route_table: u32,
+    /// Will hijack UDP:53 DNS queries to the Clash DNS server if set to true
+    /// setting to a list has the same effect as setting to true
+    #[serde(default)]
+    pub dns_hijack: DnsHijack,
 }
 
 #[derive(Serialize, Deserialize, Default, Copy, Clone)]
@@ -238,29 +270,31 @@ impl Display for LogLevel {
 ///   - MATCH, DIRECT
 /// ...
 /// ```
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Educe)]
 #[serde(rename_all = "kebab-case", default)]
+#[educe(Default)]
 pub struct Config {
     /// The HTTP proxy port
-    pub port: Option<u16>,
+    #[serde(alias = "http_port")]
+    pub port: Option<Port>,
     /// The SOCKS5 proxy port
-    pub socks_port: Option<u16>,
+    pub socks_port: Option<Port>,
     /// The redir port
     #[doc(hidden)]
-    pub redir_port: Option<u16>,
-    pub tproxy_port: Option<u16>,
+    pub redir_port: Option<Port>,
+    pub tproxy_port: Option<Port>,
     /// The HTTP/SOCKS5 mixed proxy port
     /// # Example
     /// ```yaml
     /// mixed-port: 7892
     /// ```
-    pub mixed_port: Option<u16>,
+    pub mixed_port: Option<Port>,
 
     /// HTTP and SOCKS5 proxy authentication
     pub authentication: Vec<String>,
     /// Allow connections to the local-end server from other LAN IP addresses
-    #[deprecated = "dont use. see `bind_address`"]
-    pub allow_lan: bool,
+    /// Deprecated see `bind_address`
+    pub allow_lan: Option<bool>,
     /// The address that the inbound listens on
     /// # Note
     /// - setting this to `*` will listen on all interfaces, which is
@@ -268,7 +302,7 @@ pub struct Config {
     /// - setting this to non local IP will enable `allow_lan` automatically
     /// - and if you don't want `allow_lan` to be enabled, you should set this
     ///   to `localhost` or `127.1`
-    pub bind_address: String,
+    pub bind_address: BindAddress,
     /// Clash router working mode
     /// Either `rule`, `global` or `direct`
     pub mode: RunMode,
@@ -281,26 +315,32 @@ pub struct Config {
     pub profile: Profile,
     /// Proxy settings
     #[serde(rename = "proxies")]
-    pub proxy: Vec<HashMap<String, Value>>,
+    pub proxy: Option<Vec<HashMap<String, Value>>>,
     #[serde(rename = "proxy-groups")]
     /// Proxy group settings
-    pub proxy_group: Vec<HashMap<String, Value>>,
+    pub proxy_group: Option<Vec<HashMap<String, Value>>>,
     #[serde(rename = "rules")]
     /// Rule settings
-    pub rule: Vec<String>,
+    pub rule: Option<Vec<String>>,
     /// Hosts
     pub hosts: HashMap<String, String>,
     /// Country database path relative to the $CWD
+    #[educe(Default = "Country.mmdb")]
     pub mmdb: String,
     /// Country database download url
+    // TODO not compatiable with clash-meta
+    #[educe(Default = Some("https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb".into()))]
     pub mmdb_download_url: Option<String>,
-    /// Optional ASN database path relative to the $CWD
+    /// Optional ASN database path relative to the working dir
+    #[educe(Default = "Country-asn.mmdb")]
     pub asn_mmdb: String,
     /// Optional ASN database download url
     pub asn_mmdb_download_url: Option<String>,
     /// Geosite database path relative to the $CWD
+    #[educe(Default = "geosite.dat")]
     pub geosite: String,
     /// Geosite database download url
+    #[educe(Default = Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".into()))]
     pub geosite_download_url: Option<String>,
 
     // these options has default vals,
@@ -308,7 +348,6 @@ pub struct Config {
     /// whether your network environment supports IPv6
     /// this will affect the DNS server response to AAAA questions
     /// default is `false`
-    #[serde(default = "Default::default")]
     pub ipv6: bool,
     /// external controller address
     pub external_controller: Option<String>,
@@ -342,6 +381,9 @@ pub struct Config {
     ///   device-id: "dev://utun1989"
     /// ```
     pub tun: Option<TunConfig>,
+
+    #[serde(rename = "listeners")]
+    pub listener: Option<Vec<HashMap<String, Value>>>,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -358,55 +400,23 @@ impl FromStr for Config {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_yaml::from_str(s).map_err(|x| {
+        let mut val: Value = serde_yaml::from_str(s).map_err(|e| {
             Error::InvalidConfig(format!(
-                "cound not parse config content {}: {}",
-                s, x
+                "couldn't not parse config content {s}: {e}"
+            ))
+        })?;
+
+        val.apply_merge().map_err(|e| {
+            Error::InvalidConfig(format!(
+                "failed to process anchors in config content {s}: {e}"
+            ))
+        })?;
+
+        serde_yaml::from_value(val).map_err(|e| {
+            Error::InvalidConfig(format!(
+                "counldn't not parse config content {s}: {e}"
             ))
         })
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        #[allow(deprecated)]
-        Self {
-            port: Default::default(),
-            socks_port: Default::default(),
-            redir_port: Default::default(),
-            tproxy_port: Default::default(),
-            mixed_port: Default::default(),
-            authentication: Default::default(),
-            allow_lan: Default::default(),
-            bind_address: String::from("*"),
-            mode: Default::default(),
-            log_level: Default::default(),
-            ipv6: Default::default(),
-            external_controller: Default::default(),
-            external_ui: Default::default(),
-            secret: Default::default(),
-            interface: Default::default(),
-            routing_mask: Default::default(),
-            proxy_provider: Default::default(),
-            rule_provider: Default::default(),
-            hosts: Default::default(),
-            dns: Default::default(),
-            experimental: Default::default(),
-            profile: Default::default(),
-            proxy: Default::default(),
-            proxy_group: Default::default(),
-            rule: Default::default(),
-            mmdb: "Country.mmdb".to_string(),
-            mmdb_download_url: Some(
-                "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb"
-                    .to_owned(),
-            ),
-            asn_mmdb: "Country-asn.mmdb".to_string(),
-            asn_mmdb_download_url: None, // can be downloaded from the same release but let's not make it default
-            geosite: "geosite.dat".to_string(),
-            geosite_download_url: Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".to_owned()),
-            tun: Default::default(),
-        }
     }
 }
 
@@ -438,8 +448,9 @@ pub enum DNSListen {
 ///       ca-key: dns.key
 /// ```
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Educe)]
 #[serde(rename_all = "kebab-case", default)]
+#[educe(Default)]
 pub struct DNS {
     /// When disabled, system DNS config will be used
     /// All other DNS related options will only be used when this is enabled
@@ -447,6 +458,7 @@ pub struct DNS {
     /// When false, response to AAAA questions will be empty
     pub ipv6: bool,
     /// Whether to `Config::hosts` as when resolving hostnames
+    #[educe(Default = true)]
     pub user_hosts: bool,
     /// DNS servers
     pub nameserver: Vec<String>,
@@ -460,35 +472,18 @@ pub struct DNS {
     /// Whether to use fake IP addresses
     pub enhanced_mode: DNSMode,
     /// Fake IP addresses pool CIDR
+    #[educe(Default = "198.18.0.1/16")]
     pub fake_ip_range: String,
     /// Fake IP addresses filter
     pub fake_ip_filter: Vec<String>,
     /// Default nameservers, used to resolve DoH hostnames
+    #[educe(Default = vec![
+      String::from("114.114.114.114"),
+      String::from("8.8.8.8")]
+    )]
     pub default_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
-}
-
-impl Default for DNS {
-    fn default() -> Self {
-        Self {
-            enable: Default::default(),
-            ipv6: Default::default(),
-            user_hosts: true,
-            nameserver: Default::default(),
-            fallback: Default::default(),
-            fallback_filter: Default::default(),
-            listen: Default::default(),
-            enhanced_mode: Default::default(),
-            fake_ip_range: String::from("198.18.0.1/16"),
-            fake_ip_filter: Default::default(),
-            default_nameserver: vec![
-                String::from("114.114.114.114"),
-                String::from("8.8.8.8"),
-            ],
-            nameserver_policy: Default::default(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -500,31 +495,29 @@ pub enum DNSMode {
     RedirHost,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Educe)]
 #[serde(default)]
+#[educe(Default)]
 pub struct FallbackFilter {
     #[serde(rename = "geoip")]
+    #[educe(Default = true)]
     pub geo_ip: bool,
+
     #[serde(rename = "geoip-code")]
+    #[educe(Default = "CN")]
     pub geo_ip_code: String,
+
     #[serde(rename = "ipcidr")]
     pub ip_cidr: Vec<String>,
     pub domain: Vec<String>,
 }
 
-impl Default for FallbackFilter {
-    fn default() -> Self {
-        Self {
-            geo_ip: true,
-            geo_ip_code: String::from("CN"),
-            ip_cidr: Default::default(),
-            domain: Default::default(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Default)]
-pub struct Experimental {}
+#[serde(rename_all = "kebab-case")]
+pub struct Experimental {
+    /// buffer size for tcp stream bidirectional copy
+    pub tcp_buffer_size: Option<usize>,
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
@@ -545,9 +538,51 @@ impl Default for Profile {
     }
 }
 
+#[derive(PartialEq, Debug, Clone, Serialize, Copy)]
+pub struct Port(pub u16);
+
+impl From<Port> for u16 {
+    fn from(val: Port) -> Self {
+        val.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Port {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum StrOrNum {
+            Str(String),
+            Num(u64),
+            Other,
+        }
+
+        let value = StrOrNum::deserialize(deserializer)?;
+
+        match value {
+            StrOrNum::Num(num) => u16::try_from(num)
+                .map(Port)
+                .map_err(|_| serde::de::Error::custom("Port number out of range")),
+
+            StrOrNum::Str(s) => {
+                s.parse::<u16>().map(Port).map_err(serde::de::Error::custom)
+            }
+
+            StrOrNum::Other => {
+                Err(serde::de::Error::custom("Invalid type for port"))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_yaml::Value;
+
+    use crate::config::def::Port;
 
     use super::Config;
 
@@ -557,7 +592,16 @@ mod tests {
         port: 9090
         "#;
         let c = cfg.parse::<Config>().expect("should parse");
-        assert_eq!(c.port, Some(9090));
+        assert_eq!(c.port, Some(Port(9090)));
+    }
+
+    #[test]
+    fn test_str_port() {
+        let cfg = r#"
+        port: "9090"
+        "#;
+        let c = cfg.parse::<Config>().expect("should parse");
+        assert_eq!(c.port, Some(Port(9090)));
     }
 
     #[test]
@@ -1030,19 +1074,28 @@ rules:
 
         let des: Config =
             serde_yaml::from_str(example_cfg).expect("should parse yaml");
-        assert_eq!(des.port.expect("invalid port"), 7890);
+        assert_eq!(des.port.expect("invalid port"), Port(7890));
         assert_eq!(des.dns.fallback_filter.geo_ip_code, String::from("CN"));
-        assert_eq!(des.proxy.len(), 14);
-        assert_eq!(des.proxy[2].get("name").unwrap().as_str(), Some("ss3"));
+        assert_eq!(des.proxy.as_ref().map(|v| v.len()).unwrap_or(0), 14);
         assert_eq!(
-            des.proxy[2]
-                .get("plugin-opts")
-                .unwrap()
-                .as_mapping()
-                .unwrap()
-                .get(Value::String("mode".into()))
-                .unwrap()
-                .as_str(),
+            des.proxy
+                .as_ref()
+                .map(|v| v[2].get("name").unwrap().as_str())
+                .unwrap(),
+            Some("ss3")
+        );
+        assert_eq!(
+            des.proxy
+                .as_ref()
+                .map(|v| v[2]
+                    .get("plugin-opts")
+                    .unwrap()
+                    .as_mapping()
+                    .unwrap()
+                    .get(Value::String("mode".into()))
+                    .unwrap()
+                    .as_str())
+                .unwrap(),
             Some("websocket")
         );
     }

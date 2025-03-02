@@ -1,7 +1,6 @@
 use std::{
     fmt::{Debug, Display, Formatter},
     net,
-    net::SocketAddr,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -9,34 +8,34 @@ use std::{
 
 use async_trait::async_trait;
 
-use futures::{future::BoxFuture, TryFutureExt};
-use hickory_client::{
-    client, client::AsyncClient, proto::iocompat::AsyncIoTokioAsStd,
-    tcp::TcpClientStream, udp::UdpClientStream,
-};
+use futures::{TryFutureExt, future::BoxFuture};
+use hickory_client::client;
 use hickory_proto::{
-    error::ProtoError, rustls::tls_client_stream::tls_client_connect_with_future,
+    ProtoError, runtime::iocompat::AsyncIoTokioAsStd,
+    rustls::tls_client_stream::tls_client_connect_with_future, tcp::TcpClientStream,
+    udp::UdpClientStream,
 };
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
 use crate::{
+    app::net::{Interface, TUN_SOMARK},
     common::tls::{self, GLOBAL_ROOT_STORE},
-    dns::{dhcp::DhcpClient, ThreadSafeDNSClient},
-    proxy::utils::{new_tcp_stream, new_udp_socket},
+    dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
+    proxy::utils::new_tcp_stream,
 };
 use hickory_proto::{
+    DnsHandle,
     h2::HttpsClientStreamBuilder,
     op::Message,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
-    DnsHandle,
 };
-use tokio::net::{TcpStream as TokioTcpStream, UdpSocket as TokioUdpSocket};
+use tokio::net::TcpStream as TokioTcpStream;
 
-use crate::{proxy::utils::Interface, Error};
+use crate::Error;
 
-use super::{ClashResolver, Client};
+use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
@@ -126,7 +125,7 @@ impl Display for DnsConfig {
 }
 
 struct Inner {
-    c: Option<client::AsyncClient>,
+    c: Option<client::Client>,
     bg_handle: Option<JoinHandle<Result<(), ProtoError>>>,
 }
 
@@ -150,27 +149,27 @@ impl DnsClient {
             DNSNetMode::Dhcp => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
 
             other => {
-                let ip = if let Some(r) = opts.r {
-                    if let Some(ip) =
-                        r.resolve(&opts.host, false).await.map_err(|x| {
+                let ip = match opts.r {
+                    Some(r) => {
+                        match r.resolve(&opts.host, false).await.map_err(|x| {
                             anyhow!("resolve hostname failure: {}", x.to_string())
-                        })?
-                    {
-                        ip
-                    } else {
-                        return Err(Error::InvalidConfig(format!(
-                            "can't resolve default DNS: {}",
-                            opts.host
-                        ))
-                        .into());
+                        })? {
+                            Some(ip) => ip,
+                            _ => {
+                                return Err(Error::InvalidConfig(format!(
+                                    "can't resolve default DNS: {}",
+                                    opts.host
+                                ))
+                                .into());
+                            }
+                        }
                     }
-                } else {
-                    opts.host.parse::<net::IpAddr>().map_err(|x| {
+                    _ => opts.host.parse::<net::IpAddr>().map_err(|x| {
                         Error::DNSError(format!(
                             "resolve DNS hostname error: {}, {}",
                             x, opts.host
                         ))
-                    })?
+                    })?,
                 };
 
                 match other {
@@ -282,27 +281,31 @@ impl Client for DnsClient {
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let mut inner = self.inner.write().await;
 
-        if let Some(bg) = &inner.bg_handle {
-            if bg.is_finished() {
-                warn!(
-                    "dns client background task is finished, likely connection \
-                     closed, restarting a new one"
-                );
+        match &inner.bg_handle {
+            Some(bg) => {
+                if bg.is_finished() {
+                    warn!(
+                        "dns client background task is finished, likely connection \
+                         closed, restarting a new one"
+                    );
+                    let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                    inner.c.replace(client);
+                    inner.bg_handle.replace(bg);
+                }
+            }
+            _ => {
+                // initializing client
+                info!("initializing dns client: {}", &self.cfg);
                 let (client, bg) = dns_stream_builder(&self.cfg).await?;
                 inner.c.replace(client);
                 inner.bg_handle.replace(bg);
             }
-        } else {
-            // initializing client
-            info!("initializing dns client: {}", &self.cfg);
-            let (client, bg) = dns_stream_builder(&self.cfg).await?;
-            inner.c.replace(client);
-            inner.bg_handle.replace(bg);
         }
 
         let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
-        req.set_id(rand::random::<u16>());
-
+        if req.id() == 0 {
+            req.set_id(rand::random::<u16>());
+        }
         inner
             .c
             .as_ref()
@@ -317,53 +320,30 @@ impl Client for DnsClient {
 
 async fn dns_stream_builder(
     cfg: &DnsConfig,
-) -> Result<(AsyncClient, JoinHandle<Result<(), ProtoError>>), Error> {
+) -> Result<(client::Client, JoinHandle<Result<(), ProtoError>>), Error> {
     match cfg {
         DnsConfig::Udp(addr, iface) => {
-            let iface = iface.clone();
+            let stream = UdpClientStream::builder(
+                *addr,
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+            )
+            .with_timeout(Some(Duration::from_secs(5)))
+            .build();
 
-            let closure = move |_: SocketAddr,
-                                _: SocketAddr|
-                  -> BoxFuture<
-                'static,
-                std::io::Result<tokio::net::UdpSocket>,
-            > {
-                Box::pin(new_udp_socket(
-                    None,
-                    iface.clone(),
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    None,
-                ))
-            };
-            let stream = UdpClientStream::<TokioUdpSocket>::with_creator(
-                net::SocketAddr::new(addr.ip(), addr.port()),
-                None,
-                Duration::from_secs(5),
-                Arc::new(closure),
-            );
-
-            client::AsyncClient::connect(stream)
+            client::Client::connect(stream)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
         DnsConfig::Tcp(addr, iface) => {
-            let fut = new_tcp_stream(
+            let (stream, sender) = TcpClientStream::new(
                 *addr,
-                iface.clone(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
                 None,
-            )
-            .map_ok(AsyncIoTokioAsStd);
+                Some(Duration::from_secs(5)),
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+            );
 
-            let (stream, sender) =
-                TcpClientStream::<AsyncIoTokioAsStd<TokioTcpStream>>::with_future(
-                    fut,
-                    net::SocketAddr::new(addr.ip(), addr.port()),
-                    Duration::from_secs(5),
-                );
-
-            client::AsyncClient::new(stream, sender, None)
+            client::Client::new(stream, sender, None)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
@@ -377,8 +357,8 @@ async fn dns_stream_builder(
             let fut = new_tcp_stream(
                 *addr,
                 iface.clone(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
+                #[cfg(target_os = "linux")]
+                *TUN_SOMARK.read().await,
             )
             .map_ok(AsyncIoTokioAsStd);
 
@@ -395,7 +375,7 @@ async fn dns_stream_builder(
                 Arc::new(tls_config),
             );
 
-            client::AsyncClient::with_timeout(
+            client::Client::with_timeout(
                 stream,
                 sender,
                 Duration::from_secs(5),
@@ -417,22 +397,13 @@ async fn dns_stream_builder(
                 ));
             }
 
-            let fut = new_tcp_stream(
-                *addr,
-                iface.clone(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                None,
-            )
-            .map_ok(AsyncIoTokioAsStd);
-
-            let stream = HttpsClientStreamBuilder::build_with_future(
-                Box::pin(fut),
+            let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),
-                *addr,
-                host.clone(),
-            );
+                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+            )
+            .build(*addr, host.to_owned(), "/dns-query".to_string());
 
-            client::AsyncClient::connect(stream)
+            client::Client::connect(stream)
                 .await
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))

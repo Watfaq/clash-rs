@@ -1,6 +1,6 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
-#![feature(unbounded_shifts)]
+#![feature(let_chains)]
 
 #[macro_use]
 extern crate anyhow;
@@ -12,12 +12,14 @@ use crate::{
     },
     config::{
         def,
-        internal::{proxy::OutboundProxy, InternalConfig},
+        internal::{InternalConfig, proxy::OutboundProxy},
     },
 };
 use app::{
     dispatcher::StatisticsManager,
     dns::{SystemResolver, ThreadSafeDNSResolver},
+    logging::LogEvent,
+    net::init_net_config,
     profile,
 };
 use common::{auth, http::new_http_client, mmdb};
@@ -28,24 +30,27 @@ use proxy::tun::get_tun_runner;
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{
-    sync::{broadcast, mpsc, oneshot, Mutex},
+    sync::{Mutex, broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
 use tracing::{debug, error, info};
 
 mod app;
 mod common;
+#[cfg(feature = "internal")]
+pub mod config;
+#[cfg(not(feature = "internal"))]
 mod config;
 mod proxy;
 mod session;
 
 use crate::common::geodata;
 pub use config::{
-    def::{
-        Config as ClashConfigDef, TunConfig as ClashTunConfig,
-        DNS as ClashDNSConfigDef,
-    },
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
+    def::{
+        Config as ClashConfigDef, DNS as ClashDNSConfigDef, Port,
+        TunConfig as ClashTunConfig,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -66,9 +71,11 @@ pub enum Error {
     Crypto(String),
     #[error("operation error: {0}")]
     Operation(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
-
-pub type Runner = futures::future::BoxFuture<'static, Result<(), Error>>;
+pub type Result<T> = std::result::Result<T, Error>;
+pub type Runner = futures::future::BoxFuture<'static, Result<()>>;
 
 pub struct Options {
     pub config: Config,
@@ -92,7 +99,7 @@ pub enum Config {
 }
 
 impl Config {
-    pub fn try_parse(self) -> Result<InternalConfig, Error> {
+    pub fn try_parse(self) -> Result<InternalConfig> {
         match self {
             Config::Def(c) => c.try_into(),
             Config::Internal(c) => Ok(c),
@@ -106,12 +113,10 @@ impl Config {
 
 pub struct GlobalState {
     log_level: LogLevel,
-    // must be Some otherwise we'll refuse to start
-    inbound_listener_handle: JoinHandle<Result<(), Error>>,
 
-    tunnel_listener_handle: Option<JoinHandle<Result<(), Error>>>,
-    api_listener_handle: Option<JoinHandle<Result<(), Error>>>,
-    dns_listener_handle: Option<JoinHandle<Result<(), Error>>>,
+    tunnel_listener_handle: Option<JoinHandle<Result<()>>>,
+    api_listener_handle: Option<JoinHandle<Result<()>>>,
+    dns_listener_handle: Option<JoinHandle<Result<()>>>,
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
 }
@@ -122,7 +127,7 @@ pub struct RuntimeController {
 
 static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
 
-pub fn start(opts: Options) -> Result<(), Error> {
+pub fn start_scaffold(opts: Options) -> Result<()> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
         TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -131,34 +136,8 @@ pub fn start(opts: Options) -> Result<(), Error> {
             .enable_all()
             .build()?,
     };
-
-    rt.block_on(async {
-        match start_async(opts).await {
-            Err(e) => {
-                eprintln!("start error: {}", e);
-                Err(e)
-            }
-            Ok(_) => Ok(()),
-        }
-    })
-}
-
-pub fn shutdown() -> bool {
-    match RUNTIME_CONTROLLER.get() {
-        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
-        _ => false,
-    }
-}
-
-async fn start_async(opts: Options) -> Result<(), Error> {
-    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
-
-    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
-
     let config: InternalConfig = opts.config.try_parse()?;
-
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
-
     let (log_tx, _) = broadcast::channel(100);
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
@@ -175,8 +154,35 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         default_panic(info);
-        error!("panic hook: {:?}", info);
+        error!("panic hook: {:#}", info);
     }));
+
+    rt.block_on(async {
+        match start(config, cwd, log_tx).await {
+            Err(e) => {
+                eprintln!("start error: {}", e);
+                Err(e)
+            }
+            Ok(_) => Ok(()),
+        }
+    })
+}
+
+pub fn shutdown() -> bool {
+    match RUNTIME_CONTROLLER.get() {
+        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
+        _ => false,
+    }
+}
+
+pub async fn start(
+    config: InternalConfig,
+    cwd: String,
+    log_tx: broadcast::Sender<LogEvent>,
+) -> Result<()> {
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+
+    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
@@ -189,8 +195,8 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let components = create_components(cwd.clone(), config).await?;
 
-    let inbound_runner = components.inbound_manager.lock().await.get_runner()?;
-    let inbound_listener_handle = tokio::spawn(inbound_runner);
+    let inbound_manager = components.inbound_manager.clone();
+    inbound_manager.start().await;
 
     let tun_runner_handle = components.tun_runner.map(tokio::spawn);
     let dns_listener_handle = components.dns_listener.map(tokio::spawn);
@@ -199,7 +205,6 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
     let global_state = Arc::new(Mutex::new(GlobalState {
         log_level,
-        inbound_listener_handle,
         tunnel_listener_handle: tun_runner_handle,
         dns_listener_handle,
         reload_tx,
@@ -236,7 +241,9 @@ async fn start_async(opts: Options) -> Result<(), Error> {
     }));
 
     tasks.push(Box::pin(async move {
-        let _ = tokio::signal::ctrl_c().await;
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for ^C event");
         Ok(())
     }));
 
@@ -253,13 +260,14 @@ async fn start_async(opts: Options) -> Result<(), Error> {
 
             let controller_cfg = config.general.controller.clone();
 
-            let new_componenets = create_components(cwd.clone(), config).await?;
+            let new_components = create_components(cwd.clone(), config).await?;
 
             done.send(()).unwrap();
 
             debug!("stopping listeners");
+            inbound_manager.shutdown().await;
             let mut g = global_state.lock().await;
-            g.inbound_listener_handle.abort();
+
             if let Some(h) = g.tunnel_listener_handle.take() {
                 h.abort();
             }
@@ -270,37 +278,32 @@ async fn start_async(opts: Options) -> Result<(), Error> {
                 h.abort();
             }
 
+            let inbound_manager = new_components.inbound_manager.clone();
             debug!("reloading inbound listener");
-            let inbound_listener_handle = new_componenets
-                .inbound_manager
-                .lock()
-                .await
-                .get_runner()
-                .map(tokio::spawn)?;
+            inbound_manager.restart().await;
 
             debug!("reloading tun runner");
-            let tun_runner_handle = new_componenets.tun_runner.map(tokio::spawn);
+            let tun_runner_handle = new_components.tun_runner.map(tokio::spawn);
 
             debug!("reloading dns listener");
-            let dns_listener_handle = new_componenets.dns_listener.map(tokio::spawn);
+            let dns_listener_handle = new_components.dns_listener.map(tokio::spawn);
 
             debug!("reloading api listener");
             let api_listener_handle = app::api::get_api_runner(
                 controller_cfg,
                 log_tx.clone(),
-                new_componenets.inbound_manager,
-                new_componenets.dispatcher,
+                new_components.inbound_manager,
+                new_components.dispatcher,
                 global_state.clone(),
-                new_componenets.dns_resolver,
-                new_componenets.outbound_manager,
-                new_componenets.statistics_manager,
-                new_componenets.cache_store,
-                new_componenets.router,
+                new_components.dns_resolver,
+                new_components.outbound_manager,
+                new_components.statistics_manager,
+                new_components.cache_store,
+                new_components.router,
                 cwd.to_string_lossy().to_string(),
             )
             .map(tokio::spawn);
 
-            g.inbound_listener_handle = inbound_listener_handle;
             g.tunnel_listener_handle = tun_runner_handle;
             g.dns_listener_handle = dns_listener_handle;
             g.api_listener_handle = api_listener_handle;
@@ -321,7 +324,7 @@ struct RuntimeComponents {
     router: Arc<Router>,
     dispatcher: Arc<Dispatcher>,
     statistics_manager: Arc<StatisticsManager>,
-    inbound_manager: Arc<Mutex<InboundManager>>,
+    inbound_manager: Arc<InboundManager>,
 
     tun_runner: Option<Runner>,
     dns_listener: Option<Runner>,
@@ -330,7 +333,11 @@ struct RuntimeComponents {
 async fn create_components(
     cwd: PathBuf,
     config: InternalConfig,
-) -> Result<RuntimeComponents, Error> {
+) -> Result<RuntimeComponents> {
+    if config.tun.enable {
+        debug!("tun enabled, initializing default outbound interface");
+        init_net_config(config.tun.so_mark).await;
+    }
     let system_resolver = Arc::new(
         SystemResolver::new(config.dns.ipv6)
             .map_err(|x| Error::DNSError(x.to_string()))?,
@@ -434,17 +441,23 @@ async fn create_components(
         dns_resolver.clone(),
         config.general.mode,
         statistics_manager.clone(),
+        config.experimental.and_then(|e| e.tcp_buffer_size),
     ));
 
     debug!("initializing authenticator");
     let authenticator = Arc::new(auth::PlainAuthenticator::new(config.users));
 
     debug!("initializing inbound manager");
-    let inbound_manager = Arc::new(Mutex::new(InboundManager::new(
-        config.general.inbound,
-        dispatcher.clone(),
-        authenticator,
-    )?));
+    let inbound_manager = Arc::new(
+        InboundManager::new(
+            config.general.bind_address,
+            config.general.authentication,
+            dispatcher.clone(),
+            authenticator,
+            config.listeners,
+        )
+        .await?,
+    );
 
     debug!("initializing tun runner");
     let tun_runner =
@@ -470,7 +483,7 @@ async fn create_components(
 
 #[cfg(test)]
 mod tests {
-    use crate::{shutdown, start, Config, Options};
+    use crate::{Config, Options, shutdown, start_scaffold};
     use std::{sync::Once, thread, time::Duration};
 
     static INIT: Once = Once::new();
@@ -491,7 +504,7 @@ mod tests {
         "#;
 
         let handle = thread::spawn(|| {
-            start(Options {
+            start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
                 cwd: None,
                 rt: None,

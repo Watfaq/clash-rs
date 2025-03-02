@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
-    extract::{ws::Message, ConnectInfo, State, WebSocketUpgrade},
+    extract::{ConnectInfo, State, WebSocketUpgrade, ws::Message},
     response::IntoResponse,
 };
 
@@ -12,8 +12,8 @@ use crate::app::api::AppState;
 
 #[derive(Serialize)]
 struct TrafficResponse {
-    up: i64,
-    down: i64,
+    up: u64,
+    down: u64,
 }
 pub async fn handle(
     ws: WebSocketUpgrade,
@@ -31,7 +31,7 @@ pub async fn handle(
             let j = serde_json::to_vec(&res).unwrap();
 
             if let Err(e) = socket
-                .send(Message::Text(String::from_utf8(j).unwrap()))
+                .send(Message::Text(String::from_utf8(j).unwrap().into()))
                 .await
             {
                 warn!("ws send error: {}", e);

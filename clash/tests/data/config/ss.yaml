@@ -3,7 +3,6 @@ port: 8888
 socks-port: 8889
 mixed-port: 8899
 
-
 dns:
   enable: true
   listen: 127.0.0.1:53533
@@ -17,14 +16,14 @@ dns:
   enhanced-mode: fake-ip # or fake-ip
   fake-ip-range: 198.18.0.1/16 # Fake IP addresses pool CIDR
   # use-hosts: true # lookup hosts and return IP record
-  
+
   # Hostnames in this list will not be resolved with fake IPs
   # i.e. questions to these domain names will always be answered with their
   # real IP addresses
   # fake-ip-filter:
   #   - '*.lan'
   #   - localhost.ptlogin2.qq.com
-  
+
   # Supports UDP, TCP, DoT, DoH. You can specify the port to connect to.
   # All DNS questions are sent directly to the nameserver, without proxies
   # involved. Clash answers the DNS question with the first result gathered.
@@ -33,7 +32,6 @@ dns:
     - 8.8.8.8 # default value
     - tls://dns.google:853 # DNS over TLS
     - https://1.1.1.1/dns-query # DNS over HTTPS
-    - dhcp://en0 # dns from dhcp
 
 allow-lan: true
 mode: rule
@@ -61,12 +59,19 @@ proxies:
     password: "password"
     udp: true
 
+  - name: ss-2022
+    type: ss
+    server: 127.0.0.1
+    port: 8390
+    cipher: 2022-blake3-aes-256-gcm
+    password: 3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU=:4w0GKJ9U3Ox7CIXGU4A3LDQAqP6qrp/tUi/ilpOR9p4=
+
 proxy-groups:
   - name: "udp-relay"
     type: relay
     proxies:
-     - ss-01
-     - ss-02  
+      - ss-01
+      - ss-02
+      - ss-2022
 rules:
-  - MATCH, udp-relay
-...
+  - MATCH, ss-2022

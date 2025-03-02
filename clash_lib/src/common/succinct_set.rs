@@ -153,7 +153,7 @@ impl DomainSet {
 
         let mut n = 0;
         for i in 0..self.label_bit_map.len() << 6 {
-            let z = self.label_bit_map[i >> 6] >> (i & 63) & 1;
+            let z = (self.label_bit_map[i >> 6] >> (i & 63)) & 1;
             if z == 1 && n & 63 == 0 {
                 self.selects.push(i as i32);
             }

@@ -11,6 +11,7 @@
 A custom protocol, rule based network proxy software.
 
 [![CI](https://github.com/Watfaq/clash-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Watfaq/clash-rs/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Watfaq/clash-rs/graph/badge.svg?token=ZQK5WB63KR)](https://codecov.io/gh/Watfaq/clash-rs)
 
 </div>
 
@@ -84,6 +85,22 @@ Options:
   -h, --help                   Print help
   -V, --version                Print version
 ```
+
+## FFI
+
+### Compile for apple platforms
+
+To create a framework for iOS and macOS platforms
+
+```shell
+git clone https://github.com/Watfaq/clash-rs.git
+cd clash-rs
+chmod +x scripts/build_apple.sh
+./scripts/build_apple.sh
+```
+
+This command will generate a `clashrs.xcframework` file in the `build` directory.
+
 ## 🔗 Links
 
 - [Documentation](https://watfaq.gitbook.io/clashrs-user-manual/)

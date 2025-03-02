@@ -8,7 +8,7 @@ use std::{
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::Device,
@@ -20,10 +20,10 @@ use smoltcp::{
     wire::IpCidr,
 };
 use tokio::sync::{
-    mpsc::{Receiver, Sender},
     Mutex,
+    mpsc::{Receiver, Sender},
 };
-use tracing::{debug, error, trace, trace_span, warn, Instrument};
+use tracing::{Instrument, debug, error, trace, trace_span, warn};
 
 use crate::{
     app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr,
@@ -34,7 +34,7 @@ use super::{
     ports::PortPool,
     stack::{
         tcp::SocketPair,
-        udp::{UdpPair, MAX_PACKET},
+        udp::{MAX_PACKET, UdpPair},
     },
 };
 
@@ -422,7 +422,7 @@ impl DeviceManager {
                                 if socket.may_send() {
                                     if let Some(queue) = tcp_queue.get_mut(handle) {
                                         let data = queue.pop_front();
-                                        if let Some((to_transfer_slice, active)) = data {
+                                        match data { Some((to_transfer_slice, active)) => {
                                             if !active {
                                                 trace!("socket {} closed from local(?), aboring socket", handle);
                                                 socket.abort();
@@ -445,10 +445,10 @@ impl DeviceManager {
                                                     }
                                                 }
                                             }
-                                        } else {
+                                        } _ => {
                                             // the local side has closed, but we don't know if the remote should be closed
                                             // let the dispatcher timeout to close the connection
-                                        }
+                                        }}
                                     }
                                 }
                             }
@@ -488,7 +488,7 @@ impl DeviceManager {
                                                         if let Ok(ip) = domain.parse::<IpAddr>() {
                                                             ip
                                                         } else {
-                                                            let dns_server = self.dns_servers.choose(&mut rand::thread_rng());
+                                                            let dns_server = self.dns_servers.choose(&mut rand::rng());
                                                             if let Some(dns_server) = dns_server {
                                                                 let ip = self.look_up_dns(domain, *dns_server).await;
                                                                 if let Some(ip) = ip {
@@ -666,13 +666,14 @@ impl VirtualIpDevice {
             loop {
                 let span = trace_span!("receive_packet");
 
-                if let Some((proto, data)) =
-                    packet_receiver.recv().instrument(span).await
-                {
-                    inner_packet_sender.send((proto, data)).await.unwrap();
-                    let _ = packet_notifier.try_send(());
-                } else {
-                    break;
+                match packet_receiver.recv().instrument(span).await {
+                    Some((proto, data)) => {
+                        inner_packet_sender.send((proto, data)).await.unwrap();
+                        let _ = packet_notifier.try_send(());
+                    }
+                    _ => {
+                        break;
+                    }
                 }
             }
         });
@@ -736,7 +737,7 @@ pub struct RxToken {
 impl smoltcp::phy::RxToken for RxToken {
     fn consume<R, F>(mut self, f: F) -> R
     where
-        F: FnOnce(&mut [u8]) -> R,
+        F: FnOnce(&[u8]) -> R,
     {
         f(&mut self.buffer)
     }

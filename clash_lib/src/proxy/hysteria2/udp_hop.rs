@@ -9,9 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use quinn::{udp::Transmit, AsyncUdpSocket, Runtime, TokioRuntime, UdpPoller};
+use quinn::{AsyncUdpSocket, Runtime, TokioRuntime, UdpPoller, udp::Transmit};
 
-use crate::proxy::converters::hysteria2::PortGenrateor;
+use crate::proxy::converters::hysteria2::PortGenerator;
 
 struct HopState {
     prev_conn: Option<Arc<dyn AsyncUdpSocket>>,
@@ -25,7 +25,7 @@ struct HopState {
 ///
 /// https://v2.hysteria.network/docs/advanced/Port-Hopping/
 pub struct UdpHop {
-    /// (prev_conn, cur_conn, last, new_hop_port), here mybe we can use struct
+    /// (prev_conn, cur_conn, last, new_hop_port), here maybe we can use struct
     state: Mutex<HopState>,
     /// The default port is the initial port when this quic connect connects to
     /// the server. Every time we call poll_recv, we must rewrite the source
@@ -33,7 +33,7 @@ pub struct UdpHop {
     /// source of the data packet and discard the unknown source data.
     init_port: u16,
     /// generate new port used to hop
-    port_range: PortGenrateor,
+    port_range: PortGenerator,
     /// interval to hop
     interval: Duration,
 }
@@ -43,7 +43,7 @@ impl UdpHop {
 
     pub fn new(
         port: u16,
-        port_range: PortGenrateor,
+        port_range: PortGenerator,
         interval: Option<Duration>,
     ) -> io::Result<Self> {
         let socket =
@@ -131,7 +131,7 @@ impl AsyncUdpSocket for UdpHop {
 
         let cur = self.get_conn().1;
 
-        // here just need change send addr, it is not nessary to change send
+        // here just need change send addr, it is not necessary to change send
         // contents, so we can use unsafe
         unsafe {
             let prt = transmit as *const Transmit as *mut Transmit;
@@ -152,7 +152,7 @@ impl AsyncUdpSocket for UdpHop {
 
     //     let (_pre_conn, io) = self.get_conn();
 
-    //     // here just need change send addr, it is not nessary to change send
+    //     // here just need change send addr, it is not necessary to change send
     //     // contents, so we can use unsafe
     //     unsafe {
     //         let prt = transmits.as_ptr() as *mut Transmit;

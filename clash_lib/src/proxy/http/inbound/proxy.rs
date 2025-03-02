@@ -3,10 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use futures::{future::BoxFuture, TryFutureExt};
+use futures::{TryFutureExt, future::BoxFuture};
 
 use http_body_util::{BodyExt, Empty, Full};
-use hyper::{body::Incoming, server::conn::http1, Method, Request, Response, Uri};
+use hyper::{Method, Request, Response, Uri, body::Incoming, server::conn::http1};
 
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use tracing::{instrument, warn};
@@ -16,7 +16,7 @@ use crate::{
     common::{
         auth::ThreadSafeAuthenticator,
         errors::map_io_error,
-        http::{hyper::TokioIo, HyperResponseBody},
+        http::{HyperResponseBody, hyper::TokioIo},
     },
     proxy::{AnyStream, ProxyError},
     session::{Network, Session, SocksAddr, Type},
@@ -61,37 +61,41 @@ async fn proxy(
 
     // TODO: handle other upgrades: https://github.com/hyperium/hyper/blob/master/examples/upgrades.rs
     if req.method() == Method::CONNECT {
-        if let Some(addr) = maybe_socks_addr(req.uri()) {
-            tokio::task::spawn(async move {
-                match hyper::upgrade::on(req).await {
-                    Ok(upgraded) => {
-                        let sess = Session {
-                            network: Network::Tcp,
-                            typ: Type::HttpConnect,
-                            source: src,
-                            destination: addr,
+        match maybe_socks_addr(req.uri()) {
+            Some(addr) => {
+                tokio::task::spawn(async move {
+                    match hyper::upgrade::on(req).await {
+                        Ok(upgraded) => {
+                            let sess = Session {
+                                network: Network::Tcp,
+                                typ: Type::HttpConnect,
+                                source: src,
+                                destination: addr,
 
-                            ..Default::default()
-                        };
+                                ..Default::default()
+                            };
 
-                        dispatcher
-                            .dispatch_stream(sess, TokioIo::new(upgraded))
-                            .await
+                            dispatcher
+                                .dispatch_stream(
+                                    sess,
+                                    Box::new(TokioIo::new(upgraded)),
+                                )
+                                .await
+                        }
+                        Err(e) => warn!("HTTP handshake failure, {}", e),
                     }
-                    Err(e) => warn!("HTTP handshake failure, {}", e),
-                }
-            });
+                });
 
-            Ok(Response::new(Empty::new().map_err(map_io_error).boxed()))
-        } else {
-            Ok(Response::builder()
+                Ok(Response::new(Empty::new().map_err(map_io_error).boxed()))
+            }
+            _ => Ok(Response::builder()
                 .status(hyper::StatusCode::BAD_REQUEST)
                 .body(
                     Full::new(format!("invalid request uri: {}", req.uri()).into())
                         .map_err(map_io_error)
                         .boxed(),
                 )
-                .unwrap())
+                .unwrap()),
         }
     } else {
         match client

@@ -3,32 +3,31 @@ mod connector;
 mod proxy;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, InboundListener},
     Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
 };
-use async_trait::async_trait;
 
 pub use proxy::handle as handle_http;
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::warn;
 
 #[derive(Clone)]
-pub struct Listener {
+pub struct HttpInbound {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 }
 
-impl Drop for Listener {
+impl Drop for HttpInbound {
     fn drop(&mut self) {
         warn!("HTTP inbound listener on {} stopped", self.addr);
     }
 }
 
-impl Listener {
+impl HttpInbound {
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
@@ -42,8 +41,7 @@ impl Listener {
     }
 }
 
-#[async_trait]
-impl InboundListener for Listener {
+impl InboundHandlerTrait for HttpInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -52,7 +50,7 @@ impl InboundListener for Listener {
         false
     }
 
-    async fn listen_tcp(&self) -> std::io::Result<()> {
+    async fn listen_tcp(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -69,7 +67,7 @@ impl InboundListener for Listener {
         }
     }
 
-    async fn listen_udp(&self) -> std::io::Result<()> {
-        Err(io::Error::new(io::ErrorKind::Other, "unsupported"))
+    async fn listen_udp(&self) -> anyhow::Result<()> {
+        Err(anyhow!("unsupported"))
     }
 }

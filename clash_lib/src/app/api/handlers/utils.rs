@@ -1,4 +1,4 @@
-use http::{header, HeaderMap};
+use http::{HeaderMap, header};
 
 pub fn is_request_websocket(header: HeaderMap) -> bool {
     header

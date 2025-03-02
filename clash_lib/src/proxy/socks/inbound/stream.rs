@@ -1,15 +1,15 @@
 use crate::{
+    Dispatcher,
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
         socks::{
+            SOCKS5_VERSION, Socks5UDPCodec,
             inbound::datagram::InboundUdp,
             socks5::{auth_methods, response_code, socks_command},
-            Socks5UDPCodec, SOCKS5_VERSION,
         },
         utils::new_udp_socket,
     },
     session::{Network, Session, SocksAddr, Type},
-    Dispatcher,
 };
 use bytes::{BufMut, BytesMut};
 
@@ -24,7 +24,7 @@ use tracing::{instrument, trace, warn};
 #[instrument(skip(sess, s, dispatcher, authenticator))]
 pub async fn handle_tcp<'a>(
     sess: &'a mut Session,
-    s: &'a mut TcpStream,
+    mut s: TcpStream,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 ) -> io::Result<()> {
@@ -129,7 +129,7 @@ pub async fn handle_tcp<'a>(
         ));
     }
 
-    let dst = SocksAddr::read_from(s).await?;
+    let dst = SocksAddr::read_from(&mut s).await?;
 
     match buf[1] {
         socks_command::CONNECT => {
@@ -144,7 +144,9 @@ pub async fn handle_tcp<'a>(
             s.write_all(&buf[..]).await?;
             sess.destination = dst;
 
-            dispatcher.dispatch_stream(sess.to_owned(), s).await;
+            dispatcher
+                .dispatch_stream(sess.to_owned(), Box::new(s))
+                .await;
 
             Ok(())
         }
@@ -153,7 +155,7 @@ pub async fn handle_tcp<'a>(
             let udp_inbound = new_udp_socket(
                 Some(udp_addr),
                 None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 None,
             )
             .await?;
@@ -187,7 +189,8 @@ pub async fn handle_tcp<'a>(
 
             tokio::spawn(async move {
                 let handle = dispatcher_cloned
-                    .dispatch_datagram(sess, Box::new(InboundUdp::new(framed)));
+                    .dispatch_datagram(sess, Box::new(InboundUdp::new(framed)))
+                    .await;
                 close_listener.await.ok();
                 handle.send(0).ok();
             });

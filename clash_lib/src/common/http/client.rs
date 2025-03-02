@@ -11,8 +11,8 @@ use http_body_util::Empty;
 use hyper::Uri;
 use hyper_util::{
     client::legacy::{
-        connect::{Connected, Connection},
         Client,
+        connect::{Connected, Connection},
     },
     rt::TokioExecutor,
 };
@@ -21,7 +21,7 @@ use tower::Service;
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
-    proxy::{utils::new_tcp_stream, AnyStream},
+    proxy::{AnyStream, utils::new_tcp_stream},
 };
 
 #[derive(Clone)]
@@ -67,7 +67,7 @@ impl Service<Uri> for LocalConnector {
             new_tcp_stream(
                 (remote_ip, remote_port).into(),
                 None,
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 None,
             )
             .await

@@ -4,12 +4,12 @@ use crate::{
         outbound::manager::ThreadSafeOutboundManager,
         router::ThreadSafeRouter,
     },
-    common::io::copy_buf_bidirectional_with_timeout,
+    common::io::copy_bidirectional,
     config::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{datagram::UdpPacket, AnyInboundDatagram},
+    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -17,27 +17,25 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    sync::RwLock,
-    task::JoinHandle,
-};
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use tokio::{io::AsyncWriteExt, sync::RwLock, task::JoinHandle};
+use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 use crate::app::dns::ThreadSafeDNSResolver;
 
 use super::statistics_manager::Manager;
 
+const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
+
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
     resolver: ThreadSafeDNSResolver,
-    mode: Arc<Mutex<RunMode>>,
-
+    mode: Arc<RwLock<RunMode>>,
     manager: Arc<Manager>,
+    tcp_buffer_size: usize,
 }
 
 impl Debug for Dispatcher {
@@ -52,33 +50,35 @@ impl Dispatcher {
         router: ThreadSafeRouter,
         resolver: ThreadSafeDNSResolver,
         mode: RunMode,
-
         statistics_manager: Arc<Manager>,
+        tcp_buffer_size: Option<usize>,
     ) -> Self {
         Self {
             outbound_manager,
             router,
             resolver,
-            mode: Arc::new(Mutex::new(mode)),
+            mode: Arc::new(RwLock::new(mode)),
             manager: statistics_manager,
+            tcp_buffer_size: tcp_buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE),
         }
     }
 
     pub async fn set_mode(&self, mode: RunMode) {
         info!("run mode switched to {}", mode);
 
-        *self.mode.lock().unwrap() = mode;
+        *self.mode.write().await = mode;
     }
 
     pub async fn get_mode(&self) -> RunMode {
-        *self.mode.lock().unwrap()
+        *self.mode.read().await
     }
 
     #[instrument(skip(self, sess, lhs))]
-    pub async fn dispatch_stream<S>(&self, mut sess: Session, mut lhs: S)
-    where
-        S: AsyncRead + AsyncWrite + Unpin + Send,
-    {
+    pub async fn dispatch_stream(
+        &self,
+        mut sess: Session,
+        mut lhs: Box<dyn ClientStream>,
+    ) {
         let dest: SocksAddr = match &sess.destination {
             crate::session::SocksAddr::Ip(socket_addr) => {
                 if self.resolver.fake_ip_enabled() {
@@ -100,14 +100,11 @@ impl Dispatcher {
                     }
                 } else {
                     trace!("looking up resolve cache ip: {}", socket_addr.ip());
-                    if let Some(resolved) =
-                        self.resolver.cached_for(socket_addr.ip()).await
-                    {
-                        (resolved, socket_addr.port())
+                    match self.resolver.cached_for(socket_addr.ip()).await {
+                        Some(resolved) => (resolved, socket_addr.port())
                             .try_into()
-                            .expect("must be valid domain")
-                    } else {
-                        (*socket_addr).into()
+                            .expect("must be valid domain"),
+                        _ => (*socket_addr).into(),
                     }
                 }
             }
@@ -120,7 +117,7 @@ impl Dispatcher {
 
         sess.destination = dest.clone();
 
-        let mode = *self.mode.lock().unwrap();
+        let mode = *self.mode.read().await;
         let (outbound_name, rule) = match mode {
             RunMode::Global => (PROXY_GLOBAL, None),
             RunMode::Rule => self.router.match_route(&mut sess).await,
@@ -142,17 +139,17 @@ impl Dispatcher {
         {
             Ok(rhs) => {
                 debug!("remote connection established {}", sess);
-                let mut rhs = TrackedStream::new(
+                let rhs = TrackedStream::new(
                     rhs,
                     self.manager.clone(),
                     sess.clone(),
                     rule,
                 )
                 .await;
-                match copy_buf_bidirectional_with_timeout(
-                    &mut lhs,
-                    &mut rhs,
-                    4096,
+                match copy_bidirectional(
+                    lhs,
+                    rhs,
+                    self.tcp_buffer_size,
                     Duration::from_secs(10),
                     Duration::from_secs(10),
                 )
@@ -241,7 +238,8 @@ impl Dispatcher {
     /// Dispatch a UDP packet to outbound handler
     /// returns the close sender
     #[instrument]
-    pub fn dispatch_datagram(
+    #[must_use]
+    pub async fn dispatch_datagram(
         &self,
         sess: Session,
         udp_inbound: AnyInboundDatagram,
@@ -286,14 +284,13 @@ impl Dispatcher {
                             } else {
                                 (*socket_addr).into()
                             }
-                        } else if let Some(resolved) =
-                            resolver.cached_for(socket_addr.ip()).await
-                        {
-                            (resolved, socket_addr.port())
-                                .try_into()
-                                .expect("must be valid domain")
                         } else {
-                            (*socket_addr).into()
+                            match resolver.cached_for(socket_addr.ip()).await {
+                                Some(resolved) => (resolved, socket_addr.port())
+                                    .try_into()
+                                    .expect("must be valid domain"),
+                                _ => (*socket_addr).into(),
+                            }
                         }
                     }
                     crate::session::SocksAddr::Domain(host, port) => {
@@ -311,7 +308,7 @@ impl Dispatcher {
                 // do Ip though?
                 packet.dst_addr = dest;
 
-                let mode = *mode.lock().unwrap();
+                let mode = *mode.read().await;
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
@@ -462,10 +459,13 @@ impl Dispatcher {
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
 
         tokio::spawn(async move {
-            let _ = close_receiver.await;
-            trace!("UDP close signal for {} received", s);
-            t1.abort();
-            t2.abort();
+            if (close_receiver.await).is_ok() {
+                trace!("UDP close signal for {} received", s);
+                t1.abort();
+                t2.abort();
+            } else {
+                error!("UDP close signal dropped!");
+            }
         });
 
         return close_sender;
@@ -523,8 +523,7 @@ impl TimeoutUdpSessionManager {
                 });
                 trace!(
                     "timeout udp session cleaner finished, alived: {}, expired: {}",
-                    alived,
-                    expired
+                    alived, expired
                 );
             }
         });

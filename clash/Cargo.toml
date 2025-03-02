@@ -5,18 +5,28 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = []
+default = ["standard"]
+standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy"]
+plus = ["standard", "onion"]
+perf = ["plus", "jemallocator"]
+
+android = ["shadowsocks", "tuic"] # Android build failed with libc
+bsd = ["shadowsocks", "tuic"]
+
 shadowsocks = ["clash_lib/shadowsocks"]
+ssh = ["clash_lib/ssh"]
 tuic = ["clash_lib/tuic"]
-tracing = ["clash_lib/tracing"]
-bench = ["clash_lib/bench"]
 onion = ["clash_lib/onion"]
 
+bench = ["clash_lib/bench"]
 dhat-heap = ["dep:dhat"]
+tokio-console = ["clash_lib/tokio-console"]
+jemallocator = ["dep:tikv-jemallocator"]
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 
-clash_lib = { path = "../clash_lib", version = "*", default-features = false }
+clash_lib = { path = "../clash_lib", default-features = false }
 
-dhat = { version = "0.3.3", optional = true }
+dhat = { version = "0.3", optional = true }
+tikv-jemallocator = { version = "0.6", optional = true }

@@ -1,15 +1,15 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use axum::{
+    Json, Router,
     extract::{Extension, Path, Query, State},
     http::Request,
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
-    Json, Router,
 };
 
-use http::{header, HeaderMap, StatusCode};
+use http::{HeaderMap, StatusCode, header};
 use serde::Deserialize;
 
 use crate::{
@@ -37,7 +37,7 @@ pub fn routes(
     Router::new()
         .route("/", get(get_proxies))
         .nest(
-            "/:name",
+            "/{name}",
             Router::new()
                 .route("/", get(get_proxy).put(update_proxy))
                 .route("/delay", get(get_proxy_delay))
@@ -65,11 +65,13 @@ async fn find_proxy_by_name(
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    if let Some(proxy) = outbound_manager.get_outbound(&name) {
-        req.extensions_mut().insert(proxy);
-        next.run(req).await
-    } else {
-        (StatusCode::NOT_FOUND, format!("proxy {} not found", name)).into_response()
+    match outbound_manager.get_outbound(&name) {
+        Some(proxy) => {
+            req.extensions_mut().insert(proxy);
+            next.run(req).await
+        }
+        _ => (StatusCode::NOT_FOUND, format!("proxy {} not found", name))
+            .into_response(),
     }
 }
 
@@ -93,8 +95,8 @@ async fn update_proxy(
     Json(payload): Json<UpdateProxyRequest>,
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
-    if let Some(ctrl) = outbound_manager.get_selector_control(proxy.name()) {
-        match ctrl.lock().await.select(&payload.name).await {
+    match outbound_manager.get_selector_control(proxy.name()) {
+        Some(ctrl) => match ctrl.lock().await.select(&payload.name).await {
             Ok(_) => {
                 let cache_store = state.cache_store;
                 cache_store.set_selected(proxy.name(), &payload.name).await;
@@ -112,12 +114,11 @@ async fn update_proxy(
                     err
                 ),
             ),
-        }
-    } else {
-        (
+        },
+        _ => (
             StatusCode::NOT_FOUND,
             format!("proxy {} is not a Select", proxy.name()),
-        )
+        ),
     }
 }
 

@@ -1,2 +1,2 @@
 [toolchain]
-channel = "nightly" # until https://github.com/rust-lang/rust-clippy/issues/13457
+channel = "nightly"

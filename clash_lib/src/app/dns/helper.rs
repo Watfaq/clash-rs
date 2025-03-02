@@ -1,9 +1,9 @@
 use crate::{
+    app::net::{DEFAULT_OUTBOUND_INTERFACE, get_outbound_interface},
     dns::{
-        dns_client::{DNSNetMode, DnsClient, Opts},
         ClashResolver, ThreadSafeDNSClient,
+        dns_client::{DNSNetMode, DnsClient, Opts},
     },
-    proxy::utils::{get_outbound_interface, Interface},
 };
 use std::sync::Arc;
 use tracing::{debug, warn};
@@ -22,7 +22,7 @@ pub async fn make_clients(
         let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")
         } else {
-            let port = s.address.split(':').last().unwrap();
+            let port = s.address.split(':').next_back().unwrap();
             let host = s
                 .address
                 .strip_suffix(format!(":{}", port).as_str())
@@ -42,10 +42,15 @@ pub async fn make_clients(
                 .as_ref()
                 .and_then(|x| match x.as_str() {
                     "auto" => {
-                        get_outbound_interface().map(|x| Interface::Name(x.name))
+                        get_outbound_interface().map(|x| x.name.as_str().into())
                     }
-                    _ => Some(Interface::Name(x.to_owned())),
+                    _ => Some(x.as_str().into()),
                 })
+                .or(DEFAULT_OUTBOUND_INTERFACE
+                    .read()
+                    .await
+                    .as_ref()
+                    .map(|x| x.name.as_str().into()))
                 .inspect(|x| debug!("DNS client interface: {:?}", x)),
         })
         .await

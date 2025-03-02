@@ -1,13 +1,11 @@
 mod datagram;
-mod shadow_tls;
-mod simple_obfs;
 mod stream;
-mod v2ray;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, OutboundType,
+    transport::Sip003Plugin,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
 use crate::{
     app::{
@@ -25,47 +23,12 @@ use crate::{
 use async_trait::async_trait;
 use datagram::ShadowsocksUdpIo;
 use shadowsocks::{
-    config::ServerType, context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType, ProxyClientStream, ProxySocket,
-    ServerConfig,
+    ProxyClientStream, ProxySocket, ServerConfig, config::ServerType,
+    context::Context, crypto::CipherKind,
+    relay::udprelay::proxy_socket::UdpSocketType,
 };
-use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
+use std::{fmt::Debug, io, sync::Arc};
 use tracing::debug;
-
-#[derive(Clone, Copy)]
-pub enum SimpleOBFSMode {
-    Http,
-    Tls,
-}
-
-pub struct SimpleOBFSOption {
-    pub mode: SimpleOBFSMode,
-    pub host: String,
-}
-
-#[allow(dead_code)]
-pub struct V2RayOBFSOption {
-    pub mode: String,
-    pub host: String,
-    pub path: String,
-    pub tls: bool,
-    pub headers: HashMap<String, String>,
-    pub skip_cert_verify: bool,
-    pub mux: bool,
-}
-
-#[derive(Debug)]
-pub struct ShadowTlsOption {
-    pub host: String,
-    pub password: String,
-    pub strict: bool,
-}
-
-pub enum OBFSOption {
-    Simple(SimpleOBFSOption),
-    V2Ray(V2RayOBFSOption),
-    ShadowTls(ShadowTlsOption),
-}
 
 pub struct HandlerOptions {
     pub name: String,
@@ -74,7 +37,7 @@ pub struct HandlerOptions {
     pub port: u16,
     pub password: String,
     pub cipher: String,
-    pub plugin_opts: Option<OBFSOption>,
+    pub plugin: Option<Box<dyn Sip003Plugin>>,
     pub udp: bool,
 }
 
@@ -106,30 +69,10 @@ impl Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
+        _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
-        let stream: AnyStream = match &self.opts.plugin_opts {
-            Some(plugin) => match plugin {
-                OBFSOption::Simple(opts) => match opts.mode {
-                    SimpleOBFSMode::Http => simple_obfs::SimpleObfsHTTP::new(
-                        s,
-                        opts.host.clone(),
-                        self.opts.port,
-                    )
-                    .into(),
-                    SimpleOBFSMode::Tls => {
-                        simple_obfs::SimpleObfsTLS::new(s, opts.host.clone()).into()
-                    }
-                },
-                OBFSOption::V2Ray(_opt) => {
-                    todo!("v2ray-plugin is not implemented yet")
-                }
-                OBFSOption::ShadowTls(opts) => {
-                    tracing::trace!("using shadow-tls");
-
-                    (shadow_tls::Connector::wrap(opts, s).await?) as _
-                }
-            },
+        let stream: AnyStream = match &self.opts.plugin {
+            Some(plugin) => plugin.proxy_stream(s).await?,
             None => s,
         };
 
@@ -147,23 +90,30 @@ impl Handler {
     }
 
     fn server_config(&self) -> Result<ServerConfig, io::Error> {
-        let cfg = ServerConfig::new(
+        ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
             self.opts.password.to_owned(),
             match self.opts.cipher.as_str() {
                 "aes-128-gcm" => CipherKind::AES_128_GCM,
                 "aes-256-gcm" => CipherKind::AES_256_GCM,
                 "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
+
+                "2022-blake3-aes-128-gcm" => CipherKind::AEAD2022_BLAKE3_AES_128_GCM,
+                "2022-blake3-aes-256-gcm" => CipherKind::AEAD2022_BLAKE3_AES_256_GCM,
+                "2022-blake3-chacha20-ietf-poly1305" => {
+                    CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305
+                }
+
                 "rc4-md5" => CipherKind::SS_RC4_MD5,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         "unsupported cipher",
-                    ))
+                    ));
                 }
             },
-        );
-        Ok(cfg)
+        )
+        .map_err(|e| new_io_error(e.to_string()))
     }
 }
 
@@ -241,7 +191,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -267,7 +217,7 @@ impl OutboundHandler for Handler {
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
                 sess.iface.as_ref().cloned(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -308,9 +258,14 @@ mod tests {
         consts::*, docker_runner::DockerTestRunner,
     };
     use crate::{
-        proxy::utils::test_utils::{
-            docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-            run_test_suites_and_cleanup, Suite,
+        proxy::{
+            transport::*,
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
+                run_test_suites_and_cleanup,
+            },
         },
         tests::initialize,
     };
@@ -326,7 +281,45 @@ mod tests {
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
             .entrypoint(&["ssserver"])
-            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
+            .build()
+            .await
+    }
+
+    async fn get_ss_runner_with_plugin(
+        port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        let host = format!("0.0.0.0:{}", port);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .entrypoint(&["ssserver"])
+            .cmd(&[
+                "-s",
+                &host,
+                "-m",
+                CIPHER,
+                "-k",
+                PASSWORD,
+                "-U",
+                "-vvv",
+                "--plugin",
+                "v2ray-plugin",
+                "--plugin-opts",
+                "server;tls;host=example.org;mux=0",
+            ])
+            .mounts(&[
+                (
+                    cert.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/fullchain.cer",
+                ),
+                (
+                    key.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/example.org.key",
+                ),
+            ])
             .build()
             .await
     }
@@ -342,7 +335,7 @@ mod tests {
             port: 10002,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin_opts: Default::default(),
+            plugin: Default::default(),
             udp: false,
         };
         let port = opts.port;
@@ -390,28 +383,26 @@ mod tests {
         // not important, you can assign any port that is not conflict with
         // others
         let ss_port = 10004;
+        let client =
+            Shadowtls::new("www.feishu.cn".to_owned(), "password".to_owned(), true);
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-shadowtls".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: shadow_tls_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin_opts: Some(OBFSOption::ShadowTls(ShadowTlsOption {
-                host: "www.feishu.cn".to_owned(),
-                password: "password".to_owned(),
-                strict: true,
-            })),
+            plugin: Some(Box::new(client)),
             udp: false,
         };
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
         chained
             .add(get_shadowtls_runner(ss_port, shadow_tls_port))
-            .await;
+            .await?;
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
@@ -438,6 +429,7 @@ mod tests {
                 mode,
                 "-r",
                 &ss_server_env,
+                "-vv",
             ])
             .build()
             .await
@@ -446,46 +438,78 @@ mod tests {
     async fn test_ss_obfs_inner(mode: SimpleOBFSMode) -> anyhow::Result<()> {
         let obfs_port = 10002;
         let ss_port = 10004;
+        let host = "www.bing.com".to_owned();
+        let plugin = match mode {
+            SimpleOBFSMode::Http => {
+                Box::new(SimpleObfsHttp::new(host, ss_port)) as _
+            }
+            SimpleOBFSMode::Tls => Box::new(SimpleObfsTLS::new(host)) as _,
+        };
         let opts = HandlerOptions {
-            name: "test-ss".to_owned(),
+            name: "test-obfs".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
             port: obfs_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
-            plugin_opts: Some(OBFSOption::Simple(SimpleOBFSOption {
-                host: "www.bing.com".to_owned(),
-                mode,
-            })),
+            plugin: Some(plugin),
             udp: false,
         };
 
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
-        chained.add(get_ss_runner(ss_port)).await;
-        chained.add(get_obfs_runner(ss_port, obfs_port, mode)).await;
+        chained.add(get_ss_runner(ss_port)).await?;
+        chained
+            .add(get_obfs_runner(ss_port, obfs_port, mode))
+            .await?;
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Http).await
-        } else {
-            eprintln!("test_ss_obfs_http is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
-        if cfg!(target_arch = "x86_64") {
-            test_ss_obfs_inner(SimpleOBFSMode::Tls).await
-        } else {
-            eprintln!("test_ss_obfs_tls is ignored on non-x86_64 platform");
-            Ok(())
-        }
+        initialize();
+        test_ss_obfs_inner(SimpleOBFSMode::Tls).await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_ss_v2ray_plugin() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = 10004;
+        let host = "example.org".to_owned();
+        let plugin = V2rayWsClient::try_new(
+            host,
+            ss_port,
+            "/".to_owned(),
+            Default::default(),
+            true,
+            true,
+            false,
+        )?;
+        let opts = HandlerOptions {
+            name: "test-obfs".to_owned(),
+            common_opts: Default::default(),
+            server: LOCAL_ADDR.to_owned(),
+            port: ss_port,
+            password: PASSWORD.to_owned(),
+            cipher: CIPHER.to_owned(),
+            plugin: Some(Box::new(plugin)),
+            udp: false,
+        };
+
+        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        run_test_suites_and_cleanup(
+            handler,
+            get_ss_runner_with_plugin(ss_port).await?,
+            Suite::tcp_tests(),
+        )
+        .await
     }
 }

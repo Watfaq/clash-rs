@@ -1,20 +1,20 @@
 use std::sync::Arc;
 
 use axum::{
+    Json, Router,
     body::Body,
     extract::{
-        ws::Message, FromRequest, Path, Query, Request, State, WebSocketUpgrade,
+        FromRequest, Path, Query, Request, State, WebSocketUpgrade, ws::Message,
     },
     response::IntoResponse,
     routing::{delete, get},
-    Json, Router,
 };
 use http::HeaderMap;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::app::{
-    api::{handlers::utils::is_request_websocket, AppState},
+    api::{AppState, handlers::utils::is_request_websocket},
     dispatcher::StatisticsManager,
 };
 
@@ -26,7 +26,7 @@ struct ConnectionState {
 pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(get_connections).delete(close_all_connection))
-        .route("/:id", delete(close_connection))
+        .route("/{id}", delete(close_connection))
         .with_state(ConnectionState { statistics_manager })
 }
 
@@ -68,7 +68,7 @@ async fn get_connections(
             let j = serde_json::to_vec(&snapshot).unwrap();
             let body = String::from_utf8(j).unwrap();
 
-            if let Err(e) = socket.send(Message::Text(body)).await {
+            if let Err(e) = socket.send(Message::Text(body.into())).await {
                 // likely client gone
                 debug!("ws send error: {}", e);
                 break;

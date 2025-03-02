@@ -1,9 +1,9 @@
 use std::{fmt::Debug, pin::Pin, task::Poll};
 
-use bytes::BytesMut;
-use futures::{ready, Sink, Stream};
+use bytes::{Bytes, BytesMut};
+use futures::{Sink, Stream, ready};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
 use crate::{
     common::errors::{map_io_error, new_io_error},
@@ -81,7 +81,7 @@ impl AsyncWrite for WebsocketConn {
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, std::io::Error>> {
         ready!(Pin::new(&mut self.inner).poll_ready(cx)).map_err(map_io_error)?;
-        let message = Message::Binary(buf.into());
+        let message = Message::Binary(Bytes::copy_from_slice(buf));
         Pin::new(&mut self.inner)
             .start_send(message)
             .map_err(map_io_error)?;

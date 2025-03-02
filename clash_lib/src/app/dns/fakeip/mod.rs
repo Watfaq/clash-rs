@@ -1,9 +1,6 @@
-use std::{
-    net::{self},
-    sync::Arc,
-};
+use std::{net, sync::Arc};
 
-use crate::{common::trie, Error};
+use crate::{Error, common::trie};
 
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};

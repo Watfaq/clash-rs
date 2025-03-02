@@ -3,9 +3,9 @@ use std::io;
 use crate::{common::utils, proxy::AnyStream, session::SocksAddr};
 
 use super::{
+    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security,
     stream::{self},
     user::{self, new_alter_id_list},
-    Security, SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE,
 };
 
 #[derive(Clone)]
@@ -47,7 +47,7 @@ impl Builder {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "invalid security",
-                ))
+                ));
             }
         };
 

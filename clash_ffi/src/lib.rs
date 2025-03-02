@@ -1,10 +1,12 @@
 use std::{
-    ffi::{c_int, CString},
+    ffi::{CString, c_int},
     os::raw::c_char,
     ptr,
 };
 
-use clash_lib::{ClashConfigDef, ClashDNSListen, ClashTunConfig, Config, Error};
+use clash_lib::{
+    ClashConfigDef, ClashDNSListen, ClashTunConfig, Config, Error, Port,
+};
 use error::LAST_ERROR;
 
 mod error;
@@ -65,7 +67,7 @@ fn apply_config_override(
             unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
                 .to_string_lossy()
                 .to_string();
-        cfg_def.bind_address = bind_address;
+        cfg_def.bind_address = bind_address.parse().expect("invalid bind address");
     }
 
     if cfg_override.dns_server != ptr::null() {
@@ -85,7 +87,7 @@ fn apply_config_override(
     }
 
     if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
-        cfg_def.port = Some(cfg_override.http_port);
+        cfg_def.port = Some(Port(cfg_override.http_port));
     }
 
     if cfg_override.rules_list != ptr::null() {
@@ -104,7 +106,11 @@ fn apply_config_override(
         })
         .collect::<Vec<String>>();
 
-        cfg_def.rule.append(&mut rules_list);
+        if let Some(ref mut rule) = cfg_def.rule {
+            rule.append(&mut rules_list);
+        } else {
+            cfg_def.rule = Some(rules_list);
+        }
     }
 
     if cfg_override.outbounds != ptr::null() {
@@ -115,7 +121,13 @@ fn apply_config_override(
         };
 
         match &mut serde_yaml::from_str::<_>(&outbounds) {
-            Ok(outbounds) => cfg_def.proxy.append(outbounds),
+            Ok(outbounds) => {
+                if let Some(proxy) = cfg_def.proxy.as_mut() {
+                    proxy.append(outbounds);
+                } else {
+                    cfg_def.proxy = Some(outbounds.clone());
+                }
+            }
             _ => {
                 return Some(format!(
                     "couldn't parse outbounds: {}",
@@ -128,7 +140,7 @@ fn apply_config_override(
     None
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn get_last_error() -> *const c_char {
     LAST_ERROR.with(|prev| match *prev.borrow() {
         Some(ref err) => err.as_ptr() as *const c_char,
@@ -136,7 +148,7 @@ pub extern "C" fn get_last_error() -> *const c_char {
     })
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
@@ -150,7 +162,7 @@ pub extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn start_clash_with_config(
     cfg_dir: *const c_char,
     cfg_str: *const c_char,
@@ -191,7 +203,7 @@ pub extern "C" fn start_clash_with_config(
                 },
             };
 
-            match clash_lib::start(opts) {
+            match clash_lib::start_scaffold(opts) {
                 Ok(_) => ERR_OK,
                 Err(e) => {
                     error::update_last_error(Error::Operation(format!(
@@ -209,12 +221,12 @@ pub extern "C" fn start_clash_with_config(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn shutdown_clash() -> bool {
     clash_lib::shutdown()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn parse_general_config(
     cfg_str: *const c_char,
     general: *mut GeneralConfig,
@@ -229,9 +241,11 @@ pub extern "C" fn parse_general_config(
         Ok(cfg) => {
             #[allow(deprecated)]
             unsafe {
-                (*general).port = cfg.port.unwrap_or_default();
-                (*general).socks_port = cfg.socks_port.unwrap_or_default();
-                (*general).mixed_port = cfg.mixed_port.unwrap_or_default();
+                (*general).port = cfg.port.map(Into::into).unwrap_or_default();
+                (*general).socks_port =
+                    cfg.socks_port.map(Into::into).unwrap_or_default();
+                (*general).mixed_port =
+                    cfg.mixed_port.map(Into::into).unwrap_or_default();
                 // this is a memory leak, but we don't care
                 (*general).secret = CString::new(cfg.secret.unwrap_or_default())
                     .expect("invalid secret")
@@ -250,7 +264,7 @@ pub extern "C" fn parse_general_config(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
@@ -279,7 +293,7 @@ pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn free_string(ptr: *mut c_char) {
     unsafe {
         if !ptr.is_null() {
@@ -288,7 +302,7 @@ pub extern "C" fn free_string(ptr: *mut c_char) {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
@@ -317,7 +331,7 @@ pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
@@ -346,7 +360,7 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn get_clash_version() -> *mut c_char {
     static VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -394,7 +408,7 @@ mod tests {
             None
         );
 
-        assert_eq!(cfg_def.bind_address, "240.0.0.2");
+        assert_eq!(cfg_def.bind_address, "240.0.0.2".parse().unwrap());
         assert_eq!(cfg_def.dns.enable, false);
         assert_eq!(
             cfg_def.dns.listen.unwrap(),
@@ -407,10 +421,13 @@ mod tests {
         assert_eq!(cfg_def.tun.as_ref().unwrap().enable, true);
         assert_eq!(cfg_def.tun.unwrap().device_id, "fd://1989");
 
-        assert!(cfg_def
-            .rule
-            .contains(&"DOMAIN-KEYWORD,example.com,DIRECT".to_string()));
-        assert!(cfg_def.proxy.iter().any(|p| p.get("name")
+        assert!(
+            cfg_def
+                .rule
+                .unwrap()
+                .contains(&"DOMAIN-KEYWORD,example.com,DIRECT".to_string())
+        );
+        assert!(cfg_def.proxy.unwrap().iter().any(|p| p.get("name")
             == Some(&serde_yaml::Value::String("socks5-noauth".to_string()))));
     }
 }

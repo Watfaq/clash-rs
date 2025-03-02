@@ -1,13 +1,13 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
+    Router,
     response::Redirect,
     routing::{get, post},
-    Router,
 };
 
-use http::{header, Method};
-use tokio::sync::{broadcast::Sender, Mutex};
+use http::{Method, header};
+use tokio::sync::{Mutex, broadcast::Sender};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -16,12 +16,15 @@ use tower_http::{
 };
 use tracing::{error, info};
 
-use crate::{config::internal::config::Controller, GlobalState, Runner};
+use crate::{GlobalState, Runner, config::internal::config::Controller};
 
 use super::{
-    dispatcher, dispatcher::StatisticsManager, dns::ThreadSafeDNSResolver,
-    inbound::manager::ThreadSafeInboundManager, logging::LogEvent,
-    outbound::manager::ThreadSafeOutboundManager, profile::ThreadSafeCacheFile,
+    dispatcher::{self, StatisticsManager},
+    dns::ThreadSafeDNSResolver,
+    inbound::manager::InboundManager,
+    logging::LogEvent,
+    outbound::manager::ThreadSafeOutboundManager,
+    profile::ThreadSafeCacheFile,
     router::ThreadSafeRouter,
 };
 
@@ -37,7 +40,7 @@ pub struct AppState {
 pub fn get_api_runner(
     controller_cfg: Controller,
     log_source: Sender<LogEvent>,
-    inbound_manager: ThreadSafeInboundManager,
+    inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,

@@ -2,10 +2,10 @@ name: Build/Test/Release
 
 on:
   push:
-    tags: [ "v*" ]
-    branches: [ "master" ]
+    tags: ["v*"]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -16,14 +16,12 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-
+  RUST_TOOLCHAIN: "nightly"
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
   compile:
     name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
-    permissions:
-      contents: write
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -35,7 +33,7 @@ jobs:
           #   target: x86_64-unknown-linux-gnu
           #   release-name: $target
           #   toolchain: nightly
-          #   cross: false
+          #   tool: cargo/cross
           #   postfix: ""
           #   extra-args: ""
           #   components: ""
@@ -44,102 +42,102 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cargo
+            extra-args: -F "plus"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "perf"
+          - os: ubuntu-latest
+            target: i686-unknown-linux-musl
+            tool: cross
+            extra-args: -F "plus"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "perf"
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
           # Linux arm gnu static-crt
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             release-name: aarch64-unknown-linux-gnu-static-crt
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             release-name: armv7-unknown-linux-gnueabi-static-crt
-            cross: true
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cross
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux RISC-V gnu
-          # - os: ubuntu-latest
-          #   target: riscv64gc-unknown-linux-gnu
-          #   cross: true
-          #   extra-args: "--all-features"
+          - os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            tool: cross
+            extra-args: -F "shadowsocks, tuic"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: windows-latest
             target: i686-pc-windows-msvc
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks,tuic"
+            extra-args: -F "standard"
+            no-test: true
           # Windows static-crt
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             release-name: x86_64-pc-windows-msvc-static-crt
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: windows-latest
             target: i686-pc-windows-msvc
             release-name: i686-pc-windows-msvc-static-crt
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: >-
-              -Ctarget-feature=+crt-static 
+              -Ctarget-feature=+crt-static
               -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
               -Clink-args=/NODEFAULTLIB:vcruntime.lib
               -Clink-args=/NODEFAULTLIB:vcruntimed.lib
@@ -156,35 +154,49 @@ jobs:
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             release-name: aarch64-pc-windows-msvc-static-crt
-            cross: false
             postfix: ".exe"
-            extra-args: -F "shadowsocks, tuic"
+            extra-args: -F "standard"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+            no-test: true
           # MacOSX
           - os: macos-14
             target: x86_64-apple-darwin
-            cross: false
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           - os: macos-14
             target: aarch64-apple-darwin
-            cross: false
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
           # MacOSX static-crt
           - os: macos-14
             target: x86_64-apple-darwin
             release-name: x86_64-apple-darwin-static-crt
-            cross: false
-            extra-args: -F "shadowsocks, tuic, onion"
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: macos-14
             target: aarch64-apple-darwin
             release-name: aarch64-apple-darwin-static-crt
-            cross: false
-            extra-args: -F "shadowsocks, tuic, onion"
+            tool: cargo
+            extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+          # BSD
+          - os: ubuntu-latest
+            target: x86_64-unknown-freebsd
+            tool: cross
+            extra-args: --no-default-features -F "bsd"
+            no-test: true
+          - os: ubuntu-latest
+            target: i686-unknown-freebsd
+            tool: cross
+            extra-args: --no-default-features -F "bsd"
+            no-test: true
+          # Android (no release)
+          - os: ubuntu-latest
+            target: x86_64-linux-android
+            tool: cross
+            extra-args: --no-default-features -F "android"
+            no-release: true
+            no-test: true
           # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
-          # Windows aarch: todo
 
     steps:
       - uses: actions/checkout@v4
@@ -199,16 +211,31 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
+            /target
           key: ${{ matrix.release-name || matrix.target }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: |
             ${{ matrix.release-name || matrix.target }}
 
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
+        with:
+          key: matrix.os
+
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain || 'nightly' }}
-          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
+          targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
+
+      - name: Install rust targets & cross
+        if: matrix.tool == 'cross'
+        run: |
+          rustup target add ${TARGET}
+          rm -f ~/.cargo/bin/cross*
+          cargo install cross --git https://github.com/cross-rs/cross
+        env:
+          TARGET: ${{ matrix.target }}
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -216,55 +243,51 @@ jobs:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set environment variables
+      - name: Set environment variables (non Windows)
+        if: matrix.os != 'windows-latest'
         run: |
           echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
 
+      - name: Set environment variables (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "CLASH_GIT_REF=$env:GITHUB_REF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "CLASH_GIT_SHA=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Cargo fmt
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
-          use-cross: ${{ matrix.cross }}
           command: fmt
           args: --all -- --check
         env:
           CLASH_DOCKER_TEST: "true"
-          
+
       - name: Cargo clippy
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: clippy
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+          args: -p clash-rs --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test (docker test on linux)
-        uses: clechasseur/rs-cargo@v2
-        if: startsWith(matrix.os, 'ubuntu')
+      - name: Cargo test and coverage
+        uses: clechasseur/rs-cargo@v3
+        if: ${{ !matrix.no-test }}
         with:
-          use-cross: ${{ matrix.cross }}
-          command: test
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          tool: ${{ matrix.tool }}
+          command: 'test'
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          CLASH_DOCKER_TEST: "true"
-          RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
-
-      - name: Cargo test (no docker test on windows-non-arm and macos)
-        uses: clechasseur/rs-cargo@v2
-        if: ${{ !startsWith(matrix.os, 'ubuntu') && matrix.target != 'aarch64-pc-windows-msvc' }}
-        with:
-          use-cross: ${{ matrix.cross }}
-          command: test
-          args: --all --target ${{ matrix.target }} ${{ matrix.extra-args }}
-        env:
+          CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
-        uses: clechasseur/rs-cargo@v2
+        uses: clechasseur/rs-cargo@v3
         with:
-          use-cross: ${{ matrix.cross }}
+          tool: ${{ matrix.tool }}
           command: build
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
@@ -275,6 +298,7 @@ jobs:
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
+        if: ${{ !matrix.no-release }}
         with:
           name: ${{ matrix.release-name || matrix.target }}
           path: ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
@@ -289,8 +313,10 @@ jobs:
 
   release:
     name: Release
-    needs: [ compile ]
+    needs: [compile]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -301,7 +327,7 @@ jobs:
         uses: actions/upload-artifact/merge@v4
         with:
           name: binaries
-          pattern: '*'
+          pattern: "*"
           retention-days: 1
 
       - name: Download binaries
@@ -309,7 +335,7 @@ jobs:
         with:
           name: binaries
           path: ./packages
-          
+
       - name: Create SHA256Sums.txt and version.txt
         run: |
           cd packages
@@ -319,9 +345,20 @@ jobs:
           ./clash-x86_64-unknown-linux-musl -v >> version.txt
           cat version.txt
 
-      - name: Move latest tag for git-cliff nightly
+      - name: Clean git tag & release
+        if: startsWith(github.ref, 'refs/heads/master')
         run: |
-          git tag latest -f
+          gh release delete latest --cleanup-tag --yes --repo $GITHUB_REPOSITORY || true
+          # Move latest tag to current commit locally
+          git tag latest -f || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Delete latest tag locally (for git-cliff)
+          git tag -d latest || true
 
       - name: Generate a changelog
         uses: orhun/git-cliff-action@main
@@ -343,41 +380,22 @@ jobs:
           files: |
             packages/*
             LICENSE*
-            
-      - name: Delete old latest nightly release
-        if: startsWith(github.ref, 'refs/heads/master')
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            const tag = 'latest'
-            const { owner, repo } = context.repo
-            const { data: { id } } = await github.rest.repos.getReleaseByTag({ owner, repo, tag })
-            await github.rest.repos.deleteRelease({ owner, repo, release_id: id })
 
-      - name: Update Latest Tag
-        if: startsWith(github.ref, 'refs/heads/master')
-        uses: richardsimko/update-tag@v1
-        with:
-          tag_name: latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
       - name: Github nightly release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: true
-          tag_name: "latest"
           generate_release_notes: false
           body: ${{ steps.git-cliff.outputs.content }}
+          tag_name: "latest"
           files: |
             packages/*
             LICENSE*
-  
+
   docker-image:
-    needs: [ compile ]
+    needs: [compile]
     name: Docker Image
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
@@ -416,14 +434,14 @@ jobs:
         run: |
           mv ./clash-rs/clash-x86_64-unknown-linux-musl ./clash-rs/clash-amd64
           mv ./clash-rs/clash-aarch64-unknown-linux-musl ./clash-rs/clash-arm64
-          
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: watfaq
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Build and push release
         uses: docker/build-push-action@v6
         with:
@@ -432,6 +450,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.TAG_VERSION }},${{ env.TAG_LATEST }}
-
-
-

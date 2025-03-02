@@ -3,10 +3,8 @@ name = "clash_ffi"
 version = { workspace = true }
 edition = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-clash_lib = { path = "../clash_lib" }
+clash_lib = { path = "../clash_lib", features = ["shadowsocks", "tuic", "zero_copy", "onion"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
 

@@ -2,12 +2,12 @@ mod datagram;
 mod stream;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{utils::apply_tcp_options, InboundListener},
-    session::{Network, Session, Type},
     Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
+    session::{Network, Session, Type},
 };
-use async_trait::async_trait;
+
 use std::{net::SocketAddr, sync::Arc};
 pub use stream::handle_tcp;
 use tokio::net::TcpListener;
@@ -15,19 +15,19 @@ use tracing::warn;
 
 pub use datagram::Socks5UDPCodec;
 
-pub struct Listener {
+pub struct SocksInbound {
     addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 }
 
-impl Drop for Listener {
+impl Drop for SocksInbound {
     fn drop(&mut self) {
         warn!("SOCKS5 inbound listener on {} stopped", self.addr);
     }
 }
 
-impl Listener {
+impl SocksInbound {
     pub fn new(
         addr: SocketAddr,
         dispatcher: Arc<Dispatcher>,
@@ -41,8 +41,7 @@ impl Listener {
     }
 }
 
-#[async_trait]
-impl InboundListener for Listener {
+impl InboundHandlerTrait for SocksInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -51,13 +50,13 @@ impl InboundListener for Listener {
         false
     }
 
-    async fn listen_tcp(&self) -> std::io::Result<()> {
+    async fn listen_tcp(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
             let (socket, _) = listener.accept().await?;
 
-            let mut socket = apply_tcp_options(socket)?;
+            let socket = apply_tcp_options(socket)?;
 
             let mut sess = Session {
                 network: Network::Tcp,
@@ -71,12 +70,13 @@ impl InboundListener for Listener {
             let authenticator = self.authenticator.clone();
 
             tokio::spawn(async move {
-                handle_tcp(&mut sess, &mut socket, dispatcher, authenticator).await
+                handle_tcp(&mut sess, socket, dispatcher, authenticator).await
             });
         }
     }
 
-    async fn listen_udp(&self) -> std::io::Result<()> {
-        unreachable!("don't listen to me :)")
+    async fn listen_udp(&self) -> anyhow::Result<()> {
+        // TODO
+        Err(anyhow!("UDP is not supported"))
     }
 }

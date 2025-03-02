@@ -2,20 +2,20 @@ use ipnet::IpNet;
 use std::{io, ptr::null_mut};
 use tracing::{error, info};
 use windows::Win32::{
-    Foundation::{GetLastError, ERROR_SUCCESS},
+    Foundation::{ERROR_SUCCESS, GetLastError},
     NetworkManagement::Rras::{
-        RtmAddNextHop, RtmAddRouteToDest, RtmDeregisterEntity, RtmRegisterEntity,
-        RtmReleaseNextHops, RTM_ENTITY_ID, RTM_ENTITY_ID_0, RTM_ENTITY_ID_0_0,
-        RTM_ENTITY_INFO, RTM_NET_ADDRESS, RTM_NEXTHOP_INFO, RTM_REGN_PROFILE,
-        RTM_ROUTE_CHANGE_NEW, RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST,
-        RTM_VIEW_MASK_UCAST,
+        RTM_ENTITY_ID, RTM_ENTITY_ID_0, RTM_ENTITY_ID_0_0, RTM_ENTITY_INFO,
+        RTM_NET_ADDRESS, RTM_NEXTHOP_INFO, RTM_REGN_PROFILE, RTM_ROUTE_CHANGE_NEW,
+        RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST, RTM_VIEW_MASK_UCAST, RtmAddNextHop,
+        RtmAddRouteToDest, RtmDeregisterEntity, RtmRegisterEntity,
+        RtmReleaseNextHops,
     },
     Networking::WinSock::{AF_INET, AF_INET6, PROTO_IP_RIP},
 };
 
 use crate::{
-    common::errors::new_io_error, config::internal::config::TunConfig, defer,
-    proxy::utils::OutboundInterface,
+    app::net::OutboundInterface, common::errors::new_io_error,
+    config::internal::config::TunConfig, defer,
 };
 
 const PROTO_TYPE_UCAST: u32 = 0;

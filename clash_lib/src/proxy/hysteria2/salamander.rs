@@ -10,8 +10,8 @@ use bytes::{BufMut, Bytes, BytesMut};
 use digest::consts::U32;
 use futures::ready;
 use quinn::{
-    udp::{RecvMeta, Transmit},
     AsyncUdpSocket, TokioRuntime,
+    udp::{RecvMeta, Transmit},
 };
 use rand::Rng;
 
@@ -41,8 +41,8 @@ impl SalamanderObfs {
         });
     }
 
-    fn encrpyt(&self, data: &mut [u8]) -> Bytes {
-        let salt: [u8; 8] = rand::thread_rng().gen();
+    fn encrypt(&self, data: &mut [u8]) -> Bytes {
+        let salt: [u8; 8] = rand::rng().random();
 
         let mut res = BytesMut::with_capacity(8 + data.len());
         res.put_slice(&salt);
@@ -52,7 +52,7 @@ impl SalamanderObfs {
         res.freeze()
     }
 
-    fn decrpyt(&self, data: &mut [u8]) {
+    fn decrypt(&self, data: &mut [u8]) {
         assert!(data.len() > 8, "data len must > 8");
 
         let (salt, data) = data.split_at_mut(8);
@@ -94,7 +94,7 @@ impl AsyncUdpSocket for Salamander {
     fn try_send(&self, transmit: &Transmit) -> std::io::Result<()> {
         let mut v = transmit.to_owned();
         // TODO: encrypt in place
-        let x = self.obfs.encrpyt(&mut v.contents.to_vec());
+        let x = self.obfs.encrypt(&mut v.contents.to_vec());
         v.contents = &x;
         self.inner.try_send(&v)
     }
@@ -118,7 +118,7 @@ impl AsyncUdpSocket for Salamander {
             .for_each(|(v, meta)| {
                 let x = &mut v.deref_mut()[..meta.len];
                 // decrypt in place, and drop first 8 bytes
-                self.obfs.decrpyt(x);
+                self.obfs.decrypt(x);
                 let data = &mut x[8..];
                 unsafe {
                     //  because IoSliceMut is transparent and .0 is also transparent, so it is a &[u8]
@@ -150,7 +150,7 @@ fn test_skip() {
 
     let bufs = &mut [IoSliceMut::new(&mut data)];
     bufs.iter_mut().filter(|x| x.len() > 8).for_each(|v| {
-        obfs.decrpyt(v);
+        obfs.decrypt(v);
         let data: &mut [u8] = v.as_mut();
         let data = &mut data[8..];
         unsafe {
@@ -165,11 +165,11 @@ fn test_skip() {
 fn test_obfs() {
     let obfs = SalamanderObfs::new(b"obfs".to_vec());
     let mut data = b"hhh".to_vec();
-    let x = obfs.encrpyt(&mut data);
+    let x = obfs.encrypt(&mut data);
     let mut x = x.to_vec();
 
     let res = &mut IoSliceMut::new(&mut x);
-    obfs.decrpyt(res);
+    obfs.decrypt(res);
 
     assert!(std::str::from_utf8(res[8..].as_ref()).unwrap() == "hhh");
 }

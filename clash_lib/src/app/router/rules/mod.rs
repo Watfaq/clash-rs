@@ -6,6 +6,7 @@ use crate::session::Session;
 
 pub mod domain;
 pub mod domain_keyword;
+pub mod domain_regex;
 pub mod domain_suffix;
 pub mod final_;
 pub mod geodata;

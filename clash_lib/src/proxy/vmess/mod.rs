@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use tracing::debug;
@@ -20,20 +20,11 @@ use crate::{
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    options::{GrpcOption, Http2Option, HttpOption, WsOption},
-    transport::{self, Http2Config},
-    utils::{RemoteConnector, GLOBAL_DIRECT_CONNECTOR},
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
+    transport::Transport,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
-
-pub enum VmessTransport {
-    Ws(WsOption),
-    H2(Http2Option),
-    Grpc(GrpcOption),
-    #[allow(dead_code)]
-    Http(HttpOption),
-}
 
 pub struct HandlerOptions {
     pub name: String,
@@ -44,8 +35,9 @@ pub struct HandlerOptions {
     pub alter_id: u16,
     pub security: String,
     pub udp: bool,
-    pub transport: Option<VmessTransport>,
-    pub tls: Option<transport::TLSOptions>,
+    pub transport: Option<Box<dyn Transport>>,
+    // maybe shadow-tls?
+    pub tls: Option<Box<dyn Transport>>,
 }
 
 pub struct Handler {
@@ -78,86 +70,16 @@ impl Handler {
         sess: &'a Session,
         udp: bool,
     ) -> io::Result<AnyStream> {
-        let mut stream = s;
+        let s = if let Some(tls) = self.opts.tls.as_ref() {
+            tls.proxy_stream(s).await?
+        } else {
+            s
+        };
 
-        let underlying = match self.opts.transport {
-            Some(VmessTransport::Ws(ref opt)) => {
-                let ws_builder = transport::WebsocketStreamBuilder::new(
-                    self.opts.server.clone(),
-                    self.opts.port,
-                    opt.path.clone(),
-                    opt.headers.clone(),
-                    None,
-                    opt.max_early_data,
-                    opt.early_data_header_name.clone(),
-                );
-
-                if let Some(tls_opt) = &self.opts.tls {
-                    stream = transport::tls::wrap_stream(
-                        stream,
-                        tls_opt.to_owned(),
-                        None,
-                    )
-                    .await?;
-                }
-
-                ws_builder.proxy_stream(stream).await?
-            }
-            Some(VmessTransport::H2(ref opt)) => {
-                stream = match self.opts.tls.as_ref() {
-                    Some(tls_opt) => {
-                        let mut tls_opt = tls_opt.clone();
-                        tls_opt.alpn = Some(vec!["h2".to_string()]);
-                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None)
-                            .await?
-                    }
-                    None => stream,
-                };
-
-                let h2_builder = Http2Config {
-                    hosts: opt.host.clone(),
-                    method: http::Method::GET,
-                    headers: HashMap::new(),
-                    path: opt.path.to_owned().try_into().expect("invalid H2 path"),
-                };
-
-                h2_builder.proxy_stream(stream).await?
-            }
-            Some(VmessTransport::Grpc(ref opt)) => {
-                stream = match self.opts.tls.as_ref() {
-                    Some(tls_opt) => {
-                        transport::tls::wrap_stream(stream, tls_opt.to_owned(), None)
-                            .await?
-                    }
-                    None => stream,
-                };
-
-                let grpc_builder = transport::GrpcStreamBuilder::new(
-                    opt.host.clone(),
-                    opt.service_name
-                        .to_owned()
-                        .try_into()
-                        .expect("invalid gRPC service path"),
-                );
-                grpc_builder.proxy_stream(stream).await?
-            }
-            Some(VmessTransport::Http(_)) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "HTTP transport is not supported",
-                ));
-            }
-            None => {
-                if let Some(tls_opt) = self.opts.tls.as_ref() {
-                    stream = transport::tls::wrap_stream(
-                        stream,
-                        tls_opt.to_owned(),
-                        None,
-                    )
-                    .await?;
-                }
-                stream
-            }
+        let s = if let Some(transport) = self.opts.transport.as_ref() {
+            transport.proxy_stream(s).await?
+        } else {
+            s
         };
 
         let vmess_builder = vmess_impl::Builder::new(&vmess_impl::VmessOption {
@@ -168,7 +90,7 @@ impl Handler {
             dst: sess.destination.clone(),
         })?;
 
-        vmess_builder.proxy_stream(underlying).await
+        vmess_builder.proxy_stream(s).await
     }
 }
 
@@ -248,7 +170,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -271,7 +193,7 @@ impl OutboundHandler for Handler {
                 self.opts.server.as_str(),
                 self.opts.port,
                 sess.iface.as_ref(),
-                #[cfg(any(target_os = "linux", target_os = "android"))]
+                #[cfg(target_os = "linux")]
                 sess.so_mark,
             )
             .await?;
@@ -288,14 +210,29 @@ impl OutboundHandler for Handler {
 
 #[cfg(all(test, docker_test))]
 mod tests {
-    use crate::proxy::utils::test_utils::{
-        config_helper::test_config_base_dir,
-        consts::*,
-        docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-        run_test_suites_and_cleanup, Suite,
+    use std::collections::HashMap;
+
+    use crate::proxy::{
+        transport::{GrpcClient, H2Client, TlsClient, WsClient},
+        utils::test_utils::{
+            Suite,
+            config_helper::test_config_base_dir,
+            consts::*,
+            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+            run_test_suites_and_cleanup,
+        },
     };
 
     use super::*;
+
+    fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
+        Some(Box::new(TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            alpn,
+            None,
+        )))
+    }
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
@@ -319,6 +256,17 @@ mod tests {
     async fn test_vmess_ws() -> anyhow::Result<()> {
         let span = tracing::info_span!("test_vmess_ws");
         let _enter = span.enter();
+        let ws_cilent = WsClient::new(
+            "".to_owned(),
+            10002,
+            "".to_owned(),
+            [("Host".to_owned(), "example.org".to_owned())]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+            None,
+            0,
+            "".to_owned(),
+        );
 
         let opts = HandlerOptions {
             name: "test-vmess-ws".into(),
@@ -329,20 +277,8 @@ mod tests {
             alter_id: 0,
             security: "auto".into(),
             udp: true,
-            tls: Some(transport::TLSOptions {
-                skip_cert_verify: true,
-                sni: "example.org".into(),
-                alpn: None,
-            }),
-            transport: Some(VmessTransport::Ws(WsOption {
-                path: "".to_owned(),
-                headers: [("Host".to_owned(), "example.org".to_owned())]
-                    .into_iter()
-                    .collect::<HashMap<_, _>>(),
-                // ignore the rest by setting max_early_data to 0
-                max_early_data: 0,
-                early_data_header_name: "".to_owned(),
-            })),
+            tls: tls_client(None),
+            transport: Some(Box::new(ws_cilent)),
         };
         let handler = Arc::new(Handler::new(opts));
         let runner = get_ws_runner().await?;
@@ -369,6 +305,10 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_vmess_grpc() -> anyhow::Result<()> {
+        let grpc_client = GrpcClient::new(
+            "example.org".to_owned(),
+            "example!".to_owned().try_into()?,
+        );
         let opts = HandlerOptions {
             name: "test-vmess-grpc".into(),
             common_opts: Default::default(),
@@ -378,15 +318,8 @@ mod tests {
             alter_id: 0,
             security: "auto".into(),
             udp: true,
-            tls: Some(transport::TLSOptions {
-                skip_cert_verify: true,
-                sni: "example.org".into(),
-                alpn: None,
-            }),
-            transport: Some(VmessTransport::Grpc(GrpcOption {
-                host: "example.org".to_owned(),
-                service_name: "example!".to_owned(),
-            })),
+            tls: tls_client(None),
+            transport: Some(Box::new(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
@@ -413,6 +346,12 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_vmess_h2() -> anyhow::Result<()> {
+        let h2_client = H2Client::new(
+            vec!["example.org".into()],
+            std::collections::HashMap::new(),
+            http::Method::POST,
+            "/test".to_owned().try_into()?,
+        );
         let opts = HandlerOptions {
             name: "test-vmess-h2".into(),
             common_opts: Default::default(),
@@ -422,15 +361,8 @@ mod tests {
             alter_id: 0,
             security: "auto".into(),
             udp: false,
-            tls: Some(transport::TLSOptions {
-                skip_cert_verify: true,
-                sni: "example.org".into(),
-                alpn: None,
-            }),
-            transport: Some(VmessTransport::H2(Http2Option {
-                host: vec!["example.org".into()],
-                path: "/testlollol".into(),
-            })),
+            tls: tls_client(Some(vec!["h2".to_string()])),
+            transport: Some(Box::new(h2_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         handler

@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
 use crate::{
+    Error,
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
-        shadowsocks::{
-            Handler, HandlerOptions, OBFSOption, ShadowTlsOption, SimpleOBFSMode,
-            SimpleOBFSOption, V2RayOBFSOption,
-        },
         HandlerCommonOptions,
+        shadowsocks::{Handler, HandlerOptions},
+        transport::{
+            Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
+            SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
+        },
     },
-    Error,
 };
 
 impl TryFrom<OutboundShadowsocks> for Handler {
@@ -34,40 +35,55 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
             port: s.common_opts.port,
             password: s.password.to_owned(),
             cipher: s.cipher.to_owned(),
-            plugin_opts: match &s.plugin {
+            plugin: match &s.plugin {
                 Some(plugin) => match plugin.as_str() {
                     "obfs" => {
                         tracing::warn!(
                             "simple-obfs is deprecated, please use v2ray-plugin \
                              instead"
                         );
-                        s.plugin_opts
+                        let opt: SimpleOBFSOption = s
+                            .plugin_opts
                             .clone()
                             .ok_or(Error::InvalidConfig(
                                 "plugin_opts is required for plugin obfs".to_owned(),
                             ))?
-                            .try_into()
-                            .map(OBFSOption::Simple)
-                            .ok()
+                            .try_into()?;
+                        let plugin = match opt.mode {
+                            SimpleOBFSMode::Http => Box::new(SimpleObfsHttp::new(
+                                opt.host,
+                                s.common_opts.port,
+                            ))
+                                as _,
+                            SimpleOBFSMode::Tls => {
+                                Box::new(SimpleObfsTLS::new(opt.host)) as _
+                            }
+                        };
+                        Some(plugin)
                     }
-                    "v2ray-plugin" => s
-                        .plugin_opts
-                        .clone()
-                        .ok_or(Error::InvalidConfig(
-                            "plugin_opts is required for plugin obfs".to_owned(),
-                        ))?
-                        .try_into()
-                        .map(OBFSOption::V2Ray)
-                        .ok(),
-                    "shadow-tls" => s
-                        .plugin_opts
-                        .clone()
-                        .ok_or(Error::InvalidConfig(
-                            "plugin_opts is required for plugin obfs".to_owned(),
-                        ))?
-                        .try_into()
-                        .map(OBFSOption::ShadowTls)
-                        .ok(),
+                    "v2ray-plugin" => {
+                        let opt: V2RayOBFSOption = s
+                            .plugin_opts
+                            .clone()
+                            .ok_or(Error::InvalidConfig(
+                                "plugin_opts is required for plugin obfs".to_owned(),
+                            ))?
+                            .try_into()?;
+                        // TODO: support more transport options, replace it with
+                        // `V2rayClient`
+                        let plugin = V2rayWsClient::try_from(opt)?;
+                        Some(Box::new(plugin) as _)
+                    }
+                    "shadow-tls" => {
+                        let plugin: Shadowtls = s
+                            .plugin_opts
+                            .clone()
+                            .ok_or(Error::InvalidConfig(
+                                "plugin_opts is required for plugin obfs".to_owned(),
+                            ))?
+                            .try_into()?;
+                        Some(Box::new(plugin) as _)
+                    }
                     _ => {
                         return Err(Error::InvalidConfig(format!(
                             "unsupported plugin: {}",
@@ -126,6 +142,11 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             .get("mode")
             .and_then(|x| x.as_str())
             .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
+        let port = value
+            .get("port")
+            .and_then(|x| x.as_u64())
+            .ok_or(Error::InvalidConfig("obfs port is required".to_owned()))?
+            as u16;
 
         if mode != "websocket" {
             return Err(Error::InvalidConfig(format!(
@@ -134,10 +155,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             )));
         }
 
-        let path = value
-            .get("path")
-            .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig("obfs path is required".to_owned()))?;
+        let path = value.get("path").and_then(|x| x.as_str()).unwrap_or("");
         let mux = value.get("mux").and_then(|x| x.as_bool()).unwrap_or(false);
         let tls = value.get("tls").and_then(|x| x.as_bool()).unwrap_or(false);
         let skip_cert_verify = value
@@ -159,6 +177,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
         Ok(V2RayOBFSOption {
             mode: mode.to_owned(),
             host: host.to_owned(),
+            port,
             path: path.to_owned(),
             tls,
             headers,
@@ -168,7 +187,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
     }
 }
 
-impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
+impl TryFrom<HashMap<String, serde_yaml::Value>> for Shadowtls {
     type Error = crate::Error;
 
     fn try_from(
@@ -187,10 +206,10 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for ShadowTlsOption {
             .and_then(|x| x.as_bool())
             .unwrap_or(true);
 
-        Ok(Self {
-            host: host.to_string(),
-            password: password.to_string(),
+        Ok(Shadowtls::new(
+            host.to_string(),
+            password.to_string(),
             strict,
-        })
+        ))
     }
 }
