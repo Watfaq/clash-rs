@@ -1,7 +1,7 @@
 use std::{cell::RefCell, error::Error};
 
 thread_local! {
-  pub static LAST_ERROR: RefCell<Option<String>> = RefCell::new(None);
+  pub static LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 pub fn update_last_error<E: Error + 'static>(e: E) {

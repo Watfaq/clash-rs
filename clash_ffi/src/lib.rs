@@ -62,7 +62,7 @@ fn apply_config_override(
         cfg_def.tun = Some(tun_cfg);
     }
 
-    if cfg_override.bind_address != ptr::null() {
+    if !cfg_override.bind_address.is_null() {
         let bind_address =
             unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
                 .to_string_lossy()
@@ -70,7 +70,7 @@ fn apply_config_override(
         cfg_def.bind_address = bind_address.parse().expect("invalid bind address");
     }
 
-    if cfg_override.dns_server != ptr::null() {
+    if !cfg_override.dns_server.is_null() {
         let dns_server =
             unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
                 .to_string_lossy()
@@ -78,7 +78,7 @@ fn apply_config_override(
         cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
     }
 
-    if cfg_override.external_controller != ptr::null() {
+    if !cfg_override.external_controller.is_null() {
         let external_controller =
             unsafe { std::ffi::CStr::from_ptr(cfg_override.external_controller) }
                 .to_string_lossy()
@@ -90,7 +90,7 @@ fn apply_config_override(
         cfg_def.port = Some(Port(cfg_override.http_port));
     }
 
-    if cfg_override.rules_list != ptr::null() {
+    if !cfg_override.rules_list.is_null() {
         let mut rules_list = unsafe {
             std::ffi::CStr::from_ptr(cfg_override.rules_list)
                 .to_string_lossy()
@@ -113,7 +113,7 @@ fn apply_config_override(
         }
     }
 
-    if cfg_override.outbounds != ptr::null() {
+    if !cfg_override.outbounds.is_null() {
         let outbounds = unsafe {
             std::ffi::CStr::from_ptr(cfg_override.outbounds)
                 .to_string_lossy()
@@ -174,13 +174,11 @@ pub extern "C" fn start_clash_with_config(
     match cfg_def {
         Ok(mut cfg_def) => {
             if !cfg_override.is_null() {
-                match apply_config_override(unsafe { &*cfg_override }, &mut cfg_def)
+                if let Some(err) =
+                    apply_config_override(unsafe { &*cfg_override }, &mut cfg_def)
                 {
-                    Some(err) => {
-                        error::update_last_error(Error::InvalidConfig(err));
-                        return ERR_CONFIG;
-                    }
-                    None => {}
+                    error::update_last_error(Error::InvalidConfig(err));
+                    return ERR_CONFIG;
                 }
             }
 
@@ -192,7 +190,7 @@ pub extern "C" fn start_clash_with_config(
                         .to_string(),
                 ),
                 rt: Some(clash_lib::TokioRuntime::SingleThread),
-                log_file: if log_file != ptr::null() {
+                log_file: if !log_file.is_null() {
                     Some(
                         unsafe { std::ffi::CStr::from_ptr(log_file) }
                             .to_string_lossy()
@@ -282,7 +280,7 @@ pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
                         "parse proxy list error: {}",
                         e
                     )));
-                    return ptr::null_mut();
+                    ptr::null_mut()
                 }
             }
         }
@@ -320,7 +318,7 @@ pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
                         "parse proxy group error: {}",
                         e
                     )));
-                    return ptr::null_mut();
+                    ptr::null_mut()
                 }
             }
         }
@@ -349,7 +347,7 @@ pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
                         "parse rule list error: {}",
                         e
                     )));
-                    return ptr::null_mut();
+                    ptr::null_mut()
                 }
             }
         }
@@ -409,7 +407,7 @@ mod tests {
         );
 
         assert_eq!(cfg_def.bind_address, "240.0.0.2".parse().unwrap());
-        assert_eq!(cfg_def.dns.enable, false);
+        assert!(!cfg_def.dns.enable);
         assert_eq!(
             cfg_def.dns.listen.unwrap(),
             ClashDNSListen::Udp("127.0.0.1:53".into())
@@ -418,7 +416,7 @@ mod tests {
             cfg_def.dns.default_nameserver,
             vec!["114.114.114.114", "8.8.8.8"]
         );
-        assert_eq!(cfg_def.tun.as_ref().unwrap().enable, true);
+        assert!(cfg_def.tun.as_ref().unwrap().enable);
         assert_eq!(cfg_def.tun.unwrap().device_id, "fd://1989");
 
         assert!(
