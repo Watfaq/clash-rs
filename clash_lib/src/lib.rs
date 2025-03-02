@@ -1,6 +1,7 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
 #![feature(let_chains)]
+#![feature(unbounded_shifts)]
 
 #[macro_use]
 extern crate anyhow;
