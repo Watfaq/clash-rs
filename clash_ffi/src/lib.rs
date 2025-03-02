@@ -54,11 +54,12 @@ fn apply_config_override(
     cfg_def: &mut ClashConfigDef,
 ) -> Option<String> {
     if cfg_override.tun_fd != 0 {
-        let mut tun_cfg = ClashTunConfig::default();
-        tun_cfg.enable = true;
-        tun_cfg.gateway = "192.19.0.1/32".into();
-        tun_cfg.device_id = format!("fd://{}", cfg_override.tun_fd);
-
+        let tun_cfg = ClashTunConfig {
+            enable: true,
+            gateway: "192.19.0.1/24".into(),
+            device_id: format!("fd://{}", cfg_override.tun_fd),
+            ..Default::default()
+        };
         cfg_def.tun = Some(tun_cfg);
     }
 
@@ -149,7 +150,9 @@ pub extern "C" fn get_last_error() -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
+/// # Safety
+/// `cfg_str` must be a valid C string
+pub unsafe extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
 
@@ -163,7 +166,9 @@ pub extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn start_clash_with_config(
+/// # Safety
+/// `cfg_dir`, `cfg_str`, `log_file` must be valid C strings
+pub unsafe extern "C" fn start_clash_with_config(
     cfg_dir: *const c_char,
     cfg_str: *const c_char,
     log_file: *const c_char,
@@ -225,7 +230,10 @@ pub extern "C" fn shutdown_clash() -> bool {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn parse_general_config(
+/// # Safety
+/// `cfg_str` must be a valid C string
+/// `general` must be a valid pointer
+pub unsafe extern "C" fn parse_general_config(
     cfg_str: *const c_char,
     general: *mut GeneralConfig,
 ) -> c_int {
@@ -263,7 +271,9 @@ pub extern "C" fn parse_general_config(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
+/// # Safety
+/// `cfg_str` must be a valid C string
+pub unsafe extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -292,7 +302,9 @@ pub extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn free_string(ptr: *mut c_char) {
+/// # Safety
+/// `ptr` must be a valid C string
+pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
     unsafe {
         if !ptr.is_null() {
             let _ = CString::from_raw(ptr);
@@ -301,7 +313,9 @@ pub extern "C" fn free_string(ptr: *mut c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
+/// # Safety
+/// `cfg_str` must be a valid C string
+pub unsafe extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -330,7 +344,9 @@ pub extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
+/// # Safety
+/// `cfg_str` must be a valid C string
+pub unsafe extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
     let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
     match s
         .to_string_lossy()
@@ -385,11 +401,11 @@ mod tests {
         let cfg_override = super::ConfigOverride {
             tun_fd: 1989,
             http_port: 7891,
-            dns_server: "127.0.0.1:53\0".as_ptr() as _,
-            bind_address: "240.0.0.2\0".as_ptr() as _,
+            dns_server: c"127.0.0.1:53".as_ptr() as _,
+            bind_address: c"240.0.0.2".as_ptr() as _,
             external_controller: ptr::null(),
-            rules_list: "DOMAIN-KEYWORD,example.com,DIRECT\nDOMAIN-SUFFIX,example.\
-                         org,DIRECT\n\0"
+            rules_list: c"DOMAIN-KEYWORD,example.com,DIRECT\nDOMAIN-SUFFIX,example.\
+                         org,DIRECT\n"
                 .as_ptr() as _,
             outbounds: r#"
               - name: "socks5-noauth"
