@@ -42,7 +42,7 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            tool: cargo
+            tool: cross
             extra-args: -F "plus"
             zig: "2.17"
           - os: ubuntu-latest
