@@ -1,6 +1,8 @@
+#![feature(cfg_version)]
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
 #![feature(let_chains)]
+#![cfg_attr(not(version("1.86.0")), feature("unbounded_shifts"))]
 
 #[macro_use]
 extern crate anyhow;
