@@ -1,4 +1,4 @@
-name: Build/Test/Release
+name: CI
 
 on:
   push:
@@ -82,7 +82,6 @@ jobs:
             target: armv7-unknown-linux-gnueabi
             tool: cross
             extra-args: -F "plus"
-            zig: "2.17"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             tool: cross
@@ -115,7 +114,6 @@ jobs:
             target: riscv64gc-unknown-linux-gnu
             tool: cross
             extra-args: -F "shadowsocks, tuic"
-            zig: "2.17"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
