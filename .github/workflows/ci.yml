@@ -77,14 +77,17 @@ jobs:
             target: aarch64-unknown-linux-gnu
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
@@ -112,6 +115,7 @@ jobs:
             target: riscv64gc-unknown-linux-gnu
             tool: cross
             extra-args: -F "shadowsocks, tuic"
+            zig: "2.17"
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -223,6 +227,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
         with:
           key: ${{ matrix.os }}
+          read-only: ${{ matrix.target != "x86_64-unknown-linux-gnu" }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
