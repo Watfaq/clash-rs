@@ -227,7 +227,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
         with:
           key: ${{ matrix.os }}
-          read-only: ${{ matrix.target != "x86_64-unknown-linux-gnu" }}
+          read-only: ${{ matrix.target != 'x86_64-unknown-linux-gnu' }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
