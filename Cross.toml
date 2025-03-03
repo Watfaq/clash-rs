@@ -9,19 +9,4 @@ volumes = ["/var/run/docker.sock=/var/run/docker.sock", "/tmp=/tmp"] # Docker in
 passthrough = ["CLASH_GIT_REF", "CLASH_GIT_SHA", "RUSTFLAGS", "RUST_LOG", "CLASH_DOCKER_TEST", "RUSTC_BOOTSTRAP"]
 
 [target.x86_64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
-
-[target.i686-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
-
-[target.aarch64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
-
-[target.armv7-unknown-linux-gnueabi]
-image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabi:main"
-
-[target.armv7-unknown-linux-gnueabihf]
-image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
-
-[target.armv7-unknown-linux-musleabihf]
-image = "ghcr.io/cross-rs/armv7-unknown-linux-musleabihf:main"
+zig = "2.17"
