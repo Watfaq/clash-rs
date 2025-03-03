@@ -16,7 +16,8 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly"
+  RUST_TOOLCHAIN: "stable"
+  RUSTC_BOOTSTRAP: "1"
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
@@ -228,14 +229,16 @@ jobs:
           targets: ${{ matrix.target }}
           components: ${{ matrix.components || 'rustfmt, clippy' }}
 
-      - name: Install rust targets & cross
-        if: matrix.tool == 'cross'
+      - name: Install rust targets
         run: |
           rustup target add ${TARGET}
-          rm -f ~/.cargo/bin/cross*
-          cargo install cross --git https://github.com/cross-rs/cross
         env:
           TARGET: ${{ matrix.target }}
+      - name: Install cross-rs/cross
+        if: ${{ matrix.tool == 'cross' }}
+        run: |
+          rm -f ~/.cargo/bin/cross*
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
