@@ -44,10 +44,12 @@ jobs:
             target: x86_64-unknown-linux-gnu
             tool: cargo
             extra-args: -F "plus"
+            zig: "2.17"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
@@ -292,6 +294,7 @@ jobs:
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+          CROSS_BUILD_ZIG: matrix.zig
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
