@@ -222,7 +222,7 @@ jobs:
         uses: ScribeMD/docker-cache@0.5.0
         if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
         with:
-          key: matrix.os
+          key: ${{ matrix.os }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -294,7 +294,7 @@ jobs:
           args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
-          CROSS_BUILD_ZIG: matrix.zig
+          CROSS_BUILD_ZIG: ${{ matrix.zig }}
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
