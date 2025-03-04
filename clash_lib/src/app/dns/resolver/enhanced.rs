@@ -469,7 +469,7 @@ impl EnhancedResolver {
 #[async_trait]
 impl ClashResolver for EnhancedResolver {
     #[instrument(skip(self))]
-    async fn resolve(
+    async fn resolve_old(
         &self,
         host: &str,
         enhanced: bool,
@@ -477,10 +477,10 @@ impl ClashResolver for EnhancedResolver {
         match self.ipv6.load(Relaxed) {
             true => {
                 let fut1 = self
-                    .resolve_v6(host, enhanced)
+                    .resolve_v6_old(host, enhanced)
                     .map(|x| x.map(|v6| v6.map(net::IpAddr::from)));
                 let fut2 = self
-                    .resolve_v4(host, enhanced)
+                    .resolve_v4_old(host, enhanced)
                     .map(|x| x.map(|v4| v4.map(net::IpAddr::from)));
 
                 let futs = vec![fut1.boxed(), fut2.boxed()];
@@ -492,13 +492,13 @@ impl ClashResolver for EnhancedResolver {
                 return r.0;
             }
             false => self
-                .resolve_v4(host, enhanced)
+                .resolve_v4_old(host, enhanced)
                 .await
                 .map(|ip| ip.map(net::IpAddr::from)),
         }
     }
 
-    async fn resolve_v4(
+    async fn resolve_v4_old(
         &self,
         host: &str,
         enhanced: bool,
@@ -539,7 +539,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
-    async fn resolve_v6(
+    async fn resolve_v6_old(
         &self,
         host: &str,
         enhanced: bool,

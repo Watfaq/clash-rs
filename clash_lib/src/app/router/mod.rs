@@ -98,7 +98,7 @@ impl Router {
             {
                 if let Ok(Some(ip)) = self
                     .dns_resolver
-                    .resolve(sess.destination.domain().unwrap(), false)
+                    .resolve_old(sess.destination.domain().unwrap(), false)
                     .await
                 {
                     sess.resolved_ip = Some(ip);

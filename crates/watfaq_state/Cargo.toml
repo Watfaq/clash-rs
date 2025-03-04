@@ -1,0 +1,11 @@
+[package]
+name = "watfaq_state"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+arc-swap = "*"
+
+watfaq_types = { path = "../watfaq_types" }
+watfaq_socket = { path = "../watfaq_socket" }

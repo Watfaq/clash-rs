@@ -59,6 +59,7 @@ mock! {
         /// connect to remote target via TCP
         async fn connect_stream(
             &self,
+            ctx: arc_swap::ArcSwap<watfaq_state::Context> ,
             sess: &Session,
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedStream>;
@@ -67,6 +68,7 @@ mock! {
         /// connect to remote target via UDP
         async fn connect_datagram(
             &self,
+            ctx: arc_swap::ArcSwap<watfaq_state::Context> ,
             sess: &Session,
             resolver: ThreadSafeDNSResolver,
         ) -> io::Result<BoxedChainedDatagram>;

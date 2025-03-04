@@ -48,7 +48,7 @@ impl Service<Uri> for LocalConnector {
 
         Box::pin(async move {
             let remote_ip = dns
-                .resolve(host.as_str(), false)
+                .resolve_old(host.as_str(), false)
                 .await
                 .map_err(|v| std::io::Error::new(std::io::ErrorKind::Other, v))?
                 .ok_or(std::io::Error::new(

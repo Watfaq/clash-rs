@@ -17,11 +17,7 @@ use crate::{app::profile::ThreadSafeCacheFile, common::mmdb::Mmdb};
 
 use super::{Config, ThreadSafeDNSResolver};
 
-pub async fn new(
-    cfg: Config,
-    store: Option<ThreadSafeCacheFile>,
-    mmdb: Option<Arc<Mmdb>>,
-) -> ThreadSafeDNSResolver {
+pub async fn new(cfg: Config, mmdb: Option<Arc<Mmdb>>) -> ThreadSafeDNSResolver {
     if cfg.enable {
         match (store, mmdb) {
             (Some(store), Some(mmdb)) => {

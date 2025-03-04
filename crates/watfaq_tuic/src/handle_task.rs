@@ -1,13 +1,13 @@
+use anyhow::anyhow;
 use std::{sync::Arc, time::Duration};
 
-use bytes::Bytes;
 use quinn::ZeroRttAccepted;
 
 use anyhow::Result;
+use tokio_util::bytes::Bytes;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
-
-use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
+use watfaq_types::{TargetAddr, UdpPacket};
 
 use super::types::{TuicConnection, UdpRelayMode};
 
@@ -131,9 +131,9 @@ impl TuicConnection {
                 let remote_addr = match remote_addr {
                     Address::None => unreachable!(),
                     Address::DomainAddress(domain, port) => {
-                        ClashSocksAddr::Domain(domain, port)
+                        TargetAddr::Domain(domain, port)
                     }
-                    Address::SocketAddress(socket) => ClashSocksAddr::Ip(socket),
+                    Address::SocketAddress(socket) => TargetAddr::Ip(socket),
                 };
                 if let Err(err) = session
                     .send(UdpPacket::new(data.into(), remote_addr, local_addr))

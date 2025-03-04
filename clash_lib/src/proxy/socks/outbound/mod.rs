@@ -113,7 +113,7 @@ impl Handler {
         let bind_ip = if bind_ip.is_unspecified() {
             trace!("bind address is unspecified, resolving server address");
             let remote_addr = resolver
-                .resolve(&self.opts.server, false)
+                .resolve_old(&self.opts.server, false)
                 .await
                 .map_err(|x| new_io_error(x.to_string().as_str()))?;
             remote_addr.ok_or(new_io_error(

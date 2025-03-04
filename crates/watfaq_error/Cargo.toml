@@ -1,0 +1,8 @@
+[package]
+name = "watfaq_error"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+eyre = "*"

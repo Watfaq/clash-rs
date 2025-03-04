@@ -1,7 +1,9 @@
 use std::{io, sync::Arc};
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use tracing::debug;
+use watfaq_state::Context;
 
 mod vmess_impl;
 
@@ -112,6 +114,7 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
@@ -122,6 +125,7 @@ impl OutboundHandler for Handler {
         }
 
         self.connect_stream_with_connector(
+            ctx,
             sess,
             resolver,
             dialer
@@ -134,6 +138,7 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
@@ -144,6 +149,7 @@ impl OutboundHandler for Handler {
         }
 
         self.connect_datagram_with_connector(
+            ctx,
             sess,
             resolver,
             dialer
@@ -160,12 +166,14 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream_with_connector(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         let stream = connector
             .connect_stream(
+                ctx,
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
@@ -183,12 +191,14 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram_with_connector(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
         let stream = connector
             .connect_stream(
+                ctx,
                 resolver,
                 self.opts.server.as_str(),
                 self.opts.port,

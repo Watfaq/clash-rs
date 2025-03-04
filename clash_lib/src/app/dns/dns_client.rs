@@ -151,9 +151,14 @@ impl DnsClient {
             other => {
                 let ip = match opts.r {
                     Some(r) => {
-                        match r.resolve(&opts.host, false).await.map_err(|x| {
-                            anyhow!("resolve hostname failure: {}", x.to_string())
-                        })? {
+                        match r.resolve_old(&opts.host, false).await.map_err(
+                            |x| {
+                                anyhow!(
+                                    "resolve hostname failure: {}",
+                                    x.to_string()
+                                )
+                            },
+                        )? {
                             Some(ip) => ip,
                             _ => {
                                 return Err(Error::InvalidConfig(format!(

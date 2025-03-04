@@ -6,8 +6,8 @@ members = [
     "clash_lib",
     "clash_doc",
     "clash_ffi",
+    "crates/*"
 ]
-
 
 [workspace.package]
 version = "0.7.6"

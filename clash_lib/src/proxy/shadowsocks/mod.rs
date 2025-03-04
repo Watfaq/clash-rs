@@ -229,7 +229,7 @@ impl OutboundHandler for Handler {
             ShadowsocksUdpIo::new(socket),
         );
         let server_addr = resolver
-            .resolve(&self.opts.server, false)
+            .resolve_old(&self.opts.server, false)
             .await
             .map_err(|x| {
                 new_io_error(format!(

@@ -1,0 +1,24 @@
+[package]
+name = "watfaq_utils"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+once_cell = "*"
+rustls = "*"
+
+sha2 = "*"
+
+maxminddb = "*"
+tracing = "*"
+webpki-roots = "*"
+
+tokio = "*"
+
+hyper = "*"
+tower = "*"
+
+watfaq_types = { path = "../watfaq_types" }
+watfaq_error = { path = "../watfaq_error" }
+watfaq_state = { path = "../watfaq_state" }

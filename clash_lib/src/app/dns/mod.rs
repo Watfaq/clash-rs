@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use watfaq_resolver::AbstractResolver;
 
 use std::fmt::Debug;
 
@@ -42,21 +43,21 @@ pub type ThreadSafeDNSResolver = Arc<dyn ClashResolver>;
 /// A implementation of "anti-poisoning" Resolver
 /// it can hold multiple clients in different protocols
 /// each client can also hold a "default_resolver"
-/// in case they need to resolve DoH in domain names etc.  
-#[cfg_attr(test, automock)]
+/// in case they need to resolve DoH in domain names etc.
+
 #[async_trait]
-pub trait ClashResolver: Sync + Send {
-    async fn resolve(
+pub trait ClashResolver: Sync + Send + AbstractResolver {
+    async fn resolve_old(
         &self,
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>>;
-    async fn resolve_v4(
+    async fn resolve_v4_old(
         &self,
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<std::net::Ipv4Addr>>;
-    async fn resolve_v6(
+    async fn resolve_v6_old(
         &self,
         host: &str,
         enhanced: bool,

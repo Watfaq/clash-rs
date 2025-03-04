@@ -38,7 +38,7 @@ pub async fn exchange_with_resolver<'a>(
             res.set_edns(edns);
         }
 
-        match resolver.resolve_v4(&host, enhanced).await {
+        match resolver.resolve_v4_old(&host, enhanced).await {
             Ok(resp) => match resp {
                 Some(ip) => {
                     let rdata = RData::A(A(ip));

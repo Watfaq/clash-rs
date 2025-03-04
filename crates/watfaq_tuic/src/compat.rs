@@ -3,14 +3,14 @@ use std::{
     task::{Context, Poll},
 };
 
+use anyhow::anyhow;
 use futures::{Sink, SinkExt, Stream};
+use watfaq_types::UdpPacket;
 
-use crate::{common::errors::new_io_error, proxy::datagram::UdpPacket};
+use super::TuicUdpOutbound;
 
-use super::TuicDatagramOutbound;
-
-impl Sink<UdpPacket> for TuicDatagramOutbound {
-    type Error = std::io::Error;
+impl Sink<UdpPacket> for TuicUdpOutbound {
+    type Error = anyhow::Error;
 
     fn poll_ready(
         mut self: Pin<&mut Self>,
@@ -18,7 +18,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_ready_unpin(cx)
-            .map_err(|v| new_io_error(format!("{v:?}")))
+            .map_err(|e| anyhow!("{e:?}"))
     }
 
     fn start_send(
@@ -27,7 +27,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Result<(), Self::Error> {
         self.send_tx
             .start_send_unpin(item)
-            .map_err(|v| new_io_error(format!("{v:?}")))
+            .map_err(|e| anyhow!("{e:?}"))
     }
 
     fn poll_flush(
@@ -36,7 +36,7 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_flush_unpin(cx)
-            .map_err(|v| new_io_error(format!("{v:?}")))
+            .map_err(|e| anyhow!("{e:?}"))
     }
 
     fn poll_close(
@@ -45,11 +45,11 @@ impl Sink<UdpPacket> for TuicDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_close_unpin(cx)
-            .map_err(|v| new_io_error(format!("{v:?}")))
+            .map_err(|e| anyhow!("{e:?}"))
     }
 }
 
-impl Stream for TuicDatagramOutbound {
+impl Stream for TuicUdpOutbound {
     type Item = UdpPacket;
 
     fn poll_next(

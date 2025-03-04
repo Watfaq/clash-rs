@@ -1,17 +1,17 @@
-use crate::{
-    app::{dns::ThreadSafeDNSResolver, net::get_outbound_interface},
-    proxy::utils::new_udp_socket,
-    session::SocksAddr as ClashSocksAddr,
-};
-
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use quinn::{
     Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
 };
 use register_count::Counter;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_resolver::AbstractResolver;
+use watfaq_state::Context;
+use watfaq_types::{Stack, TargetAddr, UdpPacket};
+use watfaq_utils::which_stack_decision;
+
 use std::{
     collections::HashMap,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
@@ -20,9 +20,7 @@ use tracing::debug;
 use tuic_quinn::Connection as InnerConnection;
 use uuid::Uuid;
 
-use crate::proxy::datagram::UdpPacket;
-
-pub struct TuicEndpoint {
+pub struct TuicClient {
     pub ep: QuinnEndpoint,
     pub server: ServerAddr,
     pub uuid: Uuid,
@@ -32,46 +30,58 @@ pub struct TuicEndpoint {
     pub heartbeat: Duration,
     pub gc_interval: Duration,
     pub gc_lifetime: Duration,
+
+    pub common: OutboundCommonOptions,
+    pub ip: Option<IpAddr>,
 }
-impl TuicEndpoint {
+impl TuicClient {
     pub async fn connect(
         &self,
-        resolver: &ThreadSafeDNSResolver,
+        ctx: &Context,
+        resolver: &impl AbstractResolver,
         rebind: bool,
     ) -> Result<Arc<TuicConnection>> {
-        let remote_addr = self.server.resolve(resolver).await?;
+        // if client and server don't match each other or forced to rebind,
+        // then rebind local socket
         let connect_to = async {
-            // if client and server don't match each other or forced to rebind,
-            // then rebind local socket
+            let server_ip = self.server.resolve(resolver).await?;
+            let stack = which_stack_decision(
+                self.common
+                    .interface
+                    .as_ref()
+                    .unwrap_or(&ctx.default_iface.load()),
+                self.common.stack_prefer.unwrap_or(ctx.stack_prefer.clone()),
+                server_ip,
+            )
+            .unwrap_or_default();
+            let server_addr = match stack {
+                Stack::V4 => {
+                    SocketAddr::new(server_ip.0.expect("Unreachable").into(), 0)
+                }
+                Stack::V6 => {
+                    SocketAddr::new(server_ip.1.expect("Unreachable").into(), 0)
+                }
+            };
             if rebind {
-                debug!("rebinding endpoint UDP socket");
+                // TODO allow override protector (when outbound specify
+                // interface/fwmark)
+                let socket: UdpSocket =
+                    ctx.protector.new_udp_socket(stack).await?.into();
+                debug!("try rebind endpoint UDP socket to {}", socket.local_addr()?);
 
-                let socket = {
-                    let iface = get_outbound_interface();
-                    new_udp_socket(
-                        None,
-                        iface.map(|x| x.name.as_str().into()),
-                        #[cfg(target_os = "linux")]
-                        None,
-                    )
-                    .await?
-                };
-
-                debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);
-
-                self.ep.rebind(socket.into_std()?).map_err(|err| {
+                self.ep.rebind(socket).map_err(|err| {
                     anyhow!("failed to rebind endpoint UDP socket {}", err)
                 })?;
             }
 
             tracing::trace!(
                 "connecting to {} {} from {}",
-                remote_addr,
+                server_addr,
                 self.server.server_name(),
                 self.ep.local_addr().unwrap()
             );
 
-            let conn = self.ep.connect(remote_addr, self.server.server_name())?;
+            let conn = self.ep.connect(server_addr, self.server.server_name())?;
             let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
                 match conn.into_0rtt() {
                     Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
@@ -116,7 +126,7 @@ pub struct TuicConnection {
 
 pub struct UdpSession {
     pub incoming: tokio::sync::mpsc::Sender<UdpPacket>,
-    pub local_addr: ClashSocksAddr,
+    pub local_addr: TargetAddr,
 }
 
 impl TuicConnection {
@@ -206,6 +216,7 @@ pub struct ServerAddr {
     port: u16,
     ip: Option<IpAddr>,
 }
+
 impl ServerAddr {
     pub fn new(domain: String, port: u16, ip: Option<IpAddr>) -> Self {
         Self { domain, port, ip }
@@ -217,16 +228,16 @@ impl ServerAddr {
 
     pub async fn resolve(
         &self,
-        resolver: &ThreadSafeDNSResolver,
-    ) -> Result<SocketAddr> {
+        resolver: &impl AbstractResolver,
+    ) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
         if let Some(ip) = self.ip {
-            Ok(SocketAddr::from((ip, self.port)))
+            match ip {
+                IpAddr::V4(ipv4_addr) => Ok((Some(ipv4_addr), None)),
+                IpAddr::V6(ipv6_addr) => Ok((None, Some(ipv6_addr))),
+            }
         } else {
-            let ip = resolver
-                .resolve(self.domain.as_str(), false)
-                .await?
-                .ok_or(anyhow!("Resolve failed: unknown hostname"))?;
-            Ok(SocketAddr::from((ip, self.port)))
+            let ip = resolver.resolve(self.domain.as_str()).await?;
+            Ok(ip)
         }
     }
 }
@@ -283,12 +294,11 @@ impl Default for CongestionControl {
 pub trait SocketAdderTrans {
     fn into_tuic(self) -> tuic::Address;
 }
-impl SocketAdderTrans for crate::session::SocksAddr {
+impl SocketAdderTrans for TargetAddr {
     fn into_tuic(self) -> tuic::Address {
-        use crate::session::SocksAddr;
         match self {
-            SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
-            SocksAddr::Domain(domain, port) => {
+            TargetAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
+            TargetAddr::Domain(domain, port) => {
                 tuic::Address::DomainAddress(domain, port)
             }
         }

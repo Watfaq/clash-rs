@@ -24,7 +24,7 @@ impl SystemResolver {
 
 #[async_trait]
 impl ClashResolver for SystemResolver {
-    async fn resolve(
+    async fn resolve_old(
         &self,
         host: &str,
         _: bool,
@@ -42,7 +42,7 @@ impl ClashResolver for SystemResolver {
         Ok(response.into_iter().choose(&mut rand::rng()))
     }
 
-    async fn resolve_v4(
+    async fn resolve_v4_old(
         &self,
         host: &str,
         _: bool,
@@ -57,7 +57,7 @@ impl ClashResolver for SystemResolver {
         Ok(response.into_iter().choose(&mut rand::rng()))
     }
 
-    async fn resolve_v6(
+    async fn resolve_v6_old(
         &self,
         host: &str,
         _: bool,
@@ -118,7 +118,7 @@ mod tests {
     #[tokio::test]
     async fn test_system_resolver_default_config() {
         let resolver = SystemResolver::new(false).unwrap();
-        let response = resolver.resolve("www.google.com", false).await.unwrap();
+        let response = resolver.resolve_old("www.google.com", false).await.unwrap();
         assert!(response.is_some());
     }
 }

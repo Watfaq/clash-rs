@@ -186,7 +186,7 @@ impl Handler {
             SocksAddr::Ip(ip) => ip,
             SocksAddr::Domain(d, port) => {
                 let ip = resolver
-                    .resolve(d.as_str(), true)
+                    .resolve_old(d.as_str(), true)
                     .await?
                     .ok_or_else(|| anyhow!("resolve domain {} failed", d))?;
                 SocketAddr::new(ip, port)

@@ -1,11 +1,13 @@
 use std::sync::{Arc, atomic::Ordering};
 
-use bytes::Bytes;
 use quinn::{RecvStream, SendStream, VarInt};
 use register_count::Register;
+use tokio_util::bytes::Bytes;
 use tuic_quinn::Task;
 
-use crate::proxy::tuic::types::UdpRelayMode;
+use anyhow::anyhow;
+
+use crate::types::UdpRelayMode;
 
 use super::types::TuicConnection;
 

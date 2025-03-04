@@ -1,0 +1,29 @@
+[package]
+name = "watfaq_socket"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+tracing = "*"
+socket2 = { version = "*", features = ["all"] }
+tokio = "*"
+arc-swap = "*"
+enum_dispatch = "*"
+
+anyhow = "*"
+watfaq_types = { path = "../watfaq_types" }
+watfaq_error = { path= "../watfaq_error" }
+
+network-interface = "*"
+
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "*", features = ["net"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.60", features = [
+    "Win32_Networking_WinSock",
+    "Win32_Foundation",
+    "Win32_NetworkManagement_Rras",
+]}

@@ -1,0 +1,42 @@
+[package]
+name = "watfaq_resolver"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+async-trait = "*"
+
+tokio = "*"
+
+lru_time_cache ="0.11"
+enum_dispatch = "0.3"
+
+futures = "*"
+
+tracing = "*"
+rand = "*"
+regex = "*"
+
+watfaq-dns = { version = "0.1.1" }
+hickory-client = "0.25.0-alpha.2"
+hickory-resolver = "0.25.0-alpha.2"
+hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"]}
+
+maxminddb = "*"
+ipnet = "*"
+byteorder = "*"
+
+arc-swap = "*"
+
+network-interface = "*"
+dhcproto = "*"
+url = "*"
+
+rustls = "*"
+
+watfaq_socket = { path = "../watfaq_socket" }
+watfaq_types = { path = "../watfaq_types" }
+watfaq_state = { path = "../watfaq_state" }
+watfaq_utils = { path = "../watfaq_utils" }
+watfaq_error = { path = "../watfaq_error" }

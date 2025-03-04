@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use arc_swap::ArcSwap;
 use async_recursion::async_recursion;
 use boringtun::{
     noise::{Tunn, TunnResult, errors::WireGuardError},
@@ -23,6 +24,7 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 use tracing::{Instrument, enabled, error, trace, trace_span, warn};
+use watfaq_state::Context;
 
 use crate::{
     Error,
@@ -78,6 +80,7 @@ pub struct Config {
 
 impl WireguardTunnel {
     pub async fn new(
+        ctx: ArcSwap<Context>,
         config: Config,
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
@@ -99,6 +102,7 @@ impl WireguardTunnel {
         let connector = connector.unwrap_or(GLOBAL_DIRECT_CONNECTOR.clone());
         let udp = connector
             .connect_datagram(
+                ctx,
                 resolver,
                 None,
                 remote_endpoint.into(),

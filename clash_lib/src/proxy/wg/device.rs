@@ -499,7 +499,7 @@ impl DeviceManager {
                                                                     continue;
                                                                 }
                                                             } else {
-                                                                match self.resolver.resolve(domain, false).await {
+                                                                match self.resolver.resolve_old(domain, false).await {
                                                                     Ok(Some(ip)) => {
                                                                         debug!("host {} resolved to {} on local", domain, ip);
                                                                         ip

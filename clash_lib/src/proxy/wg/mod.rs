@@ -25,6 +25,7 @@ use super::{
     OutboundType, utils::RemoteConnector,
 };
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use futures::TryFutureExt;
 
@@ -32,6 +33,7 @@ use ipnet::IpNet;
 use rand::seq::IndexedRandom;
 use tokio::sync::OnceCell;
 use tracing::debug;
+use watfaq_state::Context;
 
 mod device;
 mod events;
@@ -98,6 +100,7 @@ impl Handler {
     /// ideally we move the so_mark and iface to a global context
     async fn initialize_inner(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<&Inner, Error> {
@@ -106,7 +109,7 @@ impl Handler {
                 let recv_pair = tokio::sync::mpsc::channel(1024);
                 let send_pair = tokio::sync::mpsc::channel(1024);
                 let server_ip = resolver
-                    .resolve(&self.opts.server, false)
+                    .resolve_old(&self.opts.server, false)
                     .await
                     .map_err(map_io_error)?
                     .ok_or(new_io_error(
@@ -133,6 +136,7 @@ impl Handler {
                     .unwrap_or_default();
 
                 let wg = wireguard::WireguardTunnel::new(
+                    ctx,
                     Config {
                         private_key: self
                             .opts
@@ -247,11 +251,12 @@ impl OutboundHandler for Handler {
     /// connect to remote target via TCP
     async fn connect_stream(
         &self,
+        ctx: arc_swap::ArcSwap<watfaq_state::Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
         let inner = self
-            .initialize_inner(resolver.clone(), sess)
+            .initialize_inner(ctx, resolver.clone(), sess)
             .await
             .map_err(map_io_error)?;
 
@@ -281,7 +286,7 @@ impl OutboundHandler for Handler {
                 .ok_or(new_io_error("invalid remote address"))?
         } else {
             resolver
-                .resolve(&sess.destination.host(), false)
+                .resolve_old(&sess.destination.host(), false)
                 .map_err(map_io_error)
                 .await?
                 .ok_or(new_io_error("invalid remote address"))?
@@ -298,11 +303,12 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
+        ctx: arc_swap::ArcSwap<watfaq_state::Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
         let inner = self
-            .initialize_inner(resolver, sess)
+            .initialize_inner(ctx, resolver, sess)
             .await
             .map_err(map_io_error)?;
 

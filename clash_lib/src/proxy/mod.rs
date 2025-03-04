@@ -6,12 +6,14 @@ use crate::{
     proxy::datagram::UdpPacket,
     session::Session,
 };
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
+use watfaq_state::Context;
 
 use std::{
     collections::HashMap,
@@ -182,6 +184,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// connect to remote target via TCP
     async fn connect_stream(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream>;
@@ -189,6 +192,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
+        ctx: ArcSwap<Context>,
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram>;
@@ -198,6 +202,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
 
     async fn connect_stream_with_connector(
         &self,
+        _ctx: ArcSwap<Context>,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
@@ -211,6 +216,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
 
     async fn connect_datagram_with_connector(
         &self,
+        _ctx: ArcSwap<Context>,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,

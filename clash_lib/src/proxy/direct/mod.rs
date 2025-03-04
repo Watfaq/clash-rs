@@ -63,7 +63,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
         let remote_ip = resolver
-            .resolve(sess.destination.host().as_str(), false)
+            .resolve_old(sess.destination.host().as_str(), false)
             .map_err(map_io_error)
             .await?
             .ok_or_else(|| {

@@ -1,7 +1,9 @@
 use std::io;
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use hickory_proto::op;
+use watfaq_state::Context;
 
 use crate::{
     app::{
@@ -16,7 +18,7 @@ pub struct NoopResolver;
 
 #[async_trait]
 impl ClashResolver for NoopResolver {
-    async fn resolve(
+    async fn resolve_old(
         &self,
         _host: &str,
         _enhanced: bool,
@@ -24,7 +26,7 @@ impl ClashResolver for NoopResolver {
         Ok(None)
     }
 
-    async fn resolve_v4(
+    async fn resolve_v4_old(
         &self,
         _host: &str,
         _enhanced: bool,
@@ -32,7 +34,7 @@ impl ClashResolver for NoopResolver {
         Ok(None)
     }
 
-    async fn resolve_v6(
+    async fn resolve_v6_old(
         &self,
         _host: &str,
         _enhanced: bool,
@@ -101,6 +103,7 @@ impl OutboundHandler for NoopOutboundHandler {
 
     async fn connect_stream(
         &self,
+        _ctx: ArcSwap<Context>,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
@@ -109,6 +112,7 @@ impl OutboundHandler for NoopOutboundHandler {
 
     async fn connect_datagram(
         &self,
+        _ctx: ArcSwap<Context>,
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {

@@ -1,8 +1,10 @@
 use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use tracing::trace;
+use watfaq_state::Context;
 
 use crate::{
     app::{
@@ -28,6 +30,7 @@ use super::{new_tcp_stream, new_udp_socket};
 pub trait RemoteConnector: Send + Sync + Debug {
     async fn connect_stream(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
@@ -37,6 +40,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
 
     async fn connect_datagram(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
         destination: SocksAddr,
@@ -65,6 +69,7 @@ fn global_direct_connector() -> Arc<dyn RemoteConnector> {
 impl RemoteConnector for DirectConnector {
     async fn connect_stream(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
@@ -72,7 +77,7 @@ impl RemoteConnector for DirectConnector {
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let dial_addr = resolver
-            .resolve(address, false)
+            .resolve_old(address, false)
             .await
             .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
             .ok_or(new_io_error("no dns result"))?;
@@ -89,6 +94,7 @@ impl RemoteConnector for DirectConnector {
 
     async fn connect_datagram(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
         _destination: SocksAddr,
@@ -136,6 +142,7 @@ impl Debug for ProxyConnector {
 impl RemoteConnector for ProxyConnector {
     async fn connect_stream(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
@@ -161,7 +168,12 @@ impl RemoteConnector for ProxyConnector {
 
         let s = self
             .proxy
-            .connect_stream_with_connector(&sess, resolver, self.connector.as_ref())
+            .connect_stream_with_connector(
+                ctx,
+                &sess,
+                resolver,
+                self.connector.as_ref(),
+            )
             .await?;
 
         let stream = ChainedStreamWrapper::new(s);
@@ -171,6 +183,7 @@ impl RemoteConnector for ProxyConnector {
 
     async fn connect_datagram(
         &self,
+        ctx: ArcSwap<Context>,
         resolver: ThreadSafeDNSResolver,
         _src: Option<SocketAddr>,
         destination: SocksAddr,
@@ -189,6 +202,7 @@ impl RemoteConnector for ProxyConnector {
         let s = self
             .proxy
             .connect_datagram_with_connector(
+                ctx,
                 &sess,
                 resolver,
                 self.connector.as_ref(),
