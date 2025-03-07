@@ -1,3 +1,3 @@
-.PHONY: bindgen
-bindgen:
-	@cbindgen --lang c --crate clash_ffi --output header.h
+.PHONY: build
+build:
+	sh ./build.sh

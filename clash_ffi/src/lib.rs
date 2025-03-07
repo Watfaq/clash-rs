@@ -1,43 +1,52 @@
-use std::{
-    ffi::{CString, c_int},
-    os::raw::c_char,
-    ptr,
-};
+use clash_lib::{ClashConfigDef, ClashDNSListen, ClashTunConfig, Config, Port};
 
-use clash_lib::{
-    ClashConfigDef, ClashDNSListen, ClashTunConfig, Config, Error, Port,
-};
-use error::LAST_ERROR;
+uniffi::setup_scaffolding!();
 
-mod error;
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum FFIError {
+    #[error("parse config: {0}")]
+    ParseConfig(String),
+    #[error("start clash error: {0}")]
+    StartClash(String),
+    #[error("internal error: {0}")]
+    Internal(String),
+}
 
-pub const ERR_OK: c_int = 0;
-pub const ERR_START: c_int = 1;
-pub const ERR_CONFIG: c_int = 2;
-
-#[repr(C)]
+#[derive(uniffi::Record)]
 pub struct GeneralConfig {
     pub port: u16,
     pub socks_port: u16,
     pub mixed_port: u16,
 
-    pub secret: *const c_char,
+    pub secret: String,
 
     pub tun_enabled: bool,
     pub dns_enabled: bool,
     pub ipv6_enabled: bool,
 }
 
-#[repr(C)]
+impl From<ClashConfigDef> for GeneralConfig {
+    fn from(cfg: ClashConfigDef) -> Self {
+        Self {
+            port: cfg.port.map(Into::into).unwrap_or_default(),
+            socks_port: cfg.socks_port.map(Into::into).unwrap_or_default(),
+            mixed_port: cfg.mixed_port.map(Into::into).unwrap_or_default(),
+            secret: cfg.secret.unwrap_or_default(),
+            tun_enabled: cfg.tun.map(|tun| tun.enable).unwrap_or_default(),
+            dns_enabled: cfg.dns.enable,
+            ipv6_enabled: cfg.ipv6,
+        }
+    }
+}
+
+#[derive(uniffi::Record)]
 pub struct ConfigOverride {
-    pub tun_fd: i32,
-    pub http_port: u16,
-    pub dns_server: *const c_char,
-    pub bind_address: *const c_char,
-    pub external_controller: *const c_char,
-    /// \n separated rules list
-    /// TODO: use a better way to pass rules list, like a list of strings
-    pub rules_list: *const c_char,
+    pub tun_fd: Option<i32>,
+    pub http_port: Option<u16>,
+    pub dns_server: Option<String>,
+    pub bind_address: Option<String>,
+    pub external_controller: Option<String>,
+    pub rules_list: Vec<String>,
     /// yaml string
     /// ```
     ///  - name: "socks5-noauth"
@@ -46,81 +55,48 @@ pub struct ConfigOverride {
     ///    port: 10800
     ///    udp: true
     /// ```
-    pub outbounds: *const c_char,
+    pub outbounds: Option<String>,
 }
 
 fn apply_config_override(
     cfg_override: &ConfigOverride,
     cfg_def: &mut ClashConfigDef,
-) -> Option<String> {
-    if cfg_override.tun_fd != 0 {
+) -> Result<(), FFIError> {
+    if let Some(tun_fd) = cfg_override.tun_fd {
         let tun_cfg = ClashTunConfig {
             enable: true,
             gateway: "192.19.0.1/24".into(),
-            device_id: format!("fd://{}", cfg_override.tun_fd),
+            device_id: format!("fd://{}", tun_fd),
             ..Default::default()
         };
         cfg_def.tun = Some(tun_cfg);
     }
 
-    if !cfg_override.bind_address.is_null() {
-        let bind_address =
-            unsafe { std::ffi::CStr::from_ptr(cfg_override.bind_address) }
-                .to_string_lossy()
-                .to_string();
+    if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
+        cfg_def.port = Some(Port(cfg_override.http_port.unwrap_or(7890)));
+    }
+
+    if let Some(bind_address) = cfg_override.bind_address.as_ref() {
         cfg_def.bind_address = bind_address.parse().expect("invalid bind address");
     }
 
-    if !cfg_override.dns_server.is_null() {
-        let dns_server =
-            unsafe { std::ffi::CStr::from_ptr(cfg_override.dns_server) }
-                .to_string_lossy()
-                .to_string();
-        cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server));
+    if let Some(dns_server) = cfg_override.dns_server.as_ref() {
+        cfg_def.dns.listen = Some(ClashDNSListen::Udp(dns_server.clone()));
     }
 
-    if !cfg_override.external_controller.is_null() {
-        let external_controller =
-            unsafe { std::ffi::CStr::from_ptr(cfg_override.external_controller) }
-                .to_string_lossy()
-                .to_string();
-        cfg_def.external_controller = Some(external_controller);
+    if let Some(external_controller) = cfg_override.external_controller.as_ref() {
+        cfg_def.external_controller = Some(external_controller.clone());
     }
 
-    if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
-        cfg_def.port = Some(Port(cfg_override.http_port));
-    }
-
-    if !cfg_override.rules_list.is_null() {
-        let mut rules_list = unsafe {
-            std::ffi::CStr::from_ptr(cfg_override.rules_list)
-                .to_string_lossy()
-                .to_string()
-        }
-        .split("\n")
-        .filter_map(|s| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        })
-        .collect::<Vec<String>>();
-
+    if !cfg_override.rules_list.is_empty() {
         if let Some(ref mut rule) = cfg_def.rule {
-            rule.append(&mut rules_list);
+            rule.append(&mut cfg_override.rules_list.clone());
         } else {
-            cfg_def.rule = Some(rules_list);
+            cfg_def.rule = Some(cfg_override.rules_list.clone());
         }
     }
 
-    if !cfg_override.outbounds.is_null() {
-        let outbounds = unsafe {
-            std::ffi::CStr::from_ptr(cfg_override.outbounds)
-                .to_string_lossy()
-                .to_string()
-        };
-
+    if let Some(outbounds) = cfg_override.outbounds.as_ref() {
         match &mut serde_yaml::from_str::<_>(&outbounds) {
             Ok(outbounds) => {
                 if let Some(proxy) = cfg_def.proxy.as_mut() {
@@ -130,260 +106,124 @@ fn apply_config_override(
                 }
             }
             _ => {
-                return Some(format!(
-                    "couldn't parse outbounds: {}",
-                    outbounds.replace("\n", ""),
+                return Err(FFIError::ParseConfig(
+                    "invalid outbounds yaml string".to_string(),
                 ));
             }
         }
     }
 
-    None
+    Ok(())
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn get_last_error() -> *const c_char {
-    LAST_ERROR.with(|prev| match *prev.borrow() {
-        Some(ref err) => err.as_ptr() as *const c_char,
-        None => ptr::null(),
-    })
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_str` must be a valid C string
-pub unsafe extern "C" fn test_clash_config(cfg_str: *const c_char) -> *const c_char {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
+#[uniffi::export]
+pub fn test_clash_config(cfg_str: &str) -> Result<(), FFIError> {
+    let cfg_def = cfg_str.parse::<ClashConfigDef>();
 
     match cfg_def {
-        Ok(_) => ptr::null(),
-        Err(err) => {
-            let err = CString::new(format!("{}", err)).unwrap();
-            err.into_raw()
-        }
+        Ok(_) => Ok(()),
+        Err(err) => Err(FFIError::ParseConfig(err.to_string())),
     }
 }
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_dir`, `cfg_str`, `log_file` must be valid C strings
-pub unsafe extern "C" fn start_clash_with_config(
-    cfg_dir: *const c_char,
-    cfg_str: *const c_char,
-    log_file: *const c_char,
-    cfg_override: *const ConfigOverride,
-) -> c_int {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    let cfg_def = s.to_string_lossy().to_string().parse::<ClashConfigDef>();
+#[uniffi::export]
+pub fn start_clash_with_config(
+    cfg_dir: &str,
+    cfg_str: &str,
+    log_file: Option<String>,
+    cfg_override: Option<ConfigOverride>,
+) -> Result<(), FFIError> {
+    let cfg_def = cfg_str.parse::<ClashConfigDef>();
     match cfg_def {
         Ok(mut cfg_def) => {
-            if !cfg_override.is_null() {
-                if let Some(err) =
-                    apply_config_override(unsafe { &*cfg_override }, &mut cfg_def)
+            if let Some(cfg_override) = cfg_override {
+                if let Err(err) = apply_config_override(&cfg_override, &mut cfg_def)
                 {
-                    error::update_last_error(Error::InvalidConfig(err));
-                    return ERR_CONFIG;
+                    return Err(err);
                 }
             }
 
             let opts = clash_lib::Options {
                 config: Config::Def(cfg_def),
-                cwd: Some(
-                    unsafe { std::ffi::CStr::from_ptr(cfg_dir) }
-                        .to_string_lossy()
-                        .to_string(),
-                ),
+                cwd: Some(cfg_dir.into()),
                 rt: Some(clash_lib::TokioRuntime::SingleThread),
-                log_file: if !log_file.is_null() {
-                    Some(
-                        unsafe { std::ffi::CStr::from_ptr(log_file) }
-                            .to_string_lossy()
-                            .to_string(),
-                    )
-                } else {
-                    None
-                },
+                log_file,
             };
 
             match clash_lib::start_scaffold(opts) {
-                Ok(_) => ERR_OK,
-                Err(e) => {
-                    error::update_last_error(Error::Operation(format!(
-                        "start clash error: {}",
-                        e
-                    )));
-                    ERR_START
-                }
+                Ok(_) => Ok(()),
+                Err(e) => Err(FFIError::StartClash(e.to_string())),
             }
         }
-        Err(err) => {
-            error::update_last_error(err);
-            ERR_CONFIG
-        }
+        Err(err) => Err(FFIError::ParseConfig(err.to_string())),
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn shutdown_clash() -> bool {
+#[uniffi::export]
+pub fn shutdown_clash() -> bool {
     clash_lib::shutdown()
 }
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_str` must be a valid C string
-/// `general` must be a valid pointer
-pub unsafe extern "C" fn parse_general_config(
-    cfg_str: *const c_char,
-    general: *mut GeneralConfig,
-) -> c_int {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    match s
-        .to_string_lossy()
-        .to_string()
-        .as_str()
+#[uniffi::export]
+pub fn parse_general_config(cfg_str: &str) -> Result<GeneralConfig, FFIError> {
+    cfg_str
         .parse::<ClashConfigDef>()
-    {
-        Ok(cfg) => {
-            #[allow(deprecated)]
-            unsafe {
-                (*general).port = cfg.port.map(Into::into).unwrap_or_default();
-                (*general).socks_port =
-                    cfg.socks_port.map(Into::into).unwrap_or_default();
-                (*general).mixed_port =
-                    cfg.mixed_port.map(Into::into).unwrap_or_default();
-                // this is a memory leak, but we don't care
-                (*general).secret = CString::new(cfg.secret.unwrap_or_default())
-                    .expect("invalid secret")
-                    .into_raw();
-                (*general).tun_enabled =
-                    cfg.tun.map(|tun| tun.enable).unwrap_or_default();
-                (*general).dns_enabled = cfg.dns.enable;
-                (*general).ipv6_enabled = cfg.ipv6;
-            }
-            ERR_OK
-        }
-        Err(err) => {
-            error::update_last_error(err);
-            ERR_CONFIG
-        }
-    }
+        .map(|cfg| cfg.into())
+        .map_err(|e| FFIError::ParseConfig(e.to_string()))
 }
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_str` must be a valid C string
-pub unsafe extern "C" fn parse_proxy_list(cfg_str: *const c_char) -> *mut c_char {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    match s
-        .to_string_lossy()
-        .to_string()
-        .as_str()
-        .parse::<ClashConfigDef>()
-    {
+#[uniffi::export]
+pub fn parse_proxy_list(cfg_str: &str) -> Result<String, FFIError> {
+    match cfg_str.parse::<ClashConfigDef>() {
         Ok(cfg) => {
             let proxy_list = serde_json::to_string(&cfg.proxy);
             match proxy_list {
-                Ok(s) => CString::new(s).unwrap().into_raw(),
-                Err(e) => {
-                    error::update_last_error(Error::Operation(format!(
-                        "parse proxy list error: {}",
-                        e
-                    )));
-                    ptr::null_mut()
-                }
+                Ok(s) => Ok(s),
+                Err(e) => Err(FFIError::ParseConfig(e.to_string())),
             }
         }
-        Err(err) => {
-            error::update_last_error(err);
-            ptr::null_mut()
-        }
+        Err(err) => Err(FFIError::ParseConfig(err.to_string())),
     }
 }
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// `ptr` must be a valid C string
-pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
-    unsafe {
-        if !ptr.is_null() {
-            let _ = CString::from_raw(ptr);
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_str` must be a valid C string
-pub unsafe extern "C" fn parse_proxy_group(cfg_str: *const c_char) -> *mut c_char {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    match s
-        .to_string_lossy()
-        .to_string()
-        .as_str()
-        .parse::<ClashConfigDef>()
-    {
+#[uniffi::export]
+pub fn parse_proxy_group(cfg_str: &str) -> Result<String, FFIError> {
+    match cfg_str.parse::<ClashConfigDef>() {
         Ok(cfg) => {
             let proxy_group = serde_json::to_string(&cfg.proxy_group);
             match proxy_group {
-                Ok(s) => CString::new(s).unwrap().into_raw(),
-                Err(e) => {
-                    error::update_last_error(Error::Operation(format!(
-                        "parse proxy group error: {}",
-                        e
-                    )));
-                    ptr::null_mut()
-                }
+                Ok(s) => Ok(s),
+                Err(e) => Err(FFIError::ParseConfig(e.to_string())),
             }
         }
-        Err(err) => {
-            error::update_last_error(err);
-            ptr::null_mut()
-        }
+        Err(err) => Err(FFIError::ParseConfig(err.to_string())),
     }
 }
 
-#[unsafe(no_mangle)]
-/// # Safety
-/// `cfg_str` must be a valid C string
-pub unsafe extern "C" fn parse_rule_list(cfg_str: *const c_char) -> *mut c_char {
-    let s = unsafe { std::ffi::CStr::from_ptr(cfg_str) };
-    match s
-        .to_string_lossy()
-        .to_string()
-        .as_str()
-        .parse::<ClashConfigDef>()
-    {
+#[uniffi::export]
+pub fn parse_rule_list(cfg_str: &str) -> Result<String, FFIError> {
+    match cfg_str.parse::<ClashConfigDef>() {
         Ok(cfg) => {
             let rule_list = serde_json::to_string(&cfg.rule);
             match rule_list {
-                Ok(s) => CString::new(s).unwrap().into_raw(),
-                Err(e) => {
-                    error::update_last_error(Error::Operation(format!(
-                        "parse rule list error: {}",
-                        e
-                    )));
-                    ptr::null_mut()
-                }
+                Ok(s) => Ok(s),
+                Err(e) => Err(FFIError::ParseConfig(e.to_string())),
             }
         }
-        Err(err) => {
-            error::update_last_error(err);
-            ptr::null_mut()
-        }
+        Err(err) => Err(FFIError::ParseConfig(err.to_string())),
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn get_clash_version() -> *mut c_char {
+#[uniffi::export]
+pub fn get_clash_version() -> String {
     static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-    CString::new(VERSION).unwrap().into_raw()
+    VERSION.to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{ptr, vec};
+    use std::vec;
 
     use clash_lib::{ClashConfigDef, ClashDNSListen};
 
@@ -399,28 +239,28 @@ mod tests {
             .unwrap();
 
         let cfg_override = super::ConfigOverride {
-            tun_fd: 1989,
-            http_port: 7891,
-            dns_server: c"127.0.0.1:53".as_ptr() as _,
-            bind_address: c"240.0.0.2".as_ptr() as _,
-            external_controller: ptr::null(),
-            rules_list: c"DOMAIN-KEYWORD,example.com,DIRECT\nDOMAIN-SUFFIX,example.\
-                         org,DIRECT\n"
-                .as_ptr() as _,
-            outbounds: r#"
+            tun_fd: Some(1989),
+            http_port: Some(7891),
+            dns_server: Some("127.0.0.1:53".to_string()),
+            bind_address: Some("240.0.0.2".to_string()),
+            external_controller: None,
+            rules_list: vec![
+                "DOMAIN-KEYWORD,example.com,DIRECT".to_string(),
+                "DOMAIN-SUFFIX,example.org,DIRECT".to_string(),
+            ],
+            outbounds: Some(
+                r#"
               - name: "socks5-noauth"
                 type: socks5
                 server: 10.0.0.13
                 port: 10800
                 udp: true
             "#
-            .as_ptr() as _,
+                .to_string(),
+            ),
         };
 
-        assert_eq!(
-            super::apply_config_override(&cfg_override, &mut cfg_def),
-            None
-        );
+        assert!(super::apply_config_override(&cfg_override, &mut cfg_def).is_ok());
 
         assert_eq!(cfg_def.bind_address, "240.0.0.2".parse().unwrap());
         assert!(!cfg_def.dns.enable);

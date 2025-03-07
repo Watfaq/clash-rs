@@ -27,3 +27,5 @@ shell.nix
 .DS_Store
 
 codecov.json
+
+bindings
