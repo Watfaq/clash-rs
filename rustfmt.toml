@@ -13,5 +13,6 @@ use_field_init_shorthand = true
 error_on_line_overflow = false
 tab_spaces = 4
 enum_discrim_align_threshold = 20
+# Longer
 max_width = 85
 imports_granularity = "Crate"

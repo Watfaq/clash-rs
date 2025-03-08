@@ -7,7 +7,7 @@ use crate::{
     common::auth::ThreadSafeAuthenticator,
     proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
 };
-
+use watfaq_error::Result;
 pub use proxy::handle as handle_http;
 
 use std::{net::SocketAddr, sync::Arc};
@@ -50,7 +50,7 @@ impl InboundHandlerTrait for HttpInbound {
         false
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -67,7 +67,7 @@ impl InboundHandlerTrait for HttpInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
+    async fn listen_udp(&self) -> Result<()> {
         Err(anyhow!("unsupported"))
     }
 }

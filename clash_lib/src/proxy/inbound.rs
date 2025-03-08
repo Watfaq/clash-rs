@@ -1,5 +1,7 @@
 use enum_dispatch::enum_dispatch;
 
+use watfaq_error::Result;
+
 use super::{
     http::HttpInbound, mixed::MixedInbound, socks::SocksInbound,
     tunnel::TunnelInbound,
@@ -11,8 +13,8 @@ pub trait InboundHandlerTrait {
     fn handle_tcp(&self) -> bool;
     /// support udp or not
     fn handle_udp(&self) -> bool;
-    async fn listen_tcp(&self) -> anyhow::Result<()>;
-    async fn listen_udp(&self) -> anyhow::Result<()>;
+    async fn listen_tcp(&self) -> Result<()>;
+    async fn listen_udp(&self) -> Result<()>;
 }
 
 #[enum_dispatch]

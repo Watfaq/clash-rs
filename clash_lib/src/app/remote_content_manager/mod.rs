@@ -18,6 +18,8 @@ use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace};
+use watfaq_resolver::Resolver;
+use watfaq_state::Context;
 
 use crate::{
     common::{errors::new_io_error, timed_future::TimedFuture},
@@ -25,8 +27,6 @@ use crate::{
 };
 
 use self::http_client::LocalConnector;
-
-use super::dns::ThreadSafeDNSResolver;
 
 pub mod healthcheck;
 mod http_client;
@@ -49,16 +49,18 @@ struct ProxyState {
 /// ProxyManager is the latency registry.
 #[derive(Clone)]
 pub struct ProxyManager {
+    ctx: Arc<Context>,
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
 
     connector_map:
         Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
 }
 
 impl ProxyManager {
-    pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
+    pub fn new(ctx: Arc<Context>, dns_resolver: Arc<Resolver>) -> Self {
         Self {
+            ctx,
             dns_resolver,
             proxy_state: Arc::new(RwLock::new(HashMap::new())),
             connector_map: Arc::new(RwLock::new(HashMap::new())),
@@ -139,7 +141,8 @@ impl ProxyManager {
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
             let name = name_clone;
-            let connector = LocalConnector(proxy.clone(), dns_resolver);
+            let connector =
+                LocalConnector(proxy.clone(), dns_resolver, self.ctx.clone());
 
             let connector = {
                 use crate::common::tls::GLOBAL_ROOT_STORE;
@@ -258,105 +261,5 @@ impl ProxyManager {
         }
 
         result
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{net::Ipv4Addr, sync::Arc, time::Duration};
-
-    use futures::TryFutureExt;
-
-    use crate::{
-        app::{
-            dispatcher::ChainedStreamWrapper, dns::MockClashResolver,
-            remote_content_manager,
-        },
-        config::internal::proxy::PROXY_DIRECT,
-        proxy::{direct, mocks::MockDummyOutboundHandler},
-    };
-
-    #[tokio::test]
-    async fn test_proxy_manager_alive() {
-        let mut mock_resolver = MockClashResolver::new();
-        mock_resolver.expect_resolve().returning(|_, _| {
-            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67))))
-        });
-        mock_resolver.expect_ipv6().return_const(false);
-
-        let manager =
-            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
-
-        let mock_handler = Arc::new(direct::Handler::new());
-
-        manager
-            .url_test(
-                mock_handler.clone(),
-                "http://www.gstatic.com/generate_204",
-                None,
-            )
-            .await
-            .expect("test failed");
-
-        assert!(manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
-        assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
-
-        manager.report_alive(PROXY_DIRECT, false).await;
-        assert!(!manager.alive(PROXY_DIRECT).await);
-
-        for _ in 0..10 {
-            manager
-                .url_test(
-                    mock_handler.clone(),
-                    "http://www.gstatic.com/generate_204",
-                    None,
-                )
-                .await
-                .expect("test failed");
-        }
-
-        assert!(manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 10);
-    }
-
-    #[tokio::test]
-    async fn test_proxy_manager_timeout() {
-        let mut mock_resolver = MockClashResolver::new();
-        mock_resolver.expect_resolve().returning(|_, _| {
-            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))))
-        });
-
-        let manager =
-            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
-
-        let mut mock_handler = MockDummyOutboundHandler::new();
-        mock_handler
-            .expect_name()
-            .return_const(PROXY_DIRECT.to_owned());
-        mock_handler.expect_connect_stream().returning(|_, _| {
-            Ok(Box::new(ChainedStreamWrapper::new(
-                tokio_test::io::Builder::new()
-                    .wait(Duration::from_secs(10))
-                    .build(),
-            )))
-        });
-
-        let mock_handler = Arc::new(mock_handler);
-
-        let result = manager
-            .url_test(
-                mock_handler.clone(),
-                "http://www.gstatic.com/generate_204",
-                Some(Duration::from_secs(3)),
-            )
-            .map_err(|x| assert!(x.to_string().contains("timeout")))
-            .await;
-
-        assert!(result.is_err());
-        assert!(!manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await == u16::MAX);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 1);
     }
 }

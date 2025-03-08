@@ -1,7 +1,8 @@
+use watfaq_config::OutboundCommonOptions;
+
 use crate::{
     config::internal::proxy::OutboundSocks5,
     proxy::{
-        HandlerCommonOptions,
         socks::{Handler, HandlerOptions},
         transport::TlsClient,
     },
@@ -31,7 +32,7 @@ impl TryFrom<&OutboundSocks5> for Handler {
         };
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

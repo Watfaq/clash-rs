@@ -4,6 +4,7 @@ use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 use educe::Educe;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
+use watfaq_types::DNSMode;
 
 const DEFAULT_SO_MARK: u32 = 3389;
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
@@ -484,15 +485,6 @@ pub struct DNS {
     pub default_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
-}
-
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
-#[serde(rename_all = "kebab-case")]
-pub enum DNSMode {
-    #[default]
-    Normal,
-    FakeIp,
-    RedirHost,
 }
 
 #[derive(Serialize, Deserialize, Clone, Educe)]

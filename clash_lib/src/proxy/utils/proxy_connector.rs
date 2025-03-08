@@ -4,6 +4,7 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use tracing::trace;
+use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_state::Context;
 
 use crate::{
@@ -12,7 +13,6 @@ use crate::{
             ChainedDatagram, ChainedDatagramWrapper, ChainedStream,
             ChainedStreamWrapper,
         },
-        dns::ThreadSafeDNSResolver,
         net::Interface,
     },
     common::errors::new_io_error,
@@ -23,30 +23,34 @@ use crate::{
     session::{Network, Session, SocksAddr, Type},
 };
 
-use super::{new_tcp_stream, new_udp_socket};
+use watfaq_error::Result;
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
 pub trait RemoteConnector: Send + Sync + Debug {
+    fn ctx(&self) -> &Context {
+        todo!()
+    }
+    fn arc_ctx(&self) -> Arc<Context> {
+        todo!()
+    }
+    fn resolver(&self) -> &Resolver {
+        todo!()
+    }
+    fn clone_resolver(&self) -> Arc<Resolver> {
+        todo!()
+    }
     async fn connect_stream(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
-        #[cfg(target_os = "linux")] packet_mark: Option<u32>,
-    ) -> std::io::Result<AnyStream>;
+    ) -> Result<AnyStream>;
 
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
         destination: SocksAddr,
-        iface: Option<Interface>,
-        #[cfg(target_os = "linux")] packet_mark: Option<u32>,
-    ) -> std::io::Result<AnyOutboundDatagram>;
+    ) -> Result<AnyOutboundDatagram>;
 }
 
 #[derive(Debug)]
@@ -69,15 +73,12 @@ fn global_direct_connector() -> Arc<dyn RemoteConnector> {
 impl RemoteConnector for DirectConnector {
     async fn connect_stream(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
-        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let dial_addr = resolver
-            .resolve_old(address, false)
+            .resolve(address, false)
             .await
             .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
             .ok_or(new_io_error("no dns result"))?;
@@ -94,12 +95,9 @@ impl RemoteConnector for DirectConnector {
 
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
         src: Option<SocketAddr>,
         _destination: SocksAddr,
-        iface: Option<Interface>,
-        #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
             src,
@@ -142,8 +140,8 @@ impl Debug for ProxyConnector {
 impl RemoteConnector for ProxyConnector {
     async fn connect_stream(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
+        ctx: Arc<Context>,
+        resolver: Arc<Resolver>,
         address: &str,
         port: u16,
         iface: Option<&Interface>,

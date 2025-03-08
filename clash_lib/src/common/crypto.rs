@@ -1,6 +1,6 @@
 use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
-use anyhow::Ok;
+use watfaq_error::Result;
 
 pub fn aes_cfb_encrypt(
     key: &[u8],
@@ -57,7 +57,7 @@ pub fn aes_gcm_encrypt(
     nonce: &[u8],
     plaintext: &[u8],
     associated_data: Option<&[u8]>,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>> {
     let mut buffer = Vec::with_capacity(plaintext.len() + 16);
     buffer.append(&mut plaintext.to_vec());
     match key.len() {
@@ -88,7 +88,7 @@ pub fn aes_gcm_decrypt(
     nonce: &[u8],
     ciphertext: &[u8],
     associated_data: Option<&[u8]>,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>> {
     let mut buffer = ciphertext.to_vec();
     match key.len() {
         16 => {
@@ -136,7 +136,7 @@ pub trait AeadCipherHelper: AeadInPlace {
         nonce: &[u8],
         aad: &[u8],
         buffer: &mut [u8],
-    ) -> Result<(), aes_gcm::Error> {
+    ) -> std::result::Result<(), aes_gcm::Error> {
         let tag_pos = buffer.len() - Self::TagSize::to_usize();
         let (msg, tag) = buffer.split_at_mut(tag_pos);
         self.decrypt_in_place_detached(

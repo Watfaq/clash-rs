@@ -22,3 +22,4 @@ tower = "*"
 watfaq_types = { path = "../watfaq_types" }
 watfaq_error = { path = "../watfaq_error" }
 watfaq_state = { path = "../watfaq_state" }
+watfaq_socket = { path = "../watfaq_socket" }

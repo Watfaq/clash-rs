@@ -15,12 +15,12 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing::{error, info};
+use watfaq_resolver::Resolver;
 
 use crate::{GlobalState, Runner, config::internal::config::Controller};
 
 use super::{
     dispatcher::{self, StatisticsManager},
-    dns::ThreadSafeDNSResolver,
     inbound::manager::InboundManager,
     logging::LogEvent,
     outbound::manager::ThreadSafeOutboundManager,
@@ -43,7 +43,7 @@ pub fn get_api_runner(
     inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
     outbound_manager: ThreadSafeOutboundManager,
     statistics_manager: Arc<StatisticsManager>,
     cache_store: ThreadSafeCacheFile,

@@ -11,13 +11,14 @@ use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::warn;
+use watfaq_resolver::{AbstractResolver, Resolver};
+use watfaq_types::StackPrefer;
 
 use crate::{
     GlobalState,
     app::{
         api::AppState,
         dispatcher,
-        dns::ThreadSafeDNSResolver,
         inbound::manager::{InboundManager, Ports},
     },
     config::{def, internal::config::BindAddress},
@@ -28,14 +29,14 @@ struct ConfigState {
     inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
 }
 
 pub fn routes(
     inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
 ) -> Router<Arc<AppState>> {
     Router::new()
         .route(
@@ -67,7 +68,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
 
         mode: Some(run_mode),
         log_level: Some(global_state.log_level),
-        ipv6: Some(dns_resolver.ipv6()),
+        ipv6: Some(dns_resolver.stack_prefer().support_v6()),
         allow_lan: Some(state.inbound_manager.get_bind_address().0.is_unspecified()),
     })
 }
@@ -227,7 +228,21 @@ async fn patch_configs(
     }
 
     if let Some(ipv6) = payload.ipv6 {
-        state.dns_resolver.set_ipv6(ipv6);
+        let current = state.dns_resolver.stack_prefer();
+        if current.support_v6() == ipv6 {
+            return StatusCode::ACCEPTED.into_response();
+        }
+        if ipv6 {
+            match state.dns_resolver.stack_prefer() {
+                StackPrefer::V4 => {
+                    state.dns_resolver.set_stack_perfer(StackPrefer::V4V6)
+                }
+                _ => {}
+            }
+        }
+        if !ipv6 {
+            state.dns_resolver.set_stack_perfer(StackPrefer::V4)
+        }
     }
 
     StatusCode::ACCEPTED.into_response()

@@ -1,12 +1,11 @@
-use anyhow::anyhow;
-use std::{sync::Arc, time::Duration};
-
 use quinn::ZeroRttAccepted;
+use std::{sync::Arc, time::Duration};
+use watfaq_error::{Error, anyhow};
 
-use anyhow::Result;
 use tokio_util::bytes::Bytes;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
+use watfaq_error::Result;
 use watfaq_types::{TargetAddr, UdpPacket};
 
 use super::types::{TuicConnection, UdpRelayMode};
@@ -58,7 +57,7 @@ impl TuicConnection {
         pkt: Bytes,
         addr: Address,
         assoc_id: u16,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let addr_display = addr.to_string();
 
         match self.udp_relay_mode {
@@ -159,7 +158,7 @@ impl TuicConnection {
             Ok(()) => Ok(()),
             Err(err) => {
                 tracing::warn!("[udp] [dissociate] [{assoc_id:#06x}] {err}");
-                Err(anyhow::anyhow!(err))
+                Err(anyhow!(err))
             }
         }
     }
@@ -193,7 +192,7 @@ impl TuicConnection {
         heartbeat_interval: Duration,
         gc_interval: Duration,
         gc_lifetime: Duration,
-    ) -> anyhow::Error {
+    ) -> Error {
         let mut heartbeat_interval = tokio::time::interval(heartbeat_interval);
         let mut gc_interval = tokio::time::interval(gc_interval);
         loop {

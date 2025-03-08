@@ -1,15 +1,14 @@
-use crate::{
-    app::dns::ThreadSafeDNSResolver, common::errors::new_io_error,
-    session::SocksAddr,
-};
+use crate::{common::errors::new_io_error, session::SocksAddr};
 use futures::{Sink, Stream, ready};
 use std::{
     fmt::{Debug, Display, Formatter},
     io,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
+use watfaq_resolver::Resolver;
 
 #[derive(Clone)]
 pub struct UdpPacket {
@@ -64,13 +63,13 @@ impl UdpPacket {
 // Stream + Sink trait
 pub struct OutboundDatagramImpl {
     inner: UdpSocket,
-    resolver: ThreadSafeDNSResolver,
+    resolver: Arc<Resolver>,
     flushed: bool,
     pkt: Option<UdpPacket>,
 }
 
 impl OutboundDatagramImpl {
-    pub fn new(udp: UdpSocket, resolver: ThreadSafeDNSResolver) -> Self {
+    pub fn new(udp: UdpSocket, resolver: Arc<Resolver>) -> Self {
         Self {
             inner: udp,
             resolver,

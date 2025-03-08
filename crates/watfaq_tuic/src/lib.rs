@@ -3,7 +3,7 @@ mod handle_stream;
 mod handle_task;
 pub(crate) mod types;
 
-use anyhow::Result;
+use watfaq_error::Result;
 
 use quinn::{
     EndpointConfig, TokioRuntime,
@@ -32,7 +32,9 @@ use quinn::{
 };
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
-use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
+use self::types::{TuicConnection, UdpRelayMode, UdpSession};
+
+pub use self::types::CongestionControl;
 
 #[derive(Debug, Clone)]
 pub struct HandlerOptions {
@@ -71,7 +73,7 @@ pub struct Handler {
     pub opts: HandlerOptions,
     ep: OnceCell<TuicClient>,
     conn: AsyncMutex<Option<Arc<TuicConnection>>>,
-    next_assoc_id: AtomicU16,
+    pub next_assoc_id: AtomicU16,
 }
 
 impl std::fmt::Debug for Handler {
@@ -141,7 +143,7 @@ impl Handler {
                 .as_ref()
                 .unwrap_or(&ctx.default_iface.load()),
             opts.common.stack_prefer.unwrap_or(ctx.stack_prefer),
-            server_ip,
+            server_ip.into(),
         )
         .unwrap_or_default();
         // TODO allow override protector (when outbound specify interface/fwmark)
@@ -152,7 +154,7 @@ impl Handler {
         let mut endpoint = QuinnEndpoint::new(
             EndpointConfig::default(),
             None,
-            socket.into(),
+            socket.into_std()?,
             Arc::new(TokioRuntime),
         )?;
 

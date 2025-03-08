@@ -1,18 +1,16 @@
 use crate::{
-    app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
-    },
+    app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
     proxy::datagram::UdpPacket,
     session::Session,
 };
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
 use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
+use watfaq_error::{Result, anyhow};
+use watfaq_resolver::Resolver;
 use watfaq_state::Context;
 
 use std::{
@@ -58,11 +56,8 @@ pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
 pub mod inbound;
-mod options;
 mod transport;
 pub mod tunnel;
-
-pub use options::HandlerCommonOptions;
 
 #[cfg(test)]
 pub mod mocks;
@@ -171,6 +166,19 @@ pub enum ConnectorType {
 
 #[async_trait]
 pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
+    fn ctx(&self) -> &Context {
+        todo!()
+    }
+    fn clone_ctx(&self) -> Arc<Context> {
+        todo!()
+    }
+    fn resolver(&self) -> &Resolver {
+        todo!()
+    }
+    fn clone_resolver(&self) -> Arc<Resolver> {
+        todo!()
+    }
+
     /// The name of the outbound handler
     fn name(&self) -> &str;
 
@@ -184,47 +192,33 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// connect to remote target via TCP
     async fn connect_stream(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream>;
+    ) -> Result<BoxedChainedStream>;
 
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram>;
+    ) -> Result<BoxedChainedDatagram>;
 
     /// relay related
     async fn support_connector(&self) -> ConnectorType;
 
     async fn connect_stream_with_connector(
         &self,
-        _ctx: ArcSwap<Context>,
         _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         error!("tcp relay not supported for {}", self.proto());
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("tcp relay not supported for {}", self.proto()),
-        ))
+        Err(anyhow!("tcp relay not supported for {}", self.proto()))
     }
 
     async fn connect_datagram_with_connector(
         &self,
-        _ctx: ArcSwap<Context>,
         _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("udp relay not supported for {}", self.proto()),
-        ))
+    ) -> Result<BoxedChainedDatagram> {
+        Err(anyhow!("udp relay not supported for {}", self.proto()))
     }
 
     /// for API

@@ -479,7 +479,7 @@ impl Default for Session {
             typ: Type::Http,
             source: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             destination: SocksAddr::any_ipv4(),
-            resolved_ip: None,
+            resolved_ip: (None, None),
             so_mark: None,
             iface: None,
             asn: None,

@@ -22,17 +22,18 @@ use std::{
 };
 use tokio::{io::AsyncWriteExt, sync::RwLock, task::JoinHandle};
 use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
-
-use crate::app::dns::ThreadSafeDNSResolver;
+use watfaq_resolver::{AbstractResolver, Resolver};
+use watfaq_state::Context;
 
 use super::statistics_manager::Manager;
 
 const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 
 pub struct Dispatcher {
+    ctx: Arc<Context>,
     outbound_manager: ThreadSafeOutboundManager,
     router: ThreadSafeRouter,
-    resolver: ThreadSafeDNSResolver,
+    resolver: Arc<Resolver>,
     mode: Arc<RwLock<RunMode>>,
     manager: Arc<Manager>,
     tcp_buffer_size: usize,
@@ -46,9 +47,10 @@ impl Debug for Dispatcher {
 
 impl Dispatcher {
     pub fn new(
+        ctx: Arc<Context>,
         outbound_manager: ThreadSafeOutboundManager,
         router: ThreadSafeRouter,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
         mode: RunMode,
         statistics_manager: Arc<Manager>,
         tcp_buffer_size: Option<usize>,
@@ -60,6 +62,7 @@ impl Dispatcher {
             mode: Arc::new(RwLock::new(mode)),
             manager: statistics_manager,
             tcp_buffer_size: tcp_buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE),
+            ctx,
         }
     }
 
@@ -133,7 +136,7 @@ impl Dispatcher {
         });
 
         match handler
-            .connect_stream(&sess, self.resolver.clone())
+            .connect_stream(&sess)
             .instrument(info_span!("connect_stream", outbound_name = outbound_name,))
             .await
         {
@@ -346,7 +349,7 @@ impl Dispatcher {
                     None => {
                         debug!("building {} outbound datagram connecting", sess);
                         let outbound_datagram = match handler
-                            .connect_datagram(&sess, resolver.clone())
+                            .connect_datagram(&sess)
                             .await
                         {
                             Ok(v) => v,

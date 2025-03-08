@@ -19,6 +19,7 @@ use tokio::{
     net::{TcpListener, UdpSocket},
 };
 use tracing::{info, warn};
+use watfaq_error::Result;
 
 use super::{
     datagram::UdpPacket, inbound::InboundHandlerTrait, utils::apply_tcp_options,
@@ -44,7 +45,7 @@ impl TunnelInbound {
         dispatcher: Arc<Dispatcher>,
         network: Vec<String>,
         target: String,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         Ok(Self {
             listen: addr,
             dispatcher,
@@ -63,7 +64,7 @@ impl InboundHandlerTrait for TunnelInbound {
         true
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> Result<()> {
         if !self.network.contains(&"tcp".to_string()) {
             return Ok(());
         }
@@ -93,7 +94,7 @@ impl InboundHandlerTrait for TunnelInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
+    async fn listen_udp(&self) -> Result<()> {
         if !self.network.contains(&"udp".to_string()) {
             return Ok(());
         }

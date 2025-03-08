@@ -4,16 +4,16 @@ use async_trait::async_trait;
 use erased_serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_error::Result;
 
 use crate::{
-    Error,
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyOutboundHandler, ConnectorType, DialWithConnector,
         OutboundHandler, OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
@@ -22,7 +22,7 @@ use crate::{
 
 #[async_trait]
 pub trait SelectorControl {
-    async fn select(&mut self, name: &str) -> Result<(), Error>;
+    async fn select(&mut self, name: &str) -> Result<()>;
     async fn current(&self) -> String;
 }
 
@@ -34,7 +34,7 @@ struct HandlerInner {
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
     pub udp: bool,
 }
@@ -91,13 +91,13 @@ impl Handler {
 
 #[async_trait]
 impl SelectorControl for Handler {
-    async fn select(&mut self, name: &str) -> Result<(), Error> {
+    async fn select(&mut self, name: &str) -> Result<()> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
             name.clone_into(&mut self.inner.write().await.current);
             Ok(())
         } else {
-            Err(Error::Operation(format!("proxy {} not found", name)))
+            Err(anyhow!("proxy {} not found", name))
         }
     }
 
@@ -125,12 +125,11 @@ impl OutboundHandler for Handler {
     async fn connect_stream(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let s = self
             .selected_proxy(true)
             .await
-            .connect_stream(sess, resolver)
+            .connect_stream(sess)
             .await;
 
         match s {
@@ -144,12 +143,11 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+        sess: &Session
+    ) -> Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await
-            .connect_datagram(sess, resolver)
+            .connect_datagram(sess)
             .await
     }
 
@@ -160,13 +158,12 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let s = self
             .selected_proxy(true)
             .await
-            .connect_stream_with_connector(sess, resolver, connector)
+            .connect_stream_with_connector(sess, connector)
             .await?;
 
         s.append_to_chain(self.name()).await;
@@ -176,12 +173,11 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await
-            .connect_datagram_with_connector(sess, resolver, connector)
+            .connect_datagram_with_connector(sess, connector)
             .await
     }
 

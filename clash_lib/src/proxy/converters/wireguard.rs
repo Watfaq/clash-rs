@@ -1,12 +1,10 @@
 use ipnet::IpNet;
+use watfaq_config::OutboundCommonOptions;
 
 use crate::{
     Error,
     config::internal::proxy::OutboundWireguard,
-    proxy::{
-        HandlerCommonOptions,
-        wg::{Handler, HandlerOptions},
-    },
+    proxy::wg::{Handler, HandlerOptions},
 };
 
 impl TryFrom<OutboundWireguard> for Handler {
@@ -23,7 +21,7 @@ impl TryFrom<&OutboundWireguard> for Handler {
     fn try_from(s: &OutboundWireguard) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

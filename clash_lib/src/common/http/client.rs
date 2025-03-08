@@ -1,4 +1,5 @@
 use std::{
+    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -17,19 +18,22 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 use tower::Service;
+use watfaq_resolver::{AbstractResolver, Resolver};
+use watfaq_state::Context as AppContext;
+use watfaq_types::Stack;
+use watfaq_utils::which_stack_decision;
 
-use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    common::tls::GLOBAL_ROOT_STORE,
-    proxy::{AnyStream, utils::new_tcp_stream},
-};
+use crate::{common::tls::GLOBAL_ROOT_STORE, proxy::AnyStream};
 
 #[derive(Clone)]
 /// A LocalConnector that is generalised to connect to any url
-pub struct LocalConnector(pub ThreadSafeDNSResolver);
+pub struct LocalConnector {
+    pub ctx: Arc<AppContext>,
+    pub resolver: Arc<Resolver>,
+}
 
 impl Service<Uri> for LocalConnector {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
     type Response = AnyStream;
@@ -44,17 +48,11 @@ impl Service<Uri> for LocalConnector {
             .unwrap_or_else(|| panic!("invalid url: {}", remote))
             .to_owned();
 
-        let dns = self.0.clone();
-
+        let dns = self.resolver.clone();
+        let ctx = self.ctx.clone();
+        // FIXME remove Box pin
         Box::pin(async move {
-            let remote_ip = dns
-                .resolve_old(host.as_str(), false)
-                .await
-                .map_err(|v| std::io::Error::new(std::io::ErrorKind::Other, v))?
-                .ok_or(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "no dns result",
-                ))?;
+            let remote_ip = dns.resolve(host.as_str(), false).await?;
             let remote_port =
                 remote.port_u16().unwrap_or(match remote.scheme_str() {
                     None => 80,
@@ -64,14 +62,23 @@ impl Service<Uri> for LocalConnector {
                         _ => panic!("invalid url: {}", remote),
                     },
                 });
-            new_tcp_stream(
-                (remote_ip, remote_port).into(),
-                None,
-                #[cfg(target_os = "linux")]
-                None,
-            )
-            .await
-            .map(|x| Box::new(x) as _)
+            let stack = which_stack_decision(
+                &ctx.default_iface.load(),
+                ctx.stack_prefer,
+                remote_ip.into(),
+            );
+            let remote_addr: SocketAddr = match stack.unwrap_or_default() {
+                Stack::V4 => {
+                    SocketAddrV4::new(remote_ip.0.unwrap(), remote_port).into()
+                }
+                Stack::V6 => {
+                    SocketAddrV6::new(remote_ip.1.unwrap(), remote_port, 0, 0).into()
+                }
+            };
+            ctx.protector
+                .new_tcp(remote_addr, None)
+                .await
+                .map(|x| Box::new(x) as _)
         })
     }
 }
@@ -131,14 +138,15 @@ pub type HttpClient =
     Client<hyper_rustls::HttpsConnector<LocalConnector>, Empty<Bytes>>;
 
 pub fn new_http_client(
-    dns_resolver: ThreadSafeDNSResolver,
+    ctx: Arc<AppContext>,
+    resolver: Arc<Resolver>,
 ) -> std::io::Result<HttpClient> {
     let mut tls_config = rustls::ClientConfig::builder()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    let connector = LocalConnector(dns_resolver);
+    let connector = LocalConnector { ctx, resolver };
 
     let connector: hyper_rustls::HttpsConnector<LocalConnector> =
         hyper_rustls::HttpsConnectorBuilder::new()

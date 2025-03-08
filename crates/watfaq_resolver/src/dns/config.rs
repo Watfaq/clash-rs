@@ -11,7 +11,7 @@ use regex::Regex;
 use url::Url;
 use watfaq_dns::DNSListenAddr;
 use watfaq_error::{ErrContext, Result, anyhow};
-use watfaq_types::StringTrie;
+use watfaq_types::{DNSMode, StringTrie};
 
 use super::dns_client::DNSNetMode;
 
@@ -36,7 +36,7 @@ pub struct FallbackFilter {
 }
 
 #[derive(Default)]
-pub struct Config {
+pub struct DnsConfig {
     pub enable: bool,
     pub ipv6: bool,
     pub nameserver: Vec<NameServer>,
@@ -52,7 +52,7 @@ pub struct Config {
     pub nameserver_policy: HashMap<String, NameServer>,
 }
 
-impl Config {
+impl DnsConfig {
     pub fn parse_nameserver(servers: &[String]) -> Result<Vec<NameServer>> {
         let mut nameservers = vec![];
 
@@ -69,25 +69,24 @@ impl Config {
                 .host_str()
                 .ok_or_else(|| anyhow!("dns host must be valid"))?;
 
-            let iface = url.fragment();
             let addr: String;
             let net: &str;
 
             match url.scheme() {
                 "udp" => {
-                    addr = Config::host_with_default_port(host, "53")?;
+                    addr = DnsConfig::host_with_default_port(host, "53")?;
                     net = "UDP";
                 }
                 "tcp" => {
-                    addr = Config::host_with_default_port(host, "53")?;
+                    addr = DnsConfig::host_with_default_port(host, "53")?;
                     net = "TCP";
                 }
                 "tls" => {
-                    addr = Config::host_with_default_port(host, "853")?;
+                    addr = DnsConfig::host_with_default_port(host, "853")?;
                     net = "DoT";
                 }
                 "https" => {
-                    addr = Config::host_with_default_port(host, "443")?;
+                    addr = DnsConfig::host_with_default_port(host, "443")?;
                     net = "DoH";
                 }
                 "dhcp" => {
@@ -95,11 +94,11 @@ impl Config {
                     net = "DHCP";
                 }
                 _ => {
-                    return Err(Error::InvalidConfig(format!(
+                    return Err(anyhow!(
                         "DNS nameserver [{}] unsupported scheme: {}",
                         i,
                         url.scheme()
-                    )));
+                    ));
                 }
             }
 
@@ -107,7 +106,7 @@ impl Config {
             nameservers.push(NameServer {
                 address: addr,
                 net,
-                opts: url.fragment(),
+                opts: url.fragment().map(|v| v.to_string()),
             });
         }
 
@@ -120,14 +119,11 @@ impl Config {
         let mut policy = HashMap::new();
 
         for (domain, server) in policy_map {
-            let nameservers = Config::parse_nameserver(&[server.to_owned()])?;
-
-            let (_, valid) = trie::valid_and_split_domain(domain);
+            let nameservers = DnsConfig::parse_nameserver(&[server.to_owned()])?;
+            // TODO ugly
+            let (_, valid) = StringTrie::<()>::valid_and_split_domain(domain);
             if !valid {
-                return Err(Error::InvalidConfig(format!(
-                    "DNS ResolverRule invalid domain: {}",
-                    &domain
-                )));
+                return Err(anyhow!("DNS ResolverRule invalid domain: {}", &domain));
             }
             policy.insert(domain.into(), nameservers[0].clone());
         }
@@ -138,9 +134,7 @@ impl Config {
         let mut output = vec![];
 
         for ip in ipcidr.iter() {
-            let net: ipnet::IpNet = ip
-                .parse()
-                .map_err(|x: AddrParseError| Error::InvalidConfig(x.to_string()))?;
+            let net: ipnet::IpNet = ip.parse()?;
             output.push(net);
         }
 
@@ -150,7 +144,7 @@ impl Config {
     pub fn parse_hosts(
         hosts_mapping: &HashMap<String, String>,
     ) -> Result<StringTrie<IpAddr>> {
-        let mut tree = trie::StringTrie::new();
+        let mut tree = StringTrie::new();
         tree.insert(
             "localhost",
             Arc::new("127.0.0.1".parse::<IpAddr>().unwrap()),

@@ -13,6 +13,8 @@ use tracing_subscriber::{
     EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
 };
 
+use watfaq_error::Result;
+
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
         match level {
@@ -75,7 +77,7 @@ pub fn setup_logging(
     collector: EventCollector,
     cwd: &str,
     log_file: Option<String>,
-) -> anyhow::Result<Option<WorkerGuard>> {
+) -> Result<Option<WorkerGuard>> {
     let filter = EnvFilter::from_default_env()
         .add_directive(format!("clash={}", level).parse().unwrap())
         .add_directive(format!("clash_lib={}", level).parse().unwrap())

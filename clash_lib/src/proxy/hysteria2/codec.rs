@@ -4,6 +4,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use quinn_proto::{VarInt, coding::Codec};
 use rand::distr::Alphanumeric;
 use tokio_util::codec::{Decoder, Encoder};
+use watfaq_error::Result;
 
 use crate::session::SocksAddr;
 
@@ -31,7 +32,7 @@ impl Decoder for Hy2TcpCodec {
     fn decode(
         &mut self,
         src: &mut BytesMut,
-    ) -> Result<Option<Self::Item>, Self::Error> {
+    ) -> std::result::Result<Option<Self::Item>, Self::Error> {
         if !src.has_remaining() {
             return Err(ErrorKind::UnexpectedEof.into());
         }
@@ -76,7 +77,7 @@ impl Encoder<&'_ SocksAddr> for Hy2TcpCodec {
         &mut self,
         item: &'_ SocksAddr,
         buf: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    ) -> std::result::Result<(), Self::Error> {
         const REQ_ID: VarInt = VarInt::from_u32(0x401);
 
         let padding = padding(64..=512);
@@ -156,7 +157,7 @@ impl std::fmt::Debug for HysUdpPacket {
 
 impl HysUdpPacket {
     /// `decode` method, `encode` has been moved to Fragments
-    pub fn decode(buf: &mut BytesMut) -> anyhow::Result<Self> {
+    pub fn decode(buf: &mut BytesMut) -> Result<Self> {
         if buf.len() < 4 + 2 + 1 + 1 {
             return Err(anyhow!("packet too short"));
         }

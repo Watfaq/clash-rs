@@ -1,4 +1,4 @@
-mod config;
+pub mod config;
 pub mod dhcp;
 pub mod dns_client;
 mod fakeip;
@@ -8,4 +8,4 @@ pub mod resolver;
 mod runtime;
 mod server;
 
-pub use config::Config;
+pub use config::DnsConfig;

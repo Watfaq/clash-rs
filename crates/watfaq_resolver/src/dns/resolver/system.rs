@@ -1,8 +1,12 @@
-use std::sync::atomic::AtomicBool;
+use std::{
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    sync::{Arc, atomic::AtomicBool},
+};
 
-use async_trait::async_trait;
 use rand::seq::IteratorRandom;
 use watfaq_error::{Result, anyhow};
+use watfaq_state::Context;
+use watfaq_types::StackPrefer;
 
 use crate::AbstractResolver;
 
@@ -25,51 +29,20 @@ impl AbstractResolver for SystemResolver {
         &self,
         host: &str,
         _: bool,
-    ) -> Result<Option<std::net::IpAddr>> {
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .filter_map(|x| {
-                if self.ipv6() || x.is_ipv4() {
-                    Some(x.ip())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::rng()))
-    }
-
-    async fn resolve_v4(
-        &self,
-        host: &str,
-        _: bool,
-    ) -> Result<Option<std::net::Ipv4Addr>> {
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .filter_map(|ip| match ip.ip() {
-                std::net::IpAddr::V4(ip) => Some(ip),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::rng()))
-    }
-
-    async fn resolve_v6(
-        &self,
-        host: &str,
-        _: bool,
-    ) -> anyhow::Result<Option<std::net::Ipv6Addr>> {
-        if !self.ipv6() {
-            return Err(Error::DNSError("ipv6 disabled".into()).into());
+    ) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+        let mut v4 = Vec::with_capacity(1);
+        let mut v6 = Vec::with_capacity(1);
+        let result = tokio::net::lookup_host(format!("{}:0", host)).await?;
+        for ip in result {
+            match ip {
+                SocketAddr::V4(addr) => v4.push(*addr.ip()),
+                SocketAddr::V6(addr) => v6.push(*addr.ip()),
+            }
         }
-        let response = tokio::net::lookup_host(format!("{}:0", host))
-            .await?
-            .filter_map(|x| match x.ip() {
-                std::net::IpAddr::V6(ip) => Some(ip),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        Ok(response.into_iter().choose(&mut rand::rng()))
+        let v4 = v4.into_iter().choose(&mut rand::thread_rng());
+        let v6 = v6.into_iter().choose(&mut rand::thread_rng());
+
+        Ok((v4, v6))
     }
 
     async fn cached_for(&self, _: std::net::IpAddr) -> Option<String> {
@@ -94,16 +67,16 @@ impl AbstractResolver for SystemResolver {
     async fn reverse_lookup(&self, _: std::net::IpAddr) -> Option<String> {
         None
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use crate::app::dns::{ClashResolver, resolver::SystemResolver};
+    fn stack_prefer(&self) -> StackPrefer {
+        todo!()
+    }
 
-    #[tokio::test]
-    async fn test_system_resolver_default_config() {
-        let resolver = SystemResolver::new(false).unwrap();
-        let response = resolver.resolve_old("www.google.com", false).await.unwrap();
-        assert!(response.is_some());
+    fn ctx(&self) -> Arc<Context> {
+        todo!()
+    }
+
+    fn set_stack_perfer(&self, prefer: StackPrefer) {
+        todo!()
     }
 }

@@ -4,6 +4,7 @@ use serde_yaml::Value;
 use std::{
     collections::HashMap,
     fmt::{Display, Formatter},
+    net::IpAddr,
 };
 use uuid::Uuid;
 
@@ -268,7 +269,7 @@ pub struct OutboundTuic {
     pub uuid: Uuid,
     pub password: String,
     /// override field 'server' dns record, not used for now
-    pub ip: Option<String>,
+    pub ip: Option<IpAddr>,
     pub heartbeat_interval: Option<u64>,
     /// h3
     pub alpn: Option<Vec<String>>,

@@ -4,11 +4,13 @@ use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, warn};
+use watfaq_config::OutboundCommonOptions;
+use watfaq_resolver::Resolver;
+use watfaq_state::Context;
 
 use tracing::info;
 
 use crate::app::{
-    dns::ThreadSafeDNSResolver,
     profile::ThreadSafeCacheFile,
     remote_content_manager::{
         ProxyManager,
@@ -48,12 +50,11 @@ use crate::proxy::shadowsocks;
 use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
-#[cfg(feature = "tuic")]
-use crate::proxy::tuic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
 pub struct OutboundManager {
+    ctx: Arc<Context>,
     handlers: HashMap<String, AnyOutboundHandler>,
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
@@ -66,20 +67,22 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
 impl OutboundManager {
     pub async fn new(
+        ctx: Arc<Context>,
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
-        dns_resolver: ThreadSafeDNSResolver,
+        dns_resolver: Arc<Resolver>,
         cache_store: ThreadSafeCacheFile,
         cwd: String,
     ) -> Result<Self, Error> {
         let handlers = HashMap::new();
         let provider_registry = HashMap::new();
         let selector_control = HashMap::new();
-        let proxy_manager = ProxyManager::new(dns_resolver.clone());
+        let proxy_manager = ProxyManager::new(ctx.clone(), dns_resolver.clone());
 
         let mut m = Self {
+            ctx,
             handlers,
             proxy_manager,
             selector_control,
@@ -300,7 +303,7 @@ impl OutboundManager {
                 #[cfg(feature = "tuic")]
                 OutboundProxyProtocol::Tuic(tuic) => {
                     handlers.insert(tuic.common_opts.name.clone(), {
-                        let h: tuic::Handler = tuic.try_into()?;
+                        let h: watfaq_tuic::Handler = tuic.try_into()?;
                         Arc::new(h) as _
                     });
                 }
@@ -406,7 +409,7 @@ impl OutboundManager {
                     let relay = relay::Handler::new(
                         relay::HandlerOptions {
                             name: proto.name.clone(),
-                            common_opts: crate::proxy::HandlerCommonOptions {
+                            common_opts: OutboundCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
@@ -460,7 +463,7 @@ impl OutboundManager {
                     let url_test = urltest::Handler::new(
                         urltest::HandlerOptions {
                             name: proto.name.clone(),
-                            common_opts: crate::proxy::HandlerCommonOptions {
+                            common_opts: OutboundCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
@@ -517,7 +520,7 @@ impl OutboundManager {
                     let fallback = fallback::Handler::new(
                         fallback::HandlerOptions {
                             name: proto.name.clone(),
-                            common_opts: crate::proxy::HandlerCommonOptions {
+                            common_opts: OutboundCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
@@ -573,7 +576,7 @@ impl OutboundManager {
                     let load_balance = loadbalance::Handler::new(
                         loadbalance::HandlerOptions {
                             name: proto.name.clone(),
-                            common_opts: crate::proxy::HandlerCommonOptions {
+                            common_opts: OutboundCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
@@ -634,7 +637,7 @@ impl OutboundManager {
                         selector::HandlerOptions {
                             name: proto.name.clone(),
                             udp: proto.udp.unwrap_or(true),
-                            common_opts: crate::proxy::HandlerCommonOptions {
+                            common_opts: OutboundCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
@@ -673,7 +676,7 @@ impl OutboundManager {
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
                 udp: true,
-                common_opts: crate::proxy::HandlerCommonOptions {
+                common_opts: OutboundCommonOptions {
                     icon: None,
                     ..Default::default()
                 },
@@ -694,7 +697,7 @@ impl OutboundManager {
         &mut self,
         cwd: String,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
     ) -> Result<(), Error> {
         let proxy_manager = &self.proxy_manager;
         let provider_registry = &mut self.proxy_providers;
@@ -702,6 +705,7 @@ impl OutboundManager {
             match provider {
                 OutboundProxyProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
+                        self.ctx.clone(),
                         http.url.parse::<Uri>().unwrap_or_else(|_| {
                             panic!("invalid provider url: {}", http.url)
                         }),

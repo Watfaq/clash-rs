@@ -1,16 +1,12 @@
 use std::time::Duration;
 
 use quinn::VarInt;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_tuic::CongestionControl;
 
-use crate::{
-    config::internal::proxy::OutboundTuic,
-    proxy::{
-        HandlerCommonOptions,
-        tuic::{Handler, HandlerOptions, types::CongestionControl},
-    },
-};
+use crate::config::internal::proxy::OutboundTuic;
 
-impl TryFrom<OutboundTuic> for Handler {
+impl TryFrom<OutboundTuic> for watfaq_tuic::Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundTuic) -> Result<Self, Self::Error> {
@@ -18,14 +14,14 @@ impl TryFrom<OutboundTuic> for Handler {
     }
 }
 
-impl TryFrom<&OutboundTuic> for Handler {
+impl TryFrom<&OutboundTuic> for watfaq_tuic::Handler {
     type Error = crate::Error;
 
     fn try_from(s: &OutboundTuic) -> Result<Self, Self::Error> {
-        Ok(Handler::new(HandlerOptions {
+        Ok(watfaq_tuic::Handler::new(watfaq_tuic::HandlerOptions {
             name: s.common_opts.name.to_owned(),
             server: s.common_opts.server.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

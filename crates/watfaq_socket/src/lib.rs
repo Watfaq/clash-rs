@@ -14,6 +14,8 @@ mod protector_callback;
 
 mod platform;
 
+pub use protector_bind::BindProtector;
+
 #[enum_dispatch(AbstractProtector)]
 pub enum Protector {
     Bind(protector_bind::BindProtector),
@@ -31,7 +33,7 @@ impl Protector {
         remote: SocketAddr,
         timeout: Option<Duration>,
     ) -> Result<TcpStream> {
-        let stack = match &remote {
+        let stack = match remote {
             SocketAddr::V4(_) => Stack::V4,
             SocketAddr::V6(_) => Stack::V6,
         };

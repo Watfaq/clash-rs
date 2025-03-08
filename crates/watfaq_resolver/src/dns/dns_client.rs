@@ -1,5 +1,6 @@
 use std::{
-    fmt::{Debug, Display, Formatter, format},
+    fmt::{Debug, Display, Formatter},
+    io,
     net::{self, SocketAddr},
     str::FromStr,
     sync::Arc,
@@ -10,8 +11,7 @@ use futures::{TryFutureExt, future::BoxFuture};
 use hickory_client::client;
 use hickory_proto::{
     runtime::iocompat::AsyncIoTokioAsStd,
-    rustls::{self, tls_client_stream::tls_client_connect_with_future},
-    tcp::TcpClientStream,
+    rustls::tls_client_stream::tls_client_connect_with_future, tcp::TcpClientStream,
     udp::UdpClientStream,
 };
 
@@ -28,12 +28,12 @@ use hickory_proto::{
 };
 use tokio::net::TcpStream as TokioTcpStream;
 use watfaq_state::Context;
-use watfaq_types::Iface;
-use watfaq_utils::{GLOBAL_ROOT_STORE, NoHostnameTlsVerifier};
+use watfaq_types::Stack;
+use watfaq_utils::{GLOBAL_ROOT_STORE, NoHostnameTlsVerifier, which_stack_decision};
 
 use crate::{AbstractDnsClient, AbstractResolver, DnsClient, Resolver};
 
-use super::{dhcp::DhcpClient, resolver, runtime::DnsRuntimeProvider};
+use super::{dhcp::DhcpClient, runtime::DnsRuntimeProvider};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
@@ -127,7 +127,7 @@ pub struct EnhancedDnsClient {
 
 impl EnhancedDnsClient {
     pub async fn new(resolver: &Resolver, opts: Opts) -> Result<DnsClient> {
-        // TODO: use proxy to connect?
+        let ctx = resolver.ctx();
         match &opts.net {
             DNSNetMode::Dhcp => Ok(DhcpClient::new(&opts.host).await.into()),
 
@@ -143,7 +143,18 @@ impl EnhancedDnsClient {
                             opts.host
                         ));
                     }
-                    (v4, v6) => ip,
+                    target => {
+                        let stack = which_stack_decision(
+                            &ctx.default_iface.load(),
+                            ctx.stack_prefer,
+                            (target.0.is_some(), target.1.is_some()).into(),
+                        )
+                        .unwrap_or_default();
+                        match stack {
+                            Stack::V4 => target.0.unwrap().into(),
+                            Stack::V6 => target.1.unwrap().into(),
+                        }
+                    }
                 };
 
                 match other {
@@ -244,7 +255,7 @@ impl AbstractDnsClient for EnhancedDnsClient {
         format!("{}#{}:{}", &self.net, &self.host, &self.port)
     }
 
-    async fn exchange(&self, ctx: Arc<Context>, msg: &Message) -> Result<Message> {
+    async fn exchange(&self, msg: &Message) -> Result<Message> {
         let mut inner = self.inner.write().await;
 
         match &inner.bg_handle {
@@ -254,7 +265,8 @@ impl AbstractDnsClient for EnhancedDnsClient {
                         "dns client background task is finished, likely connection \
                          closed, restarting a new one"
                     );
-                    let (client, bg) = dns_stream_builder(ctx, &self.cfg).await?;
+                    let (client, bg) =
+                        dns_stream_builder(self.ctx(), &self.cfg).await?;
                     inner.c.replace(client);
                     inner.bg_handle.replace(bg);
                 }
@@ -262,13 +274,13 @@ impl AbstractDnsClient for EnhancedDnsClient {
             _ => {
                 // initializing client
                 info!("initializing dns client: {}", &self.cfg);
-                let (client, bg) = dns_stream_builder(ctx, &self.cfg).await?;
+                let (client, bg) = dns_stream_builder(self.ctx(), &self.cfg).await?;
                 inner.c.replace(client);
                 inner.bg_handle.replace(bg);
             }
         }
 
-        let mut req = DnsRequest::new(msg.clone(), DnsRequestOptions::default());
+        let mut req = DnsRequest::new(msg.to_owned(), DnsRequestOptions::default());
         if req.id() == 0 {
             req.set_id(rand::random::<u16>());
         }
@@ -281,6 +293,10 @@ impl AbstractDnsClient for EnhancedDnsClient {
             .await?
             .into_message();
         Ok(msg)
+    }
+
+    fn ctx(&self) -> Arc<Context> {
+        todo!()
     }
 }
 
@@ -318,8 +334,15 @@ async fn dns_stream_builder(
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into(), "h2".into()];
-
-            let fut = new_tcp_stream(*addr).map_ok(AsyncIoTokioAsStd);
+            let ctx = ctx.clone();
+            let addr = *addr;
+            let fut = async move {
+                ctx.protector
+                    .new_tcp(addr, None)
+                    .map_err(|e| io::Error::other(e))
+                    .map_ok(AsyncIoTokioAsStd)
+                    .await
+            };
 
             let (stream, sender) = tls_client_connect_with_future::<
                 AsyncIoTokioAsStd<TokioTcpStream>,

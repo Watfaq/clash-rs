@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -10,16 +10,17 @@ use hickory_proto::{op::Message, rr::RecordType};
 use http::StatusCode;
 use serde::Deserialize;
 use serde_json::{Map, Value};
+use watfaq_resolver::{AbstractResolver, Resolver};
 
-use crate::app::{api::AppState, dns::ThreadSafeDNSResolver};
+use crate::app::api::AppState;
 
 #[derive(Clone)]
 struct DNSState {
     #[allow(dead_code)]
-    resolver: ThreadSafeDNSResolver,
+    resolver: Arc<Resolver>,
 }
 
-pub fn routes(resolver: ThreadSafeDNSResolver) -> Router<Arc<AppState>> {
+pub fn routes(resolver: Arc<Resolver>) -> Router<Arc<AppState>> {
     let state = DNSState { resolver };
     Router::new()
         .route("/query", get(query_dns))
@@ -37,10 +38,14 @@ async fn query_dns(
     State(state): State<DNSState>,
     q: Query<DnsQUery>,
 ) -> impl IntoResponse {
-    if let crate::app::dns::ResolverKind::System = state.resolver.kind() {
-        return (StatusCode::BAD_REQUEST, "Clash resolver is not enabled.")
-            .into_response();
+    match state.resolver.deref() {
+        Resolver::Enchaned(..) => {}
+        _ => {
+            return (StatusCode::BAD_REQUEST, "Clash resolver is not enabled.")
+                .into_response();
+        }
     }
+
     let typ: RecordType = q.typ.parse().unwrap_or(RecordType::A);
     let mut m = Message::new();
 

@@ -1,24 +1,26 @@
 mod helpers;
 
-use std::{collections::HashMap, io, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use erased_serde::Serialize;
 use helpers::strategy_sticky_session;
 use tokio::sync::Mutex;
 use tracing::debug;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_error::Result;
+use watfaq_resolver::Resolver;
 
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
         },
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
-        OutboundHandler, OutboundType,
+        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+        OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
@@ -28,7 +30,7 @@ use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,
@@ -103,13 +105,12 @@ impl OutboundHandler for Handler {
     /// connect to remote target via TCP
     async fn connect_stream(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+        sess: &Session
+    ) -> Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        match proxy.connect_stream(sess, resolver).await {
+        match proxy.connect_stream(sess).await {
             Ok(s) => {
                 s.append_to_chain(self.name()).await;
                 Ok(s)
@@ -121,13 +122,12 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+        sess: &Session
+    ) -> Result<BoxedChainedDatagram> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        proxy.connect_datagram(sess, resolver).await
+        proxy.connect_datagram(sess).await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -137,14 +137,13 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
         proxy
-            .connect_stream_with_connector(sess, resolver, connector)
+            .connect_stream_with_connector(sess, connector)
             .await
     }
 

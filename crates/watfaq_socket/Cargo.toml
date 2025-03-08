@@ -11,7 +11,6 @@ tokio = "*"
 arc-swap = "*"
 enum_dispatch = "*"
 
-anyhow = "*"
 watfaq_types = { path = "../watfaq_types" }
 watfaq_error = { path= "../watfaq_error" }
 

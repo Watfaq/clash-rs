@@ -1,9 +1,9 @@
-use anyhow::{Result, anyhow};
 use quinn::{
     Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
 };
 use register_count::Counter;
 use watfaq_config::OutboundCommonOptions;
+use watfaq_error::{Result, anyhow};
 use watfaq_resolver::AbstractResolver;
 use watfaq_state::Context;
 use watfaq_types::{Stack, TargetAddr, UdpPacket};
@@ -51,7 +51,7 @@ impl TuicClient {
                     .as_ref()
                     .unwrap_or(&ctx.default_iface.load()),
                 self.common.stack_prefer.unwrap_or(ctx.stack_prefer.clone()),
-                server_ip,
+                server_ip.into(),
             )
             .unwrap_or_default();
             let server_addr = match stack {
@@ -66,7 +66,7 @@ impl TuicClient {
                 // TODO allow override protector (when outbound specify
                 // interface/fwmark)
                 let socket: UdpSocket =
-                    ctx.protector.new_udp_socket(stack).await?.into();
+                    ctx.protector.new_udp_socket(stack).await?.into_std()?;
                 debug!("try rebind endpoint UDP socket to {}", socket.local_addr()?);
 
                 self.ep.rebind(socket).map_err(|err| {
@@ -236,7 +236,7 @@ impl ServerAddr {
                 IpAddr::V6(ipv6_addr) => Ok((None, Some(ipv6_addr))),
             }
         } else {
-            let ip = resolver.resolve(self.domain.as_str()).await?;
+            let ip = resolver.resolve(self.domain.as_str(), false).await?;
             Ok(ip)
         }
     }

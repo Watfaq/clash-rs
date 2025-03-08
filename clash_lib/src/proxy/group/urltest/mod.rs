@@ -4,17 +4,18 @@ use async_trait::async_trait;
 use erased_serde::Serialize;
 use tokio::sync::Mutex;
 use tracing::trace;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_error::Result;
 
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
         remote_content_manager::{
             ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
         },
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyOutboundHandler, ConnectorType, DialWithConnector,
         OutboundHandler, OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
@@ -23,7 +24,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
     pub udp: bool,
 }
@@ -151,12 +152,11 @@ impl OutboundHandler for Handler {
     async fn connect_stream(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let s = self
             .fastest(false)
             .await
-            .connect_stream(sess, resolver)
+            .connect_stream(sess)
             .await?;
         s.append_to_chain(self.name()).await;
         Ok(s)
@@ -165,13 +165,12 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+        sess: &Session
+    ) -> Result<BoxedChainedDatagram> {
         let d = self
             .fastest(false)
             .await
-            .connect_datagram(sess, resolver)
+            .connect_datagram(sess)
             .await?;
         d.append_to_chain(self.name()).await;
         Ok(d)
@@ -184,13 +183,12 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let s = self
             .fastest(true)
             .await
-            .connect_stream_with_connector(sess, resolver, connector)
+            .connect_stream_with_connector(sess, connector)
             .await?;
 
         s.append_to_chain(self.name()).await;
@@ -200,12 +198,11 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         self.fastest(true)
             .await
-            .connect_datagram_with_connector(sess, resolver, connector)
+            .connect_datagram_with_connector(sess, connector)
             .await
     }
 

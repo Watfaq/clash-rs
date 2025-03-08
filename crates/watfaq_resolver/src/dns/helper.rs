@@ -7,12 +7,11 @@ use tracing::{debug, warn};
 
 use super::config::NameServer;
 
-pub async fn make_clients(
+pub async fn build_dns_clients(
     servers: Vec<NameServer>,
     resolver: &Resolver,
 ) -> Vec<DnsClient> {
     let mut rv = Vec::new();
-
     for s in servers {
         debug!("building nameserver: {}", s);
 
@@ -26,7 +25,6 @@ pub async fn make_clients(
                 .unwrap_or_else(|| panic!("invalid address: {}", s.address));
             (host, port)
         };
-
         match EnhancedDnsClient::new(
             resolver,
             Opts {

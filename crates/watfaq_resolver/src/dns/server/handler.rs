@@ -4,13 +4,16 @@ use hickory_proto::{
 };
 use tracing::debug;
 
+use crate::{AbstractResolver, Resolver, dns::resolver};
+
 use super::DEFAULT_DNS_SERVER_TTL;
 
 pub async fn exchange_with_resolver<'a>(
-    resolver: &'a ThreadSafeDNSResolver,
+    resolver: &'a Resolver,
     req: &'a Message,
     enhanced: bool,
 ) -> Result<Message, watfaq_dns::DNSError> {
+    // TODO maybe should move fakeip logic to somewhere else
     if resolver.fake_ip_enabled() {
         let name = req
             .query()
@@ -36,40 +39,36 @@ pub async fn exchange_with_resolver<'a>(
             res.set_edns(edns);
         }
 
-        match resolver.resolve_v4_old(&host, enhanced).await {
-            Ok(resp) => match resp {
-                Some(ip) => {
-                    let rdata = RData::A(A(ip));
+        match resolver.resolve(&host, enhanced).await {
+            Ok((Some(ip), _)) => {
+                let rdata = RData::A(A(ip));
 
-                    let records = vec![Record::from_rdata(
-                        name.clone(),
-                        DEFAULT_DNS_SERVER_TTL,
-                        rdata,
-                    )];
+                let records = vec![Record::from_rdata(
+                    name.clone(),
+                    DEFAULT_DNS_SERVER_TTL,
+                    rdata,
+                )];
 
-                    res.set_response_code(ResponseCode::NoError);
-                    res.set_answer_count(records.len() as u16);
+                res.set_response_code(ResponseCode::NoError);
+                res.set_answer_count(records.len() as u16);
 
-                    res.add_answers(records);
+                res.add_answers(records);
 
-                    return Ok(res);
-                }
-                None => {
-                    res.set_response_code(ResponseCode::NXDomain);
-                    return Ok(res);
-                }
-            },
+                return Ok(res);
+            }
+            Ok(_) => {
+                // FIXME not sure
+                res.set_response_code(ResponseCode::NXDomain);
+                return Ok(res);
+            }
             Err(e) => {
                 debug!("dns resolve error: {}", e);
                 return Err(watfaq_dns::DNSError::QueryFailed(e.to_string()));
             }
         }
     }
-    match resolver.exchange(req).await {
-        Ok(m) => Ok(m),
-        Err(e) => {
-            debug!("dns resolve error: {}", e);
-            Err(watfaq_dns::DNSError::QueryFailed(e.to_string()))
-        }
-    }
+    resolver.exchange(req).await.map_err(|e| {
+        debug!("dns resolve error: {}", e);
+        watfaq_dns::DNSError::QueryFailed(e.to_string())
+    })
 }

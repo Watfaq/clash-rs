@@ -1,26 +1,23 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    net::SocketAddr,
+};
 
 use crate::{
-    app::{
-        dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-        },
-        dns::ThreadSafeDNSResolver,
+    app::dispatcher::{
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
-    common::errors::map_io_error,
     config::internal::proxy::PROXY_DIRECT,
-    proxy::{
-        OutboundHandler,
-        datagram::OutboundDatagramImpl,
-        utils::{new_tcp_stream, new_udp_socket},
-    },
+    proxy::{OutboundHandler, datagram::OutboundDatagramImpl},
     session::Session,
 };
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
 use serde::Serialize;
+use watfaq_error::Result;
+use watfaq_resolver::AbstractResolver;
+use watfaq_utils::which_ip_decision;
 
 use super::{
     ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
@@ -60,25 +57,24 @@ impl OutboundHandler for Handler {
     async fn connect_stream(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
-        let remote_ip = resolver
-            .resolve_old(sess.destination.host().as_str(), false)
-            .map_err(map_io_error)
-            .await?
-            .ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "no dns result")
-            })?;
+    ) -> Result<BoxedChainedStream> {
+        let ip = sess.resolved_ip;
+        let ip = match ip {
+            Some(v) => v,
+            None => {
+                let remote_ip = self.resolver()
+                .resolve(sess.destination.host().as_str(), false) // FIXME it's pretty wired
+                .await?;
+                which_ip_decision(self.ctx(), remote_ip.into())?
+            }
+        };
+        let tcp_stream = self
+            .ctx()
+            .protector
+            .new_tcp(SocketAddr::new(ip, sess.destination.port()), None)
+            .await?; //TODO timeout
 
-        let s = new_tcp_stream(
-            (remote_ip, sess.destination.port()).into(),
-            sess.iface.clone(),
-            #[cfg(target_os = "linux")]
-            sess.so_mark,
-        )
-        .await?;
-
-        let s = ChainedStreamWrapper::new(s);
+        let s = ChainedStreamWrapper::new(tcp_stream);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
@@ -86,18 +82,26 @@ impl OutboundHandler for Handler {
     async fn connect_datagram(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
-        let d = new_udp_socket(
-            None,
-            sess.iface.clone(),
-            #[cfg(target_os = "linux")]
-            sess.so_mark,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
+    ) -> Result<BoxedChainedDatagram> {
+        let ip = sess.resolved_ip;
+        let ip = match ip {
+            Some(v) => v,
+            None => {
+                let remote_ip = self.resolver()
+                .resolve(sess.destination.host().as_str(), false) // FIXME it's pretty wired
+                .await?;
+                which_ip_decision(self.ctx(), remote_ip.into())?
+            }
+        };
+        let udp_socket = self
+            .ctx()
+            .protector
+            .new_udp(SocketAddr::new(ip, sess.destination.port()))
+            .await?;
 
-        let d = ChainedDatagramWrapper::new(d);
+        let d = ChainedDatagramWrapper::new(OutboundDatagramImpl::new(
+            udp_socket, self.clone_resolver(),
+        ));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }
@@ -109,17 +113,12 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let s = connector
             .connect_stream(
-                resolver,
                 sess.destination.host().as_str(),
                 sess.destination.port(),
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
             )
             .await?;
         let s = ChainedStreamWrapper::new(s);
@@ -130,18 +129,10 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         let d = connector
-            .connect_datagram(
-                resolver,
-                None,
-                sess.destination.clone(),
-                sess.iface.clone(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
-            )
+            .connect_datagram(None, sess.destination.clone())
             .await?;
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;

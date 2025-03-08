@@ -44,6 +44,7 @@ watfaq_state = { path = "../watfaq_state" }
 watfaq_socket = { path = "../watfaq_socket" }
 watfaq_resolver = { path = "../watfaq_resolver" }
 watfaq_utils = { path = "../watfaq_utils" }
+watfaq_error = { path = "../watfaq_error"}
 
 [dev-dependencies]
 tokio-test = "0.4"

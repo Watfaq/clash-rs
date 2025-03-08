@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use futures::{FutureExt, TryFutureExt};
-use rand::seq::SliceRandom as _;
+use rand::seq::{IteratorRandom, SliceRandom as _};
 use watfaq_state::Context;
 
 use std::{
-    net::{self, Ipv4Addr, Ipv6Addr},
+    net::{self, IpAddr, Ipv4Addr, Ipv6Addr},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
@@ -20,20 +20,20 @@ use watfaq_utils::Mmdb;
 use hickory_proto::{op, rr};
 
 use crate::{
-    AbstractDnsClient, AbstractResolver, DnsClient,
+    AbstractResolver, DnsClient,
     dns::{
-        Config,
+        DnsConfig,
         fakeip::{self, InMemStore, ThreadSafeFakeDns},
         filters::{
             DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
             IPNetFilter,
         },
-        helper::make_clients,
+        helper::build_dns_clients,
     },
 };
 use watfaq_error::Result;
 
-use super::SystemResolver;
+use super::{SystemResolver, batch_exchange};
 
 static TTL: Duration = Duration::from_secs(60);
 
@@ -53,7 +53,7 @@ pub struct EnhancedResolver {
 
     reverse_lookup_cache:
         Option<Arc<RwLock<lru_time_cache::LruCache<net::IpAddr, String>>>>,
-    ctx: Arc<Context>
+    ctx: Arc<Context>,
 }
 
 impl EnhancedResolver {
@@ -61,13 +61,14 @@ impl EnhancedResolver {
     #[cfg(test)]
     pub async fn new_default() -> Self {
         use crate::dns::{
-            config::NameServer, dns_client::DNSNetMode, helper::make_clients, resolver::dummy::DummyResolver,
+            config::NameServer, dns_client::DNSNetMode, helper::build_dns_clients,
+            resolver::dummy::DummyResolver,
         };
 
         EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
-            main: make_clients(
+            main: build_dns_clients(
                 vec![NameServer {
                     net: DNSNetMode::Udp,
                     address: "8.8.8.8:53".to_string(),
@@ -85,18 +86,25 @@ impl EnhancedResolver {
             fake_dns: None,
 
             reverse_lookup_cache: None,
-            ctx: todo!(),
+            ctx: Context::new_test().into(),
         }
     }
 
-    pub async fn new(ctx: Arc<Context>, cfg: Config, mmdb: Arc<Mmdb>) -> Result<Self> {
+    pub async fn new(
+        ctx: Arc<Context>,
+        cfg: DnsConfig,
+        mmdb: Arc<Mmdb>,
+    ) -> Result<Self> {
         let dummy_resolver = SystemResolver::new(false)?.into();
         let default_resolver = Arc::new(
             EnhancedResolver {
                 ipv6: AtomicBool::new(false),
                 hosts: None,
-                main: make_clients(cfg.default_nameserver.clone(), &dummy_resolver)
-                    .await,
+                main: build_dns_clients(
+                    cfg.default_nameserver.clone(),
+                    &dummy_resolver,
+                )
+                .await,
                 fallback: None,
                 fallback_domain_filters: None,
                 fallback_ip_filters: None,
@@ -113,10 +121,12 @@ impl EnhancedResolver {
 
         let res = Self {
             ipv6: AtomicBool::new(cfg.ipv6),
-            main: make_clients(cfg.nameserver.clone(), &default_resolver).await,
+            main: build_dns_clients(cfg.nameserver.clone(), &default_resolver).await,
             hosts: cfg.hosts,
             fallback: if !cfg.fallback.is_empty() {
-                Some(make_clients(cfg.fallback.clone(), &default_resolver).await)
+                Some(
+                    build_dns_clients(cfg.fallback.clone(), &default_resolver).await,
+                )
             } else {
                 None
             },
@@ -163,8 +173,11 @@ impl EnhancedResolver {
                     p.insert(
                         domain.as_str(),
                         Arc::new(
-                            make_clients(vec![ns.to_owned()], &default_resolver)
-                                .await,
+                            build_dns_clients(
+                                vec![ns.to_owned()],
+                                &default_resolver,
+                            )
+                            .await,
                         ),
                     );
                 }
@@ -217,41 +230,6 @@ impl EnhancedResolver {
         Ok(res)
     }
 
-    pub async fn batch_exchange(
-        &self,
-        clients: &Vec<DnsClient>,
-        message: &op::Message,
-    ) -> Result<op::Message> {
-        let mut queries = Vec::new();
-        for c in clients {
-            let ctx= self.ctx.clone();
-            queries.push(
-                async move {
-                    c.exchange(ctx, message)
-                        .inspect_err(|x| {
-                            error!(
-                                "DNS client {} resolve error: {}",
-                                c.id(),
-                                x.to_string()
-                            )
-                        })
-                        .await
-                }
-                .boxed(),
-            )
-        }
-
-        let timeout = tokio::time::sleep(Duration::from_secs(10));
-
-        tokio::select! {
-            result = futures::future::select_ok(queries) => match result {
-                Ok(r) => Ok(r.0),
-                Err(e) => Err(e),
-            },
-            _ = timeout => Err(anyhow!("DNS query timeout"))
-        }
-    }
-
     /// guaranteed to return at least 1 IP address when Ok
     async fn lookup_ip(
         &self,
@@ -261,7 +239,7 @@ impl EnhancedResolver {
         let mut m = op::Message::new();
         let mut q = op::Query::new();
         let name = rr::Name::from_str_relaxed(host)
-            .map_err(|_x| anyhow!("invalid domain: {}", host))?
+            .map_err(|_| anyhow!("invalid domain: {}", host))?
             .append_domain(&rr::Name::root())?; // makes it FQDN
         q.set_name(name);
         q.set_query_type(record_type);
@@ -306,10 +284,10 @@ impl EnhancedResolver {
             }
 
             if let Some(matched) = self.match_policy(message) {
-                return self.batch_exchange(matched, message).await;
+                return batch_exchange(matched, message).await;
             }
 
-            self.batch_exchange(&self.main, message).await
+            batch_exchange(&self.main, message).await
         };
 
         let rv = query.await;
@@ -362,28 +340,22 @@ impl EnhancedResolver {
 
     async fn ip_exchange(&self, message: &op::Message) -> Result<op::Message> {
         if let Some(matched) = self.match_policy(message) {
-            return self.batch_exchange(matched, message).await;
+            return batch_exchange(matched, message).await;
         }
 
         if self.should_only_query_fallback(message) {
             // self.fallback guaranteed in the above check
-            return self.batch_exchange(
-                self.fallback.as_ref().unwrap(),
-                message,
-            )
-            .await;
+            return batch_exchange(self.fallback.as_ref().unwrap(), message).await;
         }
 
-        let main_query = self.batch_exchange(&self.main, message);
+        let main_query = batch_exchange(&self.main, message);
 
         if self.fallback.is_none() {
             return main_query.await;
         }
 
-        let fallback_query = self.batch_exchange(
-            self.fallback.as_ref().unwrap(),
-            message,
-        );
+        let fallback_query =
+            batch_exchange(self.fallback.as_ref().unwrap(), message);
 
         if let Ok(main_result) = main_query.await {
             let ip_list = EnhancedResolver::ip_list_of_message(&main_result);
@@ -466,104 +438,54 @@ impl AbstractResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
-        match self.ipv6.load(Relaxed) {
-            true => {
-                let fut1 = self
-                    .resolve_v6(host, enhanced)
-                    .map(|x| x.map(|v6| v6.map(net::IpAddr::from)));
-                let fut2 = self
-                    .resolve_v4(host, enhanced)
-                    .map(|x| x.map(|v4| v4.map(net::IpAddr::from)));
-
-                let futs = vec![fut1.boxed(), fut2.boxed()];
-                let r = futures::future::select_ok(futs).await?;
-                if r.0.is_some() {
-                    return Ok(r.0);
-                }
-                let r = futures::future::select_all(r.1).await;
-                return r.0;
+        if enhanced
+            && let Some(hosts) = &self.hosts
+            && let Some(ip) = hosts.search(host)
+        {
+            match ip.get_data() {
+                Some(IpAddr::V4(v4)) => return Ok((Some(*v4), None)),
+                Some(IpAddr::V6(v6)) => return Ok((None, Some(*v6))),
+                None => {}
             }
-            false => self
-                .resolve_v4(host, enhanced)
-                .await
-                .map(|ip| ip.map(net::IpAddr::from)),
         }
-    }
-
-    async fn resolve_v4(
-        &self,
-        host: &str,
-        enhanced: bool,
-    ) -> Result<Option<net::Ipv4Addr>> {
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V4(v4) => *v4,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
+        if let Ok(ip) = host.parse::<net::IpAddr>() {
+            match ip {
+                IpAddr::V4(v4) => return Ok((Some(v4), None)),
+                IpAddr::V6(v6) => return Ok((None, Some(v6))),
             }
         }
 
-        if let Ok(ip) = host.parse::<net::Ipv4Addr>() {
-            return Ok(Some(ip));
-        }
-
-        if enhanced && self.fake_ip_enabled() {
-            let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
-            if !fake_dns.should_skip(host) {
-                let ip = fake_dns.lookup(host).await;
-                debug!("fake dns lookup: {} -> {:?}", host, ip);
-                match ip {
-                    net::IpAddr::V4(v4) => return Ok(Some(v4)),
-                    _ => unreachable!("invalid IP family"),
-                }
+        if enhanced
+            && self.fake_ip_enabled()
+            && let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await
+            && !fake_dns.should_skip(host)
+        {
+            let ip = fake_dns.lookup(host).await;
+            debug!("fake dns lookup: {} -> {:?}", host, ip);
+            match ip {
+                IpAddr::V4(v4) => return Ok((Some(v4), None)),
+                IpAddr::V6(v6) => return Ok((None, Some(v6))),
             }
         }
+        let fut1 = self.lookup_ip(host, rr::RecordType::A);
+        let fut2 = self.lookup_ip(host, rr::RecordType::AAAA);
+        let (res_v4, res_v6) = tokio::join!(fut1, fut2);
+        let res_v4 = res_v4?
+            .into_iter()
+            .filter_map(|v| match v {
+                IpAddr::V4(addr) => Some(addr),
+                IpAddr::V6(_) => None,
+            })
+            .choose(&mut rand::thread_rng());
+        let res_v6 = res_v6?
+            .into_iter()
+            .filter_map(|v| match v {
+                IpAddr::V4(_) => None,
+                IpAddr::V6(addr) => Some(addr),
+            })
+            .choose(&mut rand::thread_rng());
 
-        match self.lookup_ip(host, rr::RecordType::A).await {
-            Ok(result) => match result.choose(&mut rand::thread_rng()).unwrap() {
-                net::IpAddr::V4(v4) => Ok(Some(*v4)),
-                _ => unreachable!("invalid IP family"),
-                net::IpAddr::V6(ipv6_addr) => todo!(),
-            },
-            Err(e) => Err(e),
-        }
-    }
-
-    async fn resolve_v6(
-        &self,
-        host: &str,
-        enhanced: bool,
-    ) -> Result<Option<net::Ipv6Addr>> {
-        if !self.ipv6.load(Relaxed) {
-            return Err(anyhow!("ipv6 disabled"));
-        }
-
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V6(v6) => *v6,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
-            }
-        }
-
-        if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
-            return Ok(Some(ip));
-        }
-
-        match self.lookup_ip(host, rr::RecordType::AAAA).await {
-            Ok(result) => match result.choose(&mut rand::rng()).unwrap() {
-                net::IpAddr::V6(v6) => Ok(Some(*v6)),
-                _ => unreachable!("invalid IP family"),
-            },
-
-            Err(e) => Err(e),
-        }
+        Ok((res_v4, res_v6))
     }
 
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
@@ -577,7 +499,7 @@ impl AbstractResolver for EnhancedResolver {
         None
     }
 
-    async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
+    async fn exchange(&self, message: &op::Message) -> Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message
             .query()
@@ -595,7 +517,9 @@ impl AbstractResolver for EnhancedResolver {
         Ok(rv)
     }
 
-    fn stack_prefer(&self) -> StackPrefer {}
+    fn stack_prefer(&self) -> StackPrefer {
+        todo!()
+    }
 
     fn fake_ip_enabled(&self) -> bool {
         self.fake_dns.is_some()
@@ -618,5 +542,13 @@ impl AbstractResolver for EnhancedResolver {
 
         let mut fake_dns = self.fake_dns.as_ref().unwrap().write().await;
         fake_dns.reverse_lookup(ip).await
+    }
+
+    fn ctx(&self) -> Arc<Context> {
+        todo!()
+    }
+
+    fn set_stack_perfer(&self, prefer: StackPrefer) {
+        todo!()
     }
 }

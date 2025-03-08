@@ -1,15 +1,12 @@
-#![feature(cfg_version)]
-#![feature(ip)]
-#![feature(sync_unsafe_cell)]
-#![feature(let_chains)]
+#![feature(cfg_version, ip, sync_unsafe_cell, let_chains)]
 #![cfg_attr(not(version("1.86.0")), feature(unbounded_shifts))]
 
-#[macro_use]
-extern crate anyhow;
+#[macro_use(anyhow, bail)]
+extern crate watfaq_error;
 
 use crate::{
     app::{
-        dispatcher::Dispatcher, dns, inbound::manager::InboundManager,
+        dispatcher::Dispatcher, inbound::manager::InboundManager,
         outbound::manager::OutboundManager, router::Router,
     },
     config::{
@@ -28,6 +25,7 @@ use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
 use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
+use watfaq_resolver::Resolver;
 
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
@@ -71,7 +69,7 @@ pub enum Error {
     #[error("operation error: {0}")]
     Operation(String),
     #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    Other(#[from] watfaq_error::Error),
 }
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Runner = futures::future::BoxFuture<'static, Result<()>>;
@@ -97,7 +95,7 @@ pub enum Config {
 }
 
 impl Config {
-    pub fn try_parse(self) -> Result<InternalConfig> {
+    pub fn try_parse(self) -> watfaq_error::Result<InternalConfig> {
         match self {
             Config::Def(c) => c.try_into(),
             Config::Internal(c) => Ok(c),
@@ -317,7 +315,7 @@ pub async fn start(
 
 struct RuntimeComponents {
     cache_store: profile::ThreadSafeCacheFile,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
     outbound_manager: Arc<OutboundManager>,
     router: Arc<Router>,
     dispatcher: Arc<Dispatcher>,

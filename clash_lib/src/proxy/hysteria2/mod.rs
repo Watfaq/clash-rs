@@ -46,8 +46,7 @@ use tracing::{debug, trace, warn};
 
 use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    converters::hysteria2::PortGenerator, datagram::UdpPacket,
-    utils::new_udp_socket,
+    converters::hysteria2::PortGenerator, datagram::UdpPacket
 };
 
 use self::{
@@ -279,7 +278,7 @@ impl Handler {
     async fn auth(
         conn: &quinn::Connection,
         passwd: &str,
-    ) -> anyhow::Result<(SendRequest<OpenStreams, Bytes>, CcRx, bool)> {
+    ) -> Result<(SendRequest<OpenStreams, Bytes>, CcRx, bool)> {
         let h3_conn = h3_quinn::Connection::new(conn.clone());
 
         let (_, mut sender) =
@@ -322,8 +321,7 @@ impl Handler {
 
     pub async fn new_authed_connection(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
+        sess: &Session
     ) -> std::io::Result<Arc<HysteriaConnection>> {
         let mut quinn_conn_lock = self.conn.lock().await;
 
@@ -383,9 +381,8 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+        sess: &Session
+    ) -> Result<BoxedChainedStream> {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let hy_stream = authed_conn.connect_tcp(sess).await?;
         Ok(Box::new(ChainedStreamWrapper::new(Box::new(hy_stream))))
@@ -394,9 +391,8 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+        sess: &Session
+    ) -> Result<BoxedChainedDatagram> {
         let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
         let next_session_id = self
             .next_session_id

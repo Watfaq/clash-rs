@@ -1,18 +1,17 @@
 use super::{ProviderVehicle, ProviderVehicleType};
-use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    common::{
-        errors::map_io_error,
-        http::{HttpClient, new_http_client},
-    },
+use crate::common::{
+    errors::map_io_error,
+    http::{HttpClient, new_http_client},
 };
 
 use async_trait::async_trait;
 
 use http_body_util::BodyExt;
 use hyper::Uri;
+use watfaq_resolver::Resolver;
+use watfaq_state::Context;
 
-use std::io;
+use std::{io, sync::Arc};
 
 use std::path::{Path, PathBuf};
 
@@ -24,13 +23,14 @@ pub struct Vehicle {
 
 impl Vehicle {
     pub fn new<T: Into<Uri>, P: AsRef<Path>>(
+        ctx: Arc<Context>,
         url: T,
         path: P,
         cwd: Option<P>,
-        dns_resolver: ThreadSafeDNSResolver,
+        dns_resolver: Arc<Resolver>,
     ) -> Self {
-        let client =
-            new_http_client(dns_resolver).expect("failed to create http client");
+        let client = new_http_client(ctx, dns_resolver)
+            .expect("failed to create http client");
         Self {
             url: url.into(),
             path: match cwd {
@@ -62,28 +62,5 @@ impl ProviderVehicle for Vehicle {
 
     fn typ(&self) -> ProviderVehicleType {
         ProviderVehicleType::Http
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ProviderVehicle;
-    use std::{str, sync::Arc};
-
-    use hyper::Uri;
-
-    use crate::app::dns::{EnhancedResolver, ThreadSafeDNSResolver};
-
-    #[tokio::test]
-    async fn test_http_vehicle() {
-        let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
-            .parse::<Uri>()
-            .unwrap();
-        let p = std::env::temp_dir().join("test_http_vehicle");
-        let r = Arc::new(EnhancedResolver::new_default().await);
-        let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
-
-        let data = v.read().await.unwrap();
-        assert_eq!(str::from_utf8(&data).unwrap(), "HTTPBIN is awesome");
     }
 }

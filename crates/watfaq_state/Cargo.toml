@@ -6,6 +6,8 @@ edition = { workspace = true }
 
 [dependencies]
 arc-swap = "*"
+tokio = "1"
 
 watfaq_types = { path = "../watfaq_types" }
 watfaq_socket = { path = "../watfaq_socket" }
+watfaq_error = { path = "../watfaq_error" }

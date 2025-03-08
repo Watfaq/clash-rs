@@ -17,6 +17,8 @@ use crate::Dispatcher;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
 
+use watfaq_error::Result;
+
 use std::sync::Arc;
 
 pub struct NetworkInboundHandler {
@@ -27,17 +29,14 @@ pub struct NetworkInboundHandler {
 }
 
 impl NetworkInboundHandler {
-    pub fn listen(
-        &self,
-        set: &mut JoinSet<Result<(), crate::Error>>,
-    ) -> crate::Result<()> {
+    pub fn listen(&self, set: &mut JoinSet<Result<()>>) -> Result<()> {
         self.build_and_insert_listener(set)
     }
 
     fn build_and_insert_listener(
         &self,
-        set: &mut JoinSet<Result<(), crate::Error>>,
-    ) -> crate::Result<()> {
+        set: &mut JoinSet<Result<()>>,
+    ) -> Result<()> {
         let handler: InboudHandler = match &self.listener {
             InboundOpts::Http { common_opts, .. } => HttpInbound::new(
                 (common_opts.listen.0, common_opts.port).into(),

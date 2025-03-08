@@ -1,12 +1,10 @@
 use russh::keys::{EcdsaCurve, HashAlg};
 use totp_rs::{Rfc6238, Secret, TOTP};
+use watfaq_config::OutboundCommonOptions;
 
 use crate::{
     config::internal::proxy::{OutBoundSsh, Totp},
-    proxy::{
-        HandlerCommonOptions,
-        ssh::{Handler, HandlerOptions},
-    },
+    proxy::ssh::{Handler, HandlerOptions},
 };
 
 impl TryFrom<OutBoundSsh> for Handler {
@@ -119,7 +117,7 @@ impl TryFrom<&OutBoundSsh> for Handler {
 
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

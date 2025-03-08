@@ -8,10 +8,10 @@ use std::{
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 
+use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
 use crate::{
-    Error,
     app::{
-        dns, net::Interface,
+        net::Interface,
         remote_content_manager::providers::rule_provider::RuleSetBehavior,
     },
     common::auth,
@@ -20,12 +20,12 @@ use crate::{
         internal::{proxy::OutboundProxy, rule::RuleType},
     },
 };
-
-use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
+use watfaq_error::{Error, anyhow};
+use watfaq_resolver::DnsConfig;
 
 pub struct Config {
     pub general: General,
-    pub dns: dns::Config,
+    pub dns: DnsConfig,
     pub tun: TunConfig,
     pub experimental: Option<def::Experimental>,
     pub profile: Profile,
@@ -41,15 +41,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn validate(self) -> Result<Self, crate::Error> {
+    pub fn validate(self) -> Result<Self, Error> {
         for r in self.rules.iter() {
             if !self.proxies.contains_key(r.target())
                 && !self.proxy_groups.contains_key(r.target())
             {
-                return Err(Error::InvalidConfig(format!(
+                return Err(anyhow!(
                     "proxy `{}` referenced in a rule was not found",
                     r.target()
-                )));
+                ));
             }
         }
         Ok(self)
@@ -134,7 +134,7 @@ impl<'de> Deserialize<'de> for BindAddress {
 }
 
 impl FromStr for BindAddress {
-    type Err = anyhow::Error;
+    type Err = Error;
 
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         match str {

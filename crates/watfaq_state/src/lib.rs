@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use arc_swap::ArcSwap;
 
 use watfaq_socket::Protector;
@@ -21,4 +19,17 @@ pub struct Context {
     pub stack_prefer: StackPrefer,
     pub default_iface: ArcSwap<Iface>,
     pub protector: Protector,
+    // TODO pub virtual_ipv6: bool,
+}
+
+impl Context {
+    // #[cfg(test)]
+    pub fn new_test() -> Self {
+        Self {
+            system_ipv6_cap: true,
+            stack_prefer: StackPrefer::V4,
+            default_iface: todo!(),
+            protector: todo!(),
+        }
+    }
 }

@@ -1,5 +1,6 @@
 use std::{
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -8,19 +9,23 @@ use hyper::Uri;
 
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use tower::Service;
+use watfaq_resolver::Resolver;
+use watfaq_state::Context as AppContext;
 
 use crate::{
-    app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
-    proxy::AnyOutboundHandler,
-    session::Session,
+    app::dispatcher::BoxedChainedStream, proxy::AnyOutboundHandler, session::Session,
 };
 
 #[derive(Clone)]
 /// A LocalConnector that has a enclosed AnyOutboundHandler for url test
-pub struct LocalConnector(pub AnyOutboundHandler, pub ThreadSafeDNSResolver);
+pub struct LocalConnector(
+    pub AnyOutboundHandler,
+    pub Arc<Resolver>,
+    pub Arc<AppContext>,
+);
 
 impl Service<Uri> for LocalConnector {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
     type Response = BoxedChainedStream;
@@ -51,9 +56,7 @@ impl Service<Uri> for LocalConnector {
             ..Default::default()
         };
         let handler = self.0.clone();
-        let resolver = self.1.clone();
-
-        Box::pin(async move { handler.connect_stream(&sess, resolver).await })
+        Box::pin(async move { handler.connect_stream(&sess).await })
     }
 }
 

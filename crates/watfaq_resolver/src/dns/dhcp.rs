@@ -1,20 +1,25 @@
 use crate::{
     AbstractDnsClient, DnsClient, Result,
     dns::{
-        dns_client::DNSNetMode, helper::make_clients, resolver::EnhancedResolver,
+        dns_client::DNSNetMode,
+        helper::build_dns_clients,
+        resolver::{EnhancedResolver, batch_exchange},
     },
 };
-use async_trait::async_trait;
+
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use network_interface::{Addr, NetworkInterfaceConfig};
+use watfaq_error::ErrContext;
+use watfaq_socket::{BindProtector, Protector};
 use watfaq_state::Context;
+use watfaq_utils::search_iface;
 
 use std::{
     env,
     fmt::{Debug, Formatter},
     io,
-    net::Ipv4Addr,
+    net::{Ipv4Addr, SocketAddrV4},
     ops::Add,
     sync::Arc,
     time::{Duration, Instant},
@@ -31,7 +36,7 @@ const DHCP_TTL: Duration = Duration::from_secs(3600);
 const DHCP_TIMEOUT: Duration = Duration::from_secs(60);
 
 struct Inner {
-    clients: Vec<DnsClient>,
+    clients: Arc<Vec<DnsClient>>,
     iface_expires_at: std::time::Instant,
     dns_expires_at: std::time::Instant,
     iface_addr: ipnet::IpNet,
@@ -55,18 +60,18 @@ impl AbstractDnsClient for DhcpClient {
         format!("dhcp#{}", self.iface)
     }
 
-    async fn exchange(&self, ctx: Arc<Context>, msg: &Message) -> Result<Message> {
+    async fn exchange(&self, msg: &Message) -> Result<Message> {
         let clients = self.resolve().await?;
         let mut dbg_str = vec![];
-        for c in &clients {
+        for c in clients.iter() {
             dbg_str.push(format!("{:?}", c));
         }
         debug!("using clients: {:?}", dbg_str);
-        tokio::time::timeout(
-            DHCP_TIMEOUT,
-            EnhancedResolver::batch_exchange(&clients, msg),
-        )
-        .await?
+        tokio::time::timeout(DHCP_TIMEOUT, batch_exchange(&clients, msg)).await?
+    }
+
+    fn ctx(&self) -> Arc<Context> {
+        todo!()
     }
 }
 
@@ -75,7 +80,7 @@ impl DhcpClient {
         Self {
             iface: iface.to_owned(),
             inner: Mutex::new(Inner {
-                clients: vec![],
+                clients: vec![].into(),
                 iface_expires_at: Instant::now(),
                 dns_expires_at: Instant::now(),
                 iface_addr: ipnet::IpNet::default(),
@@ -83,13 +88,13 @@ impl DhcpClient {
         }
     }
 
-    async fn resolve(&self) -> Result<Vec<DnsClient>> {
+    async fn resolve(&self) -> Result<Arc<Vec<DnsClient>>> {
         let expired = self.update_if_lease_expired().await?;
         if expired {
             let dns = probe_dns_server(&self.iface).await?;
             let mut inner = self.inner.lock().await;
             let system_resolver = SystemResolver::new(false)?.into();
-            inner.clients = make_clients(
+            inner.clients = build_dns_clients(
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::Udp,
@@ -99,7 +104,8 @@ impl DhcpClient {
                     .collect(),
                 &system_resolver,
             )
-            .await;
+            .await
+            .into();
         }
 
         Ok(self.inner.lock().await.clients.clone())
@@ -178,16 +184,17 @@ impl DhcpClient {
     }
 }
 
-async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
+async fn listen_dhcp_client(iface: &str) -> Result<UdpSocket> {
     let listen_addr = match env::consts::OS {
-        "linux" => "255.255.255.255:68",
-        _ => "0.0.0.0:68",
+        "linux" => SocketAddrV4::new(Ipv4Addr::new(255, 255, 255, 255), 68),
+        _ => SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 68),
     };
-
-    new_udp_socket(Some(listen_addr.parse().expect("must parse"))).await
+    let iface = Some(Arc::new(search_iface(iface)));
+    let binder: Protector = BindProtector::new(iface.into(), None).into();
+    binder.new_udp(listen_addr.into()).await
 }
 
-async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
+async fn probe_dns_server(iface: &str) -> Result<Vec<Ipv4Addr>> {
     debug!("probing NS servers from DHCP");
     let socket = listen_dhcp_client(iface).await?;
 
@@ -202,15 +209,13 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
             format!("can not find interface: {}", iface),
         ))?
         .mac_addr
-        .ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("no MAC address on interface: {}", iface),
-        ))?
+        .ok_or_else(|| {
+            io::Error::other(format!("no MAC address on interface: {}", iface))
+        })?
         .split(':')
         .map(|x| {
-            u8::from_str_radix(x, 16).map_err(|_x| {
-                io::Error::new(io::ErrorKind::Other, "malformed MAC addr")
-            })
+            u8::from_str_radix(x, 16)
+                .map_err(|_x| io::Error::other("malformed MAC addr"))
         })
         .collect::<io::Result<Vec<u8>>>()?;
 
@@ -273,13 +278,14 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
         .await?;
 
     tokio::select! {
+        // FIXME: Not cancel safe
         result = &mut rx => {
-            result.map_err(|_x| io::Error::new(io::ErrorKind::Other, "channel error"))
+            Ok(result.context("channel error")?)
         },
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
             debug!("DHCP timeout after 10 secs");
-            Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
+            Err(io::Error::other("dhcp timeout"))?
         }
     }
 }

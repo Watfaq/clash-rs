@@ -1303,9 +1303,13 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-rustls",
+ "watfaq_config",
+ "watfaq_error",
  "watfaq_resolver",
  "watfaq_state",
  "watfaq_tuic",
+ "watfaq_types",
+ "watfaq_utils",
  "webpki-roots",
  "windows 0.60.0",
 ]
@@ -7984,7 +7988,6 @@ dependencies = [
 name = "watfaq_socket"
 version = "0.7.6"
 dependencies = [
- "anyhow",
  "arc-swap",
  "enum_dispatch",
  "network-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -8002,6 +8005,8 @@ name = "watfaq_state"
 version = "0.7.6"
 dependencies = [
  "arc-swap",
+ "tokio",
+ "watfaq_error",
  "watfaq_socket",
  "watfaq_types",
 ]
@@ -8030,6 +8035,7 @@ dependencies = [
  "tuic-quinn",
  "uuid",
  "watfaq_config",
+ "watfaq_error",
  "watfaq_resolver",
  "watfaq_socket",
  "watfaq_state",
@@ -8059,6 +8065,7 @@ dependencies = [
  "tower 0.4.13",
  "tracing",
  "watfaq_error",
+ "watfaq_socket",
  "watfaq_state",
  "watfaq_types",
  "webpki-roots",

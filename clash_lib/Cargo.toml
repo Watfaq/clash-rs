@@ -23,7 +23,10 @@ tokio-console = ["tokio/tracing"]
 watfaq_tuic = { path = "../crates/watfaq_tuic" }
 watfaq_state = { path = "../crates/watfaq_state" }
 watfaq_resolver = { path = "../crates/watfaq_resolver" }
-
+watfaq_config = { path = "../crates/watfaq_config" }
+watfaq_utils = { path = "../crates/watfaq_utils" }
+watfaq_types = { path = "../crates/watfaq_types" }
+watfaq_error = { path = "../crates/watfaq_error" }
 # Async
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }

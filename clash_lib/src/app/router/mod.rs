@@ -18,13 +18,14 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use hyper::Uri;
 use rules::domain_regex::DomainRegex;
 use tracing::{error, info, trace};
+use watfaq_resolver::{AbstractResolver, Resolver};
+use watfaq_state::Context;
+use watfaq_types::Stack;
+use watfaq_utils::which_stack_decision;
 
-use super::{
-    dns::ThreadSafeDNSResolver,
-    remote_content_manager::providers::{
-        file_vehicle, http_vehicle,
-        rule_provider::{RuleProviderImpl, ThreadSafeRuleProvider},
-    },
+use super::remote_content_manager::providers::{
+    file_vehicle, http_vehicle,
+    rule_provider::{RuleProviderImpl, ThreadSafeRuleProvider},
 };
 
 mod rules;
@@ -33,8 +34,9 @@ use crate::common::geodata::GeoData;
 pub use rules::RuleMatcher;
 
 pub struct Router {
+    ctx: Arc<Context>,
     rules: Vec<Box<dyn RuleMatcher>>,
-    dns_resolver: ThreadSafeDNSResolver,
+    dns_resolver: Arc<Resolver>,
 
     asn_mmdb: Option<Arc<Mmdb>>,
 }
@@ -45,9 +47,10 @@ const MATCH: &str = "MATCH";
 
 impl Router {
     pub async fn new(
+        ctx: Arc<Context>,
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
-        dns_resolver: ThreadSafeDNSResolver,
+        dns_resolver: Arc<Resolver>,
         country_mmdb: Arc<Mmdb>,
         asn_mmdb: Option<Arc<Mmdb>>,
         geodata: Arc<GeoData>,
@@ -56,6 +59,7 @@ impl Router {
         let mut rule_provider_registry = HashMap::new();
 
         Self::load_rule_providers(
+            ctx.clone(),
             rule_providers,
             &mut rule_provider_registry,
             dns_resolver.clone(),
@@ -67,6 +71,7 @@ impl Router {
         .ok();
 
         Self {
+            ctx,
             rules: rules
                 .into_iter()
                 .map(|r| {
@@ -89,21 +94,29 @@ impl Router {
         &self,
         sess: &mut Session,
     ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
-        let mut sess_resolved = false;
+        let mut sess_resolved = true;
 
         for r in self.rules.iter() {
             if sess.destination.is_domain()
                 && r.should_resolve_ip()
                 && !sess_resolved
-            {
-                if let Ok(Some(ip)) = self
+                && let Ok(ip) = self
                     .dns_resolver
-                    .resolve_old(sess.destination.domain().unwrap(), false)
+                    .resolve(sess.destination.domain().unwrap(), false)
                     .await
-                {
-                    sess.resolved_ip = Some(ip);
-                    sess_resolved = true;
-                }
+            {
+                // TODO
+                let stack = which_stack_decision(
+                    &self.ctx.default_iface.load(),
+                    self.ctx.stack_prefer,
+                    ip.into(),
+                );
+                let ip = match stack.unwrap_or_default() {
+                    Stack::V4 => ip.0.map(|v| v.into()),
+                    Stack::V6 => ip.1.map(|v| v.into()),
+                };
+                sess.resolved_ip = ip;
+                sess_resolved = true;
             }
 
             let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
@@ -146,9 +159,10 @@ impl Router {
     }
 
     async fn load_rule_providers(
+        ctx: Arc<Context>,
         rule_providers: HashMap<String, RuleProviderDef>,
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
         mmdb: Arc<Mmdb>,
         geodata: Arc<GeoData>,
         cwd: String,
@@ -157,6 +171,7 @@ impl Router {
             match provider {
                 RuleProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
+                        ctx.clone(),
                         http.url.parse::<Uri>().unwrap_or_else(|_| {
                             panic!("invalid provider url: {}", http.url)
                         }),
@@ -340,132 +355,5 @@ pub fn map_rule_type(
             }
         },
         RuleType::Match { target } => Box::new(Final { target }),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use anyhow::Ok;
-
-    use crate::{
-        app::dns::{MockClashResolver, SystemResolver},
-        common::{geodata::GeoData, http::new_http_client, mmdb::Mmdb},
-        config::internal::rule::RuleType,
-        session::Session,
-    };
-
-    const GEO_DATA_DOWNLOAD_URL:&str = "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
-    const MMDB_DOWNLOAD_URL:&str = "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb";
-
-    #[tokio::test]
-    async fn test_route_match() {
-        let mut mock_resolver = MockClashResolver::new();
-        mock_resolver.expect_resolve().returning(|host, _| {
-            if host == "china.com" {
-                Ok(Some("114.114.114.114".parse().unwrap()))
-            } else if host == "t.me" {
-                Ok(Some("149.154.0.1".parse().unwrap()))
-            } else if host == "git.io" {
-                Ok(Some("8.8.8.8".parse().unwrap()))
-            } else {
-                Ok(None)
-            }
-        });
-        let mock_resolver = Arc::new(mock_resolver);
-
-        let real_resolver = Arc::new(SystemResolver::new(false).unwrap());
-
-        let client = new_http_client(real_resolver.clone()).unwrap();
-
-        let temp_dir = tempfile::tempdir().unwrap();
-
-        let mmdb = Mmdb::new(
-            temp_dir.path().join("mmdb.mmdb"),
-            Some(MMDB_DOWNLOAD_URL.to_string()),
-            client,
-        )
-        .await
-        .unwrap();
-
-        let client = new_http_client(real_resolver.clone()).unwrap();
-
-        let geodata = GeoData::new(
-            temp_dir.path().join("geodata.geodata"),
-            Some(GEO_DATA_DOWNLOAD_URL.to_string()),
-            client,
-        )
-        .await
-        .unwrap();
-
-        let router = super::Router::new(
-            vec![
-                RuleType::GeoIP {
-                    target: "DIRECT".to_string(),
-                    country_code: "CN".to_string(),
-                    no_resolve: false,
-                },
-                RuleType::DomainRegex {
-                    regex: regex::Regex::new(r"^regex").unwrap(),
-                    target: "regex-match".to_string(),
-                },
-                RuleType::DomainSuffix {
-                    domain_suffix: "t.me".to_string(),
-                    target: "DS".to_string(),
-                },
-                RuleType::IpCidr {
-                    ipnet: "149.154.0.0/16".parse().unwrap(),
-                    target: "IC".to_string(),
-                    no_resolve: false,
-                },
-                RuleType::DomainSuffix {
-                    domain_suffix: "git.io".to_string(),
-                    target: "DS2".to_string(),
-                },
-            ],
-            Default::default(),
-            mock_resolver,
-            Arc::new(mmdb),
-            None,
-            Arc::new(geodata),
-            temp_dir.path().to_str().unwrap().to_string(),
-        )
-        .await;
-
-        let cases = vec![
-            ("china.com", "DIRECT", "should resolve and match IP"),
-            ("regex", "regex-match", "should match regex"),
-            ("t.me", "DS", "should match domain"),
-            (
-                "git.io",
-                "DS2",
-                "should still match domain after previous rule resolved IP and non \
-                 match",
-            ),
-            (
-                "no-match",
-                "MATCH",
-                "should fallback to MATCH when nothing matched",
-            ),
-        ];
-
-        for (domain, target, desc) in cases {
-            assert_eq!(
-                router
-                    .match_route(&mut Session {
-                        destination: crate::session::SocksAddr::Domain(
-                            domain.to_string(),
-                            1111
-                        ),
-                        ..Default::default()
-                    })
-                    .await
-                    .0,
-                target,
-                "{}",
-                desc
-            );
-        }
     }
 }

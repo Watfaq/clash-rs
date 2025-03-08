@@ -64,7 +64,7 @@ impl<T> StringTrie<T> {
     }
 
     pub fn insert(&mut self, domain: &str, data: Arc<T>) -> bool {
-        let (parts, valid) = valid_and_split_domain(domain);
+        let (parts, valid) = Self::valid_and_split_domain(domain);
         if !valid {
             return false;
         }
@@ -84,7 +84,7 @@ impl<T> StringTrie<T> {
     }
 
     pub fn search(&self, domain: &str) -> Option<&Node<T>> {
-        let (parts, valid) = valid_and_split_domain(domain);
+        let (parts, valid) = Self::valid_and_split_domain(domain);
         if !valid {
             return None;
         }
@@ -190,28 +190,25 @@ impl<T> StringTrie<T> {
 
         node.get_child(DOT_WILDCARD)
     }
-}
 
-pub fn valid_and_split_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
-    if !domain.is_empty() && domain.ends_with('.') {
-        return (None, false);
-    }
-
-    let parts: Vec<&str> = domain.split(DOMAIN_STEP).collect();
-    if parts.len() == 1 {
-        if parts[0].is_empty() {
+    pub fn valid_and_split_domain(domain: &str) -> (Option<Vec<&str>>, bool) {
+        if !domain.is_empty() && domain.ends_with('.') {
             return (None, false);
         }
-        return (Some(parts), true);
-    }
-
-    for p in parts.iter().skip(1) {
-        if p == &"" {
-            return (None, false);
+        let parts: Vec<&str> = domain.split(DOMAIN_STEP).collect();
+        if parts.len() == 1 {
+            if parts[0].is_empty() {
+                return (None, false);
+            }
+            return (Some(parts), true);
         }
+        for p in parts.iter().skip(1) {
+            if p == &"" {
+                return (None, false);
+            }
+        }
+        (Some(parts), true)
     }
-
-    (Some(parts), true)
 }
 
 #[cfg(test)]

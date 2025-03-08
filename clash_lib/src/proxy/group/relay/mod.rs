@@ -4,6 +4,9 @@ use async_trait::async_trait;
 use erased_serde::Serialize;
 use futures::stream::{self, StreamExt};
 use tracing::debug;
+use watfaq_config::OutboundCommonOptions;
+use watfaq_resolver::Resolver;
+use watfaq_error::Result;
 
 use crate::{
     app::{
@@ -11,12 +14,11 @@ use crate::{
             BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
             ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
-        dns::ThreadSafeDNSResolver,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     common::errors::new_io_error,
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyOutboundHandler, ConnectorType, DialWithConnector,
         OutboundHandler, OutboundType,
         utils::{
             DirectConnector, ProxyConnector, RemoteConnector,
@@ -28,7 +30,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
 }
 
@@ -86,18 +88,17 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+        sess: &Session
+    ) -> Result<BoxedChainedStream> {
         let proxies: Vec<AnyOutboundHandler> =
             stream::iter(self.get_proxies(true).await).collect().await;
 
         match proxies.len() {
-            0 => Err(new_io_error("no proxy available")),
+            0 => Err(anyhow!("no proxy available")),
             1 => {
                 let proxy = proxies[0].clone();
                 debug!("tcp relay `{}` via proxy `{}`", self.name(), proxy.name());
-                proxy.connect_stream(sess, resolver).await
+                proxy.connect_stream(sess).await
             }
             _ => {
                 let mut connector: Box<dyn RemoteConnector> =
@@ -117,7 +118,6 @@ impl OutboundHandler for Handler {
                 let s = last[0]
                     .connect_stream_with_connector(
                         sess,
-                        resolver,
                         connector.as_ref(),
                     )
                     .await?;
@@ -131,18 +131,17 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+        sess: &Session
+    ) -> Result<BoxedChainedDatagram> {
         let proxies: Vec<AnyOutboundHandler> =
             stream::iter(self.get_proxies(true).await).collect().await;
 
         match proxies.len() {
-            0 => Err(new_io_error("no proxy available")),
+            0 => Err(anyhow!("no proxy available")),
             1 => {
                 let proxy = proxies[0].clone();
                 debug!("udp relay `{}` via proxy `{}`", self.name(), proxy.name());
-                proxy.connect_datagram(sess, resolver).await
+                proxy.connect_datagram(sess).await
             }
             _ => {
                 let mut connector: Box<dyn RemoteConnector> =
@@ -162,7 +161,6 @@ impl OutboundHandler for Handler {
                 let d = last[0]
                     .connect_datagram_with_connector(
                         sess,
-                        resolver,
                         connector.as_ref(),
                     )
                     .await?;

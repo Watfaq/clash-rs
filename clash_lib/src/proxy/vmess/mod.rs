@@ -22,8 +22,7 @@ use crate::{
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    AnyStream, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };

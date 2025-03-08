@@ -4,7 +4,6 @@ use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
 
 use crate::{
-    Error,
     common::auth,
     config::{
         def,
@@ -14,7 +13,9 @@ use crate::{
         },
     },
 };
+use watfaq_error::{ErrContext, Error, Result, anyhow};
 
+mod dns;
 mod general;
 mod listener;
 mod proxy_group;
@@ -25,19 +26,18 @@ use super::{
     config::{self, BindAddress, Profile},
     proxy::{
         OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
-        map_serde_error,
     },
 };
 
 impl TryFrom<def::Config> for config::Config {
-    type Error = crate::Error;
+    type Error = Error;
 
-    fn try_from(value: def::Config) -> Result<Self, Self::Error> {
+    fn try_from(value: def::Config) -> Result<Self> {
         convert(value)
     }
 }
 
-pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error> {
+pub(super) fn convert(mut c: def::Config) -> Result<config::Config> {
     let mut proxy_names =
         vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
 
@@ -49,7 +49,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
 
     config::Config {
         general: general::convert(&c)?,
-        dns: (&c).try_into()?,
+        dns: dns::convert(&c)?,
         experimental: c.experimental.take(),
         tun: tun::convert(c.tun.take())?,
         profile: Profile {
@@ -60,11 +60,8 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             .take()
             .unwrap_or_default()
             .into_iter()
-            .map(|x| {
-                x.parse::<RuleType>()
-                    .map_err(|x| Error::InvalidConfig(x.to_string()))
-            })
-            .collect::<Result<Vec<_>, _>>()?,
+            .map(|x| x.parse::<RuleType>().context("parse RuleType Error"))
+            .collect::<Result<Vec<_>>>()?,
         rule_providers: rule_provider::convert(c.rule_provider.take()),
         users: c
             .authentication
@@ -93,9 +90,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                     OutboundProxy::ProxyServer(OutboundProxyProtocol::try_from(x)?);
                 let name = proxy.name();
                 if rv.contains_key(name.as_str()) {
-                    return Err(Error::InvalidConfig(format!(
-                        "duplicated proxy name: {name}"
-                    )));
+                    return Err(anyhow!("duplicated proxy name: {name}"));
                 }
                 proxy_names.push(name.clone());
                 rv.insert(name, proxy);
@@ -115,16 +110,11 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                             serde_yaml::Value::String(name.clone()),
                         );
                         let provider = OutboundProxyProviderDef::try_from(body)
-                            .map_err(|x| {
-                                Error::InvalidConfig(format!(
-                                    "invalid proxy provider {name}: {x}"
-                                ))
+                            .with_context(|| {
+                                format!("invalid proxy provider {name}")
                             })?;
                         rv.insert(name, provider);
-                        Ok::<
-                            HashMap<std::string::String, OutboundProxyProviderDef>,
-                            Error,
-                        >(rv)
+                        Ok::<HashMap<String, OutboundProxyProviderDef>, Error>(rv)
                     })
                     .expect("proxy provider parse error")
             })
@@ -137,15 +127,15 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
 impl TryFrom<HashMap<String, Value>> for OutboundGroupProtocol {
     type Error = Error;
 
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+    fn try_from(mapping: HashMap<String, Value>) -> Result<OutboundGroupProtocol> {
         let name = mapping
             .get("name")
             .and_then(|x| x.as_str())
-            .ok_or(Error::InvalidConfig(
-                "missing field `name` in outbound proxy grouop".to_owned(),
-            ))?
+            .ok_or_else(|| anyhow!("missing field `name` in outbound proxy grouop"))?
             .to_owned();
-        OutboundGroupProtocol::deserialize(MapDeserializer::new(mapping.into_iter()))
-            .map_err(map_serde_error(name))
+        let res = OutboundGroupProtocol::deserialize(MapDeserializer::new(
+            mapping.into_iter(),
+        ))?;
+        Ok(res)
     }
 }

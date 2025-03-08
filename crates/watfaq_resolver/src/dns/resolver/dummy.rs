@@ -1,12 +1,13 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+};
 
-use watfaq_error::anyhow;
+use watfaq_error::{Result, anyhow};
+use watfaq_state::Context;
 use watfaq_types::StackPrefer;
-use watfaq_error::Result;
 
 use crate::AbstractResolver;
-
-
 
 pub struct DummyResolver;
 
@@ -21,22 +22,6 @@ impl AbstractResolver for DummyResolver {
             IpAddr::V4(v4) => (Some(v4), None),
             IpAddr::V6(v6) => (None, Some(v6)),
         })
-    }
-
-    async fn resolve_v4(
-        &self,
-        host: &str,
-        enhanced: bool,
-    ) -> Result<Option<Ipv4Addr>> {
-        Ok(self.resolve(host, enhanced).await?.0)
-    }
-
-    async fn resolve_v6(
-        &self,
-        host: &str,
-        enhanced: bool,
-    ) -> Result<Option<Ipv6Addr>> {
-        Ok(self.resolve(host, enhanced).await?.1)
     }
 
     async fn cached_for(&self, _: IpAddr) -> Option<String> {
@@ -61,8 +46,16 @@ impl AbstractResolver for DummyResolver {
     async fn reverse_lookup(&self, _: std::net::IpAddr) -> Option<String> {
         None
     }
-    
+
     fn stack_prefer(&self) -> StackPrefer {
+        todo!()
+    }
+
+    fn ctx(&self) -> Arc<Context> {
+        todo!()
+    }
+
+    fn set_stack_perfer(&self, prefer: StackPrefer) {
         todo!()
     }
 }
