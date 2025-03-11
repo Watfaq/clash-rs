@@ -63,7 +63,7 @@ pub fn get_api_runner(
 
         let bind_addr = if bind_addr.starts_with(':') {
             info!("hostname not provided, listening on localhost");
-            format!("localhost{}", bind_addr)
+            format!("127.0.0.1{}", bind_addr)
         } else {
             bind_addr
         };

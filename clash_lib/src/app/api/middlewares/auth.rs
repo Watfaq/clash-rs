@@ -80,8 +80,6 @@ where
                     return Box::pin(self.inner.call(req));
                 }
             }
-
-            return Box::pin(async move { Ok(unauthorised) });
         }
 
         let header = req
