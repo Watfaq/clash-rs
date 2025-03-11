@@ -1,33 +1,32 @@
 use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use once_cell::sync::Lazy;
 use tracing::trace;
 use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_state::Context;
+use watfaq_types::Stack;
+use watfaq_utils::which_ip_decision;
 
 use crate::{
-    app::{
+    app::
         dispatcher::{
             ChainedDatagram, ChainedDatagramWrapper, ChainedStream,
             ChainedStreamWrapper,
-        },
-        net::Interface,
-    },
-    common::errors::new_io_error,
+        }
+    ,
     proxy::{
         AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
         datagram::OutboundDatagramImpl,
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 
 use watfaq_error::Result;
 
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
-pub trait RemoteConnector: Send + Sync + Debug {
+pub trait AbstractDialer: Send + Sync + Debug {
     fn ctx(&self) -> &Context {
         todo!()
     }
@@ -40,16 +39,13 @@ pub trait RemoteConnector: Send + Sync + Debug {
     fn clone_resolver(&self) -> Arc<Resolver> {
         todo!()
     }
-    async fn connect_stream(
-        &self,
-        address: &str,
-        port: u16,
-    ) -> Result<AnyStream>;
+    // FIXME address could be socket address?
+    async fn connect_stream(&self, address: &str, port: u16) -> Result<AnyStream>;
 
     async fn connect_datagram(
         &self,
         src: Option<SocketAddr>,
-        destination: SocksAddr,
+        destination: TargetAddr,
     ) -> Result<AnyOutboundDatagram>;
 }
 
@@ -62,52 +58,38 @@ impl DirectConnector {
     }
 }
 
-pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn RemoteConnector>> =
-    Lazy::new(global_direct_connector);
-
-fn global_direct_connector() -> Arc<dyn RemoteConnector> {
+pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn AbstractDialer>> = Lazy::new(|| {
     Arc::new(DirectConnector::new())
-}
+});
 
 #[async_trait]
-impl RemoteConnector for DirectConnector {
+impl AbstractDialer for DirectConnector {
     async fn connect_stream(
         &self,
-        resolver: Arc<Resolver>,
         address: &str,
         port: u16,
-    ) -> std::io::Result<AnyStream> {
-        let dial_addr = resolver
+    ) -> Result<AnyStream> {
+        let dial_addr = self.resolver()
             .resolve(address, false)
-            .await
-            .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
-            .ok_or(new_io_error("no dns result"))?;
+            .await?;
+        let ip = which_ip_decision(self.ctx(), None, None, dial_addr)?;
+        let stream = self.ctx().protector.new_tcp(ip, None).await?;
 
-        new_tcp_stream(
-            (dial_addr, port).into(),
-            iface.cloned(),
-            #[cfg(target_os = "linux")]
-            so_mark,
-        )
-        .await
-        .map(|x| Box::new(x) as _)
+        Ok(Box::new(stream))
     }
 
+    // TODO I think this is buggy
     async fn connect_datagram(
         &self,
-        resolver: Arc<Resolver>,
         src: Option<SocketAddr>,
-        _destination: SocksAddr,
-    ) -> std::io::Result<AnyOutboundDatagram> {
-        let dgram = new_udp_socket(
-            src,
-            iface,
-            #[cfg(target_os = "linux")]
-            so_mark,
-        )
-        .await
-        .map(|x| OutboundDatagramImpl::new(x, resolver))?;
-
+        destination: TargetAddr,
+    ) -> Result<AnyOutboundDatagram> {
+        let stack: Stack = match src {
+            Some(v) => (&v).into(),
+            None => todo!(),
+        };
+        let socket = self.ctx().protector.new_udp_socket(stack).await?;
+        let dgram = OutboundDatagramImpl::new(socket, self.clone_resolver());
         let dgram = ChainedDatagramWrapper::new(dgram);
         Ok(Box::new(dgram))
     }
@@ -115,14 +97,14 @@ impl RemoteConnector for DirectConnector {
 
 pub struct ProxyConnector {
     proxy: AnyOutboundHandler,
-    connector: Box<dyn RemoteConnector>,
+    connector: Box<dyn AbstractDialer>,
 }
 
 impl ProxyConnector {
     pub fn new(
         proxy: AnyOutboundHandler,
         // TODO: make this Arc
-        connector: Box<dyn RemoteConnector>,
+        connector: Box<dyn AbstractDialer>,
     ) -> Self {
         Self { proxy, connector }
     }
@@ -137,23 +119,19 @@ impl Debug for ProxyConnector {
 }
 
 #[async_trait]
-impl RemoteConnector for ProxyConnector {
+impl AbstractDialer for ProxyConnector {
     async fn connect_stream(
         &self,
-        ctx: Arc<Context>,
-        resolver: Arc<Resolver>,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
-        #[cfg(target_os = "linux")] so_mark: Option<u32>,
-    ) -> std::io::Result<AnyStream> {
+    ) -> Result<AnyStream> {
         let sess = Session {
-            network: Network::Tcp,
+            network: Network::TCP,
             typ: Type::Ignore,
-            destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
-            iface: iface.cloned(),
-            #[cfg(target_os = "linux")]
-            so_mark,
+            destination: crate::session::TargetAddr::Domain(
+                address.to_owned(),
+                port,
+            ),
             ..Default::default()
         };
 
@@ -167,9 +145,7 @@ impl RemoteConnector for ProxyConnector {
         let s = self
             .proxy
             .connect_stream_with_connector(
-                ctx,
                 &sess,
-                resolver,
                 self.connector.as_ref(),
             )
             .await?;
@@ -181,28 +157,19 @@ impl RemoteConnector for ProxyConnector {
 
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
         _src: Option<SocketAddr>,
-        destination: SocksAddr,
-        iface: Option<Interface>,
-        #[cfg(target_os = "linux")] so_mark: Option<u32>,
-    ) -> std::io::Result<AnyOutboundDatagram> {
+        destination: TargetAddr,
+    ) -> Result<AnyOutboundDatagram> {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
-            iface,
             destination: destination.clone(),
-            #[cfg(target_os = "linux")]
-            so_mark,
             ..Default::default()
         };
         let s = self
             .proxy
             .connect_datagram_with_connector(
-                ctx,
                 &sess,
-                resolver,
                 self.connector.as_ref(),
             )
             .await?;

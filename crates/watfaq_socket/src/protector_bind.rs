@@ -7,11 +7,12 @@ use std::{
 use arc_swap::ArcSwapOption;
 use socket2::{SockAddr, SockRef};
 use watfaq_error::Result;
-use watfaq_types::{Iface, Proto, Stack};
+use watfaq_types::{Iface, Network, Stack};
 
 use crate::{AbstractProtector, platform};
 
 #[allow(dead_code)]
+#[derive(Debug)]
 pub struct BindProtector {
     iface: ArcSwapOption<Iface>,
     enable_fwmark: AtomicBool,
@@ -30,7 +31,7 @@ impl BindProtector {
 
 impl AbstractProtector for BindProtector {
     #[inline(always)]
-    fn protect(&self, socket: SockRef, stack: Stack, _proto: Proto) -> Result<()> {
+    fn protect(&self, socket: SockRef, stack: Stack, _proto: Network) -> Result<()> {
         match self.iface.load().as_deref() {
             Some(iface) => {
                 platform::bind_iface(socket.deref(), iface, stack)?;

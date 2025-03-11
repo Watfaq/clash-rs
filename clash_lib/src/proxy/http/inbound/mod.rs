@@ -5,10 +5,10 @@ mod proxy;
 use crate::{
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
-    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
+    proxy::{inbound::AbstractInboundHandler, utils::apply_tcp_options},
 };
-use watfaq_error::Result;
 pub use proxy::handle as handle_http;
+use watfaq_error::Result;
 
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
@@ -41,7 +41,7 @@ impl HttpInbound {
     }
 }
 
-impl InboundHandlerTrait for HttpInbound {
+impl AbstractInboundHandler for HttpInbound {
     fn handle_tcp(&self) -> bool {
         true
     }

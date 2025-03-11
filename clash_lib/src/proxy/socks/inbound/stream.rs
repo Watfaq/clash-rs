@@ -1,19 +1,19 @@
 use crate::{
     Dispatcher,
-    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
-    proxy::{
-        socks::{
-            SOCKS5_VERSION, Socks5UDPCodec,
-            inbound::datagram::InboundUdp,
-            socks5::{auth_methods, response_code, socks_command},
-        },
-        utils::new_udp_socket,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::socks::{
+        SOCKS5_VERSION, Socks5UDPCodec,
+        inbound::datagram::InboundUdp,
+        socks5::{auth_methods, response_code, socks_command},
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 use bytes::{BufMut, BytesMut};
+use watfaq_error::Result;
+use watfaq_state::Context;
+use watfaq_utils::TargetAddrExt;
 
-use std::{io, net::SocketAddr, str, sync::Arc};
+use std::{net::SocketAddr, str, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -23,11 +23,12 @@ use tracing::{instrument, trace, warn};
 
 #[instrument(skip(sess, s, dispatcher, authenticator))]
 pub async fn handle_tcp<'a>(
+    ctx: &Context,
     sess: &'a mut Session,
     mut s: TcpStream,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
-) -> io::Result<()> {
+) -> Result<()> {
     // handshake
     let mut buf = BytesMut::new();
     {
@@ -36,18 +37,12 @@ pub async fn handle_tcp<'a>(
         s.read_exact(&mut buf[..]).await?;
 
         if buf[0] != SOCKS5_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported SOCKS version",
-            ));
+            return Err(anyhow!("unsupported SOCKS version"));
         }
 
         let n_methods = buf[1] as usize;
         if n_methods == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "malformed SOCKS data",
-            ));
+            return Err(anyhow!("malformed SOCKS data"));
         }
 
         buf.resize(n_methods, 0);
@@ -61,7 +56,7 @@ pub async fn handle_tcp<'a>(
                 response[1] = response_code::FAILURE;
                 s.write_all(&response).await?;
                 s.shutdown().await?;
-                return Err(new_io_error("auth required"));
+                return Err(anyhow!("auth required"));
             }
 
             response[1] = auth_methods::USER_PASS;
@@ -103,10 +98,7 @@ pub async fn handle_tcp<'a>(
                     response = [0x1, response_code::FAILURE];
                     s.write_all(&response).await?;
                     s.shutdown().await?;
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "auth failure",
-                    ));
+                    return Err(anyhow!("auth failure"));
                 }
             }
         } else if methods.contains(&auth_methods::NO_AUTH) {
@@ -116,20 +108,17 @@ pub async fn handle_tcp<'a>(
             response[1] = auth_methods::NO_METHODS;
             s.write_all(&response).await?;
             s.shutdown().await?;
-            return Err(io::Error::new(io::ErrorKind::Other, "auth failure"));
+            return Err(anyhow!("auth failure"));
         }
     }
 
     buf.resize(3, 0);
     s.read_exact(&mut buf[..]).await?;
     if buf[0] != SOCKS5_VERSION {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "unsupported SOCKS version",
-        ));
+        return Err(anyhow!("unsupported SOCKS version"));
     }
 
-    let dst = SocksAddr::read_from(&mut s).await?;
+    let dst = TargetAddr::read_from(&mut s).await?;
 
     match buf[1] {
         socks_command::CONNECT => {
@@ -139,7 +128,7 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
-            let bnd = SocksAddr::from(s.local_addr()?);
+            let bnd = TargetAddr::from(s.local_addr()?);
             bnd.write_buf(&mut buf);
             s.write_all(&buf[..]).await?;
             sess.destination = dst;
@@ -151,14 +140,10 @@ pub async fn handle_tcp<'a>(
             Ok(())
         }
         socks_command::UDP_ASSOCIATE => {
-            let udp_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
-            let udp_inbound = new_udp_socket(
-                Some(udp_addr),
-                None,
-                #[cfg(target_os = "linux")]
-                None,
-            )
-            .await?;
+            let local_addr = SocketAddr::new(s.local_addr()?.ip(), 0);
+
+            // use the same ip-family as local_addr of socks inbound server.
+            let udp_inbound = ctx.protector.new_udp_socket(&local_addr).await?;
 
             trace!(
                 "Got a UDP_ASSOCIATE request from {}, UDP assigned at {}",
@@ -170,7 +155,7 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
-            let bnd = SocksAddr::from(udp_inbound.local_addr()?);
+            let bnd = TargetAddr::from(udp_inbound.local_addr()?);
             bnd.write_buf(&mut buf);
 
             let (close_handle, close_listener) = tokio::sync::oneshot::channel();
@@ -178,10 +163,8 @@ pub async fn handle_tcp<'a>(
             let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
 
             let sess = Session {
-                network: Network::Udp,
+                network: Network::UDP,
                 typ: Type::Socks5,
-                so_mark: None,
-                iface: None,
                 ..Default::default()
             };
 
@@ -216,12 +199,9 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::COMMAND_NOT_SUPPORTED);
             buf.put_u8(0x0);
-            SocksAddr::any_ipv4().write_buf(&mut buf);
+            TargetAddr::any_ipv4().write_buf(&mut buf);
             s.write_all(&buf).await?;
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported SOCKS command",
-            ))
+            Err(anyhow!("unsupported SOCKS command"))
         }
     }
 }

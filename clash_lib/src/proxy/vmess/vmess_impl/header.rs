@@ -2,6 +2,7 @@ use aead::{KeyInit, generic_array::GenericArray};
 use aes::cipher::BlockEncrypt;
 use bytes::{Buf, BufMut, BytesMut};
 
+use watfaq_error::Result;
 use crate::common::{crypto, errors::map_io_error, utils};
 
 use super::kdf::{
@@ -41,7 +42,7 @@ pub(crate) fn seal_vmess_aead_header(
     key: [u8; 16],
     data: Vec<u8>,
     timestamp: u64,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>> {
     let auth_id = create_auth_id(key, timestamp);
     let mut connection_nonce = [0u8; 8];
     utils::rand_fill(connection_nonce.as_mut());
@@ -64,8 +65,7 @@ pub(crate) fn seal_vmess_aead_header(
         payload_header_length_aead_nonce,
         (data.len() as u16).to_be_bytes().as_ref(),
         Some(auth_id.as_ref()),
-    )
-    .map_err(map_io_error)?;
+    )?;
 
     let payload_header_aead_key = &kdf::vmess_kdf_3_one_shot(
         &key[..],
@@ -85,8 +85,7 @@ pub(crate) fn seal_vmess_aead_header(
         payload_header_aead_nonce,
         &data,
         Some(auth_id.as_ref()),
-    )
-    .map_err(map_io_error)?;
+    )?;
 
     let mut out = BytesMut::new();
     out.put_slice(&auth_id[..]);

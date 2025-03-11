@@ -1,28 +1,21 @@
-use crate::{
-    common::tls::DefaultTlsVerifier,
-    proxy::{tuic::types::SocketAdderTrans, utils::new_udp_socket},
-};
+use std::sync::atomic::Ordering;
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
-
-use watfaq_state::Context;
+use watfaq_error::Result;
 
 use crate::{
     app::dispatcher::{
-        BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
-        ChainedStreamWrapper,
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagramWrapper,
+        ChainedStream, ChainedStreamWrapper,
     },
-    proxy::DialWithConnector,
     session::Session,
 };
 
-use super::{ConnectorType, OutboundHandler, OutboundType};
-
-impl DialWithConnector for watfaq_tuic::Handler {}
+use super::{AbstractOutboundHandler, ConnectorType, OutboundType};
+use watfaq_tuic::types::SocketAdderTrans;
 
 #[async_trait]
-impl OutboundHandler for watfaq_tuic::Handler {
+impl AbstractOutboundHandler for watfaq_tuic::Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -35,37 +28,26 @@ impl OutboundHandler for watfaq_tuic::Handler {
         true
     }
 
-    async fn connect_stream(
-        &self,
-        ctx: ArcSwap<Context>,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
-        async {
-            let conn = self.get_conn(&ctx.load(), &resolver, sess).await?;
-            let dest = sess.destination.clone().into_tuic();
-            let tuic_tcp = conn.connect_tcp(dest).await?;
-            let s = ChainedStreamWrapper::new(tuic_tcp);
-            s.append_to_chain(self.name()).await;
-            Ok(Box::new(s))
-        }
-        .await
-        .map_err(|e| {
-            tracing::error!("{:?}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-        })?
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
+        let conn = self.get_conn(self.ctx(), self.resolver()).await?;
+        let dest = sess.destination.clone().into_tuic();
+        let tuic_tcp = conn.connect_tcp(dest).await?;
+        let s = ChainedStreamWrapper::new(tuic_tcp);
+        s.append_to_chain(self.name()).await;
+        Ok(Box::new(s))
     }
 
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
-        self.do_connect_datagram(sess, resolver).await.map_err(|e| {
-            tracing::error!("{:?}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-        })
+    ) -> Result<BoxedChainedDatagram> {
+        let conn = self.get_conn(self.ctx(), self.resolver()).await?;
+        let assos_id = self.next_assoc_id.fetch_add(1, Ordering::SeqCst);
+        let tuic_udp =
+            watfaq_tuic::TuicUdpOutbound::new(assos_id, conn, sess.source.into());
+
+        let s = tuic_udp.append_to_chain(self.name()).await;
+        Ok(Box::new(s))
     }
 
     async fn support_connector(&self) -> ConnectorType {

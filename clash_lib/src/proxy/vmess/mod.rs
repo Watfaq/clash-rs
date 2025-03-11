@@ -3,33 +3,32 @@ use std::{io, sync::Arc};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use tracing::debug;
+use watfaq_config::OutboundCommonOptions;
 use watfaq_state::Context;
+use watfaq_error::Result;
 
 mod vmess_impl;
 
 use crate::{
-    app::{
-        dispatcher::{
+    app::dispatcher::{
             BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
             ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
-        dns::ThreadSafeDNSResolver,
-    },
-    impl_default_connector,
     session::Session,
 };
 
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    AnyStream, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+    AbstractOutboundHandler, AnyStream, ConnectorType,
+    OutboundType,
     transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+    utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
 };
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub uuid: String,
@@ -44,7 +43,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -54,8 +53,6 @@ impl std::fmt::Debug for Handler {
             .finish()
     }
 }
-
-impl_default_connector!(Handler);
 
 impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
@@ -96,7 +93,7 @@ impl Handler {
 }
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -113,10 +110,8 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -124,9 +119,7 @@ impl OutboundHandler for Handler {
         }
 
         self.connect_stream_with_connector(
-            ctx,
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
@@ -137,10 +130,8 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -148,9 +139,7 @@ impl OutboundHandler for Handler {
         }
 
         self.connect_datagram_with_connector(
-            ctx,
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
@@ -165,20 +154,13 @@ impl OutboundHandler for Handler {
 
     async fn connect_stream_with_connector(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedStream> {
         let stream = connector
             .connect_stream(
-                ctx,
-                resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
             )
             .await?;
 
@@ -190,20 +172,13 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram_with_connector(
         &self,
-        ctx: ArcSwap<Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedDatagram> {
         let stream = connector
             .connect_stream(
-                ctx,
-                resolver,
                 self.opts.server.as_str(),
                 self.opts.port,
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
             )
             .await?;
 

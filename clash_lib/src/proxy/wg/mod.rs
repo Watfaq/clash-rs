@@ -6,26 +6,23 @@ use std::{
 
 use crate::{
     Error,
-    app::{
-        dispatcher::{
+    app::dispatcher::{
             BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
             ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
         },
-        dns::ThreadSafeDNSResolver,
-    },
     common::errors::{map_io_error, new_io_error},
     impl_default_connector,
     session::Session,
 };
 
 use self::{keys::KeyBytes, wireguard::Config};
+use watfaq_error::Result;
 
 use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, utils::RemoteConnector,
+    AbstractOutboundHandler, ConnectorType, DialWithConnector,
+    OutboundType, utils::AbstractDialer,
 };
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use futures::TryFutureExt;
 
@@ -33,7 +30,7 @@ use ipnet::IpNet;
 use rand::seq::IndexedRandom;
 use tokio::sync::OnceCell;
 use tracing::debug;
-use watfaq_state::Context;
+use watfaq_config::OutboundCommonOptions;
 
 mod device;
 mod events;
@@ -44,7 +41,7 @@ mod wireguard;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,
@@ -72,7 +69,7 @@ pub struct Handler {
     opts: HandlerOptions,
     inner: OnceCell<Inner>,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -100,16 +97,14 @@ impl Handler {
     /// ideally we move the so_mark and iface to a global context
     async fn initialize_inner(
         &self,
-        ctx: ArcSwap<Context>,
-        resolver: ThreadSafeDNSResolver,
         sess: &Session,
     ) -> Result<&Inner, Error> {
         self.inner
             .get_or_try_init(|| async {
                 let recv_pair = tokio::sync::mpsc::channel(1024);
                 let send_pair = tokio::sync::mpsc::channel(1024);
-                let server_ip = resolver
-                    .resolve_old(&self.opts.server, false)
+                let server_ip = self.resolver()
+                    .resolve(&self.opts.server, false)
                     .await
                     .map_err(map_io_error)?
                     .ok_or(new_io_error(
@@ -136,7 +131,6 @@ impl Handler {
                     .unwrap_or_default();
 
                 let wg = wireguard::WireguardTunnel::new(
-                    ctx,
                     Config {
                         private_key: self
                             .opts
@@ -175,7 +169,7 @@ impl Handler {
                     },
                     recv_pair.0,
                     send_pair.1,
-                    resolver.clone(),
+                    self.clone_resolver(),
                     self.connector.lock().await.as_ref().cloned(),
                     sess,
                 )
@@ -199,7 +193,7 @@ impl Handler {
                 let device_manager = Arc::new(device::DeviceManager::new(
                     self.opts.ip,
                     self.opts.ipv6,
-                    resolver,
+                    self.clone_resolver(),
                     if self.opts.remote_dns_resolve {
                         self.opts
                             .dns
@@ -235,7 +229,7 @@ impl Handler {
 }
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -251,12 +245,10 @@ impl OutboundHandler for Handler {
     /// connect to remote target via TCP
     async fn connect_stream(
         &self,
-        ctx: arc_swap::ArcSwap<watfaq_state::Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    ) -> Result<BoxedChainedStream> {
         let inner = self
-            .initialize_inner(ctx, resolver.clone(), sess)
+            .initialize_inner(sess)
             .await
             .map_err(map_io_error)?;
 
@@ -282,14 +274,11 @@ impl OutboundHandler for Handler {
                     &sess.destination.host(),
                     (server.parse::<IpAddr>().unwrap(), 53).into(),
                 )
-                .await
-                .ok_or(new_io_error("invalid remote address"))?
-        } else {
-            resolver
-                .resolve_old(&sess.destination.host(), false)
-                .map_err(map_io_error)
                 .await?
-                .ok_or(new_io_error("invalid remote address"))?
+        } else {
+            self.resolver()
+                .resolve(&sess.destination.host(), false)
+                .await?
         };
 
         let remote = (ip, sess.destination.port()).into();
@@ -303,14 +292,11 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        ctx: arc_swap::ArcSwap<watfaq_state::Context>,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         let inner = self
-            .initialize_inner(ctx, resolver, sess)
-            .await
-            .map_err(map_io_error)?;
+            .initialize_inner(sess)
+            .await?;
 
         let socket = inner.device_manager.new_udp_socket().await;
         let chained = ChainedDatagramWrapper::new(socket);

@@ -15,17 +15,13 @@ use crate::{
     },
 };
 use app::{
-    dispatcher::StatisticsManager,
-    dns::{SystemResolver, ThreadSafeDNSResolver},
-    logging::LogEvent,
-    net::init_net_config,
-    profile,
+    dispatcher::StatisticsManager, logging::LogEvent, net::init_net_config, profile,
 };
 use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
 use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
-use watfaq_resolver::Resolver;
+use watfaq_resolver::{dns::resolver::SystemResolver, Resolver};
 
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;

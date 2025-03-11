@@ -1,7 +1,8 @@
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use watfaq_utils::TargetAddrExt;
 
-use crate::{common::errors::new_io_error, proxy::AnyStream, session::SocksAddr};
+use crate::{common::errors::new_io_error, proxy::AnyStream, session::TargetAddr};
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 
@@ -46,11 +47,11 @@ const ERROR_CODE_LOOKUP: &[&str] = &[
 
 pub(crate) async fn client_handshake(
     s: &mut AnyStream,
-    addr: &SocksAddr,
+    addr: &TargetAddr,
     command: u8,
     username: Option<String>,
     password: Option<String>,
-) -> std::io::Result<SocksAddr> {
+) -> std::io::Result<TargetAddr> {
     let mut buf = BytesMut::with_capacity(MAX_AUTH_LEN);
     buf.put_u8(SOCKS5_VERSION);
 
@@ -99,7 +100,7 @@ pub(crate) async fn client_handshake(
     buf.put_u8(command);
     buf.put_u8(0x00);
     if command == socks_command::UDP_ASSOCIATE {
-        let addr = SocksAddr::any_ipv4();
+        let addr = TargetAddr::any_ipv4();
         addr.write_buf(&mut buf);
     } else {
         addr.write_buf(&mut buf);
@@ -127,5 +128,5 @@ pub(crate) async fn client_handshake(
         ));
     }
 
-    SocksAddr::read_from(s).await
+    TargetAddr::read_from(s).await
 }

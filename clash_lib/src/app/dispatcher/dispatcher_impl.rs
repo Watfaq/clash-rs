@@ -10,7 +10,7 @@ use crate::{
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
     proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 use futures::{SinkExt, StreamExt};
 use std::{
@@ -82,8 +82,8 @@ impl Dispatcher {
         mut sess: Session,
         mut lhs: Box<dyn ClientStream>,
     ) {
-        let dest: SocksAddr = match &sess.destination {
-            crate::session::SocksAddr::Ip(socket_addr) => {
+        let dest: TargetAddr = match &sess.destination {
+            crate::session::TargetAddr::Socket(socket_addr) => {
                 if self.resolver.fake_ip_enabled() {
                     trace!("looking up fake ip: {}", socket_addr.ip());
                     let ip = socket_addr.ip();
@@ -111,7 +111,7 @@ impl Dispatcher {
                     }
                 }
             }
-            crate::session::SocksAddr::Domain(host, port) => {
+            crate::session::TargetAddr::Domain(host, port) => {
                 (host.to_owned(), *port)
                     .try_into()
                     .expect("must be valid domain")
@@ -266,8 +266,8 @@ impl Dispatcher {
                 let mut sess = sess.clone();
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
 
-                let dest: SocksAddr = match &packet.dst_addr {
-                    crate::session::SocksAddr::Ip(socket_addr) => {
+                let dest: TargetAddr = match &packet.dst_addr {
+                    crate::session::TargetAddr::Socket(socket_addr) => {
                         if resolver.fake_ip_enabled() {
                             let ip = socket_addr.ip();
                             if resolver.is_fake_ip(ip).await {
@@ -296,7 +296,7 @@ impl Dispatcher {
                             }
                         }
                     }
-                    crate::session::SocksAddr::Domain(host, port) => {
+                    crate::session::TargetAddr::Domain(host, port) => {
                         (host.to_owned(), *port)
                             .try_into()
                             .expect("must be valid domain")
@@ -348,16 +348,14 @@ impl Dispatcher {
                 {
                     None => {
                         debug!("building {} outbound datagram connecting", sess);
-                        let outbound_datagram = match handler
-                            .connect_datagram(&sess)
-                            .await
-                        {
-                            Ok(v) => v,
-                            Err(err) => {
-                                error!("failed to connect outbound: {}", err);
-                                continue;
-                            }
-                        };
+                        let outbound_datagram =
+                            match handler.connect_datagram(&sess).await {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    error!("failed to connect outbound: {}", err);
+                                    continue;
+                                }
+                            };
 
                         debug!("{} outbound datagram connected", sess);
 

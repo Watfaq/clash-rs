@@ -10,8 +10,7 @@ use std::{
 
 use crate::{
     app::dispatcher::Dispatcher,
-    common::errors::new_io_error,
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 use futures::{Sink, Stream};
 use tokio::{
@@ -22,7 +21,7 @@ use tracing::{info, warn};
 use watfaq_error::Result;
 
 use super::{
-    datagram::UdpPacket, inbound::InboundHandlerTrait, utils::apply_tcp_options,
+    datagram::UdpPacket, inbound::AbstractInboundHandler, utils::apply_tcp_options,
 };
 
 #[derive(Clone)]
@@ -30,12 +29,12 @@ pub struct TunnelInbound {
     listen: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     network: Vec<String>,
-    target: SocksAddr,
+    target: TargetAddr,
 }
 
 impl Drop for TunnelInbound {
     fn drop(&mut self) {
-        warn!("HTTP inbound listener on {} stopped", self.listen);
+        warn!("Tunnel inbound listener on {} stopped", self.listen);
     }
 }
 
@@ -50,12 +49,12 @@ impl TunnelInbound {
             listen: addr,
             dispatcher,
             network,
-            target: SocksAddr::from_str(&target)?,
+            target: TargetAddr::from_str(&target)?,
         })
     }
 }
 
-impl InboundHandlerTrait for TunnelInbound {
+impl AbstractInboundHandler for TunnelInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -81,7 +80,7 @@ impl InboundHandlerTrait for TunnelInbound {
 
             let dispatcher = self.dispatcher.clone();
             let sess = Session {
-                network: Network::Tcp,
+                network: Network::TCP,
                 typ: Type::Tunnel,
                 source: src_addr,
                 destination: self.target.clone(),
@@ -104,7 +103,7 @@ impl InboundHandlerTrait for TunnelInbound {
         );
         let socket = UdpSocket::bind(self.listen).await?;
         let sess = Session {
-            network: Network::Udp,
+            network: Network::UDP,
             typ: Type::Tunnel,
             destination: self.target.clone(),
             ..Default::default()
@@ -122,13 +121,13 @@ impl InboundHandlerTrait for TunnelInbound {
 #[derive(Debug)]
 struct UdpSession {
     pub socket: UdpSocket,
-    pub dst_addr: SocksAddr,
+    pub dst_addr: TargetAddr,
     pub read_buf: Vec<u8>,
     pub send_buf: Option<(Vec<u8>, SocketAddr)>,
 }
 
 impl UdpSession {
-    fn new(socket: UdpSocket, dst_addr: SocksAddr) -> Self {
+    fn new(socket: UdpSocket, dst_addr: TargetAddr) -> Self {
         Self {
             socket,
             dst_addr,
@@ -144,7 +143,7 @@ impl Sink<UdpPacket> for UdpSession {
     fn poll_ready(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
+    ) -> Poll<io::Result<()>> {
         let this = self.deref_mut();
         // "Back pressure" mechanism, new data is allowed to be written only when the
         // buffer is empty
@@ -157,15 +156,13 @@ impl Sink<UdpPacket> for UdpSession {
     fn start_send(
         mut self: Pin<&mut Self>,
         item: UdpPacket,
-    ) -> Result<(), Self::Error> {
+    ) -> io::Result<()> {
         let this = self.deref_mut();
         let socket = &this.socket;
         let dst_addr = match item.dst_addr {
-            SocksAddr::Ip(socket_addr) => socket_addr,
-            SocksAddr::Domain(..) => {
-                return Err(new_io_error(
-                    "UdpPacket dst_src MUSTBE IpAddr instead of Domain",
-                ));
+            TargetAddr::Socket(socket_addr) => socket_addr,
+            TargetAddr::Domain(..) => {
+                return Err(io::Error::other( "UdpPacket dst_src MUSTBE IpAddr instead of Domain"));
             }
         };
 
@@ -184,7 +181,7 @@ impl Sink<UdpPacket> for UdpSession {
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
+    ) -> Poll<io::Result<()>> {
         let this = self.deref_mut();
         let socket = &this.socket;
         let send_buf = &this.send_buf;
@@ -198,7 +195,7 @@ impl Sink<UdpPacket> for UdpSession {
                     // Register Waker to wake up when the socket is writable
                     socket.poll_send_ready(cx)
                 }
-                Err(e) => Poll::Ready(Err(e)),
+                Err(e) => Poll::Ready(Err(e.into())),
             };
         }
         // No data needs flush
@@ -208,7 +205,7 @@ impl Sink<UdpPacket> for UdpSession {
     fn poll_close(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
+    ) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -230,7 +227,7 @@ impl Stream for UdpSession {
             Poll::Ready(Ok(src_addr)) => {
                 let data = buf.filled().to_vec();
                 let dst_addr = this.dst_addr.clone();
-                let src_addr = SocksAddr::from(src_addr);
+                let src_addr = TargetAddr::from(src_addr);
                 Poll::Ready(Some(UdpPacket {
                     data,
                     src_addr,

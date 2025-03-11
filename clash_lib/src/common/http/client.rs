@@ -21,7 +21,7 @@ use tower::Service;
 use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_state::Context as AppContext;
 use watfaq_types::Stack;
-use watfaq_utils::which_stack_decision;
+use watfaq_utils::{which_ip_decision, which_stack_decision};
 
 use crate::{common::tls::GLOBAL_ROOT_STORE, proxy::AnyStream};
 
@@ -62,19 +62,9 @@ impl Service<Uri> for LocalConnector {
                         _ => panic!("invalid url: {}", remote),
                     },
                 });
-            let stack = which_stack_decision(
-                &ctx.default_iface.load(),
-                ctx.stack_prefer,
-                remote_ip.into(),
-            );
-            let remote_addr: SocketAddr = match stack.unwrap_or_default() {
-                Stack::V4 => {
-                    SocketAddrV4::new(remote_ip.0.unwrap(), remote_port).into()
-                }
-                Stack::V6 => {
-                    SocketAddrV6::new(remote_ip.1.unwrap(), remote_port, 0, 0).into()
-                }
-            };
+            let remote_ip = which_ip_decision(&ctx, None, None, remote_ip)?;
+            let remote_addr = SocketAddr::new(remote_ip, remote_port);
+
             ctx.protector
                 .new_tcp(remote_addr, None)
                 .await

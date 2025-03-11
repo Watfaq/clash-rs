@@ -21,7 +21,7 @@ use tracing::{error, info, trace};
 use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_state::Context;
 use watfaq_types::Stack;
-use watfaq_utils::which_stack_decision;
+use watfaq_utils::which_ip_decision;
 
 use super::remote_content_manager::providers::{
     file_vehicle, http_vehicle,
@@ -105,16 +105,8 @@ impl Router {
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
             {
-                // TODO
-                let stack = which_stack_decision(
-                    &self.ctx.default_iface.load(),
-                    self.ctx.stack_prefer,
-                    ip.into(),
-                );
-                let ip = match stack.unwrap_or_default() {
-                    Stack::V4 => ip.0.map(|v| v.into()),
-                    Stack::V6 => ip.1.map(|v| v.into()),
-                };
+                // TODO need docs for user
+                let ip = which_ip_decision(&self.ctx, None, None, ip).ok();
                 sess.resolved_ip = ip;
                 sess_resolved = true;
             }

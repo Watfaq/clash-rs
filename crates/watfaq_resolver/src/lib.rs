@@ -15,6 +15,7 @@ use watfaq_error::Result;
 use watfaq_state::Context;
 use watfaq_types::StackPrefer;
 
+pub use self::dns::exchange_with_resolver;
 pub use self::dns::DnsConfig;
 
 pub mod dns;

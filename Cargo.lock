@@ -8047,15 +8047,17 @@ dependencies = [
 name = "watfaq_types"
 version = "0.7.6"
 dependencies = [
- "anyhow",
+ "erased-serde",
  "serde",
  "socket2 0.4.10",
+ "watfaq_error",
 ]
 
 [[package]]
 name = "watfaq_utils"
 version = "0.7.6"
 dependencies = [
+ "bytes",
  "hyper",
  "maxminddb",
  "once_cell",

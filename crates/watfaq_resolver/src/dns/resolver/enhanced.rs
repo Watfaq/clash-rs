@@ -484,8 +484,11 @@ impl AbstractResolver for EnhancedResolver {
                 IpAddr::V6(addr) => Some(addr),
             })
             .choose(&mut rand::thread_rng());
-
-        Ok((res_v4, res_v6))
+        if res_v4.is_none() && res_v6.is_none() {
+            Err(anyhow!("can't resolve default DNS: {host}"))
+        } else {
+            Ok((res_v4, res_v6))
+        }
     }
 
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {

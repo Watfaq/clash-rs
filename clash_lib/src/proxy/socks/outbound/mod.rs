@@ -3,20 +3,16 @@ mod datagram;
 use std::{fmt::Debug, sync::Arc};
 
 use crate::{
-    app::{
-        dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-        },
-        dns::ThreadSafeDNSResolver,
+    app::dispatcher::{
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
     common::errors::new_io_error,
-    impl_default_connector,
     proxy::{
-        AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-        OutboundHandler, OutboundType,
+        AbstractOutboundHandler, AnyStream, ConnectorType,
+        OutboundType,
         transport::Transport,
-        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
+        utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
     },
     session::Session,
 };
@@ -24,13 +20,18 @@ use crate::{
 use async_trait::async_trait;
 use datagram::Socks5Datagram;
 use tracing::{debug, trace};
+use watfaq_config::OutboundCommonOptions;
+use watfaq_error::Result;
+use watfaq_resolver::AbstractResolver;
+use watfaq_types::DualIpAddr;
+use watfaq_utils::which_ip_decision;
 
 use super::socks5::{client_handshake, socks_command};
 
 #[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub user: Option<String>,
@@ -42,10 +43,8 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
-
-impl_default_connector!(Handler);
 
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -88,14 +87,13 @@ impl Handler {
 
     async fn inner_connect_datagram(
         &self,
-        s: AnyStream,
+        stream: AnyStream,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<Socks5Datagram> {
+    ) -> Result<Socks5Datagram> {
         let mut s = if let Some(tls_client) = self.opts.tls_client.as_ref() {
-            tls_client.proxy_stream(s).await?
+            tls_client.proxy_stream(stream).await?
         } else {
-            s
+            stream
         };
 
         let bind_addr = client_handshake(
@@ -110,30 +108,20 @@ impl Handler {
         let bind_ip = bind_addr
             .ip()
             .ok_or(new_io_error("missing IP in bind address"))?;
-        let bind_ip = if bind_ip.is_unspecified() {
+        let bind_ip: DualIpAddr = if bind_ip.is_unspecified() {
             trace!("bind address is unspecified, resolving server address");
-            let remote_addr = resolver
-                .resolve_old(&self.opts.server, false)
-                .await
-                .map_err(|x| new_io_error(x.to_string().as_str()))?;
-            remote_addr.ok_or(new_io_error(
-                "no bind addr returned from server and failed to resolve server \
-                 address",
-            ))?
+            self.resolver()
+                .resolve(&self.opts.server, false)
+                .await?
+                .into()
         } else {
             trace!("using server returned bind addr {}", bind_ip);
-            bind_ip
+            bind_ip.into()
         };
         let bind_port = bind_addr.port();
-        trace!("bind address resolved to {}:{}", bind_ip, bind_port);
-
-        let udp_socket = new_udp_socket(
-            None,
-            sess.iface.clone(),
-            #[cfg(target_os = "linux")]
-            None,
-        )
-        .await?;
+        trace!("bind address resolved to {:?}:{}", bind_ip, bind_port);
+        let bind_ip = which_ip_decision(self.ctx(), None, None, bind_ip)?;
+        let udp_socket = self.ctx().protector.new_udp_socket(&bind_ip).await?;
 
         Ok(Socks5Datagram::new(
             s,
@@ -144,7 +132,7 @@ impl Handler {
 }
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -157,11 +145,7 @@ impl OutboundHandler for Handler {
         self.opts.udp
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -170,7 +154,6 @@ impl OutboundHandler for Handler {
 
         self.connect_stream_with_connector(
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
@@ -184,8 +167,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -194,7 +176,6 @@ impl OutboundHandler for Handler {
 
         self.connect_datagram_with_connector(
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
@@ -210,18 +191,10 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedStream> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedStream> {
         let s = connector
-            .connect_stream(
-                resolver,
-                self.opts.server.as_str(),
-                self.opts.port,
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
-            )
+            .connect_stream(self.opts.server.as_str(), self.opts.port)
             .await?;
 
         let s = self.inner_connect_stream(s, sess).await?;
@@ -234,25 +207,26 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> std::io::Result<BoxedChainedDatagram> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedDatagram> {
         let s = connector
-            .connect_stream(
-                resolver.clone(),
-                self.opts.server.as_str(),
-                self.opts.port,
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
-            )
+            .connect_stream(self.opts.server.as_str(), self.opts.port)
             .await?;
 
-        let d = self.inner_connect_datagram(s, sess, resolver).await?;
+        let d = self.inner_connect_datagram(s, sess).await?;
 
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    fn support_dialer(&self) -> Option<&str> {
+        self.opts.common_opts.dialer.as_deref()
+    }
+
+    async fn register_connector(&self, connector: Arc<dyn AbstractDialer>) {
+        let mut m = self.connector.lock().await;
+        *m = Some(connector);
     }
 }
 

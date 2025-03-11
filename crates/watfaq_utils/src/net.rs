@@ -19,32 +19,34 @@ use watfaq_types::{DualIpAddr, Iface, Stack, StackPrefer, TargetStack};
 //    ，远端v6不为空 或 v4v6 = 46， 远端v4为空 则bind到v6::UNSPECIFIED
 //    connect到远端v6
 
-#[derive(Clone, Copy, Debug)]
-pub struct StackCondition {
-    iface_v4: bool,
-    iface_v6: bool,
-    stack_prefer: StackPrefer,
-}
-// TODO add more args
-pub fn which_ip_decision(ctx: &Context, remote: DualIpAddr) -> Result<IpAddr> {
-    let stack = which_stack_decision(
-        &ctx.default_iface.load(),
-        ctx.stack_prefer,
-        (&remote).into(),
-    )?;
+pub fn which_ip_decision<T: Into<DualIpAddr>>(
+    ctx: &Context,
+    iface: Option<&Iface>,
+    stack_prefer: Option<StackPrefer>,
+    remote: T,
+) -> Result<IpAddr> {
+    let remote: DualIpAddr = remote.into();
+    let iface = match iface {
+        Some(v) => v,
+        None => &ctx.default_iface.load(),
+    };
+
+    let stack_prefer = stack_prefer.unwrap_or_else(|| ctx.stack_prefer);
+    let stack = which_stack_decision(iface, stack_prefer, &remote)?;
     match (stack, remote.v4, remote.v6) {
         (Stack::V4, Some(v4), _) => Ok(v4.into()),
         (Stack::V6, _, Some(v6)) => Ok(v6.into()),
-        _ => unreachable!(),
+        _ => unreachable!("pattern filtered in `which_stack_decision`"),
     }
 }
 
-pub fn which_stack_decision(
+pub fn which_stack_decision<T: Into<TargetStack>>(
     iface: &Iface,
     stack_prefer: StackPrefer,
-    target: TargetStack,
+    target: T,
 ) -> Result<Stack> {
     let (iface_v4, iface_v6) = (iface.ipv4.is_some(), iface.ipv6.is_some());
+    let target: TargetStack = target.into();
     let (target_v4, target_v6) = (target.0, target.1);
 
     // Check for incompatible single stack scenarios
@@ -111,11 +113,8 @@ impl From<(Option<Ipv4Addr>, Option<Ipv6Addr>, u16)> for SocketAddrArg {
 }
 
 pub async fn new_tcp(ctx: &Context, remote: SocketAddrArg) -> Result<TcpStream> {
-    let stack = which_stack_decision(
-        &ctx.default_iface.load(),
-        ctx.stack_prefer,
-        (&remote).into(),
-    )?;
+    let stack =
+        which_stack_decision(&ctx.default_iface.load(), ctx.stack_prefer, &remote)?;
     let addr: SocketAddr = match (stack, (remote.0, remote.1)) {
         (Stack::V4, (Some(addr), _)) => addr.into(),
         (Stack::V6, (_, Some(addr))) => addr.into(),

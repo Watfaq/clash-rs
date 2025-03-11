@@ -344,7 +344,7 @@ impl AsyncWrite for TrackedStream {
 
 #[async_trait]
 pub trait ChainedDatagram:
-    Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Unpin
+    Stream<Item = UdpPacket> + Sink<UdpPacket, Error = watfaq_error::Error> + Unpin
 {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
@@ -355,7 +355,7 @@ pub type BoxedChainedDatagram = Box<dyn ChainedDatagram + Send + Sync>;
 #[async_trait]
 impl<T> ChainedDatagram for ChainedDatagramWrapper<T>
 where
-    T: Sink<UdpPacket, Error = std::io::Error> + Unpin + Send + Sync + 'static,
+    T: Sink<UdpPacket, Error = watfaq_error::Error> + Unpin + Send + Sync + 'static,
     T: Stream<Item = UdpPacket>,
 {
     fn chain(&self) -> &ProxyChain {
@@ -397,9 +397,9 @@ where
 }
 impl<T> Sink<UdpPacket> for ChainedDatagramWrapper<T>
 where
-    T: Sink<UdpPacket, Error = std::io::Error> + Unpin,
+    T: Sink<UdpPacket, Error = watfaq_error::Error> + Unpin,
 {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: Pin<&mut Self>,
@@ -515,18 +515,18 @@ impl Stream for TrackedDatagram {
 }
 
 impl Sink<UdpPacket> for TrackedDatagram {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
+            Ok(_) => return Poll::Ready(Err(anyhow!("shutdown"))),
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+                    return Poll::Ready(Err(anyhow!("shutdown")));
                 }
             },
         }
@@ -538,11 +538,11 @@ impl Sink<UdpPacket> for TrackedDatagram {
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
         match self.close_notify.try_recv() {
-            Ok(_) => return Err(std::io::ErrorKind::BrokenPipe.into()),
+            Ok(_) => return Err(anyhow!("shutdown")),
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Err(std::io::ErrorKind::BrokenPipe.into());
+                    return Err(anyhow!("shutdown"));
                 }
             },
         }
@@ -560,11 +560,11 @@ impl Sink<UdpPacket> for TrackedDatagram {
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
+            Ok(_) => return Poll::Ready(Err(anyhow!("shutdown"))),
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+                    return Poll::Ready(Err(anyhow!("shutdown")));
                 }
             },
         }
@@ -577,11 +577,11 @@ impl Sink<UdpPacket> for TrackedDatagram {
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         match self.close_notify.try_recv() {
-            Ok(_) => return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into())),
+            Ok(_) => return Poll::Ready(Err(anyhow!("shutdown"))),
             Err(e) => match e {
                 TryRecvError::Empty => {}
                 TryRecvError::Closed => {
-                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+                    return Poll::Ready(Err(anyhow!("shutdown")));
                 }
             },
         }

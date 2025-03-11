@@ -118,7 +118,7 @@ impl TryFrom<&OutBoundSsh> for Handler {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             common_opts: OutboundCommonOptions {
-                connector: s.common_opts.connect_via.clone(),
+                dialer: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },
             server: s.common_opts.server.to_owned(),

@@ -3,21 +3,17 @@ mod stream;
 
 use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
-    AnyStream, ConnectorType, DialWithConnector, OutboundType,
+    AnyStream, ConnectorType, OutboundType,
     transport::Sip003Plugin,
-    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+    utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
 };
 use crate::{
-    app::{
-        dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-        },
-        dns::ThreadSafeDNSResolver,
+    app::dispatcher::{
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
     common::errors::new_io_error,
-    impl_default_connector,
-    proxy::{HandlerCommonOptions, OutboundHandler},
+    proxy::AbstractOutboundHandler,
     session::Session,
 };
 use async_trait::async_trait;
@@ -27,12 +23,17 @@ use shadowsocks::{
     context::Context, crypto::CipherKind,
     relay::udprelay::proxy_socket::UdpSocketType,
 };
+use watfaq_error::Result;
+use watfaq_resolver::AbstractResolver;
+use watfaq_utils::which_ip_decision;
+
 use std::{fmt::Debug, io, sync::Arc};
 use tracing::debug;
+use watfaq_config::OutboundCommonOptions;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,
@@ -44,10 +45,8 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
-
-impl_default_connector!(Handler);
 
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -69,7 +68,6 @@ impl Handler {
         &self,
         s: AnyStream,
         sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
         let stream: AnyStream = match &self.opts.plugin {
             Some(plugin) => plugin.proxy_stream(s).await?,
@@ -89,7 +87,7 @@ impl Handler {
         Ok(Box::new(ShadowSocksStream(stream)))
     }
 
-    fn server_config(&self) -> Result<ServerConfig, io::Error> {
+    fn server_config(&self) -> std::io::Result<ServerConfig> {
         ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
             self.opts.password.to_owned(),
@@ -118,7 +116,7 @@ impl Handler {
 }
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         self.opts.name.as_str()
     }
@@ -131,11 +129,7 @@ impl OutboundHandler for Handler {
         self.opts.udp
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -144,20 +138,19 @@ impl OutboundHandler for Handler {
 
         self.connect_stream_with_connector(
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
                 .as_ref(),
         )
         .await
+        .into()
     }
 
     async fn connect_datagram(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
+    ) -> Result<BoxedChainedDatagram> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -166,7 +159,6 @@ impl OutboundHandler for Handler {
 
         self.connect_datagram_with_connector(
             sess,
-            resolver,
             dialer
                 .as_ref()
                 .unwrap_or(&GLOBAL_DIRECT_CONNECTOR.clone())
@@ -182,21 +174,13 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedStream> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedStream> {
         let stream = connector
-            .connect_stream(
-                resolver.clone(),
-                self.opts.server.as_str(),
-                self.opts.port,
-                sess.iface.as_ref(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
-            )
+            .connect_stream(self.opts.server.as_str(), self.opts.port)
             .await?;
 
-        let s = self.proxy_stream(stream, sess, resolver).await?;
+        let s = self.proxy_stream(stream, sess).await?;
         let chained = ChainedStreamWrapper::new(s);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
@@ -205,20 +189,15 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-        connector: &dyn RemoteConnector,
-    ) -> io::Result<BoxedChainedDatagram> {
+        connector: &dyn AbstractDialer,
+    ) -> Result<BoxedChainedDatagram> {
         let ctx = Context::new_shared(ServerType::Local);
         let cfg = self.server_config()?;
 
         let socket = connector
             .connect_datagram(
-                resolver.clone(),
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
-                sess.iface.as_ref().cloned(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
             )
             .await?;
 
@@ -228,22 +207,12 @@ impl OutboundHandler for Handler {
             &cfg,
             ShadowsocksUdpIo::new(socket),
         );
-        let server_addr = resolver
-            .resolve_old(&self.opts.server, false)
-            .await
-            .map_err(|x| {
-                new_io_error(format!(
-                    "failed to resolve {}: {}",
-                    self.opts.server, x
-                ))
-            })?
-            .ok_or(new_io_error(format!(
-                "failed to resolve {}",
-                self.opts.server
-            )))?;
+        let server_ip = self.resolver().resolve(&self.opts.server, false).await?;
+        let server_ip = which_ip_decision(&self.ctx(), None, None, server_ip)?;
+
         let d = OutboundDatagramShadowsocks::new(
             socket,
-            (server_addr, self.opts.port).into(),
+            (server_ip, self.opts.port).into(),
         );
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
@@ -395,7 +364,7 @@ mod tests {
             plugin: Some(Box::new(client)),
             udp: false,
         };
-        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        let handler: Arc<dyn AbstractOutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
@@ -456,7 +425,7 @@ mod tests {
             udp: false,
         };
 
-        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        let handler: Arc<dyn AbstractOutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
         chained.add(get_ss_runner(ss_port)).await?;
         chained
@@ -504,7 +473,7 @@ mod tests {
             udp: false,
         };
 
-        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        let handler: Arc<dyn AbstractOutboundHandler> = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(
             handler,
             get_ss_runner_with_plugin(ss_port).await?,

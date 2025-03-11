@@ -11,7 +11,7 @@ use erased_serde::Serialize as ESerialize;
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
-
+use watfaq_error::Result;
 use crate::{
     Error,
     app::{
@@ -194,7 +194,7 @@ impl Provider for RuleProviderImpl {
         ProviderType::Rule
     }
 
-    async fn initialize(&self) -> std::io::Result<()> {
+    async fn initialize(&self) -> Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
         if let Some(updater) = self.fetcher.on_update.as_ref() {

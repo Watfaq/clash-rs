@@ -24,6 +24,10 @@ use std::{
     sync::{Arc, RwLock, atomic::AtomicU32},
     task::{Context, Poll},
 };
+use watfaq_error::Result;
+use watfaq_resolver::AbstractResolver;
+use watfaq_types::Stack;
+use watfaq_utils::which_stack_decision;
 
 use rustls::ClientConfig as RustlsClientConfig;
 use tokio::{
@@ -32,21 +36,18 @@ use tokio::{
 };
 
 use crate::{
-    app::{
-        dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStreamWrapper,
-        },
-        dns::ThreadSafeDNSResolver,
+    app::dispatcher::{
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStreamWrapper,
     },
     common::tls::DefaultTlsVerifier,
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 use tracing::{debug, trace, warn};
 
 use super::{
-    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    converters::hysteria2::PortGenerator, datagram::UdpPacket
+    AbstractOutboundHandler, ConnectorType, OutboundType,
+    converters::hysteria2::PortGenerator, datagram::UdpPacket,
 };
 
 use self::{
@@ -68,7 +69,7 @@ pub enum Obfs {
 #[derive(Clone)]
 pub struct HystOption {
     pub name: String,
-    pub addr: SocksAddr,
+    pub addr: TargetAddr,
     pub ports: Option<PortGenerator>,
     pub sni: Option<String>,
     pub passwd: String,
@@ -95,7 +96,7 @@ enum CcRx {
 impl FromStr for CcRx {
     type Err = ParseIntError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         if s.eq_ignore_ascii_case("auto") {
             Ok(Self::Auto)
         } else {
@@ -127,7 +128,7 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> anyhow::Result<Self> {
+    pub fn new(opts: HystOption) -> Result<Self> {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
@@ -176,44 +177,38 @@ impl Handler {
     // connect and auth
     async fn new_authed_connection_inner(
         &self,
-        sess: &Session,
-        resolver: ThreadSafeDNSResolver,
-    ) -> anyhow::Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
+    ) -> Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
         // Everytime we enstablish a new session, we should lookup the server
         // address. maybe it changed since it use ddns
         let server_socket_addr = match self.opts.addr.clone() {
-            SocksAddr::Ip(ip) => ip,
-            SocksAddr::Domain(d, port) => {
-                let ip = resolver
-                    .resolve_old(d.as_str(), true)
-                    .await?
-                    .ok_or_else(|| anyhow!("resolve domain {} failed", d))?;
+            TargetAddr::Socket(ip) => ip,
+            TargetAddr::Domain(d, port) => {
+                let ip = self.resolver().resolve(d.as_str(), true).await?;
+
+                // TODO allow override
+                let stack = which_stack_decision(
+                    &self.ctx().default_iface.load(),
+                    self.ctx().stack_prefer,
+                    &ip,
+                )?;
+                let ip = match (stack, ip.0, ip.1) {
+                    (Stack::V4, Some(v4), _) => v4.into(),
+                    (Stack::V6, _, Some(v6)) => v6.into(),
+                    _ => unreachable!("pattern filtered in `which_stack_decision`"),
+                };
+
                 SocketAddr::new(ip, port)
             }
         };
-
-        let src = if resolver.ipv6() {
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-        } else {
-            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        let stack = match server_socket_addr {
+            SocketAddr::V4(_) => Stack::V4,
+            SocketAddr::V6(_) => Stack::V6,
         };
-
-        // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
-        // and port hopping
-        let create_socket = || async {
-            new_udp_socket(
-                Some(src),
-                sess.iface.clone(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
-            )
-            .await
-        };
+        let socket = self.ctx().protector.new_udp_socket(stack).await?;
 
         let mut ep = if let Some(obfs) = self.opts.obfs.as_ref() {
             match obfs {
                 Obfs::Salamander(salamander_obfs) => {
-                    let socket = create_socket().await?;
                     let obfs = salamander::Salamander::new(
                         socket.into_std()?,
                         salamander_obfs.key.to_vec(),
@@ -240,8 +235,6 @@ impl Handler {
                 Arc::new(TokioRuntime),
             )?
         } else {
-            let socket = create_socket().await?;
-
             quinn::Endpoint::new(
                 self.ep_config.clone(),
                 None,
@@ -319,10 +312,7 @@ impl Handler {
         Ok((sender, cc_rx, support_udp))
     }
 
-    pub async fn new_authed_connection(
-        &self,
-        sess: &Session
-    ) -> std::io::Result<Arc<HysteriaConnection>> {
+    pub async fn new_authed_connection(&self) -> Result<Arc<HysteriaConnection>> {
         let mut quinn_conn_lock = self.conn.lock().await;
 
         match (*quinn_conn_lock).as_ref().filter(|s| {
@@ -337,10 +327,8 @@ impl Handler {
         }) {
             Some(s) => Ok(s.clone()),
             None => {
-                let (session, guard) = self
-                    .new_authed_connection_inner(sess, resolver)
-                    .await
-                    .map_err(|e| {
+                let (session, guard) =
+                    self.new_authed_connection_inner().await.map_err(|e| {
                         std::io::Error::other(format!(
                             "connect to {} failed: {}",
                             self.opts.addr, e
@@ -359,10 +347,8 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
-
 #[async_trait::async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -379,11 +365,8 @@ impl OutboundHandler for Handler {
         ConnectorType::Tcp
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session
-    ) -> Result<BoxedChainedStream> {
-        let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
+        let authed_conn = self.new_authed_connection().await?;
         let hy_stream = authed_conn.connect_tcp(sess).await?;
         Ok(Box::new(ChainedStreamWrapper::new(Box::new(hy_stream))))
     }
@@ -391,9 +374,9 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session
+        sess: &Session,
     ) -> Result<BoxedChainedDatagram> {
-        let authed_conn = self.new_authed_connection(sess, resolver.clone()).await?;
+        let authed_conn = self.new_authed_connection().await?;
         let next_session_id = self
             .next_session_id
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -498,7 +481,7 @@ impl HysteriaConnection {
     pub fn send_packet(
         &self,
         pkt: Bytes,
-        addr: SocksAddr,
+        addr: TargetAddr,
         session_id: u32,
         pkt_id: u16,
     ) -> std::io::Result<()> {

@@ -3,7 +3,7 @@ use crate::{
     config::listener::InboundOpts,
     proxy::{
         http::HttpInbound,
-        inbound::{InboudHandler, InboundHandlerTrait as _},
+        inbound::{AbstractInboundHandler as _, InboudHandler},
         mixed::MixedInbound,
         socks::SocksInbound,
         tunnel::TunnelInbound,

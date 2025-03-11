@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 use watfaq_error::{Result, anyhow};
 use watfaq_resolver::Resolver;
-use watfaq_state::Context;
+use watfaq_state::{Context, ContextScope};
 
 use std::{
     collections::HashMap,
@@ -22,7 +22,7 @@ use std::{
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use self::utils::RemoteConnector;
+use self::utils::AbstractDialer;
 
 pub mod direct;
 pub mod reject;
@@ -52,15 +52,11 @@ pub mod vmess;
 pub mod wg;
 
 pub mod group;
-pub use group::{fallback, loadbalance, relay, selector, urltest};
+pub use group::{fallback, loadbalance, selector, urltest};
 
-mod common;
 pub mod inbound;
 mod transport;
 pub mod tunnel;
-
-#[cfg(test)]
-pub mod mocks;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
@@ -98,17 +94,17 @@ pub type AnyInboundDatagram =
     Box<dyn InboundDatagram<UdpPacket, Error = io::Error, Item = UdpPacket>>;
 
 pub trait OutboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + 'static
+    Stream<Item = Item> + Sink<Item, Error = watfaq_error::Error> + Send + Sync + Unpin + 'static
 {
 }
 
 impl<T, U> OutboundDatagram<U> for T where
-    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin + 'static
+    T: Stream<Item = U> + Sink<U, Error = watfaq_error::Error> + Send + Sync + Unpin + 'static
 {
 }
 
 pub type AnyOutboundDatagram =
-    Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
+    Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = watfaq_error::Error>>;
 
 #[derive(Serialize, Deserialize)]
 pub enum OutboundType {
@@ -125,7 +121,6 @@ pub enum OutboundType {
     #[serde(rename = "URLTest")]
     UrlTest,
     Selector,
-    Relay,
     LoadBalance,
     Fallback,
 
@@ -148,7 +143,6 @@ impl Display for OutboundType {
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),
-            OutboundType::Relay => write!(f, "Relay"),
             OutboundType::LoadBalance => write!(f, "LoadBalance"),
             OutboundType::Fallback => write!(f, "Fallback"),
 
@@ -163,15 +157,18 @@ pub enum ConnectorType {
     All,
     None,
 }
+pub type AnyOutboundHandler = Arc<dyn AbstractOutboundHandler + Sync + Send + Unpin>;
 
 #[async_trait]
-pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
+pub trait AbstractOutboundHandler {
     fn ctx(&self) -> &Context {
         todo!()
     }
     fn clone_ctx(&self) -> Arc<Context> {
         todo!()
     }
+
+    // TODO probably we should put this into Context
     fn resolver(&self) -> &Resolver {
         todo!()
     }
@@ -187,19 +184,15 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     fn proto(&self) -> OutboundType;
 
     /// whether the outbound handler support UDP
+
     async fn support_udp(&self) -> bool;
 
     /// connect to remote target via TCP
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream>;
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream>;
 
     /// connect to remote target via UDP
-    async fn connect_datagram(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedDatagram>;
+    async fn connect_datagram(&self, sess: &Session)
+    -> Result<BoxedChainedDatagram>;
 
     /// relay related
     async fn support_connector(&self) -> ConnectorType;
@@ -207,7 +200,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     async fn connect_stream_with_connector(
         &self,
         _sess: &Session,
-        _connector: &dyn RemoteConnector,
+        _connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         error!("tcp relay not supported for {}", self.proto());
         Err(anyhow!("tcp relay not supported for {}", self.proto()))
@@ -216,10 +209,19 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     async fn connect_datagram_with_connector(
         &self,
         _sess: &Session,
-        _connector: &dyn RemoteConnector,
+        _connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedDatagram> {
         Err(anyhow!("udp relay not supported for {}", self.proto()))
     }
+
+    fn support_dialer(&self) -> Option<&str> {
+        None
+    }
+
+    /// register a dialer for the outbound handler
+    /// this must be called before the outbound handler is used
+    async fn register_connector(&self, _: Arc<dyn AbstractDialer>) {}
+
 
     /// for API
     /// the map only contains basic information
@@ -235,15 +237,6 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         None
     }
 }
-pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;
 
-#[async_trait]
-pub trait DialWithConnector {
-    fn support_dialer(&self) -> Option<&str> {
-        None
-    }
 
-    /// register a dialer for the outbound handler
-    /// this must be called before the outbound handler is used
-    async fn register_connector(&self, _: Arc<dyn RemoteConnector>) {}
-}
+

@@ -12,23 +12,21 @@ use russh::{
     keys::Algorithm,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+use watfaq_config::OutboundCommonOptions;
+use watfaq_error::Result;
 
 use crate::{
-    app::{
-        dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
-            ChainedStreamWrapper,
-        },
-        dns::ThreadSafeDNSResolver,
+    app::dispatcher::{
+        BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
+        ChainedStreamWrapper,
     },
     common::errors::new_io_error,
-    impl_default_connector,
     session::Session,
 };
 
 use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, ProxyStream, utils::RemoteConnector,
+    AbstractOutboundHandler, ConnectorType, OutboundType,
+    ProxyStream, utils::AbstractDialer,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait
@@ -57,28 +55,28 @@ impl AsyncWrite for ChannelStreamWrapper {
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
-    ) -> std::task::Poll<Result<usize, io::Error>> {
+    ) -> std::task::Poll<std::io::Result<usize>> {
         Pin::new(&mut self.get_mut().inner).poll_write(cx, buf)
     }
 
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), io::Error>> {
+    ) -> std::task::Poll<std::io::Result<()>> {
         Pin::new(&mut self.get_mut().inner).poll_flush(cx)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), io::Error>> {
+    ) -> std::task::Poll<std::io::Result<()>> {
         Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
     }
 }
 #[derive(Debug)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub username: String,
@@ -109,10 +107,8 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
-
-impl_default_connector!(Handler);
 
 impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
@@ -140,7 +136,7 @@ const KEX_ALGORITHMS: &[Name] = &[
 ];
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -157,11 +153,7 @@ impl OutboundHandler for Handler {
         ConnectorType::Tcp
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         // key exchange algorithms
         let kex = Cow::Borrowed(KEX_ALGORITHMS);
         // host key algorithms
@@ -221,9 +213,8 @@ impl OutboundHandler for Handler {
     async fn connect_datagram(
         &self,
         _sess: &Session,
-        _resolver: ThreadSafeDNSResolver,
-    ) -> std::io::Result<BoxedChainedDatagram> {
-        Err(new_io_error("ssh udp is not implemented yet"))
+    ) -> Result<BoxedChainedDatagram> {
+        Err(anyhow!("ssh udp is not implemented yet"))
     }
 }
 
@@ -426,7 +417,7 @@ mod tests {
             ]),
             totp: None,
         };
-        let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
+        let handler: Arc<dyn AbstractOutboundHandler> = Arc::new(Handler::new(opts));
         // we need to store all the runners in a container, to make sure all of
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();

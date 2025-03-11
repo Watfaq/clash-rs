@@ -11,14 +11,11 @@ use netstack_smoltcp::StackBuilder;
 use tracing::{debug, error, info, trace, warn};
 use tun::AbstractDevice;
 use url::Url;
+use watfaq_resolver::{exchange_with_resolver, Resolver};
 
 use crate::{
     Error, Runner,
-    app::{
-        dispatcher::Dispatcher,
-        dns::{ThreadSafeDNSResolver, exchange_with_resolver},
-        net::get_outbound_interface,
-    },
+    app::dispatcher::Dispatcher,
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
     proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
@@ -32,22 +29,12 @@ async fn handle_inbound_stream(
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     dispatcher: Arc<Dispatcher>,
-    so_mark: u32,
 ) {
     let sess = Session {
-        network: Network::Tcp,
+        network: Network::TCP,
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
-            .inspect(|x| {
-                debug!(
-                    "selecting outbound interface: {:?} for tun TCP connection",
-                    x
-                );
-            }),
-        so_mark: Some(so_mark),
         ..Default::default()
     };
 
@@ -58,8 +45,7 @@ async fn handle_inbound_stream(
 async fn handle_inbound_datagram(
     socket: netstack_smoltcp::UdpSocket,
     dispatcher: Arc<Dispatcher>,
-    resolver: ThreadSafeDNSResolver,
-    so_mark: u32,
+    resolver: Arc<Resolver>,
     dns_hijack: bool,
 ) {
     // tun i/o
@@ -94,14 +80,8 @@ async fn handle_inbound_datagram(
     let udp_stream = TunDatagram::new(l_tx, d_rx);
 
     let sess = Session {
-        network: Network::Udp,
+        network: Network::UDP,
         typ: Type::Tun,
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
-            .inspect(|x| {
-                debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
-            }),
-        so_mark: Some(so_mark),
         ..Default::default()
     };
 
@@ -241,7 +221,7 @@ async fn handle_inbound_datagram(
 pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
-    resolver: ThreadSafeDNSResolver,
+    resolver: Arc<Resolver>,
 ) -> Result<Option<Runner>, Error> {
     if !cfg.enable {
         trace!("tun is disabled");
@@ -330,6 +310,7 @@ pub fn get_runner(
         let (mut tun_sink, mut tun_stream) = framed.split();
         let (mut stack_sink, mut stack_stream) = stack.split();
 
+        // TODO use tokio JoinSet and impl graceful shutdown
         let mut futs: Vec<Runner> = vec![];
 
         // dispatcher -> stack -> tun
@@ -384,7 +365,6 @@ pub fn get_runner(
                     local_addr,
                     remote_addr,
                     dsp.clone(),
-                    so_mark,
                 ));
             }
 
@@ -396,7 +376,6 @@ pub fn get_runner(
                 udp_socket,
                 dispatcher,
                 resolver,
-                so_mark,
                 cfg.dns_hijack,
             )
             .await;

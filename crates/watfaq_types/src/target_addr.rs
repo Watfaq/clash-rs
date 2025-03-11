@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use serde::Serialize;
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
@@ -6,168 +5,12 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     str::FromStr,
 };
+use watfaq_error::anyhow;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum TargetAddr {
-    Ip(SocketAddr),
+    Socket(SocketAddr),
     Domain(String, u16),
-}
-
-impl FromStr for TargetAddr {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.to_string();
-        if !s.contains(':') {
-            return Err(anyhow!("missing port"));
-        }
-        match SocketAddr::from_str(&s) {
-            Ok(v) => Ok(Self::Ip(v)),
-            Err(_) => {
-                let tokens: Vec<_> = s.split(':').collect();
-                if tokens.len() == 2 {
-                    let port: u16 = tokens.get(1).unwrap().parse()?;
-                    Ok(Self::Domain(tokens.first().unwrap().to_string(), port))
-                } else {
-                    Err(anyhow!("SocksAddr parse error, value: {s}"))
-                }
-            }
-        }
-    }
-}
-impl Display for TargetAddr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            TargetAddr::Ip(addr) => write!(f, "{}", addr),
-            TargetAddr::Domain(domain, port) => write!(f, "{}:{}", domain, port),
-        }
-    }
-}
-#[test]
-fn test_from_str() {
-    assert_eq!(
-        TargetAddr::from_str("127.0.0.1:80").unwrap(),
-        TargetAddr::Ip(SocketAddr::V4("127.0.0.1:80".parse().unwrap()))
-    );
-    assert!(TargetAddr::from_str("127.0.0.1:80").is_ok());
-    assert!(TargetAddr::from_str("hosta.com:443").is_ok());
-    assert!(TargetAddr::from_str("hosta.:com:443").is_err());
-}
-
-impl Default for TargetAddr {
-    fn default() -> Self {
-        Self::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
-    }
-}
-
-pub struct SocksAddrType;
-
-impl SocksAddrType {
-    pub const DOMAIN: u8 = 0x3;
-    pub const V4: u8 = 0x1;
-    pub const V6: u8 = 0x4;
-}
-
-impl TargetAddr {
-    pub fn any_ipv4() -> Self {
-        Self::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
-    }
-
-    pub fn any_ipv6() -> Self {
-        Self::Ip(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
-            0,
-        ))
-    }
-
-    pub fn is_domain(&self) -> bool {
-        match self {
-            TargetAddr::Ip(_) => false,
-            TargetAddr::Domain(..) => true,
-        }
-    }
-
-    pub fn domain(&self) -> Option<&str> {
-        match self {
-            TargetAddr::Ip(_) => None,
-            TargetAddr::Domain(domain, _) => Some(domain.as_str()),
-        }
-    }
-
-    pub fn must_into_socket_addr(self) -> SocketAddr {
-        match self {
-            TargetAddr::Ip(addr) => addr,
-            TargetAddr::Domain(..) => panic!("not a socket address"),
-        }
-    }
-
-    pub fn ip(&self) -> Option<IpAddr> {
-        if let TargetAddr::Ip(addr) = self {
-            Some(addr.ip())
-        } else {
-            None
-        }
-    }
-
-    pub fn host(&self) -> String {
-        match self {
-            TargetAddr::Ip(ip) => ip.ip().to_string(),
-            TargetAddr::Domain(domain, _) => domain.to_string(),
-        }
-    }
-
-    pub fn port(&self) -> u16 {
-        match self {
-            TargetAddr::Ip(ip) => ip.port(),
-            TargetAddr::Domain(_, port) => *port,
-        }
-    }
-
-    pub fn size(&self) -> usize {
-        match self {
-            // SOCKS5 ATYP
-            TargetAddr::Ip(ip) => match ip {
-                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
-                SocketAddr::V6(_) => 1 + 16 + 2,
-            },
-            TargetAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
-        }
-    }
-}
-
-impl Clone for TargetAddr {
-    fn clone(&self) -> Self {
-        match self {
-            TargetAddr::Ip(a) => Self::from(a.to_owned()),
-            TargetAddr::Domain(domain, port) => {
-                Self::try_from((domain.clone(), *port)).unwrap()
-            }
-        }
-    }
-}
-
-impl From<(IpAddr, u16)> for TargetAddr {
-    fn from(value: (IpAddr, u16)) -> Self {
-        Self::Ip(value.into())
-    }
-}
-
-impl From<(Ipv4Addr, u16)> for TargetAddr {
-    fn from(value: (Ipv4Addr, u16)) -> Self {
-        Self::Ip(value.into())
-    }
-}
-
-impl From<(Ipv6Addr, u16)> for TargetAddr {
-    fn from(value: (Ipv6Addr, u16)) -> Self {
-        Self::Ip(value.into())
-    }
-}
-
-impl From<SocketAddr> for TargetAddr {
-    fn from(value: SocketAddr) -> Self {
-        Self::Ip(value)
-    }
 }
 
 impl TryFrom<(String, u16)> for TargetAddr {
@@ -184,12 +27,169 @@ impl TryFrom<(String, u16)> for TargetAddr {
     }
 }
 
+impl FromStr for TargetAddr {
+    type Err = watfaq_error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.to_string();
+        if !s.contains(':') {
+            return Err(anyhow!("missing port"));
+        }
+        match SocketAddr::from_str(&s) {
+            Ok(v) => Ok(Self::Socket(v)),
+            Err(_) => {
+                let tokens: Vec<_> = s.split(':').collect();
+                if tokens.len() == 2 {
+                    let port: u16 = tokens.get(1).unwrap().parse()?;
+                    Ok(Self::Domain(tokens.first().unwrap().to_string(), port))
+                } else {
+                    Err(anyhow!("SocksAddr parse error, value: {s}"))
+                }
+            }
+        }
+    }
+}
+impl Display for TargetAddr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            TargetAddr::Socket(addr) => write!(f, "{}", addr),
+            TargetAddr::Domain(domain, port) => write!(f, "{}:{}", domain, port),
+        }
+    }
+}
+#[test]
+fn test_from_str() {
+    assert_eq!(
+        TargetAddr::from_str("127.0.0.1:80").unwrap(),
+        TargetAddr::Socket(SocketAddr::V4("127.0.0.1:80".parse().unwrap()))
+    );
+    assert!(TargetAddr::from_str("127.0.0.1:80").is_ok());
+    assert!(TargetAddr::from_str("hosta.com:443").is_ok());
+    assert!(TargetAddr::from_str("hosta.:com:443").is_err());
+}
+
+impl Default for TargetAddr {
+    fn default() -> Self {
+        Self::Socket(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
+    }
+}
+
+pub struct SocksAddrType;
+
+impl SocksAddrType {
+    pub const DOMAIN: u8 = 0x3;
+    pub const V4: u8 = 0x1;
+    pub const V6: u8 = 0x4;
+}
+
+impl TargetAddr {
+    pub fn any_ipv4() -> Self {
+        Self::Socket(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))
+    }
+
+    pub fn any_ipv6() -> Self {
+        Self::Socket(SocketAddr::new(
+            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+            0,
+        ))
+    }
+
+    pub fn is_domain(&self) -> bool {
+        match self {
+            TargetAddr::Socket(_) => false,
+            TargetAddr::Domain(..) => true,
+        }
+    }
+
+    pub fn domain(&self) -> Option<&str> {
+        match self {
+            TargetAddr::Socket(_) => None,
+            TargetAddr::Domain(domain, _) => Some(domain.as_str()),
+        }
+    }
+
+    pub fn must_into_socket_addr(self) -> SocketAddr {
+        match self {
+            TargetAddr::Socket(addr) => addr,
+            TargetAddr::Domain(..) => panic!("not a socket address"),
+        }
+    }
+
+    pub fn ip(&self) -> Option<IpAddr> {
+        if let TargetAddr::Socket(addr) = self {
+            Some(addr.ip())
+        } else {
+            None
+        }
+    }
+
+    pub fn host(&self) -> String {
+        match self {
+            TargetAddr::Socket(ip) => ip.ip().to_string(),
+            TargetAddr::Domain(domain, _) => domain.to_string(),
+        }
+    }
+
+    pub fn port(&self) -> u16 {
+        match self {
+            TargetAddr::Socket(ip) => ip.port(),
+            TargetAddr::Domain(_, port) => *port,
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            // SOCKS5 ATYP
+            TargetAddr::Socket(ip) => match ip {
+                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
+                SocketAddr::V6(_) => 1 + 16 + 2,
+            },
+            TargetAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
+        }
+    }
+}
+
+impl Clone for TargetAddr {
+    fn clone(&self) -> Self {
+        match self {
+            TargetAddr::Socket(a) => Self::from(a.to_owned()),
+            TargetAddr::Domain(domain, port) => {
+                Self::try_from((domain.clone(), *port)).unwrap()
+            }
+        }
+    }
+}
+
+impl From<(IpAddr, u16)> for TargetAddr {
+    fn from(value: (IpAddr, u16)) -> Self {
+        Self::Socket(value.into())
+    }
+}
+
+impl From<(Ipv4Addr, u16)> for TargetAddr {
+    fn from(value: (Ipv4Addr, u16)) -> Self {
+        Self::Socket(value.into())
+    }
+}
+
+impl From<(Ipv6Addr, u16)> for TargetAddr {
+    fn from(value: (Ipv6Addr, u16)) -> Self {
+        Self::Socket(value.into())
+    }
+}
+
+impl From<SocketAddr> for TargetAddr {
+    fn from(value: SocketAddr) -> Self {
+        Self::Socket(value)
+    }
+}
+
 impl TryFrom<TargetAddr> for SocketAddr {
-    type Error = anyhow::Error;
+    type Error = watfaq_error::Error;
 
     fn try_from(s: TargetAddr) -> Result<Self, Self::Error> {
         match s {
-            TargetAddr::Ip(ip) => Ok(ip),
+            TargetAddr::Socket(ip) => Ok(ip),
             TargetAddr::Domain(..) => {
                 Err(anyhow!("cannot convert domain into SocketAddress"))
             }

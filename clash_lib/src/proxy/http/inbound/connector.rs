@@ -52,7 +52,7 @@ impl tower::Service<Uri> for Connector {
             let (left, right) = duplex(1024 * 1024);
 
             let sess = Session {
-                network: Network::Tcp,
+                network: Network::TCP,
                 typ: Type::Http,
                 source: src,
                 destination: destination

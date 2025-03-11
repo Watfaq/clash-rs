@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use serde::{Deserialize, Serialize};
 
@@ -34,9 +34,26 @@ pub enum Stack {
     V4,
     V6,
 }
+impl From<&SocketAddr> for Stack {
+    fn from(value: &SocketAddr) -> Self {
+        match value {
+            SocketAddr::V4(..) => Self::V4,
+            SocketAddr::V6(..) => Self::V6,
+        }
+    }
+}
+impl From<&IpAddr> for Stack {
+    fn from(value: &IpAddr) -> Self {
+        match value {
+            IpAddr::V4(..) => Self::V4,
+            IpAddr::V6(..) => Self::V6,
+        }
+    }
+}
 
-#[derive(Debug, Clone, Copy)]
-pub enum Proto {
+#[derive(Serialize, Debug, Clone, Copy)]
+// TODO impl Display
+pub enum Network {
     TCP,
     UDP,
     ICMPv4,

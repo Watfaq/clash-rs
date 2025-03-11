@@ -19,12 +19,12 @@ use crate::{
         http::{HyperResponseBody, hyper::TokioIo},
     },
     proxy::{AnyStream, ProxyError},
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 
 use super::{auth::authenticate_req, connector::Connector};
 
-pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
+pub fn maybe_socks_addr(r: &Uri) -> Option<TargetAddr> {
     let port = r.port_u16().unwrap_or(
         match r.scheme().map(|s| s.as_str()).unwrap_or("http") {
             "http" => 80 as _,
@@ -35,9 +35,9 @@ pub fn maybe_socks_addr(r: &Uri) -> Option<SocksAddr> {
 
     r.host().map(|x| {
         if let Ok(ip) = x.parse::<IpAddr>() {
-            SocksAddr::Ip((ip, port).into())
+            TargetAddr::Socket((ip, port).into())
         } else {
-            SocksAddr::Domain(x.to_string(), port)
+            TargetAddr::Domain(x.to_string(), port)
         }
     })
 }
@@ -67,7 +67,7 @@ async fn proxy(
                     match hyper::upgrade::on(req).await {
                         Ok(upgraded) => {
                             let sess = Session {
-                                network: Network::Tcp,
+                                network: Network::TCP,
                                 typ: Type::HttpConnect,
                                 source: src,
                                 destination: addr,

@@ -1,16 +1,18 @@
+mod r#abstract;
 mod dns;
 mod interface;
 mod session;
-mod socket_addr;
+mod target_addr;
 mod trie;
 mod udp_packet;
 
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 
+pub use r#abstract::*;
 pub use dns::*;
 pub use interface::*;
 pub use session::*;
-pub use socket_addr::*;
+pub use target_addr::*;
 pub use trie::*;
 pub use udp_packet::*;
 
@@ -54,8 +56,9 @@ impl From<(bool, bool)> for TargetStack {
         TargetStack(value.0, value.1)
     }
 }
-impl From<(Option<Ipv4Addr>, Option<Ipv6Addr>)> for TargetStack {
-    fn from(value: (Option<Ipv4Addr>, Option<Ipv6Addr>)) -> Self {
+
+impl From<&(Option<Ipv4Addr>, Option<Ipv6Addr>)> for TargetStack {
+    fn from(value: &(Option<Ipv4Addr>, Option<Ipv6Addr>)) -> Self {
         (value.0.is_some(), value.1.is_some()).into()
     }
 }

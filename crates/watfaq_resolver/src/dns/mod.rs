@@ -9,3 +9,4 @@ mod runtime;
 mod server;
 
 pub use config::DnsConfig;
+pub use server::exchange_with_resolver;

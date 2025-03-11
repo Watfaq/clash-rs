@@ -24,17 +24,16 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 use tracing::{Instrument, enabled, error, trace, trace_span, warn};
-use watfaq_state::Context;
+use watfaq_error::Result;
+use watfaq_resolver::Resolver;
 
 use crate::{
-    Error,
-    app::dns::ThreadSafeDNSResolver,
     proxy::{
         AnyOutboundDatagram,
         datagram::UdpPacket,
-        utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+        utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
     },
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 
 use super::events::PortProtocol;
@@ -80,14 +79,13 @@ pub struct Config {
 
 impl WireguardTunnel {
     pub async fn new(
-        ctx: ArcSwap<Context>,
         config: Config,
         packet_writer: Sender<(PortProtocol, Bytes)>,
         packet_reader: Receiver<Bytes>,
-        resolver: ThreadSafeDNSResolver,
-        connector: Option<Arc<dyn RemoteConnector>>,
+        resolver: Arc<Resolver>,
+        connector: Option<Arc<dyn AbstractDialer>>,
         sess: &Session,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let peer = Tunn::new(
             config.private_key,
             config.endpoint_public_key,
@@ -102,13 +100,8 @@ impl WireguardTunnel {
         let connector = connector.unwrap_or(GLOBAL_DIRECT_CONNECTOR.clone());
         let udp = connector
             .connect_datagram(
-                ctx,
-                resolver,
                 None,
                 remote_endpoint.into(),
-                sess.iface.clone(),
-                #[cfg(target_os = "linux")]
-                sess.so_mark,
             )
             .await?;
 
@@ -130,7 +123,7 @@ impl WireguardTunnel {
         })
     }
 
-    async fn udp_send(&self, packet: &mut [u8]) -> Result<(), std::io::Error> {
+    async fn udp_send(&self, packet: &mut [u8]) -> Result<()> {
         if packet.len() > 3 {
             packet[1] = self.reserved_bits[0];
             packet[2] = self.reserved_bits[1];
@@ -141,13 +134,14 @@ impl WireguardTunnel {
             .await
             .send(UdpPacket {
                 data: packet.to_vec(),
-                src_addr: SocksAddr::any_ipv4(),
+                src_addr: TargetAddr::any_ipv4(),
                 dst_addr: self.endpoint.into(),
             })
-            .await
+            .await?;
+        Ok(())
     }
 
-    pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<(), Error> {
+    pub async fn send_ip_packet(&self, packet: &[u8]) -> Result<()> {
         trace_ip_packet("Sending IP packet", packet);
 
         let mut send_buf = vec![0u8; 65535];

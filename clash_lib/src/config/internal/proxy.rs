@@ -330,8 +330,6 @@ pub struct Totp {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutboundGroupProtocol {
-    #[serde(rename = "relay")]
-    Relay(OutboundGroupRelay),
     #[serde(rename = "url-test")]
     UrlTest(OutboundGroupUrlTest),
     #[serde(rename = "fallback")]
@@ -345,7 +343,6 @@ pub enum OutboundGroupProtocol {
 impl OutboundGroupProtocol {
     pub fn name(&self) -> &str {
         match &self {
-            OutboundGroupProtocol::Relay(g) => &g.name,
             OutboundGroupProtocol::UrlTest(g) => &g.name,
             OutboundGroupProtocol::Fallback(g) => &g.name,
             OutboundGroupProtocol::LoadBalance(g) => &g.name,
@@ -355,7 +352,6 @@ impl OutboundGroupProtocol {
 
     pub fn proxies(&self) -> Option<&Vec<String>> {
         match &self {
-            OutboundGroupProtocol::Relay(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::UrlTest(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Fallback(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
@@ -367,22 +363,12 @@ impl OutboundGroupProtocol {
 impl Display for OutboundGroupProtocol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            OutboundGroupProtocol::Relay(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::UrlTest(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::Fallback(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::LoadBalance(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::Select(g) => write!(f, "{}", g.name),
         }
     }
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
-pub struct OutboundGroupRelay {
-    pub name: String,
-    pub proxies: Option<Vec<String>>,
-    #[serde(rename = "use")]
-    pub use_provider: Option<Vec<String>>,
-    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]

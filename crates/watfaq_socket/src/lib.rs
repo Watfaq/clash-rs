@@ -6,7 +6,7 @@ use enum_dispatch::enum_dispatch;
 use socket2::{Protocol, SockRef, TcpKeepalive};
 use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 use watfaq_error::Result;
-use watfaq_types::{Proto, Stack};
+use watfaq_types::{Network, Stack};
 
 mod protector_bind;
 
@@ -17,13 +17,14 @@ mod platform;
 pub use protector_bind::BindProtector;
 
 #[enum_dispatch(AbstractProtector)]
+#[derive(Debug)]
 pub enum Protector {
     Bind(protector_bind::BindProtector),
 }
 
 #[enum_dispatch]
 pub trait AbstractProtector {
-    fn protect(&self, socket: SockRef, stack: Stack, proto: Proto) -> Result<()>;
+    fn protect(&self, socket: SockRef, stack: Stack, proto: Network) -> Result<()>;
 }
 
 impl Protector {
@@ -56,7 +57,7 @@ impl Protector {
             Some(Protocol::TCP),
         )?;
 
-        self.protect(SockRef::from(&socket), stack, Proto::TCP)?;
+        self.protect(SockRef::from(&socket), stack, Network::TCP)?;
         socket.set_keepalive(true)?;
         socket.set_nodelay(true)?;
         socket.set_nonblocking(true)?;
@@ -87,7 +88,11 @@ impl Protector {
         Ok(socket)
     }
 
-    pub async fn new_udp_socket(&self, stack: Stack) -> Result<UdpSocket> {
+    pub async fn new_udp_socket<T: Into<Stack>>(
+        &self,
+        stack: T,
+    ) -> Result<UdpSocket> {
+        let stack: Stack = stack.into();
         let socket = socket2::Socket::new(
             match stack {
                 Stack::V4 => socket2::Domain::IPV4,
@@ -96,7 +101,7 @@ impl Protector {
             socket2::Type::DGRAM,
             Some(Protocol::UDP),
         )?;
-        self.protect(SockRef::from(&socket), stack, Proto::UDP)?;
+        self.protect(SockRef::from(&socket), stack, Network::UDP)?;
         socket.set_broadcast(true)?;
         socket.set_nonblocking(true)?;
         let socket = std::net::UdpSocket::from(socket);

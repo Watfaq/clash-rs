@@ -24,9 +24,10 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 use tracing::{Instrument, debug, error, trace, trace_span, warn};
+use watfaq_resolver::Resolver;
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr,
+    proxy::datagram::UdpPacket, session::TargetAddr,
 };
 
 use super::{
@@ -62,7 +63,7 @@ enum SenderType {
 pub struct DeviceManager {
     addr: Ipv4Addr,
     addr_v6: Option<Ipv6Addr>,
-    resolver: ThreadSafeDNSResolver,
+    resolver: Arc<Resolver>,
     dns_servers: Vec<SocketAddr>,
 
     socket_set: Arc<Mutex<SocketSet<'static>>>,
@@ -81,7 +82,7 @@ impl DeviceManager {
     pub fn new(
         addr: Ipv4Addr,
         addr_v6: Option<Ipv6Addr>,
-        resolver: ThreadSafeDNSResolver,
+        resolver: Arc<Resolver>,
         dns_servers: Vec<SocketAddr>,
         packet_notifier: Receiver<()>,
     ) -> Self {
@@ -169,7 +170,7 @@ impl DeviceManager {
 
             let pkt = UdpPacket::new(
                 msg.to_vec().unwrap(),
-                SocksAddr::any_ipv4(),
+                TargetAddr::any_ipv4(),
                 server.into(),
             );
 
@@ -456,7 +457,7 @@ impl DeviceManager {
                                 let socket = sockets.get_mut::<udp::Socket>(*handle);
                                 if socket.can_recv() {
                                     match socket.recv() {
-                                        Ok((data, md)) if !data.is_empty() => match sender.try_send(UdpPacket::new(data.into(), crate::session::SocksAddr::Ip(SocketAddr::new(md.endpoint.addr.into(), md.endpoint.port)), SocksAddr::any_ipv4())) {
+                                        Ok((data, md)) if !data.is_empty() => match sender.try_send(UdpPacket::new(data.into(), crate::session::TargetAddr::Socket(SocketAddr::new(md.endpoint.addr.into(), md.endpoint.port)), TargetAddr::any_ipv4())) {
                                             Ok(_) => {}
                                             Err(_) => {
                                                 trace!("socket {} closed from remote(?), aboring connection", handle);
@@ -483,8 +484,8 @@ impl DeviceManager {
                                                 socket.close();
                                             } else {
                                                 let ip = match &pkt.dst_addr {
-                                                    SocksAddr::Ip(addr) => addr.ip(),
-                                                    SocksAddr::Domain(domain, _) => {
+                                                    TargetAddr::Socket(addr) => addr.ip(),
+                                                    TargetAddr::Domain(domain, _) => {
                                                         if let Ok(ip) = domain.parse::<IpAddr>() {
                                                             ip
                                                         } else {
@@ -499,7 +500,7 @@ impl DeviceManager {
                                                                     continue;
                                                                 }
                                                             } else {
-                                                                match self.resolver.resolve_old(domain, false).await {
+                                                                match self.resolver.resolve(domain, false).await {
                                                                     Ok(Some(ip)) => {
                                                                         debug!("host {} resolved to {} on local", domain, ip);
                                                                         ip

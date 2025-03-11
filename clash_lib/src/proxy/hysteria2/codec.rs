@@ -6,7 +6,7 @@ use rand::distr::Alphanumeric;
 use tokio_util::codec::{Decoder, Encoder};
 use watfaq_error::Result;
 
-use crate::session::SocksAddr;
+use crate::session::TargetAddr;
 
 pub struct Hy2TcpCodec;
 
@@ -70,12 +70,12 @@ pub fn padding(range: std::ops::RangeInclusive<u32>) -> Vec<u8> {
     rng.sample_iter(Alphanumeric).take(len).collect()
 }
 
-impl Encoder<&'_ SocksAddr> for Hy2TcpCodec {
+impl Encoder<&'_ TargetAddr> for Hy2TcpCodec {
     type Error = std::io::Error;
 
     fn encode(
         &mut self,
-        item: &'_ SocksAddr,
+        item: &'_ TargetAddr,
         buf: &mut BytesMut,
     ) -> std::result::Result<(), Self::Error> {
         const REQ_ID: VarInt = VarInt::from_u32(0x401);
@@ -138,7 +138,7 @@ pub struct HysUdpPacket {
     pub pkt_id: u16,
     pub frag_id: u8,
     pub frag_count: u8,
-    pub addr: SocksAddr,
+    pub addr: TargetAddr,
     pub data: Vec<u8>,
 }
 
@@ -180,7 +180,7 @@ impl HysUdpPacket {
     }
 }
 
-fn to_socksaddr(bytes: &[u8]) -> std::io::Result<SocksAddr> {
+fn to_socksaddr(bytes: &[u8]) -> std::io::Result<TargetAddr> {
     let addr_str = std::str::from_utf8(bytes).map_err(|_| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -203,10 +203,10 @@ fn to_socksaddr(bytes: &[u8]) -> std::io::Result<SocksAddr> {
 
     // Try parsing as SocketAddr first
     if let Ok(sock_addr) = std::net::SocketAddr::from_str(addr_str) {
-        Ok(SocksAddr::Ip(sock_addr))
+        Ok(TargetAddr::Socket(sock_addr))
     } else {
         // If not a valid IP address, treat as domain
-        Ok(SocksAddr::Domain(host.to_string(), port))
+        Ok(TargetAddr::Domain(host.to_string(), port))
     }
 }
 
@@ -233,7 +233,7 @@ where
     pub fn new(
         session_id: u32,
         pkt_id: u16,
-        addr: SocksAddr,
+        addr: TargetAddr,
         max_pkt_size: usize,
         payload: P,
     ) -> Self {
@@ -372,12 +372,12 @@ fn hy2_resp_parse() {
 #[test]
 fn test_decode_addr() {
     let socket_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 80));
-    let addr = SocksAddr::Ip(socket_addr);
+    let addr = TargetAddr::Socket(socket_addr);
     let addr_bytes = addr.to_string().into_bytes();
     let decoded_addr = to_socksaddr(&addr_bytes).unwrap();
     assert_eq!(addr, decoded_addr);
 
-    let addr = SocksAddr::Domain("example.com".to_string(), 80);
+    let addr = TargetAddr::Domain("example.com".to_string(), 80);
     let addr_bytes = addr.to_string().into_bytes();
     let decoded_addr = to_socksaddr(&addr_bytes).unwrap();
     assert_eq!(addr, decoded_addr);

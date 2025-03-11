@@ -19,9 +19,9 @@ use crate::{
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
         OutboundType,
-        utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
+        utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
@@ -82,10 +82,9 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
 
 #[async_trait::async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     /// The name of the outbound handler
     fn name(&self) -> &str {
         &self.opts.name
@@ -103,10 +102,7 @@ impl OutboundHandler for Handler {
     }
 
     /// connect to remote target via TCP
-    async fn connect_stream(
-        &self,
-        sess: &Session
-    ) -> Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
@@ -122,7 +118,7 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session
+        sess: &Session,
     ) -> Result<BoxedChainedDatagram> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
@@ -137,14 +133,12 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        proxy
-            .connect_stream_with_connector(sess, connector)
-            .await
+        proxy.connect_stream_with_connector(sess, connector).await
     }
 
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {

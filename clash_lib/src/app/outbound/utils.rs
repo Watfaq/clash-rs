@@ -174,23 +174,12 @@ pub fn proxy_groups_dag_sort(
 mod tests {
     use crate::config::internal::proxy::{
         OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupProtocol,
-        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupUrlTest,
+        OutboundGroupSelect, OutboundGroupUrlTest,
     };
 
     #[test]
     fn test_proxy_groups_dag_sort_ok() {
-        let g1 = OutboundGroupRelay {
-            name: "relay".to_owned(),
-            proxies: Some(vec![
-                "ss".to_owned(),
-                "auto".to_owned(),
-                "fallback-auto".to_owned(),
-                "load-balance".to_owned(),
-                "select".to_owned(),
-                "DIRECT".to_owned(),
-            ]),
-            ..Default::default()
-        };
+
         let g2 = OutboundGroupUrlTest {
             name: "auto".to_owned(),
             proxies: Some(vec!["ss".to_owned(), "DIRECT".to_owned()]),
@@ -217,7 +206,6 @@ mod tests {
         };
 
         let mut groups = vec![
-            OutboundGroupProtocol::Relay(g1),
             OutboundGroupProtocol::UrlTest(g2),
             OutboundGroupProtocol::Fallback(g3),
             OutboundGroupProtocol::LoadBalance(g4),
@@ -231,15 +219,6 @@ mod tests {
 
     #[test]
     fn test_proxy_groups_dag_sort_cycle() {
-        let g1 = OutboundGroupRelay {
-            name: "relay".to_owned(),
-            proxies: Some(vec![
-                "ss".to_owned(),
-                "auto".to_owned(),
-                "fallback-auto".to_owned(),
-            ]),
-            ..Default::default()
-        };
         let g2 = OutboundGroupUrlTest {
             name: "auto".to_owned(),
             proxies: Some(vec![
@@ -260,7 +239,6 @@ mod tests {
         };
 
         let mut groups = vec![
-            OutboundGroupProtocol::Relay(g1),
             OutboundGroupProtocol::UrlTest(g2),
             OutboundGroupProtocol::Fallback(g3),
         ];

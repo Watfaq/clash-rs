@@ -1,17 +1,15 @@
 use crate::{
-    app::{
-        dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::ThreadSafeDNSResolver,
-    },
+    app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
     config::internal::proxy::PROXY_REJECT,
-    proxy::OutboundHandler,
+    proxy::AbstractOutboundHandler,
     session::Session,
 };
 use async_trait::async_trait;
 use serde::Serialize;
 use std::io;
+use watfaq_error::Result;
 
-use super::{ConnectorType, DialWithConnector, OutboundType};
+use super::{ConnectorType, OutboundType};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -28,10 +26,8 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
-
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         PROXY_REJECT
     }
@@ -47,17 +43,15 @@ impl OutboundHandler for Handler {
     async fn connect_stream(
         &self,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    ) -> Result<BoxedChainedStream> {
+        Err(anyhow!("REJECT"))
     }
 
     async fn connect_datagram(
         &self,
         #[allow(unused_variables)] sess: &Session,
-        #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
-    ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+    ) -> Result<BoxedChainedDatagram> {
+        Err(anyhow!("REJECT"))
     }
 
     async fn support_connector(&self) -> ConnectorType {

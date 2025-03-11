@@ -4,14 +4,12 @@ use quinn::{
 use register_count::Counter;
 use watfaq_config::OutboundCommonOptions;
 use watfaq_error::{Result, anyhow};
-use watfaq_resolver::AbstractResolver;
 use watfaq_state::Context;
-use watfaq_types::{Stack, TargetAddr, UdpPacket};
-use watfaq_utils::which_stack_decision;
+use watfaq_types::{TargetAddr, UdpPacket};
 
 use std::{
     collections::HashMap,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    net::{SocketAddr, UdpSocket},
     sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
@@ -22,7 +20,8 @@ use uuid::Uuid;
 
 pub struct TuicClient {
     pub ep: QuinnEndpoint,
-    pub server: ServerAddr,
+    pub server_addr: SocketAddr,
+    pub server_name: String,
     pub uuid: Uuid,
     pub password: Arc<[u8]>,
     pub udp_relay_mode: UdpRelayMode,
@@ -32,41 +31,25 @@ pub struct TuicClient {
     pub gc_lifetime: Duration,
 
     pub common: OutboundCommonOptions,
-    pub ip: Option<IpAddr>,
 }
 impl TuicClient {
     pub async fn connect(
         &self,
         ctx: &Context,
-        resolver: &impl AbstractResolver,
         rebind: bool,
     ) -> Result<Arc<TuicConnection>> {
         // if client and server don't match each other or forced to rebind,
         // then rebind local socket
         let connect_to = async {
-            let server_ip = self.server.resolve(resolver).await?;
-            let stack = which_stack_decision(
-                self.common
-                    .interface
-                    .as_ref()
-                    .unwrap_or(&ctx.default_iface.load()),
-                self.common.stack_prefer.unwrap_or(ctx.stack_prefer.clone()),
-                server_ip.into(),
-            )
-            .unwrap_or_default();
-            let server_addr = match stack {
-                Stack::V4 => {
-                    SocketAddr::new(server_ip.0.expect("Unreachable").into(), 0)
-                }
-                Stack::V6 => {
-                    SocketAddr::new(server_ip.1.expect("Unreachable").into(), 0)
-                }
-            };
+            let server_addr = self.server_addr.clone();
             if rebind {
                 // TODO allow override protector (when outbound specify
                 // interface/fwmark)
-                let socket: UdpSocket =
-                    ctx.protector.new_udp_socket(stack).await?.into_std()?;
+                let socket: UdpSocket = ctx
+                    .protector
+                    .new_udp_socket(&server_addr)
+                    .await?
+                    .into_std()?;
                 debug!("try rebind endpoint UDP socket to {}", socket.local_addr()?);
 
                 self.ep.rebind(socket).map_err(|err| {
@@ -77,11 +60,11 @@ impl TuicClient {
             tracing::trace!(
                 "connecting to {} {} from {}",
                 server_addr,
-                self.server.server_name(),
+                self.server_name,
                 self.ep.local_addr().unwrap()
             );
 
-            let conn = self.ep.connect(server_addr, self.server.server_name())?;
+            let conn = self.ep.connect(server_addr, &self.server_name)?;
             let (conn, zero_rtt_accepted) = if self.zero_rtt_handshake {
                 match conn.into_0rtt() {
                     Ok((conn, zero_rtt_accepted)) => (conn, Some(zero_rtt_accepted)),
@@ -211,37 +194,6 @@ impl TuicConnection {
     }
 }
 
-pub struct ServerAddr {
-    domain: String,
-    port: u16,
-    ip: Option<IpAddr>,
-}
-
-impl ServerAddr {
-    pub fn new(domain: String, port: u16, ip: Option<IpAddr>) -> Self {
-        Self { domain, port, ip }
-    }
-
-    pub fn server_name(&self) -> &str {
-        &self.domain
-    }
-
-    pub async fn resolve(
-        &self,
-        resolver: &impl AbstractResolver,
-    ) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
-        if let Some(ip) = self.ip {
-            match ip {
-                IpAddr::V4(ipv4_addr) => Ok((Some(ipv4_addr), None)),
-                IpAddr::V6(ipv6_addr) => Ok((None, Some(ipv6_addr))),
-            }
-        } else {
-            let ip = resolver.resolve(self.domain.as_str(), false).await?;
-            Ok(ip)
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum UdpRelayMode {
     Native,
@@ -297,7 +249,7 @@ pub trait SocketAdderTrans {
 impl SocketAdderTrans for TargetAddr {
     fn into_tuic(self) -> tuic::Address {
         match self {
-            TargetAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
+            TargetAddr::Socket(addr) => tuic::Address::SocketAddress(addr),
             TargetAddr::Domain(domain, port) => {
                 tuic::Address::DomainAddress(domain, port)
             }

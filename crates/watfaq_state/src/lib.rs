@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use arc_swap::ArcSwap;
 
 use watfaq_socket::Protector;
 use watfaq_types::{Iface, StackPrefer};
 
+#[derive(Debug)]
 pub struct Context {
     /// Whether current system have
     /// Respect user configuration
@@ -31,5 +34,14 @@ impl Context {
             default_iface: todo!(),
             protector: todo!(),
         }
+    }
+}
+
+pub trait ContextScope {
+    fn ctx(&self) -> &Context {
+        todo!()
+    }
+    fn clone_ctx(&self) -> Arc<Context> {
+        todo!()
     }
 }

@@ -1,7 +1,4 @@
-use std::{
-    fmt::Debug,
-    net::SocketAddr,
-};
+use std::{fmt::Debug, net::SocketAddr};
 
 use crate::{
     app::dispatcher::{
@@ -9,7 +6,7 @@ use crate::{
         ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
     config::internal::proxy::PROXY_DIRECT,
-    proxy::{OutboundHandler, datagram::OutboundDatagramImpl},
+    proxy::{AbstractOutboundHandler, datagram::OutboundDatagramImpl},
     session::Session,
 };
 
@@ -20,7 +17,7 @@ use watfaq_resolver::AbstractResolver;
 use watfaq_utils::which_ip_decision;
 
 use super::{
-    ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
+    utils::AbstractDialer, ConnectorType, OutboundDatagram, OutboundType
 };
 
 #[derive(Serialize)]
@@ -38,10 +35,8 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
-
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         PROXY_DIRECT
     }
@@ -54,10 +49,7 @@ impl OutboundHandler for Handler {
         true
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         let ip = sess.resolved_ip;
         let ip = match ip {
             Some(v) => v,
@@ -65,7 +57,7 @@ impl OutboundHandler for Handler {
                 let remote_ip = self.resolver()
                 .resolve(sess.destination.host().as_str(), false) // FIXME it's pretty wired
                 .await?;
-                which_ip_decision(self.ctx(), remote_ip.into())?
+                which_ip_decision(self.ctx(), None, None, remote_ip)?
             }
         };
         let tcp_stream = self
@@ -90,7 +82,7 @@ impl OutboundHandler for Handler {
                 let remote_ip = self.resolver()
                 .resolve(sess.destination.host().as_str(), false) // FIXME it's pretty wired
                 .await?;
-                which_ip_decision(self.ctx(), remote_ip.into())?
+                which_ip_decision(self.ctx(), None, None, remote_ip)?
             }
         };
         let udp_socket = self
@@ -99,8 +91,9 @@ impl OutboundHandler for Handler {
             .new_udp(SocketAddr::new(ip, sess.destination.port()))
             .await?;
 
-        let d = ChainedDatagramWrapper::new(OutboundDatagramImpl::new(
-            udp_socket, self.clone_resolver(),
+        let d: ChainedDatagramWrapper<OutboundDatagramImpl> = ChainedDatagramWrapper::new(OutboundDatagramImpl::new(
+            udp_socket,
+            self.clone_resolver(),
         ));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
@@ -113,7 +106,7 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         let s = connector
             .connect_stream(
@@ -129,7 +122,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedDatagram> {
         let d = connector
             .connect_datagram(None, sess.destination.clone())

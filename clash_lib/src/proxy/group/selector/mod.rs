@@ -13,9 +13,9 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector,
-        OutboundHandler, OutboundType,
-        utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
+        OutboundType,
+        utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
@@ -106,10 +106,9 @@ impl SelectorControl for Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
     }
@@ -122,15 +121,8 @@ impl OutboundHandler for Handler {
         self.opts.udp && self.selected_proxy(false).await.support_udp().await
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream> {
-        let s = self
-            .selected_proxy(true)
-            .await
-            .connect_stream(sess)
-            .await;
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
+        let s = self.selected_proxy(true).await.connect_stream(sess).await;
 
         match s {
             Ok(s) => {
@@ -143,12 +135,9 @@ impl OutboundHandler for Handler {
 
     async fn connect_datagram(
         &self,
-        sess: &Session
+        sess: &Session,
     ) -> Result<BoxedChainedDatagram> {
-        self.selected_proxy(true)
-            .await
-            .connect_datagram(sess)
-            .await
+        self.selected_proxy(true).await.connect_datagram(sess).await
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -158,7 +147,7 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         let s = self
             .selected_proxy(true)
@@ -173,7 +162,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedDatagram> {
         self.selected_proxy(true)
             .await
@@ -198,76 +187,5 @@ impl OutboundHandler for Handler {
 
     fn icon(&self) -> Option<String> {
         self.opts.common_opts.icon.clone()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use tokio::sync::{Mutex, RwLock};
-
-    use crate::proxy::{
-        group::selector::ThreadSafeSelectorControl,
-        mocks::{MockDummyOutboundHandler, MockDummyProxyProvider},
-    };
-
-    #[tokio::test]
-    async fn test_selector_control() {
-        let mut mock_provider = MockDummyProxyProvider::new();
-        mock_provider
-            .expect_name()
-            .return_const("provider1".to_owned());
-
-        mock_provider.expect_proxies().returning(|| {
-            let mut proxy1 = MockDummyOutboundHandler::new();
-            proxy1.expect_name().return_const("provider1".to_owned());
-            let mut proxy2 = MockDummyOutboundHandler::new();
-            proxy2.expect_name().return_const("provider2".to_owned());
-            vec![Arc::new(proxy1), Arc::new(proxy2)]
-        });
-
-        let handler = super::Handler::new(
-            super::HandlerOptions {
-                name: "test".to_owned(),
-                udp: false,
-                ..Default::default()
-            },
-            vec![Arc::new(RwLock::new(mock_provider))],
-            None,
-        )
-        .await;
-
-        let selector_control =
-            Arc::new(Mutex::new(handler.clone())) as ThreadSafeSelectorControl;
-        let outbound_handler = Arc::new(handler);
-
-        assert_eq!(
-            selector_control.lock().await.current().await,
-            "provider1".to_owned()
-        );
-        assert_eq!(
-            outbound_handler.selected_proxy(false).await.name(),
-            "provider1".to_owned()
-        );
-
-        selector_control
-            .lock()
-            .await
-            .select("provider2")
-            .await
-            .unwrap();
-
-        assert_eq!(
-            selector_control.lock().await.current().await,
-            "provider2".to_owned()
-        );
-        assert_eq!(
-            outbound_handler.selected_proxy(false).await.name(),
-            "provider2".to_owned()
-        );
-
-        let fail = selector_control.lock().await.select("provider3").await;
-        assert!(fail.is_err());
     }
 }

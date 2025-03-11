@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, trace, warn};
+use watfaq_error::Result;
 
 use crate::common::utils;
 
@@ -35,7 +36,7 @@ impl<T, U, P> Fetcher<U, P>
 where
     T: Send + Sync + 'static,
     U: Fn(T) -> BoxFuture<'static, ()> + Send + Sync + 'static,
-    P: Fn(&[u8]) -> anyhow::Result<T> + Send + Sync + 'static,
+    P: Fn(&[u8]) -> Result<T> + Send + Sync + 'static,
 {
     pub fn new(
         name: String,
@@ -71,7 +72,7 @@ where
         self.inner.read().await.updated_at.into()
     }
 
-    pub async fn initial(&self) -> anyhow::Result<T> {
+    pub async fn initial(&self) -> Result<T> {
         let mut is_local = false;
         let mut immediately_update = false;
 
@@ -133,7 +134,7 @@ where
         Ok(proxies)
     }
 
-    pub async fn update(&self) -> anyhow::Result<(T, bool)> {
+    pub async fn update(&self) -> Result<(T, bool)> {
         Fetcher::<U, P>::update_inner(
             self.inner.clone(),
             self.vehicle.clone(),
@@ -146,7 +147,7 @@ where
         inner: Arc<RwLock<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
         parser: Arc<Mutex<P>>,
-    ) -> anyhow::Result<(T, bool)> {
+    ) -> Result<(T, bool)> {
         let mut this = inner.write().await;
         let content = vehicle.read().await?;
         let proxies = (parser.lock().await)(&content)?;
@@ -253,6 +254,7 @@ mod tests {
     use crate::app::remote_content_manager::providers::{
         MockProviderVehicle, ProviderVehicleType,
     };
+    use watfaq_error::Result;
 
     use super::Fetcher;
 
@@ -276,7 +278,7 @@ mod tests {
             .expect_typ()
             .return_const(ProviderVehicleType::File);
 
-        let parser = move |i: &[u8]| -> anyhow::Result<String> {
+        let parser = move |i: &[u8]| -> Result<String> {
             let copy = i.to_owned();
             tx1.try_send(copy).unwrap();
             Ok("parsed".to_owned())

@@ -132,7 +132,7 @@ impl TuicConnection {
                     Address::DomainAddress(domain, port) => {
                         TargetAddr::Domain(domain, port)
                     }
-                    Address::SocketAddress(socket) => TargetAddr::Ip(socket),
+                    Address::SocketAddress(socket) => TargetAddr::Socket(socket),
                 };
                 if let Err(err) = session
                     .send(UdpPacket::new(data.into(), remote_addr, local_addr))

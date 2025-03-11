@@ -1,9 +1,11 @@
 mod mmdb;
 mod net;
+mod target_addr;
 mod tls;
 
 pub use mmdb::*;
 pub use net::*;
+pub use target_addr::*;
 pub use tls::*;
 
 pub fn encode_hex(bytes: &[u8]) -> String {

@@ -1,8 +1,9 @@
 mod compat;
 mod handle_stream;
 mod handle_task;
-pub(crate) mod types;
+pub mod types;
 
+use futures::{Sink, SinkExt, Stream};
 use watfaq_error::Result;
 
 use quinn::{
@@ -11,17 +12,15 @@ use quinn::{
     crypto::rustls::QuicClientConfig,
 };
 use tracing::debug;
-use types::{ServerAddr, SocketAdderTrans, TuicClient};
+use types::{SocketAdderTrans, TuicClient};
 use watfaq_config::OutboundCommonOptions;
 use watfaq_resolver::AbstractResolver;
 use watfaq_state::Context;
-use watfaq_types::{Session, TargetAddr, UdpPacket};
-use watfaq_utils::{DefaultTlsVerifier, which_stack_decision};
+use watfaq_types::{TargetAddr, UdpPacket};
+use watfaq_utils::{DefaultTlsVerifier, which_ip_decision};
 
 use std::{
-    net::IpAddr,
-    sync::{Arc, atomic::AtomicU16},
-    time::Duration,
+    net::{IpAddr, SocketAddr}, pin::Pin, sync::{atomic::AtomicU16, Arc}, task::Poll, time::Duration
 };
 
 use uuid::Uuid;
@@ -98,7 +97,6 @@ impl Handler {
         ctx: &Context,
         opts: HandlerOptions,
         resolver: &impl AbstractResolver,
-        sess: &Session,
     ) -> Result<TuicClient> {
         let verifier = DefaultTlsVerifier::new(None, opts.skip_cert_verify);
         let mut crypto =
@@ -134,20 +132,17 @@ impl Handler {
         };
 
         quinn_config.transport_config(Arc::new(transport_config));
-        let server = ServerAddr::new(opts.server.clone(), opts.port, opts.ip);
-        let server_ip = server.resolve(resolver).await?;
+        let server_ip = match opts.ip {
+            Some(v) => v,
+            None => {
+                let ip = resolver.resolve(&opts.server, false).await?;
+                // TODO allow custom stack prefer iface
+                which_ip_decision(&ctx, None, None, ip)?
+            }
+        };
 
-        let stack = which_stack_decision(
-            opts.common
-                .interface
-                .as_ref()
-                .unwrap_or(&ctx.default_iface.load()),
-            opts.common.stack_prefer.unwrap_or(ctx.stack_prefer),
-            server_ip.into(),
-        )
-        .unwrap_or_default();
         // TODO allow override protector (when outbound specify interface/fwmark)
-        let socket = ctx.protector.new_udp_socket(stack).await?;
+        let socket = ctx.protector.new_udp_socket(&server_ip).await?;
 
         debug!("binding socket to: {:?}", socket.local_addr()?);
 
@@ -161,7 +156,8 @@ impl Handler {
         endpoint.set_default_client_config(quinn_config);
         let endpoint = TuicClient {
             ep: endpoint,
-            server,
+            server_addr: SocketAddr::new(server_ip, opts.port),
+            server_name: opts.server,
             uuid: opts.uuid,
             password: Arc::from(
                 opts.password.clone().into_bytes().into_boxed_slice(),
@@ -172,7 +168,6 @@ impl Handler {
             gc_interval: opts.gc_interval,
             gc_lifetime: opts.gc_lifetime,
             common: opts.common,
-            ip: opts.ip,
         };
 
         Ok(endpoint)
@@ -182,12 +177,11 @@ impl Handler {
         &self,
         ctx: &Context,
         resolver: &impl AbstractResolver,
-        sess: &Session,
     ) -> Result<Arc<TuicConnection>> {
         let endpoint = self
             .ep
             .get_or_try_init(|| {
-                Self::init_endpoint(ctx, self.opts.clone(), resolver, sess)
+                Self::init_endpoint(ctx, self.opts.clone(), resolver)
             })
             .await?;
 
@@ -195,12 +189,12 @@ impl Handler {
             let mut guard = self.conn.lock().await;
             if guard.is_none() {
                 // init
-                *guard = Some(endpoint.connect(ctx, resolver, false).await?);
+                *guard = Some(endpoint.connect(ctx, false).await?);
             }
             let conn = guard.take().unwrap();
             let conn = if conn.check_open().is_err() {
                 // reconnect
-                endpoint.connect(ctx, resolver, true).await?
+                endpoint.connect(ctx, true).await?
             } else {
                 conn
             };
@@ -213,7 +207,7 @@ impl Handler {
 }
 
 #[derive(Debug)]
-struct TuicUdpOutbound {
+pub struct TuicUdpOutbound {
     send_tx: tokio_util::sync::PollSender<UdpPacket>,
     recv_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
 }
@@ -265,6 +259,58 @@ impl TuicUdpOutbound {
         }
     }
 }
+use watfaq_error::anyhow;
+impl Sink<UdpPacket> for TuicUdpOutbound {
+    type Error = watfaq_error::Error;
+
+    fn poll_ready(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<()>> {
+        self.send_tx
+            .poll_ready_unpin(cx)
+            .map_err(|e| anyhow!(e))
+    }
+
+    fn start_send(
+        mut self: Pin<&mut Self>,
+        item: UdpPacket,
+    ) -> Result<()> {
+        self.send_tx
+            .start_send_unpin(item)
+            .map_err(|e| anyhow!(e))
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<()>> {
+        self.send_tx
+            .poll_flush_unpin(cx)
+            .map_err(|e| anyhow!(e))
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<()>> {
+        self.send_tx
+            .poll_close_unpin(cx)
+            .map_err(|e| anyhow!(e))
+    }
+}
+
+impl Stream for TuicUdpOutbound {
+    type Item = UdpPacket;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.recv_rx.poll_recv(cx)
+    }
+}
+
 
 #[cfg(all(test, feature = "docker-test"))]
 mod tests {

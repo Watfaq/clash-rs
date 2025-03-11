@@ -1,6 +1,7 @@
-use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
+use crate::{proxy::datagram::UdpPacket, session::TargetAddr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
+use watfaq_utils::TargetAddrExt;
 use std::{
     io,
     net::SocketAddr,
@@ -31,12 +32,12 @@ use tokio_util::{
 // o  DATA     user data
 pub struct Socks5UDPCodec;
 
-impl Encoder<(Bytes, SocksAddr)> for Socks5UDPCodec {
+impl Encoder<(Bytes, TargetAddr)> for Socks5UDPCodec {
     type Error = std::io::Error;
 
     fn encode(
         &mut self,
-        item: (Bytes, SocksAddr),
+        item: (Bytes, TargetAddr),
         dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
         dst.reserve(3 + item.1.size() + item.0.len());
@@ -50,7 +51,7 @@ impl Encoder<(Bytes, SocksAddr)> for Socks5UDPCodec {
 
 impl Decoder for Socks5UDPCodec {
     type Error = std::io::Error;
-    type Item = (SocksAddr, BytesMut);
+    type Item = (TargetAddr, BytesMut);
 
     fn decode(
         &mut self,
@@ -68,7 +69,7 @@ impl Decoder for Socks5UDPCodec {
         }
 
         src.advance(3);
-        let addr = SocksAddr::peek_read(src)?;
+        let addr = TargetAddr::peek_read(src)?;
         src.advance(addr.size());
         let packet = std::mem::take(src);
         Ok(Some((addr, packet)))
@@ -82,7 +83,7 @@ pub struct InboundUdp<I> {
 impl<I> InboundUdp<I>
 where
     I: Stream + Unpin,
-    I: Sink<((Bytes, SocksAddr), SocketAddr)>,
+    I: Sink<((Bytes, TargetAddr), SocketAddr)>,
 {
     pub fn new(inner: I) -> Self {
         Self { inner }
@@ -110,7 +111,7 @@ impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
                 Some(item) => match item {
                     Ok(((dst, pkt), src)) => Poll::Ready(Some(UdpPacket {
                         data: pkt.to_vec(),
-                        src_addr: SocksAddr::Ip(src),
+                        src_addr: TargetAddr::Socket(src),
                         dst_addr: dst,
                     })),
                     Err(_) => Poll::Ready(None),

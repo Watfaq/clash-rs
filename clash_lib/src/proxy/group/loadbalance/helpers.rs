@@ -25,8 +25,8 @@ pub type StrategyFn = Box<
 
 fn get_key(sess: &Session) -> String {
     match &sess.destination {
-        crate::session::SocksAddr::Ip(addr) => addr.ip().to_string(),
-        crate::session::SocksAddr::Domain(host, _) => DEFAULT_PROVIDER
+        crate::session::TargetAddr::Socket(addr) => addr.ip().to_string(),
+        crate::session::TargetAddr::Domain(host, _) => DEFAULT_PROVIDER
             .effective_tld_plus_one(host)
             .map(|s| s.to_string())
             .unwrap_or_default(),

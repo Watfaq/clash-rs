@@ -18,7 +18,7 @@ use hickory_proto::{
 use ::rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
-use watfaq_error::{ErrContext, Error, Result, anyhow};
+use watfaq_error::{Error, Result, anyhow};
 
 use hickory_proto::{
     DnsHandle,
@@ -28,8 +28,7 @@ use hickory_proto::{
 };
 use tokio::net::TcpStream as TokioTcpStream;
 use watfaq_state::Context;
-use watfaq_types::Stack;
-use watfaq_utils::{GLOBAL_ROOT_STORE, NoHostnameTlsVerifier, which_stack_decision};
+use watfaq_utils::{GLOBAL_ROOT_STORE, NoHostnameTlsVerifier, which_ip_decision};
 
 use crate::{AbstractDnsClient, AbstractResolver, DnsClient, Resolver};
 
@@ -132,31 +131,8 @@ impl EnhancedDnsClient {
             DNSNetMode::Dhcp => Ok(DhcpClient::new(&opts.host).await.into()),
 
             other => {
-                let ip = match resolver
-                    .resolve(&opts.host, false)
-                    .await
-                    .context("resolve hostname failure {}")?
-                {
-                    (None, None) => {
-                        return Err(anyhow!(
-                            "can't resolve default DNS: {}",
-                            opts.host
-                        ));
-                    }
-                    target => {
-                        let stack = which_stack_decision(
-                            &ctx.default_iface.load(),
-                            ctx.stack_prefer,
-                            (target.0.is_some(), target.1.is_some()).into(),
-                        )
-                        .unwrap_or_default();
-                        match stack {
-                            Stack::V4 => target.0.unwrap().into(),
-                            Stack::V6 => target.1.unwrap().into(),
-                        }
-                    }
-                };
-
+                let ip = resolver.resolve(&opts.host, false).await?;
+                let ip = which_ip_decision(&ctx, None, None, ip)?;
                 match other {
                     DNSNetMode::Udp => {
                         let cfg =

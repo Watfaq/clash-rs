@@ -37,7 +37,7 @@ use crate::{
     Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        AnyOutboundHandler, direct, reject, relay,
+        AnyOutboundHandler, direct, reject,
         selector::ThreadSafeSelectorControl, urltest,
     },
 };
@@ -141,7 +141,6 @@ impl OutboundManager {
             if matches!(
                 v.proto(),
                 OutboundType::UrlTest
-                    | OutboundType::Relay
                     | OutboundType::Selector
                     | OutboundType::Fallback
                     | OutboundType::LoadBalance
@@ -365,60 +364,6 @@ impl OutboundManager {
 
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
-                OutboundGroupProtocol::Relay(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
-                        return Err(Error::InvalidConfig(format!(
-                            "proxy group {} has no proxies",
-                            proto.name
-                        )));
-                    }
-                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
-
-                    if let Some(proxies) = &proto.proxies {
-                        providers.push(make_provider_from_proxies(
-                            &proto.name,
-                            proxies,
-                            0,
-                            true,
-                            handlers,
-                            proxy_manager.clone(),
-                            &mut proxy_providers,
-                            provider_registry,
-                        )?);
-                    }
-
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
-                                })
-                                .clone();
-                            providers.push(provider);
-                        }
-                    }
-
-                    let relay = relay::Handler::new(
-                        relay::HandlerOptions {
-                            name: proto.name.clone(),
-                            common_opts: OutboundCommonOptions {
-                                icon: proto.icon.clone(),
-                                ..Default::default()
-                            },
-                        },
-                        providers,
-                    );
-
-                    handlers.insert(proto.name.clone(), relay);
-                }
                 OutboundGroupProtocol::UrlTest(proto) => {
                     if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
                         + proto

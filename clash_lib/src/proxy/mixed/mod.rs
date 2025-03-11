@@ -8,8 +8,11 @@ use std::{net::SocketAddr, sync::Arc};
 
 use tokio::net::TcpListener;
 use tracing::warn;
+use watfaq_error::Result;
 
-use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
+use super::{
+    http, inbound::AbstractInboundHandler, socks, utils::apply_tcp_options,
+};
 
 pub struct MixedInbound {
     addr: SocketAddr,
@@ -37,7 +40,7 @@ impl MixedInbound {
     }
 }
 
-impl InboundHandlerTrait for MixedInbound {
+impl AbstractInboundHandler for MixedInbound {
     fn handle_tcp(&self) -> bool {
         true
     }
@@ -46,7 +49,7 @@ impl InboundHandlerTrait for MixedInbound {
         false
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -66,14 +69,15 @@ impl InboundHandlerTrait for MixedInbound {
             match p[0] {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
-                        network: Network::Tcp,
+                        network: Network::TCP,
                         source: socket.peer_addr()?,
 
                         ..Default::default()
                     };
-
+                    let ctx = self.clone_ctx();
                     tokio::spawn(async move {
                         socks::handle_tcp(
+                            &ctx,
                             &mut sess,
                             socket,
                             dispatcher,
@@ -97,7 +101,7 @@ impl InboundHandlerTrait for MixedInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
+    async fn listen_udp(&self) -> Result<()> {
         Err(anyhow!("UDP is not supported"))
     }
 }

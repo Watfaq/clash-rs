@@ -22,7 +22,7 @@ impl TryFrom<&OutboundTuic> for watfaq_tuic::Handler {
             name: s.common_opts.name.to_owned(),
             server: s.common_opts.server.to_owned(),
             common: OutboundCommonOptions {
-                connector: s.common_opts.connect_via.clone(),
+                dialer: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },
             port: s.common_opts.port,

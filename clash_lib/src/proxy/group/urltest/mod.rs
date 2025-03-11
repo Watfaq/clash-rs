@@ -15,9 +15,9 @@ use crate::{
         },
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector,
-        OutboundHandler, OutboundType,
-        utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
+        OutboundType,
+        utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
@@ -129,10 +129,9 @@ impl Handler {
     }
 }
 
-impl DialWithConnector for Handler {}
 
 #[async_trait]
-impl OutboundHandler for Handler {
+impl AbstractOutboundHandler for Handler {
     /// The name of the outbound handler
     fn name(&self) -> &str {
         &self.opts.name
@@ -149,15 +148,8 @@ impl OutboundHandler for Handler {
     }
 
     /// connect to remote target via TCP
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream> {
-        let s = self
-            .fastest(false)
-            .await
-            .connect_stream(sess)
-            .await?;
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
+        let s = self.fastest(false).await.connect_stream(sess).await?;
         s.append_to_chain(self.name()).await;
         Ok(s)
     }
@@ -165,13 +157,9 @@ impl OutboundHandler for Handler {
     /// connect to remote target via UDP
     async fn connect_datagram(
         &self,
-        sess: &Session
+        sess: &Session,
     ) -> Result<BoxedChainedDatagram> {
-        let d = self
-            .fastest(false)
-            .await
-            .connect_datagram(sess)
-            .await?;
+        let d = self.fastest(false).await.connect_datagram(sess).await?;
         d.append_to_chain(self.name()).await;
         Ok(d)
     }
@@ -183,7 +171,7 @@ impl OutboundHandler for Handler {
     async fn connect_stream_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         let s = self
             .fastest(true)
@@ -198,7 +186,7 @@ impl OutboundHandler for Handler {
     async fn connect_datagram_with_connector(
         &self,
         sess: &Session,
-        connector: &dyn RemoteConnector,
+        connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedDatagram> {
         self.fastest(true)
             .await

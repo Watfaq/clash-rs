@@ -7,6 +7,9 @@ use futures::ready;
 
 use md5::Md5;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use watfaq_utils::TargetAddrExt;
+
+use watfaq_error::Result;
 
 use crate::{
     common::{
@@ -15,7 +18,7 @@ use crate::{
         utils,
     },
     proxy::vmess::vmess_impl::MAX_CHUNK_SIZE,
-    session::SocksAddr,
+    session::TargetAddr,
 };
 
 use super::{
@@ -36,7 +39,7 @@ pub struct VmessStream<S> {
     stream: S,
     aead_read_cipher: Option<AeadCipher>,
     aead_write_cipher: Option<AeadCipher>,
-    dst: SocksAddr,
+    dst: TargetAddr,
     id: ID,
     req_body_iv: Vec<u8>,
     req_body_key: Vec<u8>,
@@ -95,7 +98,7 @@ where
     pub(crate) async fn new(
         stream: S,
         id: &ID,
-        dst: &SocksAddr,
+        dst: &TargetAddr,
         security: &Security,
         is_aead: bool,
         is_udp: bool,
@@ -195,7 +198,7 @@ impl<S> VmessStream<S>
 where
     S: AsyncWrite + Unpin,
 {
-    async fn send_handshake_request(&mut self) -> std::io::Result<()> {
+    async fn send_handshake_request(&mut self) -> Result<()> {
         use hmac::{Hmac, Mac};
         type HmacMd5 = Hmac<Md5>;
         let &mut Self {
@@ -271,8 +274,7 @@ where
                 id.cmd_key,
                 buf.freeze().to_vec(),
                 now,
-            )
-            .map_err(map_io_error)?;
+            )?;
             stream.write_all(&out).await?;
         }
 
@@ -342,8 +344,7 @@ where
                             aead_response_header_length_encryption_iv,
                             this.read_buf.split().as_ref(),
                             None,
-                        )
-                        .map_err(map_io_error)?;
+                        )?;
 
                         if decrypted_response_header_len.len() < 2 {
                             return Err(std::io::Error::new(

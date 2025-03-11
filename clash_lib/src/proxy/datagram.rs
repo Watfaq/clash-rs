@@ -1,4 +1,4 @@
-use crate::{common::errors::new_io_error, session::SocksAddr};
+use crate::{common::errors::new_io_error, session::TargetAddr};
 use futures::{Sink, Stream, ready};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -13,16 +13,16 @@ use watfaq_resolver::Resolver;
 #[derive(Clone)]
 pub struct UdpPacket {
     pub data: Vec<u8>,
-    pub src_addr: SocksAddr,
-    pub dst_addr: SocksAddr,
+    pub src_addr: TargetAddr,
+    pub dst_addr: TargetAddr,
 }
 
 impl Default for UdpPacket {
     fn default() -> Self {
         Self {
             data: Vec::new(),
-            src_addr: SocksAddr::any_ipv4(),
-            dst_addr: SocksAddr::any_ipv4(),
+            src_addr: TargetAddr::any_ipv4(),
+            dst_addr: TargetAddr::any_ipv4(),
         }
     }
 }
@@ -49,7 +49,7 @@ impl Display for UdpPacket {
 }
 
 impl UdpPacket {
-    pub fn new(data: Vec<u8>, src_addr: SocksAddr, dst_addr: SocksAddr) -> Self {
+    pub fn new(data: Vec<u8>, src_addr: TargetAddr, dst_addr: TargetAddr) -> Self {
         Self {
             data,
             src_addr,
@@ -123,7 +123,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let dst = &p.dst_addr;
             let data = &p.data;
             let dst = match dst {
-                SocksAddr::Domain(domain, port) => {
+                TargetAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = *port;
                     let mut fut = resolver.resolve_old(domain.as_str(), false);
@@ -139,7 +139,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         )));
                     }
                 }
-                SocksAddr::Ip(addr) => *addr,
+                TargetAddr::Socket(addr) => *addr,
             };
 
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
@@ -188,7 +188,7 @@ impl Stream for OutboundDatagramImpl {
                 Poll::Ready(Some(UdpPacket {
                     data,
                     src_addr: src.into(),
-                    dst_addr: SocksAddr::any_ipv4(),
+                    dst_addr: TargetAddr::any_ipv4(),
                 }))
             }
             Err(_) => Poll::Ready(None),
