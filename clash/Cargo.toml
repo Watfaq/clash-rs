@@ -5,7 +5,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["standard"]
+default = ["tuic"]
 standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy"]
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]

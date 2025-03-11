@@ -5,7 +5,6 @@ pub mod errors;
 pub mod geodata;
 pub mod http;
 pub mod io;
-pub mod mmdb;
 pub mod succinct_set;
 pub mod timed_future;
 pub mod tls;

@@ -5,8 +5,7 @@ use watfaq_error::Result;
 
 use crate::{
     app::dispatcher::{
-        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagramWrapper,
-        ChainedStream, ChainedStreamWrapper,
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper
     },
     session::Session,
 };
@@ -45,8 +44,8 @@ impl AbstractOutboundHandler for watfaq_tuic::Handler {
         let assos_id = self.next_assoc_id.fetch_add(1, Ordering::SeqCst);
         let tuic_udp =
             watfaq_tuic::TuicUdpOutbound::new(assos_id, conn, sess.source.into());
-
-        let s = tuic_udp.append_to_chain(self.name()).await;
+        let s = ChainedDatagramWrapper::new(tuic_udp);
+        s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
     }
 

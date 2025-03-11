@@ -1,5 +1,6 @@
 use std::io;
 
+use watfaq_error::Result;
 use crate::{common::utils, proxy::AnyStream, session::TargetAddr};
 
 use super::{
@@ -60,7 +61,7 @@ impl Builder {
         })
     }
 
-    pub async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
+    pub async fn proxy_stream(&self, stream: AnyStream) -> Result<AnyStream> {
         let idx = utils::rand_range(0..self.user.len());
         let stream = stream::VmessStream::new(
             stream,

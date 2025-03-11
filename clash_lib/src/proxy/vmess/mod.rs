@@ -67,7 +67,7 @@ impl Handler {
         s: AnyStream,
         sess: &'a Session,
         udp: bool,
-    ) -> io::Result<AnyStream> {
+    ) -> Result<AnyStream> {
         let s = if let Some(tls) = self.opts.tls.as_ref() {
             tls.proxy_stream(s).await?
         } else {

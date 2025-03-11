@@ -1,4 +1,5 @@
-use crate::Error;
+use watfaq_error::Result;
+use watfaq_error::ErrContext;
 use std::{fmt::Display, str::FromStr};
 
 pub enum RuleType {
@@ -114,15 +115,14 @@ impl RuleType {
         payload: &str,
         target: &str,
         params: Option<Vec<&str>>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         match proto {
             "DOMAIN" => Ok(RuleType::Domain {
                 domain: payload.to_string(),
                 target: target.to_string(),
             }),
             "DOMAIN-REGEX" => Ok(RuleType::DomainRegex {
-                regex: regex::Regex::new(payload)
-                    .map_err(|e| Error::InvalidConfig(e.to_string()))?,
+                regex: regex::Regex::new(payload).context("Invalid config")?,
                 target: target.to_string(),
             }),
             "DOMAIN-SUFFIX" => Ok(RuleType::DomainSuffix {
@@ -191,18 +191,15 @@ impl RuleType {
             "MATCH" => Ok(RuleType::Match {
                 target: target.to_string(),
             }),
-            _ => Err(Error::InvalidConfig(format!(
-                "unsupported rule type: {}",
-                proto
-            ))),
+            _ => Err(anyhow!("Invalid config unsupported rule type: {proto}")),
         }
     }
 }
 
 impl TryFrom<String> for RuleType {
-    type Error = crate::Error;
+    type Error = watfaq_error::Error;
 
-    fn try_from(line: String) -> Result<Self, Self::Error> {
+    fn try_from(line: String) -> Result<Self> {
         let parts = line.split(',').map(str::trim).collect::<Vec<&str>>();
 
         match parts.as_slice() {
@@ -211,15 +208,15 @@ impl TryFrom<String> for RuleType {
             [proto, payload, target, params @ ..] => {
                 RuleType::new(proto, payload, target, Some(params.to_vec()))
             }
-            _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", line))),
+            _ => Err(anyhow!("InvalidConfig invalid rule line: {line}")),
         }
     }
 }
 
 impl FromStr for RuleType {
-    type Err = Error;
+    type Err = watfaq_error::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         s.to_string().try_into()
     }
 }

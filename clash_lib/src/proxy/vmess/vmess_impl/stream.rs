@@ -1,4 +1,4 @@
-use std::{fmt::Debug, pin::Pin, task::Poll, time::SystemTime};
+use std::{fmt::Debug, io, pin::Pin, task::Poll, time::SystemTime};
 
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
@@ -102,7 +102,7 @@ where
         security: &Security,
         is_aead: bool,
         is_udp: bool,
-    ) -> std::io::Result<VmessStream<S>> {
+    ) -> Result<VmessStream<S>> {
         let mut rand_bytes = [0u8; 33];
         utils::rand_fill(&mut rand_bytes[..]);
         let req_body_iv = rand_bytes[0..16].to_vec();
@@ -157,12 +157,7 @@ where
 
                 (Some(read_cipher), Some(write_cipher))
             }
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "unsupported security",
-                ));
-            }
+            _ => bail!("unsupported security")
         };
 
         let mut stream = Self {
@@ -263,8 +258,7 @@ where
                 &id.cmd_key[..],
                 &hash_timestamp(now)[..],
                 &mut data,
-            )
-            .map_err(map_io_error)?;
+            )?;
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
@@ -344,7 +338,7 @@ where
                             aead_response_header_length_encryption_iv,
                             this.read_buf.split().as_ref(),
                             None,
-                        )?;
+                        ).map_err(map_io_error)?;
 
                         if decrypted_response_header_len.len() < 2 {
                             return Err(std::io::Error::new(
@@ -477,7 +471,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
+    ) -> Poll<io::Result<usize>> {
         loop {
             match self.write_state {
                 WriteState::BuildingData => {
@@ -533,8 +527,7 @@ where
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::WriteZero,
                             "failed to write whole data",
-                        ))
-                        .into();
+                        )).into();
                     }
 
                     if written + nw >= total {
@@ -553,7 +546,7 @@ where
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
+    ) -> Poll<io::Result<()>> {
         let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_flush(cx)
     }
@@ -561,7 +554,7 @@ where
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
+    ) -> Poll<io::Result<()>> {
         let Self { stream, .. } = self.get_mut();
         Pin::new(stream).poll_shutdown(cx)
     }

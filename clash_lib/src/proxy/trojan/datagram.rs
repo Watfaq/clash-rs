@@ -46,7 +46,7 @@ impl OutboundDatagramTrojan {
 }
 
 impl Sink<UdpPacket> for OutboundDatagramTrojan {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -128,10 +128,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             Poll::Ready(Ok(()))
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(anyhow!("no packet to send",)))
         }
     }
 
@@ -203,9 +200,7 @@ impl Stream for OutboundDatagramTrojan {
                             }
                             Err(err) => {
                                 debug!(
-                                    "failed to read socks addr from Trojan stream: \
-                                     {}",
-                                    err
+                                    "failed to read socks addr from Trojan stream: {err}"
                                 );
                                 return Poll::Ready(None);
                             }

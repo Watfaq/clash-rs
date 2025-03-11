@@ -41,7 +41,7 @@ impl Stream for TunDatagram {
 }
 
 impl Sink<UdpPacket> for TunDatagram {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -90,10 +90,10 @@ impl Sink<UdpPacket> for TunDatagram {
                     *flushed = true;
                     Poll::Ready(Ok(()))
                 }
-                Err(err) => Poll::Ready(Err(new_io_error(err.to_string().as_str()))),
+                Err(err) => Poll::Ready(Err(anyhow!(err))),
             }
         } else {
-            Poll::Ready(Err(new_io_error("no packet to send")))
+            Poll::Ready(Err(anyhow!("no packet to send")))
         }
     }
 

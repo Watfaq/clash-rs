@@ -24,7 +24,7 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
 };
 use tracing::{Instrument, debug, error, trace, trace_span, warn};
-use watfaq_resolver::Resolver;
+use watfaq_resolver::{AbstractResolver, Resolver};
 
 use crate::{
     proxy::datagram::UdpPacket, session::TargetAddr,

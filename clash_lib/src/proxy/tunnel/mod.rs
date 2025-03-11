@@ -138,12 +138,12 @@ impl UdpSession {
 }
 
 impl Sink<UdpPacket> for UdpSession {
-    type Error = io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    ) -> Poll<Result<()>> {
         let this = self.deref_mut();
         // "Back pressure" mechanism, new data is allowed to be written only when the
         // buffer is empty
@@ -156,13 +156,13 @@ impl Sink<UdpPacket> for UdpSession {
     fn start_send(
         mut self: Pin<&mut Self>,
         item: UdpPacket,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let this = self.deref_mut();
         let socket = &this.socket;
         let dst_addr = match item.dst_addr {
             TargetAddr::Socket(socket_addr) => socket_addr,
             TargetAddr::Domain(..) => {
-                return Err(io::Error::other( "UdpPacket dst_src MUSTBE IpAddr instead of Domain"));
+                return Err(anyhow!("UdpPacket dst_src MUSTBE IpAddr instead of Domain"));
             }
         };
 
@@ -174,14 +174,14 @@ impl Sink<UdpPacket> for UdpSession {
                 this.send_buf = Some((item.data, dst_addr));
                 Ok(())
             }
-            Err(e) => Err(e),
+            Err(e) => Err(anyhow!(e)),
         }
     }
 
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    ) -> Poll<Result<()>> {
         let this = self.deref_mut();
         let socket = &this.socket;
         let send_buf = &this.send_buf;
@@ -193,7 +193,7 @@ impl Sink<UdpPacket> for UdpSession {
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     // Register Waker to wake up when the socket is writable
-                    socket.poll_send_ready(cx)
+                    socket.poll_send_ready(cx).map_err(|e| anyhow!(e))
                 }
                 Err(e) => Poll::Ready(Err(e.into())),
             };
@@ -205,7 +205,7 @@ impl Sink<UdpPacket> for UdpSession {
     fn poll_close(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    ) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

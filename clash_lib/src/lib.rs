@@ -21,13 +21,17 @@ use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
 use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
+
+use tokio_util::sync::CancellationToken;
 use watfaq_resolver::{dns::resolver::SystemResolver, Resolver};
+use watfaq_state::Context;
+use watfaq_utils::Mmdb;
 
 use std::{io, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tokio::{
-    sync::{Mutex, broadcast, mpsc, oneshot},
-    task::JoinHandle,
+    sync::{broadcast, mpsc, oneshot, Mutex},
+    task::{JoinHandle, JoinSet},
 };
 use tracing::{debug, error, info};
 
@@ -67,7 +71,7 @@ pub enum Error {
     #[error(transparent)]
     Other(#[from] watfaq_error::Error),
 }
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = watfaq_error::Result<T>;
 pub type Runner = futures::future::BoxFuture<'static, Result<()>>;
 
 pub struct Options {
@@ -176,6 +180,9 @@ pub async fn start(
 
     let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
 
+    let set: JoinSet<Result<()>> = tokio::task::JoinSet::new();
+    let token = CancellationToken::new();
+
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
 
@@ -185,7 +192,7 @@ pub async fn start(
     let controller_cfg = config.general.controller.clone();
     let log_level = config.general.log_level;
 
-    let components = create_components(cwd.clone(), config).await?;
+    let components = create_runtime(cwd.clone(), config).await?;
 
     let inbound_manager = components.inbound_manager.clone();
     inbound_manager.start().await;
@@ -252,7 +259,7 @@ pub async fn start(
 
             let controller_cfg = config.general.controller.clone();
 
-            let new_components = create_components(cwd.clone(), config).await?;
+            let new_components = create_runtime(cwd.clone(), config).await?;
 
             done.send(()).unwrap();
 
@@ -303,13 +310,18 @@ pub async fn start(
         Ok(())
     }));
 
+    set.join_all().await.into_iter().filter_map(Result::err);
+    for result in results {
+
+    }
     futures::future::select_all(tasks).await.0.map_err(|x| {
         error!("runtime error: {}, shutting down", x);
         x
     })
 }
 
-struct RuntimeComponents {
+struct Runtime {
+    ctx: Arc<Context>,
     cache_store: profile::ThreadSafeCacheFile,
     dns_resolver: Arc<Resolver>,
     outbound_manager: Arc<OutboundManager>,
@@ -320,31 +332,36 @@ struct RuntimeComponents {
 
     tun_runner: Option<Runner>,
     dns_listener: Option<Runner>,
+    task_set: JoinSet<Result<()>>,
+    token: CancellationToken
 }
 
-async fn create_components(
+async fn create_runtime(
     cwd: PathBuf,
     config: InternalConfig,
-) -> Result<RuntimeComponents> {
+) -> Result<Runtime> {
+    let set = JoinSet::new();
+    let token = CancellationToken::new();
     if config.tun.enable {
         debug!("tun enabled, initializing default outbound interface");
         init_net_config(config.tun.so_mark).await;
     }
-    let system_resolver = Arc::new(
-        SystemResolver::new(config.dns.ipv6)
-            .map_err(|x| Error::DNSError(x.to_string()))?,
+    let system_resolver: Arc<Resolver> = Arc::new(
+        SystemResolver::new(config.dns.ipv6)?.into(),
     );
-    let client = new_http_client(system_resolver.clone())
-        .map_err(|x| Error::DNSError(x.to_string()))?;
+    let ctx = Context {
+        system_ipv6_cap: todo!(),
+        stack_prefer: todo!(),
+        default_iface: todo!(),
+        protector: todo!(),
+    };
+    let ctx = Arc::new(ctx);
+    // FIXME On some system, system resolver already be catpured by TUN device.
+    let client = new_http_client(ctx, system_resolver.clone())?;
 
     debug!("initializing mmdb");
     let country_mmdb = Arc::new(
-        mmdb::Mmdb::new(
-            cwd.join(&config.general.mmdb),
-            config.general.mmdb_download_url,
-            client.clone(),
-        )
-        .await?,
+        Mmdb::new(cwd.join(&config.general.mmdb)).await?,
     );
 
     let geodata = Arc::new(
@@ -364,9 +381,9 @@ async fn create_components(
 
     let dns_listen = config.dns.listen.clone();
     debug!("initializing dns resolver");
-    let dns_resolver = dns::new_resolver(
+    let dns_resolver = watfaq_resolver::dns::resolver::new(
+        ctx,
         config.dns,
-        Some(cache_store.clone()),
         Some(country_mmdb.clone()),
     )
     .await;
@@ -374,6 +391,7 @@ async fn create_components(
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
         OutboundManager::new(
+            ctx.clone(),
             config
                 .proxies
                 .into_values()
@@ -413,6 +431,7 @@ async fn create_components(
     debug!("initializing router");
     let router = Arc::new(
         Router::new(
+            ctx.clone(),
             config.rules,
             config.rule_providers,
             dns_resolver.clone(),
@@ -441,7 +460,7 @@ async fn create_components(
 
     debug!("initializing inbound manager");
     let inbound_manager = Arc::new(
-        InboundManager::new(
+        InboundManager::spawn(
             config.general.bind_address,
             config.general.authentication,
             dispatcher.clone(),
@@ -460,7 +479,7 @@ async fn create_components(
         dns::get_dns_listener(dns_listen, dns_resolver.clone(), &cwd).await;
 
     info!("all components initialized");
-    Ok(RuntimeComponents {
+    Ok(Runtime {
         cache_store,
         dns_resolver,
         outbound_manager,
@@ -470,6 +489,9 @@ async fn create_components(
         inbound_manager,
         tun_runner,
         dns_listener,
+        ctx,
+        task_set: set,
+        token,
     })
 }
 

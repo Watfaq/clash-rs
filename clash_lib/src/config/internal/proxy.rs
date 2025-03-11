@@ -61,6 +61,7 @@ pub enum OutboundProxyProtocol {
     Trojan(OutboundTrojan),
     #[serde(rename = "vmess")]
     Vmess(OutboundVmess),
+    #[cfg(feature = "wireguard")]
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
     #[cfg(feature = "onion")]
@@ -86,6 +87,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.common_opts.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.common_opts.name,
+            #[cfg(feature = "wireguard")]
             OutboundProxyProtocol::Wireguard(wireguard) => {
                 &wireguard.common_opts.name
             }
@@ -126,6 +128,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
+            #[cfg(feature = "wireguard")]
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             #[cfg(feature = "onion")]
             OutboundProxyProtocol::Tor(_) => write!(f, "Tor"),

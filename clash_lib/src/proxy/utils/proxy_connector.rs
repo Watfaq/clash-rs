@@ -73,7 +73,7 @@ impl AbstractDialer for DirectConnector {
             .resolve(address, false)
             .await?;
         let ip = which_ip_decision(self.ctx(), None, None, dial_addr)?;
-        let stream = self.ctx().protector.new_tcp(ip, None).await?;
+        let stream = self.ctx().protector.new_tcp(SocketAddr::new(ip, port), None).await?;
 
         Ok(Box::new(stream))
     }
@@ -161,7 +161,7 @@ impl AbstractDialer for ProxyConnector {
         destination: TargetAddr,
     ) -> Result<AnyOutboundDatagram> {
         let sess = Session {
-            network: Network::Udp,
+            network: Network::UDP,
             typ: Type::Ignore,
             destination: destination.clone(),
             ..Default::default()

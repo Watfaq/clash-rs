@@ -7,7 +7,6 @@ use crate::{
 };
 
 use crate::{
-    common::mmdb::Mmdb,
     config::internal::{config::RuleProviderDef, rule::RuleType},
     session::Session,
 };
@@ -20,8 +19,7 @@ use rules::domain_regex::DomainRegex;
 use tracing::{error, info, trace};
 use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_state::Context;
-use watfaq_types::Stack;
-use watfaq_utils::which_ip_decision;
+use watfaq_utils::{which_ip_decision, Mmdb};
 
 use super::remote_content_manager::providers::{
     file_vehicle, http_vehicle,

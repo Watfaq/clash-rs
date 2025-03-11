@@ -17,6 +17,7 @@ use crate::{
 
 use self::{keys::KeyBytes, wireguard::Config};
 use watfaq_error::Result;
+use watfaq_resolver::AbstractResolver;
 
 use super::{
     AbstractOutboundHandler, ConnectorType, DialWithConnector,

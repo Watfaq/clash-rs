@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use async_trait::async_trait;
 use erased_serde::Serialize;
 use tracing::debug;
+use watfaq_error::Result;
 
 use crate::{
     Error,
@@ -26,7 +27,7 @@ impl PlainProvider {
         name: String,
         proxies: Vec<AnyOutboundHandler>,
         hc: HealthCheck,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let hc = Arc::new(hc);
 
         if proxies.is_empty() {
@@ -61,11 +62,11 @@ impl Provider for PlainProvider {
         ProviderType::Proxy
     }
 
-    async fn initialize(&self) -> std::io::Result<()> {
+    async fn initialize(&self) -> Result<()> {
         Ok(())
     }
 
-    async fn update(&self) -> std::io::Result<()> {
+    async fn update(&self) -> Result<()> {
         Ok(())
     }
 

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use tracing::debug;
+use watfaq_utils::Mmdb;
 
-use crate::{common::mmdb, session::Session};
+use crate::session::Session;
 
 use super::RuleMatcher;
 
@@ -11,7 +12,7 @@ pub struct GeoIP {
     pub target: String,
     pub country_code: String,
     pub no_resolve: bool,
-    pub mmdb: Arc<mmdb::Mmdb>,
+    pub mmdb: Arc<Mmdb>,
 }
 
 impl std::fmt::Display for GeoIP {

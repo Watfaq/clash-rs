@@ -51,7 +51,7 @@ impl Drop for Socks5Datagram {
 }
 
 impl Sink<UdpPacket> for Socks5Datagram {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: Pin<&mut Self>,

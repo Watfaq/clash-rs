@@ -6,7 +6,7 @@ pub fn aes_cfb_encrypt(
     key: &[u8],
     iv: &[u8],
     data: &mut [u8],
-) -> anyhow::Result<()> {
+) -> Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into())
@@ -23,7 +23,7 @@ pub fn aes_cfb_encrypt(
                 .encrypt(data);
             Ok(())
         }
-        _ => anyhow::bail!("invalid key length"),
+        _ => bail!("invalid key length"),
     }
 }
 
@@ -31,7 +31,7 @@ pub fn aes_cfb_decrypt(
     key: &[u8],
     iv: &[u8],
     data: &mut [u8],
-) -> anyhow::Result<()> {
+) -> Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into())
@@ -48,7 +48,7 @@ pub fn aes_cfb_decrypt(
                 .decrypt(data);
             Ok(())
         }
-        _ => anyhow::bail!("invalid key length"),
+        _ => bail!("invalid key length"),
     }
 }
 

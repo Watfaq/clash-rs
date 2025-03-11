@@ -29,7 +29,7 @@ use crate::{
     proxy::{
         OutboundType, fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
-        vmess, wg,
+        vmess,
     },
 };
 
@@ -68,11 +68,11 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 impl OutboundManager {
     pub async fn new(
         ctx: Arc<Context>,
+        dns_resolver: Arc<Resolver>,
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
-        dns_resolver: Arc<Resolver>,
         cache_store: ThreadSafeCacheFile,
         cwd: String,
     ) -> Result<Self, Error> {
@@ -275,7 +275,7 @@ impl OutboundManager {
                 OutboundProxyProtocol::Hysteria2(h) => {
                     handlers.insert(h.name.clone(), h.clone().try_into()?);
                 }
-
+                #[cfg(feature = "wireguard")]
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
                     handlers.insert(wg.common_opts.name.clone(), {

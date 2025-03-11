@@ -33,7 +33,7 @@ use tokio_util::{
 pub struct Socks5UDPCodec;
 
 impl Encoder<(Bytes, TargetAddr)> for Socks5UDPCodec {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn encode(
         &mut self,
@@ -123,7 +123,7 @@ impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
 }
 
 impl Sink<UdpPacket> for InboundUdp<UdpFramed<Socks5UDPCodec>> {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: Pin<&mut Self>,

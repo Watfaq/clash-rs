@@ -14,7 +14,6 @@ use crate::{
         ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
     common::utils,
-    impl_default_connector,
     session::Session,
 };
 
@@ -22,7 +21,7 @@ use self::datagram::OutboundDatagramTrojan;
 use watfaq_error::Result;
 
 use super::{
-    AbstractOutboundHandler, AnyStream, ConnectorType, DialWithConnector,
+    AbstractOutboundHandler, AnyStream, ConnectorType,
     OutboundType,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},

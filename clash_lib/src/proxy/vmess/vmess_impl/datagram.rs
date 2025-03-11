@@ -35,7 +35,7 @@ impl OutboundDatagramVmess {
 }
 
 impl Sink<UdpPacket> for OutboundDatagramVmess {
-    type Error = std::io::Error;
+    type Error = watfaq_error::Error;
 
     fn poll_ready(
         self: std::pin::Pin<&mut Self>,
@@ -89,18 +89,14 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                      {}",
                     pkt.dst_addr, remote_addr
                 );
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "udp packet dst_addr not match",
-                )));
+                return Poll::Ready(Err(anyhow!("udp packet dst_addr not match")));
             }
 
             if written.is_none() {
                 let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
                 debug!(
-                    "send udp packet to remote vmess server, len: {}, remote_addr: \
-                     {}, dst_addr: {}",
-                    n, remote_addr, pkt.dst_addr
+                    "send udp packet to remote vmess server, len: {n}, remote_addr: \
+                     {remote_addr}, dst_addr: {}", pkt.dst_addr
                 );
                 *written = Some(n);
             }
@@ -118,19 +114,13 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             let res = if written.unwrap() == total_len {
                 Ok(())
             } else {
-                Err(new_io_error(format!(
-                    "failed to write entire datagram, written: {}",
-                    written.unwrap()
-                )))
+                Err(anyhow!("failed to write entire datagram, written: {}", written.unwrap()))
             };
             *written = None;
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(anyhow!("no packet to send")))
         }
     }
 

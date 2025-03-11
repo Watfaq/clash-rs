@@ -12,6 +12,8 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 use watfaq_error::Result;
+use watfaq_types::StringTrie;
+use watfaq_utils::Mmdb;
 use crate::{
     Error,
     app::{
@@ -22,7 +24,7 @@ use crate::{
         router::{RuleMatcher, map_rule_type},
     },
     common::{
-        errors::map_io_error, geodata::GeoData, mmdb::Mmdb, succinct_set, trie,
+        errors::map_io_error, geodata::GeoData, succinct_set, trie,
     },
     config::internal::rule::RuleType,
     session::Session,
@@ -74,7 +76,7 @@ pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
 type RuleUpdater =
     Box<dyn Fn(RuleContent) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
 type RuleParser =
-    Box<dyn Fn(&[u8]) -> anyhow::Result<RuleContent> + Send + Sync + 'static>;
+    Box<dyn Fn(&[u8]) -> Result<RuleContent> + Send + Sync + 'static>;
 
 pub struct RuleProviderImpl {
     fetcher: Fetcher<RuleUpdater, RuleParser>,
@@ -119,7 +121,7 @@ impl RuleProviderImpl {
 
         let n = name.clone();
         let parser: RuleParser =
-            Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
+            Box::new(move |input: &[u8]| -> Result<RuleContent> {
                 let scheme: ProviderScheme =
                     serde_yaml::from_slice(input).map_err(|x| {
                         Error::InvalidConfig(format!(
@@ -203,7 +205,7 @@ impl Provider for RuleProviderImpl {
         Ok(())
     }
 
-    async fn update(&self) -> std::io::Result<()> {
+    async fn update(&self) -> Result<()> {
         let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
         debug!("rule provider {} updated. same? {}", self.name(), same);
         if !same {
@@ -241,7 +243,7 @@ fn make_rules(
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
     geodata: Arc<GeoData>,
-) -> Result<RuleContent, Error> {
+) -> Result<RuleContent> {
     match behavior {
         RuleSetBehavior::Domain => {
             let s = make_domain_rules(rules)?;
@@ -256,15 +258,15 @@ fn make_rules(
     }
 }
 
-fn make_domain_rules(rules: Vec<String>) -> Result<trie::StringTrie<bool>, Error> {
-    let mut trie = trie::StringTrie::new();
+fn make_domain_rules(rules: Vec<String>) -> Result<StringTrie<bool>> {
+    let mut trie = StringTrie::new();
     for rule in rules {
         trie.insert(&rule, Arc::new(true));
     }
     Ok(trie)
 }
 
-fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
+fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie> {
     let mut trie = CidrTrie::new();
     for rule in rules {
         trie.insert(&rule);
@@ -276,7 +278,7 @@ fn make_classical_rules(
     rules: Vec<String>,
     mmdb: Arc<Mmdb>,
     geodata: Arc<GeoData>,
-) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
+) -> Result<Vec<Box<dyn RuleMatcher>>> {
     let mut rv = vec![];
     for rule in rules {
         let parts = rule.split(',').map(str::trim).collect::<Vec<&str>>();
@@ -289,7 +291,7 @@ fn make_classical_rules(
             [proto, payload, params @ ..] => {
                 RuleType::new(proto, payload, "", Some(params.to_vec()))
             }
-            _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", rule))),
+            _ => Err(anyhow!("invalid rule line: {rule}")),
         }?;
 
         let rule_matcher =

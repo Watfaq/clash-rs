@@ -49,6 +49,7 @@ pub mod tuic;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
+#[cfg(feature = "websocket")]
 pub mod wg;
 
 pub mod group;
@@ -83,15 +84,15 @@ impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + U
 impl_downcast!(ClientStream);
 
 pub trait InboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = io::Error> + Send + Sync + Unpin + Debug
+    Stream<Item = Item> + Sink<Item, Error = watfaq_error::Error> + Send + Sync + Unpin + Debug
 {
 }
 impl<T, U> InboundDatagram<U> for T where
-    T: Stream<Item = U> + Sink<U, Error = io::Error> + Send + Sync + Unpin + Debug
+    T: Stream<Item = U> + Sink<U, Error = watfaq_error::Error> + Send + Sync + Unpin + Debug
 {
 }
 pub type AnyInboundDatagram =
-    Box<dyn InboundDatagram<UdpPacket, Error = io::Error, Item = UdpPacket>>;
+    Box<dyn InboundDatagram<UdpPacket, Error = watfaq_error::Error, Item = UdpPacket>>;
 
 pub trait OutboundDatagram<Item>:
     Stream<Item = Item> + Sink<Item, Error = watfaq_error::Error> + Send + Sync + Unpin + 'static

@@ -81,7 +81,7 @@ impl PortGenerator {
 }
 
 impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
-    type Error = crate::Error;
+    type Error = watfaq_error::Error;
 
     fn try_from(value: OutboundHysteria2) -> Result<Self, Self::Error> {
         let addr = TargetAddr::try_from((value.server, value.port))?;
@@ -95,10 +95,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
                 }
             },
             (Some(_), None) => {
-                return Err(crate::Error::InvalidConfig(
-                    "hysteria2 found obfs enable, but obfs password is none"
-                        .to_owned(),
-                ));
+                return Err(anyhow!("hysteria2 found obfs enable, but obfs password is none"));
             }
             _ => None,
         };

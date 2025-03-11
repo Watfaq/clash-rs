@@ -6,6 +6,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tracing::debug;
+use watfaq_error::Result;
 
 use super::ProxyProvider;
 use crate::{
@@ -19,7 +20,7 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{AnyOutboundHandler, direct, reject, socks, trojan, vmess, wg},
+    proxy::{AnyOutboundHandler, direct, reject, socks, trojan, vmess},
 };
 
 #[cfg(feature = "shadowsocks")]
@@ -28,8 +29,8 @@ use crate::proxy::shadowsocks;
 use crate::proxy::ssh;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
-#[cfg(feature = "tuic")]
-use crate::proxy::tuic;
+#[cfg(feature = "wireguard")]
+use crate::proxy::wg;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -49,7 +50,7 @@ type ProxyUpdater = Box<
         + 'static,
 >;
 type ProxyParser = Box<
-    dyn Fn(&[u8]) -> anyhow::Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
+    dyn Fn(&[u8]) -> Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
 >;
 
 pub struct ProxySetProvider {
@@ -63,7 +64,7 @@ impl ProxySetProvider {
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
         hc: HealthCheck,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let hc = Arc::new(hc);
 
         if hc.auto() {
@@ -102,7 +103,7 @@ impl ProxySetProvider {
 
         let n = name.clone();
         let parser: ProxyParser = Box::new(
-            move |input: &[u8]| -> anyhow::Result<Vec<AnyOutboundHandler>> {
+            move |input: &[u8]| -> Result<Vec<AnyOutboundHandler>> {
                 let scheme: ProviderScheme =
                     serde_yaml::from_slice(input).map_err(|x| {
                         Error::InvalidConfig(format!(
@@ -146,6 +147,7 @@ impl ProxySetProvider {
                                     let h: ssh::Handler = s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
+                                #[cfg(feature = "wireguard")]
                                 OutboundProxyProtocol::Wireguard(wg) => {
                                     let h: wg::Handler = wg.try_into()?;
                                     Ok(Arc::new(h) as _)
@@ -161,7 +163,7 @@ impl ProxySetProvider {
                                     Ok(Arc::new(h) as _)
                                 }
                             })
-                            .collect::<Result<Vec<_>, crate::Error>>();
+                            .collect::<Result<Vec<_>>>();
                         Ok(proxies?)
                     }
                     _ => {
@@ -191,7 +193,7 @@ impl Provider for ProxySetProvider {
         ProviderType::Proxy
     }
 
-    async fn initialize(&self) -> std::io::Result<()> {
+    async fn initialize(&self) -> Result<()> {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.as_ref() {
@@ -200,7 +202,7 @@ impl Provider for ProxySetProvider {
         Ok(())
     }
 
-    async fn update(&self) -> std::io::Result<()> {
+    async fn update(&self) -> Result<()> {
         let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
         debug!(
             "{} updated with {} proxies, same? {}",

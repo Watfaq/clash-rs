@@ -218,7 +218,7 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
-pub fn get_runner(
+pub async fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: Arc<Resolver>,
@@ -309,9 +309,6 @@ pub fn get_runner(
 
         let (mut tun_sink, mut tun_stream) = framed.split();
         let (mut stack_sink, mut stack_stream) = stack.split();
-
-        // TODO use tokio JoinSet and impl graceful shutdown
-        let mut futs: Vec<Runner> = vec![];
 
         // dispatcher -> stack -> tun
         futs.push(Box::pin(async move {
