@@ -71,7 +71,7 @@ mode: rule
 log-level: trace
 external-controller: :9090
 external-ui: "public"
-# secret: "clash-rs"
+secret: "clash-rs"
 experimental:
   ignore-resolve-fail: true
 
