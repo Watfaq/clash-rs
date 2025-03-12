@@ -238,6 +238,9 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
+/// macos required the name schema
+const TUN_NAME: &str = "utun8";
+
 pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
@@ -250,30 +253,46 @@ pub fn get_runner(
 
     let device_id = &cfg.device_id;
 
-    let u = Url::parse(device_id)
-        .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
-
     let mut tun_cfg = tun::Configuration::default();
 
-    match u.scheme() {
-        "fd" => {
-            let fd = u
-                .host()
-                .expect("tun fd must be provided")
-                .to_string()
-                .parse()
-                .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
-            tun_cfg.raw_fd(fd);
+    #[cfg(target_os = "android")]
+    {
+        println!("andriod is not supported");
+        todo!()
+    }
+
+    let u = Url::parse(device_id);
+    // .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+    match u {
+        Ok(u) => {
+            warn!("todo: URL format configuration will no longer be supported.");
+            match u.scheme() {
+                "fd" => {
+                    let fd = u
+                        .host()
+                        .expect("tun fd must be provided")
+                        .to_string()
+                        .parse()
+                        .map_err(|x| {
+                            Error::InvalidConfig(format!("tun fd {}", x))
+                        })?;
+                    tun_cfg.raw_fd(fd);
+                }
+                "dev" => {
+                    let dev =
+                        u.host().expect("tun dev must be provided").to_string();
+                    tun_cfg.tun_name(dev);
+                }
+                _ => {
+                    return Err(Error::InvalidConfig(format!(
+                        "invalid device id: {}",
+                        device_id
+                    )));
+                }
+            }
         }
-        "dev" => {
-            let dev = u.host().expect("tun dev must be provided").to_string();
-            tun_cfg.tun_name(dev);
-        }
-        _ => {
-            return Err(Error::InvalidConfig(format!(
-                "invalid device id: {}",
-                device_id
-            )));
+        Err(e) => {
+            tun_cfg.tun_name(TUN_NAME);
         }
     }
 

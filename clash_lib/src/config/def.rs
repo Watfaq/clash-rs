@@ -38,7 +38,7 @@ impl Default for DnsHijack {
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
-    #[serde(alias = "device-url")]
+    #[serde(alias = "device-url", alias = "device")]
     pub device_id: String,
     /// tun interface address
     #[serde(default = "default_tun_address")]
