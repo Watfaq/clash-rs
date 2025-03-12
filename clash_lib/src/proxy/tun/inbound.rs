@@ -4,17 +4,20 @@ use std::{
     sync::Arc,
 };
 
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt as _, StreamExt as _};
+use watfaq_error::ErrContext;
 
 use hickory_proto::rr::RecordType;
 use netstack_smoltcp::StackBuilder;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace, warn};
 use tun::AbstractDevice;
 use url::Url;
-use watfaq_resolver::{exchange_with_resolver, Resolver};
+use watfaq_error::Result;
+use watfaq_resolver::{Resolver, exchange_with_resolver};
 
 use crate::{
-    Error, Runner,
+    Error,
     app::dispatcher::Dispatcher,
     common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
@@ -22,7 +25,7 @@ use crate::{
     session::{Network, Session, Type},
 };
 
-use crate::{defer, proxy::tun::routes};
+use crate::proxy::tun::routes;
 
 async fn handle_inbound_stream(
     stream: netstack_smoltcp::TcpStream,
@@ -215,17 +218,18 @@ async fn handle_inbound_datagram(
 
     debug!("tun UDP ready");
 
-    let _ = futures::future::join(fut1, fut2).await;
+    _ = tokio::join!(fut1, fut2);
 }
 
-pub async fn get_runner(
+pub async fn tun_task(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: Arc<Resolver>,
-) -> Result<Option<Runner>, Error> {
+    token: CancellationToken,
+) -> Result<()> {
     if !cfg.enable {
         trace!("tun is disabled");
-        return Ok(None);
+        return Ok(());
     }
 
     let device_id = &cfg.device_id;
@@ -239,7 +243,7 @@ pub async fn get_runner(
         "fd" => {
             let fd = u
                 .host()
-                .expect("tun fd must be provided")
+                .expect("tun fd must be provided") //TODO
                 .to_string()
                 .parse()
                 .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
@@ -253,7 +257,8 @@ pub async fn get_runner(
             return Err(Error::InvalidConfig(format!(
                 "invalid device id: {}",
                 device_id
-            )));
+            ))
+            .into());
         }
     }
 
@@ -284,106 +289,82 @@ pub async fn get_runner(
             // .add_ip_filter(Box::new(move |src, dst| *src != device_broadcast && *dst != device_broadcast));
             .add_ip_filter_fn(move |src, dst| *src != device_broadcast && *dst != device_broadcast);
     }
-    let (stack, runner, udp_socket, tcp_listener) = builder.build().unwrap();
+    let (stack, netstack_task, udp_socket, tcp_listener) = builder.build().unwrap();
     let udp_socket = udp_socket.unwrap(); // udp enabled
     let mut tcp_listener = tcp_listener.unwrap(); // tcp enabled or icmp enabled
-    if let Some(runner) = runner {
-        tokio::spawn(runner);
-    }
 
-    Ok(Some(Box::pin(async move {
-        defer! {
-            warn!("cleaning up routes");
-
-            match routes::maybe_routes_clean_up(&cfg) {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("failed to clean up routes: {}", e);
-                }
+    let token_clone = token.clone();
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = token_clone.cancelled() => {
+                Ok(())
             }
+            res = async {
+                match netstack_task {
+                    Some(v) => v.await.map_err(|e| anyhow!(e)),
+                    None => Ok(()),
+                }
+            } => res
         }
+    });
 
-        let so_mark = cfg.so_mark;
+    let framed = tun.into_framed();
 
-        let framed = tun.into_framed();
+    let (mut tun_sink, mut tun_stream) = framed.split();
+    let (mut stack_sink, mut stack_stream) = stack.split();
 
-        let (mut tun_sink, mut tun_stream) = framed.split();
-        let (mut stack_sink, mut stack_stream) = stack.split();
+    // TODO this is not right...
+    let token_clone = token.clone();
+    let dispatcher_clone = dispatcher.clone();
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = token_clone.cancelled() => {}
+            // [UDP] stack <-> dispatcher
+            _ = handle_inbound_datagram(
+                udp_socket,
+                dispatcher_clone,
+                resolver,
+                cfg.dns_hijack,
+            ) => {}
+        }
+    });
 
-        // dispatcher -> stack -> tun
-        futs.push(Box::pin(async move {
-            while let Some(pkt) = stack_stream.next().await {
-                match pkt {
-                    Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(pkt).await {
-                            error!("failed to send pkt to tun: {}", e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("tun stack error: {}", e);
-                        break;
-                    }
-                }
+    let result: Result<()> = loop {
+        tokio::select! {
+            _ = token.cancelled() => {
+                warn!("Tun task cancelled!");
+                break Ok(());
             }
-
-            Err(Error::Operation("tun stopped unexpectedly 0".to_string()))
-        }));
-
-        // tun -> stack -> dispatcher
-        futs.push(Box::pin(async move {
-            while let Some(pkt) = tun_stream.next().await {
-                match pkt {
-                    Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt).await {
-                            error!("failed to send pkt to stack: {}", e);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("tun stream error: {}", e);
-                        break;
-                    }
-                }
+            // tun <- stack
+            // None if the stream is finished
+            Some(pkt) = stack_stream.next() => {
+                let pkt = pkt.context("[TUN] netstack error")?;
+                tun_sink.send(pkt).await.context("failed to send packet to tun")?;
             }
-
-            Err(Error::Operation("tun stopped unexpectedly 1".to_string()))
-        }));
-
-        let dsp = dispatcher.clone();
-        futs.push(Box::pin(async move {
-            while let Some((stream, local_addr, remote_addr)) =
-                tcp_listener.next().await
-            {
+            // tun -> stack
+            Some(pkt) = tun_stream.next() => {
+                let pkt = pkt.context("[TUN] tun error")?;
+                stack_sink.send(pkt).await.context("failed to send pkt to stack")?;
+            }
+            // [TCP] stack <-> dispatcher
+            Some((stream, local_addr, remote_addr)) = tcp_listener.next() => {
                 debug!("new tun TCP connection: {} -> {}", local_addr, remote_addr);
-
+                let dispatcher_clone = dispatcher.clone();
                 tokio::spawn(handle_inbound_stream(
                     stream,
                     local_addr,
                     remote_addr,
-                    dsp.clone(),
+                    dispatcher_clone,
                 ));
             }
-
-            Err(Error::Operation("tun stopped unexpectedly 2".to_string()))
-        }));
-
-        futs.push(Box::pin(async move {
-            handle_inbound_datagram(
-                udp_socket,
-                dispatcher,
-                resolver,
-                cfg.dns_hijack,
-            )
-            .await;
-            Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
-        }));
-
-        futures::future::select_all(futs).await.0.map_err(|x| {
-            error!("tun error: {}. stopped", x);
-            x
-        })
-    })))
+        }
+    };
+    warn!("cleaning up routes");
+    routes::maybe_routes_clean_up(&cfg).inspect_err(|e| {
+        error!("failed to clean up routes: {e}");
+    })?;
+    result.inspect_err(|e| error!(error = %e));
+    Ok(())
 }
 
 fn get_device_broadcast(device: &tun::AsyncDevice) -> Option<std::net::Ipv4Addr> {

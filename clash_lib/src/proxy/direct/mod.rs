@@ -16,9 +16,7 @@ use watfaq_error::Result;
 use watfaq_resolver::AbstractResolver;
 use watfaq_utils::which_ip_decision;
 
-use super::{
-    utils::AbstractDialer, ConnectorType, OutboundDatagram, OutboundType
-};
+use super::{ConnectorType, OutboundDatagram, OutboundType, utils::AbstractDialer};
 
 #[derive(Serialize)]
 pub struct Handler;
@@ -91,10 +89,11 @@ impl AbstractOutboundHandler for Handler {
             .new_udp(SocketAddr::new(ip, sess.destination.port()))
             .await?;
 
-        let d: ChainedDatagramWrapper<OutboundDatagramImpl> = ChainedDatagramWrapper::new(OutboundDatagramImpl::new(
-            udp_socket,
-            self.clone_resolver(),
-        ));
+        let d: ChainedDatagramWrapper<OutboundDatagramImpl> =
+            ChainedDatagramWrapper::new(OutboundDatagramImpl::new(
+                udp_socket,
+                self.clone_resolver(),
+            ));
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
     }

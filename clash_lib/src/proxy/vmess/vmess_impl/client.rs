@@ -1,7 +1,7 @@
 use std::io;
 
-use watfaq_error::Result;
 use crate::{common::utils, proxy::AnyStream, session::TargetAddr};
+use watfaq_error::Result;
 
 use super::{
     SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security,

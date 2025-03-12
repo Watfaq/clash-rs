@@ -1,7 +1,6 @@
 use crate::{proxy::datagram::UdpPacket, session::TargetAddr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use watfaq_utils::TargetAddrExt;
 use std::{
     io,
     net::SocketAddr,
@@ -12,6 +11,7 @@ use tokio_util::{
     codec::{Decoder, Encoder},
     udp::UdpFramed,
 };
+use watfaq_utils::TargetAddrExt;
 
 // +----+------+------+----------+----------+----------+
 // |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |

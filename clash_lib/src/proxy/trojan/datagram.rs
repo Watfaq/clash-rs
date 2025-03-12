@@ -200,7 +200,8 @@ impl Stream for OutboundDatagramTrojan {
                             }
                             Err(err) => {
                                 debug!(
-                                    "failed to read socks addr from Trojan stream: {err}"
+                                    "failed to read socks addr from Trojan stream: \
+                                     {err}"
                                 );
                                 return Poll::Ready(None);
                             }

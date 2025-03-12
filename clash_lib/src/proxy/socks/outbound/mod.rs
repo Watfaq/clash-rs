@@ -9,10 +9,9 @@ use crate::{
     },
     common::errors::new_io_error,
     proxy::{
-        AbstractOutboundHandler, AnyStream, ConnectorType,
-        OutboundType,
+        AbstractOutboundHandler, AnyStream, ConnectorType, OutboundType,
         transport::Transport,
-        utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
+        utils::{AbstractDialer, GLOBAL_DIRECT_CONNECTOR},
     },
     session::Session,
 };

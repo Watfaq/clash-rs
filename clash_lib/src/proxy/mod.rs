@@ -84,28 +84,50 @@ impl<T> ClientStream for T where T: Downcast + AsyncRead + AsyncWrite + Send + U
 impl_downcast!(ClientStream);
 
 pub trait InboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = watfaq_error::Error> + Send + Sync + Unpin + Debug
+    Stream<Item = Item>
+    + Sink<Item, Error = watfaq_error::Error>
+    + Send
+    + Sync
+    + Unpin
+    + Debug
 {
 }
 impl<T, U> InboundDatagram<U> for T where
-    T: Stream<Item = U> + Sink<U, Error = watfaq_error::Error> + Send + Sync + Unpin + Debug
+    T: Stream<Item = U>
+        + Sink<U, Error = watfaq_error::Error>
+        + Send
+        + Sync
+        + Unpin
+        + Debug
 {
 }
-pub type AnyInboundDatagram =
-    Box<dyn InboundDatagram<UdpPacket, Error = watfaq_error::Error, Item = UdpPacket>>;
+pub type AnyInboundDatagram = Box<
+    dyn InboundDatagram<UdpPacket, Error = watfaq_error::Error, Item = UdpPacket>,
+>;
 
 pub trait OutboundDatagram<Item>:
-    Stream<Item = Item> + Sink<Item, Error = watfaq_error::Error> + Send + Sync + Unpin + 'static
+    Stream<Item = Item>
+    + Sink<Item, Error = watfaq_error::Error>
+    + Send
+    + Sync
+    + Unpin
+    + 'static
 {
 }
 
 impl<T, U> OutboundDatagram<U> for T where
-    T: Stream<Item = U> + Sink<U, Error = watfaq_error::Error> + Send + Sync + Unpin + 'static
+    T: Stream<Item = U>
+        + Sink<U, Error = watfaq_error::Error>
+        + Send
+        + Sync
+        + Unpin
+        + 'static
 {
 }
 
-pub type AnyOutboundDatagram =
-    Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = watfaq_error::Error>>;
+pub type AnyOutboundDatagram = Box<
+    dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = watfaq_error::Error>,
+>;
 
 #[derive(Serialize, Deserialize)]
 pub enum OutboundType {
@@ -223,7 +245,6 @@ pub trait AbstractOutboundHandler {
     /// this must be called before the outbound handler is used
     async fn register_connector(&self, _: Arc<dyn AbstractDialer>) {}
 
-
     /// for API
     /// the map only contains basic information
     /// to populate history/liveness information, use the proxy_manager
@@ -238,6 +259,3 @@ pub trait AbstractOutboundHandler {
         None
     }
 }
-
-
-

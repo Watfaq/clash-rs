@@ -8,4 +8,3 @@ use futures::{Sink, SinkExt, Stream};
 use watfaq_types::UdpPacket;
 
 use super::TuicUdpOutbound;
-

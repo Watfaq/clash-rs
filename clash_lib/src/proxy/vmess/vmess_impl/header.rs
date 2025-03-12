@@ -2,8 +2,8 @@ use aead::{KeyInit, generic_array::GenericArray};
 use aes::cipher::BlockEncrypt;
 use bytes::{Buf, BufMut, BytesMut};
 
-use watfaq_error::Result;
 use crate::common::{crypto, errors::map_io_error, utils};
+use watfaq_error::Result;
 
 use super::kdf::{
     self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,

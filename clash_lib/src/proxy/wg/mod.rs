@@ -7,9 +7,9 @@ use std::{
 use crate::{
     Error,
     app::dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-        },
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+    },
     common::errors::{map_io_error, new_io_error},
     impl_default_connector,
     session::Session,
@@ -20,8 +20,8 @@ use watfaq_error::Result;
 use watfaq_resolver::AbstractResolver;
 
 use super::{
-    AbstractOutboundHandler, ConnectorType, DialWithConnector,
-    OutboundType, utils::AbstractDialer,
+    AbstractOutboundHandler, ConnectorType, DialWithConnector, OutboundType,
+    utils::AbstractDialer,
 };
 
 use async_trait::async_trait;
@@ -96,15 +96,13 @@ impl Handler {
     /// this is a one time initialization, however in theory sess.so_mark
     /// and sess.iface should be all the same
     /// ideally we move the so_mark and iface to a global context
-    async fn initialize_inner(
-        &self,
-        sess: &Session,
-    ) -> Result<&Inner, Error> {
+    async fn initialize_inner(&self, sess: &Session) -> Result<&Inner, Error> {
         self.inner
             .get_or_try_init(|| async {
                 let recv_pair = tokio::sync::mpsc::channel(1024);
                 let send_pair = tokio::sync::mpsc::channel(1024);
-                let server_ip = self.resolver()
+                let server_ip = self
+                    .resolver()
                     .resolve(&self.opts.server, false)
                     .await
                     .map_err(map_io_error)?
@@ -244,14 +242,8 @@ impl AbstractOutboundHandler for Handler {
     }
 
     /// connect to remote target via TCP
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream> {
-        let inner = self
-            .initialize_inner(sess)
-            .await
-            .map_err(map_io_error)?;
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
+        let inner = self.initialize_inner(sess).await.map_err(map_io_error)?;
 
         let ip = if self.opts.remote_dns_resolve
             && sess.destination.is_domain()
@@ -295,9 +287,7 @@ impl AbstractOutboundHandler for Handler {
         &self,
         sess: &Session,
     ) -> Result<BoxedChainedDatagram> {
-        let inner = self
-            .initialize_inner(sess)
-            .await?;
+        let inner = self.initialize_inner(sess).await?;
 
         let socket = inner.device_manager.new_udp_socket().await;
         let chained = ChainedDatagramWrapper::new(socket);

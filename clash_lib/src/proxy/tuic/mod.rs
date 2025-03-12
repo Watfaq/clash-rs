@@ -5,7 +5,8 @@ use watfaq_error::Result;
 
 use crate::{
     app::dispatcher::{
-        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
     },
     session::Session,
 };

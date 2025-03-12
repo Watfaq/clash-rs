@@ -95,7 +95,9 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
                 }
             },
             (Some(_), None) => {
-                return Err(anyhow!("hysteria2 found obfs enable, but obfs password is none"));
+                return Err(anyhow!(
+                    "hysteria2 found obfs enable, but obfs password is none"
+                ));
             }
             _ => None,
         };

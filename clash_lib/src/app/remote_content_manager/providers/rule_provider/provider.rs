@@ -6,14 +6,6 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
-use erased_serde::Serialize as ESerialize;
-use futures::future::BoxFuture;
-use serde::{Deserialize, Serialize};
-use tracing::{debug, trace};
-use watfaq_error::Result;
-use watfaq_types::StringTrie;
-use watfaq_utils::Mmdb;
 use crate::{
     Error,
     app::{
@@ -23,12 +15,18 @@ use crate::{
         },
         router::{RuleMatcher, map_rule_type},
     },
-    common::{
-        errors::map_io_error, geodata::GeoData, succinct_set, trie,
-    },
+    common::{errors::map_io_error, geodata::GeoData, succinct_set, trie},
     config::internal::rule::RuleType,
     session::Session,
 };
+use async_trait::async_trait;
+use erased_serde::Serialize as ESerialize;
+use futures::future::BoxFuture;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, trace};
+use watfaq_error::Result;
+use watfaq_types::StringTrie;
+use watfaq_utils::Mmdb;
 
 use super::cidr_trie::CidrTrie;
 
@@ -75,8 +73,7 @@ pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
 
 type RuleUpdater =
     Box<dyn Fn(RuleContent) -> BoxFuture<'static, ()> + Send + Sync + 'static>;
-type RuleParser =
-    Box<dyn Fn(&[u8]) -> Result<RuleContent> + Send + Sync + 'static>;
+type RuleParser = Box<dyn Fn(&[u8]) -> Result<RuleContent> + Send + Sync + 'static>;
 
 pub struct RuleProviderImpl {
     fetcher: Fetcher<RuleUpdater, RuleParser>,

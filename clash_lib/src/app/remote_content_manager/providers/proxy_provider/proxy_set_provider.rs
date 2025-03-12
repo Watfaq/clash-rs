@@ -49,9 +49,8 @@ type ProxyUpdater = Box<
         + Sync
         + 'static,
 >;
-type ProxyParser = Box<
-    dyn Fn(&[u8]) -> Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static,
->;
+type ProxyParser =
+    Box<dyn Fn(&[u8]) -> Result<Vec<AnyOutboundHandler>> + Send + Sync + 'static>;
 
 pub struct ProxySetProvider {
     fetcher: Fetcher<ProxyUpdater, ProxyParser>,
@@ -102,8 +101,8 @@ impl ProxySetProvider {
         );
 
         let n = name.clone();
-        let parser: ProxyParser = Box::new(
-            move |input: &[u8]| -> Result<Vec<AnyOutboundHandler>> {
+        let parser: ProxyParser =
+            Box::new(move |input: &[u8]| -> Result<Vec<AnyOutboundHandler>> {
                 let scheme: ProviderScheme =
                     serde_yaml::from_slice(input).map_err(|x| {
                         Error::InvalidConfig(format!(
@@ -171,8 +170,7 @@ impl ProxySetProvider {
                             .into())
                     }
                 }
-            },
-        );
+            });
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
         Ok(Self { fetcher, inner })

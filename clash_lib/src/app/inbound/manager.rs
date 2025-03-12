@@ -44,14 +44,12 @@ pub struct InboundManager {
 }
 
 impl InboundManager {
-    pub async fn spawn(
+    pub async fn new(
         bind_address: BindAddress,
         _authentication: Vec<String>, // TODO
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
         inbounds_opt: HashMap<String, InboundOpts>,
-        task_set: &mut JoinSet<Result<()>>,
-        token: &CancellationToken
     ) -> Result<Self> {
         let s = Self {
             inbounds_handler: HashMap::with_capacity(3).into(),
@@ -86,6 +84,11 @@ impl InboundManager {
             _ = signal.send(());
             handle.abort();
         }
+    }
+
+    pub async fn restart(self: &Arc<Self>) {
+        self.build_handlers().await;
+        self.start().await;
     }
 
     // Build `inbounds_handler` tasks

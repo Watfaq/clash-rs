@@ -19,8 +19,7 @@ use crate::{
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
-        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
-        OutboundType,
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType, OutboundType,
         utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,
@@ -81,7 +80,6 @@ impl Handler {
         get_proxies_from_providers(&self.providers, touch).await
     }
 }
-
 
 #[async_trait::async_trait]
 impl AbstractOutboundHandler for Handler {

@@ -21,10 +21,9 @@ use self::datagram::OutboundDatagramTrojan;
 use watfaq_error::Result;
 
 use super::{
-    AbstractOutboundHandler, AnyStream, ConnectorType,
-    OutboundType,
+    AbstractOutboundHandler, AnyStream, ConnectorType, OutboundType,
     transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
+    utils::{AbstractDialer, GLOBAL_DIRECT_CONNECTOR},
 };
 
 mod datagram;
@@ -46,7 +45,6 @@ pub struct Handler {
 
     connector: tokio::sync::Mutex<Option<Arc<dyn AbstractDialer>>>,
 }
-
 
 impl std::fmt::Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

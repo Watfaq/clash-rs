@@ -157,7 +157,7 @@ where
 
                 (Some(read_cipher), Some(write_cipher))
             }
-            _ => bail!("unsupported security")
+            _ => bail!("unsupported security"),
         };
 
         let mut stream = Self {
@@ -338,7 +338,8 @@ where
                             aead_response_header_length_encryption_iv,
                             this.read_buf.split().as_ref(),
                             None,
-                        ).map_err(map_io_error)?;
+                        )
+                        .map_err(map_io_error)?;
 
                         if decrypted_response_header_len.len() < 2 {
                             return Err(std::io::Error::new(
@@ -527,7 +528,8 @@ where
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::WriteZero,
                             "failed to write whole data",
-                        )).into();
+                        ))
+                        .into();
                     }
 
                     if written + nw >= total {

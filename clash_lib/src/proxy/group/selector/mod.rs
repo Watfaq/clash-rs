@@ -13,8 +13,7 @@ use crate::{
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     proxy::{
-        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
-        OutboundType,
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType, OutboundType,
         utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,
@@ -105,7 +104,6 @@ impl SelectorControl for Handler {
         self.inner.read().await.current.to_owned()
     }
 }
-
 
 #[async_trait]
 impl AbstractOutboundHandler for Handler {

@@ -31,7 +31,7 @@ use crate::{
     proxy::{
         AnyOutboundDatagram,
         datagram::UdpPacket,
-        utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
+        utils::{AbstractDialer, GLOBAL_DIRECT_CONNECTOR},
     },
     session::{Session, TargetAddr},
 };
@@ -99,10 +99,7 @@ impl WireguardTunnel {
 
         let connector = connector.unwrap_or(GLOBAL_DIRECT_CONNECTOR.clone());
         let udp = connector
-            .connect_datagram(
-                None,
-                remote_endpoint.into(),
-            )
+            .connect_datagram(None, remote_endpoint.into())
             .await?;
 
         let (tx, rx) = udp.split();

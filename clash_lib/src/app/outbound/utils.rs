@@ -179,7 +179,6 @@ mod tests {
 
     #[test]
     fn test_proxy_groups_dag_sort_ok() {
-
         let g2 = OutboundGroupUrlTest {
             name: "auto".to_owned(),
             proxies: Some(vec!["ss".to_owned(), "DIRECT".to_owned()]),

@@ -2,11 +2,7 @@ use aes::cipher::{AsyncStreamCipher, KeyIvInit};
 use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
 use watfaq_error::Result;
 
-pub fn aes_cfb_encrypt(
-    key: &[u8],
-    iv: &[u8],
-    data: &mut [u8],
-) -> Result<()> {
+pub fn aes_cfb_encrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Encryptor::<aes::Aes128>::new(key.into(), iv.into())
@@ -27,11 +23,7 @@ pub fn aes_cfb_encrypt(
     }
 }
 
-pub fn aes_cfb_decrypt(
-    key: &[u8],
-    iv: &[u8],
-    data: &mut [u8],
-) -> Result<()> {
+pub fn aes_cfb_decrypt(key: &[u8], iv: &[u8], data: &mut [u8]) -> Result<()> {
     match key.len() {
         16 => {
             cfb_mode::Decryptor::<aes::Aes128>::new(key.into(), iv.into())

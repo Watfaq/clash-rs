@@ -9,12 +9,9 @@ use watfaq_types::Stack;
 use watfaq_utils::which_ip_decision;
 
 use crate::{
-    app::
-        dispatcher::{
-            ChainedDatagram, ChainedDatagramWrapper, ChainedStream,
-            ChainedStreamWrapper,
-        }
-    ,
+    app::dispatcher::{
+        ChainedDatagram, ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+    },
     proxy::{
         AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
         datagram::OutboundDatagramImpl,
@@ -58,22 +55,19 @@ impl DirectConnector {
     }
 }
 
-pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn AbstractDialer>> = Lazy::new(|| {
-    Arc::new(DirectConnector::new())
-});
+pub static GLOBAL_DIRECT_CONNECTOR: Lazy<Arc<dyn AbstractDialer>> =
+    Lazy::new(|| Arc::new(DirectConnector::new()));
 
 #[async_trait]
 impl AbstractDialer for DirectConnector {
-    async fn connect_stream(
-        &self,
-        address: &str,
-        port: u16,
-    ) -> Result<AnyStream> {
-        let dial_addr = self.resolver()
-            .resolve(address, false)
-            .await?;
+    async fn connect_stream(&self, address: &str, port: u16) -> Result<AnyStream> {
+        let dial_addr = self.resolver().resolve(address, false).await?;
         let ip = which_ip_decision(self.ctx(), None, None, dial_addr)?;
-        let stream = self.ctx().protector.new_tcp(SocketAddr::new(ip, port), None).await?;
+        let stream = self
+            .ctx()
+            .protector
+            .new_tcp(SocketAddr::new(ip, port), None)
+            .await?;
 
         Ok(Box::new(stream))
     }
@@ -120,11 +114,7 @@ impl Debug for ProxyConnector {
 
 #[async_trait]
 impl AbstractDialer for ProxyConnector {
-    async fn connect_stream(
-        &self,
-        address: &str,
-        port: u16,
-    ) -> Result<AnyStream> {
+    async fn connect_stream(&self, address: &str, port: u16) -> Result<AnyStream> {
         let sess = Session {
             network: Network::TCP,
             typ: Type::Ignore,
@@ -144,10 +134,7 @@ impl AbstractDialer for ProxyConnector {
 
         let s = self
             .proxy
-            .connect_stream_with_connector(
-                &sess,
-                self.connector.as_ref(),
-            )
+            .connect_stream_with_connector(&sess, self.connector.as_ref())
             .await?;
 
         let stream = ChainedStreamWrapper::new(s);
@@ -168,10 +155,7 @@ impl AbstractDialer for ProxyConnector {
         };
         let s = self
             .proxy
-            .connect_datagram_with_connector(
-                &sess,
-                self.connector.as_ref(),
-            )
+            .connect_datagram_with_connector(&sess, self.connector.as_ref())
             .await?;
 
         let stream = ChainedDatagramWrapper::new(s);

@@ -13,8 +13,7 @@ use crate::{
         },
     },
     proxy::{
-        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType,
-        OutboundType,
+        AbstractOutboundHandler, AnyOutboundHandler, ConnectorType, OutboundType,
         utils::{AbstractDialer, provider_helper::get_proxies_from_providers},
     },
     session::Session,

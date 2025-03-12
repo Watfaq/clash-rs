@@ -96,36 +96,28 @@ impl Sink<UdpPacket> for HysteriaDatagramOutbound {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.send_tx
-            .poll_ready_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_ready_unpin(cx).map_err(|e| anyhow!(e))
     }
 
     fn start_send(
         mut self: Pin<&mut Self>,
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
-        self.send_tx
-            .start_send_unpin(item)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.start_send_unpin(item).map_err(|e| anyhow!(e))
     }
 
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.send_tx
-            .poll_flush_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_flush_unpin(cx).map_err(|e| anyhow!(e))
     }
 
     fn poll_close(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.send_tx
-            .poll_close_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_close_unpin(cx).map_err(|e| anyhow!(e))
     }
 }
 

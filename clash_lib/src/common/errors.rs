@@ -8,12 +8,9 @@ where
     io::Error::new(io::ErrorKind::Other, msg.into())
 }
 
-
 pub fn map_io_error<T>(err: T) -> io::Error
 where
     T: Into<watfaq_error::Error> + Send,
 {
     io::Error::other(anyhow!(err))
-
 }
-

@@ -5,7 +5,7 @@ use self::{datagram::OutboundDatagramShadowsocks, stream::ShadowSocksStream};
 use super::{
     AnyStream, ConnectorType, OutboundType,
     transport::Sip003Plugin,
-    utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
+    utils::{AbstractDialer, GLOBAL_DIRECT_CONNECTOR},
 };
 use crate::{
     app::dispatcher::{

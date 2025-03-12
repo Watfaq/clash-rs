@@ -95,8 +95,9 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             if written.is_none() {
                 let n = ready!(inner.as_mut().poll_write(cx, pkt.data.as_ref()))?;
                 debug!(
-                    "send udp packet to remote vmess server, len: {n}, remote_addr: \
-                     {remote_addr}, dst_addr: {}", pkt.dst_addr
+                    "send udp packet to remote vmess server, len: {n}, \
+                     remote_addr: {remote_addr}, dst_addr: {}",
+                    pkt.dst_addr
                 );
                 *written = Some(n);
             }
@@ -114,7 +115,10 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             let res = if written.unwrap() == total_len {
                 Ok(())
             } else {
-                Err(anyhow!("failed to write entire datagram, written: {}", written.unwrap()))
+                Err(anyhow!(
+                    "failed to write entire datagram, written: {}",
+                    written.unwrap()
+                ))
             };
             *written = None;
             Poll::Ready(res)

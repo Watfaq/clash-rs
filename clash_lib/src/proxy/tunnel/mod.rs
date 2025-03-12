@@ -153,16 +153,15 @@ impl Sink<UdpPacket> for UdpSession {
         }
     }
 
-    fn start_send(
-        mut self: Pin<&mut Self>,
-        item: UdpPacket,
-    ) -> Result<()> {
+    fn start_send(mut self: Pin<&mut Self>, item: UdpPacket) -> Result<()> {
         let this = self.deref_mut();
         let socket = &this.socket;
         let dst_addr = match item.dst_addr {
             TargetAddr::Socket(socket_addr) => socket_addr,
             TargetAddr::Domain(..) => {
-                return Err(anyhow!("UdpPacket dst_src MUSTBE IpAddr instead of Domain"));
+                return Err(anyhow!(
+                    "UdpPacket dst_src MUSTBE IpAddr instead of Domain"
+                ));
             }
         };
 
@@ -202,10 +201,7 @@ impl Sink<UdpPacket> for UdpSession {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

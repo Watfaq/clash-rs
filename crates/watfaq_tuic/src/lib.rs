@@ -20,7 +20,11 @@ use watfaq_types::{TargetAddr, UdpPacket};
 use watfaq_utils::{DefaultTlsVerifier, which_ip_decision};
 
 use std::{
-    net::{IpAddr, SocketAddr}, pin::Pin, sync::{atomic::AtomicU16, Arc}, task::Poll, time::Duration
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    sync::{Arc, atomic::AtomicU16},
+    task::Poll,
+    time::Duration,
 };
 
 use uuid::Uuid;
@@ -267,36 +271,25 @@ impl Sink<UdpPacket> for TuicUdpOutbound {
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<()>> {
-        self.send_tx
-            .poll_ready_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_ready_unpin(cx).map_err(|e| anyhow!(e))
     }
 
-    fn start_send(
-        mut self: Pin<&mut Self>,
-        item: UdpPacket,
-    ) -> Result<()> {
-        self.send_tx
-            .start_send_unpin(item)
-            .map_err(|e| anyhow!(e))
+    fn start_send(mut self: Pin<&mut Self>, item: UdpPacket) -> Result<()> {
+        self.send_tx.start_send_unpin(item).map_err(|e| anyhow!(e))
     }
 
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<()>> {
-        self.send_tx
-            .poll_flush_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_flush_unpin(cx).map_err(|e| anyhow!(e))
     }
 
     fn poll_close(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<()>> {
-        self.send_tx
-            .poll_close_unpin(cx)
-            .map_err(|e| anyhow!(e))
+        self.send_tx.poll_close_unpin(cx).map_err(|e| anyhow!(e))
     }
 }
 
@@ -310,7 +303,6 @@ impl Stream for TuicUdpOutbound {
         self.recv_rx.poll_recv(cx)
     }
 }
-
 
 #[cfg(all(test, feature = "docker-test"))]
 mod tests {

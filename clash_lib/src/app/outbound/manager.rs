@@ -37,8 +37,8 @@ use crate::{
     Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        AnyOutboundHandler, direct, reject,
-        selector::ThreadSafeSelectorControl, urltest,
+        AnyOutboundHandler, direct, reject, selector::ThreadSafeSelectorControl,
+        urltest,
     },
 };
 

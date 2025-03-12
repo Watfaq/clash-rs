@@ -1282,6 +1282,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-stream",
  "tokio-test",
  "tokio-tungstenite",
  "tokio-util",

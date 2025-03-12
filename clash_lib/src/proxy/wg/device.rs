@@ -26,9 +26,7 @@ use tokio::sync::{
 use tracing::{Instrument, debug, error, trace, trace_span, warn};
 use watfaq_resolver::{AbstractResolver, Resolver};
 
-use crate::{
-    proxy::datagram::UdpPacket, session::TargetAddr,
-};
+use crate::{proxy::datagram::UdpPacket, session::TargetAddr};
 
 use super::{
     events::PortProtocol,

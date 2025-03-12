@@ -1,6 +1,5 @@
-use watfaq_error::Result;
-use watfaq_error::ErrContext;
 use std::{fmt::Display, str::FromStr};
+use watfaq_error::{ErrContext, Result};
 
 pub enum RuleType {
     Domain {

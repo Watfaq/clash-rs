@@ -25,8 +25,8 @@ use crate::{
 };
 
 use super::{
-    AbstractOutboundHandler, ConnectorType, OutboundType,
-    ProxyStream, utils::AbstractDialer,
+    AbstractOutboundHandler, ConnectorType, OutboundType, ProxyStream,
+    utils::AbstractDialer,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait

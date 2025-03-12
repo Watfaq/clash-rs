@@ -4,26 +4,25 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use tracing::debug;
 use watfaq_config::OutboundCommonOptions;
-use watfaq_state::Context;
 use watfaq_error::Result;
+use watfaq_state::Context;
 
 mod vmess_impl;
 
 use crate::{
     app::dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
-            ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
-        },
+        BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+        ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper,
+    },
     session::Session,
 };
 
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    AbstractOutboundHandler, AnyStream, ConnectorType,
-    OutboundType,
+    AbstractOutboundHandler, AnyStream, ConnectorType, OutboundType,
     transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, AbstractDialer},
+    utils::{AbstractDialer, GLOBAL_DIRECT_CONNECTOR},
 };
 
 pub struct HandlerOptions {
@@ -108,10 +107,7 @@ impl AbstractOutboundHandler for Handler {
         self.opts.udp
     }
 
-    async fn connect_stream(
-        &self,
-        sess: &Session,
-    ) -> Result<BoxedChainedStream> {
+    async fn connect_stream(&self, sess: &Session) -> Result<BoxedChainedStream> {
         let dialer = self.connector.lock().await;
 
         if let Some(dialer) = dialer.as_ref() {
@@ -158,10 +154,7 @@ impl AbstractOutboundHandler for Handler {
         connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedStream> {
         let stream = connector
-            .connect_stream(
-                self.opts.server.as_str(),
-                self.opts.port,
-            )
+            .connect_stream(self.opts.server.as_str(), self.opts.port)
             .await?;
 
         let s = self.inner_proxy_stream(stream, sess, false).await?;
@@ -176,10 +169,7 @@ impl AbstractOutboundHandler for Handler {
         connector: &dyn AbstractDialer,
     ) -> Result<BoxedChainedDatagram> {
         let stream = connector
-            .connect_stream(
-                self.opts.server.as_str(),
-                self.opts.port,
-            )
+            .connect_stream(self.opts.server.as_str(), self.opts.port)
             .await?;
 
         let stream = self.inner_proxy_stream(stream, sess, true).await?;
