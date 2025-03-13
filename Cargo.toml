@@ -22,3 +22,4 @@ codegen-units = 1
 lto = "thin"
 strip = "none"
 debug = 2
+panic = "abort"
