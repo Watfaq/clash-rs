@@ -295,7 +295,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: build
-          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }} --package clash-rs
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
           CROSS_BUILD_ZIG: ${{ matrix.zig }}
