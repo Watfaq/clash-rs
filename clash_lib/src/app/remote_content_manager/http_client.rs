@@ -11,6 +11,7 @@ use tower::Service;
 
 use crate::{
     app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
+    print_and_exit,
     proxy::AnyOutboundHandler,
     session::Session,
 };
@@ -32,7 +33,7 @@ impl Service<Uri> for LocalConnector {
     fn call(&mut self, remote: Uri) -> Self::Future {
         let host = remote
             .host()
-            .unwrap_or_else(|| panic!("invalid url: {}", remote))
+            .unwrap_or_else(|| print_and_exit!("invalid url: {}", remote))
             .to_owned();
 
         let port = remote.port_u16().unwrap_or(match remote.scheme_str() {
@@ -40,14 +41,14 @@ impl Service<Uri> for LocalConnector {
             Some(s) => match s {
                 "http" => 80,
                 "https" => 443,
-                _ => panic!("invalid url: {}", remote),
+                _ => print_and_exit!("invalid url: {}", remote),
             },
         });
 
         let sess = Session {
             destination: (host, port)
                 .try_into()
-                .unwrap_or_else(|_| panic!("invalid url: {}", remote)),
+                .unwrap_or_else(|_| print_and_exit!("invalid url: {}", remote)),
             ..Default::default()
         };
         let handler = self.0.clone();

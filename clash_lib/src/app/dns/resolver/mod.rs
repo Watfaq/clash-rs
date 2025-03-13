@@ -13,7 +13,7 @@ use std::sync::Arc;
 pub use enhanced::EnhancedResolver;
 pub use system::SystemResolver;
 
-use crate::{app::profile::ThreadSafeCacheFile, common::mmdb::Mmdb};
+use crate::{app::profile::ThreadSafeCacheFile, common::mmdb::Mmdb, print_and_exit};
 
 use super::{Config, ThreadSafeDNSResolver};
 
@@ -27,7 +27,7 @@ pub async fn new(
             (Some(store), Some(mmdb)) => {
                 Arc::new(EnhancedResolver::new(cfg, store, mmdb).await)
             }
-            _ => panic!("enhanced resolver requires cache store and mmdb"),
+            _ => print_and_exit!("enhanced resolver requires cache store and mmdb"),
         }
     } else {
         Arc::new(

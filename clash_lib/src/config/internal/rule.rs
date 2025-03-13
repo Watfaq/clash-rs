@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{Error, print_and_exit};
 use std::{fmt::Display, str::FromStr};
 
 pub enum RuleType {
@@ -166,15 +166,15 @@ impl RuleType {
             }),
             "SRC-PORT" => Ok(RuleType::SRCPort {
                 target: target.to_string(),
-                port: payload
-                    .parse()
-                    .unwrap_or_else(|_| panic!("invalid port: {}", payload)),
+                port: payload.parse().unwrap_or_else(|_| {
+                    print_and_exit!("invalid port: {}", payload)
+                }),
             }),
             "DST-PORT" => Ok(RuleType::DSTPort {
                 target: target.to_string(),
-                port: payload
-                    .parse()
-                    .unwrap_or_else(|_| panic!("invalid port: {}", payload)),
+                port: payload.parse().unwrap_or_else(|_| {
+                    print_and_exit!("invalid port: {}", payload)
+                }),
             }),
             "PROCESS-NAME" => Ok(RuleType::ProcessName {
                 process_name: payload.to_string(),

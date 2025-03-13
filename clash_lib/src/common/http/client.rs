@@ -21,6 +21,7 @@ use tower::Service;
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
+    print_and_exit,
     proxy::{AnyStream, utils::new_tcp_stream},
 };
 
@@ -41,7 +42,7 @@ impl Service<Uri> for LocalConnector {
     fn call(&mut self, remote: Uri) -> Self::Future {
         let host = remote
             .host()
-            .unwrap_or_else(|| panic!("invalid url: {}", remote))
+            .unwrap_or_else(|| print_and_exit!("invalid url: {}", remote))
             .to_owned();
 
         let dns = self.0.clone();
@@ -61,7 +62,7 @@ impl Service<Uri> for LocalConnector {
                     Some(s) => match s {
                         "http" => 80,
                         "https" => 443,
-                        _ => panic!("invalid url: {}", remote),
+                        _ => print_and_exit!("invalid url: {}", remote),
                     },
                 });
             new_tcp_stream(

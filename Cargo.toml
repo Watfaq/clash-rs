@@ -13,10 +13,13 @@ members = [
 version = "0.7.6"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
+authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
+homepage = "https://github.com/watfaq/clash-rs"
 
 [profile.release]
 opt-level = "s"
 codegen-units = 1
-lto = true
-strip = true
-debug = 1
+lto = "thin"
+strip = "none"
+debug = 2
+panic = "abort"

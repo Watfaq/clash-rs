@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tracing::{debug, warn};
 
 use super::config::NameServer;
+use crate::print_and_exit;
 
 pub async fn make_clients(
     servers: Vec<NameServer>,
@@ -26,16 +27,18 @@ pub async fn make_clients(
             let host = s
                 .address
                 .strip_suffix(format!(":{}", port).as_str())
-                .unwrap_or_else(|| panic!("invalid address: {}", s.address));
+                .unwrap_or_else(|| {
+                    print_and_exit!("invalid address: {}", s.address);
+                });
             (host, port)
         };
 
         match DnsClient::new_client(Opts {
             r: resolver.as_ref().cloned(),
             host: host.to_string(),
-            port: port
-                .parse::<u16>()
-                .unwrap_or_else(|_| panic!("no port for DNS server: {}", s.address)),
+            port: port.parse::<u16>().unwrap_or_else(|_| {
+                print_and_exit!("invalid port: {}", port);
+            }),
             net: s.net.to_owned(),
             iface: s
                 .interface

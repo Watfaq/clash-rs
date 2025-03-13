@@ -3,6 +3,8 @@ name = "clash-rs"
 repository = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
 
 [features]
 default = ["standard"]
@@ -30,3 +32,6 @@ clash_lib = { path = "../clash_lib", default-features = false }
 
 dhat = { version = "0.3", optional = true }
 tikv-jemallocator = { version = "0.6", optional = true }
+
+sentry = { version = "0.36", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+human-panic = "2.0"

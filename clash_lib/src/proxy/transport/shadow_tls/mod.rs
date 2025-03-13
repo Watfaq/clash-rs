@@ -13,7 +13,7 @@ mod stream;
 mod utils;
 
 use super::Transport;
-use crate::proxy::AnyStream;
+use crate::{common::errors::map_io_error, proxy::AnyStream};
 use prelude::*;
 
 static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
@@ -48,7 +48,7 @@ impl Client {
         let hamc_handshake = Hmac::new(&self.password, (&[], &[]));
         let sni_name =
             watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
-                .unwrap_or_else(|_| panic!("invalid server name: {}", self.host));
+                .map_err(map_io_error)?;
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
         let connector = new_connector();

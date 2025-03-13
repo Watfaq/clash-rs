@@ -75,15 +75,17 @@ port: 7890
 
 ### Help
 ```shell
--> % ./target/debug/clash -h
-Usage: clash [OPTIONS]
+-> % ./target/debug/clash-rs -h
+Usage: clash-rs [OPTIONS]
 
 Options:
   -d, --directory <DIRECTORY>
-  -c, --config <FILE>          [default: config.yaml]
-  -t, --test
+  -c, --config <FILE>          Specify configuration file [default: config.yaml] [short aliases: f]
+  -t, --test-config            Test configuration and exit
+  -v, --version                Print clash-rs version and exit [short aliases: V]
+  -l, --log-file <LOG_FILE>    Additinally log to file
+      --help-improve           Enable crash report to help improve clash
   -h, --help                   Print help
-  -V, --version                Print version
 ```
 
 ## FFI
