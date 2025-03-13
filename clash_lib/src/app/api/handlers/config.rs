@@ -15,6 +15,7 @@ use watfaq_resolver::{AbstractResolver, Resolver};
 use watfaq_types::StackPrefer;
 
 use crate::{
+    GlobalState,
     app::{
         api::AppState,
         dispatcher,

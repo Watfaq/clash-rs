@@ -5,15 +5,10 @@
 extern crate watfaq_error;
 
 use crate::{
-    app::{dispatcher::Dispatcher},
-    config::{
-        def,
-        internal::{InternalConfig},
-    },
+    app::dispatcher::Dispatcher,
+    config::{def, internal::InternalConfig},
 };
-use app::{
-    logging::LogEvent, net::init_net_config, profile,
-};
+use app::{logging::LogEvent, net::init_net_config, profile};
 
 use config::def::LogLevel;
 use futures::TryFutureExt as _;
@@ -36,6 +31,7 @@ mod config;
 mod instance;
 mod proxy;
 mod session;
+mod tasks;
 
 pub use config::{
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
@@ -93,7 +89,6 @@ pub struct GlobalState {
     cwd: String,
 }
 
-
 impl Config {
     pub fn try_parse(self) -> watfaq_error::Result<InternalConfig> {
         match self {
@@ -106,7 +101,6 @@ impl Config {
         }
     }
 }
-
 
 pub struct RuntimeController {
     shutdown_tx: mpsc::Sender<()>,
@@ -168,7 +162,8 @@ pub async fn start(
     log_tx: broadcast::Sender<LogEvent>,
 ) -> Result<()> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
-    let (reload_tx, mut reload_rx) = mpsc::channel::<(Config, oneshot::Sender<()>)>(1);
+    let (reload_tx, mut reload_rx) =
+        mpsc::channel::<(Config, oneshot::Sender<()>)>(1);
 
     let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
 
@@ -201,7 +196,6 @@ pub async fn start(
     //         let new_instace = Instance::new(work_dir.clone(), config).await?;
 
     //         done.send(()).unwrap();
-
 
     //         let mut g = global_state.lock().await;
 
@@ -266,11 +260,15 @@ pub async fn start(
     Ok(())
 }
 
-async fn reload_config(instance: &mut Option<Instance>, config: Config, done: oneshot::Sender<()>){
+async fn reload_config(
+    instance: &mut Option<Instance>,
+    config: Config,
+    done: oneshot::Sender<()>,
+) {
     info!("reloading config");
     match instance.take() {
         Some(v) => v.shutdown().await,
-        None => {},
+        None => {}
     }
 
     todo!()

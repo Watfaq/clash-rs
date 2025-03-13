@@ -221,7 +221,7 @@ async fn handle_inbound_datagram(
     _ = tokio::join!(fut1, fut2);
 }
 
-pub async fn tun_task(
+pub async fn setup_tun_module(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: Arc<Resolver>,
@@ -331,10 +331,6 @@ pub async fn tun_task(
 
     let result: Result<()> = loop {
         tokio::select! {
-            _ = token.cancelled() => {
-                warn!("Tun task cancelled!");
-                break Ok(());
-            }
             // tun <- stack
             // None if the stream is finished
             Some(pkt) = stack_stream.next() => {

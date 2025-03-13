@@ -1302,6 +1302,7 @@ dependencies = [
  "unix-udp-sock",
  "url",
  "uuid",
+ "wait-counter",
  "watfaq-dns",
  "watfaq-rustls",
  "watfaq_config",
@@ -3752,9 +3753,9 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.6.5"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
 ]
@@ -3944,8 +3945,6 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "libc",
- "memoffset",
- "pin-utils",
 ]
 
 [[package]]
@@ -3958,6 +3957,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -7786,6 +7786,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
+name = "wait-counter"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e73ee05663b5705e73de1269a25eed7404e424f2f508873540a2a7515325af3"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7971,7 +7980,7 @@ dependencies = [
  "lru_time_cache",
  "maxminddb",
  "network-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.8.5",
+ "rand 0.9.0",
  "regex",
  "rustls",
  "tokio",
@@ -7992,8 +8001,8 @@ dependencies = [
  "arc-swap",
  "enum_dispatch",
  "network-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "nix 0.25.1",
- "socket2 0.4.10",
+ "nix 0.29.0",
+ "socket2 0.5.8",
  "tokio",
  "tracing",
  "watfaq_error",
@@ -8050,7 +8059,7 @@ version = "0.7.6"
 dependencies = [
  "erased-serde",
  "serde",
- "socket2 0.4.10",
+ "socket2 0.5.8",
  "watfaq_error",
 ]
 
@@ -8065,7 +8074,7 @@ dependencies = [
  "rustls",
  "sha2",
  "tokio",
- "tower 0.4.13",
+ "tower 0.5.2",
  "tracing",
  "watfaq_error",
  "watfaq_socket",

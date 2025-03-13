@@ -3,7 +3,7 @@ use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 use watfaq_config::OutboundCommonOptions;
 use watfaq_resolver::Resolver;
 use watfaq_state::Context;
@@ -68,7 +68,7 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 impl OutboundManager {
     pub async fn new(
         ctx: Arc<Context>,
-        dns_resolver: Arc<Resolver>,
+        resolver: Arc<Resolver>,
         outbounds: Vec<OutboundProxyProtocol>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
@@ -79,7 +79,7 @@ impl OutboundManager {
         let handlers = HashMap::new();
         let provider_registry = HashMap::new();
         let selector_control = HashMap::new();
-        let proxy_manager = ProxyManager::new(ctx.clone(), dns_resolver.clone());
+        let proxy_manager = ProxyManager::new(ctx.clone(), resolver.clone());
 
         let mut m = Self {
             ctx,
@@ -90,7 +90,7 @@ impl OutboundManager {
         };
 
         debug!("initializing proxy providers");
-        m.load_proxy_providers(cwd, proxy_providers, dns_resolver)
+        m.load_proxy_providers(cwd, proxy_providers, resolver)
             .await?;
 
         debug!("initializing handlers");

@@ -1,17 +1,14 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    Router,
+    Router as AxumRouter,
     response::Redirect,
     routing::{get, post},
 };
 
 use http::{Method, header};
-use tokio::{
-    sync::{Mutex, broadcast::Sender},
-    task::JoinSet,
-};
-use tokio_util::sync::CancellationToken;
+use tokio::sync::{Mutex, broadcast::Sender};
+
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -30,7 +27,7 @@ use super::{
     logging::LogEvent,
     outbound::manager::ThreadSafeOutboundManager,
     profile::ThreadSafeCacheFile,
-    router::ThreadSafeRouter,
+    router::{Router, ThreadSafeRouter},
 };
 
 mod handlers;
@@ -48,13 +45,12 @@ pub async fn controller_task(
     inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
-    dns_resolver: Arc<Resolver>,
+    resolver: Arc<Resolver>,
     outbound_manager: ThreadSafeOutboundManager,
     statistics_manager: Arc<StatisticsManager>,
     cache_store: ThreadSafeCacheFile,
-    router: ThreadSafeRouter,
-    cwd: String,
-    token: CancellationToken,
+    router: Arc<Router>,
+    cwd: PathBuf,
 ) -> Result<()> {
     if let None = controller_cfg.external_controller {
         return Ok(());
@@ -77,7 +73,7 @@ pub async fn controller_task(
         bind_addr
     };
     info!("Starting API server at {}", bind_addr);
-    let mut app = Router::new()
+    let mut app = AxumRouter::new()
         .route("/", get(handlers::hello::handle))
         .route("/logs", get(handlers::log::handle))
         .route("/traffic", get(handlers::traffic::handle))
@@ -90,7 +86,7 @@ pub async fn controller_task(
                 inbound_manager,
                 dispatcher,
                 global_state,
-                dns_resolver.clone(),
+                resolver.clone(),
             ),
         )
         .nest("/rules", handlers::rule::routes(router))
@@ -106,7 +102,7 @@ pub async fn controller_task(
             "/providers/proxies",
             handlers::provider::routes(outbound_manager),
         )
-        .nest("/dns", handlers::dns::routes(dns_resolver))
+        .nest("/dns", handlers::dns::routes(resolver))
         .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
             controller_cfg.secret.unwrap_or_default(),
         ))
@@ -117,32 +113,15 @@ pub async fn controller_task(
     if let Some(external_ui) = controller_cfg.external_ui {
         app = app
             .route("/ui", get(|| async { Redirect::to("/ui/") }))
-            .nest_service(
-                "/ui/",
-                ServeDir::new(PathBuf::from(cwd).join(external_ui)),
-            );
+            .nest_service("/ui/", ServeDir::new(cwd.join(external_ui)));
     }
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
-    let fut = async move {
-        axum::serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .context("API server error")
-    };
-
-    tokio::select! {
-        // Error occured in task
-        Err(e) = fut => {
-            error!(error = %e);
-            Err(e)
-        }
-        // Task got cancelled
-        _ = token.cancelled() => {
-            Ok(())
-        }
-    }
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .context("API server error")
 }

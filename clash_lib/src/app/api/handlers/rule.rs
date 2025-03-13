@@ -1,16 +1,18 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::{Router, extract::State, response::IntoResponse, routing::get};
+use axum::{
+    Router as AxumRouter, extract::State, response::IntoResponse, routing::get,
+};
 
-use crate::app::{api::AppState, router::ThreadSafeRouter};
+use crate::app::{api::AppState, router::Router};
 
 #[derive(Clone)]
 struct RuleState {
-    router: ThreadSafeRouter,
+    router: Arc<Router>,
 }
 
-pub fn routes(router: ThreadSafeRouter) -> Router<Arc<AppState>> {
-    Router::new()
+pub fn routes(router: Arc<Router>) -> AxumRouter<Arc<AppState>> {
+    AxumRouter::new()
         .route("/", get(get_rules))
         .with_state(RuleState { router })
 }

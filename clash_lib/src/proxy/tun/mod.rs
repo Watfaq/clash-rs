@@ -1,6 +1,6 @@
 mod datagram;
 pub mod inbound;
-pub use inbound::tun_task;
+pub use inbound::setup_tun_module;
 mod routes;
 
 #[cfg(target_os = "linux")] // for tproxy

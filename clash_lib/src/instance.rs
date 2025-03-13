@@ -1,17 +1,21 @@
 use std::{path::PathBuf, sync::Arc};
 
+use tokio::sync::{Mutex, broadcast, mpsc::Sender};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
+use wait_counter::WaitCounter;
 use watfaq_dns::get_dns_listener;
 use watfaq_error::Result;
-use watfaq_resolver::dns::resolver::SystemResolver;
-use watfaq_resolver::Resolver;
+use watfaq_resolver::{Resolver, dns::resolver::SystemResolver};
 use watfaq_state::Context;
 use watfaq_utils::Mmdb;
 
-use crate::app::api::controller_task;
-use crate::proxy::tun::tun_task;
-use crate::{app::net::init_net_config, config::internal::InternalConfig};
+use crate::{
+    GlobalState,
+    app::{logging::LogEvent, net::init_net_config},
+    config::internal::InternalConfig,
+    tasks::{build_controller_task, build_dns_task, build_tun_task},
+};
 
 use crate::{
     ClashRuntimeConfig,
@@ -29,13 +33,16 @@ use crate::{
 pub struct Instance {
     ctx: Arc<Context>,
     cache_store: profile::ThreadSafeCacheFile,
-    dns_resolver: Arc<Resolver>,
+    resolver: Arc<Resolver>,
     outbound_manager: Arc<OutboundManager>,
     router: Arc<Router>,
     dispatcher: Arc<Dispatcher>,
     statistics_manager: Arc<StatisticsManager>,
     inbound_manager: Arc<InboundManager>,
     token: CancellationToken,
+    config: InternalConfig,
+    work_dir: PathBuf,
+    counter: WaitCounter,
 }
 impl Instance {
     pub async fn new(work_dir: PathBuf, config: InternalConfig) -> Result<Self> {
@@ -108,7 +115,6 @@ impl Instance {
                     .collect(),
                 config.proxy_providers,
                 config.proxy_names,
-                resolver.clone(),
                 cache_store.clone(),
                 work_dir.to_string_lossy().to_string(),
             )
@@ -153,7 +159,8 @@ impl Instance {
         ));
 
         debug!("initializing authenticator");
-        let authenticator = Arc::new(crate::common::auth::PlainAuthenticator::new(config.users));
+        let authenticator =
+            Arc::new(crate::common::auth::PlainAuthenticator::new(config.users));
 
         debug!("initializing inbound manager");
         let inbound_manager = Arc::new(
@@ -167,11 +174,10 @@ impl Instance {
             .await?,
         );
 
-
         info!("all components initialized");
         Ok(Instance {
             cache_store,
-            dns_resolver: resolver,
+            resolver,
             outbound_manager,
             router,
             dispatcher,
@@ -179,32 +185,75 @@ impl Instance {
             inbound_manager,
             ctx,
             token,
+            config,
+            work_dir,
+            counter: WaitCounter::new(),
         })
     }
 
-    pub async fn spawn(&mut self) {
+    pub async fn spawn(
+        &mut self,
+        log_tx: broadcast::Sender<LogEvent>,
+        global_state: Arc<Mutex<GlobalState>>,
+    ) {
         self.inbound_manager.start().await;
-        tun_task(cfg, dispatcher, resolver, token)
-        get_dns_listener(listen, exchanger, cwd)
-        controller_task(
-            controller_cfg, 
-            log_source, 
-            inbound_manager, 
-            dispatcher, 
-            global_state, 
-            dns_resolver, 
-            outbound_manager, 
-            statistics_manager, 
-            cache_store, 
-            router, 
-            cwd, 
-            token
-        )
 
+        if self.config.tun.enable {
+            let tun_config = self.config.tun.clone();
+            let dispatcher = self.dispatcher.clone();
+            let resolver = self.resolver.clone();
+
+            let token = self.token.child_token();
+            let counter = self.counter.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = token.cancelled() => { }
+                    _ = build_tun_task(tun_config, dispatcher, resolver, token.clone()) => { }
+                }
+                drop(counter);
+            });
+        }
+        if self.config.dns.enable {
+            let listen_addr = self.config.dns.listen.clone();
+            let resolver = self.resolver.clone();
+            let work_dir = self.work_dir.clone();
+
+            let token = self.token.child_token();
+            let counter = self.counter.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = token.cancelled() => { }
+                    _ = build_dns_task(listen_addr, resolver, &work_dir) => { }
+                }
+                drop(counter);
+            });
+        }
+
+        if self.config.general.controller.external_controller.is_some() {
+            let cfg = self.config.general.controller.clone();
+            let inbound_manager = self.inbound_manager.clone();
+            let dispatcher = self.dispatcher.clone();
+            let resolver = self.resolver.clone();
+            let outbound_manager = self.outbound_manager.clone();
+            let statistics_manager = self.statistics_manager.clone();
+            let cache_store = self.cache_store.clone();
+            let router = self.router.clone();
+            let cwd = self.work_dir.clone();
+
+            let token = self.token.child_token();
+            let counter = self.counter.clone();
+            tokio::spawn(async move {
+                tokio::select! {
+                    _ = token.cancelled() => { }
+                    _ = build_controller_task(cfg, log_tx, inbound_manager, dispatcher, global_state, resolver, outbound_manager, statistics_manager, cache_store, router, cwd) => { }
+                }
+                drop(counter);
+            });
+        }
     }
 
     pub async fn shutdown(self) {
         self.token.cancel();
+        self.counter.wait().await;
     }
 }
-
