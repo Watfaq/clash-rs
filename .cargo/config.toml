@@ -4,3 +4,4 @@ rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
 RUST_LOG = { value = "clash=trace" }
+SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }
