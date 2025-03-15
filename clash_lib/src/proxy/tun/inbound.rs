@@ -251,20 +251,30 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = {
-        #[cfg(target_os = "android")]
-        {
-            &cfg.device_id.clone().expect("must have a valid fd")
+    let device_id: String = if cfg!(target_os = "android") {
+        match &cfg.device_id {
+            Some(id) => {
+                if Url::parse(id).is_err() {
+                    format!("dev://{}", id)
+                } else {
+                    id.clone()
+                }
+            }
+            None => {
+                return Err(Error::InvalidConfig(
+                    "tun device id must be provided on android".to_string(),
+                ));
+            }
         }
-        #[cfg(not(target_os = "android"))]
-        {
-            &cfg.device_id.clone().unwrap_or(TUN_NAME.to_string())
-        }
+    } else {
+        cfg.device_id
+            .clone()
+            .unwrap_or_else(|| TUN_NAME.to_string())
     };
 
     let mut tun_cfg = tun::Configuration::default();
 
-    let u = Url::parse(device_id);
+    let u = Url::parse(&device_id);
     // .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
     match u {
         Ok(u) => {
