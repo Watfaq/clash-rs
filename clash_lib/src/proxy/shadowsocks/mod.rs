@@ -17,7 +17,7 @@ use crate::{
     },
     common::errors::new_io_error,
     impl_default_connector,
-    proxy::{HandlerCommonOptions, OutboundHandler},
+    proxy::{OutboundCommonOptions, OutboundHandler},
     session::Session,
 };
 use async_trait::async_trait;
@@ -32,7 +32,7 @@ use tracing::debug;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,

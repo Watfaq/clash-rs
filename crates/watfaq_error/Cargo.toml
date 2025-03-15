@@ -1,0 +1,13 @@
+[package]
+name = "watfaq_error"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+
+tokio = "1"
+watfaq-dns = { version = "0.1.1" }
+ipnet = "2"

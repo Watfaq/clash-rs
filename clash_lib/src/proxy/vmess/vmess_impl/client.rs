@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{common::utils, proxy::AnyStream, session::SocksAddr};
+use crate::{common::utils, proxy::AnyStream, session::TargetAddr};
 
 use super::{
     SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security,
@@ -14,7 +14,7 @@ pub struct VmessOption {
     pub alter_id: u16,
     pub security: String,
     pub udp: bool,
-    pub dst: SocksAddr,
+    pub dst: TargetAddr,
 }
 
 pub struct Builder {
@@ -22,7 +22,7 @@ pub struct Builder {
     pub security: Security,
     pub is_aead: bool,
     pub is_udp: bool,
-    pub dst: SocksAddr,
+    pub dst: TargetAddr,
 }
 
 impl Builder {

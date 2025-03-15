@@ -17,8 +17,8 @@ impl std::fmt::Display for Domain {
 impl RuleMatcher for Domain {
     fn apply(&self, sess: &session::Session) -> bool {
         match &sess.destination {
-            session::SocksAddr::Ip(_) => false,
-            session::SocksAddr::Domain(domain, _) => &self.domain == domain,
+            session::TargetAddr::Socket(_) => false,
+            session::TargetAddr::Domain(domain, _) => &self.domain == domain,
         }
     }
 

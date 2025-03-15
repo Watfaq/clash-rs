@@ -32,7 +32,7 @@ use crate::{
         datagram::UdpPacket,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 
 use super::events::PortProtocol;
@@ -137,7 +137,7 @@ impl WireguardTunnel {
             .await
             .send(UdpPacket {
                 data: packet.to_vec(),
-                src_addr: SocksAddr::any_ipv4(),
+                src_addr: TargetAddr::any_ipv4(),
                 dst_addr: self.endpoint.into(),
             })
             .await

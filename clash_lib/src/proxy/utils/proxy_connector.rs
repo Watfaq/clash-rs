@@ -18,7 +18,7 @@ use crate::{
         AnyOutboundDatagram, AnyOutboundHandler, AnyStream,
         datagram::OutboundDatagramImpl,
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 
 use super::{new_tcp_stream, new_udp_socket};
@@ -39,7 +39,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
         &self,
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
-        destination: SocksAddr,
+        destination: TargetAddr,
         iface: Option<Interface>,
         #[cfg(target_os = "linux")] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram>;
@@ -91,7 +91,7 @@ impl RemoteConnector for DirectConnector {
         &self,
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
-        _destination: SocksAddr,
+        _destination: TargetAddr,
         iface: Option<Interface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
@@ -145,7 +145,10 @@ impl RemoteConnector for ProxyConnector {
         let sess = Session {
             network: Network::Tcp,
             typ: Type::Ignore,
-            destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
+            destination: crate::session::TargetAddr::Domain(
+                address.to_owned(),
+                port,
+            ),
             iface: iface.cloned(),
             #[cfg(target_os = "linux")]
             so_mark,
@@ -173,7 +176,7 @@ impl RemoteConnector for ProxyConnector {
         &self,
         resolver: ThreadSafeDNSResolver,
         _src: Option<SocketAddr>,
-        destination: SocksAddr,
+        destination: TargetAddr,
         iface: Option<Interface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {

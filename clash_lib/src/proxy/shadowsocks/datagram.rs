@@ -22,7 +22,7 @@ use tracing::{debug, error, instrument};
 use crate::{
     common::errors::new_io_error,
     proxy::{AnyOutboundDatagram, datagram::UdpPacket},
-    session::SocksAddr,
+    session::TargetAddr,
 };
 
 /// OutboundDatagram wrapper for shadowsocks socket, that takes ShadowsocksUdpIo
@@ -190,9 +190,9 @@ where
                 data: buf.filled()[..n].to_vec(),
                 src_addr: match src {
                     shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                    _ => SocksAddr::any_ipv4(),
+                    _ => TargetAddr::any_ipv4(),
                 },
-                dst_addr: SocksAddr::any_ipv4(),
+                dst_addr: TargetAddr::any_ipv4(),
             })),
             Err(_) => Poll::Ready(None),
         }
@@ -229,7 +229,7 @@ impl DatagramSend for ShadowsocksUdpIo {
         let mut w = self.w.try_lock().expect("must acquire");
         match w.start_send_unpin(UdpPacket {
             data: buf.to_vec(),
-            src_addr: SocksAddr::any_ipv4(),
+            src_addr: TargetAddr::any_ipv4(),
             dst_addr: target.into(),
         }) {
             Ok(_) => {}

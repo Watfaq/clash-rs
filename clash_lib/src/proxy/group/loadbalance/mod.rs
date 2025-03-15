@@ -17,7 +17,7 @@ use crate::{
     },
     config::internal::proxy::LoadBalanceStrategy,
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundCommonOptions,
         OutboundHandler, OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
@@ -28,7 +28,7 @@ use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
     pub udp: bool,
     pub strategy: LoadBalanceStrategy,

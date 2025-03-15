@@ -1,6 +1,6 @@
 use crate::{
     app::router::rules::RuleMatcher,
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 
 #[derive(Clone)]
@@ -18,8 +18,8 @@ impl std::fmt::Display for DomainSuffix {
 impl RuleMatcher for DomainSuffix {
     fn apply(&self, sess: &Session) -> bool {
         match &sess.destination {
-            SocksAddr::Ip(_) => false,
-            SocksAddr::Domain(domain, _) => {
+            TargetAddr::Socket(_) => false,
+            TargetAddr::Domain(domain, _) => {
                 domain.ends_with((String::from(".") + self.suffix.as_str()).as_str())
                     || domain == &self.suffix
             }

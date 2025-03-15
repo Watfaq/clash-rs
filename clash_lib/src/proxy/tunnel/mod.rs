@@ -11,7 +11,7 @@ use std::{
 use crate::{
     app::dispatcher::Dispatcher,
     common::errors::new_io_error,
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 use futures::{Sink, Stream};
 use tokio::{
@@ -29,7 +29,7 @@ pub struct TunnelInbound {
     listen: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     network: Vec<String>,
-    target: SocksAddr,
+    target: TargetAddr,
 }
 
 impl Drop for TunnelInbound {
@@ -49,7 +49,7 @@ impl TunnelInbound {
             listen: addr,
             dispatcher,
             network,
-            target: SocksAddr::from_str(&target)?,
+            target: TargetAddr::from_str(&target)?,
         })
     }
 }
@@ -121,13 +121,13 @@ impl InboundHandlerTrait for TunnelInbound {
 #[derive(Debug)]
 struct UdpSession {
     pub socket: UdpSocket,
-    pub dst_addr: SocksAddr,
+    pub dst_addr: TargetAddr,
     pub read_buf: Vec<u8>,
     pub send_buf: Option<(Vec<u8>, SocketAddr)>,
 }
 
 impl UdpSession {
-    fn new(socket: UdpSocket, dst_addr: SocksAddr) -> Self {
+    fn new(socket: UdpSocket, dst_addr: TargetAddr) -> Self {
         Self {
             socket,
             dst_addr,
@@ -160,8 +160,8 @@ impl Sink<UdpPacket> for UdpSession {
         let this = self.deref_mut();
         let socket = &this.socket;
         let dst_addr = match item.dst_addr {
-            SocksAddr::Ip(socket_addr) => socket_addr,
-            SocksAddr::Domain(..) => {
+            TargetAddr::Socket(socket_addr) => socket_addr,
+            TargetAddr::Domain(..) => {
                 return Err(new_io_error(
                     "UdpPacket dst_src MUSTBE IpAddr instead of Domain",
                 ));
@@ -229,7 +229,7 @@ impl Stream for UdpSession {
             Poll::Ready(Ok(src_addr)) => {
                 let data = buf.filled().to_vec();
                 let dst_addr = this.dst_addr.clone();
-                let src_addr = SocksAddr::from(src_addr);
+                let src_addr = TargetAddr::from(src_addr);
                 Poll::Ready(Some(UdpPacket {
                     data,
                     src_addr,

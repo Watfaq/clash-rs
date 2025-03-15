@@ -27,7 +27,7 @@ use crate::{
 };
 
 use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    ConnectorType, DialWithConnector, OutboundCommonOptions, OutboundHandler,
     OutboundType, ProxyStream, utils::RemoteConnector,
 };
 
@@ -78,7 +78,7 @@ impl AsyncWrite for ChannelStreamWrapper {
 #[derive(Debug)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub username: String,

@@ -455,7 +455,7 @@ mod tests {
             assert_eq!(
                 router
                     .match_route(&mut Session {
-                        destination: crate::session::SocksAddr::Domain(
+                        destination: crate::session::TargetAddr::Domain(
                             domain.to_string(),
                             1111
                         ),

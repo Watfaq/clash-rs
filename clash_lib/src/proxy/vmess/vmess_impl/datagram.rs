@@ -8,12 +8,12 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::{
     common::errors::new_io_error,
     proxy::{AnyStream, datagram::UdpPacket},
-    session::SocksAddr,
+    session::TargetAddr,
 };
 
 pub struct OutboundDatagramVmess {
     inner: AnyStream,
-    remote_addr: SocksAddr,
+    remote_addr: TargetAddr,
 
     written: Option<usize>,
     flushed: bool,
@@ -22,7 +22,7 @@ pub struct OutboundDatagramVmess {
 }
 
 impl OutboundDatagramVmess {
-    pub fn new(inner: AnyStream, remote_addr: SocksAddr) -> Self {
+    pub fn new(inner: AnyStream, remote_addr: TargetAddr) -> Self {
         Self {
             inner,
             remote_addr,
@@ -168,7 +168,7 @@ impl Stream for OutboundDatagramVmess {
             Ok(()) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled().to_vec(),
                 src_addr: remote_addr.clone(),
-                dst_addr: SocksAddr::any_ipv4(),
+                dst_addr: TargetAddr::any_ipv4(),
             })),
             Err(_) => Poll::Ready(None),
         }

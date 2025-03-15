@@ -1,7 +1,7 @@
 use crate::{
     app::{dns::ThreadSafeDNSResolver, net::get_outbound_interface},
     proxy::utils::new_udp_socket,
-    session::SocksAddr as ClashSocksAddr,
+    session::TargetAddr as ClashSocksAddr,
 };
 
 use anyhow::Result;
@@ -283,12 +283,12 @@ impl Default for CongestionControl {
 pub trait SocketAdderTrans {
     fn into_tuic(self) -> tuic::Address;
 }
-impl SocketAdderTrans for crate::session::SocksAddr {
+impl SocketAdderTrans for crate::session::TargetAddr {
     fn into_tuic(self) -> tuic::Address {
-        use crate::session::SocksAddr;
+        use crate::session::TargetAddr;
         match self {
-            SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
-            SocksAddr::Domain(domain, port) => {
+            TargetAddr::Socket(addr) => tuic::Address::SocketAddress(addr),
+            TargetAddr::Domain(domain, port) => {
                 tuic::Address::DomainAddress(domain, port)
             }
         }

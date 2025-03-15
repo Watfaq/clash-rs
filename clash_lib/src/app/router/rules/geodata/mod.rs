@@ -90,8 +90,8 @@ impl Display for GeoSiteMatcher {
 impl RuleMatcher for GeoSiteMatcher {
     fn apply(&self, sess: &Session) -> bool {
         match &sess.destination {
-            crate::session::SocksAddr::Ip(_) => false,
-            crate::session::SocksAddr::Domain(domain, _) => {
+            crate::session::TargetAddr::Socket(_) => false,
+            crate::session::TargetAddr::Domain(domain, _) => {
                 self.matcher.apply(domain.as_str())
             }
         }

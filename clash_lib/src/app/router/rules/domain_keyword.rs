@@ -19,8 +19,8 @@ impl Display for DomainKeyword {
 impl RuleMatcher for DomainKeyword {
     fn apply(&self, sess: &session::Session) -> bool {
         match &sess.destination {
-            session::SocksAddr::Ip(_) => false,
-            session::SocksAddr::Domain(domain, _) => domain.contains(&self.keyword),
+            session::TargetAddr::Socket(_) => false,
+            session::TargetAddr::Domain(domain, _) => domain.contains(&self.keyword),
         }
     }
 

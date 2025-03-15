@@ -25,8 +25,8 @@ pub type StrategyFn = Box<
 
 fn get_key(sess: &Session) -> String {
     match &sess.destination {
-        crate::session::SocksAddr::Ip(addr) => addr.ip().to_string(),
-        crate::session::SocksAddr::Domain(host, _) => DEFAULT_PROVIDER
+        crate::session::TargetAddr::Socket(addr) => addr.ip().to_string(),
+        crate::session::TargetAddr::Domain(host, _) => DEFAULT_PROVIDER
             .effective_tld_plus_one(host)
             .map(|s| s.to_string())
             .unwrap_or_default(),
@@ -179,7 +179,7 @@ mod tests {
     use crate::{
         app::remote_content_manager::ProxyManager,
         proxy::utils::test_utils::noop::{NoopOutboundHandler, NoopResolver},
-        session::SocksAddr,
+        session::TargetAddr,
     };
 
     macro_rules! assert_cache_state {
@@ -228,7 +228,7 @@ mod tests {
         let dst1 = Ipv4Addr::new(1, 1, 1, 1);
         session1.source = SocketAddr::V4(SocketAddrV4::new(src1, 8964));
         session1.destination =
-            SocksAddr::Ip(SocketAddr::V4(SocketAddrV4::new(dst1, 80)));
+            TargetAddr::Socket(SocketAddr::V4(SocketAddrV4::new(dst1, 80)));
 
         // 1.1 first time, cache miss & update
         let res = strategy_fn(proxies.clone(), &session1).await;
@@ -247,7 +247,7 @@ mod tests {
         // 1.4 change the source address, cache miss & update
         let dst1_2 = Ipv4Addr::new(8, 8, 8, 8);
         session1.destination =
-            SocksAddr::Ip(SocketAddr::V4(SocketAddrV4::new(dst1_2, 80)));
+            TargetAddr::Socket(SocketAddr::V4(SocketAddrV4::new(dst1_2, 80)));
         let res = strategy_fn(proxies.clone(), &session1).await;
         assert_cache_state!(CACHE_UPDATE);
         let session1_outbound_name_2 = res.unwrap().name().to_owned();

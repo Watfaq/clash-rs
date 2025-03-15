@@ -5,7 +5,7 @@ use quinn::VarInt;
 use crate::{
     config::internal::proxy::OutboundTuic,
     proxy::{
-        HandlerCommonOptions,
+        OutboundCommonOptions,
         tuic::{Handler, HandlerOptions, types::CongestionControl},
     },
 };
@@ -25,7 +25,7 @@ impl TryFrom<&OutboundTuic> for Handler {
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             server: s.common_opts.server.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

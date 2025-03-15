@@ -1,0 +1,12 @@
+[package]
+name = "watfaq_types"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+watfaq_error = { path = "../watfaq_error" }
+serde = "1"
+socket2 = "*"
+erased-serde = "*"
+
