@@ -238,6 +238,9 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
+/// macos required the name schema
+const TUN_NAME: &str = "utun8";
+
 pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
@@ -248,32 +251,63 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = &cfg.device_id;
-
-    let u = Url::parse(device_id)
-        .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+    let device_id: String = if cfg!(target_os = "android") {
+        match &cfg.device_id {
+            Some(id) => {
+                if Url::parse(id).is_err() {
+                    format!("dev://{}", id)
+                } else {
+                    id.clone()
+                }
+            }
+            None => {
+                return Err(Error::InvalidConfig(
+                    "tun device id must be provided on android".to_string(),
+                ));
+            }
+        }
+    } else {
+        cfg.device_id
+            .clone()
+            .unwrap_or_else(|| TUN_NAME.to_string())
+    };
 
     let mut tun_cfg = tun::Configuration::default();
 
-    match u.scheme() {
-        "fd" => {
-            let fd = u
-                .host()
-                .expect("tun fd must be provided")
-                .to_string()
-                .parse()
-                .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
-            tun_cfg.raw_fd(fd);
+    let u = Url::parse(&device_id);
+    // .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
+    match u {
+        Ok(u) => {
+            warn!("todo: URL format configuration will no longer be supported.");
+            match u.scheme() {
+                "fd" => {
+                    let fd = u
+                        .host()
+                        .expect("tun fd must be provided")
+                        .to_string()
+                        .parse()
+                        .map_err(|x| {
+                            Error::InvalidConfig(format!("tun fd {}", x))
+                        })?;
+                    tun_cfg.raw_fd(fd);
+                }
+                "dev" => {
+                    let dev =
+                        u.host().expect("tun dev must be provided").to_string();
+                    tun_cfg.tun_name(dev);
+                }
+                _ => {
+                    return Err(Error::InvalidConfig(format!(
+                        "invalid device id: {}",
+                        device_id
+                    )));
+                }
+            }
         }
-        "dev" => {
-            let dev = u.host().expect("tun dev must be provided").to_string();
-            tun_cfg.tun_name(dev);
-        }
-        _ => {
-            return Err(Error::InvalidConfig(format!(
-                "invalid device id: {}",
-                device_id
-            )));
+        Err(e) => {
+            // todo: will support the following format to build the tun device.
+            warn!("used the mihomo standard tun cfg. {}", e);
+            tun_cfg.tun_name(TUN_NAME);
         }
     }
 
