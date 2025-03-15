@@ -12,9 +12,9 @@ use crate::{modules::types::TargetAddr, session::SocksAddrType};
 // There are some helper functions which shouldn't be here
 // They are used in vmess and socks
 pub trait TargetAddrExt: Sized {
+    fn size(&self) -> usize;
     fn write_buf<T: BufMut>(&self, buf: &mut T);
     fn write_to_buf_vmess<B: BufMut>(&self, buf: &mut B);
-    fn size(&self) -> usize;
     fn peek_read(buf: &[u8]) -> std::io::Result<Self>;
     fn read_from<T: AsyncRead + Unpin>(
         r: &mut T,
@@ -23,6 +23,17 @@ pub trait TargetAddrExt: Sized {
 }
 
 impl TargetAddrExt for TargetAddr {
+    fn size(&self) -> usize {
+        match self {
+            // SOCKS5 ATYP
+            TargetAddr::Socket(ip) => match ip {
+                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
+                SocketAddr::V6(_) => 1 + 16 + 2,
+            },
+            TargetAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
+        }
+    }
+
     // TODO move to vmess
     fn write_buf<T: BufMut>(&self, buf: &mut T) {
         match self {
@@ -67,17 +78,6 @@ impl TargetAddrExt for TargetAddr {
                 buf.put_u8(domain_name.len() as u8);
                 buf.put_slice(domain_name.as_bytes());
             }
-        }
-    }
-
-    fn size(&self) -> usize {
-        match self {
-            // SOCKS5 ATYP
-            TargetAddr::Socket(ip) => match ip {
-                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
-                SocketAddr::V6(_) => 1 + 16 + 2,
-            },
-            TargetAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
         }
     }
 

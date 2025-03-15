@@ -118,16 +118,6 @@ impl TargetAddr {
         }
     }
 
-    pub fn size(&self) -> usize {
-        match self {
-            // SOCKS5 ATYP
-            TargetAddr::Socket(ip) => match ip {
-                SocketAddr::V4(_) => 1 + 4 + 2, // ATYP + IPv4 len + port len
-                SocketAddr::V6(_) => 1 + 16 + 2,
-            },
-            TargetAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2,
-        }
-    }
 }
 
 impl Clone for TargetAddr {
