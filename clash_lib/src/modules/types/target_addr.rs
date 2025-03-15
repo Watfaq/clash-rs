@@ -117,7 +117,6 @@ impl TargetAddr {
             TargetAddr::Domain(_, port) => *port,
         }
     }
-
 }
 
 impl Clone for TargetAddr {
