@@ -25,7 +25,7 @@ pub fn which_ip_decision<T: Into<DualIpAddr>>(
         None => &ctx.default_iface.load(),
     };
 
-    let stack_prefer = stack_prefer.unwrap_or_else(|| ctx.stack_prefer);
+    let stack_prefer = stack_prefer.unwrap_or(ctx.stack_prefer);
     let stack = which_stack_decision(iface, stack_prefer, &remote)?;
     match (stack, remote.v4, remote.v6) {
         (Stack::V4, Some(v4), _) => Ok(v4.into()),
@@ -46,14 +46,14 @@ pub fn which_stack_decision<T: Into<TargetStack>>(
     // Check for incompatible single stack scenarios
     match (iface_v4, iface_v6) {
         (true, false) if !target_v4 => {
-            return Err(anyhow!(
+            Err(anyhow!(
                 "Cannot dicide which stack to use, cause of interface{} only \
                  support v4 but target only support v6",
                 iface.name
             ))?;
         }
         (false, true) if !target_v6 => {
-            return Err(anyhow!(
+            Err(anyhow!(
                 "Cannot dicide which stack to use, cause of interface{} only \
                  support v6 but target only support v4",
                 iface.name
@@ -125,7 +125,7 @@ pub fn search_iface(name: &str) -> anyhow::Result<Iface> {
     let iface = network_interface::NetworkInterface::show()?
         .into_iter()
         .find_map(|iface| {
-            if &iface.name == name {
+            if iface.name == name {
                 Some(iface)
             } else {
                 None

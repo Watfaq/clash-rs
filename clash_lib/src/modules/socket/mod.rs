@@ -19,7 +19,7 @@ use super::{
 pub enum Protector {
     Bind(protector::BindProtector),
     Dummy(protector::DummyProtector),
-    Callback(protector::CallbackProtector)
+    Callback(protector::CallbackProtector),
 }
 
 #[enum_dispatch]

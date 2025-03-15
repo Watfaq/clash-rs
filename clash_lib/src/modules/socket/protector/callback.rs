@@ -2,8 +2,10 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 
 use socket2::{SockAddr, SockRef};
 
-use crate::modules::{socket::AbstractProtector, types::{Network, Stack}};
-
+use crate::modules::{
+    socket::AbstractProtector,
+    types::{Network, Stack},
+};
 
 #[allow(dead_code)]
 #[derive(Debug)]
