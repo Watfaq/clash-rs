@@ -251,15 +251,18 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = &cfg.device_id;
+    let device_id = {
+        #[cfg(target_os = "android")]
+        {
+            &cfg.device_id.clone().expect("must have a valid fd")
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            &cfg.device_id.clone().unwrap_or(TUN_NAME.to_string())
+        }
+    };
 
     let mut tun_cfg = tun::Configuration::default();
-
-    #[cfg(target_os = "android")]
-    {
-        println!("andriod is not supported");
-        todo!()
-    }
 
     let u = Url::parse(device_id);
     // .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
@@ -292,6 +295,8 @@ pub fn get_runner(
             }
         }
         Err(e) => {
+            // todo: will support the following format to build the tun device.
+            warn!("used the mihomo standard tun cfg. {}", e);
             tun_cfg.tun_name(TUN_NAME);
         }
     }
