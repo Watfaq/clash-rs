@@ -2,7 +2,7 @@ use aes_gcm::Aes128Gcm;
 use bytes::Bytes;
 use chacha20poly1305::ChaCha20Poly1305;
 
-use crate::common::crypto::AeadCipherHelper;
+use crate::common::AeadCipherHelper;
 
 #[allow(clippy::large_enum_variant)]
 pub enum VmessSecurity {

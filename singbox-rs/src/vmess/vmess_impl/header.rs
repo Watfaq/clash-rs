@@ -2,7 +2,7 @@ use aead::{KeyInit, generic_array::GenericArray};
 use aes::cipher::BlockEncrypt;
 use bytes::{Buf, BufMut, BytesMut};
 
-use crate::common::{crypto, errors::map_io_error, utils};
+use crate::utils;
 
 use super::kdf::{
     self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
@@ -41,7 +41,7 @@ pub(crate) fn seal_vmess_aead_header(
     key: [u8; 16],
     data: Vec<u8>,
     timestamp: u64,
-) -> anyhow::Result<Vec<u8>> {
+) -> std::io::Result<Vec<u8>> {
     let auth_id = create_auth_id(key, timestamp);
     let mut connection_nonce = [0u8; 8];
     utils::rand_fill(connection_nonce.as_mut());
@@ -59,13 +59,13 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let header_len_encrypted = crypto::aes_gcm_encrypt(
+    let header_len_encrypted = utils::aes_gcm_encrypt(
         payload_header_length_aead_key,
         payload_header_length_aead_nonce,
         (data.len() as u16).to_be_bytes().as_ref(),
         Some(auth_id.as_ref()),
     )
-    .map_err(map_io_error)?;
+    .map_err(|x| std::io::Error::new(std::io::ErrorKind::Other, x.to_string()))?;
 
     let payload_header_aead_key = &kdf::vmess_kdf_3_one_shot(
         &key[..],
@@ -80,13 +80,13 @@ pub(crate) fn seal_vmess_aead_header(
         &connection_nonce[..],
     )[..12];
 
-    let payload_encrypted = crypto::aes_gcm_encrypt(
+    let payload_encrypted = utils::aes_gcm_encrypt(
         payload_header_aead_key,
         payload_header_aead_nonce,
         &data,
         Some(auth_id.as_ref()),
     )
-    .map_err(map_io_error)?;
+    .map_err(|x| std::io::Error::new(std::io::ErrorKind::Other, x.to_string()))?;
 
     let mut out = BytesMut::new();
     out.put_slice(&auth_id[..]);
@@ -100,8 +100,8 @@ pub(crate) fn seal_vmess_aead_header(
 #[cfg(test)]
 mod tests {
     use crate::{
-        common::crypto,
-        proxy::vmess::vmess_impl::kdf::{
+        utils,
+        vmess::vmess_impl::kdf::{
             self, KDF_SALT_CONST_AUTH_ID_ENCRYPTION_KEY,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_IV,
             KDF_SALT_CONST_VMESS_HEADER_PAYLOAD_AEAD_KEY,
@@ -169,7 +169,7 @@ mod tests {
             &connection_nonce[..],
         )[..12];
 
-        let header_len_encrypted = crypto::aes_gcm_encrypt(
+        let header_len_encrypted = utils::aes_gcm_encrypt(
             payload_header_length_aead_key,
             payload_header_length_aead_nonce,
             (data.len() as u16).to_be_bytes().as_ref(),
@@ -190,7 +190,7 @@ mod tests {
             &connection_nonce[..],
         )[..12];
 
-        let payload_encrypted = crypto::aes_gcm_encrypt(
+        let payload_encrypted = utils::aes_gcm_encrypt(
             payload_header_aead_key,
             payload_header_aead_nonce,
             &data,

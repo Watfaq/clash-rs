@@ -5,11 +5,7 @@ use tracing::{debug, error, instrument};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::{
-    common::errors::new_io_error,
-    proxy::{AnyStream, datagram::UdpPacket},
-    session::SocksAddr,
-};
+use crate::{AnyStream, SocksAddr, UdpPacket};
 
 pub struct OutboundDatagramVmess {
     inner: AnyStream,
@@ -118,10 +114,10 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             let res = if written.unwrap() == total_len {
                 Ok(())
             } else {
-                Err(new_io_error(format!(
-                    "failed to write entire datagram, written: {}",
-                    written.unwrap()
-                )))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "failed to send all data",
+                ))
             };
             *written = None;
             Poll::Ready(res)

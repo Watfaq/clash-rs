@@ -9,10 +9,11 @@ use crate::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
+    proxy::{AnyInboundDatagram, ClientStream},
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
+use singbox_rs::UdpPacket;
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
@@ -375,7 +376,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = sess.destination.clone();
+                                packet.src_addr = sess.destination.clone().into();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!(

@@ -5,7 +5,8 @@ members = [
     "clash",
     "clash_lib",
     "clash_doc",
-    "clash_ffi",
+    "clash_ffi", 
+    "singbox-rs",
 ]
 
 

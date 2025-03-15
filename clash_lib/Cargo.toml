@@ -28,6 +28,8 @@ async-trait = "0.1"
 hyper = { version = "1", features = ["http1","http2","client", "server"] }
 hyper-util = "0.1"
 
+singbox-rs = { path = "../singbox-rs" }
+
 # Network proto
 http = { version = "1" }
 http-body-util = "0.1.2"

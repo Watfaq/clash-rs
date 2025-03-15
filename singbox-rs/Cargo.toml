@@ -1,0 +1,29 @@
+[package]
+name = "singbox-rs"
+version.workspace = true
+repository.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+
+[dependencies]
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+bytes = "1"
+uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+rand = "0.9"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
+futures = "0.3"
+tracing = "0.1"
+serde = { version = "1", features=["derive"] }
+thiserror = "2"
+aead = { version = "0.5", features = ["std"] }
+aes = "0.8"
+ring-compat = { version = "0.8", features = ["aead"] }
+crc32fast = "1"
+hmac = "0.12"
+sha2 = "0.10"
+md-5 = "0.10"
+const-fnv1a-hash = "1"
+cfb-mode = "0.8"

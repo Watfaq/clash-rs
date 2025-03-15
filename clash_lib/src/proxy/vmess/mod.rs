@@ -3,7 +3,7 @@ use std::{io, sync::Arc};
 use async_trait::async_trait;
 use tracing::debug;
 
-mod vmess_impl;
+use singbox_rs::vmess;
 
 use crate::{
     app::{
@@ -16,8 +16,6 @@ use crate::{
     impl_default_connector,
     session::Session,
 };
-
-use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
@@ -82,12 +80,13 @@ impl Handler {
             s
         };
 
-        let vmess_builder = vmess_impl::Builder::new(&vmess_impl::VmessOption {
+        let target_addr: singbox_rs::SocksAddr = sess.destination.clone().into();
+        let vmess_builder = vmess::Builder::new(&vmess::VmessOption {
             uuid: self.opts.uuid.to_owned(),
             alter_id: self.opts.alter_id,
             security: self.opts.security.to_owned(),
             udp,
-            dst: sess.destination.clone(),
+            dst: target_addr.into(),
         })?;
 
         vmess_builder.proxy_stream(s).await
@@ -200,7 +199,8 @@ impl OutboundHandler for Handler {
 
         let stream = self.inner_proxy_stream(stream, sess, true).await?;
 
-        let d = OutboundDatagramVmess::new(stream, sess.destination.clone());
+        let target_addr: singbox_rs::SocksAddr = sess.destination.clone().into();
+        let d = vmess::OutboundDatagramVmess::new(stream, target_addr);
 
         let chained = ChainedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;

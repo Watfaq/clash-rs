@@ -1227,6 +1227,7 @@ dependencies = [
  "sha1",
  "sha2",
  "shadowsocks",
+ "singbox-rs",
  "smoltcp 0.12.0",
  "socket2 0.5.8",
  "tempfile",
@@ -5810,6 +5811,32 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "singbox-rs"
+version = "0.7.6"
+dependencies = [
+ "aead",
+ "aes",
+ "aes-gcm",
+ "bytes",
+ "cfb-mode",
+ "chacha20poly1305",
+ "const-fnv1a-hash",
+ "crc32fast",
+ "futures",
+ "hmac",
+ "md-5",
+ "rand 0.9.0",
+ "ring-compat",
+ "serde",
+ "sha2",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

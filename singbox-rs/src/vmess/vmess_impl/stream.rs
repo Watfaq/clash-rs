@@ -8,19 +8,10 @@ use futures::ready;
 use md5::Md5;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::{
-    common::{
-        crypto::{self, AeadCipherHelper},
-        errors::map_io_error,
-        utils,
-    },
-    proxy::vmess::vmess_impl::MAX_CHUNK_SIZE,
-    session::SocksAddr,
-};
-
 use super::{
-    CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, OPTION_CHUNK_STREAM, SECURITY_AES_128_GCM,
-    SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security, VERSION,
+    CHUNK_SIZE, COMMAND_TCP, COMMAND_UDP, MAX_CHUNK_SIZE, OPTION_CHUNK_STREAM,
+    SECURITY_AES_128_GCM, SECURITY_CHACHA20_POLY1305, SECURITY_NONE, Security,
+    TargetAddr, VERSION,
     cipher::{AeadCipher, VmessSecurity},
     header,
     kdf::{
@@ -36,7 +27,7 @@ pub struct VmessStream<S> {
     stream: S,
     aead_read_cipher: Option<AeadCipher>,
     aead_write_cipher: Option<AeadCipher>,
-    dst: SocksAddr,
+    dst: TargetAddr,
     id: ID,
     req_body_iv: Vec<u8>,
     req_body_key: Vec<u8>,
@@ -78,7 +69,11 @@ enum WriteState {
     FlushingData(usize, (usize, usize)),
 }
 
-use crate::common::io::{ReadExactBase, ReadExt};
+use crate::{
+    common::AeadCipherHelper,
+    io::{ReadExactBase, ReadExt},
+    utils,
+};
 
 impl<S: AsyncRead + Unpin> ReadExactBase for VmessStream<S> {
     type I = S;
@@ -95,7 +90,7 @@ where
     pub(crate) async fn new(
         stream: S,
         id: &ID,
-        dst: &SocksAddr,
+        dst: &TargetAddr,
         security: &Security,
         is_aead: bool,
         is_udp: bool,
@@ -256,12 +251,12 @@ where
 
         if !is_aead {
             let mut data = buf.to_vec();
-            crypto::aes_cfb_encrypt(
+            utils::aes_cfb_encrypt(
                 &id.cmd_key[..],
                 &hash_timestamp(now)[..],
                 &mut data,
             )
-            .map_err(map_io_error)?;
+            .map_err(|x| std::io::Error::new(std::io::ErrorKind::Other, x))?;
 
             mbuf.put_slice(data.as_slice());
             let out = mbuf.freeze();
@@ -272,7 +267,7 @@ where
                 buf.freeze().to_vec(),
                 now,
             )
-            .map_err(map_io_error)?;
+            .map_err(|x| std::io::Error::new(std::io::ErrorKind::Other, x))?;
             stream.write_all(&out).await?;
         }
 
@@ -302,12 +297,14 @@ where
                     if !this.is_aead {
                         ready!(this.poll_read_exact(cx, 4))?;
                         let mut buf = this.read_buf.split().freeze().to_vec();
-                        crypto::aes_cfb_decrypt(
+                        utils::aes_cfb_decrypt(
                             &resp_body_key,
                             &resp_body_iv,
                             &mut buf,
                         )
-                        .map_err(map_io_error)?;
+                        .map_err(|x| {
+                            std::io::Error::new(std::io::ErrorKind::Other, x)
+                        })?;
                         if buf[0] != resp_v {
                             return Poll::Ready(Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
@@ -337,13 +334,15 @@ where
                                 KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
                             )[..12];
 
-                        let decrypted_response_header_len = crypto::aes_gcm_decrypt(
+                        let decrypted_response_header_len = utils::aes_gcm_decrypt(
                             aead_response_header_length_encryption_key,
                             aead_response_header_length_encryption_iv,
                             this.read_buf.split().as_ref(),
                             None,
                         )
-                        .map_err(map_io_error)?;
+                        .map_err(|x| {
+                            std::io::Error::new(std::io::ErrorKind::Other, x)
+                        })?;
 
                         if decrypted_response_header_len.len() < 2 {
                             return Err(std::io::Error::new(
@@ -381,13 +380,15 @@ where
                             KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_IV,
                         )[..12];
 
-                    let buf = crypto::aes_gcm_decrypt(
+                    let buf = utils::aes_gcm_decrypt(
                         aead_response_header_payload_encryption_key,
                         aead_response_header_payload_encryption_iv,
                         this.read_buf.split().as_ref(),
                         None,
                     )
-                    .map_err(map_io_error)?;
+                    .map_err(|x| {
+                        std::io::Error::new(std::io::ErrorKind::Other, x)
+                    })?;
 
                     if buf.len() < 4 {
                         return Poll::Ready(Err(std::io::Error::new(

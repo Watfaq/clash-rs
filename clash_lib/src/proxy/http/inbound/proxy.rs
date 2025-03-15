@@ -148,7 +148,7 @@ pub async fn handle(
             .preserve_header_case(true)
             .title_case_headers(true)
             .serve_connection(
-                stream,
+                TokioIo::new(stream),
                 ProxyService {
                     src,
                     dispatcher,

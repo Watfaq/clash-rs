@@ -10,19 +10,15 @@ use futures::Future;
 use http_body_util::Empty;
 use hyper::Uri;
 use hyper_util::{
-    client::legacy::{
-        Client,
-        connect::{Connected, Connection},
-    },
-    rt::TokioExecutor,
+    client::legacy::Client,
+    rt::{TokioExecutor, TokioIo},
 };
+use tokio::net::TcpStream;
 use tower::Service;
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver,
-    common::tls::GLOBAL_ROOT_STORE,
-    print_and_exit,
-    proxy::{AnyStream, utils::new_tcp_stream},
+    app::dns::ThreadSafeDNSResolver, common::tls::GLOBAL_ROOT_STORE, print_and_exit,
+    proxy::utils::new_tcp_stream,
 };
 
 #[derive(Clone)]
@@ -33,7 +29,7 @@ impl Service<Uri> for LocalConnector {
     type Error = std::io::Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-    type Response = AnyStream;
+    type Response = TokioIo<TcpStream>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -72,59 +68,8 @@ impl Service<Uri> for LocalConnector {
                 None,
             )
             .await
-            .map(|x| Box::new(x) as _)
+            .map(|x| TokioIo::new(x))
         })
-    }
-}
-
-impl Connection for AnyStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
-    }
-}
-
-impl hyper::rt::Read for AnyStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: hyper::rt::ReadBufCursor<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        let n = unsafe {
-            let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
-            match tokio::io::AsyncRead::poll_read(self, cx, &mut tbuf) {
-                Poll::Ready(Ok(())) => tbuf.filled().len(),
-                other => return other,
-            }
-        };
-
-        unsafe {
-            buf.advance(n);
-        }
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl hyper::rt::Write for AnyStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        tokio::io::AsyncWrite::poll_write(self, cx, buf)
-    }
-
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        tokio::io::AsyncWrite::poll_flush(self, cx)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        tokio::io::AsyncWrite::poll_shutdown(self, cx)
     }
 }
 

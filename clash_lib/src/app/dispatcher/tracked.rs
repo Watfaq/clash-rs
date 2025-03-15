@@ -9,9 +9,8 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{
-    app::router::RuleMatcher, proxy::datagram::UdpPacket, session::Session,
-};
+use crate::{app::router::RuleMatcher, session::Session};
+use singbox_rs::UdpPacket;
 
 use super::statistics_manager::{Manager, ProxyChain, TrackerInfo};
 

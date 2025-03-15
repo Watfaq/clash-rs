@@ -178,7 +178,7 @@ pub fn vmess_kdf_3_one_shot(
 
 #[cfg(test)]
 mod tests {
-    use crate::proxy::vmess::vmess_impl::kdf::{
+    use crate::vmess::vmess_impl::kdf::{
         KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_IV,
         KDF_SALT_CONST_AEAD_RESP_HEADER_LEN_KEY,
         KDF_SALT_CONST_AEAD_RESP_HEADER_PAYLOAD_KEY,

@@ -536,3 +536,14 @@ fn invalid_atyp() -> io::Error {
 fn insuff_bytes() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "insufficient bytes")
 }
+
+impl From<SocksAddr> for singbox_rs::SocksAddr {
+    fn from(value: SocksAddr) -> Self {
+        match value {
+            SocksAddr::Ip(addr) => singbox_rs::SocksAddr::Ip(addr.ip(), addr.port()),
+            SocksAddr::Domain(domain, port) => {
+                singbox_rs::SocksAddr::Domain(domain, port)
+            }
+        }
+    }
+}
