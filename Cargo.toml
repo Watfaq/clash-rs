@@ -6,6 +6,7 @@ members = [
     "clash_lib",
     "clash_doc",
     "clash_ffi",
+    "crates/*"
 ]
 
 

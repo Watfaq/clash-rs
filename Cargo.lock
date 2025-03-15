@@ -1255,6 +1255,10 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-rustls",
+ "watfaq_config",
+ "watfaq_error",
+ "watfaq_types",
+ "watfaq_utils",
  "webpki-roots",
  "windows 0.60.0",
 ]
@@ -8051,6 +8055,44 @@ dependencies = [
  "rustls-webpki",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "watfaq_config"
+version = "0.7.6"
+dependencies = [
+ "watfaq_types",
+]
+
+[[package]]
+name = "watfaq_error"
+version = "0.7.6"
+dependencies = [
+ "anyhow",
+ "ipnet",
+ "thiserror 1.0.69",
+ "tokio",
+ "watfaq-dns",
+]
+
+[[package]]
+name = "watfaq_types"
+version = "0.7.6"
+dependencies = [
+ "erased-serde",
+ "serde",
+ "socket2 0.5.8",
+ "watfaq_error",
+]
+
+[[package]]
+name = "watfaq_utils"
+version = "0.7.6"
+dependencies = [
+ "bytes",
+ "tokio",
+ "watfaq_error",
+ "watfaq_types",
 ]
 
 [[package]]

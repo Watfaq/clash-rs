@@ -56,11 +56,11 @@ pub use group::{fallback, loadbalance, relay, selector, urltest};
 
 mod common;
 pub mod inbound;
-mod options;
+
 mod transport;
 pub mod tunnel;
 
-pub use options::OutboundCommonOptions;
+pub use watfaq_config::OutboundCommonOptions;
 
 #[cfg(test)]
 pub mod mocks;

@@ -10,11 +10,11 @@ use futures::{Future, Sink, Stream, pin_mut, ready};
 use tracing::{debug, trace};
 
 use tokio::io::{AsyncReadExt, AsyncWrite};
+use watfaq_utils::{SocksAddrType, TargetAddrExt as _};
 
 use crate::{
-    modules::utils::TargetAddrExt,
     proxy::{AnyStream, datagram::UdpPacket},
-    session::{SocksAddrType, TargetAddr},
+    session::TargetAddr,
 };
 
 pub struct OutboundDatagramTrojan {

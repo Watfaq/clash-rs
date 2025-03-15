@@ -1,0 +1,8 @@
+[package]
+name = "watfaq_config"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+watfaq_types = { path = "../watfaq_types" }

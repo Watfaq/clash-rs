@@ -1,0 +1,12 @@
+[package]
+name = "watfaq_utils"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+bytes = "1"
+tokio = "1"
+
+watfaq_types = { path = "../watfaq_types" }
+watfaq_error = { path = "../watfaq_error" }

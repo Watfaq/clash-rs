@@ -5,8 +5,7 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
-
-use crate::{modules::types::TargetAddr, session::SocksAddrType};
+use watfaq_types::TargetAddr;
 
 // TODO
 // There are some helper functions which shouldn't be here
@@ -20,6 +19,14 @@ pub trait TargetAddrExt: Sized {
         r: &mut T,
     ) -> impl Future<Output = io::Result<Self>>;
     fn from_slice(buf: &[u8]) -> io::Result<Self>;
+}
+
+pub struct SocksAddrType;
+
+impl SocksAddrType {
+    pub const DOMAIN: u8 = 0x3;
+    pub const V4: u8 = 0x1;
+    pub const V6: u8 = 0x4;
 }
 
 impl TargetAddrExt for TargetAddr {

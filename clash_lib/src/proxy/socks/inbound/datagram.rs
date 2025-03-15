@@ -1,6 +1,4 @@
-use crate::{
-    modules::utils::TargetAddrExt, proxy::datagram::UdpPacket, session::TargetAddr,
-};
+use crate::{proxy::datagram::UdpPacket, session::TargetAddr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{
@@ -13,6 +11,7 @@ use tokio_util::{
     codec::{Decoder, Encoder},
     udp::UdpFramed,
 };
+use watfaq_utils::TargetAddrExt as _;
 
 // +----+------+------+----------+----------+----------+
 // |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |

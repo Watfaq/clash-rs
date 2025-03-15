@@ -29,8 +29,8 @@ use config::def::LogLevel;
 use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
 
-pub use crate::modules::error::{Error, Result};
 use std::{path::PathBuf, sync::Arc};
+pub use watfaq_error::{Error, Result};
 
 use tokio::{
     sync::{Mutex, broadcast, mpsc, oneshot},
@@ -44,7 +44,6 @@ mod common;
 pub mod config;
 #[cfg(not(feature = "internal"))]
 mod config;
-pub mod modules;
 mod proxy;
 mod session;
 

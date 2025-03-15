@@ -5,6 +5,7 @@ use bytes::{BufMut, BytesMut};
 use sha2::{Digest, Sha224};
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
+use watfaq_utils::TargetAddrExt as _;
 
 use crate::{
     app::{
@@ -16,7 +17,6 @@ use crate::{
     },
     common::utils,
     impl_default_connector,
-    modules::utils::TargetAddrExt,
     session::Session,
 };
 

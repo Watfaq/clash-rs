@@ -5,6 +5,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     str::FromStr,
 };
+use watfaq_error::anyhow::{self, anyhow};
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum TargetAddr {
@@ -171,7 +172,7 @@ impl TryFrom<TargetAddr> for SocketAddr {
 mod test {
     use std::{net::SocketAddr, str::FromStr as _};
 
-    use crate::session::TargetAddr;
+    use crate::TargetAddr;
 
     #[test]
     fn test_from_str() {

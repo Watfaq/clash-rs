@@ -1,10 +1,8 @@
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use watfaq_utils::TargetAddrExt as _;
 
-use crate::{
-    common::errors::new_io_error, modules::utils::TargetAddrExt, proxy::AnyStream,
-    session::TargetAddr,
-};
+use crate::{common::errors::new_io_error, proxy::AnyStream, session::TargetAddr};
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 

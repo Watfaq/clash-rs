@@ -10,15 +10,7 @@ use erased_serde::Serialize as ESerialize;
 
 use crate::app::net::Interface;
 
-pub use crate::modules::types::TargetAddr;
-
-pub struct SocksAddrType;
-
-impl SocksAddrType {
-    pub const DOMAIN: u8 = 0x3;
-    pub const V4: u8 = 0x1;
-    pub const V6: u8 = 0x4;
-}
+pub use watfaq_types::TargetAddr;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, Serialize)]
 pub enum Network {

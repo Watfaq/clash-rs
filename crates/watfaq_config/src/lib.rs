@@ -1,4 +1,4 @@
-use super::types::{Iface, StackPrefer};
+use watfaq_types::{Iface, StackPrefer};
 
 #[derive(Default, Debug, Clone)]
 pub struct OutboundCommonOptions {

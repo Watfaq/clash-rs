@@ -1,7 +1,6 @@
 use crate::{
     Dispatcher,
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
-    modules::utils::TargetAddrExt,
     proxy::{
         socks::{
             SOCKS5_VERSION, Socks5UDPCodec,
@@ -13,6 +12,7 @@ use crate::{
     session::{Network, Session, TargetAddr, Type},
 };
 use bytes::{BufMut, BytesMut};
+use watfaq_utils::TargetAddrExt as _;
 
 use std::{io, net::SocketAddr, str, sync::Arc};
 use tokio::{

@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
 
-pub use crate::modules::types::UdpPacket;
+pub use watfaq_types::UdpPacket;
 
 #[must_use = "sinks do nothing unless polled"]
 // TODO: maybe we should use abstract datagram IO interface instead of the

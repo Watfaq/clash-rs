@@ -7,6 +7,7 @@ use futures::ready;
 
 use md5::Md5;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use watfaq_utils::TargetAddrExt as _;
 
 use crate::{
     common::{
@@ -14,7 +15,6 @@ use crate::{
         errors::map_io_error,
         utils,
     },
-    modules::utils::TargetAddrExt,
     proxy::vmess::vmess_impl::MAX_CHUNK_SIZE,
     session::TargetAddr,
 };
