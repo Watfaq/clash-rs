@@ -16,13 +16,14 @@ use crate::{
     },
     common::utils,
     impl_default_connector,
+    modules::utils::TargetAddrExt,
     session::Session,
 };
 
 use self::datagram::OutboundDatagramTrojan;
 
 use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    AnyStream, ConnectorType, DialWithConnector, OutboundCommonOptions,
     OutboundHandler, OutboundType,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
@@ -32,7 +33,7 @@ mod datagram;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub password: String,

@@ -14,8 +14,9 @@ use crate::{
         errors::map_io_error,
         utils,
     },
+    modules::utils::TargetAddrExt,
     proxy::vmess::vmess_impl::MAX_CHUNK_SIZE,
-    session::SocksAddr,
+    session::TargetAddr,
 };
 
 use super::{
@@ -36,7 +37,7 @@ pub struct VmessStream<S> {
     stream: S,
     aead_read_cipher: Option<AeadCipher>,
     aead_write_cipher: Option<AeadCipher>,
-    dst: SocksAddr,
+    dst: TargetAddr,
     id: ID,
     req_body_iv: Vec<u8>,
     req_body_key: Vec<u8>,
@@ -95,7 +96,7 @@ where
     pub(crate) async fn new(
         stream: S,
         id: &ID,
-        dst: &SocksAddr,
+        dst: &TargetAddr,
         security: &Security,
         is_aead: bool,
         is_udp: bool,

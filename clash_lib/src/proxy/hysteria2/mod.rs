@@ -40,7 +40,7 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::tls::DefaultTlsVerifier,
-    session::{Session, SocksAddr},
+    session::{Session, TargetAddr},
 };
 use tracing::{debug, trace, warn};
 
@@ -69,7 +69,7 @@ pub enum Obfs {
 #[derive(Clone)]
 pub struct HystOption {
     pub name: String,
-    pub addr: SocksAddr,
+    pub addr: TargetAddr,
     pub ports: Option<PortGenerator>,
     pub sni: Option<String>,
     pub passwd: String,
@@ -183,8 +183,8 @@ impl Handler {
         // Everytime we enstablish a new session, we should lookup the server
         // address. maybe it changed since it use ddns
         let server_socket_addr = match self.opts.addr.clone() {
-            SocksAddr::Ip(ip) => ip,
-            SocksAddr::Domain(d, port) => {
+            TargetAddr::Socket(ip) => ip,
+            TargetAddr::Domain(d, port) => {
                 let ip = resolver
                     .resolve(d.as_str(), true)
                     .await?
@@ -502,7 +502,7 @@ impl HysteriaConnection {
     pub fn send_packet(
         &self,
         pkt: Bytes,
-        addr: SocksAddr,
+        addr: TargetAddr,
         session_id: u32,
         pkt_id: u16,
     ) -> std::io::Result<()> {

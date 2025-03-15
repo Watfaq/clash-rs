@@ -6,7 +6,7 @@ use crate::{
     Error,
     config::internal::proxy::OutboundTrojan,
     proxy::{
-        HandlerCommonOptions,
+        OutboundCommonOptions,
         transport::{GrpcClient, TlsClient, WsClient},
         trojan::{Handler, HandlerOptions},
     },
@@ -34,7 +34,7 @@ impl TryFrom<&OutboundTrojan> for Handler {
 
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

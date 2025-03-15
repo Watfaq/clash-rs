@@ -60,7 +60,7 @@ mod options;
 mod transport;
 pub mod tunnel;
 
-pub use options::HandlerCommonOptions;
+pub use options::OutboundCommonOptions;
 
 #[cfg(test)]
 pub mod mocks;

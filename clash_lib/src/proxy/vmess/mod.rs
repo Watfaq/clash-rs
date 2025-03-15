@@ -20,7 +20,7 @@ use crate::{
 use self::vmess_impl::OutboundDatagramVmess;
 
 use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    AnyStream, ConnectorType, DialWithConnector, OutboundCommonOptions,
     OutboundHandler, OutboundType,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
@@ -28,7 +28,7 @@ use super::{
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub uuid: String,

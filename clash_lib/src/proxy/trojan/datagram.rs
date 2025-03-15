@@ -12,13 +12,14 @@ use tracing::{debug, trace};
 use tokio::io::{AsyncReadExt, AsyncWrite};
 
 use crate::{
+    modules::utils::TargetAddrExt,
     proxy::{AnyStream, datagram::UdpPacket},
-    session::{SocksAddr, SocksAddrType},
+    session::{SocksAddrType, TargetAddr},
 };
 
 pub struct OutboundDatagramTrojan {
     inner: AnyStream,
-    remote_addr: SocksAddr,
+    remote_addr: TargetAddr,
 
     state: ReadState,
     read_buf: BytesMut,
@@ -29,7 +30,7 @@ pub struct OutboundDatagramTrojan {
 }
 
 impl OutboundDatagramTrojan {
-    pub fn new(inner: AnyStream, remote_addr: SocksAddr) -> Self {
+    pub fn new(inner: AnyStream, remote_addr: TargetAddr) -> Self {
         Self {
             inner,
             remote_addr,
@@ -152,8 +153,8 @@ enum ReadState {
     Atyp,
     Addr(u8),
     Port(Addr),
-    DataLen(SocksAddr),
-    Data(SocksAddr, usize),
+    DataLen(TargetAddr),
+    Data(TargetAddr, usize),
 }
 
 impl Stream for OutboundDatagramTrojan {
@@ -285,10 +286,10 @@ impl Stream for OutboundDatagramTrojan {
                     match ready!(fut.poll(cx)) {
                         Ok(port) => {
                             let addr = match addr {
-                                Addr::V4(ip) => SocksAddr::from((*ip, port)),
-                                Addr::V6(ip) => SocksAddr::from((*ip, port)),
+                                Addr::V4(ip) => TargetAddr::from((*ip, port)),
+                                Addr::V6(ip) => TargetAddr::from((*ip, port)),
                                 Addr::Domain(domain) => {
-                                    match SocksAddr::try_from((
+                                    match TargetAddr::try_from((
                                         domain.to_owned(),
                                         port,
                                     )) {

@@ -1,63 +1,16 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver, common::errors::new_io_error,
-    session::SocksAddr,
+    session::TargetAddr,
 };
 use futures::{Sink, Stream, ready};
 use std::{
-    fmt::{Debug, Display, Formatter},
     io,
     pin::Pin,
     task::{Context, Poll},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
 
-#[derive(Clone)]
-pub struct UdpPacket {
-    pub data: Vec<u8>,
-    pub src_addr: SocksAddr,
-    pub dst_addr: SocksAddr,
-}
-
-impl Default for UdpPacket {
-    fn default() -> Self {
-        Self {
-            data: Vec::new(),
-            src_addr: SocksAddr::any_ipv4(),
-            dst_addr: SocksAddr::any_ipv4(),
-        }
-    }
-}
-
-impl Debug for UdpPacket {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UdpPacket")
-            .field("src_addr", &self.src_addr)
-            .field("dst_addr", &self.dst_addr)
-            .finish()
-    }
-}
-
-impl Display for UdpPacket {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "UDP Packet from {} to {} with {} bytes",
-            self.src_addr,
-            self.dst_addr,
-            self.data.len()
-        )
-    }
-}
-
-impl UdpPacket {
-    pub fn new(data: Vec<u8>, src_addr: SocksAddr, dst_addr: SocksAddr) -> Self {
-        Self {
-            data,
-            src_addr,
-            dst_addr,
-        }
-    }
-}
+pub use crate::modules::types::UdpPacket;
 
 #[must_use = "sinks do nothing unless polled"]
 // TODO: maybe we should use abstract datagram IO interface instead of the
@@ -124,7 +77,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let dst = &p.dst_addr;
             let data = &p.data;
             let dst = match dst {
-                SocksAddr::Domain(domain, port) => {
+                TargetAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = *port;
                     let mut fut = resolver.resolve(domain.as_str(), false);
@@ -140,7 +93,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         )));
                     }
                 }
-                SocksAddr::Ip(addr) => *addr,
+                TargetAddr::Socket(addr) => *addr,
             };
 
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
@@ -189,7 +142,7 @@ impl Stream for OutboundDatagramImpl {
                 Poll::Ready(Some(UdpPacket {
                     data,
                     src_addr: src.into(),
-                    dst_addr: SocksAddr::any_ipv4(),
+                    dst_addr: TargetAddr::any_ipv4(),
                 }))
             }
             Err(_) => Poll::Ready(None),

@@ -4,7 +4,7 @@ use crate::{
     Error,
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
-        HandlerCommonOptions,
+        OutboundCommonOptions,
         shadowsocks::{Handler, HandlerOptions},
         transport::{
             Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
@@ -27,7 +27,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
     fn try_from(s: &OutboundShadowsocks) -> Result<Self, Self::Error> {
         let h = Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            common_opts: HandlerCommonOptions {
+            common_opts: OutboundCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
             },

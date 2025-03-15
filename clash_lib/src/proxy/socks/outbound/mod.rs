@@ -13,7 +13,7 @@ use crate::{
     common::errors::new_io_error,
     impl_default_connector,
     proxy::{
-        AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyStream, ConnectorType, DialWithConnector, OutboundCommonOptions,
         OutboundHandler, OutboundType,
         transport::Transport,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
@@ -30,7 +30,7 @@ use super::socks5::{client_handshake, socks_command};
 #[derive(Default)]
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub user: Option<String>,

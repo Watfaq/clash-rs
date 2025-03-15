@@ -21,7 +21,7 @@ use crate::{
 use self::{keys::KeyBytes, wireguard::Config};
 
 use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    ConnectorType, DialWithConnector, OutboundCommonOptions, OutboundHandler,
     OutboundType, utils::RemoteConnector,
 };
 
@@ -42,7 +42,7 @@ mod wireguard;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub server: String,
     pub port: u16,
     pub ip: Ipv4Addr,

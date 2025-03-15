@@ -7,7 +7,7 @@ use std::{
 use futures::{Sink, SinkExt, Stream};
 
 use crate::{
-    common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
+    common::errors::new_io_error, proxy::datagram::UdpPacket, session::TargetAddr,
 };
 
 use super::{
@@ -17,7 +17,7 @@ use super::{
 
 pub struct UdpSession {
     pub incoming: tokio::sync::mpsc::Sender<UdpPacket>,
-    pub local_addr: SocksAddr,
+    pub local_addr: TargetAddr,
     pub defragger: Defragger,
 }
 
@@ -37,7 +37,7 @@ impl HysteriaDatagramOutbound {
     pub async fn new(
         session_id: u32,
         conn: Arc<HysteriaConnection>,
-        local_addr: SocksAddr,
+        local_addr: TargetAddr,
     ) -> Self {
         let (send_tx, send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);

@@ -12,7 +12,7 @@ use crate::{
         AnyOutboundHandler,
         hysteria2::{self, Handler, HystOption, SalamanderObfs},
     },
-    session::SocksAddr,
+    session::TargetAddr,
 };
 #[derive(Clone)]
 pub struct PortGenerator {
@@ -84,7 +84,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundHysteria2) -> Result<Self, Self::Error> {
-        let addr = SocksAddr::try_from((value.server, value.port))?;
+        let addr = TargetAddr::try_from((value.server, value.port))?;
 
         let obfs = match (value.obfs, value.obfs_password.as_ref()) {
             (Some(obfs), Some(passwd)) => match obfs {

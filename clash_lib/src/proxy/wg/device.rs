@@ -26,7 +26,7 @@ use tokio::sync::{
 use tracing::{Instrument, debug, error, trace, trace_span, warn};
 
 use crate::{
-    app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::SocksAddr,
+    app::dns::ThreadSafeDNSResolver, proxy::datagram::UdpPacket, session::TargetAddr,
 };
 
 use super::{
@@ -169,7 +169,7 @@ impl DeviceManager {
 
             let pkt = UdpPacket::new(
                 msg.to_vec().unwrap(),
-                SocksAddr::any_ipv4(),
+                TargetAddr::any_ipv4(),
                 server.into(),
             );
 
@@ -456,7 +456,7 @@ impl DeviceManager {
                                 let socket = sockets.get_mut::<udp::Socket>(*handle);
                                 if socket.can_recv() {
                                     match socket.recv() {
-                                        Ok((data, md)) if !data.is_empty() => match sender.try_send(UdpPacket::new(data.into(), crate::session::SocksAddr::Ip(SocketAddr::new(md.endpoint.addr.into(), md.endpoint.port)), SocksAddr::any_ipv4())) {
+                                        Ok((data, md)) if !data.is_empty() => match sender.try_send(UdpPacket::new(data.into(), crate::session::TargetAddr::Socket(SocketAddr::new(md.endpoint.addr.into(), md.endpoint.port)), TargetAddr::any_ipv4())) {
                                             Ok(_) => {}
                                             Err(_) => {
                                                 trace!("socket {} closed from remote(?), aboring connection", handle);
@@ -483,8 +483,8 @@ impl DeviceManager {
                                                 socket.close();
                                             } else {
                                                 let ip = match &pkt.dst_addr {
-                                                    SocksAddr::Ip(addr) => addr.ip(),
-                                                    SocksAddr::Domain(domain, _) => {
+                                                    TargetAddr::Socket(addr) => addr.ip(),
+                                                    TargetAddr::Domain(domain, _) => {
                                                         if let Ok(ip) = domain.parse::<IpAddr>() {
                                                             ip
                                                         } else {

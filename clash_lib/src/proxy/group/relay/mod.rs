@@ -16,7 +16,7 @@ use crate::{
     },
     common::errors::new_io_error,
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundCommonOptions,
         OutboundHandler, OutboundType,
         utils::{
             DirectConnector, ProxyConnector, RemoteConnector,
@@ -28,7 +28,7 @@ use crate::{
 
 #[derive(Default)]
 pub struct HandlerOptions {
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
     pub name: String,
 }
 

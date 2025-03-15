@@ -43,7 +43,7 @@ use crate::{
     session::Session,
 };
 
-use crate::session::SocksAddr as ClashSocksAddr;
+use crate::session::TargetAddr as ClashSocksAddr;
 use quinn::{
     ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
     TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
@@ -53,7 +53,7 @@ use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
-    ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
+    ConnectorType, OutboundCommonOptions, OutboundHandler, OutboundType,
     datagram::UdpPacket,
 };
 
@@ -80,7 +80,7 @@ pub struct HandlerOptions {
     pub skip_cert_verify: bool,
 
     #[allow(dead_code)]
-    pub common_opts: HandlerCommonOptions,
+    pub common_opts: OutboundCommonOptions,
 
     /// not used
     #[allow(dead_code)]

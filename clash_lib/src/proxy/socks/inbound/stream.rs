@@ -1,6 +1,7 @@
 use crate::{
     Dispatcher,
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
+    modules::utils::TargetAddrExt,
     proxy::{
         socks::{
             SOCKS5_VERSION, Socks5UDPCodec,
@@ -9,7 +10,7 @@ use crate::{
         },
         utils::new_udp_socket,
     },
-    session::{Network, Session, SocksAddr, Type},
+    session::{Network, Session, TargetAddr, Type},
 };
 use bytes::{BufMut, BytesMut};
 
@@ -129,7 +130,7 @@ pub async fn handle_tcp<'a>(
         ));
     }
 
-    let dst = SocksAddr::read_from(&mut s).await?;
+    let dst = TargetAddr::read_from(&mut s).await?;
 
     match buf[1] {
         socks_command::CONNECT => {
@@ -139,7 +140,7 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
-            let bnd = SocksAddr::from(s.local_addr()?);
+            let bnd = TargetAddr::from(s.local_addr()?);
             bnd.write_buf(&mut buf);
             s.write_all(&buf[..]).await?;
             sess.destination = dst;
@@ -170,7 +171,7 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::SUCCEEDED);
             buf.put_u8(0x0);
-            let bnd = SocksAddr::from(udp_inbound.local_addr()?);
+            let bnd = TargetAddr::from(udp_inbound.local_addr()?);
             bnd.write_buf(&mut buf);
 
             let (close_handle, close_listener) = tokio::sync::oneshot::channel();
@@ -216,7 +217,7 @@ pub async fn handle_tcp<'a>(
             buf.put_u8(SOCKS5_VERSION);
             buf.put_u8(response_code::COMMAND_NOT_SUPPORTED);
             buf.put_u8(0x0);
-            SocksAddr::any_ipv4().write_buf(&mut buf);
+            TargetAddr::any_ipv4().write_buf(&mut buf);
             s.write_all(&buf).await?;
             Err(io::Error::new(
                 io::ErrorKind::Other,

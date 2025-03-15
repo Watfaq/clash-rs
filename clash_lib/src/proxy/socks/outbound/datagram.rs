@@ -11,7 +11,7 @@ use tracing::{error, trace};
 
 use crate::{
     proxy::{AnyStream, datagram::UdpPacket, socks::Socks5UDPCodec},
-    session::SocksAddr,
+    session::TargetAddr,
 };
 
 pub(crate) struct Socks5Datagram {
@@ -103,15 +103,15 @@ impl Stream for Socks5Datagram {
                     trace!("received UDP packet from {} to {}", src, dst,);
                     UdpPacket {
                         src_addr: src,
-                        dst_addr: SocksAddr::Ip(dst),
+                        dst_addr: TargetAddr::Socket(dst),
                         data: data.into(),
                     }
                 }
                 Err(_) => {
                     error!("failed to decode UDP packet from remote");
                     UdpPacket {
-                        src_addr: SocksAddr::any_ipv4(),
-                        dst_addr: SocksAddr::any_ipv4(),
+                        src_addr: TargetAddr::any_ipv4(),
+                        dst_addr: TargetAddr::any_ipv4(),
                         data: Vec::new(),
                     }
                 }

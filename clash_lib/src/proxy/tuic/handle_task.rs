@@ -7,7 +7,7 @@ use anyhow::Result;
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
 
-use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
+use crate::{proxy::datagram::UdpPacket, session::TargetAddr as ClashSocksAddr};
 
 use super::types::{TuicConnection, UdpRelayMode};
 
@@ -133,7 +133,7 @@ impl TuicConnection {
                     Address::DomainAddress(domain, port) => {
                         ClashSocksAddr::Domain(domain, port)
                     }
-                    Address::SocketAddress(socket) => ClashSocksAddr::Ip(socket),
+                    Address::SocketAddress(socket) => ClashSocksAddr::Socket(socket),
                 };
                 if let Err(err) = session
                     .send(UdpPacket::new(data.into(), remote_addr, local_addr))
