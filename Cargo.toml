@@ -20,6 +20,6 @@ homepage = "https://github.com/watfaq/clash-rs"
 opt-level = "s"
 codegen-units = 1
 lto = "thin"
-strip = "none"
+strip = true
 debug = 2
 panic = "abort"
