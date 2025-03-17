@@ -126,6 +126,7 @@ pub async fn authenticate(
             Ok(AuthResult::Success) => return Ok(AuthResult::Success),
             Ok(AuthResult::Failure {
                 remaining_methods: methods,
+                partial_success: _,
             }) => {
                 tried.insert(auth.method().into());
                 methods
@@ -297,7 +298,7 @@ where
                 Ok(r) => {
                     match r {
                         russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(AuthResult::Success),
-                        russh::client::KeyboardInteractiveAuthResponse::Failure{remaining_methods} => return Ok(AuthResult::Failure{remaining_methods}),
+                        russh::client::KeyboardInteractiveAuthResponse::Failure{remaining_methods,partial_success} => return Ok(AuthResult::Failure{remaining_methods, partial_success}),
                         russh::client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
                             let response = (self.handler)(name, instructions, prompts, username);
                             resp = client.authenticate_keyboard_interactive_respond(response).await;
