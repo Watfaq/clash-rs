@@ -83,7 +83,7 @@ pub struct Profile {
 #[derive(Default)]
 pub struct TunConfig {
     pub enable: bool,
-    pub device_id: Option<String>,
+    pub device_id: String,
     pub route_all: bool,
     pub routes: Vec<IpNet>,
     pub gateway: IpNet,

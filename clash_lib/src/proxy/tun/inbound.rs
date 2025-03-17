@@ -238,9 +238,6 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
-/// macos required the name schema
-const TUN_NAME: &str = "utun8";
-
 pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
@@ -251,32 +248,9 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id: String = if cfg!(target_os = "android") {
-        match &cfg.device_id {
-            Some(id) => {
-                if Url::parse(id).is_err() {
-                    format!("dev://{}", id)
-                } else {
-                    id.clone()
-                }
-            }
-            None => {
-                return Err(Error::InvalidConfig(
-                    "tun device id must be provided on android".to_string(),
-                ));
-            }
-        }
-    } else {
-        cfg.device_id
-            .clone()
-            .unwrap_or_else(|| TUN_NAME.to_string())
-    };
-
     let mut tun_cfg = tun::Configuration::default();
 
-    let u = Url::parse(&device_id);
-    // .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
-    match u {
+    match Url::parse(&cfg.device_id) {
         Ok(u) => {
             warn!("todo: URL format configuration will no longer be supported.");
             match u.scheme() {
@@ -294,20 +268,34 @@ pub fn get_runner(
                 "dev" => {
                     let dev =
                         u.host().expect("tun dev must be provided").to_string();
+                    if cfg!(target_os = "macos") {
+                        if !dev.starts_with("utun") {
+                            return Err(Error::InvalidConfig(format!(
+                                "invalid device id: {}. tun name must be utunX",
+                                cfg.device_id
+                            )));
+                        }
+                    }
                     tun_cfg.tun_name(dev);
                 }
                 _ => {
                     return Err(Error::InvalidConfig(format!(
                         "invalid device id: {}",
-                        device_id
+                        cfg.device_id
                     )));
                 }
             }
         }
-        Err(e) => {
-            // todo: will support the following format to build the tun device.
-            warn!("used the mihomo standard tun cfg. {}", e);
-            tun_cfg.tun_name(TUN_NAME);
+        Err(_) => {
+            if cfg!(target_os = "macos") {
+                if !&cfg.device_id.starts_with("utun") {
+                    return Err(Error::InvalidConfig(format!(
+                        "invalid device id: {}. tun name must be utunX",
+                        cfg.device_id
+                    )));
+                }
+            }
+            tun_cfg.tun_name(&cfg.device_id);
         }
     }
 
