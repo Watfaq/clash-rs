@@ -4,7 +4,10 @@ use std::{io, sync::Arc};
 
 use super::Transport;
 use crate::{
-    common::tls::{DefaultTlsVerifier, GLOBAL_ROOT_STORE},
+    common::{
+        errors::map_io_error,
+        tls::{DefaultTlsVerifier, GLOBAL_ROOT_STORE},
+    },
     proxy::AnyStream,
 };
 
@@ -67,7 +70,7 @@ impl Transport for Client {
         let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
         let dns_name =
             rustls::pki_types::ServerName::try_from(self.sni.as_str().to_owned())
-                .unwrap_or_else(|_| panic!("invalid server name: {}", self.sni));
+                .map_err(map_io_error)?;
 
         let c = connector.connect(dns_name, stream).await.and_then(|x| {
             if let Some(expected_alpn) = self.expected_alpn.as_ref() {

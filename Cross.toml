@@ -6,5 +6,5 @@ pre-build = [
 
 [build.env]
 volumes = ["/var/run/docker.sock=/var/run/docker.sock", "/tmp=/tmp"] # Docker in docker
-passthrough = ["CLASH_GIT_REF", "CLASH_GIT_SHA", "RUSTFLAGS", "RUST_LOG", "CLASH_DOCKER_TEST"]
+passthrough = ["CLASH_GIT_REF", "CLASH_GIT_SHA", "RUSTFLAGS", "RUST_LOG", "CLASH_DOCKER_TEST", "SENTRY_DSN"]
 

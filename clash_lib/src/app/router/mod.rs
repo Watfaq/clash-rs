@@ -4,6 +4,7 @@ use crate::{
         domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
         ipcidr::IpCidr, ruleset::RuleSet,
     },
+    print_and_exit,
 };
 
 use crate::{
@@ -158,7 +159,7 @@ impl Router {
                 RuleProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url.parse::<Uri>().unwrap_or_else(|_| {
-                            panic!("invalid provider url: {}", http.url)
+                            print_and_exit!("invalid provider url: {}", http.url)
                         }),
                         http.path,
                         Some(cwd.clone()),
@@ -329,7 +330,7 @@ pub fn map_rule_type(
                 rule_provider_registry
                     .get(&rule_set)
                     .unwrap_or_else(|| {
-                        panic!("rule provider {} not found", rule_set)
+                        print_and_exit!("rule provider {} not found", rule_set)
                     })
                     .clone(),
             )),

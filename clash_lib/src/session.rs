@@ -157,7 +157,7 @@ impl SocksAddr {
     pub fn must_into_socket_addr(self) -> SocketAddr {
         match self {
             SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(..) => panic!("not a socket address"),
+            SocksAddr::Domain(..) => panic!("not a socket address {:?}", self),
         }
     }
 

@@ -149,12 +149,6 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
     .map_err(|x| eprintln!("failed to setup logging: {}", x))
     .unwrap_or_default();
 
-    let default_panic = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        default_panic(info);
-        error!("panic hook: {:#}", info);
-    }));
-
     rt.block_on(async {
         match start(config, cwd, log_tx).await {
             Err(e) => {

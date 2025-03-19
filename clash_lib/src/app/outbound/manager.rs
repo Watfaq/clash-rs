@@ -24,6 +24,7 @@ use crate::{
     config::internal::proxy::{
         OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
+    print_and_exit,
     proxy::{
         OutboundType, fallback, loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
@@ -396,7 +397,10 @@ impl OutboundManager {
                             let provider = provider_registry
                                 .get(provider_name)
                                 .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
+                                    print_and_exit!(
+                                        "provider {} not found",
+                                        provider_name
+                                    );
                                 })
                                 .clone();
                             providers.push(provider);
@@ -450,7 +454,10 @@ impl OutboundManager {
                             let provider = provider_registry
                                 .get(provider_name)
                                 .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
+                                    print_and_exit!(
+                                        "provider {} not found",
+                                        provider_name
+                                    );
                                 })
                                 .clone();
                             providers.push(provider);
@@ -507,7 +514,10 @@ impl OutboundManager {
                             let provider = provider_registry
                                 .get(provider_name)
                                 .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
+                                    print_and_exit!(
+                                        "provider {} not found",
+                                        provider_name
+                                    );
                                 })
                                 .clone();
                             providers.push(provider);
@@ -563,7 +573,10 @@ impl OutboundManager {
                             let provider = provider_registry
                                 .get(provider_name)
                                 .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
+                                    print_and_exit!(
+                                        "provider {} not found",
+                                        provider_name
+                                    );
                                 })
                                 .clone();
                             providers.push(provider);
@@ -619,7 +632,10 @@ impl OutboundManager {
                             let provider = provider_registry
                                 .get(provider_name)
                                 .unwrap_or_else(|| {
-                                    panic!("provider {} not found", provider_name)
+                                    print_and_exit!(
+                                        "provider {} not found",
+                                        provider_name
+                                    );
                                 })
                                 .clone();
 
@@ -703,7 +719,7 @@ impl OutboundManager {
                 OutboundProxyProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url.parse::<Uri>().unwrap_or_else(|_| {
-                            panic!("invalid provider url: {}", http.url)
+                            print_and_exit!("invalid provider url: {}", http.url);
                         }),
                         http.path,
                         Some(cwd.clone()),
