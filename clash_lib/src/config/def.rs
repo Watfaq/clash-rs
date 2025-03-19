@@ -10,6 +10,10 @@ const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 use super::config::BindAddress;
 
+fn default_tun_device_id() -> String {
+    "utun1989".to_string()
+}
+
 fn default_tun_address() -> String {
     "198.18.0.1/24".to_string()
 }
@@ -38,7 +42,16 @@ impl Default for DnsHijack {
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
-    #[serde(alias = "device-url")]
+    #[serde(alias = "device-url", alias = "device")]
+    #[serde(default = "default_tun_device_id")]
+    /// tun interface device id
+    /// # Example:
+    ///  * `dev://utun1989` on macOS
+    ///  * `dev://tun0` on Linux
+    ///  * `fd://3` if you want to use an existing file descriptor
+    ///  * `utun1989` -> equivalent to `dev://utun1989`
+    ///
+    /// *Note*: macOS requires the `utun` prefix
     pub device_id: String,
     /// tun interface address
     #[serde(default = "default_tun_address")]

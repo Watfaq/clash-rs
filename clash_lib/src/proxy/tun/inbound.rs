@@ -248,32 +248,44 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let device_id = &cfg.device_id;
-
-    let u = Url::parse(device_id)
-        .map_err(|x| Error::InvalidConfig(format!("tun device {}", x)))?;
-
     let mut tun_cfg = tun::Configuration::default();
 
-    match u.scheme() {
-        "fd" => {
-            let fd = u
-                .host()
-                .expect("tun fd must be provided")
-                .to_string()
-                .parse()
-                .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
-            tun_cfg.raw_fd(fd);
-        }
-        "dev" => {
-            let dev = u.host().expect("tun dev must be provided").to_string();
-            tun_cfg.tun_name(dev);
-        }
-        _ => {
-            return Err(Error::InvalidConfig(format!(
-                "invalid device id: {}",
-                device_id
-            )));
+    match Url::parse(&cfg.device_id) {
+        Ok(u) => match u.scheme() {
+            "fd" => {
+                let fd = u
+                    .host()
+                    .expect("tun fd must be provided")
+                    .to_string()
+                    .parse()
+                    .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
+                tun_cfg.raw_fd(fd);
+            }
+            "dev" => {
+                let dev = u.host().expect("tun dev must be provided").to_string();
+                if cfg!(target_os = "macos") && !dev.starts_with("utun") {
+                    return Err(Error::InvalidConfig(format!(
+                        "invalid device id: {}. tun name must be utunX",
+                        cfg.device_id
+                    )));
+                }
+                tun_cfg.tun_name(dev);
+            }
+            _ => {
+                return Err(Error::InvalidConfig(format!(
+                    "invalid device id: {}",
+                    cfg.device_id
+                )));
+            }
+        },
+        Err(_) => {
+            if cfg!(target_os = "macos") && !&cfg.device_id.starts_with("utun") {
+                return Err(Error::InvalidConfig(format!(
+                    "invalid device id: {}. tun name must be utunX",
+                    cfg.device_id
+                )));
+            }
+            tun_cfg.tun_name(&cfg.device_id);
         }
     }
 
