@@ -45,11 +45,12 @@ pub struct TunConfig {
     #[serde(alias = "device-url", alias = "device")]
     #[serde(default = "default_tun_device_id")]
     /// tun interface device id
-    /// Example:
+    /// # Example:
     ///  * `dev://utun1989` on macOS
     ///  * `dev://tun0` on Linux
     ///  * `fd://3` if you want to use an existing file descriptor
     ///  * `utun1989` -> equivalent to `dev://utun1989`
+    ///
     /// *Note*: macOS requires the `utun` prefix
     pub device_id: String,
     /// tun interface address

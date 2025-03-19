@@ -263,13 +263,11 @@ pub fn get_runner(
             }
             "dev" => {
                 let dev = u.host().expect("tun dev must be provided").to_string();
-                if cfg!(target_os = "macos") {
-                    if !dev.starts_with("utun") {
-                        return Err(Error::InvalidConfig(format!(
-                            "invalid device id: {}. tun name must be utunX",
-                            cfg.device_id
-                        )));
-                    }
+                if cfg!(target_os = "macos") && !dev.starts_with("utun") {
+                    return Err(Error::InvalidConfig(format!(
+                        "invalid device id: {}. tun name must be utunX",
+                        cfg.device_id
+                    )));
                 }
                 tun_cfg.tun_name(dev);
             }
@@ -281,13 +279,11 @@ pub fn get_runner(
             }
         },
         Err(_) => {
-            if cfg!(target_os = "macos") {
-                if !&cfg.device_id.starts_with("utun") {
-                    return Err(Error::InvalidConfig(format!(
-                        "invalid device id: {}. tun name must be utunX",
-                        cfg.device_id
-                    )));
-                }
+            if cfg!(target_os = "macos") && !&cfg.device_id.starts_with("utun") {
+                return Err(Error::InvalidConfig(format!(
+                    "invalid device id: {}. tun name must be utunX",
+                    cfg.device_id
+                )));
             }
             tun_cfg.tun_name(&cfg.device_id);
         }
