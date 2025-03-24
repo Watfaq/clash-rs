@@ -114,7 +114,7 @@ enum_dispatch = "0.3"
 watfaq-dns = { version = "0.1.2" }
 hickory-client = "0.25"
 hickory-resolver = "0.25"
-hickory-proto = { version = "0.25", features = []}
+hickory-proto = { version = "0.25"}
 
 dhcproto = "0.12"
 ring-compat = { version = "0.8", features = ["aead"] }
