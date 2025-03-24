@@ -112,7 +112,7 @@ enum_dispatch = "0.3"
 
 # DNS
 watfaq-dns = { version = "0.1.1" }
-hickory-client = "0.25.0-alpha.2"
+hickory-client = "0.25.0-alpha.5"
 hickory-resolver = "0.25.0-alpha.2"
 hickory-proto = { version = "0.25.0-alpha.2", features = ["dns-over-rustls", "dns-over-https-rustls", "dns-over-h3"]}
 
@@ -139,7 +139,7 @@ quinn = { version = "0.11", default-features = false, features = ["futures-io", 
 
 # hysteria2
 h3 = "0.0.7"
-h3-quinn = "0.0.8"
+h3-quinn = "0.0.9"
 quinn-proto = "0.11.8"
 blake2 = "0.10.6"
 digest = "0.10.7"
@@ -181,7 +181,7 @@ security-framework = "3.2.0"
 tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.60", features = [
+windows = { version = "0.61", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",
