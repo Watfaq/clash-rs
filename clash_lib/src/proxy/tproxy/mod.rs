@@ -62,11 +62,9 @@ impl InboundHandlerTrait for TproxyInbound {
         loop {
             let (socket, _) = listener.accept().await?;
             let src_addr = socket.peer_addr()?;
-            if !self.allow_lan {
-                if src_addr.ip() != socket.local_addr()?.ip() {
-                    warn!("Connection from {} is not allowed", src_addr);
-                    continue;
-                }
+            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+                warn!("Connection from {} is not allowed", src_addr);
+                continue;
             }
 
             let socket = apply_tcp_options(socket)?;
@@ -182,11 +180,9 @@ async fn handle_inbound_datagram(
                     }
 
                     trace!("recv msg:{:?} orig_dst:{:?}", meta, orig_dst);
-                    if !allow_lan && let Ok(local_addr) = socket.local_addr() {
-                        if meta.addr.ip() != local_addr.ip() {
-                            warn!("Connection from {} is not allowed", meta.addr);
-                            continue;
-                        }
+                    if !allow_lan && let Ok(local_addr) = socket.local_addr() && meta.addr.ip() != local_addr.ip() {
+                        warn!("Connection from {} is not allowed", meta.addr);
+                        continue;
                     }
                     let pkt = UdpPacket {
                         data: buf[..meta.len].to_vec(),
