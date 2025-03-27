@@ -180,7 +180,10 @@ async fn handle_inbound_datagram(
                     }
 
                     trace!("recv msg:{:?} orig_dst:{:?}", meta, orig_dst);
-                    if !allow_lan && let Ok(local_addr) = socket.local_addr() && meta.addr.ip() != local_addr.ip() {
+                    if !allow_lan
+                        && let Ok(local_addr) = socket.local_addr()
+                        && meta.addr.ip() != local_addr.ip()
+                    {
                         warn!("Connection from {} is not allowed", meta.addr);
                         continue;
                     }
