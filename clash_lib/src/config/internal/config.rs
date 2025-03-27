@@ -104,6 +104,13 @@ impl BindAddress {
     pub fn local() -> Self {
         Self(IpAddr::V4(Ipv4Addr::LOCALHOST))
     }
+
+    pub fn is_localhost(&self) -> bool {
+        match self.0 {
+            IpAddr::V4(ip) => ip.is_loopback(),
+            IpAddr::V6(ip) => ip.is_loopback(),
+        }
+    }
 }
 impl Default for BindAddress {
     fn default() -> Self {

@@ -92,9 +92,8 @@ impl InboundOpts {
 pub struct CommonInboundOpts {
     pub name: String,
     pub listen: BindAddress,
+    // TODO: make this reloadable in inbound listeners
+    pub allow_lan: bool,
     #[educe(Default = 0)]
     pub port: u16,
-    // TODO opts down below is unimplemented
-    pub rule: Option<String>,
-    pub proxy: Option<String>,
 }
