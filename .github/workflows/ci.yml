@@ -278,13 +278,13 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test and coverage
+      - name: Cargo test
         uses: clechasseur/rs-cargo@v3
         if: ${{ !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
-          command: 'test'
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} }}
+          command: "test"
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}

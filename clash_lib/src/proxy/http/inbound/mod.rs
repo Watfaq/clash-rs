@@ -17,6 +17,7 @@ use tracing::warn;
 #[derive(Clone)]
 pub struct HttpInbound {
     addr: SocketAddr,
+    allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 }
@@ -30,11 +31,13 @@ impl Drop for HttpInbound {
 impl HttpInbound {
     pub fn new(
         addr: SocketAddr,
+        allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
     ) -> Self {
         Self {
             addr,
+            allow_lan,
             dispatcher,
             authenticator,
         }
@@ -54,7 +57,13 @@ impl InboundHandlerTrait for HttpInbound {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
-            let (socket, src_addr) = listener.accept().await?;
+            let (socket, _) = listener.accept().await?;
+            let src_addr = socket.peer_addr()?;
+
+            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+                warn!("Connection from {} is not allowed", src_addr);
+                continue;
+            }
 
             let socket = apply_tcp_options(socket)?;
 

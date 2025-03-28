@@ -457,7 +457,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res.unwrap_err().to_string().contains(
             "the cryptographic handshake failed: error 45: invalid peer \
-             certificate: Expired"
+             certificate: certificate expired"
         ));
         Ok(())
     }

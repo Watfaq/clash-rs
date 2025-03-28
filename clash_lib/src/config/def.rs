@@ -305,8 +305,7 @@ pub struct Config {
 
     /// HTTP and SOCKS5 proxy authentication
     pub authentication: Vec<String>,
-    /// Allow connections to the local-end server from other LAN IP addresses
-    /// Deprecated see `bind_address`
+    /// Allow connections from IP addresses other than local listening address
     pub allow_lan: Option<bool>,
     /// The address that the inbound listens on
     /// # Note
