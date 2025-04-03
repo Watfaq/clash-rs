@@ -50,7 +50,7 @@ thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "0.3", features = ["macros", "local-offset"] }
+time = { version = "=0.3.39", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
 
@@ -123,7 +123,7 @@ rand = "0.9"
 tracing = "0.1"
 
 shadowsocks = { version="1.23", optional = true, features=["aead-cipher-2022","stream-cipher"] }
-maxminddb = "0.25"
+maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
@@ -166,7 +166,7 @@ bollard = "0.18"
 serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
-rand_chacha = "0.3"
+rand_chacha = "=0.3"
 
 [build-dependencies]
 prost-build = "0.13"
