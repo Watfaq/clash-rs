@@ -50,7 +50,7 @@ thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "0.3", features = ["macros", "local-offset"] }
+time = { version = "=0.3.39", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
 
@@ -127,8 +127,8 @@ maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.29", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.29", optional = true, default-features = false }
+arti-client = { version = "0.28", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.28", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.4.5", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
@@ -166,7 +166,7 @@ bollard = "0.18"
 serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
-rand_chacha = "0.3"
+rand_chacha = "=0.3"
 
 [build-dependencies]
 prost-build = "0.13"
