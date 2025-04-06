@@ -270,6 +270,18 @@ pub fn get_runner(
                     )));
                 }
                 tun_cfg.tun_name(dev);
+                #[cfg(target_os = "windows")]
+                {
+                    let guid = u.query_pairs().find(|(k, _)| k == "guid");
+                    if let Some((_, v)) = guid {
+                        let guid = uuid::Uuid::parse_str(&v).map_err(|x| {
+                            Error::InvalidConfig(format!("invalid guid: {}", x))
+                        })?;
+                        tun_cfg.platform_config(|cfg| {
+                            cfg.device_guid(guid.as_u128());
+                        });
+                    }
+                }
             }
             _ => {
                 return Err(Error::InvalidConfig(format!(
