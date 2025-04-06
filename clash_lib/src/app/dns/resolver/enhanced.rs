@@ -42,6 +42,7 @@ pub struct EnhancedResolver {
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
+    // TODO: replace this with hickory_resolver::dns_lru::DnsLru
     lru_cache: Option<Arc<RwLock<lru_time_cache::LruCache<String, op::Message>>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 

@@ -17,6 +17,7 @@ pub use datagram::Socks5UDPCodec;
 
 pub struct SocksInbound {
     addr: SocketAddr,
+    allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
 }
@@ -30,11 +31,13 @@ impl Drop for SocksInbound {
 impl SocksInbound {
     pub fn new(
         addr: SocketAddr,
+        allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
     ) -> Self {
         Self {
             addr,
+            allow_lan,
             dispatcher,
             authenticator,
         }
@@ -55,7 +58,11 @@ impl InboundHandlerTrait for SocksInbound {
 
         loop {
             let (socket, _) = listener.accept().await?;
-
+            let src_addr = socket.peer_addr()?;
+            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+                warn!("Connection from {} is not allowed", src_addr);
+                continue;
+            }
             let socket = apply_tcp_options(socket)?;
 
             let mut sess = Session {

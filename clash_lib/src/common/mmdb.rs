@@ -49,8 +49,8 @@ impl Mmdb {
         match maxminddb::Reader::open_readfile(&path) {
             Ok(r) => Ok(r),
             Err(e) => match e {
-                maxminddb::MaxMindDBError::InvalidDatabaseError(_)
-                | maxminddb::MaxMindDBError::IoError(_) => {
+                maxminddb::MaxMindDbError::InvalidDatabase(_)
+                | maxminddb::MaxMindDbError::Io(_) => {
                     warn!(
                         "invalid mmdb `{}`: {}, trying to download again",
                         path.as_ref().to_string_lossy(),
@@ -96,9 +96,23 @@ impl Mmdb {
         self.reader
             .lookup::<geoip2::Country>(ip)
             .map_err(map_io_error)
+            .and_then(|c| {
+                c.ok_or(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "country not found",
+                ))
+            })
     }
 
     pub fn lookup_asn(&self, ip: IpAddr) -> std::io::Result<geoip2::Asn> {
-        self.reader.lookup::<geoip2::Asn>(ip).map_err(map_io_error)
+        self.reader
+            .lookup::<geoip2::Asn>(ip)
+            .map_err(map_io_error)
+            .and_then(|c| {
+                c.ok_or(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "asn not found",
+                ))
+            })
     }
 }

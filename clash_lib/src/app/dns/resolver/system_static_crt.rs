@@ -15,7 +15,7 @@ pub struct SystemResolver {
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            inner: TokioResolver::tokio_from_system_conf()?,
+            inner: TokioResolver::builder_tokio()?.build(),
             ipv6: AtomicBool::new(ipv6),
         })
     }
