@@ -1118,7 +1118,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "clash-rs"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "clap",
  "clash_lib",
@@ -1130,21 +1130,21 @@ dependencies = [
 
 [[package]]
 name = "clash_doc"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "clash_lib",
 ]
 
 [[package]]
 name = "clash_ffi"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "clash_lib",
 ]
 
 [[package]]
 name = "clash_lib"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "aead",
  "aes",
