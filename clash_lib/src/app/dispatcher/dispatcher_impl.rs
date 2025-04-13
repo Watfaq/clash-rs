@@ -263,6 +263,8 @@ impl Dispatcher {
                     }
                 };
 
+                // for TUN or Tproxy, we need the original destination address
+                let orig_dest = packet.dst_addr.clone();
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = dest.clone();
 
@@ -339,7 +341,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = sess.destination.clone();
+                                packet.src_addr = orig_dest.clone();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!(
