@@ -256,12 +256,13 @@ impl Dispatcher {
         let (remote_receiver_w, mut remote_receiver_r) =
             tokio::sync::mpsc::channel(32);
 
-        let s = sess.clone();
-        let ss = sess.clone();
+        let s1 = sess.clone();
         let t1 = tokio::spawn(async move {
             while let Some(packet) = local_r.next().await {
-                let mut sess = sess.clone();
-                sess.source = packet.src_addr.clone().must_into_socket_addr();
+                let orig_sess = s1.clone();
+                let mut out_going_sess = orig_sess.clone();
+                out_going_sess.source =
+                    packet.src_addr.clone().must_into_socket_addr();
 
                 let dest: SocksAddr = match &packet.dst_addr {
                     crate::session::SocksAddr::Ip(socket_addr) => {
@@ -299,7 +300,7 @@ impl Dispatcher {
                             .expect("must be valid domain")
                     }
                 };
-                sess.destination = dest.clone();
+                out_going_sess.destination = dest.clone();
 
                 // mutate packet for fake ip
                 let mut packet = packet;
@@ -312,13 +313,16 @@ impl Dispatcher {
 
                 let (outbound_name, rule) = match mode {
                     RunMode::Global => (PROXY_GLOBAL, None),
-                    RunMode::Rule => router.match_route(&mut sess).await,
+                    RunMode::Rule => router.match_route(&mut out_going_sess).await,
                     RunMode::Direct => (PROXY_DIRECT, None),
                 };
 
                 let outbound_name = outbound_name.to_string();
 
-                debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);
+                debug!(
+                    "dispatching {} to {}[{}]",
+                    &out_going_sess, outbound_name, mode
+                );
 
                 let remote_receiver_w = remote_receiver_w.clone();
 
@@ -344,9 +348,12 @@ impl Dispatcher {
                     .await
                 {
                     None => {
-                        debug!("building {} outbound datagram connecting", sess);
+                        debug!(
+                            "building {} outbound datagram connecting",
+                            out_going_sess
+                        );
                         let outbound_datagram = match handler
-                            .connect_datagram(&sess, resolver.clone())
+                            .connect_datagram(&out_going_sess, resolver.clone())
                             .await
                         {
                             Ok(v) => v,
@@ -356,12 +363,12 @@ impl Dispatcher {
                             }
                         };
 
-                        debug!("{} outbound datagram connected", sess);
+                        debug!("{} outbound datagram connected", out_going_sess);
 
                         let outbound_datagram = TrackedDatagram::new(
                             outbound_datagram,
                             manager.clone(),
-                            sess.clone(),
+                            out_going_sess.clone(),
                             rule,
                         )
                         .await;
@@ -375,12 +382,12 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = sess.destination.clone();
-                                packet.dst_addr = sess.source.into();
+                                packet.src_addr = orig_sess.destination.clone();
+                                packet.dst_addr = orig_sess.source.into();
 
                                 debug!(
                                     "UDP NAT for packet: {:?}, session: {}",
-                                    packet, sess
+                                    packet, out_going_sess
                                 );
                                 match remote_receiver_w.send(packet).await {
                                     Ok(_) => {}
@@ -428,7 +435,7 @@ impl Dispatcher {
                     Some(handle) => match handle.send(packet).await {
                         // TODO: need to reset when GLOBAL select is changed
                         Ok(_) => {
-                            debug!("reusing {} sent to remote", sess);
+                            debug!("reusing {} sent to remote", orig_sess);
                         }
                         Err(err) => {
                             error!("failed to send packet to remote: {}", err);
@@ -437,10 +444,10 @@ impl Dispatcher {
                 };
             }
 
-            trace!("UDP session local -> remote finished for {}", ss);
+            trace!("UDP session local -> remote finished for {}", &s1);
         });
 
-        let ss = s.clone();
+        let s2 = sess.clone();
         let t2 = tokio::spawn(async move {
             while let Some(packet) = remote_receiver_r.recv().await {
                 match local_w.send(packet.clone()).await {
@@ -453,14 +460,14 @@ impl Dispatcher {
                     }
                 }
             }
-            trace!("UDP session remote -> local finished for {}", ss);
+            trace!("UDP session remote -> local finished for {}", s2);
         });
 
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
 
         tokio::spawn(async move {
             if (close_receiver.await).is_ok() {
-                trace!("UDP close signal for {} received", s);
+                trace!("UDP close signal for {} received", sess);
                 t1.abort();
                 t2.abort();
             } else {
