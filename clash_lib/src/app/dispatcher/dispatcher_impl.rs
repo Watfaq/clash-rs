@@ -80,7 +80,7 @@ impl Dispatcher {
         mut sess: Session,
         mut lhs: Box<dyn ClientStream>,
     ) {
-        let dest: SocksAddr = match resolve(&self.resolver, &sess.destination).await
+        let dest: SocksAddr = match reverse_lookup(&self.resolver, &sess.destination).await
         {
             Some(dest) => dest,
             None => {
@@ -243,7 +243,6 @@ impl Dispatcher {
          *  notice:
          *    the NAT is binded to the session in the dispatch_datagram function arg and the closure
          *    so we need not to add a global NAT table and do the translation
-         *    but the price is, we have to spawn two tasks for each session
          */
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) =
@@ -255,7 +254,7 @@ impl Dispatcher {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
 
-                let dest = match resolve(&resolver, &packet.dst_addr).await {
+                let dest = match reverse_lookup(&resolver, &packet.dst_addr).await {
                     Some(dest) => dest,
                     None => {
                         warn!("failed to resolve destination {}", sess);
@@ -442,7 +441,7 @@ impl Dispatcher {
 // if the destination is an IP address, check if it's a fake IP
 // or look for cached IP
 // if the destination is a domain name, don't resolve
-async fn resolve(
+async fn reverse_lookup(
     resolver: &Arc<dyn ClashResolver>,
     dst: &SocksAddr,
 ) -> Option<SocksAddr> {
