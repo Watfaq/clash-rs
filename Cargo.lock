@@ -206,9 +206,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.97"
+version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
+checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "arc-swap"
@@ -600,9 +600,9 @@ checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
 name = "base32"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
+checksum = "022dfe9eb35f19ebbcb51e0b40a5ab759f46ad60cadf7297e0bd085afb50e076"
 
 [[package]]
 name = "base64"
@@ -702,7 +702,7 @@ dependencies = [
  "arrayvec",
  "cc",
  "cfg-if",
- "constant_time_eq 0.3.1",
+ "constant_time_eq",
 ]
 
 [[package]]
@@ -1078,9 +1078,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.35"
+version = "4.5.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8aa86934b44c19c50f87cc2790e19f54f7a67aedb64101c2e1a2e5ecfb73944"
+checksum = "2df961d8c8a0d08aa9945718ccf584145eee3f3aa06cddbeac12933781102e04"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1088,9 +1088,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.35"
+version = "4.5.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2414dbb2dd0695280da6ea9261e327479e9d37b0630f6b53ba2a11c60c679fd9"
+checksum = "132dbda40fb6753878316a489d5a1242a8ef2f0d9e47ba01c951ea8aa7d013a5"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1335,12 +1335,6 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
-
-[[package]]
-name = "constant_time_eq"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21a53c0a4d288377e7415b53dcfc3c04da5cdc2cc95c8d5ac178b58f0b861ad6"
 
 [[package]]
 name = "constant_time_eq"
@@ -5224,9 +5218,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.25"
+version = "0.23.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "822ee9188ac4ec04a2f0531e55d035fb2de73f18b41a63c70c2712503b6fb13c"
+checksum = "df51b5869f3a441595eac5e8ff14d486ff285f7b8c0df8770e49c3b56351f0f0"
 dependencies = [
  "log",
  "once_cell",
@@ -7376,12 +7370,12 @@ dependencies = [
 
 [[package]]
 name = "totp-rs"
-version = "5.6.0"
+version = "5.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17b2f27dad992486c26b4e7455f38aa487e838d6d61b57e72906ee2b8c287a90"
+checksum = "f124352108f58ef88299e909f6e9470f1cdc8d2a1397963901b4a6366206bf72"
 dependencies = [
  "base32",
- "constant_time_eq 0.2.6",
+ "constant_time_eq",
  "hmac",
  "serde",
  "sha1",
@@ -7659,9 +7653,9 @@ dependencies = [
 
 [[package]]
 name = "tun"
-version = "0.7.17"
+version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "528d712da3fafc9bf7ab8795244cb0197e4bfaa506e26280810f9ae327e20d6a"
+checksum = "caaf6aa0a713f0e3b20157f6048d113b6256c045e0e2d80734d54cf1c72dc24a"
 dependencies = [
  "bytes",
  "cfg-if",
