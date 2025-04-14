@@ -80,14 +80,14 @@ impl Dispatcher {
         mut sess: Session,
         mut lhs: Box<dyn ClientStream>,
     ) {
-        let dest: SocksAddr = match reverse_lookup(&self.resolver, &sess.destination).await
-        {
-            Some(dest) => dest,
-            None => {
-                warn!("failed to resolve destination {}", sess);
-                return;
-            }
-        };
+        let dest: SocksAddr =
+            match reverse_lookup(&self.resolver, &sess.destination).await {
+                Some(dest) => dest,
+                None => {
+                    warn!("failed to resolve destination {}", sess);
+                    return;
+                }
+            };
 
         sess.destination = dest.clone();
 
