@@ -127,7 +127,7 @@ mod tests {
     };
 
     const GEOSITE_URL: &str =
-        "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
+        "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat";
 
     struct TestSuite<'a> {
         country_code: &'a str,
