@@ -95,7 +95,6 @@ pub(super) fn convert(
                     listen: bind_address,
                     port: http_port,
                     allow_lan: c.allow_lan.unwrap_or_default(),
-                    ..Default::default()
                 },
                 inherited: true,
             },
@@ -110,7 +109,6 @@ pub(super) fn convert(
                     listen: bind_address,
                     port: socks_port,
                     allow_lan: c.allow_lan.unwrap_or_default(),
-                    ..Default::default()
                 },
                 udp: true,
                 inherited: true,
@@ -126,7 +124,6 @@ pub(super) fn convert(
                     listen: bind_address,
                     port: mixed_port,
                     allow_lan: c.allow_lan.unwrap_or_default(),
-                    ..Default::default()
                 },
                 udp: true,
                 inherited: true,
@@ -142,7 +139,6 @@ pub(super) fn convert(
                     listen: bind_address,
                     port: redir_port,
                     allow_lan: c.allow_lan.unwrap_or_default(),
-                    ..Default::default()
                 },
                 inherited: true,
             },
@@ -157,7 +153,6 @@ pub(super) fn convert(
                     listen: bind_address,
                     port: tproxy_port,
                     allow_lan: c.allow_lan.unwrap_or_default(),
-                    ..Default::default()
                 },
                 udp: true,
                 inherited: true,
