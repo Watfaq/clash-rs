@@ -449,6 +449,7 @@ mod tests {
                 "MATCH",
                 "should fallback to MATCH when nothing matched",
             ),
+            ("149.154.0.1", "IC", "should match CIDR"),
         ];
 
         for (domain, target, desc) in cases {

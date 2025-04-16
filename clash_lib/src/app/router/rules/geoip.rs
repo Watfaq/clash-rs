@@ -22,11 +22,7 @@ impl std::fmt::Display for GeoIP {
 
 impl RuleMatcher for GeoIP {
     fn apply(&self, sess: &Session) -> bool {
-        let ip = if self.no_resolve {
-            sess.destination.ip()
-        } else {
-            sess.resolved_ip
-        };
+        let ip = sess.resolved_ip.or(sess.destination.ip());
 
         if let Some(ip) = ip {
             match self.mmdb.lookup_country(ip) {
