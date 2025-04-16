@@ -136,7 +136,7 @@ impl InboundManager {
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                     listener: inbound.clone(),
-                    allow_lan: self.allow_lan
+                    allow_lan: self.allow_lan,
                 },
             );
         }

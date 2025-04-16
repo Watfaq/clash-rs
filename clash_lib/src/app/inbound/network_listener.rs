@@ -24,7 +24,7 @@ pub struct NetworkInboundHandler {
     pub listener: InboundOpts,
     pub dispatcher: Arc<Dispatcher>,
     pub authenticator: ThreadSafeAuthenticator,
-    pub allow_lan: bool
+    pub allow_lan: bool,
 }
 
 impl NetworkInboundHandler {
