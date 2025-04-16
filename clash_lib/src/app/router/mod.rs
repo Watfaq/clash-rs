@@ -14,9 +14,7 @@ use crate::{
 };
 
 use crate::app::router::rules::final_::Final;
-use std::{
-    collections::HashMap, net::IpAddr, path::PathBuf, sync::Arc, time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use hyper::Uri;
 use rules::domain_regex::DomainRegex;
@@ -93,16 +91,6 @@ impl Router {
         sess: &mut Session,
     ) -> (&str, Option<&Box<dyn RuleMatcher>>) {
         let mut sess_resolved = false;
-
-        match sess.destination {
-            crate::session::SocksAddr::Domain(ref domain, port) => {
-                if let Ok(ip) = domain.parse::<IpAddr>() {
-                    sess.destination =
-                        crate::session::SocksAddr::Ip((ip, port).into());
-                }
-            }
-            _ => {}
-        };
 
         for r in self.rules.iter() {
             if sess.destination.is_domain()

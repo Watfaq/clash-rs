@@ -162,10 +162,9 @@ impl SocksAddr {
     }
 
     pub fn ip(&self) -> Option<IpAddr> {
-        if let SocksAddr::Ip(addr) = self {
-            Some(addr.ip())
-        } else {
-            None
+        match self {
+            SocksAddr::Ip(addr) => Some(addr.ip()),
+            SocksAddr::Domain(host, _) => host.parse().ok(),
         }
     }
 
