@@ -94,6 +94,7 @@ pub(super) fn convert(
                     name: "HTTP-IN".into(),
                     listen: bind_address,
                     port: http_port,
+                    allow_lan: c.allow_lan.unwrap_or_default(),
                     ..Default::default()
                 },
                 inherited: true,
@@ -108,6 +109,7 @@ pub(super) fn convert(
                     name: "SOCKS-IN".into(),
                     listen: bind_address,
                     port: socks_port,
+                    allow_lan: c.allow_lan.unwrap_or_default(),
                     ..Default::default()
                 },
                 udp: true,
@@ -123,6 +125,7 @@ pub(super) fn convert(
                     name: "MIXED-IN".into(),
                     listen: bind_address,
                     port: mixed_port,
+                    allow_lan: c.allow_lan.unwrap_or_default(),
                     ..Default::default()
                 },
                 udp: true,
@@ -138,6 +141,7 @@ pub(super) fn convert(
                     name: "REDIR-IN".into(),
                     listen: bind_address,
                     port: redir_port,
+                    allow_lan: c.allow_lan.unwrap_or_default(),
                     ..Default::default()
                 },
                 inherited: true,
@@ -152,6 +156,7 @@ pub(super) fn convert(
                     name: "TPROXY-IN".into(),
                     listen: bind_address,
                     port: tproxy_port,
+                    allow_lan: c.allow_lan.unwrap_or_default(),
                     ..Default::default()
                 },
                 udp: true,
