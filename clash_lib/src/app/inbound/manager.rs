@@ -33,6 +33,7 @@ type TaskHandle = RwLock<Option<(JoinHandle<Result<()>>, oneshot::Sender<()>)>>;
 
 pub struct InboundManager {
     dispatcher: Arc<Dispatcher>,
+    allow_lan: bool,
     bind_address: ArcSwap<BindAddress>,
     authenticator: ThreadSafeAuthenticator,
 
@@ -44,6 +45,7 @@ pub struct InboundManager {
 
 impl InboundManager {
     pub async fn new(
+        allow_lan: bool,
         bind_address: BindAddress,
         _authentication: Vec<String>, // TODO
         dispatcher: Arc<Dispatcher>,
@@ -57,6 +59,7 @@ impl InboundManager {
             authenticator,
             inbounds_opt: inbounds_opt.into(),
             task_handle: RwLock::new(None),
+            allow_lan,
         };
         s.build_handlers().await;
         Ok(s)
@@ -132,7 +135,8 @@ impl InboundManager {
                     name: name.to_string(),
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
-                    listener: inbound.clone(), // TODO use Arc
+                    listener: inbound.clone(),
+                    allow_lan: self.allow_lan
                 },
             );
         }

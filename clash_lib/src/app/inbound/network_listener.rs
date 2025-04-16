@@ -24,6 +24,7 @@ pub struct NetworkInboundHandler {
     pub listener: InboundOpts,
     pub dispatcher: Arc<Dispatcher>,
     pub authenticator: ThreadSafeAuthenticator,
+    pub allow_lan: bool
 }
 
 impl NetworkInboundHandler {
@@ -41,21 +42,21 @@ impl NetworkInboundHandler {
         let handler: InboudHandler = match &self.listener {
             InboundOpts::Http { common_opts, .. } => HttpInbound::new(
                 (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
+                common_opts.allow_lan.unwrap_or(self.allow_lan),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             )
             .into(),
             InboundOpts::Socks { common_opts, .. } => SocksInbound::new(
                 (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
+                common_opts.allow_lan.unwrap_or(self.allow_lan),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             )
             .into(),
             InboundOpts::Mixed { common_opts, .. } => MixedInbound::new(
                 (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
+                common_opts.allow_lan.unwrap_or(self.allow_lan),
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
             )
@@ -66,7 +67,7 @@ impl NetworkInboundHandler {
                 {
                     TproxyInbound::new(
                         (common_opts.listen.0, common_opts.port).into(),
-                        common_opts.allow_lan,
+                        common_opts.allow_lan.unwrap_or(self.allow_lan),
                         self.dispatcher.clone(),
                     )
                     .into()

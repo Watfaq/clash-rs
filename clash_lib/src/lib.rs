@@ -442,6 +442,7 @@ async fn create_components(
     debug!("initializing inbound manager");
     let inbound_manager = Arc::new(
         InboundManager::new(
+            config.general.allow_lan,
             config.general.bind_address,
             config.general.authentication,
             dispatcher.clone(),

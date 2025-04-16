@@ -57,6 +57,7 @@ impl Config {
 }
 
 pub struct General {
+    pub allow_lan: bool,
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
     pub(crate) controller: Controller,

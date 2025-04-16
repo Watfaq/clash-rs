@@ -10,6 +10,7 @@ use crate::{
 
 pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {
     Ok(General {
+        allow_lan: c.allow_lan.unwrap_or_default(),
         authentication: c.authentication.clone(),
         controller: Controller {
             external_controller: c.external_controller.clone(),

@@ -93,7 +93,8 @@ pub struct CommonInboundOpts {
     pub name: String,
     pub listen: BindAddress,
     // TODO: make this reloadable in inbound listeners
-    pub allow_lan: bool,
+    #[educe(Default = None)]
+    pub allow_lan: Option<bool>,
     #[educe(Default = 0)]
     pub port: u16,
 }
