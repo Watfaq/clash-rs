@@ -25,11 +25,7 @@ impl RuleMatcher for IpCidr {
         if self.match_src {
             self.ipnet.contains(&sess.source.ip())
         } else {
-            let ip = if self.no_resolve {
-                sess.destination.ip()
-            } else {
-                sess.resolved_ip
-            };
+            let ip = sess.resolved_ip.or(sess.destination.ip());
 
             if let Some(ip) = ip {
                 self.ipnet.contains(&ip)
