@@ -51,6 +51,8 @@ use crate::proxy::ssh;
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -302,6 +304,13 @@ impl OutboundManager {
                 OutboundProxyProtocol::Tuic(tuic) => {
                     handlers.insert(tuic.common_opts.name.clone(), {
                         let h: tuic::Handler = tuic.try_into()?;
+                        Arc::new(h) as _
+                    });
+                }
+                #[cfg(feature = "shadowquic")]
+                OutboundProxyProtocol::ShadowQuic(sqcfg) => {
+                    handlers.insert(sqcfg.common_opts.name.clone(), {
+                        let h: shadowquic::Handler = sqcfg.try_into()?;
                         Arc::new(h) as _
                     });
                 }

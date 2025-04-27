@@ -8,7 +8,7 @@ authors = { workspace = true }
 
 [features]
 default = ["standard"]
-standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy"]
+standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy", "shadowquic"]
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
@@ -19,6 +19,7 @@ shadowsocks = ["clash_lib/shadowsocks"]
 ssh = ["clash_lib/ssh"]
 tuic = ["clash_lib/tuic"]
 onion = ["clash_lib/onion"]
+shadowquic = ["clash_lib/shadowquic"]
 
 bench = ["clash_lib/bench"]
 dhat-heap = ["dep:dhat"]

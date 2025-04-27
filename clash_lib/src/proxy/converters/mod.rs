@@ -12,4 +12,6 @@ pub mod tuic;
 pub mod vmess;
 pub mod wireguard;
 
+#[cfg(feature = "shadowquic")]
+pub mod shadowquic;
 mod utils;

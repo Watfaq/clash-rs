@@ -1,6 +1,7 @@
 use crate::{Error, common::utils::default_bool_true, config::utils};
 use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
+use shadowquic::config::CongestionControl as SQCongestionControl;
 use std::{
     collections::HashMap,
     fmt::{Display, Formatter},
@@ -73,6 +74,9 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "ssh")]
     #[cfg(feature = "ssh")]
     Ssh(OutBoundSsh),
+    #[serde(rename = "shadowquic")]
+    #[cfg(feature = "shadowquic")]
+    ShadowQuic(OutboundShadowQuic),
 }
 
 impl OutboundProxyProtocol {
@@ -95,6 +99,8 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
             #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
+            #[cfg(feature = "shadowquic")]
+            OutboundProxyProtocol::ShadowQuic(sq) => &sq.common_opts.name,
         }
     }
 }
@@ -133,6 +139,8 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
             #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
+            #[cfg(feature = "shadowquic")]
+            OutboundProxyProtocol::ShadowQuic(_) => write!(f, "ShadowQUIC"),
         }
     }
 }
@@ -290,6 +298,22 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundShadowQuic {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub jls_pwd: String,
+    pub jls_iv: String,
+    pub server_name: String,
+    pub alpn: Option<Vec<String>>,
+    pub initial_mtu: Option<u16>,
+    pub congestion_control: Option<SQCongestionControl>, // bbr, new-reno, cubic
+    pub zero_rtt: Option<bool>,
+    pub over_stream: Option<bool>,
+    pub min_mtu: Option<u16>,
 }
 
 #[cfg(feature = "ssh")]

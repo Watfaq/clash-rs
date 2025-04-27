@@ -50,6 +50,8 @@ pub mod tun;
 pub mod utils;
 pub mod vmess;
 pub mod wg;
+#[cfg(feature = "shadowquic")]
+pub mod shadowquic;
 
 pub mod group;
 pub use group::{fallback, loadbalance, relay, selector, urltest};
@@ -124,6 +126,7 @@ pub enum OutboundType {
     Socks5,
     Hysteria2,
     Ssh,
+    ShadowQuic,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -148,6 +151,7 @@ impl Display for OutboundType {
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
             OutboundType::Ssh => write!(f, "ssh"),
+            OutboundType::ShadowQuic => write!(f, "ShadowQuic"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),

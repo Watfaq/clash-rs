@@ -160,6 +160,11 @@ impl ProxySetProvider {
                                     let h: tuic::Handler = tuic.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
+                                #[cfg(feature = "shadowquic")]
+                                OutboundProxyProtocol::ShadowQuic(sq) => {
+                                    let h: crate::proxy::shadowquic::Handler = sq.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
                             })
                             .collect::<Result<Vec<_>, crate::Error>>();
                         Ok(proxies?)
