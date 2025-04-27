@@ -162,7 +162,8 @@ impl ProxySetProvider {
                                 }
                                 #[cfg(feature = "shadowquic")]
                                 OutboundProxyProtocol::ShadowQuic(sq) => {
-                                    let h: crate::proxy::shadowquic::Handler = sq.try_into()?;
+                                    let h: crate::proxy::shadowquic::Handler =
+                                        sq.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                             })

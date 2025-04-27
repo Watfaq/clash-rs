@@ -1,35 +1,49 @@
-use std::collections::BTreeMap;
-use std::io;
-use std::ops::{Deref, DerefMut};
-
+use std::{
+    collections::BTreeMap,
+    io,
+    ops::{Deref, DerefMut},
+};
 
 use async_trait::async_trait;
-use futures::channel::mpsc::Sender;
-use futures::AsyncRead;
+use futures::{AsyncRead, channel::mpsc::Sender};
 use hyper_util::server::conn;
-use shadowquic::msgs::socks5::SocksAddr as SQAddr;
-use shadowquic::shadowquic::SQConn;
-use shadowquic::{config, AnyTcp, Outbound};
-use shadowquic::shadowquic::outbound::{self as SQ, ShadowQuicClient};
+use shadowquic::{
+    AnyTcp, Outbound, config,
+    msgs::socks5::SocksAddr as SQAddr,
+    shadowquic::{
+        SQConn,
+        outbound::{self as SQ, ShadowQuicClient},
+    },
+};
 use tokio::sync::{OnceCell, RwLock};
 
-use crate::app::dispatcher::{BoxedChainedDatagram, BoxedChainedStream, ChainedStreamWrapper};
-use crate::app::dns::ThreadSafeDNSResolver;
-use crate::app::net::get_outbound_interface;
-use crate::session::{Session, SocksAddr};
+use crate::{
+    app::{
+        dispatcher::{
+            BoxedChainedDatagram, BoxedChainedStream, ChainedStreamWrapper,
+        },
+        dns::ThreadSafeDNSResolver,
+        net::get_outbound_interface,
+    },
+    session::{Session, SocksAddr},
+};
 
-use super::utils::new_udp_socket;
-use super::{ConnectorType, DialWithConnector, OutboundHandler, OutboundType};
-use std::fmt::Debug;
+use super::{
+    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+    utils::new_udp_socket,
+};
 use crate::app::dispatcher::ChainedStream;
+use std::fmt::Debug;
 
 mod compat;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
 
 pub struct Handler {
     opts: HandlerOptions,
-    ep: OnceCell<ShadowQuicClient>, // A once lock to resolve server destination
+    ep: OnceCell<ShadowQuicClient>, /* Must be created after session since server
+                                     * addr needs be resolved */
     conn: RwLock<Option<SQConn>>,
+    udp_conn: RwLock<BTreeMap<SocksAddr, ()>>,
 }
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -37,27 +51,41 @@ impl Debug for Handler {
     }
 }
 impl Handler {
-    pub fn new(opts: HandlerOptions) -> Self{
+    pub fn new(opts: HandlerOptions) -> Self {
         let ep = ShadowQuicClient::new(opts.clone());
-        Self{
+        Self {
             opts,
             ep: Default::default(),
-            conn: Default::default()
+            conn: Default::default(),
+            udp_conn: Default::default(),
         }
     }
-    /// Resolve quic server DNS with clash DNS resolver
-    pub async fn prepare_endpoint(&self, sess: &Session,
-        resolver: ThreadSafeDNSResolver,) ->  io::Result<&ShadowQuicClient> {
-            self.ep.get_or_try_init(|| async {
 
-                let iter:Vec<&str> = self.opts.addr.split(":").collect();
+    /// Resolve quic server DNS with clash DNS resolver
+    pub async fn prepare_endpoint(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<&ShadowQuicClient> {
+        self.ep
+            .get_or_try_init(|| async {
+                let iter: Vec<&str> = self.opts.addr.split(":").collect();
                 let host = iter[0].to_string();
-                tracing::info!("resolving host:{}",host);
-                let addr = resolver.resolve(&host, false).await
-                .map_err(|x|io::Error::new(io::ErrorKind::AddrNotAvailable,
-                     format!("failed to resolve shadowquic domain name:{:?}",x)))?
-                .ok_or(io::ErrorKind::AddrNotAvailable)?;
-                tracing::info!("host resolved:{}",addr);
+                tracing::info!("resolving host:{}", host);
+                let addr = resolver
+                    .resolve(&host, false)
+                    .await
+                    .map_err(|x| {
+                        io::Error::new(
+                            io::ErrorKind::AddrNotAvailable,
+                            format!(
+                                "failed to resolve shadowquic domain name:{:?}",
+                                x
+                            ),
+                        )
+                    })?
+                    .ok_or(io::ErrorKind::AddrNotAvailable)?;
+                tracing::info!("host resolved:{}", addr);
                 let socket = {
                     let iface = get_outbound_interface();
                     new_udp_socket(
@@ -72,25 +100,35 @@ impl Handler {
                 let mut addr = addr.to_string();
                 addr.push_str(":");
                 addr.push_str(port);
-                let mut ep = ShadowQuicClient::new_with_socket(self.opts.clone(),socket.into_std()?);
+                let mut ep = ShadowQuicClient::new_with_socket(
+                    self.opts.clone(),
+                    socket.into_std()?,
+                );
                 ep.dst_addr = addr;
                 Ok(ep) as io::Result<ShadowQuicClient>
-            }).await
+            })
+            .await
     }
-    async fn prepare_conn(&self, sess: &Session,
-        resolver: ThreadSafeDNSResolver,) -> io::Result<SQConn> {
+
+    async fn prepare_conn(
+        &self,
+        sess: &Session,
+        resolver: ThreadSafeDNSResolver,
+    ) -> io::Result<SQConn> {
         let ep = self.prepare_endpoint(sess, resolver).await?;
         tracing::info!("endpoint opened");
         if let Some(x) = &*self.conn.read().await {
             if x.close_reason().is_none() {
                 return Ok(x.clone());
             }
-        } 
+        }
         let mut conn = self.conn.write().await;
         tracing::info!("open connection");
-        let newconn = ep.get_conn().await.map_err(|x|{
-            io::Error::new(io::ErrorKind::Other,
-                format!("can't open shadowquic conection due to:{}",x.to_string()))
+        let newconn = ep.get_conn().await.map_err(|x| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("can't open shadowquic conection due to:{}", x.to_string()),
+            )
         })?;
         conn.replace(newconn.clone());
         tracing::info!("connection opened");
@@ -100,8 +138,6 @@ impl Handler {
 
 #[async_trait]
 impl DialWithConnector for Handler {}
-
-
 
 #[async_trait]
 impl OutboundHandler for Handler {
@@ -129,12 +165,18 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedStream> {
         tracing::info!("conect shadowquic");
         let conn = self.prepare_conn(sess, resolver).await?;
-        let conn = SQ::connect_tcp(&conn,
-            to_sq_socks_addr(sess.destination.clone())).await
-            .map_err(|x|{
-                io::Error::new(io::ErrorKind::Other,
-                    format!("can't open shadowquic stream due to:{}",x.to_string()))
-            })?;
+        let conn =
+            SQ::connect_tcp(&conn, to_sq_socks_addr(sess.destination.clone()))
+                .await
+                .map_err(|x| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "can't open shadowquic stream due to:{}",
+                            x.to_string()
+                        ),
+                    )
+                })?;
         let s = ChainedStreamWrapper::new(conn);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
@@ -155,12 +197,9 @@ impl OutboundHandler for Handler {
     }
 }
 
-
-fn to_sq_socks_addr(x: SocksAddr) -> SQAddr{
+fn to_sq_socks_addr(x: SocksAddr) -> SQAddr {
     match x {
         SocksAddr::Ip(socket_addr) => SQAddr::from(socket_addr),
         SocksAddr::Domain(host, port) => SQAddr::from_domain(host, port),
     }
 }
-
-

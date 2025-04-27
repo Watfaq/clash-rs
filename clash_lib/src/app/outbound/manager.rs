@@ -43,6 +43,8 @@ use crate::{
 
 use super::utils::proxy_groups_dag_sort;
 
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic;
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
@@ -51,8 +53,6 @@ use crate::proxy::ssh;
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
-#[cfg(feature = "shadowquic")]
-use crate::proxy::shadowquic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 

@@ -36,6 +36,8 @@ pub(crate) mod datagram;
 
 pub mod converters;
 pub mod hysteria2;
+#[cfg(feature = "shadowquic")]
+pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
@@ -50,8 +52,6 @@ pub mod tun;
 pub mod utils;
 pub mod vmess;
 pub mod wg;
-#[cfg(feature = "shadowquic")]
-pub mod shadowquic;
 
 pub mod group;
 pub use group::{fallback, loadbalance, relay, selector, urltest};
