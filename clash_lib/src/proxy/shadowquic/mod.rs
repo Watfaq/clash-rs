@@ -1,14 +1,12 @@
 use std::{
-    collections::BTreeMap,
     io,
-    ops::{Deref, DerefMut},
+    net::SocketAddr,
 };
 
 use async_trait::async_trait;
-use futures::{AsyncRead, channel::mpsc::Sender};
-use hyper_util::server::conn;
+use compat::UdpSessionWrapper;
 use shadowquic::{
-    AnyTcp, Outbound, config,
+    config,
     msgs::socks5::SocksAddr as SQAddr,
     shadowquic::{
         SQConn,
@@ -16,14 +14,15 @@ use shadowquic::{
     },
 };
 use tokio::sync::{OnceCell, RwLock};
-
+use tokio_util::sync::PollSender;
+mod compat;
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedDatagramWrapper, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
-        net::get_outbound_interface,
     },
     session::{Session, SocksAddr},
 };
@@ -35,15 +34,13 @@ use super::{
 use crate::app::dispatcher::ChainedStream;
 use std::fmt::Debug;
 
-mod compat;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
 
 pub struct Handler {
     opts: HandlerOptions,
     ep: OnceCell<ShadowQuicClient>, /* Must be created after session since server
-                                     * addr needs be resolved */
+                                     * addr needs to be resolved */
     conn: RwLock<Option<SQConn>>,
-    udp_conn: RwLock<BTreeMap<SocksAddr, ()>>,
 }
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -52,12 +49,10 @@ impl Debug for Handler {
 }
 impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
-        let ep = ShadowQuicClient::new(opts.clone());
         Self {
             opts,
             ep: Default::default(),
             conn: Default::default(),
-            udp_conn: Default::default(),
         }
     }
 
@@ -85,20 +80,18 @@ impl Handler {
                         )
                     })?
                     .ok_or(io::ErrorKind::AddrNotAvailable)?;
-                tracing::info!("host resolved:{}", addr);
                 let socket = {
-                    let iface = get_outbound_interface();
                     new_udp_socket(
                         None,
-                        iface.map(|x| x.name.as_str().into()),
+                        sess.iface.clone(),
                         #[cfg(target_os = "linux")]
-                        None,
+                        sess.so_mark,
                     )
                     .await?
                 };
                 let port = iter.get(1).unwrap_or(&"443");
                 let mut addr = addr.to_string();
-                addr.push_str(":");
+                addr.push(':');
                 addr.push_str(port);
                 let mut ep = ShadowQuicClient::new_with_socket(
                     self.opts.clone(),
@@ -116,23 +109,20 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<SQConn> {
         let ep = self.prepare_endpoint(sess, resolver).await?;
-        tracing::info!("endpoint opened");
         if let Some(x) = &*self.conn.read().await {
             if x.close_reason().is_none() {
                 return Ok(x.clone());
             }
         }
         let mut conn = self.conn.write().await;
-        tracing::info!("open connection");
         let newconn = ep.get_conn().await.map_err(|x| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("can't open shadowquic conection due to:{}", x.to_string()),
+                format!("can't open shadowquic conection due to:{}", x),
             )
         })?;
         conn.replace(newconn.clone());
-        tracing::info!("connection opened");
-        return Ok(newconn);
+        Ok(newconn)
     }
 }
 
@@ -163,7 +153,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        tracing::info!("conect shadowquic");
         let conn = self.prepare_conn(sess, resolver).await?;
         let conn =
             SQ::connect_tcp(&conn, to_sq_socks_addr(sess.destination.clone()))
@@ -173,7 +162,7 @@ impl OutboundHandler for Handler {
                         io::ErrorKind::Other,
                         format!(
                             "can't open shadowquic stream due to:{}",
-                            x.to_string()
+                            x
                         ),
                     )
                 })?;
@@ -188,7 +177,33 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        todo!()
+        let conn = self.prepare_conn(sess, resolver).await?;
+        // clash-rs didn't expose udp associate address, so set to unspecified
+        // address
+        let addr = if sess.source.is_ipv4() {
+            "0.0.0.0:0"
+        } else {
+            "[::]:0"
+        };
+        let socket = SQ::associate_udp(
+            &conn,
+            addr.parse::<SocketAddr>().unwrap().into(),
+            self.opts.over_stream,
+        )
+        .await
+        .map_err(|x| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("can't open shadowquic stream due to:{}", x),
+            )
+        })?;
+        let chain = ChainedDatagramWrapper::new(UdpSessionWrapper {
+            s: PollSender::new(socket.0),
+            r: socket.1,
+            src_addr: sess.source.into(),
+        });
+        chain.append_to_chain(self.name()).await;
+        Ok(Box::new(chain))
     }
 
     /// relay related
@@ -201,5 +216,18 @@ fn to_sq_socks_addr(x: SocksAddr) -> SQAddr {
     match x {
         SocksAddr::Ip(socket_addr) => SQAddr::from(socket_addr),
         SocksAddr::Domain(host, port) => SQAddr::from_domain(host, port),
+    }
+}
+fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
+    match x.addr {
+        shadowquic::msgs::socks5::AddrOrDomain::V4(ip) => {
+            SocksAddr::Ip(SocketAddr::new(ip.into(), x.port))
+        }
+        shadowquic::msgs::socks5::AddrOrDomain::V6(ip) => {
+            SocksAddr::Ip(SocketAddr::new(ip.into(), x.port))
+        }
+        shadowquic::msgs::socks5::AddrOrDomain::Domain(domain) => {
+            SocksAddr::Domain(String::from_utf8(domain.contents).unwrap(), x.port)
+        }
     }
 }
