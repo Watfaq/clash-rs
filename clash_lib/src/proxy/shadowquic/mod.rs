@@ -1,7 +1,4 @@
-use std::{
-    io,
-    net::SocketAddr,
-};
+use std::{io, net::SocketAddr};
 
 use async_trait::async_trait;
 use compat::UdpSessionWrapper;
@@ -160,10 +157,7 @@ impl OutboundHandler for Handler {
                 .map_err(|x| {
                     io::Error::new(
                         io::ErrorKind::Other,
-                        format!(
-                            "can't open shadowquic stream due to:{}",
-                            x
-                        ),
+                        format!("can't open shadowquic stream due to:{}", x),
                     )
                 })?;
         let s = ChainedStreamWrapper::new(conn);

@@ -26,10 +26,7 @@ impl Sink<UdpPacket> for UdpSessionWrapper {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.get_mut()
-            .s
-            .poll_ready_unpin(cx)
-            .map_err(new_io_error)
+        self.get_mut().s.poll_ready_unpin(cx).map_err(new_io_error)
     }
 
     fn start_send(
@@ -46,20 +43,14 @@ impl Sink<UdpPacket> for UdpSessionWrapper {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.get_mut()
-            .s
-            .poll_flush_unpin(cx)
-            .map_err(new_io_error)
+        self.get_mut().s.poll_flush_unpin(cx).map_err(new_io_error)
     }
 
     fn poll_close(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.get_mut()
-            .s
-            .poll_close_unpin(cx)
-            .map_err(new_io_error)
+        self.get_mut().s.poll_close_unpin(cx).map_err(new_io_error)
     }
 }
 
