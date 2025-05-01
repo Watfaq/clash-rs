@@ -34,6 +34,7 @@ use std::fmt::Debug;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
 
 pub struct Handler {
+    name: String,
     opts: HandlerOptions,
     ep: OnceCell<ShadowQuicClient>, /* Must be created after session since server
                                      * addr needs to be resolved */
@@ -45,8 +46,9 @@ impl Debug for Handler {
     }
 }
 impl Handler {
-    pub fn new(opts: HandlerOptions) -> Self {
+    pub fn new(name: String, opts: HandlerOptions) -> Self {
         Self {
+            name,
             opts,
             ep: Default::default(),
             conn: Default::default(),
@@ -130,7 +132,7 @@ impl DialWithConnector for Handler {}
 impl OutboundHandler for Handler {
     /// The name of the outbound handler
     fn name(&self) -> &str {
-        "shadowquic"
+        &self.name
     }
 
     /// The protocol of the outbound handler
