@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr};
+use std::{io, net::SocketAddr, str::FromStr};
 
 use async_trait::async_trait;
 use compat::UdpSessionWrapper;
@@ -21,6 +21,7 @@ use crate::{
         },
         dns::ThreadSafeDNSResolver,
     },
+    common::errors::new_io_error,
     session::{Session, SocksAddr},
 };
 
@@ -63,22 +64,31 @@ impl Handler {
     ) -> io::Result<&ShadowQuicClient> {
         self.ep
             .get_or_try_init(|| async {
-                let iter: Vec<&str> = self.opts.addr.split(":").collect();
-                let host = iter[0].to_string();
-                tracing::info!("resolving host:{}", host);
-                let addr = resolver
-                    .resolve(&host, false)
-                    .await
-                    .map_err(|x| {
-                        io::Error::new(
-                            io::ErrorKind::AddrNotAvailable,
-                            format!(
-                                "failed to resolve shadowquic domain name:{:?}",
-                                x
-                            ),
-                        )
-                    })?
-                    .ok_or(io::ErrorKind::AddrNotAvailable)?;
+                let addr = self.opts.addr.clone();
+                let sock_addr = SocksAddr::from_str(&format!("{addr}:443"))
+                    .or(SocksAddr::from_str(&addr))
+                    .map_err(new_io_error)?;
+                tracing::info!("resolving host:{:?}", sock_addr);
+                let addr = match sock_addr {
+                    SocksAddr::Domain(host, port) => {
+                        let addr = resolver
+                            .resolve(&host, false)
+                            .await
+                            .map_err(|x| {
+                                io::Error::new(
+                                    io::ErrorKind::AddrNotAvailable,
+                                    format!(
+                                        "failed to resolve shadowquic domain \
+                                         name:{:?}",
+                                        x
+                                    ),
+                                )
+                            })?
+                            .ok_or(io::ErrorKind::AddrNotAvailable)?;
+                        SocketAddr::new(addr, port)
+                    }
+                    SocksAddr::Ip(socket_addr) => socket_addr,
+                };
                 let socket = {
                     new_udp_socket(
                         None,
@@ -88,15 +98,11 @@ impl Handler {
                     )
                     .await?
                 };
-                let port = iter.get(1).unwrap_or(&"443");
-                let mut addr = addr.to_string();
-                addr.push(':');
-                addr.push_str(port);
                 let mut ep = ShadowQuicClient::new_with_socket(
                     self.opts.clone(),
                     socket.into_std()?,
                 );
-                ep.dst_addr = addr;
+                ep.dst_addr = addr.to_string();
                 Ok(ep) as io::Result<ShadowQuicClient>
             })
             .await
