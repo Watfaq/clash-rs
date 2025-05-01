@@ -1,6 +1,7 @@
 use crate::{Error, common::utils::default_bool_true, config::utils};
 use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
+#[cfg(feature = "shadowquic")]
 use shadowquic::config::CongestionControl as SQCongestionControl;
 use std::{
     collections::HashMap,
@@ -300,6 +301,7 @@ pub struct OutboundTuic {
     pub receive_window: Option<u64>,
 }
 
+#[cfg(feature = "shadowquic")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundShadowQuic {
