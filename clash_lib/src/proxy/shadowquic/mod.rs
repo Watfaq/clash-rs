@@ -90,8 +90,14 @@ impl Handler {
                     SocksAddr::Ip(socket_addr) => socket_addr,
                 };
                 let socket = {
+                    let bind_addr = if addr.is_ipv4() {
+                        "0.0.0.0:0"
+                    } else {
+                        "[::]:0"
+                    };
                     new_udp_socket(
-                        None,
+                        Some(bind_addr.parse().unwrap()), /* Used to indicate the
+                                                           * address family */
                         sess.iface.clone(),
                         #[cfg(target_os = "linux")]
                         sess.so_mark,
@@ -234,8 +240,6 @@ fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
     }
 }
 
-
-
 #[cfg(all(test, docker_test))]
 mod tests {
 
@@ -261,9 +265,7 @@ mod tests {
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOWQUIC)
-            .mounts(&[
-                (conf.to_str().unwrap(), "/etc/shadowquic/config.yaml"),
-            ])
+            .mounts(&[(conf.to_str().unwrap(), "/etc/shadowquic/config.yaml")])
             .build()
             .await
     }
@@ -272,14 +274,14 @@ mod tests {
 
     fn gen_options(over_stream: bool) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
-            addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(),PORT).to_string(),
+            addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(), PORT).to_string(),
             jls_pwd: "12345678".into(),
             jls_iv: "87654321".into(),
             server_name: "echo.free.beeceptor.com".into(),
             alpn: vec!["h3".into()],
             initial_mtu: 1400,
             zero_rtt: true,
-            over_stream: over_stream,
+            over_stream,
             ..Default::default()
         })
     }
@@ -290,13 +292,16 @@ mod tests {
         initialize();
         let opts = gen_options(false)?;
 
-        let handler = Arc::new(Handler::new("test-shadowquic".into(),
-        opts));
+        let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_shadowquic_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(
+            handler,
+            get_shadowquic_runner().await?,
+            Suite::all(),
+        )
+        .await
     }
     #[tokio::test]
     #[serial_test::serial]
@@ -305,12 +310,15 @@ mod tests {
         let mut opts = gen_options(true)?;
         opts.over_stream = true;
 
-        let handler = Arc::new(Handler::new("test-shadowquic".into(),
-        opts));
+        let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_shadowquic_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(
+            handler,
+            get_shadowquic_runner().await?,
+            Suite::all(),
+        )
+        .await
     }
 }

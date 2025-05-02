@@ -6,6 +6,7 @@ use shadowquic::config::{
 use crate::{
     config::proxy::OutboundShadowQuic,
     proxy::shadowquic::{Handler, HandlerOptions},
+    session::SocksAddr,
 };
 
 impl TryFrom<OutboundShadowQuic> for Handler {
@@ -23,11 +24,11 @@ impl TryFrom<&OutboundShadowQuic> for Handler {
         Ok(Handler::new(
             s.common_opts.name.clone(),
             HandlerOptions {
-                addr: format!(
-                    "{}:{}",
-                    s.common_opts.server.to_owned(),
-                    s.common_opts.port
-                ),
+                addr: SocksAddr::try_from((
+                    s.common_opts.server.clone(),
+                    s.common_opts.port,
+                ))?
+                .to_string(),
                 jls_pwd: s.jls_pwd.clone(),
                 jls_iv: s.jls_iv.clone(),
                 server_name: s.server_name.clone(),
