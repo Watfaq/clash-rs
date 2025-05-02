@@ -43,6 +43,8 @@ use crate::{
 
 use super::utils::proxy_groups_dag_sort;
 
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic;
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
@@ -302,6 +304,13 @@ impl OutboundManager {
                 OutboundProxyProtocol::Tuic(tuic) => {
                     handlers.insert(tuic.common_opts.name.clone(), {
                         let h: tuic::Handler = tuic.try_into()?;
+                        Arc::new(h) as _
+                    });
+                }
+                #[cfg(feature = "shadowquic")]
+                OutboundProxyProtocol::ShadowQuic(sqcfg) => {
+                    handlers.insert(sqcfg.common_opts.name.clone(), {
+                        let h: shadowquic::Handler = sqcfg.try_into()?;
                         Arc::new(h) as _
                     });
                 }

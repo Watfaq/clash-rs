@@ -36,6 +36,8 @@ pub(crate) mod datagram;
 
 pub mod converters;
 pub mod hysteria2;
+#[cfg(feature = "shadowquic")]
+pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks;
@@ -124,6 +126,7 @@ pub enum OutboundType {
     Socks5,
     Hysteria2,
     Ssh,
+    ShadowQuic,
 
     #[serde(rename = "URLTest")]
     UrlTest,
@@ -148,6 +151,7 @@ impl Display for OutboundType {
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
             OutboundType::Ssh => write!(f, "ssh"),
+            OutboundType::ShadowQuic => write!(f, "ShadowQuic"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
             OutboundType::Selector => write!(f, "Selector"),
