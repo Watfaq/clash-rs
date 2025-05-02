@@ -307,15 +307,30 @@ pub struct OutboundTuic {
 pub struct OutboundShadowQuic {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
+    /// jls password, must be the same as the server
     pub jls_pwd: String,
+    /// jls initial vector, must be the same as the server
     pub jls_iv: String,
+    /// server name, must be the same as the server jls_upstream
+    /// domain name
     pub server_name: String,
+    /// alpn, default to "h3"
     pub alpn: Option<Vec<String>>,
+    /// initial mtu, must be larger than min mtu, at least to be 1200.
+    /// 1400 is recommended for high packet loss network. default to be 1300
     pub initial_mtu: Option<u16>,
+    /// congestion control, default to "bbr"
     pub congestion_control: Option<SQCongestionControl>, // bbr, new-reno, cubic
+    /// set to true to enable zero rtt, default to true
     pub zero_rtt: Option<bool>,
+    /// if true, use quic stream to send UDP, otherwise use quic datagram
+    /// extension, similar to native UDP in TUIC
     pub over_stream: Option<bool>,
+    /// minimum mtu, must be smaller than initial mtu, at least to be 1200.
+    /// 1400 is recommended for high packet loss network. default to be 1290
     pub min_mtu: Option<u16>,
+    /// keep alive interval in milliseconds
+    /// 0 means disable keep alive, should be smaller than 30_000(idle time)
     pub keep_alive_interval: Option<u32>,
 }
 
