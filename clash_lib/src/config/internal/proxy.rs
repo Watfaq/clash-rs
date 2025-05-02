@@ -316,6 +316,7 @@ pub struct OutboundShadowQuic {
     pub zero_rtt: Option<bool>,
     pub over_stream: Option<bool>,
     pub min_mtu: Option<u16>,
+    pub keep_alive_interval: Option<u32>,
 }
 
 #[cfg(feature = "ssh")]

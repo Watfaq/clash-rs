@@ -1737,7 +1737,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f9bc3564f74be6c35d49a7efee54380d7946ccc631323067f33fabb9246027"
 dependencies = [
  "derive-deftly-macros 0.14.2",
- "heck 0.5.0",
+ "heck 0.4.1",
 ]
 
 [[package]]
@@ -1747,7 +1747,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0015cb20a284ec944852820598af3aef6309ea8dc317a0304441272ed620f196"
 dependencies = [
  "derive-deftly-macros 1.0.1",
- "heck 0.5.0",
+ "heck 0.4.1",
 ]
 
 [[package]]
@@ -1756,8 +1756,8 @@ version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1b84d32b18d9a256d81e4fec2e4cfd0ab6dde5e5ff49be1713ae0adbd0060c2"
 dependencies = [
- "heck 0.5.0",
- "indexmap 2.7.1",
+ "heck 0.4.1",
+ "indexmap 1.9.3",
  "itertools 0.13.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -1774,8 +1774,8 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b48e8e38a4aa565da767322b5ca55fb0f8347983c5bc7f7647db069405420479"
 dependencies = [
- "heck 0.5.0",
- "indexmap 2.7.1",
+ "heck 0.4.1",
+ "indexmap 1.9.3",
  "itertools 0.14.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -3574,7 +3574,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4624,7 +4624,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -5816,8 +5816,8 @@ dependencies = [
 
 [[package]]
 name = "shadowquic"
-version = "0.1.4"
-source = "git+https://github.com/spongebob888/shadowquic#03b31c7540bdad0ef4c801f5847d5f0a53c338d8"
+version = "0.1.6"
+source = "git+https://github.com/spongebob888/shadowquic#7842b95242087ab5ac52972df903ae8fad9b71f7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5842,8 +5842,8 @@ dependencies = [
 
 [[package]]
 name = "shadowquic-macros"
-version = "0.1.4"
-source = "git+https://github.com/spongebob888/shadowquic#03b31c7540bdad0ef4c801f5847d5f0a53c338d8"
+version = "0.1.6"
+source = "git+https://github.com/spongebob888/shadowquic#7842b95242087ab5ac52972df903ae8fad9b71f7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8281,7 +8281,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

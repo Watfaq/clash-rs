@@ -156,7 +156,7 @@ dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"] , optional = true }
 
 # shadowquic 
-shadowquic = { version = "0.1.4", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+shadowquic = { version = "0.1.6", optional = true, git = "https://github.com/spongebob888/shadowquic" }
 
 # experimental
 downcast-rs = "2.0"
