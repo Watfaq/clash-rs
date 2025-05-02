@@ -233,3 +233,84 @@ fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
         }
     }
 }
+
+
+
+#[cfg(all(test, docker_test))]
+mod tests {
+
+    use super::super::utils::test_utils::{
+        consts::*, docker_runner::DockerTestRunner,
+    };
+    use crate::{
+        proxy::utils::{
+            GLOBAL_DIRECT_CONNECTOR,
+            test_utils::{
+                Suite, config_helper::test_config_base_dir,
+                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
+    use std::sync::Arc;
+
+    use super::*;
+    async fn get_shadowquic_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("shadowquic.yaml");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOWQUIC)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/shadowquic/config.yaml"),
+            ])
+            .build()
+            .await
+    }
+
+    const PORT: u16 = 10002;
+
+    fn gen_options(over_stream: bool) -> anyhow::Result<HandlerOptions> {
+        Ok(HandlerOptions {
+            addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(),PORT).to_string(),
+            jls_pwd: "12345678".into(),
+            jls_iv: "87654321".into(),
+            server_name: "echo.free.beeceptor.com".into(),
+            alpn: vec!["h3".into()],
+            initial_mtu: 1400,
+            zero_rtt: true,
+            over_stream: over_stream,
+            ..Default::default()
+        })
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
+        initialize();
+        let opts = gen_options(false)?;
+
+        let handler = Arc::new(Handler::new("test-shadowquic".into(),
+        opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(handler, get_shadowquic_runner().await?, Suite::all())
+            .await
+    }
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
+        initialize();
+        let mut opts = gen_options(true)?;
+        opts.over_stream = true;
+
+        let handler = Arc::new(Handler::new("test-shadowquic".into(),
+        opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(handler, get_shadowquic_runner().await?, Suite::all())
+            .await
+    }
+}
