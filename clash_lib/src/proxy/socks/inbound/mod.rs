@@ -20,6 +20,7 @@ pub struct SocksInbound {
     allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for SocksInbound {
@@ -34,12 +35,14 @@ impl SocksInbound {
         allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
+        fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
             allow_lan,
             dispatcher,
             authenticator,
+            fw_mark,
         }
     }
 }
@@ -69,6 +72,7 @@ impl InboundHandlerTrait for SocksInbound {
                 network: Network::Tcp,
                 typ: Type::Socks5,
                 source: socket.peer_addr()?,
+                so_mark: self.fw_mark,
 
                 ..Default::default()
             };

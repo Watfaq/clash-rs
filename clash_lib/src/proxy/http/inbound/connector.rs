@@ -21,11 +21,20 @@ use super::proxy::maybe_socks_addr;
 pub struct Connector {
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
+    fw_mark: Option<u32>,
 }
 
 impl Connector {
-    pub fn new(src: SocketAddr, dispatcher: Arc<Dispatcher>) -> Self {
-        Self { src, dispatcher }
+    pub fn new(
+        src: SocketAddr,
+        dispatcher: Arc<Dispatcher>,
+        fw_mark: Option<u32>,
+    ) -> Self {
+        Self {
+            src,
+            dispatcher,
+            fw_mark,
+        }
     }
 }
 
@@ -47,7 +56,7 @@ impl tower::Service<Uri> for Connector {
         let dispatcher = self.dispatcher.clone();
 
         let destination = maybe_socks_addr(&url);
-
+        let fw_mark = self.fw_mark;
         async move {
             let (left, right) = duplex(1024 * 1024);
 
@@ -57,6 +66,7 @@ impl tower::Service<Uri> for Connector {
                 source: src,
                 destination: destination
                     .ok_or(ProxyError::InvalidUrl(url.to_string()))?,
+                so_mark: fw_mark,
                 ..Default::default()
             };
 

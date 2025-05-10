@@ -24,6 +24,7 @@ pub struct NetworkInboundHandler {
     pub listener: InboundOpts,
     pub dispatcher: Arc<Dispatcher>,
     pub authenticator: ThreadSafeAuthenticator,
+    pub fw_mark: Option<u32>,
 }
 
 impl NetworkInboundHandler {
@@ -44,6 +45,7 @@ impl NetworkInboundHandler {
                 common_opts.allow_lan,
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
+                self.fw_mark,
             )
             .into(),
             InboundOpts::Socks { common_opts, .. } => SocksInbound::new(
@@ -51,6 +53,7 @@ impl NetworkInboundHandler {
                 common_opts.allow_lan,
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
+                self.fw_mark,
             )
             .into(),
             InboundOpts::Mixed { common_opts, .. } => MixedInbound::new(
@@ -58,6 +61,7 @@ impl NetworkInboundHandler {
                 common_opts.allow_lan,
                 self.dispatcher.clone(),
                 self.authenticator.clone(),
+                self.fw_mark,
             )
             .into(),
             #[allow(unused)]
@@ -68,6 +72,7 @@ impl NetworkInboundHandler {
                         (common_opts.listen.0, common_opts.port).into(),
                         common_opts.allow_lan,
                         self.dispatcher.clone(),
+                        self.fw_mark,
                     )
                     .into()
                 }
@@ -88,6 +93,7 @@ impl NetworkInboundHandler {
                 self.dispatcher.clone(),
                 network.clone(),
                 target.clone(),
+                self.fw_mark,
             )?
             .into(),
         };

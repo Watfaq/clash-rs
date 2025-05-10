@@ -20,6 +20,7 @@ pub struct HttpInbound {
     allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for HttpInbound {
@@ -34,12 +35,14 @@ impl HttpInbound {
         allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
+        fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
             allow_lan,
             dispatcher,
             authenticator,
+            fw_mark,
         }
     }
 }
@@ -69,9 +72,16 @@ impl InboundHandlerTrait for HttpInbound {
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();
-
+            let fw_mark = self.fw_mark;
             tokio::spawn(async move {
-                proxy::handle(Box::new(socket), src_addr, dispatcher, author).await
+                proxy::handle(
+                    Box::new(socket),
+                    src_addr,
+                    dispatcher,
+                    author,
+                    fw_mark,
+                )
+                .await
             });
         }
     }

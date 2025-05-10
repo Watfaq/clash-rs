@@ -131,7 +131,7 @@ impl Handler {
             None,
             sess.iface.clone(),
             #[cfg(target_os = "linux")]
-            None,
+            sess.so_mark,
         )
         .await?;
 
