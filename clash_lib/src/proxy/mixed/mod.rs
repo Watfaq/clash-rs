@@ -16,6 +16,7 @@ pub struct MixedInbound {
     allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for MixedInbound {
@@ -30,12 +31,14 @@ impl MixedInbound {
         allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
+        fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
             allow_lan,
             dispatcher,
             authenticator,
+            fw_mark,
         }
     }
 }
@@ -70,13 +73,14 @@ impl InboundHandlerTrait for MixedInbound {
 
             let dispatcher = self.dispatcher.clone();
             let authenticator = self.authenticator.clone();
+            let fw_mark = self.fw_mark;
 
             match p[0] {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
                         network: Network::Tcp,
                         source: socket.peer_addr()?,
-
+                        so_mark: fw_mark,
                         ..Default::default()
                     };
 
@@ -98,6 +102,7 @@ impl InboundHandlerTrait for MixedInbound {
                         src,
                         dispatcher,
                         authenticator,
+                        fw_mark,
                     )
                     .await;
                 }

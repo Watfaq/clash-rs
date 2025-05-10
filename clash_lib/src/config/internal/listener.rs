@@ -96,4 +96,6 @@ pub struct CommonInboundOpts {
     pub allow_lan: bool,
     #[educe(Default = 0)]
     pub port: u16,
+    /// Linux routing mark
+    pub fw_mark: Option<u32>,
 }

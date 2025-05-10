@@ -176,12 +176,13 @@ pub async fn handle_tcp<'a>(
             let (close_handle, close_listener) = tokio::sync::oneshot::channel();
 
             let framed = UdpFramed::new(udp_inbound, Socks5UDPCodec);
-
+            let so_mark = sess.so_mark;
+            let iface = sess.iface.clone();
             let sess = Session {
                 network: Network::Udp,
                 typ: Type::Socks5,
-                so_mark: None,
-                iface: None,
+                so_mark,
+                iface,
                 ..Default::default()
             };
 

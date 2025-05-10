@@ -30,6 +30,7 @@ pub struct TunnelInbound {
     dispatcher: Arc<Dispatcher>,
     network: Vec<String>,
     target: SocksAddr,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for TunnelInbound {
@@ -44,12 +45,14 @@ impl TunnelInbound {
         dispatcher: Arc<Dispatcher>,
         network: Vec<String>,
         target: String,
+        fw_mark: Option<u32>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             listen: addr,
             dispatcher,
             network,
             target: SocksAddr::from_str(&target)?,
+            fw_mark,
         })
     }
 }
@@ -84,6 +87,7 @@ impl InboundHandlerTrait for TunnelInbound {
                 typ: Type::Tunnel,
                 source: src_addr,
                 destination: self.target.clone(),
+                so_mark: self.fw_mark,
                 ..Default::default()
             };
 
