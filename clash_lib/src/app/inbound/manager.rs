@@ -133,6 +133,7 @@ impl InboundManager {
                     dispatcher: self.dispatcher.clone(),
                     authenticator: self.authenticator.clone(),
                     listener: inbound.clone(), // TODO use Arc
+                    fw_mark: inbound.common_opts().fw_mark,
                 },
             );
         }

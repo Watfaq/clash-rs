@@ -47,6 +47,7 @@ async fn proxy(
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 ) -> Result<Response<HyperResponseBody>, ProxyError> {
     if authenticator.enabled() {
         if let Some(res) = authenticate_req(&req, authenticator) {
@@ -57,7 +58,7 @@ async fn proxy(
     let client = Client::builder(TokioExecutor::new())
         .http1_title_case_headers(true)
         .http1_preserve_header_case(true)
-        .build(Connector::new(src, dispatcher.clone()));
+        .build(Connector::new(src, dispatcher.clone(), fw_mark));
 
     // TODO: handle other upgrades: https://github.com/hyperium/hyper/blob/master/examples/upgrades.rs
     if req.method() == Method::CONNECT {
@@ -71,6 +72,7 @@ async fn proxy(
                                 typ: Type::HttpConnect,
                                 source: src,
                                 destination: addr,
+                                so_mark: fw_mark,
 
                                 ..Default::default()
                             };
@@ -119,6 +121,7 @@ struct ProxyService {
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 }
 
 impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
@@ -132,6 +135,7 @@ impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
             self.src,
             self.dispatcher.clone(),
             self.authenticator.clone(),
+            self.fw_mark,
         ))
     }
 }
@@ -142,6 +146,7 @@ pub async fn handle(
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 ) {
     tokio::task::spawn(async move {
         if let Err(http_err) = http1::Builder::new()
@@ -153,6 +158,7 @@ pub async fn handle(
                     src,
                     dispatcher,
                     authenticator,
+                    fw_mark,
                 },
             )
             .with_upgrades()

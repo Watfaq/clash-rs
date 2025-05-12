@@ -18,6 +18,7 @@ pub struct TproxyInbound {
     addr: SocketAddr,
     allow_lan: bool,
     dispather: Arc<Dispatcher>,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for TproxyInbound {
@@ -31,11 +32,13 @@ impl TproxyInbound {
         addr: SocketAddr,
         allow_lan: bool,
         dispather: Arc<Dispatcher>,
+        fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
             allow_lan,
             dispather,
+            fw_mark,
         }
     }
 }
@@ -77,6 +80,7 @@ impl InboundHandlerTrait for TproxyInbound {
                 typ: Type::Tproxy,
                 source: src_addr,
                 destination: orig_dst.into(),
+                so_mark: self.fw_mark,
                 ..Default::default()
             };
 
