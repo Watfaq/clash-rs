@@ -288,6 +288,23 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
+    async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
+        initialize();
+        let opts = gen_options(false)?;
+
+        let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(
+            handler,
+            get_shadowquic_runner().await?,
+            Suite::all(),
+        )
+        .await
+    }
+    #[tokio::test]
+    #[serial_test::serial]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
         let mut opts = gen_options(true)?;
