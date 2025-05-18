@@ -13,8 +13,10 @@ use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options}
 
 pub struct MixedInbound {
     addr: SocketAddr,
+    allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for MixedInbound {
@@ -26,13 +28,17 @@ impl Drop for MixedInbound {
 impl MixedInbound {
     pub fn new(
         addr: SocketAddr,
+        allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
+        fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
+            allow_lan,
             dispatcher,
             authenticator,
+            fw_mark,
         }
     }
 }
@@ -51,6 +57,11 @@ impl InboundHandlerTrait for MixedInbound {
 
         loop {
             let (socket, _) = listener.accept().await?;
+            let src_addr = socket.peer_addr()?;
+            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+                warn!("Connection from {} is not allowed", src_addr);
+                continue;
+            }
             let socket = apply_tcp_options(socket)?;
 
             let mut p = [0; 1];
@@ -62,13 +73,14 @@ impl InboundHandlerTrait for MixedInbound {
 
             let dispatcher = self.dispatcher.clone();
             let authenticator = self.authenticator.clone();
+            let fw_mark = self.fw_mark;
 
             match p[0] {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
                         network: Network::Tcp,
                         source: socket.peer_addr()?,
-
+                        so_mark: fw_mark,
                         ..Default::default()
                     };
 
@@ -90,6 +102,7 @@ impl InboundHandlerTrait for MixedInbound {
                         src,
                         dispatcher,
                         authenticator,
+                        fw_mark,
                     )
                     .await;
                 }

@@ -1,4 +1,4 @@
-name: Build/Test/Release
+name: CI
 
 on:
   push:
@@ -16,7 +16,8 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly"
+  RUST_TOOLCHAIN: "nightly-2025-03-01"
+  SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
@@ -42,12 +43,14 @@ jobs:
           # Linux x86 gnu
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            tool: cargo
+            tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           # Linux x86 musl
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
@@ -75,6 +78,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             tool: cross
@@ -83,6 +87,7 @@ jobs:
             target: armv7-unknown-linux-gnueabihf
             tool: cross
             extra-args: -F "plus"
+            zig: "2.17"
           # Linux arm musl
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
@@ -220,7 +225,8 @@ jobs:
         uses: ScribeMD/docker-cache@0.5.0
         if: startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test
         with:
-          key: matrix.os
+          key: ${{ matrix.os }}
+          read-only: ${{ matrix.target != 'x86_64-unknown-linux-gnu' }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -272,13 +278,13 @@ jobs:
         env:
           CLASH_DOCKER_TEST: "true"
 
-      - name: Cargo test and coverage
+      - name: Cargo test
         uses: clechasseur/rs-cargo@v3
         if: ${{ !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
-          command: 'test'
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }} }}
+          command: "test"
+          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
@@ -289,9 +295,10 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: build
-          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }} --package clash-rs
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
+          CROSS_BUILD_ZIG: ${{ matrix.zig }}
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}

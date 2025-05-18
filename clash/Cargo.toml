@@ -3,10 +3,12 @@ name = "clash-rs"
 repository = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
 
 [features]
 default = ["standard"]
-standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy"]
+standard = ["shadowsocks", "tuic", "ssh", "clash_lib/zero_copy", "shadowquic"]
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
@@ -17,6 +19,7 @@ shadowsocks = ["clash_lib/shadowsocks"]
 ssh = ["clash_lib/ssh"]
 tuic = ["clash_lib/tuic"]
 onion = ["clash_lib/onion"]
+shadowquic = ["clash_lib/shadowquic"]
 
 bench = ["clash_lib/bench"]
 dhat-heap = ["dep:dhat"]
@@ -30,3 +33,6 @@ clash_lib = { path = "../clash_lib", default-features = false }
 
 dhat = { version = "0.3", optional = true }
 tikv-jemallocator = { version = "0.6", optional = true }
+
+sentry = { version = "0.38", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+human-panic = "2.0"

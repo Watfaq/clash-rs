@@ -1,6 +1,7 @@
 use crate::{
     app::{
         dispatcher::tracked::{TrackedDatagram, TrackedStream},
+        dns::ClashResolver,
         outbound::manager::ThreadSafeOutboundManager,
         router::ThreadSafeRouter,
     },
@@ -79,41 +80,14 @@ impl Dispatcher {
         mut sess: Session,
         mut lhs: Box<dyn ClientStream>,
     ) {
-        let dest: SocksAddr = match &sess.destination {
-            crate::session::SocksAddr::Ip(socket_addr) => {
-                if self.resolver.fake_ip_enabled() {
-                    trace!("looking up fake ip: {}", socket_addr.ip());
-                    let ip = socket_addr.ip();
-                    if self.resolver.is_fake_ip(ip).await {
-                        let host = self.resolver.reverse_lookup(ip).await;
-                        match host {
-                            Some(host) => (host, socket_addr.port())
-                                .try_into()
-                                .expect("must be valid domain"),
-                            None => {
-                                error!("failed to reverse lookup fake ip: {}", ip);
-                                return;
-                            }
-                        }
-                    } else {
-                        (*socket_addr).into()
-                    }
-                } else {
-                    trace!("looking up resolve cache ip: {}", socket_addr.ip());
-                    match self.resolver.cached_for(socket_addr.ip()).await {
-                        Some(resolved) => (resolved, socket_addr.port())
-                            .try_into()
-                            .expect("must be valid domain"),
-                        _ => (*socket_addr).into(),
-                    }
+        let dest: SocksAddr =
+            match reverse_lookup(&self.resolver, &sess.destination).await {
+                Some(dest) => dest,
+                None => {
+                    warn!("failed to resolve destination {}", sess);
+                    return;
                 }
-            }
-            crate::session::SocksAddr::Domain(host, port) => {
-                (host.to_owned(), *port)
-                    .try_into()
-                    .expect("must be valid domain")
-            }
-        };
+            };
 
         sess.destination = dest.clone();
 
@@ -252,6 +226,24 @@ impl Dispatcher {
         let mode = self.mode.clone();
         let manager = self.manager.clone();
 
+        #[rustfmt::skip]
+        /*
+         *  implement details
+         * 
+         *  data structure:
+         *    local_r, local_w: stream/sink pair
+         *    remote_r, remote_w: stream/sink pair
+         *    remote_receiver_r, remote_receiver_w: channel pair
+         *    remote_sender, remote_forwarder: channel pair
+         *
+         *  data flow:
+         *    => local_r => init packet => connect_datagram => remote_sender     => remote_forwarder         => remote_w
+         *    => local_w                                    <= remote_receiver_r <= NAT + remote_receiver_w  <= remote_r
+         *  
+         *  notice:
+         *    the NAT is binded to the session in the dispatch_datagram function arg and the closure
+         *    so we need not to add a global NAT table and do the translation
+         */
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) =
             tokio::sync::mpsc::channel(32);
@@ -259,50 +251,23 @@ impl Dispatcher {
         let s = sess.clone();
         let ss = sess.clone();
         let t1 = tokio::spawn(async move {
-            while let Some(packet) = local_r.next().await {
+            while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
-                sess.source = packet.src_addr.clone().must_into_socket_addr();
 
-                let dest: SocksAddr = match &packet.dst_addr {
-                    crate::session::SocksAddr::Ip(socket_addr) => {
-                        if resolver.fake_ip_enabled() {
-                            let ip = socket_addr.ip();
-                            if resolver.is_fake_ip(ip).await {
-                                let host = resolver.reverse_lookup(ip).await;
-                                match host {
-                                    Some(host) => (host, socket_addr.port())
-                                        .try_into()
-                                        .expect("must be valid domain"),
-                                    None => {
-                                        error!(
-                                            "failed to reverse lookup fake ip: {}",
-                                            ip
-                                        );
-                                        continue;
-                                    }
-                                }
-                            } else {
-                                (*socket_addr).into()
-                            }
-                        } else {
-                            match resolver.cached_for(socket_addr.ip()).await {
-                                Some(resolved) => (resolved, socket_addr.port())
-                                    .try_into()
-                                    .expect("must be valid domain"),
-                                _ => (*socket_addr).into(),
-                            }
-                        }
-                    }
-                    crate::session::SocksAddr::Domain(host, port) => {
-                        (host.to_owned(), *port)
-                            .try_into()
-                            .expect("must be valid domain")
+                let dest = match reverse_lookup(&resolver, &packet.dst_addr).await {
+                    Some(dest) => dest,
+                    None => {
+                        warn!("failed to resolve destination {}", sess);
+                        continue;
                     }
                 };
+
+                // for TUN or Tproxy, we need the original destination address
+                let orig_dest = packet.dst_addr.clone();
+                sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = dest.clone();
 
                 // mutate packet for fake ip
-                let mut packet = packet;
                 // resolve is done in OutboundDatagramImpl so it's fine to have
                 // (Domain, port) here. ideally the OutboundDatagramImpl should only
                 // do Ip though?
@@ -375,7 +340,7 @@ impl Dispatcher {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = sess.destination.clone();
+                                packet.src_addr = orig_dest.clone();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!(
@@ -470,6 +435,50 @@ impl Dispatcher {
 
         return close_sender;
     }
+}
+
+// helper function to resolve the destination address
+// if the destination is an IP address, check if it's a fake IP
+// or look for cached IP
+// if the destination is a domain name, don't resolve
+async fn reverse_lookup(
+    resolver: &Arc<dyn ClashResolver>,
+    dst: &SocksAddr,
+) -> Option<SocksAddr> {
+    let dst = match dst {
+        crate::session::SocksAddr::Ip(socket_addr) => {
+            if resolver.fake_ip_enabled() {
+                let ip = socket_addr.ip();
+                if resolver.is_fake_ip(ip).await {
+                    trace!("looking up fake ip: {}", socket_addr.ip());
+                    let host = resolver.reverse_lookup(ip).await;
+                    match host {
+                        Some(host) => (host, socket_addr.port())
+                            .try_into()
+                            .expect("must be valid domain"),
+                        None => {
+                            error!("failed to reverse lookup fake ip: {}", ip);
+                            return None;
+                        }
+                    }
+                } else {
+                    (*socket_addr).into()
+                }
+            } else {
+                trace!("looking up resolve cache ip: {}", socket_addr.ip());
+                match resolver.cached_for(socket_addr.ip()).await {
+                    Some(resolved) => (resolved, socket_addr.port())
+                        .try_into()
+                        .expect("must be valid domain"),
+                    _ => (*socket_addr).into(),
+                }
+            }
+        }
+        crate::session::SocksAddr::Domain(host, port) => (host.to_owned(), *port)
+            .try_into()
+            .expect("must be valid domain"),
+    };
+    Some(dst)
 }
 
 type OutboundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>; // outbound packet sender

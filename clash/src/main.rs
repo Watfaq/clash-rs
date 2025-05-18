@@ -1,7 +1,10 @@
+#![feature(let_chains)]
+
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
+use human_panic::{Metadata, setup_panic};
 #[cfg(all(feature = "jemallocator", not(feature = "dhat-heap")))]
 use tikv_jemallocator::Jemalloc;
 
@@ -54,6 +57,14 @@ struct Cli {
     version: bool,
     #[clap(short, long, help = "Additinally log to file")]
     log_file: Option<String>,
+
+    #[clap(
+        long,
+        value_parser,
+        default_value = "false",
+        help = "Enable crash report to help improve clash"
+    )]
+    help_improve: bool,
 }
 
 fn main() {
@@ -112,6 +123,27 @@ fn main() {
                 exit(1);
             }
         }
+    }
+
+    // NOTE: set this up before Sentry
+    setup_panic!(
+        Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+            .authors(env!("CARGO_PKG_AUTHORS"))
+            .homepage(env!("CARGO_PKG_HOMEPAGE"))
+            .support(
+                "Open an issue on GitHub: https://github.com/Watfaq/clash-rs/issues"
+            )
+    );
+
+    let mut _guard = None;
+    if cli.help_improve {
+        _guard = Some(sentry::init((
+            env!("SENTRY_DSN"),
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        )));
     }
 
     match clash::start_scaffold(clash::Options {

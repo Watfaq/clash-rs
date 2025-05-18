@@ -13,3 +13,11 @@ where
 {
     io::Error::new(io::ErrorKind::Other, format!("{:?}", anyhow::anyhow!(err)))
 }
+
+#[macro_export]
+macro_rules! print_and_exit {
+    ($($arg:tt)*) => {{
+        eprintln!($($arg)*);
+        std::process::exit(1);
+    }};
+}

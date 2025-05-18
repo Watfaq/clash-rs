@@ -104,6 +104,13 @@ impl BindAddress {
     pub fn local() -> Self {
         Self(IpAddr::V4(Ipv4Addr::LOCALHOST))
     }
+
+    pub fn is_localhost(&self) -> bool {
+        match self.0 {
+            IpAddr::V4(ip) => ip.is_loopback(),
+            IpAddr::V6(ip) => ip.is_loopback(),
+        }
+    }
 }
 impl Default for BindAddress {
     fn default() -> Self {
@@ -191,32 +198,17 @@ mod tests {
         mixed-port: "9091"
         "#;
         let c = cfg.parse::<def::Config>().expect("should parse");
-        assert_eq!(c.port.clone().map(|x| x.try_into().unwrap()), Some(9090));
-        assert_eq!(
-            c.mixed_port.clone().map(|x| x.try_into().unwrap()),
-            Some(9091)
-        );
+        assert_eq!(c.port.map(|x| x.into()), Some(9090));
+        assert_eq!(c.mixed_port.map(|x| x.into()), Some(9091));
         let cc = convert(c).expect("should convert");
 
-        assert!(
-            cc.listeners
-                .iter()
-                .find(|(_, listener)| match listener {
-                    InboundOpts::Http { common_opts, .. } =>
-                        common_opts.port == 9090,
-                    _ => false,
-                })
-                .is_some()
-        );
-        assert!(
-            cc.listeners
-                .iter()
-                .find(|(_, listener)| match listener {
-                    InboundOpts::Mixed { common_opts, .. } =>
-                        common_opts.port == 9091,
-                    _ => false,
-                })
-                .is_some()
-        );
+        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+            InboundOpts::Http { common_opts, .. } => common_opts.port == 9090,
+            _ => false,
+        }));
+        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+            InboundOpts::Mixed { common_opts, .. } => common_opts.port == 9091,
+            _ => false,
+        }));
     }
 }

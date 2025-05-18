@@ -157,15 +157,14 @@ impl SocksAddr {
     pub fn must_into_socket_addr(self) -> SocketAddr {
         match self {
             SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(..) => panic!("not a socket address"),
+            SocksAddr::Domain(..) => panic!("not a socket address {:?}", self),
         }
     }
 
     pub fn ip(&self) -> Option<IpAddr> {
-        if let SocksAddr::Ip(addr) = self {
-            Some(addr.ip())
-        } else {
-            None
+        match self {
+            SocksAddr::Ip(addr) => Some(addr.ip()),
+            SocksAddr::Domain(host, _) => host.parse().ok(),
         }
     }
 

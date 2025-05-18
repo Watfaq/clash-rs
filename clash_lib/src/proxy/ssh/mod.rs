@@ -191,6 +191,7 @@ impl OutboundHandler for Handler {
         });
         let sh = connector::Client { server_public_key };
 
+        // TODO: adding fw_mark
         let mut session =
             client::connect(config, (self.opts.server.as_str(), self.opts.port), sh)
                 .await

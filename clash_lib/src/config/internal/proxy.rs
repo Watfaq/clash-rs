@@ -1,6 +1,8 @@
 use crate::{Error, common::utils::default_bool_true, config::utils};
 use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
+#[cfg(feature = "shadowquic")]
+use shadowquic::config::CongestionControl as SQCongestionControl;
 use std::{
     collections::HashMap,
     fmt::{Display, Formatter},
@@ -73,6 +75,9 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "ssh")]
     #[cfg(feature = "ssh")]
     Ssh(OutBoundSsh),
+    #[serde(rename = "shadowquic")]
+    #[cfg(feature = "shadowquic")]
+    ShadowQuic(OutboundShadowQuic),
 }
 
 impl OutboundProxyProtocol {
@@ -95,6 +100,8 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Hysteria2(hysteria2) => &hysteria2.name,
             #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
+            #[cfg(feature = "shadowquic")]
+            OutboundProxyProtocol::ShadowQuic(sq) => &sq.common_opts.name,
         }
     }
 }
@@ -133,6 +140,8 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Hysteria2(_) => write!(f, "Hysteria2"),
             #[cfg(feature = "ssh")]
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
+            #[cfg(feature = "shadowquic")]
+            OutboundProxyProtocol::ShadowQuic(_) => write!(f, "ShadowQUIC"),
         }
     }
 }
@@ -290,6 +299,39 @@ pub struct OutboundTuic {
     pub gc_lifetime: Option<u64>,
     pub send_window: Option<u64>,
     pub receive_window: Option<u64>,
+}
+
+#[cfg(feature = "shadowquic")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundShadowQuic {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    /// jls password, must be the same as the server
+    pub jls_pwd: String,
+    /// jls initial vector, must be the same as the server
+    pub jls_iv: String,
+    /// server name, must be the same as the server jls_upstream
+    /// domain name
+    pub server_name: String,
+    /// alpn, default to "h3"
+    pub alpn: Option<Vec<String>>,
+    /// initial mtu, must be larger than min mtu, at least to be 1200.
+    /// 1400 is recommended for high packet loss network. default to be 1300
+    pub initial_mtu: Option<u16>,
+    /// congestion control, default to "bbr"
+    pub congestion_control: Option<SQCongestionControl>, // bbr, new-reno, cubic
+    /// set to true to enable zero rtt, default to true
+    pub zero_rtt: Option<bool>,
+    /// if true, use quic stream to send UDP, otherwise use quic datagram
+    /// extension, similar to native UDP in TUIC
+    pub over_stream: Option<bool>,
+    /// minimum mtu, must be smaller than initial mtu, at least to be 1200.
+    /// 1400 is recommended for high packet loss network. default to be 1290
+    pub min_mtu: Option<u16>,
+    /// keep alive interval in milliseconds
+    /// 0 means disable keep alive, should be smaller than 30_000(idle time)
+    pub keep_alive_interval: Option<u32>,
 }
 
 #[cfg(feature = "ssh")]

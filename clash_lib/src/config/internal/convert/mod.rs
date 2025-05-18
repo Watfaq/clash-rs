@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, de::value::MapDeserializer};
 use serde_yaml::Value;
+use tracing::warn;
 
 use crate::{
     Error,
@@ -22,7 +23,7 @@ mod rule_provider;
 mod tun;
 
 use super::{
-    config::{self, BindAddress, Profile},
+    config::{self, Profile},
     proxy::{
         OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
         map_serde_error,
@@ -41,10 +42,11 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
     let mut proxy_names =
         vec![String::from(PROXY_DIRECT), String::from(PROXY_REJECT)];
 
-    if c.allow_lan.unwrap_or(false) {
-        c.bind_address = BindAddress::all()
-    } else {
-        c.bind_address = BindAddress::local()
+    if c.allow_lan.unwrap_or_default() && c.bind_address.is_localhost() {
+        warn!(
+            "allow-lan is set to true, but bind-address is set to localhost. This \
+             will not allow any connections from the local network."
+        );
     }
 
     config::Config {

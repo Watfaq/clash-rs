@@ -16,7 +16,9 @@ use tracing::{trace, warn};
 
 pub struct TproxyInbound {
     addr: SocketAddr,
+    allow_lan: bool,
     dispather: Arc<Dispatcher>,
+    fw_mark: Option<u32>,
 }
 
 impl Drop for TproxyInbound {
@@ -26,8 +28,18 @@ impl Drop for TproxyInbound {
 }
 
 impl TproxyInbound {
-    pub fn new(addr: SocketAddr, dispather: Arc<Dispatcher>) -> Self {
-        Self { addr, dispather }
+    pub fn new(
+        addr: SocketAddr,
+        allow_lan: bool,
+        dispather: Arc<Dispatcher>,
+        fw_mark: Option<u32>,
+    ) -> Self {
+        Self {
+            addr,
+            allow_lan,
+            dispather,
+            fw_mark,
+        }
     }
 }
 
@@ -51,7 +63,12 @@ impl InboundHandlerTrait for TproxyInbound {
         let listener = TcpListener::from_std(socket.into())?;
 
         loop {
-            let (socket, src_addr) = listener.accept().await?;
+            let (socket, _) = listener.accept().await?;
+            let src_addr = socket.peer_addr()?;
+            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+                warn!("Connection from {} is not allowed", src_addr);
+                continue;
+            }
 
             let socket = apply_tcp_options(socket)?;
 
@@ -63,6 +80,7 @@ impl InboundHandlerTrait for TproxyInbound {
                 typ: Type::Tproxy,
                 source: src_addr,
                 destination: orig_dst.into(),
+                so_mark: self.fw_mark,
                 ..Default::default()
             };
 
@@ -96,11 +114,17 @@ impl InboundHandlerTrait for TproxyInbound {
 
         let listener = unix_udp_sock::UdpSocket::from_std(socket.into())?;
 
-        handle_inbound_datagram(Arc::new(listener), self.dispather.clone()).await
+        handle_inbound_datagram(
+            self.allow_lan,
+            Arc::new(listener),
+            self.dispather.clone(),
+        )
+        .await
     }
 }
 
 async fn handle_inbound_datagram(
+    allow_lan: bool,
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
 ) -> anyhow::Result<()> {
@@ -160,6 +184,13 @@ async fn handle_inbound_datagram(
                     }
 
                     trace!("recv msg:{:?} orig_dst:{:?}", meta, orig_dst);
+                    if !allow_lan
+                        && let Ok(local_addr) = socket.local_addr()
+                        && meta.addr.ip() != local_addr.ip()
+                    {
+                        warn!("Connection from {} is not allowed", meta.addr);
+                        continue;
+                    }
                     let pkt = UdpPacket {
                         data: buf[..meta.len].to_vec(),
                         src_addr: meta.addr.into(),
