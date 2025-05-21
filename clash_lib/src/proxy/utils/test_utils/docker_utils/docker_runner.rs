@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use bollard::{
+    Docker,
     models::ContainerCreateBody,
     query_parameters::{CreateImageOptions, LogsOptions},
     secret::{HostConfig, Mount, PortBinding},
-    Docker,
 };
 
 use bollard::query_parameters::{
