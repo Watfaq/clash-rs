@@ -1,14 +1,16 @@
 use std::collections::HashMap;
 
 use bollard::{
-    Docker,
-    container::{Config, LogsOptions, RemoveContainerOptions},
+    models::ContainerCreateBody,
+    query_parameters::{CreateImageOptions, LogsOptions},
     secret::{HostConfig, Mount, PortBinding},
+    Docker,
 };
 
-use bollard::image::CreateImageOptions;
-
-use anyhow::Result;
+use bollard::query_parameters::{
+    CreateContainerOptions, CreateImageOptionsBuilder, RemoveContainerOptions,
+    StartContainerOptions,
+};
 use futures::{Future, TryStreamExt};
 
 const TIMEOUT_DURATION: u64 = 30;
@@ -20,9 +22,9 @@ pub struct DockerTestRunner {
 
 impl DockerTestRunner {
     pub async fn try_new(
-        image_conf: Option<CreateImageOptions<'_, String>>,
-        container_conf: Config<String>,
-    ) -> Result<Self> {
+        image_conf: Option<CreateImageOptions>,
+        container_conf: ContainerCreateBody,
+    ) -> anyhow::Result<Self> {
         let docker: Docker = Docker::connect_with_socket_defaults()?;
 
         docker
@@ -31,10 +33,15 @@ impl DockerTestRunner {
             .await?;
 
         let id = docker
-            .create_container::<&str, String>(None, container_conf)
+            .create_container(
+                Some(CreateContainerOptions::default()),
+                container_conf,
+            )
             .await?
             .id;
-        docker.start_container::<String>(&id, None).await?;
+        docker
+            .start_container(&id, Some(StartContainerOptions::default()))
+            .await?;
         Ok(Self {
             instance: docker,
             id,
@@ -45,7 +52,7 @@ impl DockerTestRunner {
     pub async fn cleanup(self) -> anyhow::Result<()> {
         let logs = self
             .instance
-            .logs::<String>(
+            .logs(
                 &self.id,
                 Some(LogsOptions {
                     follow: false,
@@ -283,11 +290,12 @@ impl DockerTestRunnerBuilder {
             .collect::<HashMap<_, _>>();
 
         DockerTestRunner::try_new(
-            Some(CreateImageOptions {
-                from_image: self.image.clone(),
-                ..Default::default()
-            }),
-            Config {
+            Some(
+                CreateImageOptionsBuilder::new()
+                    .from_image(&self.image)
+                    .build(),
+            ),
+            ContainerCreateBody {
                 image: Some(self.image),
                 tty: Some(true),
                 entrypoint: self.entrypoint,
