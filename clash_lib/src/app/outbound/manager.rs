@@ -386,23 +386,44 @@ impl OutboundManager {
             Ok(pd)
         }
 
+        fn maybe_append_providers(
+            provider_names: &Option<Vec<String>>,
+            provider_registry: &HashMap<String, ThreadSafeProxyProvider>,
+            providers: &mut Vec<ThreadSafeProxyProvider>,
+        ) {
+            if let Some(provider_names) = provider_names {
+                for provider_name in provider_names {
+                    let provider = provider_registry
+                        .get(provider_name)
+                        .unwrap_or_else(|| {
+                            print_and_exit!("provider {} not found", provider_name);
+                        })
+                        .clone();
+
+                    providers.push(provider);
+                }
+            }
+        }
+
+        fn check_group_empty(
+            proxies: &Option<Vec<String>>,
+            use_provider: &Option<Vec<String>>,
+        ) -> bool {
+            proxies.as_ref().map(|x| x.len()).unwrap_or_default()
+                + use_provider.as_ref().map(|x| x.len()).unwrap_or_default()
+                == 0
+        }
         // Initialize handlers for each outbound group protocol
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
                         return Err(Error::InvalidConfig(format!(
                             "proxy group {} has no proxies",
                             proto.name
                         )));
                     }
+
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -418,20 +439,11 @@ impl OutboundManager {
                         )?);
                     }
 
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    print_and_exit!(
-                                        "provider {} not found",
-                                        provider_name
-                                    );
-                                })
-                                .clone();
-                            providers.push(provider);
-                        }
-                    }
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
 
                     let relay = relay::Handler::new(
                         relay::HandlerOptions {
@@ -447,14 +459,7 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), relay);
                 }
                 OutboundGroupProtocol::UrlTest(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
                         return Err(Error::InvalidConfig(format!(
                             "proxy group {} has no proxies",
                             proto.name
@@ -475,20 +480,11 @@ impl OutboundManager {
                         )?);
                     }
 
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    print_and_exit!(
-                                        "provider {} not found",
-                                        provider_name
-                                    );
-                                })
-                                .clone();
-                            providers.push(provider);
-                        }
-                    }
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
 
                     let url_test = urltest::Handler::new(
                         urltest::HandlerOptions {
@@ -507,14 +503,7 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(url_test));
                 }
                 OutboundGroupProtocol::Fallback(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
                         return Err(Error::InvalidConfig(format!(
                             "proxy group {} has no proxies",
                             proto.name
@@ -535,20 +524,11 @@ impl OutboundManager {
                         )?);
                     }
 
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    print_and_exit!(
-                                        "provider {} not found",
-                                        provider_name
-                                    );
-                                })
-                                .clone();
-                            providers.push(provider);
-                        }
-                    }
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
 
                     let fallback = fallback::Handler::new(
                         fallback::HandlerOptions {
@@ -566,19 +546,13 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(fallback));
                 }
                 OutboundGroupProtocol::LoadBalance(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
                         return Err(Error::InvalidConfig(format!(
                             "proxy group {} has no proxies",
                             proto.name
                         )));
                     }
+
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -594,20 +568,11 @@ impl OutboundManager {
                         )?);
                     }
 
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    print_and_exit!(
-                                        "provider {} not found",
-                                        provider_name
-                                    );
-                                })
-                                .clone();
-                            providers.push(provider);
-                        }
-                    }
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
 
                     let load_balance = loadbalance::Handler::new(
                         loadbalance::HandlerOptions {
@@ -625,19 +590,13 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(load_balance));
                 }
                 OutboundGroupProtocol::Select(proto) => {
-                    if proto.proxies.as_ref().map(|x| x.len()).unwrap_or_default()
-                        + proto
-                            .use_provider
-                            .as_ref()
-                            .map(|x| x.len())
-                            .unwrap_or_default()
-                        == 0
-                    {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
                         return Err(Error::InvalidConfig(format!(
                             "proxy group {} has no proxies",
                             proto.name
                         )));
                     }
+
                     let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
                     if let Some(proxies) = &proto.proxies {
@@ -653,21 +612,11 @@ impl OutboundManager {
                         )?);
                     }
 
-                    if let Some(provider_names) = &proto.use_provider {
-                        for provider_name in provider_names {
-                            let provider = provider_registry
-                                .get(provider_name)
-                                .unwrap_or_else(|| {
-                                    print_and_exit!(
-                                        "provider {} not found",
-                                        provider_name
-                                    );
-                                })
-                                .clone();
-
-                            providers.push(provider);
-                        }
-                    }
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
 
                     let stored_selection =
                         cache_store.get_selected(&proto.name).await;
@@ -706,11 +655,15 @@ impl OutboundManager {
             proxy_manager.clone(),
         );
 
-        let pd = Arc::new(RwLock::new(
-            PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap(),
-        ));
+        let pd = Arc::new(RwLock::new(PlainProvider::new(
+            PROXY_GLOBAL.to_owned(),
+            g,
+            hc,
+        )?));
 
         let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
+        let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
+        providers.extend(proxy_providers);
         let h = selector::Handler::new(
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
@@ -720,7 +673,7 @@ impl OutboundManager {
                     ..Default::default()
                 },
             },
-            vec![pd.clone()],
+            providers,
             stored_selection,
         )
         .await;

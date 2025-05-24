@@ -83,7 +83,10 @@ impl NetworkInboundHandler {
                     return Ok(());
                 }
             }
-            InboundOpts::Redir { .. } => unimplemented!(),
+            InboundOpts::Redir { .. } => {
+                warn!("redir is not implemented yet");
+                return Ok(());
+            }
             InboundOpts::Tunnel {
                 common_opts,
                 network,
