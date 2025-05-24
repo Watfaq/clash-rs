@@ -372,8 +372,8 @@ pub struct Config {
     /// ```yaml
     /// cors-allow-origins:
     ///   - "https://example.com"
+    #[serde(rename = "cors-allow-origins")]
     pub cors_allow_origins: Option<Vec<String>>,
-    #[serde(rename = "interface-name")]
     /// outbound interface name
     /// # Note
     /// - not implemented yet
