@@ -28,8 +28,8 @@ impl HealthCheck {
         interval: u64,
         lazy: bool,
         proxy_manager: ProxyManager,
-    ) -> anyhow::Result<Self> {
-        let health_check = Self {
+    ) -> Self {
+        Self {
             url,
             interval,
             lazy,
@@ -39,8 +39,7 @@ impl HealthCheck {
                 proxies,
                 task_handle: None,
             })),
-        };
-        Ok(health_check)
+        }
     }
 
     pub async fn kick_off(&self) {
