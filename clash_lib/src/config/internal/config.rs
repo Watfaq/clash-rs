@@ -9,6 +9,7 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Error,
     app::{
         dns, net::Interface,
         remote_content_manager::providers::rule_provider::RuleSetBehavior,
@@ -18,7 +19,6 @@ use crate::{
         def::{self, LogLevel, RunMode},
         internal::{proxy::OutboundProxy, rule::RuleType},
     },
-    Error,
 };
 
 use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};

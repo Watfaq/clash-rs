@@ -1,12 +1,12 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
+    Router,
     response::Redirect,
     routing::{get, post},
-    Router,
 };
-use http::{header, Method};
-use tokio::sync::{broadcast::Sender, Mutex};
+use http::{Method, header};
+use tokio::sync::{Mutex, broadcast::Sender};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{AllowOrigin, Any, CorsLayer},
@@ -15,7 +15,7 @@ use tower_http::{
 };
 use tracing::{error, info, warn};
 
-use crate::{config::internal::config::Controller, GlobalState, Runner};
+use crate::{GlobalState, Runner, config::internal::config::Controller};
 
 use super::{
     dispatcher::{self, StatisticsManager},
