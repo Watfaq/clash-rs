@@ -1,22 +1,21 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    Router,
     response::Redirect,
     routing::{get, post},
+    Router,
 };
-
-use http::{Method, header};
-use tokio::sync::{Mutex, broadcast::Sender};
+use http::{header, Method};
+use tokio::sync::{broadcast::Sender, Mutex};
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, Any, CorsLayer},
     services::ServeDir,
     trace::TraceLayer,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-use crate::{GlobalState, Runner, config::internal::config::Controller};
+use crate::{config::internal::config::Controller, GlobalState, Runner};
 
 use super::{
     dispatcher::{self, StatisticsManager},
@@ -56,10 +55,28 @@ pub fn get_api_runner(
             statistics_manager: statistics_manager.clone(),
         });
 
+        let origins: AllowOrigin =
+            if let Some(origins) = &controller_cfg.cors_allow_origins {
+                origins
+                    .into_iter()
+                    .filter_map(|v| match v.parse() {
+                        Ok(origin) => Some(origin),
+                        Err(e) => {
+                            warn!("ignored invalid CORS origin '{}': {}", v, e);
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into()
+            } else {
+                Any.into()
+            };
+
         let cors = CorsLayer::new()
             .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH])
             .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
-            .allow_origin(Any);
+            .allow_private_network(true)
+            .allow_origin(origins);
 
         let bind_addr = if bind_addr.starts_with(':') {
             info!("hostname not provided, listening on localhost");
@@ -101,7 +118,7 @@ pub fn get_api_runner(
                 )
                 .nest("/dns", handlers::dns::routes(dns_resolver))
                 .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
-                    controller_cfg.secret.unwrap_or_default(),
+                    controller_cfg.secret.clone().unwrap_or_default(),
                 ))
                 .route_layer(cors)
                 .with_state(app_state)
@@ -117,6 +134,42 @@ pub fn get_api_runner(
             }
 
             let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
+            if let Ok(addr) = listener.local_addr() {
+                if !addr.ip().is_loopback()
+                    && controller_cfg.secret.unwrap_or_default().is_empty()
+                {
+                    error!(
+                        "API server is listening on a non-loopback address without \
+                         a secret. This is insecure!"
+                    );
+                    error!(
+                        "Please set a secret in the configuration to secure the \
+                         API server."
+                    );
+                    return Err(crate::Error::Operation(
+                        "API server is listening on a non-loopback address without \
+                         a secret. This is insecure!"
+                            .to_string(),
+                    ));
+                }
+                if !addr.ip().is_loopback()
+                    && controller_cfg.cors_allow_origins.is_none()
+                {
+                    error!(
+                        "API server is listening on a non-loopback address without \
+                         CORS origins configured. This is insecure!"
+                    );
+                    error!(
+                        "Please set CORS origins in the configuration to secure \
+                         the API server."
+                    );
+                    return Err(crate::Error::Operation(
+                        "API server is listening on a non-loopback address without \
+                         CORS origins configured. This is insecure!"
+                            .to_string(),
+                    ));
+                }
+            }
 
             axum::serve(
                 listener,
