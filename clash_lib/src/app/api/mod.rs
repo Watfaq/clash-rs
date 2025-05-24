@@ -58,7 +58,7 @@ pub fn get_api_runner(
         let origins: AllowOrigin =
             if let Some(origins) = &controller_cfg.cors_allow_origins {
                 origins
-                    .into_iter()
+                    .iter()
                     .filter_map(|v| match v.parse() {
                         Ok(origin) => Some(origin),
                         Err(e) => {
