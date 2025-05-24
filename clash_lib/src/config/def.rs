@@ -367,7 +367,13 @@ pub struct Config {
     pub external_ui: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
-    #[serde(rename = "interface-name")]
+    /// CORS allowed origins
+    /// # examples
+    /// ```yaml
+    /// cors-allow-origins:
+    ///   - "https://example.com"
+    #[serde(rename = "cors-allow-origins")]
+    pub cors_allow_origins: Option<Vec<String>>,
     /// outbound interface name
     /// # Note
     /// - not implemented yet
