@@ -57,7 +57,9 @@ use crate::proxy::tuic;
 static RESERVED_PROVIDER_NAME: &str = "default";
 
 pub struct OutboundManager {
+    /// name -> handler
     handlers: HashMap<String, AnyOutboundHandler>,
+    /// name -> provider
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
@@ -120,12 +122,21 @@ impl OutboundManager {
         self.selector_control.get(name).cloned()
     }
 
+    /// Get all proxies in the manager, including those from providers.
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
-        let proxy_manager = self.proxy_manager.clone();
+        let proxy_manager = &self.proxy_manager;
 
-        for (k, v) in self.handlers.iter() {
+        let mut provider_handlers = HashMap::new();
+        for provider in self.proxy_providers.values() {
+            let proxies = provider.read().await.proxies().await;
+            for proxy in proxies {
+                provider_handlers.insert(proxy.name().to_owned(), proxy.clone());
+            }
+        }
+
+        for (k, v) in self.handlers.iter().chain(provider_handlers.iter()) {
             let mut m = v.as_map().await;
 
             let alive = proxy_manager.alive(k).await;
@@ -192,6 +203,7 @@ impl OutboundManager {
 
     // API handlers end
 
+    /// Lazy initialization of connectors for each handler.
     async fn init_handler_connectors(&self) -> Result<(), Error> {
         let mut connectors = HashMap::new();
         for handler in self.handlers.values() {
@@ -216,6 +228,9 @@ impl OutboundManager {
         Ok(())
     }
 
+    /// Load handlers from the provided outbound protocols and groups.
+    /// handlers in proxy_providers are not loaded here as they are stored in
+    /// the provider separately.
     async fn load_handlers(
         &mut self,
         outbounds: Vec<OutboundProxyProtocol>,
@@ -230,6 +245,7 @@ impl OutboundManager {
 
         let mut proxy_providers = vec![];
 
+        // Initialize handlers for each outbound proxy protocol
         for outbound in outbounds.iter() {
             match outbound {
                 OutboundProxyProtocol::Direct => {
@@ -317,6 +333,7 @@ impl OutboundManager {
             }
         }
 
+        // Sort outbound groups to ensure dependencies are resolved
         let mut outbound_groups = outbound_groups;
         proxy_groups_dag_sort(&mut outbound_groups)?;
 
@@ -355,8 +372,7 @@ impl OutboundManager {
                 interval,
                 lazy,
                 proxy_manager.clone(),
-            )
-            .map_err(|e| Error::InvalidConfig(format!("invalid hc config {}", e)))?;
+            );
 
             let pd = Arc::new(RwLock::new(
                 PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
@@ -370,6 +386,7 @@ impl OutboundManager {
             Ok(pd)
         }
 
+        // Initialize handlers for each outbound group protocol
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
                 OutboundGroupProtocol::Relay(proto) => {
@@ -687,8 +704,8 @@ impl OutboundManager {
             0, // this is a manual HC
             true,
             proxy_manager.clone(),
-        )
-        .unwrap();
+        );
+
         let pd = Arc::new(RwLock::new(
             PlainProvider::new(PROXY_GLOBAL.to_owned(), g, hc).unwrap(),
         ));
@@ -740,10 +757,8 @@ impl OutboundManager {
                         http.health_check.interval,
                         http.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
-                    )
-                    .map_err(|e| {
-                        Error::InvalidConfig(format!("invalid hc config {}", e))
-                    })?;
+                    );
+
                     let provider = ProxySetProvider::new(
                         name.clone(),
                         Duration::from_secs(http.interval),
@@ -772,10 +787,7 @@ impl OutboundManager {
                         file.health_check.interval,
                         file.health_check.lazy.unwrap_or_default(),
                         proxy_manager.clone(),
-                    )
-                    .map_err(|e| {
-                        Error::InvalidConfig(format!("invalid hc config {}", e))
-                    })?;
+                    );
 
                     let provider = ProxySetProvider::new(
                         name.clone(),

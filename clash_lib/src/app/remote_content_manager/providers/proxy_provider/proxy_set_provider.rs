@@ -313,8 +313,7 @@ proxies:
             0,
             true,
             latency_manager.clone(),
-        )
-        .unwrap();
+        );
 
         let provider = ProxySetProvider::new(
             "test".to_owned(),
