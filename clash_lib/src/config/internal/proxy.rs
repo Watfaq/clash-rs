@@ -498,6 +498,27 @@ pub struct OutboundGroupSmart {
 
     pub lazy: Option<bool>,
     pub icon: Option<String>,
+    
+    /// Custom weight expressions for proxy priority tuning
+    /// Format: "ProxyNamePattern:weight;AnotherPattern:weight"
+    /// Example: "Premium:0.9;SG:1.3"
+    #[serde(rename = "policy-priority")]
+    pub policy_priority: Option<String>,
+    
+    /// Maximum retries for failed connections (default: 3)
+    pub max_retries: Option<u32>,
+    
+    /// Intelligent testing optimization mode
+    /// When true, only subset of proxies are tested based on usage patterns
+    pub smart_testing: Option<bool>,
+    
+    /// Site stickiness factor (0.0-1.0, default: 0.8)
+    /// Higher values make the same site more likely to use the same proxy
+    pub site_stickiness: Option<f64>,
+    
+    /// Bandwidth consideration weight (default: 0.0 - disabled)
+    /// When > 0, bandwidth metrics are included in selection algorithm
+    pub bandwidth_weight: Option<f64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
