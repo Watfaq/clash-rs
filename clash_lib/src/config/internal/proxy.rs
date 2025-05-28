@@ -379,6 +379,8 @@ pub enum OutboundGroupProtocol {
     Fallback(OutboundGroupFallback),
     #[serde(rename = "load-balance")]
     LoadBalance(OutboundGroupLoadBalance),
+    #[serde(rename = "smart")]
+    Smart(OutboundGroupSmart),
     #[serde(rename = "select")]
     Select(OutboundGroupSelect),
 }
@@ -390,6 +392,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => &g.name,
             OutboundGroupProtocol::Fallback(g) => &g.name,
             OutboundGroupProtocol::LoadBalance(g) => &g.name,
+            OutboundGroupProtocol::Smart(g) => &g.name,
             OutboundGroupProtocol::Select(g) => &g.name,
         }
     }
@@ -400,6 +403,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Fallback(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::Smart(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Select(g) => g.proxies.as_ref(),
         }
     }
@@ -413,6 +417,7 @@ impl Display for OutboundGroupProtocol {
             OutboundGroupProtocol::Fallback(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::LoadBalance(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::Select(g) => write!(f, "{}", g.name),
+            OutboundGroupProtocol::Smart(g) => write!(f, "{}", g.name),
         }
     }
 }
@@ -481,6 +486,21 @@ pub enum LoadBalanceStrategy {
     RoundRobin,
     #[serde(rename = "sticky-session")]
     StickySession,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+pub struct OutboundGroupSmart {
+    pub name: String,
+
+    pub proxies: Option<Vec<String>>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
+    pub url: String,
+    #[serde(deserialize_with = "utils::deserialize_u64")]
+    pub interval: u64,
+    pub lazy: Option<bool>,
+    pub icon: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]

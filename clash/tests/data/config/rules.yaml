@@ -92,6 +92,7 @@ proxy-groups:
       - "auto"
       - "fallback-auto"
       - "load-balance"
+      - "smart"
       - "select"
       - "wg"
       - DIRECT
@@ -109,6 +110,7 @@ proxy-groups:
       # - "auto"
       # - "fallback-auto"
       # - "load-balance"
+      # - "smart"
       # - "select"
       # - "wg"
       # - DIRECT
@@ -143,6 +145,15 @@ proxy-groups:
     proxies:
       - DIRECT
     strategy: round-robin
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+
+  - name: "smart"
+    type: smart
+    use:
+      - "file-provider-uot"
+    proxies:
+      - DIRECT
     url: "http://www.gstatic.com/generate_204"
     interval: 300
 

@@ -17,6 +17,7 @@ use crate::app::{
     },
 };
 
+use crate::proxy::group::smart;
 use crate::{
     app::remote_content_manager::providers::proxy_provider::{
         PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
@@ -638,6 +639,50 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(selector.clone()));
                     selector_control
                         .insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
+                }
+                OutboundGroupProtocol::Smart(proto) => {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
+
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            proto.interval,
+                            proto.lazy.unwrap_or_default(),
+                            handlers,
+                            proxy_manager.clone(),
+                            &mut proxy_providers,
+                            provider_registry,
+                        )?);
+                    }
+
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
+
+                    let smart_handler = smart::Handler::new(
+                        smart::HandlerOptions {
+                            name: proto.name.clone(),
+                            common_opts: crate::proxy::HandlerCommonOptions {
+                                icon: proto.icon.clone(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        providers,
+                        proxy_manager.clone(),
+                    );
+
+                    handlers.insert(proto.name.clone(), Arc::new(smart_handler));
                 }
             }
         }

@@ -56,6 +56,14 @@ pub struct ProxyManager {
         Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
 }
 
+#[derive(Clone, Default)]
+pub struct SiteTuning {
+    pub delay_weight: Option<f64>,
+    pub packet_loss_weight: Option<f64>,
+    pub rtt_weight: Option<f64>,
+    pub alive_penalty: Option<f64>,
+}
+
 impl ProxyManager {
     pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
         Self {
@@ -123,6 +131,35 @@ impl ProxyManager {
             .last()
             .map(|x| x.delay)
             .unwrap_or(max)
+    }
+
+    pub async fn get_delay(&self, name: &str) -> Option<f64> {
+        let delay = self.last_delay(name).await;
+        if delay == u16::MAX {
+            None
+        } else {
+            Some(delay as f64)
+        }
+    }
+
+    pub async fn get_packet_loss(&self, name: &str) -> Option<f64> {
+        let history = self.delay_history(name).await;
+        if history.is_empty() {
+            None
+        } else {
+            let failed_count = history.iter().filter(|x| x.delay == 0).count();
+            Some(failed_count as f64 / history.len() as f64)
+        }
+    }
+
+    pub async fn get_rtt(&self, name: &str) -> Option<f64> {
+        let history = self.delay_history(name).await;
+        if history.is_empty() {
+            None
+        } else {
+            let avg_rtt = history.iter().map(|x| x.delay as f64).sum::<f64>() / history.len() as f64;
+            Some(avg_rtt)
+        }
     }
 
     #[instrument(skip(self, proxy))]
@@ -258,6 +295,11 @@ impl ProxyManager {
         }
 
         result
+    }
+
+    pub async fn get_site_tuning(&self, _host: &str) -> SiteTuning {
+        // TODO: implement per-site tuning logic, for now return default
+        SiteTuning::default()
     }
 }
 
