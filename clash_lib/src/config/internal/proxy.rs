@@ -496,9 +496,6 @@ pub struct OutboundGroupSmart {
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
 
-    pub url: String,
-    #[serde(deserialize_with = "utils::deserialize_u64")]
-    pub interval: u64,
     pub lazy: Option<bool>,
     pub icon: Option<String>,
 }

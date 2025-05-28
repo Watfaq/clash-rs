@@ -654,7 +654,7 @@ impl OutboundManager {
                         providers.push(make_provider_from_proxies(
                             &proto.name,
                             proxies,
-                            proto.interval,
+                            0,
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
