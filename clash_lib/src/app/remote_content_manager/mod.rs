@@ -22,6 +22,7 @@ use tracing::{debug, instrument, trace};
 use crate::{
     common::{errors::new_io_error, timed_future::TimedFuture},
     proxy::AnyOutboundHandler,
+    session::Session,
 };
 
 use self::http_client::LocalConnector;
@@ -31,6 +32,56 @@ use super::dns::ThreadSafeDNSResolver;
 pub mod healthcheck;
 mod http_client;
 pub mod providers;
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct TrafficStats {
+    /// Total bytes uploaded in this session
+    pub bytes_uploaded: u64,
+    /// Total bytes downloaded in this session
+    pub bytes_downloaded: u64,
+    /// Duration of the connection
+    pub connection_duration: Duration,
+    /// Average throughput in bytes per second
+    pub average_throughput: f64,
+    /// Peak throughput observed
+    pub peak_throughput: f64,
+    /// Frequency of requests per second
+    pub request_frequency: f64,
+    /// Whether traffic flows both ways significantly
+    pub is_bidirectional: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TrafficPatternType {
+    /// Web browsing - moderate download, low upload, short-medium duration
+    WebBrowsing,
+    /// Video streaming - high download, low upload, long duration, steady
+    /// throughput
+    VideoStreaming,
+    /// File download - very high download, minimal upload, variable duration
+    FileDownload,
+    /// File upload - minimal download, high upload, variable duration
+    FileUpload,
+    /// Gaming - low throughput, high frequency, bidirectional, low latency
+    /// critical
+    Gaming,
+    /// Voice call - moderate bidirectional, steady throughput, medium duration
+    VoiceCall,
+    /// Video call - high bidirectional, steady throughput, medium-long duration
+    VideoCall,
+    /// Messaging - very low throughput, sporadic, bidirectional
+    Messaging,
+    /// Unknown pattern
+    Unknown,
+}
+
+/// Result of traffic pattern analysis with confidence score
+#[derive(Clone, Debug)]
+pub struct TrafficPattern {
+    pub pattern_type: TrafficPatternType,
+    /// Confidence score from 0.0 to 1.0
+    pub confidence: f64,
+}
 
 #[derive(Clone, Serialize)]
 pub struct DelayHistory {
@@ -157,8 +208,472 @@ impl ProxyManager {
         if history.is_empty() {
             None
         } else {
-            let avg_rtt = history.iter().map(|x| x.delay as f64).sum::<f64>() / history.len() as f64;
+            let avg_rtt = history.iter().map(|x| x.delay as f64).sum::<f64>()
+                / history.len() as f64;
             Some(avg_rtt)
+        }
+    }
+
+    /// This method analyzes traffic characteristics using multiple detection
+    /// algorithms and applies confidence boosting based on session context.
+    pub async fn analyze_traffic_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let mut patterns = Vec::new();
+
+        // Early exit for minimal data
+        if stats.bytes_uploaded + stats.bytes_downloaded < 1024 {
+            return TrafficPattern {
+                pattern_type: TrafficPatternType::Unknown,
+                confidence: 0.1,
+            };
+        }
+
+        // Run all pattern detection algorithms
+        patterns.push(self.detect_streaming_pattern(stats, sess));
+        patterns.push(self.detect_download_pattern(stats, sess));
+        patterns.push(self.detect_upload_pattern(stats, sess));
+        patterns.push(self.detect_gaming_pattern(stats, sess));
+        patterns.push(self.detect_voip_pattern(stats, sess));
+        patterns.push(self.detect_video_call_pattern(stats, sess));
+        patterns.push(self.detect_web_browsing_pattern(stats, sess));
+        patterns.push(self.detect_messaging_pattern(stats, sess));
+
+        // Find the pattern with highest confidence
+        let best_pattern = patterns
+            .into_iter()
+            .max_by(|a, b| {
+                a.confidence
+                    .partial_cmp(&b.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(TrafficPattern {
+                pattern_type: TrafficPatternType::Unknown,
+                confidence: 0.0,
+            });
+
+        debug!(
+            "Traffic pattern analysis for {}: {:?} (confidence: {:.2})",
+            sess.destination.host(),
+            best_pattern.pattern_type,
+            best_pattern.confidence
+        );
+
+        best_pattern
+    }
+
+    fn detect_streaming_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let download_ratio = if stats.bytes_uploaded + stats.bytes_downloaded > 0 {
+            stats.bytes_downloaded as f64
+                / (stats.bytes_uploaded + stats.bytes_downloaded) as f64
+        } else {
+            0.0
+        };
+
+        let duration_secs = stats.connection_duration.as_secs();
+        let mut confidence = 0.0;
+
+        // Domain-based detection boost
+        let host = sess.destination.host().to_lowercase();
+        if host.contains("youtube")
+            || host.contains("netflix")
+            || host.contains("twitch")
+            || host.contains("video")
+            || host.contains("stream")
+            || host.contains("hls")
+        {
+            confidence += 0.2;
+        }
+
+        // High download ratio (>88% download, slightly relaxed)
+        if download_ratio > 0.88 {
+            confidence += 0.3;
+        }
+
+        // Long duration indicates streaming
+        match duration_secs {
+            0..=60 => {}                      // Too short for streaming
+            61..=300 => confidence += 0.1,    // Short stream
+            301..=1800 => confidence += 0.25, // Medium stream
+            _ => confidence += 0.3,           // Long stream
+        }
+
+        // Steady moderate to high throughput
+        if stats.average_throughput > 500_000.0
+            && stats.average_throughput < 100_000_000.0
+        {
+            confidence += 0.25;
+        }
+
+        // Consistent throughput (streaming should be relatively stable)
+        if stats.peak_throughput > 0.0 && stats.average_throughput > 0.0 {
+            let variance_ratio = stats.peak_throughput / stats.average_throughput;
+            if variance_ratio < 4.0 {
+                // Less variance indicates streaming
+                confidence += 0.15;
+            }
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::VideoStreaming,
+            confidence,
+        }
+    }
+
+    fn detect_download_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let download_ratio = if stats.bytes_uploaded + stats.bytes_downloaded > 0 {
+            stats.bytes_downloaded as f64
+                / (stats.bytes_uploaded + stats.bytes_downloaded) as f64
+        } else {
+            0.0
+        };
+
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+
+        // Domain-based detection
+        if host.contains("cdn")
+            || host.contains("download")
+            || host.contains("files")
+            || host.contains("github")
+            || host.contains("releases")
+        {
+            confidence += 0.2;
+        }
+
+        // Very high download ratio (>94%)
+        if download_ratio > 0.94 {
+            confidence += 0.4;
+        }
+
+        // High sustained throughput
+        if stats.average_throughput > 5_000_000.0 {
+            confidence += 0.3;
+        }
+
+        // Large total download size
+        match stats.bytes_downloaded {
+            10_000_000..=100_000_000 => confidence += 0.2, // 10-100MB
+            100_000_001.. => confidence += 0.3,            // >100MB
+            _ => {}
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::FileDownload,
+            confidence,
+        }
+    }
+
+    fn detect_upload_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let upload_ratio = if stats.bytes_uploaded + stats.bytes_downloaded > 0 {
+            stats.bytes_uploaded as f64
+                / (stats.bytes_uploaded + stats.bytes_downloaded) as f64
+        } else {
+            0.0
+        };
+
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+
+        // Domain-based detection
+        if host.contains("upload")
+            || host.contains("cloud")
+            || host.contains("drive")
+            || host.contains("storage")
+            || host.contains("backup")
+        {
+            confidence += 0.2;
+        }
+
+        // High upload ratio (>75%)
+        if upload_ratio > 0.75 {
+            confidence += 0.4;
+        }
+
+        // Sustained upload throughput
+        if stats.average_throughput > 2_000_000.0 {
+            confidence += 0.3;
+        }
+
+        // Large upload size
+        if stats.bytes_uploaded > 20_000_000 {
+            // 20MB+
+            confidence += 0.3;
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::FileUpload,
+            confidence,
+        }
+    }
+
+    fn detect_gaming_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+        let port = sess.destination.port();
+
+        // Gaming-related domains and ports
+        if host.contains("game")
+            || host.contains("steam")
+            || host.contains("riot")
+            || host.contains("blizzard")
+            || host.contains("xbox")
+            || host.contains("playstation")
+        {
+            confidence += 0.3;
+        }
+
+        // Common gaming ports
+        if matches!(port, 3478..=3480 | 27000..=28000 | 7777..=7784) {
+            confidence += 0.2;
+        }
+
+        // High request frequency with low latency requirements
+        if stats.request_frequency > 20.0 {
+            confidence += 0.3;
+        }
+
+        // Low overall throughput but highly bidirectional
+        if stats.average_throughput < 1_000_000.0 && stats.is_bidirectional {
+            confidence += 0.3;
+        }
+
+        // Gaming sessions tend to be long
+        if stats.connection_duration.as_secs() > 600 {
+            // 10+ minutes
+            confidence += 0.2;
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::Gaming,
+            confidence,
+        }
+    }
+
+    fn detect_voip_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let upload_download_ratio = if stats.bytes_downloaded > 0 {
+            stats.bytes_uploaded as f64 / stats.bytes_downloaded as f64
+        } else {
+            f64::INFINITY
+        };
+
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+
+        // VoIP service domains
+        if host.contains("skype")
+            || host.contains("zoom")
+            || host.contains("teams")
+            || host.contains("discord")
+            || host.contains("webex")
+            || host.contains("voip")
+        {
+            confidence += 0.3;
+        }
+
+        // Balanced upload/download (0.4 to 2.5 ratio for VoIP)
+        if upload_download_ratio > 0.4 && upload_download_ratio < 2.5 {
+            confidence += 0.4;
+        }
+
+        // Voice codec throughput range
+        if stats.average_throughput > 16_000.0
+            && stats.average_throughput < 320_000.0
+        {
+            confidence += 0.3;
+        }
+
+        // Call duration patterns
+        match stats.connection_duration.as_secs() {
+            60..=3600 => confidence += 0.3, // 1 minute to 1 hour
+            3601.. => confidence += 0.2,    // Very long calls
+            _ => {}
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::VoiceCall,
+            confidence,
+        }
+    }
+
+    fn detect_video_call_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let upload_download_ratio = if stats.bytes_downloaded > 0 {
+            stats.bytes_uploaded as f64 / stats.bytes_downloaded as f64
+        } else {
+            f64::INFINITY
+        };
+
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+
+        // Video call service domains
+        if host.contains("zoom")
+            || host.contains("teams")
+            || host.contains("meet")
+            || host.contains("webex")
+            || host.contains("facetime")
+            || host.contains("hangouts")
+        {
+            confidence += 0.3;
+        }
+
+        // Balanced but higher bandwidth than voice
+        if upload_download_ratio > 0.2 && upload_download_ratio < 5.0 {
+            confidence += 0.3;
+        }
+
+        // Video call throughput range
+        if stats.average_throughput > 200_000.0
+            && stats.average_throughput < 15_000_000.0
+        {
+            confidence += 0.4;
+        }
+
+        // Video call duration patterns
+        if stats.connection_duration.as_secs() > 120 {
+            confidence += 0.3;
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::VideoCall,
+            confidence,
+        }
+    }
+
+    fn detect_web_browsing_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let mut confidence = 0.0;
+        let port = sess.destination.port();
+        let host = sess.destination.host().to_lowercase();
+
+        // HTTP/HTTPS ports get strong signal
+        if port == 80 || port == 443 {
+            confidence += 0.4;
+        }
+
+        // Common web domains
+        if host.contains("www")
+            || host.contains("com")
+            || host.contains("org")
+            || host.contains("net")
+            || host.ends_with(".io")
+        {
+            confidence += 0.1;
+        }
+
+        // Web browsing download preference
+        let download_ratio = if stats.bytes_uploaded + stats.bytes_downloaded > 0 {
+            stats.bytes_downloaded as f64
+                / (stats.bytes_uploaded + stats.bytes_downloaded) as f64
+        } else {
+            0.0
+        };
+
+        if download_ratio > 0.65 && download_ratio < 0.93 {
+            confidence += 0.3;
+        }
+
+        // Web browsing throughput characteristics
+        if stats.average_throughput > 50_000.0
+            && stats.average_throughput < 8_000_000.0
+        {
+            confidence += 0.2;
+        }
+
+        // Browsing sessions are typically shorter
+        if stats.connection_duration.as_secs() < 1800 {
+            // Less than 30 minutes
+            confidence += 0.1;
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::WebBrowsing,
+            confidence,
+        }
+    }
+
+    fn detect_messaging_pattern(
+        &self,
+        stats: &TrafficStats,
+        sess: &Session,
+    ) -> TrafficPattern {
+        let mut confidence = 0.0;
+        let host = sess.destination.host().to_lowercase();
+
+        // Messaging service domains
+        if host.contains("whatsapp")
+            || host.contains("telegram")
+            || host.contains("signal")
+            || host.contains("messenger")
+            || host.contains("slack")
+            || host.contains("discord")
+        {
+            confidence += 0.3;
+        }
+
+        // Very low sustained throughput
+        if stats.average_throughput < 100_000.0 {
+            confidence += 0.4;
+        }
+
+        // Bidirectional but low volume
+        if stats.is_bidirectional
+            && stats.bytes_uploaded + stats.bytes_downloaded < 5_000_000
+        {
+            // Less than 5MB total
+            confidence += 0.3;
+        }
+
+        // Messaging can have long idle connections
+        if stats.connection_duration.as_secs() > 300 {
+            confidence += 0.3;
+        }
+
+        TrafficPattern {
+            pattern_type: TrafficPatternType::Messaging,
+            confidence,
+        }
+    }
+
+    /// Calculate adjustment factor based on total data transferred
+    fn calculate_data_size_factor(&self, stats: &TrafficStats) -> f64 {
+        let total_bytes = stats.bytes_uploaded + stats.bytes_downloaded;
+
+        match total_bytes {
+            0..=1_000_000 => 1.0,           // Small data: standard weights
+            1_000_001..=100_000_000 => 1.2, // Medium data: slightly favor stability
+            100_000_001..=1_000_000_000 => 1.5, // Large data: favor stability more
+            _ => 2.0,                       /* Very large data: heavily favor
+                                              * stability */
         }
     }
 
@@ -297,9 +812,129 @@ impl ProxyManager {
         result
     }
 
-    pub async fn get_site_tuning(&self, _host: &str) -> SiteTuning {
-        // TODO: implement per-site tuning logic, for now return default
-        SiteTuning::default()
+    /// Based on session characteristics and traffic statistics.
+    pub async fn get_site_tuning(&self, sess: &Session) -> SiteTuning {
+        // Extract traffic statistics from the session if available
+        let traffic_stats = sess.traffic_stats.as_ref();
+
+        // Attempt intelligent pattern detection if traffic statistics are available
+        if let Some(stats) = traffic_stats {
+            let pattern = self.analyze_traffic_pattern(stats, sess).await;
+
+            // Only use pattern-specific tuning if confidence is high enough
+            if pattern.confidence > 0.6 {
+                // Apply pattern-specific tuning parameters optimized for each
+                // traffic type
+                let mut tuning = match pattern.pattern_type {
+                    // Gaming: Ultra-low latency critical, high packet loss penalty
+                    TrafficPatternType::Gaming => SiteTuning {
+                        delay_weight: Some(0.1),
+                        packet_loss_weight: Some(8000.0),
+                        rtt_weight: Some(0.1),
+                        alive_penalty: Some(20000.0),
+                    },
+                    // Voice calls: Low latency important, moderate packet loss
+                    // sensitivity
+                    TrafficPatternType::VoiceCall => SiteTuning {
+                        delay_weight: Some(0.2),
+                        packet_loss_weight: Some(6000.0),
+                        rtt_weight: Some(0.2),
+                        alive_penalty: Some(15000.0),
+                    },
+                    // Video calls: Balance between latency and stability
+                    TrafficPatternType::VideoCall => SiteTuning {
+                        delay_weight: Some(0.4),
+                        packet_loss_weight: Some(5000.0),
+                        rtt_weight: Some(0.3),
+                        alive_penalty: Some(12000.0),
+                    },
+                    // Video streaming: Favor stability over low latency
+                    TrafficPatternType::VideoStreaming => SiteTuning {
+                        delay_weight: Some(0.5),
+                        packet_loss_weight: Some(4000.0),
+                        rtt_weight: Some(0.4),
+                        alive_penalty: Some(10000.0),
+                    },
+                    // Web browsing: Balanced approach for general usage
+                    TrafficPatternType::WebBrowsing => SiteTuning {
+                        delay_weight: Some(0.6),
+                        packet_loss_weight: Some(2000.0),
+                        rtt_weight: Some(0.5),
+                        alive_penalty: Some(6000.0),
+                    },
+                    // Messaging: Moderate latency tolerance, low bandwidth
+                    TrafficPatternType::Messaging => SiteTuning {
+                        delay_weight: Some(0.8),
+                        packet_loss_weight: Some(1500.0),
+                        rtt_weight: Some(0.4),
+                        alive_penalty: Some(5000.0),
+                    },
+                    // File upload: Prioritize connection stability over speed
+                    TrafficPatternType::FileUpload => SiteTuning {
+                        delay_weight: Some(1.2),
+                        packet_loss_weight: Some(800.0),
+                        rtt_weight: Some(0.8),
+                        alive_penalty: Some(4000.0),
+                    },
+                    // File download: Maximum stability for large transfers
+                    TrafficPatternType::FileDownload => SiteTuning {
+                        delay_weight: Some(1.5),
+                        packet_loss_weight: Some(500.0),
+                        rtt_weight: Some(1.0),
+                        alive_penalty: Some(3000.0),
+                    },
+                    // Unknown patterns: Use fallback logic
+                    _ => self.get_fallback_tuning(sess),
+                };
+
+                // Apply data size scaling factor for large transfers
+                // Larger transfers benefit more from stable connections
+                let data_size_factor = self.calculate_data_size_factor(stats);
+                if let Some(ref mut delay_weight) = tuning.delay_weight {
+                    *delay_weight *= data_size_factor;
+                }
+                return tuning;
+            }
+        }
+
+        // Fallback to protocol and port-based tuning when no traffic data
+        // is available or pattern confidence is too low
+        self.get_fallback_tuning(sess)
+    }
+
+    /// Fallback tuning based on protocol and port
+    fn get_fallback_tuning(&self, sess: &Session) -> SiteTuning {
+        let is_udp = matches!(sess.network, crate::session::Network::Udp);
+        let port = sess.destination.port();
+
+        if is_udp {
+            // UDP: games, VoIP, real-time - prioritize low latency
+            SiteTuning {
+                delay_weight: Some(0.3),
+                packet_loss_weight: Some(3000.0),
+                rtt_weight: Some(0.3),
+                alive_penalty: Some(15000.0),
+            }
+        } else if port == 80 || port == 443 {
+            // HTTP/HTTPS: balance latency and stability
+            SiteTuning {
+                delay_weight: Some(0.7),
+                packet_loss_weight: Some(2000.0),
+                rtt_weight: Some(0.7),
+                alive_penalty: Some(8000.0),
+            }
+        } else if matches!(port, 21 | 22 | 115 | 989 | 990) {
+            // FTP/SFTP: prioritize stability for file transfers
+            SiteTuning {
+                delay_weight: Some(1.2),
+                packet_loss_weight: Some(1000.0),
+                rtt_weight: Some(1.2),
+                alive_penalty: Some(5000.0),
+            }
+        } else {
+            // Default balanced tuning
+            SiteTuning::default()
+        }
     }
 }
 

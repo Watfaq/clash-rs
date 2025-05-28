@@ -1,7 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     io,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use erased_serde::Serialize;
@@ -12,7 +12,7 @@ use crate::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
         dns::ThreadSafeDNSResolver,
         remote_content_manager::{
-            ProxyManager, providers::proxy_provider::ThreadSafeProxyProvider,
+            ProxyManager, TrafficStats, providers::proxy_provider::ThreadSafeProxyProvider,
         },
     },
     proxy::{
@@ -199,10 +199,134 @@ impl SiteStats {
     }
 }
 
+/// Traffic statistics collector for real-time monitoring
+struct TrafficStatsCollector {
+    /// Connection start time for duration calculation
+    connection_start: HashMap<String, Instant>,
+    /// Accumulated bytes per session
+    session_bytes: HashMap<String, (u64, u64)>, // (uploaded, downloaded)
+    /// Request frequency tracking
+    request_counts: HashMap<String, VecDeque<Instant>>,
+    /// Throughput samples
+    throughput_samples: HashMap<String, VecDeque<(Instant, f64)>>,
+}
+
+impl TrafficStatsCollector {
+    fn new() -> Self {
+        Self {
+            connection_start: HashMap::new(),
+            session_bytes: HashMap::new(),
+            request_counts: HashMap::new(),
+            throughput_samples: HashMap::new(),
+        }
+    }
+
+    /// Start tracking a new session
+    fn start_session(&mut self, session_id: &str) {
+        self.connection_start.insert(session_id.to_string(), Instant::now());
+        self.session_bytes.insert(session_id.to_string(), (0, 0));
+        self.request_counts.insert(session_id.to_string(), VecDeque::new());
+        self.throughput_samples.insert(session_id.to_string(), VecDeque::new());
+    }
+
+    /// Record data transfer for a session
+    fn record_transfer(&mut self, session_id: &str, uploaded: u64, downloaded: u64) {
+        if let Some((up, down)) = self.session_bytes.get_mut(session_id) {
+            *up += uploaded;
+            *down += downloaded;
+            
+            // Calculate and record current throughput
+            if let Some(start_time) = self.connection_start.get(session_id) {
+                let elapsed = start_time.elapsed().as_secs_f64();
+                if elapsed > 0.0 {
+                    let current_throughput = (uploaded + downloaded) as f64 / elapsed;
+                    if let Some(samples) = self.throughput_samples.get_mut(session_id) {
+                        samples.push_back((Instant::now(), current_throughput));
+                        // Keep only last 10 samples
+                        if samples.len() > 10 {
+                            samples.pop_front();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Record a request event for frequency calculation
+    fn record_request(&mut self, session_id: &str) {
+        if let Some(requests) = self.request_counts.get_mut(session_id) {
+            requests.push_back(Instant::now());
+            // Keep only requests from last 60 seconds
+            let cutoff = Instant::now() - Duration::from_secs(60);
+            while let Some(&front_time) = requests.front() {
+                if front_time < cutoff {
+                    requests.pop_front();
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Generate traffic statistics for a session
+    fn get_stats(&self, session_id: &str) -> Option<TrafficStats> {
+        let start_time = self.connection_start.get(session_id)?;
+        let (uploaded, downloaded) = self.session_bytes.get(session_id)?;
+        let connection_duration = start_time.elapsed();
+        
+        // Calculate average throughput
+        let total_bytes = uploaded + downloaded;
+        let average_throughput = if connection_duration.as_secs_f64() > 0.0 {
+            total_bytes as f64 / connection_duration.as_secs_f64()
+        } else {
+            0.0
+        };
+
+        // Calculate peak throughput
+        let peak_throughput = self.throughput_samples.get(session_id)
+            .map(|samples| samples.iter().map(|(_, throughput)| *throughput).fold(0.0, f64::max))
+            .unwrap_or(0.0);
+
+        // Calculate request frequency (requests per second)
+        let request_frequency = self.request_counts.get(session_id)
+            .map(|requests| requests.len() as f64 / 60.0) // requests per minute -> per second
+            .unwrap_or(0.0);
+
+        // Determine if traffic is bidirectional
+        let is_bidirectional = if total_bytes > 0 {
+            let upload_ratio = *uploaded as f64 / total_bytes as f64;
+            upload_ratio > 0.1 && upload_ratio < 0.9 // Neither extremely upload nor download heavy
+        } else {
+            false
+        };
+
+        Some(TrafficStats {
+            bytes_uploaded: *uploaded,
+            bytes_downloaded: *downloaded,
+            connection_duration,
+            average_throughput,
+            peak_throughput,
+            request_frequency,
+            is_bidirectional,
+        })
+    }
+
+    /// Clean up old sessions
+    fn cleanup_old_sessions(&mut self) {
+        let cutoff = Instant::now() - Duration::from_secs(300); // 5 minutes
+        
+        self.connection_start.retain(|_, start_time| *start_time > cutoff);
+        self.session_bytes.retain(|session_id, _| self.connection_start.contains_key(session_id));
+        self.request_counts.retain(|session_id, _| self.connection_start.contains_key(session_id));
+        self.throughput_samples.retain(|session_id, _| self.connection_start.contains_key(session_id));
+    }
+}
+
 pub struct SmartState {
     penalty: HashMap<String, ProxyPenalty>,
     site_stats: HashMap<String, HashMap<String, SiteStats>>, /* Proxy name ->
-                                                              * Site -> Stats */
+                                                               * Site -> Stats */
+    traffic_collector: TrafficStatsCollector,
 }
 
 impl SmartState {
@@ -210,6 +334,7 @@ impl SmartState {
         Self {
             penalty: HashMap::new(),
             site_stats: HashMap::new(),
+            traffic_collector: TrafficStatsCollector::new(),
         }
     }
 
@@ -217,6 +342,36 @@ impl SmartState {
         for stats in self.site_stats.values_mut() {
             stats.retain(|_, site_stat| !site_stat.is_stale());
         }
+        self.traffic_collector.cleanup_old_sessions();
+    }
+
+    /// Generate session ID from session information
+    fn generate_session_id(sess: &Session) -> String {
+        format!("{}:{}->{}", sess.network, sess.source, sess.destination)
+    }
+
+    /// Start tracking traffic for a session
+    fn start_traffic_tracking(&mut self, sess: &Session) {
+        let session_id = Self::generate_session_id(sess);
+        self.traffic_collector.start_session(&session_id);
+    }
+
+    /// Record traffic data for a session
+    fn record_traffic(&mut self, sess: &Session, uploaded: u64, downloaded: u64) {
+        let session_id = Self::generate_session_id(sess);
+        self.traffic_collector.record_transfer(&session_id, uploaded, downloaded);
+    }
+
+    /// Record a request event for a session
+    fn record_request(&mut self, sess: &Session) {
+        let session_id = Self::generate_session_id(sess);
+        self.traffic_collector.record_request(&session_id);
+    }
+
+    /// Get traffic statistics for a session
+    fn get_traffic_stats(&self, sess: &Session) -> Option<TrafficStats> {
+        let session_id = Self::generate_session_id(sess);
+        self.traffic_collector.get_stats(&session_id)
     }
 }
 
@@ -253,7 +408,7 @@ impl Handler {
         get_proxies_from_providers(&self.providers, touch).await
     }
 
-    /// Smart selection considering all available metrics
+    /// Smart selection considering all available metrics including traffic patterns
     async fn pick_smart(&self, sess: &Session) -> Option<AnyOutboundHandler> {
         let proxies = self.get_proxies(false).await;
         if proxies.is_empty() {
@@ -274,6 +429,22 @@ impl Handler {
         let mut best: Option<(f64, AnyOutboundHandler, String)> = None;
         let mut state_guard = self.smart_state.lock().await;
         state_guard.cleanup_stale();
+
+        // Create enhanced session with traffic stats for site tuning
+        let mut enhanced_sess = sess.clone();
+        if let Some(traffic_stats) = state_guard.get_traffic_stats(sess) {
+            enhanced_sess.traffic_stats = Some(traffic_stats);
+            debug!(
+                "{} using traffic pattern analysis for session {}",
+                self.name(),
+                SmartState::generate_session_id(sess)
+            );
+        }
+
+        // Drop the lock temporarily to call get_site_tuning
+        drop(state_guard);
+        let site_tuning = self.proxy_manager.get_site_tuning(&enhanced_sess).await;
+        let mut state_guard = self.smart_state.lock().await;
 
         for proxy in proxies {
             let name = proxy.name().to_string();
@@ -299,13 +470,20 @@ impl Handler {
                 alive
             );
 
-            // Get site-specific tuning
-            let site_tuning = self.proxy_manager.get_site_tuning(&site).await;
+            // Use traffic-aware tuning parameters
             let delay_weight = site_tuning.delay_weight.unwrap_or(1.0);
-            let packet_loss_weight =
-                site_tuning.packet_loss_weight.unwrap_or(1000.0);
+            let packet_loss_weight = site_tuning.packet_loss_weight.unwrap_or(1000.0);
             let rtt_weight = site_tuning.rtt_weight.unwrap_or(1.0);
             let alive_penalty = site_tuning.alive_penalty.unwrap_or(5000.0);
+
+            debug!(
+                "{} using tuning weights - delay: {:.2}, loss: {:.1}, rtt: {:.2}, alive_penalty: {:.1}",
+                self.name(),
+                delay_weight,
+                packet_loss_weight,
+                rtt_weight,
+                alive_penalty
+            );
 
             // Get historical performance
             let site_stats = state_guard
@@ -359,7 +537,7 @@ impl Handler {
                 penalty_score
             );
 
-            // Calculate composite score
+            // Calculate composite score with traffic-aware weights
             let site_delay = site_stats.map(|(d, r)| d * (2.0 - r)).unwrap_or(delay);
             let ip_delay = ip_stats.map(|(d, r)| d * (2.0 - r)).unwrap_or(delay);
 
@@ -393,7 +571,7 @@ impl Handler {
         })
     }
 
-    /// Adaptive retry with exponential backoff and state updates
+    /// Adaptive retry with exponential backoff, state updates, and traffic tracking
     async fn adaptive_retry(
         &self,
         sess: &Session,
@@ -403,6 +581,13 @@ impl Handler {
         let dest_ip = sess.destination.ip().map(|ip| ip.to_string());
         let mut tried = HashSet::new();
         let mut retry_delay = 100; // Initial retry delay in ms
+
+        // Start traffic tracking for this session
+        {
+            let mut state_guard = self.smart_state.lock().await;
+            state_guard.start_traffic_tracking(sess);
+            state_guard.record_request(sess); // Record initial request
+        }
 
         // Dynamic retry config based on site history
         let mut state_guard = self.smart_state.lock().await;
@@ -470,6 +655,10 @@ impl Handler {
                                 ip_stats.add_result(delay, true);
                             }
 
+                            // Record successful connection as traffic event
+                            // Initial connection usually involves some handshake data
+                            state.record_traffic(sess, 500, 500); // Approximate handshake bytes
+
                             debug!(
                                 "{} successfully connected to {} via {}, delay: \
                                  {:.2}ms, attempts: {}",
@@ -511,6 +700,9 @@ impl Handler {
                                     .or_insert_with(SiteStats::new);
                                 ip_stats.add_result(9999.0, false);
                             }
+
+                            // Record failed attempt
+                            state.record_request(sess);
 
                             tokio::time::sleep(std::time::Duration::from_millis(
                                 retry_delay,
