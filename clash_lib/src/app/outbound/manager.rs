@@ -264,7 +264,7 @@ impl OutboundManager {
                 #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => {
                     handlers.insert(s.common_opts.name.clone(), {
-                        let h: shadowsocks::Handler = s.try_into()?;
+                        let h: shadowsocks::outbound::Handler = s.try_into()?;
                         Arc::new(h) as _
                     });
                 }

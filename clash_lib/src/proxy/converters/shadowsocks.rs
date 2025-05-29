@@ -5,7 +5,7 @@ use crate::{
     config::internal::proxy::OutboundShadowsocks,
     proxy::{
         HandlerCommonOptions,
-        shadowsocks::{Handler, HandlerOptions},
+        shadowsocks::outbound::{Handler, HandlerOptions},
         transport::{
             Shadowtls, SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp,
             SimpleObfsTLS, V2RayOBFSOption, V2rayWsClient,
