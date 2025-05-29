@@ -1,3 +1,10 @@
+use crate::{
+    app::dispatcher::Dispatcher,
+    common::errors::new_io_error,
+    session::{Network, Session, SocksAddr, Type},
+};
+use async_trait::async_trait;
+use futures::{Sink, Stream};
 use std::{
     io,
     net::SocketAddr,
@@ -7,13 +14,6 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-
-use crate::{
-    app::dispatcher::Dispatcher,
-    common::errors::new_io_error,
-    session::{Network, Session, SocksAddr, Type},
-};
-use futures::{Sink, Stream};
 use tokio::{
     io::ReadBuf,
     net::{TcpListener, UdpSocket},
@@ -46,7 +46,7 @@ impl TunnelInbound {
         network: Vec<String>,
         target: String,
         fw_mark: Option<u32>,
-    ) -> anyhow::Result<Self> {
+    ) -> crate::Result<Self> {
         Ok(Self {
             listen: addr,
             dispatcher,
@@ -57,6 +57,7 @@ impl TunnelInbound {
     }
 }
 
+#[async_trait]
 impl InboundHandlerTrait for TunnelInbound {
     fn handle_tcp(&self) -> bool {
         true
@@ -66,7 +67,7 @@ impl InboundHandlerTrait for TunnelInbound {
         true
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         if !self.network.contains(&"tcp".to_string()) {
             return Ok(());
         }
@@ -97,7 +98,7 @@ impl InboundHandlerTrait for TunnelInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
+    async fn listen_udp(&self) -> std::io::Result<()> {
         if !self.network.contains(&"udp".to_string()) {
             return Ok(());
         }

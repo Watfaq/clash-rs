@@ -2,16 +2,15 @@ use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 use tokio::{
     sync::{RwLock, oneshot},
-    task::{JoinHandle, JoinSet},
+    task::JoinHandle,
 };
-use tracing::error;
 
 use crate::{
     Result,
     app::{
         dispatcher::Dispatcher, inbound::network_listener::NetworkInboundHandler,
     },
-    common::auth::ThreadSafeAuthenticator,
+    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     config::internal::{config::BindAddress, listener::InboundOpts},
 };
 use std::{collections::HashMap, sync::Arc};
@@ -62,7 +61,8 @@ impl InboundManager {
         Ok(s)
     }
 
-    pub async fn start(self: &Arc<Self>) {
+    /// This function blocks
+    pub async fn start_listen_blocking(self: &Arc<Self>) {
         let mut guard = self.task_handle.write().await;
         if let Some((handle, signal)) = guard.take() {
             _ = signal.send(());
@@ -71,13 +71,11 @@ impl InboundManager {
 
         let v = self.clone();
         let (signal_tx, signal_rx) = oneshot::channel();
-        let handle = tokio::spawn(async move { v.build_task(signal_rx).await });
+        let handle =
+            tokio::spawn(async move { v.start_listener_loop(signal_rx).await });
         *guard = Some((handle, signal_tx));
     }
 
-    // FIXME: This is not working if
-    // 1. Inner nested spawned tasks.
-    // 2. spawn_blocking
     pub async fn shutdown(&self) {
         if let Some((handle, signal)) = self.task_handle.write().await.take() {
             _ = signal.send(());
@@ -87,38 +85,43 @@ impl InboundManager {
 
     pub async fn restart(self: &Arc<Self>) {
         self.build_handlers().await;
-        self.start().await;
+        self.start_listen_blocking().await;
     }
 
     // Build `inbounds_handler` tasks
-    async fn build_task(
+    async fn start_listener_loop(
         self: &Arc<Self>,
-        mut signal: oneshot::Receiver<()>,
+        signal: oneshot::Receiver<()>,
     ) -> Result<()> {
-        let mut runners = JoinSet::new();
-        for (_, handler) in self.inbounds_handler.read().await.iter() {
-            handler.listen(&mut runners)?;
-        }
-        loop {
-            tokio::select! {
-                Some(result) = runners.join_next() => {
-                    match result {
-                        Ok(Err(e)) => error!("failed to start inbound listeners: {e:?}"),
-                        Err(e) => {
-                            if let Ok(reason) = e.try_into_panic() {
-                                std::panic::resume_unwind(reason);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                _ = &mut signal => {
-                    runners.shutdown().await;
-                    break;
-                }
+        let mut tasks = vec![];
+        for handler in self.inbounds_handler.read().await.values() {
+            if let Some(mut r) = handler.listen() {
+                tasks.append(&mut r);
             }
         }
-        Ok(())
+
+        let mut futs = tasks
+            .into_iter()
+            .map(|t| tokio::spawn(async move { t.await }))
+            .collect::<Vec<_>>();
+        futs.push(tokio::spawn(async move {
+            Ok(signal.await.expect("shutdown rx dropped too early"))
+        }));
+
+        match futures::future::select_all(futs).await {
+            (Ok(Ok(())), ..) => {
+                tracing::info!("InboundManager listener loop stopped gracefully.");
+                Ok(())
+            }
+            (Err(e), ..) => {
+                tracing::error!("InboundManager listener loop error: {e}");
+                Err(new_io_error(e.to_string()).into())
+            }
+            (Ok(Err(e)), ..) => {
+                tracing::error!("InboundManager listener loop aborted: {e}");
+                Err(e.into())
+            }
+        }
     }
 
     // Sync `inbounds_handler` with `inbounds_opt`

@@ -188,7 +188,7 @@ pub async fn start(
     let components = create_components(cwd.clone(), config).await?;
 
     let inbound_manager = components.inbound_manager.clone();
-    inbound_manager.start().await;
+    inbound_manager.start_listen_blocking().await;
 
     let tun_runner_handle = components.tun_runner.map(tokio::spawn);
     let dns_listener_handle = components.dns_listener.map(tokio::spawn);

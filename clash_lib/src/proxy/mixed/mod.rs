@@ -4,12 +4,12 @@ use crate::{
     session::{Network, Session},
 };
 
+use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
+use crate::common::errors::new_io_error;
+use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
-
 use tokio::net::TcpListener;
 use tracing::warn;
-
-use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
 
 pub struct MixedInbound {
     addr: SocketAddr,
@@ -43,6 +43,7 @@ impl MixedInbound {
     }
 }
 
+#[async_trait]
 impl InboundHandlerTrait for MixedInbound {
     fn handle_tcp(&self) -> bool {
         true
@@ -52,7 +53,7 @@ impl InboundHandlerTrait for MixedInbound {
         false
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -110,7 +111,7 @@ impl InboundHandlerTrait for MixedInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
-        Err(anyhow!("UDP is not supported"))
+    async fn listen_udp(&self) -> std::io::Result<()> {
+        Err(new_io_error("UDP is not supported"))
     }
 }

@@ -8,11 +8,13 @@ use crate::{
     session::{Network, Session, Type},
 };
 
+use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
 pub use stream::handle_tcp;
 use tokio::net::TcpListener;
 use tracing::warn;
 
+use crate::common::errors::new_io_error;
 pub use datagram::Socks5UDPCodec;
 
 pub struct SocksInbound {
@@ -47,6 +49,7 @@ impl SocksInbound {
     }
 }
 
+#[async_trait]
 impl InboundHandlerTrait for SocksInbound {
     fn handle_tcp(&self) -> bool {
         true
@@ -56,7 +59,7 @@ impl InboundHandlerTrait for SocksInbound {
         false
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -86,8 +89,7 @@ impl InboundHandlerTrait for SocksInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
-        // TODO
-        Err(anyhow!("UDP is not supported"))
+    async fn listen_udp(&self) -> std::io::Result<()> {
+        Err(new_io_error("UDP is not supported"))
     }
 }

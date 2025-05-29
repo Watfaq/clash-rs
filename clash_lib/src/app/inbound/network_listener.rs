@@ -1,12 +1,10 @@
 use crate::{
+    Runner,
     common::auth::ThreadSafeAuthenticator,
     config::listener::InboundOpts,
     proxy::{
-        http::HttpInbound,
-        inbound::{InboudHandler, InboundHandlerTrait as _},
-        mixed::MixedInbound,
-        socks::SocksInbound,
-        tunnel::TunnelInbound,
+        http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
+        socks::SocksInbound, tunnel::TunnelInbound,
     },
 };
 
@@ -14,8 +12,7 @@ use crate::{
 use crate::proxy::tproxy::TproxyInbound;
 
 use crate::Dispatcher;
-use tokio::task::JoinSet;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use std::sync::Arc;
 
@@ -28,64 +25,112 @@ pub struct NetworkInboundHandler {
 }
 
 impl NetworkInboundHandler {
-    pub fn listen(
-        &self,
-        set: &mut JoinSet<Result<(), crate::Error>>,
-    ) -> crate::Result<()> {
-        self.build_and_insert_listener(set)
+    pub fn listen(&self) -> Option<Vec<Runner>> {
+        if let Some(handler) = self.build_and_insert_listener() {
+            let mut runners: Vec<Runner> = Vec::new();
+
+            if handler.handle_tcp() {
+                info!(
+                    "{} TCP listening at: {}:{}",
+                    self.name,
+                    self.listener.common_opts().listen.0,
+                    self.listener.common_opts().port
+                );
+
+                let tcp_listener = handler.clone();
+
+                let name = self.name.clone();
+                runners.push(Box::pin(async move {
+                    tcp_listener
+                        .listen_tcp()
+                        .await
+                        .inspect_err(|x| {
+                            error!("handler {} tcp listen failed: {x}", name);
+                        })
+                        .map_err(|e| e.into())
+                }));
+            }
+
+            if handler.handle_udp() {
+                info!(
+                    "{} UDP listening at: {}:{}",
+                    self.name,
+                    self.listener.common_opts().listen.0,
+                    self.listener.common_opts().port
+                );
+                let udp_listener = handler.clone();
+                let name = self.name.clone();
+                runners.push(Box::pin(async move {
+                    udp_listener
+                        .listen_udp()
+                        .await
+                        .inspect_err(|x| {
+                            error!("handler {} udp listen failed: {x}", name);
+                        })
+                        .map_err(|e| e.into())
+                }));
+            }
+
+            if runners.is_empty() {
+                warn!("no listener for {}", self.name);
+                return None;
+            }
+            Some(runners)
+        } else {
+            None
+        }
     }
 
-    fn build_and_insert_listener(
-        &self,
-        set: &mut JoinSet<Result<(), crate::Error>>,
-    ) -> crate::Result<()> {
-        let handler: InboudHandler = match &self.listener {
-            InboundOpts::Http { common_opts, .. } => HttpInbound::new(
-                (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
-                self.dispatcher.clone(),
-                self.authenticator.clone(),
-                self.fw_mark,
-            )
-            .into(),
-            InboundOpts::Socks { common_opts, .. } => SocksInbound::new(
-                (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
-                self.dispatcher.clone(),
-                self.authenticator.clone(),
-                self.fw_mark,
-            )
-            .into(),
-            InboundOpts::Mixed { common_opts, .. } => MixedInbound::new(
-                (common_opts.listen.0, common_opts.port).into(),
-                common_opts.allow_lan,
-                self.dispatcher.clone(),
-                self.authenticator.clone(),
-                self.fw_mark,
-            )
-            .into(),
-            #[allow(unused)]
+    fn build_and_insert_listener(&self) -> Option<Arc<dyn InboundHandlerTrait>> {
+        match &self.listener {
+            InboundOpts::Http { common_opts, .. } => {
+                Some(Arc::new(HttpInbound::new(
+                    (common_opts.listen.0, common_opts.port).into(),
+                    common_opts.allow_lan,
+                    self.dispatcher.clone(),
+                    self.authenticator.clone(),
+                    self.fw_mark,
+                )) as _)
+            }
+
+            InboundOpts::Socks { common_opts, .. } => {
+                Some(Arc::new(SocksInbound::new(
+                    (common_opts.listen.0, common_opts.port).into(),
+                    common_opts.allow_lan,
+                    self.dispatcher.clone(),
+                    self.authenticator.clone(),
+                    self.fw_mark,
+                )) as _)
+            }
+            InboundOpts::Mixed { common_opts, .. } => {
+                Some(Arc::new(MixedInbound::new(
+                    (common_opts.listen.0, common_opts.port).into(),
+                    common_opts.allow_lan,
+                    self.dispatcher.clone(),
+                    self.authenticator.clone(),
+                    self.fw_mark,
+                )) as _)
+            }
             InboundOpts::TProxy { common_opts, .. } => {
                 #[cfg(target_os = "linux")]
                 {
-                    TproxyInbound::new(
+                    Some(Box::new(TproxyInbound::new(
                         (common_opts.listen.0, common_opts.port).into(),
                         common_opts.allow_lan,
                         self.dispatcher.clone(),
                         self.fw_mark,
-                    )
-                    .into()
+                    )) as _)
                 }
 
                 #[cfg(not(target_os = "linux"))]
                 {
                     warn!("tproxy is not supported on this platform");
-                    return Ok(());
+                    None
                 }
             }
             InboundOpts::Redir { .. } => {
                 warn!("redir is not implemented yet");
-                return Ok(());
+                None
             }
             InboundOpts::Tunnel {
                 common_opts,
@@ -97,45 +142,12 @@ impl NetworkInboundHandler {
                 network.clone(),
                 target.clone(),
                 self.fw_mark,
-            )?
-            .into(),
-        };
-        let handler = Arc::new(handler);
-        if handler.handle_tcp() {
-            info!(
-                "{} TCP listening at: {}:{}",
-                self.name,
-                self.listener.common_opts().listen.0,
-                self.listener.common_opts().port
-            );
-
-            let tcp_listener = handler.clone();
-
-            let name = self.name.clone();
-            set.spawn(async move {
-                tcp_listener.listen_tcp().await.map_err(|e| {
-                    warn!("handler {} tcp listen failed: {e}", name);
-                    e.into()
-                })
-            });
+            )
+            .inspect_err(|x| {
+                warn!("tunnel inbound handler failed to create: {x}");
+            })
+            .map(|x| Arc::new(x) as _)
+            .ok(),
         }
-
-        if handler.handle_udp() {
-            info!(
-                "{} UDP listening at: {}:{}",
-                self.name,
-                self.listener.common_opts().listen.0,
-                self.listener.common_opts().port
-            );
-            let udp_listener = handler.clone();
-            let name = self.name.clone();
-            set.spawn(async move {
-                udp_listener.listen_udp().await.map_err(|e| {
-                    warn!("handler {} udp listen failed: {e}", name);
-                    e.into()
-                })
-            });
-        }
-        Ok(())
     }
 }
