@@ -149,15 +149,15 @@ mod tests {
 
     #[test]
     fn test_penalty_reward() {
-        let mut penalty = ProxyPenalty::new();
+        let mut penalty: ProxyPenalty = ProxyPenalty::new();
         penalty.add_penalty(); // value = 2.0
         penalty.add_penalty(); // value = 6.0
         
         penalty.reward();
-        assert_eq!(penalty.value(), 1.2); // 6.0 * 0.2
+        assert!((penalty.value() - 1.2).abs() < 1e-6); // 6.0 * 0.2
         
         penalty.reward();
-        assert_eq!(penalty.value(), 0.24); // 1.2 * 0.2
+        assert!((penalty.value() - 0.24).abs() < 1e-6); // 1.2 * 0.2
     }
 
     #[test]

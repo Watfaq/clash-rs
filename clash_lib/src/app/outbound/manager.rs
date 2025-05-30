@@ -680,7 +680,6 @@ impl OutboundManager {
                             max_retries: proto.max_retries,
                             site_stickiness: proto.site_stickiness,
                             bandwidth_weight: proto.bandwidth_weight,
-                            // policy_priority is now handled by cache_store
                         },
                         providers,
                         proxy_manager.clone(),

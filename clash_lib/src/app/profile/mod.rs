@@ -206,10 +206,6 @@ impl CacheFile {
         self.db.smart_stats.get(group_name).cloned()
     }
 
-    // pub fn set_smart_policy_priority(&mut self, group_name: &str, priority: String) {
-    //     self.db.smart_policy_priority.insert(group_name.to_string(), priority);
-    // }
-
     pub fn get_smart_policy_priority(&self, group_name: &str) -> Option<String> {
         self.db.smart_policy_priority.get(group_name).cloned()
     }

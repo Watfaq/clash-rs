@@ -351,13 +351,9 @@ mod tests {
     #[test]
     fn test_smart_state_creation() {
         let state = SmartState::new();
-        // Original test called get_statistics, which was removed.
-        // We now assert that the internal HashMaps are empty upon creation.
         assert!(state.penalty.is_empty());
         assert!(state.site_stats.is_empty());
         assert!(state.site_preferences.is_empty());
-        // traffic_collector is initialized internally and is not directly checked here,
-        // but its successful initialization is part of SmartState::new().
     }
 
     #[test]
