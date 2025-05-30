@@ -76,6 +76,7 @@ pub struct General {
 
 pub struct Profile {
     pub store_selected: bool,
+    pub store_smart_stats: bool,
     // this is read to dns config directly
     // store_fake_ip: bool,
 }

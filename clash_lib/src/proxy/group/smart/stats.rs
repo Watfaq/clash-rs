@@ -5,18 +5,19 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app::remote_content_manager::TrafficStats,
-    session::Session,
 };
 
 /// Unified site statistics and preference tracking
 ///
 /// Combines performance metrics and site preference functionality,
 /// utilizing traffic statistics from session data when available.
+#[derive(Debug, Clone)]
 pub struct SiteStats {
     /// History of connection delays (milliseconds)
     delay_history: Vec<f64>,
@@ -26,6 +27,64 @@ pub struct SiteStats {
     last_attempt: Instant,
     /// Maximum history size to prevent unbounded growth
     max_history: usize,
+}
+
+impl Serialize for SiteStats {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("SiteStats", 4)?;
+        state.serialize_field("delay_history", &self.delay_history)?;
+        state.serialize_field("success_history", &self.success_history)?;
+        
+        // Convert Instant to timestamp
+        let duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let elapsed = self.last_attempt.elapsed();
+        let timestamp = duration.saturating_sub(elapsed);
+        state.serialize_field("last_attempt", &timestamp.as_secs())?;
+        
+        state.serialize_field("max_history", &self.max_history)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for SiteStats {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct SiteStatsData {
+            delay_history: Vec<f64>,
+            success_history: Vec<bool>,
+            last_attempt: u64,
+            max_history: usize,
+        }
+        
+        let data = SiteStatsData::deserialize(deserializer)?;
+        
+        // Convert timestamp back to Instant
+        let timestamp = Duration::from_secs(data.last_attempt);
+        let now_duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        
+        let last_attempt = if now_duration > timestamp {
+            let elapsed = now_duration - timestamp;
+            Instant::now() - elapsed
+        } else {
+            Instant::now()
+        };
+        
+        Ok(SiteStats {
+            delay_history: data.delay_history,
+            success_history: data.success_history,
+            last_attempt,
+            max_history: data.max_history,
+        })
+    }
 }
 
 impl SiteStats {
@@ -44,33 +103,22 @@ impl SiteStats {
         if self.success_history.is_empty() {
             return 0.0;
         }
-        self.success_history.iter().filter(|&&x| x).count() as f64
-            / self.success_history.len() as f64
+        let success_count = self.success_history.iter().filter(|&&x| x).count();
+        // Use integer arithmetic to avoid floating-point precision issues
+        (success_count as f64) / (self.success_history.len() as f64)
     }
 
 
     /// Add a new connection result with optional session data
     ///
     /// Enhanced to utilize traffic statistics from session when available
-    pub fn add_result(&mut self, delay: f64, success: bool, session: Option<&Session>) {
-        // Use enhanced delay calculation if traffic stats are available
-        let effective_delay = if let Some(sess) = session {
-            if let Some(traffic_stats) = &sess.traffic_stats {
-                // Weight delay based on traffic characteristics
-                self.calculate_traffic_weighted_delay(delay, traffic_stats)
-            } else {
-                delay
-            }
-        } else {
-            delay
-        };
-
+    pub fn add_result(&mut self, delay: f64, success: bool) {
         // Update delay history (only for successful connections)
         if success {
             if self.delay_history.len() >= self.max_history {
                 self.delay_history.remove(0);
             }
-            self.delay_history.push(effective_delay);
+            self.delay_history.push(delay);
         }
 
         // Update success history
@@ -82,27 +130,6 @@ impl SiteStats {
         self.last_attempt = Instant::now();
     }
 
-    /// Calculate traffic-weighted delay using session statistics
-    fn calculate_traffic_weighted_delay(&self, base_delay: f64, traffic_stats: &TrafficStats) -> f64 {
-        let mut weighted_delay = base_delay;
-        
-        // Adjust for bidirectional traffic (typically more complex)
-        if traffic_stats.is_bidirectional {
-            weighted_delay *= 1.1;
-        }
-        
-        // Adjust for high request frequency (more overhead)
-        if traffic_stats.request_frequency > 10.0 {
-            weighted_delay *= 1.05;
-        }
-        
-        // Adjust for connection duration (longer connections might indicate stability)
-        if traffic_stats.connection_duration.as_secs() > 30 {
-            weighted_delay *= 0.95;
-        }
-        
-        weighted_delay
-    }
 
     /// Check if stats are stale and should be cleaned up
     pub fn is_stale(&self) -> bool {
@@ -329,13 +356,13 @@ impl TrafficStatsCollector {
         self.throughput_samples.retain(|session_id, _| self.connection_start.contains_key(session_id));
     }
 
-    /// Get the number of active sessions
-    ///
-    /// # Returns
-    /// Number of currently tracked sessions
-    pub fn active_session_count(&self) -> usize {
-        self.connection_start.len()
-    }
+    // /// Get the number of active sessions
+    // ///
+    // /// # Returns
+    // /// Number of currently tracked sessions
+    // pub fn active_session_count(&self) -> usize {
+    //     self.connection_start.len()
+    // }
 }
 
 impl Default for TrafficStatsCollector {
@@ -352,9 +379,9 @@ mod tests {
     fn test_site_stats_success_rate() {
         let mut stats = SiteStats::new();
         
-        stats.add_result(100.0, true, None);
-        stats.add_result(150.0, true, None);
-        stats.add_result(200.0, false, None);
+        stats.add_result(100.0, true);
+        stats.add_result(150.0, true);
+        stats.add_result(200.0, false);
         
         assert_eq!(stats.success_rate(), 2.0/3.0);
         assert!(stats.get_delay_score() > 0.0);
@@ -364,9 +391,9 @@ mod tests {
     fn test_site_stats_delay_score() {
         let mut stats = SiteStats::new();
         
-        stats.add_result(100.0, true, None);
-        stats.add_result(200.0, true, None);
-        stats.add_result(300.0, false, None); // Should not affect delay average
+        stats.add_result(100.0, true);
+        stats.add_result(200.0, true);
+        stats.add_result(300.0, false); // Should not affect delay average
         
         // Delay score should be calculated from successful connections only
         let score = stats.get_delay_score();
@@ -379,12 +406,12 @@ mod tests {
         let mut stats = SiteStats::new();
         
         // Add older failures
-        stats.add_result(100.0, false, None);
-        stats.add_result(100.0, false, None);
+        stats.add_result(100.0, false);
+        stats.add_result(100.0, false);
         
         // Add recent successes
-        stats.add_result(100.0, true, None);
-        stats.add_result(100.0, true, None);
+        stats.add_result(100.0, true);
+        stats.add_result(100.0, true);
         
         assert_eq!(stats.get_trend(), 1); // Improving
     }

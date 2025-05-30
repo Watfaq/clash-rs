@@ -14,8 +14,6 @@ pub struct HandlerOptions {
     pub name: String,
     /// Whether UDP is supported
     pub udp: bool,
-    /// Custom weight expressions for proxy priority tuning
-    pub policy_priority: Option<String>,
     /// Maximum retries for failed connections
     pub max_retries: Option<u32>,
     /// Site stickiness factor (0.0-1.0)

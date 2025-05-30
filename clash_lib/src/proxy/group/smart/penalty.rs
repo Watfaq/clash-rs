@@ -3,18 +3,54 @@
 //! This module implements a penalty system that tracks proxy performance
 //! and applies exponential penalties for failures with time-based decay.
 
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use serde::{Deserialize, Serialize};
 
 /// Tracks and manages the penalty score for a proxy
 ///
 /// The penalty system uses exponential growth for failures and exponential
 /// decay over time to allow recovery. Higher penalty values indicate worse
 /// performance and lower selection priority.
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProxyPenalty {
     /// Current penalty value (higher = worse performance)
     value: f64,
-    /// When the penalty was last updated
+    /// When the penalty was last updated (as duration since UNIX_EPOCH)
+    #[serde(with = "instant_serde")]
     last_update: Instant,
+}
+
+mod instant_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+    
+    pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let elapsed = instant.elapsed();
+        let timestamp = duration.saturating_sub(elapsed);
+        serializer.serialize_u64(timestamp.as_secs())
+    }
+    
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let timestamp_secs = u64::deserialize(deserializer)?;
+        let timestamp = Duration::from_secs(timestamp_secs);
+        let now_duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        
+        if now_duration > timestamp {
+            let elapsed = now_duration - timestamp;
+            Ok(Instant::now() - elapsed)
+        } else {
+            Ok(Instant::now())
+        }
+    }
 }
 
 impl ProxyPenalty {
@@ -58,8 +94,11 @@ impl ProxyPenalty {
     #[inline]
     pub fn decay(&mut self) {
         let elapsed = self.last_update.elapsed().as_secs_f64();
-        if self.value > 0.0 && elapsed > 0.0 {
-            // Half-life of ~10 seconds
+        // Reset to zero if penalty becomes negligible to avoid floating-point underflow
+        if self.value < 0.01 || elapsed > 300.0 { // 5-minute timeout
+            self.value = 0.0;
+        } else if elapsed > 0.0 {
+            // Exponential decay with half-life of 10 seconds
             self.value *= 0.5f64.powf(elapsed / 10.0);
         }
         self.last_update = Instant::now();
@@ -74,22 +113,6 @@ impl ProxyPenalty {
     pub fn reward(&mut self) {
         self.value *= 0.2; // 80% reduction
         self.last_update = Instant::now();
-    }
-
-    /// Check if penalty has decayed to negligible levels
-    ///
-    /// # Returns
-    /// `true` if penalty is effectively zero (< 0.01)
-    pub fn is_negligible(&self) -> bool {
-        self.value < 0.01
-    }
-
-    /// Get the age of the last penalty update
-    ///
-    /// # Returns
-    /// Duration since last penalty update
-    pub fn age(&self) -> std::time::Duration {
-        self.last_update.elapsed()
     }
 }
 
@@ -108,7 +131,6 @@ mod tests {
     fn test_penalty_creation() {
         let penalty = ProxyPenalty::new();
         assert_eq!(penalty.value(), 0.0);
-        assert!(penalty.is_negligible());
     }
 
     #[test]

@@ -669,17 +669,22 @@ impl OutboundManager {
                         &mut providers,
                     );
 
-                    let smart_handler = smart::Handler::new(
+                    let smart_handler = smart::Handler::new_with_cache(
                         smart::HandlerOptions {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
                                 ..Default::default()
                             },
-                            ..Default::default()
+                            udp: proto.udp.unwrap_or(true),
+                            max_retries: proto.max_retries,
+                            site_stickiness: proto.site_stickiness,
+                            bandwidth_weight: proto.bandwidth_weight,
+                            // policy_priority is now handled by cache_store
                         },
                         providers,
                         proxy_manager.clone(),
+                        cache_store.clone(),
                     );
 
                     handlers.insert(proto.name.clone(), Arc::new(smart_handler));

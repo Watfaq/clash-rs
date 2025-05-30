@@ -544,7 +544,11 @@ pub struct Profile {
     /// Store the `select` results in $CWD/cache.db
     pub store_selected: bool,
     /// persistence fakeip
+    #[serde(rename = "store-fake-ip")]
     pub store_fake_ip: bool,
+    /// Store smart proxy group statistics and preferences
+    #[serde(rename = "store-smart-stats")]
+    pub store_smart_stats: bool,
 }
 
 impl Default for Profile {
@@ -552,6 +556,7 @@ impl Default for Profile {
         Self {
             store_selected: true,
             store_fake_ip: false,
+            store_smart_stats: true,
         }
     }
 }

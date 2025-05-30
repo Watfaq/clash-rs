@@ -13,6 +13,7 @@
 use std::{
     collections::{HashMap, HashSet},
     io,
+    sync::Arc,
     time::Instant,
 };
 
@@ -42,7 +43,7 @@ pub mod state;
 pub mod stats;
 
 // Re-export commonly used types
-pub use config::HandlerOptions;
+pub use config::{HandlerOptions, WeightConfig};
 pub use state::SmartState;
 
 /// Error type for smart group failures
@@ -80,10 +81,6 @@ impl SmartError {
 }
 
 /// Smart proxy group handler
-///
-/// Implements intelligent proxy selection with adaptive retry mechanisms,
-/// site preference tracking, traffic-aware routing, and comprehensive
-/// performance monitoring and optimization.
 pub struct Handler {
     /// Configuration options
     opts: HandlerOptions,
@@ -92,7 +89,7 @@ pub struct Handler {
     /// Proxy manager for health checks and metrics
     proxy_manager: ProxyManager,
     /// Centralized state management
-    smart_state: tokio::sync::Mutex<SmartState>,
+    smart_state: Arc<tokio::sync::Mutex<SmartState>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -107,27 +104,56 @@ impl std::fmt::Debug for Handler {
 }
 
 impl Handler {
-    /// Create a new smart proxy group handler
-    ///
-    /// # Arguments
-    /// * `opts` - Configuration options for the handler
-    /// * `providers` - List of proxy providers
-    /// * `proxy_manager` - Proxy manager for health checks and metrics
-    ///
-    /// # Returns
-    /// New Handler instance
-    pub fn new(
+    /// Create a new smart proxy group handler with persistence support
+    pub fn new_with_cache(
         opts: HandlerOptions,
         providers: Vec<ThreadSafeProxyProvider>,
         proxy_manager: ProxyManager,
+        cache_store: crate::app::profile::ThreadSafeCacheFile,
     ) -> Self {
-        let smart_state = SmartState::new_with_weight_config(opts.policy_priority.as_deref());
-        Self {
+        let group_name = opts.name.clone();
+        
+        let smart_state = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let stored_data = cache_store.get_smart_stats(&group_name).await;
+                let policy_priority_str = cache_store.get_smart_policy_priority(&group_name).await;
+
+                let weight_config = match policy_priority_str {
+                    Some(priority_str) => WeightConfig::parse(&priority_str).unwrap_or_default(),
+                    None => WeightConfig::default(),
+                };
+
+                SmartState::new_with_imported_data(stored_data, weight_config)
+            })
+        });
+        
+        let handler = Self {
             opts,
             providers,
             proxy_manager,
-            smart_state: tokio::sync::Mutex::new(smart_state),
-        }
+            smart_state: Arc::new(tokio::sync::Mutex::new(smart_state)),
+        };
+        
+        // Set up periodic persistence for smart_stats
+        let cache_store_clone = cache_store.clone();
+        let group_name_clone = group_name.clone();
+        let state_clone = Arc::clone(&handler.smart_state);
+        
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                let state_guard = state_clone.lock().await;
+                let data = state_guard.export_data();
+                drop(state_guard);
+                
+                // Note: policy_priority is part of the global Db and saved by ThreadSafeCacheFile's main loop.
+                // We only save smart_stats here.
+                cache_store_clone.set_smart_stats(&group_name_clone, data).await;
+            }
+        });
+        
+        handler
     }
 
     /// Get all available proxies from providers
@@ -521,22 +547,26 @@ impl Handler {
                     }
                 }
                 None => {
-                    let error = SmartError::NoProxy;
-                    error.log_error();
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "no available proxy in smart group",
-                    ));
+                    break; // Exit loop immediately if no proxy available
                 }
             }
         }
 
-        let error = SmartError::AllProxiesFailed(tried.into_iter().collect());
-        error.log_error();
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "smart proxy selection failed after all retries",
-        ))
+        if tried.is_empty() {
+            let error = SmartError::NoProxy;
+            error.log_error();
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "no available proxy in smart group",
+            ))
+        } else {
+            let error = SmartError::AllProxiesFailed(tried.into_iter().collect());
+            error.log_error();
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("smart proxy selection failed after {} retries", retries),
+            ))
+        }
     }
 
     /// Calculate optimal retry count based on site history
@@ -588,7 +618,7 @@ impl Handler {
     async fn record_failure(&self, proxy_name: &str, site: &str, dest_ip: Option<&str>, sess: &Session) {
         let mut state_guard = self.smart_state.lock().await;
         
-        // Record connection result
+        // Record connection result - this will apply penalty and update stats
         state_guard.record_connection_result(proxy_name, site, dest_ip, 9999.0, false);
         
         // Update site preference
@@ -598,22 +628,8 @@ impl Handler {
         // Record failed request
         state_guard.record_request(sess);
     }
-
-    /// Get comprehensive system statistics for monitoring
-    ///
-    /// Returns detailed statistics about the smart proxy group including
-    /// tracked proxies, active sites, sessions, and performance metrics.
-    ///
-    /// # Returns
-    /// (tracked_proxies, active_sites, active_sessions, avg_success_rate)
-    pub async fn get_statistics(&self) -> (usize, usize, usize, f64) {
-        let state_guard = self.smart_state.lock().await;
-        state_guard.get_statistics()
-    }
 }
-
 impl DialWithConnector for Handler {}
-
 #[async_trait::async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {

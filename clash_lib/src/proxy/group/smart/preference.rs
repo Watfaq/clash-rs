@@ -2,8 +2,8 @@
 //!
 //! This module implements simple site stickiness functionality.
 
-use std::time::Instant;
-
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use serde::{Deserialize, Serialize};
 /// Simple site preference tracking for sticky behavior
 #[derive(Debug, Clone)]
 pub struct SitePreference {
@@ -15,6 +15,64 @@ pub struct SitePreference {
     pub success_rate: f64,
     /// Total connection attempts
     pub total_attempts: u32,
+}
+
+impl Serialize for SitePreference {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("SitePreference", 4)?;
+        state.serialize_field("preferred_proxy", &self.preferred_proxy)?;
+        
+        // Convert Instant to timestamp
+        let duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let elapsed = self.last_used.elapsed();
+        let timestamp = duration.saturating_sub(elapsed);
+        state.serialize_field("last_used", &timestamp.as_secs())?;
+        
+        state.serialize_field("success_rate", &self.success_rate)?;
+        state.serialize_field("total_attempts", &self.total_attempts)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for SitePreference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct SitePreferenceData {
+            preferred_proxy: String,
+            last_used: u64,
+            success_rate: f64,
+            total_attempts: u32,
+        }
+        
+        let data = SitePreferenceData::deserialize(deserializer)?;
+        
+        // Convert timestamp back to Instant
+        let timestamp = Duration::from_secs(data.last_used);
+        let now_duration = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        
+        let last_used = if now_duration > timestamp {
+            let elapsed = now_duration - timestamp;
+            Instant::now() - elapsed
+        } else {
+            Instant::now()
+        };
+        
+        Ok(SitePreference {
+            preferred_proxy: data.preferred_proxy,
+            last_used,
+            success_rate: data.success_rate,
+            total_attempts: data.total_attempts,
+        })
+    }
 }
 
 impl SitePreference {

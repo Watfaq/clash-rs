@@ -80,6 +80,7 @@ asn-mmdb: Country-asn.mmdb
 profile:
   store-selected: true
   store-fake-ip: false
+  store-smart-stats: true
 
 proxy-groups:
   - name: "relay"
