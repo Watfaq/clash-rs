@@ -114,22 +114,29 @@ impl Handler {
     ) -> Self {
         let group_name = opts.name.clone();
 
-        let smart_state = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                let stored_data = cache_store.get_smart_stats(&group_name).await;
-                let policy_priority_str =
-                    cache_store.get_smart_policy_priority(&group_name).await;
+        let load_smart_state = || async {
+            let stored_data = cache_store.get_smart_stats(&group_name).await;
+            let policy_priority_str =
+                cache_store.get_smart_policy_priority(&group_name).await;
 
-                let weight_config = match policy_priority_str {
-                    Some(priority_str) => {
-                        WeightConfig::parse(&priority_str).unwrap_or_default()
-                    }
-                    None => WeightConfig::default(),
-                };
+            let weight_config = match policy_priority_str {
+                Some(priority_str) => {
+                    WeightConfig::parse(&priority_str).unwrap_or_default()
+                }
+                None => WeightConfig::default(),
+            };
 
-                SmartState::new_with_imported_data(stored_data, weight_config)
-            })
-        });
+            SmartState::new_with_imported_data(stored_data, weight_config)
+        };
+
+        let smart_state = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => handle.block_on(load_smart_state()),
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .expect("Failed to create runtime");
+                rt.block_on(load_smart_state())
+            }
+        };
 
         let handler = Self {
             opts,
