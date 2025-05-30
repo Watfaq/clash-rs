@@ -723,51 +723,39 @@ impl OutboundHandler for Handler {
 mod tests {
     use super::*;
     use crate::{
-        app::{
-            dns::{DNSResolver, ThreadSafeDNSResolver},
-            profile::{CacheFile, ThreadSafeCacheFile},
-            remote_content_manager::{
-                providers::proxy_provider::ThreadSafeProxyProvider, HostsContentManager,
-                ProxyManager,
-            },
-        },
-        common::mmdb::Mmdb,
-        config,
         proxy::{
-            AnyOutboundHandler,
-            mocks::MockDummyProxyProvider,
-            shadowsocks,
             utils::test_utils::{
-                consts::*, docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                consts::*, docker_runner::{DockerTestRunnerBuilder, DockerTestRunner},
                 run_test_suites_and_cleanup, Suite,
             },
+            mocks::MockDummyProxyProvider,
         },
+        profile::ThreadSafeCacheFile,
+        SystemResolver,
     };
-    use reqwest::Client;
-    use std::sync::Arc;
+    use tokio::sync::RwLock;
     use tempfile::tempdir;
-    use tokio::sync::{mpsc, RwLock};
 
     // Constants for the mock Shadowsocks server
-    const PASSWORD: str = "FzcLbKs2dY9mhL_smart";
-    const CIPHER: str = "aes-256-gcm";
+    const PASSWORD: &str = "FzcLbKs2dY9mhL_smart";
+    const CIPHER: &str = "aes-256-gcm";
 
     // Helper function to get a Shadowsocks Docker runner
-    async fn get_ss_runner(port: u16) -> anyhow::ResultDockerTestRunner {
+    async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
-            .entrypoint(["ssserver"])
-            .cmd(["-s", host, "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .entrypoint(&["ssserver"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
             .build()
             .await
     }
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_smart_group_smoke() -> anyhow::Result() {
+    async fn test_smart_group_smoke() -> anyhow::Result<()> {
         let ss_port = 10003;
-        let ss_opts = shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
             name: "test-ss-for-smart".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -778,7 +766,7 @@ mod tests {
             udp: true,
         };
         let ss_handler: AnyOutboundHandler =
-            Arc::new(shadowsocks::Handler::new(ss_opts));
+            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
 
         let mut provider = MockDummyProxyProvider::new();
         provider.expect_touch().returning(|| ());
@@ -800,40 +788,22 @@ mod tests {
 
         let temp_dir_hdl = tempdir()?;
         let cache_path = temp_dir_hdl.path().join("smart_test_cache.db");
-        let cache_file_inner = CacheFile::new(cache_path.clone(), false)?;
-        let cache_store: ThreadSafeCacheFile = Arc::new(RwLock::new(cache_file_inner));
-
-        let rt = tokio::runtime::Handle::current();
-        let client = Client::new();
-
-        let hosts_content_manager =
-            HostsContentManager::new(cache_store.clone(), client.clone());
-        let arc_hosts_content_manager = Arc::new(RwLock::new(hosts_content_manager));
-
-        let geoip_resolver = Arc::new(RwLock::new(Mmdb::empty()?));
-
-        let resolver_inner = DNSResolver::new_with_system_conf_and_hosts(
-            rt.clone(),
-            None,
-            Some(arc_hosts_content_manager.clone()),
-            geoip_resolver.clone(),
-        )?;
-        let thread_safe_resolver: ThreadSafeDNSResolver = Arc::new(resolver_inner);
-
-        let (_tun_tx, tun_rx) = mpsc::channel::<()>(1);
-
-        let proxy_manager = ProxyManager::new(
-            thread_safe_resolver.clone(),
-            client.clone(),
-            cache_store.clone(),
-            Some(tun_rx),
+        let cache_store = ThreadSafeCacheFile::new(
+            cache_path.to_str().expect("Cache path is not valid UTF-8"), 
+            false
         );
+
+        let resolver = SystemResolver::new(false)
+            .map_err(|e| anyhow::anyhow!("Failed to create system resolver: {}", e))?;
+        let thread_safe_resolver = Arc::new(resolver);
+
+        let proxy_manager = ProxyManager::new(thread_safe_resolver.clone());
 
         let smart_handler_instance = super::Handler::new_with_cache(
             smart_opts,
             vec![thread_safe_provider],
             proxy_manager,
-            cache_store.clone(),
+            cache_store,
         );
         let any_smart_handler: AnyOutboundHandler = Arc::new(smart_handler_instance);
 
