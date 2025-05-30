@@ -652,7 +652,7 @@ impl Handler {
         if configured_max > 0 {
             configured_max
         } else {
-            calculated_max.max(2).min(6) // Reasonable bounds
+            calculated_max.clamp(2, 6) // Reasonable bounds
         }
     }
 
