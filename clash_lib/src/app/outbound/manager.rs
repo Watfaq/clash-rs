@@ -17,7 +17,6 @@ use crate::app::{
     },
 };
 
-use crate::proxy::group::smart;
 use crate::{
     app::remote_content_manager::providers::proxy_provider::{
         PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
@@ -27,7 +26,9 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        OutboundType, fallback, loadbalance, selector, socks, trojan,
+        OutboundType, fallback,
+        group::smart,
+        loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg,
     },

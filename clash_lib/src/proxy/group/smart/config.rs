@@ -47,8 +47,9 @@ pub struct WeightConfig {
 impl WeightConfig {
     /// Parse policy priority string into weight rules
     ///
-    /// The policy priority string format is: "pattern1:weight1;pattern2:weight2;..."
-    /// where patterns are regex expressions and weights are floating point numbers.
+    /// The policy priority string format is:
+    /// "pattern1:weight1;pattern2:weight2;..." where patterns are regex
+    /// expressions and weights are floating point numbers.
     ///
     /// # Arguments
     /// * `policy_priority` - The policy priority configuration string
@@ -63,7 +64,7 @@ impl WeightConfig {
     /// ```
     pub fn parse(policy_priority: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut rules = Vec::new();
-        
+
         for rule_str in policy_priority.split(';') {
             let parts: Vec<&str> = rule_str.splitn(2, ':').collect();
             if parts.len() == 2 {
@@ -72,10 +73,10 @@ impl WeightConfig {
                 rules.push(WeightRule { pattern, weight });
             }
         }
-        
+
         Ok(WeightConfig { rules })
     }
-    
+
     /// Get weight multiplier for a proxy name
     ///
     /// Iterates through all weight rules and returns the weight
@@ -104,7 +105,7 @@ mod tests {
     fn test_weight_config_parse() {
         let config = WeightConfig::parse("US.*:0.8;.*HK.*:1.2").unwrap();
         assert_eq!(config.rules.len(), 2);
-        
+
         assert_eq!(config.get_weight("US-Server-1"), 0.8);
         assert_eq!(config.get_weight("HK-Server-1"), 1.2);
         assert_eq!(config.get_weight("JP-Server-1"), 1.0);

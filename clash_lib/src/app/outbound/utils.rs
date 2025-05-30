@@ -173,8 +173,9 @@ pub fn proxy_groups_dag_sort(
 #[cfg(test)]
 mod tests {
     use crate::config::internal::proxy::{
-        OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupSmart, OutboundGroupProtocol,
-        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupUrlTest,
+        OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupProtocol,
+        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupSmart,
+        OutboundGroupUrlTest,
     };
 
     #[test]

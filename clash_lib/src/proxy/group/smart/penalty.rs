@@ -3,8 +3,8 @@
 //! This module implements a penalty system that tracks proxy performance
 //! and applies exponential penalties for failures with time-based decay.
 
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Tracks and manages the penalty score for a proxy
 ///
@@ -23,27 +23,29 @@ pub struct ProxyPenalty {
 mod instant_serde {
     use super::*;
     use serde::{Deserializer, Serializer};
-    
+
     pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let duration = SystemTime::now().duration_since(UNIX_EPOCH)
+        let duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
         let elapsed = instant.elapsed();
         let timestamp = duration.saturating_sub(elapsed);
         serializer.serialize_u64(timestamp.as_secs())
     }
-    
+
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
     where
         D: Deserializer<'de>,
     {
         let timestamp_secs = u64::deserialize(deserializer)?;
         let timestamp = Duration::from_secs(timestamp_secs);
-        let now_duration = SystemTime::now().duration_since(UNIX_EPOCH)
+        let now_duration = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
-        
+
         if now_duration > timestamp {
             let elapsed = now_duration - timestamp;
             Ok(Instant::now() - elapsed)
@@ -94,8 +96,10 @@ impl ProxyPenalty {
     #[inline]
     pub fn decay(&mut self) {
         let elapsed = self.last_update.elapsed().as_secs_f64();
-        // Reset to zero if penalty becomes negligible to avoid floating-point underflow
-        if self.value < 0.01 || elapsed > 300.0 { // 5-minute timeout
+        // Reset to zero if penalty becomes negligible to avoid floating-point
+        // underflow
+        if self.value < 0.01 || elapsed > 300.0 {
+            // 5-minute timeout
             self.value = 0.0;
         } else if elapsed > 0.0 {
             // Exponential decay with half-life of 10 seconds
@@ -136,13 +140,13 @@ mod tests {
     #[test]
     fn test_penalty_growth() {
         let mut penalty = ProxyPenalty::new();
-        
+
         penalty.add_penalty();
         assert_eq!(penalty.value(), 2.0); // (0 + 1) * 2
-        
+
         penalty.add_penalty();
         assert_eq!(penalty.value(), 6.0); // (2 + 1) * 2
-        
+
         penalty.add_penalty();
         assert_eq!(penalty.value(), 14.0); // (6 + 1) * 2
     }
@@ -152,10 +156,10 @@ mod tests {
         let mut penalty: ProxyPenalty = ProxyPenalty::new();
         penalty.add_penalty(); // value = 2.0
         penalty.add_penalty(); // value = 6.0
-        
+
         penalty.reward();
         assert!((penalty.value() - 1.2).abs() < 1e-6); // 6.0 * 0.2
-        
+
         penalty.reward();
         assert!((penalty.value() - 0.24).abs() < 1e-6); // 1.2 * 0.2
     }
@@ -164,11 +168,11 @@ mod tests {
     fn test_penalty_decay() {
         let mut penalty = ProxyPenalty::new();
         penalty.add_penalty(); // value = 2.0
-        
+
         // Simulate time passage by manually setting last_update
         penalty.last_update = Instant::now() - Duration::from_secs(10);
         penalty.decay();
-        
+
         // After 10 seconds (one half-life), penalty should be ~1.0
         assert!((penalty.value() - 1.0).abs() < 0.1);
     }

@@ -499,16 +499,16 @@ pub struct OutboundGroupSmart {
 
     pub lazy: Option<bool>,
     pub icon: Option<String>,
-    
+
     /// Maximum retries for failed connections (default: 3)
     #[serde(rename = "max-retries")]
     pub max_retries: Option<u32>,
-    
+
     /// Site stickiness factor (0.0-1.0, default: 0.8)
     /// Higher values make the same site more likely to use the same proxy
     #[serde(rename = "site-stickiness")]
     pub site_stickiness: Option<f64>,
-    
+
     /// Bandwidth consideration weight (default: 0.0 - disabled)
     /// When > 0, bandwidth metrics are included in selection algorithm
     #[serde(rename = "bandwidth-weight")]

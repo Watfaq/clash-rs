@@ -105,19 +105,29 @@ impl ThreadSafeCacheFile {
     }
 
     /// Store smart proxy group statistics
-    pub async fn set_smart_stats(&self, group_name: &str, stats: crate::proxy::group::smart::state::SmartStateData) {
+    pub async fn set_smart_stats(
+        &self,
+        group_name: &str,
+        stats: crate::proxy::group::smart::state::SmartStateData,
+    ) {
         let mut g = self.0.write().await;
         g.set_smart_stats(group_name, stats);
     }
 
     /// Get smart proxy group statistics
-    pub async fn get_smart_stats(&self, group_name: &str) -> Option<crate::proxy::group::smart::state::SmartStateData> {
+    pub async fn get_smart_stats(
+        &self,
+        group_name: &str,
+    ) -> Option<crate::proxy::group::smart::state::SmartStateData> {
         let g = self.0.read().await;
         g.get_smart_stats(group_name)
     }
 
     /// Get smart proxy group policy priority
-    pub async fn get_smart_policy_priority(&self, group_name: &str) -> Option<String> {
+    pub async fn get_smart_policy_priority(
+        &self,
+        group_name: &str,
+    ) -> Option<String> {
         let g = self.0.read().await;
         g.get_smart_policy_priority(group_name)
     }
@@ -198,11 +208,18 @@ impl CacheFile {
         self.db.host_to_ip.remove(host);
     }
 
-    pub fn set_smart_stats(&mut self, group_name: &str, stats: crate::proxy::group::smart::state::SmartStateData) {
+    pub fn set_smart_stats(
+        &mut self,
+        group_name: &str,
+        stats: crate::proxy::group::smart::state::SmartStateData,
+    ) {
         self.db.smart_stats.insert(group_name.to_string(), stats);
     }
 
-    pub fn get_smart_stats(&self, group_name: &str) -> Option<crate::proxy::group::smart::state::SmartStateData> {
+    pub fn get_smart_stats(
+        &self,
+        group_name: &str,
+    ) -> Option<crate::proxy::group::smart::state::SmartStateData> {
         self.db.smart_stats.get(group_name).cloned()
     }
 

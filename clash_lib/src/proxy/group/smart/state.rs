@@ -4,17 +4,14 @@
 //! group, coordinating between different components like penalties,
 //! statistics, and preferences.
 
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
-use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::{
-    app::remote_content_manager::TrafficStats,
-    session::Session,
-};
+use crate::{app::remote_content_manager::TrafficStats, session::Session};
 
 use super::{
     config::WeightConfig,
@@ -42,7 +39,7 @@ pub struct SmartState {
     /// Penalty tracking per proxy
     penalty: HashMap<String, ProxyPenalty>,
     /// Site-specific statistics per proxy
-    pub site_stats: HashMap<String, HashMap<String, SiteStats>>, // Proxy name -> Site -> Stats
+    pub site_stats: HashMap<String, HashMap<String, SiteStats>>, /* Proxy name -> Site -> Stats */
     /// Real-time traffic statistics collector
     traffic_collector: TrafficStatsCollector,
     /// Site preferences for sticky behavior
@@ -65,7 +62,7 @@ impl SmartState {
             weight_config: WeightConfig::default(),
         }
     }
-    
+
     /// Create a new SmartState with a given weight configuration
     ///
     /// # Arguments
@@ -91,12 +88,15 @@ impl SmartState {
     ///
     /// # Returns
     /// New SmartState instance initialized from data or defaults
-    pub fn new_with_imported_data(data: Option<SmartStateData>, weight_config: WeightConfig) -> Self {
+    pub fn new_with_imported_data(
+        data: Option<SmartStateData>,
+        weight_config: WeightConfig,
+    ) -> Self {
         if let Some(imported_data) = data {
             Self {
                 penalty: imported_data.penalty,
                 site_stats: imported_data.site_stats,
-                traffic_collector: TrafficStatsCollector::new(), // Traffic collector is not persisted
+                traffic_collector: TrafficStatsCollector::new(), /* Traffic collector is not persisted */
                 site_preferences: imported_data.site_preferences,
                 weight_config,
             }
@@ -146,7 +146,11 @@ impl SmartState {
     ///
     /// # Returns
     /// Mutable reference to the site statistics
-    pub fn get_site_stats_mut(&mut self, proxy_name: &str, site: &str) -> &mut SiteStats {
+    pub fn get_site_stats_mut(
+        &mut self,
+        proxy_name: &str,
+        site: &str,
+    ) -> &mut SiteStats {
         self.site_stats
             .entry(proxy_name.to_string())
             .or_default()
@@ -162,7 +166,11 @@ impl SmartState {
     ///
     /// # Returns
     /// Reference to site statistics, or None if not found
-    pub fn get_site_stats(&self, proxy_name: &str, site: &str) -> Option<&SiteStats> {
+    pub fn get_site_stats(
+        &self,
+        proxy_name: &str,
+        site: &str,
+    ) -> Option<&SiteStats> {
         self.site_stats
             .get(proxy_name)
             .and_then(|sites| sites.get(site))
@@ -201,7 +209,6 @@ impl SmartState {
             let ip_stats = self.get_site_stats_mut(proxy_name, ip);
             ip_stats.add_result(delay, success);
         }
-
     }
 
     /// Get site preference for a site
@@ -222,7 +229,13 @@ impl SmartState {
     /// * `proxy_name` - Name of the proxy used
     /// * `success` - Whether the connection was successful
     /// * `site_stickiness` - Site stickiness configuration (0.0-1.0)
-    pub fn update_site_preference(&mut self, site: &str, proxy_name: &str, success: bool, site_stickiness: f64) {
+    pub fn update_site_preference(
+        &mut self,
+        site: &str,
+        proxy_name: &str,
+        success: bool,
+        site_stickiness: f64,
+    ) {
         if site_stickiness <= 0.0 {
             return;
         }
@@ -231,19 +244,25 @@ impl SmartState {
             if preference.preferred_proxy == proxy_name {
                 preference.update_success(success);
                 if !success && preference.success_rate < 0.5 {
-                    debug!("Removing site preference for {} from {} (poor performance)", site, proxy_name);
+                    debug!(
+                        "Removing site preference for {} from {} (poor performance)",
+                        site, proxy_name
+                    );
                     self.site_preferences.remove(site);
                 }
             } else if success && preference.success_rate < 0.8 {
                 // Switch to this better performing proxy
-                debug!("Switching site preference for {} from {} to {} (better performance)",
-                       site, preference.preferred_proxy, proxy_name);
+                debug!(
+                    "Switching site preference for {} from {} to {} (better \
+                     performance)",
+                    site, preference.preferred_proxy, proxy_name
+                );
                 *preference = SitePreference::new(proxy_name.to_string());
             }
         } else if success {
             self.site_preferences.insert(
                 site.to_string(),
-                SitePreference::new(proxy_name.to_string())
+                SitePreference::new(proxy_name.to_string()),
             );
         }
     }
@@ -274,9 +293,15 @@ impl SmartState {
     /// * `sess` - Session information
     /// * `uploaded` - Bytes uploaded
     /// * `downloaded` - Bytes downloaded
-    pub fn record_traffic(&mut self, sess: &Session, uploaded: u64, downloaded: u64) {
+    pub fn record_traffic(
+        &mut self,
+        sess: &Session,
+        uploaded: u64,
+        downloaded: u64,
+    ) {
         let session_id = Self::generate_session_id(sess);
-        self.traffic_collector.record_transfer(&session_id, uploaded, downloaded);
+        self.traffic_collector
+            .record_transfer(&session_id, uploaded, downloaded);
     }
 
     /// Record a request event for a session
@@ -308,7 +333,7 @@ impl SmartState {
         // Clean up stale site statistics and remove empty proxy entries
         self.site_stats.retain(|_proxy, sites| {
             sites.retain(|_, site_stat| !site_stat.is_stale());
-            !sites.is_empty()  // Remove proxy entry if no sites left
+            !sites.is_empty() // Remove proxy entry if no sites left
         });
 
         // Clean up old traffic data
@@ -316,9 +341,8 @@ impl SmartState {
 
         // Clean up old site preferences (older than 1 hour with poor performance)
         let cutoff = Instant::now() - Duration::from_secs(3600);
-        self.site_preferences.retain(|_, pref| {
-            pref.last_used > cutoff || pref.success_rate > 0.7
-        });
+        self.site_preferences
+            .retain(|_, pref| pref.last_used > cutoff || pref.success_rate > 0.7);
 
         // Clean up penalties: decay and remove negligible ones
         let negligible_threshold = 0.01;
@@ -359,10 +383,10 @@ mod tests {
     #[test]
     fn test_penalty_tracking() {
         let mut state = SmartState::new();
-        
+
         // Record a failure
         state.record_connection_result("proxy1", "example.com", None, 1000.0, false);
-        
+
         let penalty = state.get_penalty("proxy1");
         assert!(penalty.is_some());
         assert!(penalty.unwrap().value() > 0.0);
@@ -371,10 +395,10 @@ mod tests {
     #[test]
     fn test_site_preference() {
         let mut state = SmartState::new();
-        
+
         // Record successful connection
         state.update_site_preference("example.com", "proxy1", true, 0.8);
-        
+
         let preference = state.get_site_preference("example.com");
         assert!(preference.is_some());
         assert_eq!(preference.unwrap().preferred_proxy, "proxy1");

@@ -469,7 +469,10 @@ impl Session {
         );
         rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
         rv.insert("asn".to_string(), Box::new(self.asn.clone()) as _);
-        rv.insert("traffic_stats".to_string(), Box::new(self.traffic_stats.clone()) as _);
+        rv.insert(
+            "traffic_stats".to_string(),
+            Box::new(self.traffic_stats.clone()) as _,
+        );
         rv
     }
 }

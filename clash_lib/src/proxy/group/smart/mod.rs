@@ -1,8 +1,8 @@
 //! Smart proxy group implementation
 //!
 //! This module provides an intelligent proxy group that automatically selects
-//! the best proxy based on performance metrics, site preferences, traffic patterns,
-//! and adaptive learning algorithms.
+//! the best proxy based on performance metrics, site preferences, traffic
+//! patterns, and adaptive learning algorithms.
 //!
 //! - [`config`] - Configuration management and weight rules
 //! - [`penalty`] - Proxy penalty system for performance tracking
@@ -29,7 +29,8 @@ use crate::{
         },
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
+        OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
@@ -112,47 +113,54 @@ impl Handler {
         cache_store: crate::app::profile::ThreadSafeCacheFile,
     ) -> Self {
         let group_name = opts.name.clone();
-        
+
         let smart_state = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let stored_data = cache_store.get_smart_stats(&group_name).await;
-                let policy_priority_str = cache_store.get_smart_policy_priority(&group_name).await;
+                let policy_priority_str =
+                    cache_store.get_smart_policy_priority(&group_name).await;
 
                 let weight_config = match policy_priority_str {
-                    Some(priority_str) => WeightConfig::parse(&priority_str).unwrap_or_default(),
+                    Some(priority_str) => {
+                        WeightConfig::parse(&priority_str).unwrap_or_default()
+                    }
                     None => WeightConfig::default(),
                 };
 
                 SmartState::new_with_imported_data(stored_data, weight_config)
             })
         });
-        
+
         let handler = Self {
             opts,
             providers,
             proxy_manager,
             smart_state: Arc::new(tokio::sync::Mutex::new(smart_state)),
         };
-        
+
         // Set up periodic persistence for smart_stats
         let cache_store_clone = cache_store.clone();
         let group_name_clone = group_name.clone();
         let state_clone = Arc::clone(&handler.smart_state);
-        
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(30));
             loop {
                 interval.tick().await;
                 let state_guard = state_clone.lock().await;
                 let data = state_guard.export_data();
                 drop(state_guard);
-                
-                // Note: policy_priority is part of the global Db and saved by ThreadSafeCacheFile's main loop.
-                // We only save smart_stats here.
-                cache_store_clone.set_smart_stats(&group_name_clone, data).await;
+
+                // Note: policy_priority is part of the global Db and saved by
+                // ThreadSafeCacheFile's main loop. We only save
+                // smart_stats here.
+                cache_store_clone
+                    .set_smart_stats(&group_name_clone, data)
+                    .await;
             }
         });
-        
+
         handler
     }
 
@@ -205,9 +213,12 @@ impl Handler {
         // Check site stickiness first
         let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
         let preferred_proxy_info = if site_stickiness > 0.0 {
-            state_guard.get_site_preference(&site)
+            state_guard
+                .get_site_preference(&site)
                 .filter(|preference| preference.is_valid(0.7, 300))
-                .map(|preference| (preference.preferred_proxy.clone(), preference.success_rate))
+                .map(|preference| {
+                    (preference.preferred_proxy.clone(), preference.success_rate)
+                })
         } else {
             None
         };
@@ -223,12 +234,13 @@ impl Handler {
                         site,
                         success_rate * 100.0
                     );
-                    
+
                     return Some(proxy.clone());
                 }
             }
             debug!(
-                "{} preferred proxy {} not available, falling back to smart selection",
+                "{} preferred proxy {} not available, falling back to smart \
+                 selection",
                 self.name(),
                 preferred_proxy_name
             );
@@ -266,7 +278,8 @@ impl Handler {
             let alive = self.proxy_manager.alive(&name).await;
 
             debug!(
-                "{} proxy {} metrics - delay: {:.1}ms, loss: {:.1}%, rtt: {:.1}ms, alive: {}",
+                "{} proxy {} metrics - delay: {:.1}ms, loss: {:.1}%, rtt: {:.1}ms, \
+                 alive: {}",
                 self.name(),
                 name,
                 delay,
@@ -277,17 +290,24 @@ impl Handler {
 
             // Apply custom weight configuration
             let custom_weight = state_guard.get_weight(&name);
-            debug!("{} proxy {} custom weight: {:.2}", self.name(), name, custom_weight);
+            debug!(
+                "{} proxy {} custom weight: {:.2}",
+                self.name(),
+                name,
+                custom_weight
+            );
 
             // Use traffic-aware tuning parameters
             let delay_weight = site_tuning.delay_weight.unwrap_or(1.0);
-            let packet_loss_weight = site_tuning.packet_loss_weight.unwrap_or(1000.0);
+            let packet_loss_weight =
+                site_tuning.packet_loss_weight.unwrap_or(1000.0);
             let rtt_weight = site_tuning.rtt_weight.unwrap_or(1.0);
             let alive_penalty = site_tuning.alive_penalty.unwrap_or(5000.0);
             let bandwidth_weight = self.opts.bandwidth_weight.unwrap_or(0.0);
 
             debug!(
-                "{} using tuning weights - delay: {:.2}, loss: {:.1}, rtt: {:.2}, alive_penalty: {:.1}, bandwidth: {:.2}",
+                "{} using tuning weights - delay: {:.2}, loss: {:.1}, rtt: {:.2}, \
+                 alive_penalty: {:.1}, bandwidth: {:.2}",
                 self.name(),
                 delay_weight,
                 packet_loss_weight,
@@ -309,7 +329,8 @@ impl Handler {
 
             if let Some((sd, sr, st)) = site_stats {
                 debug!(
-                    "{} proxy {} site history - avg delay: {:.1}ms, success rate: {:.1}%, trend: {}",
+                    "{} proxy {} site history - avg delay: {:.1}ms, success rate: \
+                     {:.1}%, trend: {}",
                     self.name(),
                     name,
                     sd,
@@ -317,14 +338,15 @@ impl Handler {
                     match st {
                         1 => "improving",
                         -1 => "degrading",
-                        _ => "stable"
+                        _ => "stable",
                     }
                 );
             }
 
             if let Some((id, ir, it)) = ip_stats {
                 debug!(
-                    "{} proxy {} IP history - avg delay: {:.1}ms, success rate: {:.1}%, trend: {}",
+                    "{} proxy {} IP history - avg delay: {:.1}ms, success rate: \
+                     {:.1}%, trend: {}",
                     self.name(),
                     name,
                     id,
@@ -332,7 +354,7 @@ impl Handler {
                     match it {
                         1 => "improving",
                         -1 => "degrading",
-                        _ => "stable"
+                        _ => "stable",
                     }
                 );
             }
@@ -351,23 +373,27 @@ impl Handler {
             );
 
             // Calculate comprehensive score with trend consideration
-            let site_delay = site_stats.map(|(d, r, t)| {
-                let trend_multiplier = match t {
-                    1 => 0.9,   // Improving trend gets 10% bonus
-                    -1 => 1.1,  // Degrading trend gets 10% penalty
-                    _ => 1.0,   // Stable trend no change
-                };
-                d * (2.0 - r) * trend_multiplier
-            }).unwrap_or(delay);
-            
-            let ip_delay = ip_stats.map(|(d, r, t)| {
-                let trend_multiplier = match t {
-                    1 => 0.9,   // Improving trend gets 10% bonus
-                    -1 => 1.1,  // Degrading trend gets 10% penalty
-                    _ => 1.0,   // Stable trend no change
-                };
-                d * (2.0 - r) * trend_multiplier
-            }).unwrap_or(delay);
+            let site_delay = site_stats
+                .map(|(d, r, t)| {
+                    let trend_multiplier = match t {
+                        1 => 0.9,  // Improving trend gets 10% bonus
+                        -1 => 1.1, // Degrading trend gets 10% penalty
+                        _ => 1.0,  // Stable trend no change
+                    };
+                    d * (2.0 - r) * trend_multiplier
+                })
+                .unwrap_or(delay);
+
+            let ip_delay = ip_stats
+                .map(|(d, r, t)| {
+                    let trend_multiplier = match t {
+                        1 => 0.9,  // Improving trend gets 10% bonus
+                        -1 => 1.1, // Degrading trend gets 10% penalty
+                        _ => 1.0,  // Stable trend no change
+                    };
+                    d * (2.0 - r) * trend_multiplier
+                })
+                .unwrap_or(delay);
 
             let mut base_score = ((site_delay + ip_delay) / 2.0) * delay_weight
                 + packet_loss * packet_loss_weight
@@ -398,28 +424,32 @@ impl Handler {
         }
 
         // Sort by score (lower is better)
-        candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Implement smart selection with weighted randomization for site stickiness
         let best_candidate = if site_stickiness > 0.0 && candidates.len() > 1 {
             let top_candidates = std::cmp::min(3, candidates.len());
             let threshold = candidates[0].0 * 1.2; // Within 20% of best score
-            
-            let viable_candidates: Vec<_> = candidates.iter()
+
+            let viable_candidates: Vec<_> = candidates
+                .iter()
                 .take(top_candidates)
-                .filter(|(score, _, _)| *score <= threshold)
+                .filter(|(score, ..)| *score <= threshold)
                 .cloned()
                 .collect();
-            
+
             if viable_candidates.len() > 1 {
                 // Weighted random selection favoring better scores
-                let weights: Vec<f64> = viable_candidates.iter()
-                    .map(|(score, _, _)| 1.0 / (1.0 + score))
+                let weights: Vec<f64> = viable_candidates
+                    .iter()
+                    .map(|(score, ..)| 1.0 / (1.0 + score))
                     .collect();
-                
+
                 let total_weight: f64 = weights.iter().sum();
                 let mut random_val = rand::random::<f64>() * total_weight;
-                
+
                 let mut selected_index = 0;
                 for (i, weight) in weights.iter().enumerate() {
                     random_val -= weight;
@@ -440,7 +470,12 @@ impl Handler {
 
         // Update site preference for stickiness
         if site_stickiness > 0.0 {
-            state_guard.update_site_preference(&site, &selected_name, true, site_stickiness);
+            state_guard.update_site_preference(
+                &site,
+                &selected_name,
+                true,
+                site_stickiness,
+            );
         }
 
         debug!("{} selected proxy: {}", self.name(), selected_name);
@@ -504,12 +539,20 @@ impl Handler {
                     match proxy.connect_stream(sess, resolver.clone()).await {
                         Ok(stream) => {
                             let delay = start.elapsed().as_secs_f64() * 1000.0;
-                            
+
                             // Update success metrics
-                            self.record_success(&name, &site, dest_ip.as_deref(), delay, sess).await;
-                            
+                            self.record_success(
+                                &name,
+                                &site,
+                                dest_ip.as_deref(),
+                                delay,
+                                sess,
+                            )
+                            .await;
+
                             debug!(
-                                "{} successfully connected to {} via {}, delay: {:.2}ms, attempts: {}",
+                                "{} successfully connected to {} via {}, delay: \
+                                 {:.2}ms, attempts: {}",
                                 self.name(),
                                 site,
                                 name,
@@ -525,22 +568,35 @@ impl Handler {
                                 name,
                                 e
                             );
-                            
+
                             // Update failure metrics
-                            self.record_failure(&name, &site, dest_ip.as_deref(), sess).await;
+                            self.record_failure(
+                                &name,
+                                &site,
+                                dest_ip.as_deref(),
+                                sess,
+                            )
+                            .await;
 
                             // Exponential backoff with jitter
-                            tokio::time::sleep(std::time::Duration::from_millis(retry_delay)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                retry_delay,
+                            ))
+                            .await;
                             retry_delay = (retry_delay * 2).min(5000); // Cap at 5 seconds
                             retries += 1;
-                            
+
                             debug!(
                                 "{} retry {} of {} for {}, next delay: {}ms",
                                 self.name(),
                                 retries,
                                 max_retries,
                                 site,
-                                if retries < max_retries { retry_delay } else { 0 }
+                                if retries < max_retries {
+                                    retry_delay
+                                } else {
+                                    0
+                                }
                             );
                             continue;
                         }
@@ -572,7 +628,7 @@ impl Handler {
     /// Calculate optimal retry count based on site history
     async fn calculate_max_retries(&self, site: &str) -> u32 {
         let state_guard = self.smart_state.lock().await;
-        
+
         // Collect site success rate data
         let site_stats: Vec<_> = state_guard
             .site_stats
@@ -581,7 +637,8 @@ impl Handler {
             .collect();
 
         let avg_success_rate = if !site_stats.is_empty() {
-            site_stats.iter().map(|s| s.success_rate()).sum::<f64>() / site_stats.len() as f64
+            site_stats.iter().map(|s| s.success_rate()).sum::<f64>()
+                / site_stats.len() as f64
         } else {
             0.5 // Default to middle ground
         };
@@ -591,7 +648,7 @@ impl Handler {
         // Use configured max retries or calculate based on site history
         let configured_max = self.opts.max_retries.unwrap_or(0);
         let calculated_max = (3.0 * (2.0 - avg_success_rate)).round() as u32;
-        
+
         if configured_max > 0 {
             configured_max
         } else {
@@ -600,31 +657,45 @@ impl Handler {
     }
 
     /// Record successful connection metrics
-    async fn record_success(&self, proxy_name: &str, site: &str, dest_ip: Option<&str>, delay: f64, sess: &Session) {
+    async fn record_success(
+        &self,
+        proxy_name: &str,
+        site: &str,
+        dest_ip: Option<&str>,
+        delay: f64,
+        sess: &Session,
+    ) {
         let mut state_guard = self.smart_state.lock().await;
-        
+
         // Record connection result
         state_guard.record_connection_result(proxy_name, site, dest_ip, delay, true);
-        
+
         // Update site preference
         let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
         state_guard.update_site_preference(site, proxy_name, true, site_stickiness);
-        
+
         // Record traffic data (approximate handshake bytes)
         state_guard.record_traffic(sess, 500, 500);
     }
 
     /// Record failed connection metrics
-    async fn record_failure(&self, proxy_name: &str, site: &str, dest_ip: Option<&str>, sess: &Session) {
+    async fn record_failure(
+        &self,
+        proxy_name: &str,
+        site: &str,
+        dest_ip: Option<&str>,
+        sess: &Session,
+    ) {
         let mut state_guard = self.smart_state.lock().await;
-        
+
         // Record connection result - this will apply penalty and update stats
-        state_guard.record_connection_result(proxy_name, site, dest_ip, 9999.0, false);
-        
+        state_guard
+            .record_connection_result(proxy_name, site, dest_ip, 9999.0, false);
+
         // Update site preference
         let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
         state_guard.update_site_preference(site, proxy_name, false, site_stickiness);
-        
+
         // Record failed request
         state_guard.record_request(sess);
     }
@@ -652,11 +723,18 @@ impl OutboundHandler for Handler {
         debug!("{} starting smart proxy selection", self.name());
         match self.adaptive_retry(sess, &resolver).await {
             Ok(stream) => {
-                debug!("{} successfully connected using smart selection", self.name());
+                debug!(
+                    "{} successfully connected using smart selection",
+                    self.name()
+                );
                 Ok(stream)
             }
             Err(e) => {
-                debug!("{} failed to connect with all available proxies: {:?}", self.name(), e);
+                debug!(
+                    "{} failed to connect with all available proxies: {:?}",
+                    self.name(),
+                    e
+                );
                 Err(e)
             }
         }
@@ -708,7 +786,8 @@ impl OutboundHandler for Handler {
         m.insert("type".to_string(), Box::new(self.proto()) as _);
         m.insert(
             "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>()) as _,
+            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
+                as _,
         );
         m
     }
@@ -723,18 +802,20 @@ impl OutboundHandler for Handler {
 mod tests {
     use super::*;
     use crate::{
-        proxy::{
-            utils::test_utils::{
-                consts::*, docker_runner::{DockerTestRunnerBuilder, DockerTestRunner},
-                run_test_suites_and_cleanup, Suite,
-            },
-            mocks::MockDummyProxyProvider,
-        },
-        profile::ThreadSafeCacheFile,
         SystemResolver,
+        profile::ThreadSafeCacheFile,
+        proxy::{
+            mocks::MockDummyProxyProvider,
+            utils::test_utils::{
+                Suite,
+                consts::*,
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
     };
-    use tokio::sync::RwLock;
     use tempfile::tempdir;
+    use tokio::sync::RwLock;
 
     // Constants for the mock Shadowsocks server
     const PASSWORD: &str = "FzcLbKs2dY9mhL_smart";
@@ -774,7 +855,8 @@ mod tests {
         provider
             .expect_proxies()
             .returning(move || vec![ss_handler.clone()]);
-        let thread_safe_provider: ThreadSafeProxyProvider = Arc::new(RwLock::new(provider));
+        let thread_safe_provider: ThreadSafeProxyProvider =
+            Arc::new(RwLock::new(provider));
 
         // Setup HandlerOptions for Smart group
         let smart_opts = super::HandlerOptions {
@@ -789,12 +871,13 @@ mod tests {
         let temp_dir_hdl = tempdir()?;
         let cache_path = temp_dir_hdl.path().join("smart_test_cache.db");
         let cache_store = ThreadSafeCacheFile::new(
-            cache_path.to_str().expect("Cache path is not valid UTF-8"), 
-            false
+            cache_path.to_str().expect("Cache path is not valid UTF-8"),
+            false,
         );
 
-        let resolver = SystemResolver::new(false)
-            .map_err(|e| anyhow::anyhow!("Failed to create system resolver: {}", e))?;
+        let resolver = SystemResolver::new(false).map_err(|e| {
+            anyhow::anyhow!("Failed to create system resolver: {}", e)
+        })?;
         let thread_safe_resolver = Arc::new(resolver);
 
         let proxy_manager = ProxyManager::new(thread_safe_resolver.clone());
@@ -809,11 +892,7 @@ mod tests {
 
         let docker_runner = get_ss_runner(ss_port).await?;
 
-        run_test_suites_and_cleanup(
-            any_smart_handler,
-            docker_runner,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(any_smart_handler, docker_runner, Suite::all())
+            .await
     }
 }
