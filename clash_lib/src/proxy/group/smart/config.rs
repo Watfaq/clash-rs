@@ -57,13 +57,6 @@ impl WeightConfig {
     /// # Returns
     /// * `Ok(WeightConfig)` - Successfully parsed configuration
     /// * `Err(Box<dyn std::error::Error>)` - Parse error
-    ///
-    /// # Example
-    /// ```
-    /// use crate::proxy::group::smart::config::WeightConfig;
-    ///
-    /// let config = WeightConfig::parse("US.*:0.8;.*HK.*:1.2").unwrap();
-    /// ```
     pub fn parse(policy_priority: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut rules = Vec::new();
 
