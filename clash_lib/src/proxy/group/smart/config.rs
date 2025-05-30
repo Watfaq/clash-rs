@@ -60,7 +60,9 @@ impl WeightConfig {
     ///
     /// # Example
     /// ```
-    /// let config = WeightConfig::parse("US.*:0.8;.*HK.*:1.2")?;
+    /// use super::WeightConfig;
+    ///
+    /// let config = WeightConfig::parse("US.*:0.8;.*HK.*:1.2").unwrap();
     /// ```
     pub fn parse(policy_priority: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut rules = Vec::new();
