@@ -60,7 +60,7 @@ impl WeightConfig {
     ///
     /// # Example
     /// ```
-    /// use super::WeightConfig;
+    /// use crate::proxy::group::smart::config::WeightConfig;
     ///
     /// let config = WeightConfig::parse("US.*:0.8;.*HK.*:1.2").unwrap();
     /// ```
