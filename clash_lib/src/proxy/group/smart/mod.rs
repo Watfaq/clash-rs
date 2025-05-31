@@ -114,23 +114,34 @@ impl Handler {
     ) -> Self {
         let group_name = opts.name.clone();
 
-        let load_smart_state = || async {
-            let stored_data = cache_store.get_smart_stats(&group_name).await;
-            let policy_priority_str =
-                cache_store.get_smart_policy_priority(&group_name).await;
+        let thread_group_name = group_name.clone();
+        let thread_cache_store = cache_store.clone();
 
-            let weight_config = match policy_priority_str {
-                Some(priority_str) => {
-                    WeightConfig::parse(&priority_str).unwrap_or_default()
-                }
-                None => WeightConfig::default(),
-            };
+        let (tx, rx) = std::sync::mpsc::sync_channel(0);
 
-            SmartState::new_with_imported_data(stored_data, weight_config)
-        };
+        std::thread::spawn(move || {
+            let rt =
+                tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            let state = rt.block_on(async {
+                let stored_data =
+                    thread_cache_store.get_smart_stats(&thread_group_name).await;
+                let policy_priority_str = thread_cache_store
+                    .get_smart_policy_priority(&thread_group_name)
+                    .await;
 
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-        let smart_state = rt.block_on(load_smart_state());
+                let weight_config = match policy_priority_str {
+                    Some(priority_str) => {
+                        WeightConfig::parse(&priority_str).unwrap_or_default()
+                    }
+                    None => WeightConfig::default(),
+                };
+
+                SmartState::new_with_imported_data(stored_data, weight_config)
+            });
+
+            tx.send(state).expect("Failed to send smart state");
+        });
+        let smart_state = rx.recv().expect("Failed to receive smart state");
 
         let handler = Self {
             opts,
@@ -153,9 +164,6 @@ impl Handler {
                 let data = state_guard.export_data();
                 drop(state_guard);
 
-                // Note: policy_priority is part of the global Db and saved by
-                // ThreadSafeCacheFile's main loop. We only save
-                // smart_stats here.
                 cache_store_clone
                     .set_smart_stats(&group_name_clone, data)
                     .await;
