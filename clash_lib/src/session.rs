@@ -441,6 +441,8 @@ pub struct Session {
     pub iface: Option<Interface>,
     /// The ASN of the destination IP address. Only for display.
     pub asn: Option<String>,
+    /// Traffic statistics for intelligent proxy selection
+    pub traffic_stats: Option<crate::app::remote_content_manager::TrafficStats>,
 }
 
 impl Session {
@@ -467,6 +469,10 @@ impl Session {
         );
         rv.insert("host".to_string(), Box::new(self.destination.host()) as _);
         rv.insert("asn".to_string(), Box::new(self.asn.clone()) as _);
+        rv.insert(
+            "traffic_stats".to_string(),
+            Box::new(self.traffic_stats.clone()) as _,
+        );
         rv
     }
 }
@@ -482,6 +488,7 @@ impl Default for Session {
             so_mark: None,
             iface: None,
             asn: None,
+            traffic_stats: None,
         }
     }
 }
@@ -520,6 +527,7 @@ impl Clone for Session {
             so_mark: self.so_mark,
             iface: self.iface.as_ref().cloned(),
             asn: self.asn.clone(),
+            traffic_stats: self.traffic_stats.clone(),
         }
     }
 }

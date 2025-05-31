@@ -5,9 +5,16 @@ use tracing::{error, trace, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Db {
+    #[serde(default)]
     selected: HashMap<String, String>,
+    #[serde(default)]
     ip_to_host: HashMap<String, String>,
+    #[serde(default)]
     host_to_ip: HashMap<String, String>,
+    #[serde(default)]
+    smart_stats: HashMap<String, crate::proxy::group::smart::state::SmartStateData>,
+    #[serde(default)]
+    smart_policy_priority: HashMap<String, String>,
 }
 
 #[derive(Clone)]
@@ -96,6 +103,34 @@ impl ThreadSafeCacheFile {
     pub async fn delete_fake_ip_pair(&self, ip: &str, host: &str) {
         self.0.write().await.delete_fake_ip_pair(ip, host);
     }
+
+    /// Store smart proxy group statistics
+    pub async fn set_smart_stats(
+        &self,
+        group_name: &str,
+        stats: crate::proxy::group::smart::state::SmartStateData,
+    ) {
+        let mut g = self.0.write().await;
+        g.set_smart_stats(group_name, stats);
+    }
+
+    /// Get smart proxy group statistics
+    pub async fn get_smart_stats(
+        &self,
+        group_name: &str,
+    ) -> Option<crate::proxy::group::smart::state::SmartStateData> {
+        let g = self.0.read().await;
+        g.get_smart_stats(group_name)
+    }
+
+    /// Get smart proxy group policy priority
+    pub async fn get_smart_policy_priority(
+        &self,
+        group_name: &str,
+    ) -> Option<String> {
+        let g = self.0.read().await;
+        g.get_smart_policy_priority(group_name)
+    }
 }
 
 struct CacheFile {
@@ -118,6 +153,8 @@ impl CacheFile {
                         selected: HashMap::new(),
                         ip_to_host: HashMap::new(),
                         host_to_ip: HashMap::new(),
+                        smart_stats: HashMap::new(),
+                        smart_policy_priority: HashMap::new(),
                     }
                 }
             },
@@ -127,6 +164,8 @@ impl CacheFile {
                     selected: HashMap::new(),
                     ip_to_host: HashMap::new(),
                     host_to_ip: HashMap::new(),
+                    smart_stats: HashMap::new(),
+                    smart_policy_priority: HashMap::new(),
                 }
             }
         };
@@ -167,5 +206,24 @@ impl CacheFile {
     pub fn delete_fake_ip_pair(&mut self, ip: &str, host: &str) {
         self.db.ip_to_host.remove(ip);
         self.db.host_to_ip.remove(host);
+    }
+
+    pub fn set_smart_stats(
+        &mut self,
+        group_name: &str,
+        stats: crate::proxy::group::smart::state::SmartStateData,
+    ) {
+        self.db.smart_stats.insert(group_name.to_string(), stats);
+    }
+
+    pub fn get_smart_stats(
+        &self,
+        group_name: &str,
+    ) -> Option<crate::proxy::group::smart::state::SmartStateData> {
+        self.db.smart_stats.get(group_name).cloned()
+    }
+
+    pub fn get_smart_policy_priority(&self, group_name: &str) -> Option<String> {
+        self.db.smart_policy_priority.get(group_name).cloned()
     }
 }
