@@ -5,6 +5,7 @@ use serde_yaml::Value;
 
 use crate::{
     Error,
+    common::utils::md5_str,
     config::{config::RuleProviderDef, proxy::map_serde_error},
 };
 
@@ -19,6 +20,28 @@ pub(super) fn convert(
                         "name".to_owned(),
                         serde_yaml::Value::String(name.clone()),
                     );
+
+                    // Set default values if not present
+                    if !body.contains_key("interval") {
+                        body.insert(
+                            "interval".to_owned(),
+                            serde_yaml::Value::Number(0u64.into()),
+                        );
+                    }
+                    if !body.contains_key("path") {
+                        // Prefer url if present, else use name
+                        let key = body
+                            .get("url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&name);
+                        let md5 = md5_str(key.as_bytes());
+                        let path = format!("rules/{}", md5);
+                        body.insert(
+                            "path".to_owned(),
+                            serde_yaml::Value::String(path),
+                        );
+                    }
+
                     let provider = RuleProviderDef::try_from(body).map_err(|x| {
                         Error::InvalidConfig(format!(
                             "invalid rule provider {name}: {x}"
@@ -43,6 +66,7 @@ impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
                 "rule provider name is required".to_owned(),
             ))?
             .to_owned();
+
         RuleProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
             .map_err(map_serde_error(name))
     }

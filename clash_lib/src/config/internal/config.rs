@@ -11,8 +11,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     Error,
     app::{
-        dns, net::Interface,
-        remote_content_manager::providers::rule_provider::RuleSetBehavior,
+        dns,
+        net::Interface,
+        remote_content_manager::providers::rule_provider::{
+            RuleSetBehavior, RuleSetFormat,
+        },
     },
     common::auth,
     config::{
@@ -181,6 +184,7 @@ pub struct HttpRuleProvider {
     pub interval: u64,
     pub behavior: RuleSetBehavior,
     pub path: String,
+    pub format: Option<RuleSetFormat>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -188,6 +192,7 @@ pub struct FileRuleProvider {
     pub path: String,
     pub interval: Option<u64>,
     pub behavior: RuleSetBehavior,
+    pub format: Option<RuleSetFormat>,
 }
 
 #[cfg(test)]
