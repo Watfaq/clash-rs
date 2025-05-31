@@ -129,14 +129,8 @@ impl Handler {
             SmartState::new_with_imported_data(stored_data, weight_config)
         };
 
-        let smart_state = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => handle.block_on(load_smart_state()),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new()
-                    .expect("Failed to create runtime");
-                rt.block_on(load_smart_state())
-            }
-        };
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+        let smart_state = rt.block_on(load_smart_state());
 
         let handler = Self {
             opts,
