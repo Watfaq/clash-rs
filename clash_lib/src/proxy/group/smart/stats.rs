@@ -169,32 +169,55 @@ impl SiteStats {
     }
 
     /// Get recent performance trend
+    /// Calculate trend using linear regression for more accurate prediction
     pub fn get_trend(&self) -> i8 {
-        if self.success_history.len() < 4 {
+        if self.delay_history.len() < 3 {
             return 0; // Not enough data
         }
 
-        let recent_half = self.success_history.len() / 2;
-        let older_success = self.success_history[..recent_half]
-            .iter()
-            .filter(|&&x| x)
-            .count();
-        let recent_success = self.success_history[recent_half..]
-            .iter()
-            .filter(|&&x| x)
-            .count();
+        // Calculate linear regression slope for delay history
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let mut sum_xy = 0.0;
+        let mut sum_x2 = 0.0;
+        let n = self.delay_history.len() as f64;
 
-        let older_rate = older_success as f64 / recent_half as f64;
-        let recent_rate = recent_success as f64
-            / (self.success_history.len() - recent_half) as f64;
+        for (i, &y) in self.delay_history.iter().enumerate() {
+            let x = i as f64;
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_x2 += x * x;
+        }
 
-        if recent_rate > older_rate + 0.2 {
-            1 // Improving
-        } else if recent_rate < older_rate - 0.2 {
-            -1 // Degrading
+        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
+
+        // Determine trend based on slope
+        if slope < -0.5 {
+            1 // Improving: significant negative slope
+        } else if slope > 0.5 {
+            -1 // Degrading: significant positive slope
         } else {
             0 // Stable
         }
+    }
+
+    /// Calculate standard deviation of latency for stability metric
+    pub fn latency_stability(&self) -> f64 {
+        if self.delay_history.is_empty() {
+            return 0.0;
+        }
+
+        let mean =
+            self.delay_history.iter().sum::<f64>() / self.delay_history.len() as f64;
+        let variance = self
+            .delay_history
+            .iter()
+            .map(|&d| (d - mean).powi(2))
+            .sum::<f64>()
+            / self.delay_history.len() as f64;
+
+        variance.sqrt()
     }
 }
 

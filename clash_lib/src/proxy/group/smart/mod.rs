@@ -326,20 +326,30 @@ impl Handler {
             );
 
             // Get historical performance data
-            let site_stats = state_guard
-                .get_site_stats(&name, &site)
-                .map(|s| (s.get_delay_score(), s.success_rate(), s.get_trend()));
-
-            let ip_stats = dest_ip.as_ref().and_then(|ip| {
-                state_guard
-                    .get_site_stats(&name, ip)
-                    .map(|s| (s.get_delay_score(), s.success_rate(), s.get_trend()))
+            let site_stats = state_guard.get_site_stats(&name, &site).map(|s| {
+                (
+                    s.get_delay_score(),
+                    s.success_rate(),
+                    s.get_trend(),
+                    s.latency_stability(),
+                )
             });
 
-            if let Some((sd, sr, st)) = site_stats {
+            let ip_stats = dest_ip.as_ref().and_then(|ip| {
+                state_guard.get_site_stats(&name, ip).map(|s| {
+                    (
+                        s.get_delay_score(),
+                        s.success_rate(),
+                        s.get_trend(),
+                        s.latency_stability(),
+                    )
+                })
+            });
+
+            if let Some((sd, sr, st, stability)) = site_stats {
                 debug!(
                     "{} proxy {} site history - avg delay: {:.1}ms, success rate: \
-                     {:.1}%, trend: {}",
+                     {:.1}%, trend: {}, stability: {:.2}",
                     self.name(),
                     name,
                     sd,
@@ -348,14 +358,15 @@ impl Handler {
                         1 => "improving",
                         -1 => "degrading",
                         _ => "stable",
-                    }
+                    },
+                    stability
                 );
             }
 
-            if let Some((id, ir, it)) = ip_stats {
+            if let Some((id, ir, it, stability)) = ip_stats {
                 debug!(
                     "{} proxy {} IP history - avg delay: {:.1}ms, success rate: \
-                     {:.1}%, trend: {}",
+                     {:.1}%, trend: {}, stability: {:.2}",
                     self.name(),
                     name,
                     id,
@@ -364,7 +375,8 @@ impl Handler {
                         1 => "improving",
                         -1 => "degrading",
                         _ => "stable",
-                    }
+                    },
+                    stability
                 );
             }
 
@@ -383,7 +395,7 @@ impl Handler {
 
             // Calculate comprehensive score with trend consideration
             let site_delay = site_stats
-                .map(|(d, r, t)| {
+                .map(|(d, r, t, _)| {
                     let trend_multiplier = match t {
                         1 => 0.9,  // Improving trend gets 10% bonus
                         -1 => 1.1, // Degrading trend gets 10% penalty
@@ -394,7 +406,7 @@ impl Handler {
                 .unwrap_or(delay);
 
             let ip_delay = ip_stats
-                .map(|(d, r, t)| {
+                .map(|(d, r, t, _)| {
                     let trend_multiplier = match t {
                         1 => 0.9,  // Improving trend gets 10% bonus
                         -1 => 1.1, // Degrading trend gets 10% penalty
@@ -404,9 +416,16 @@ impl Handler {
                 })
                 .unwrap_or(delay);
 
+            // Calculate stability penalty factor
+            let stability_penalty = site_stats
+                .map(|(_, _, _, s)| s * 0.5) // Each point of stability adds 0.5 to score
+                .unwrap_or(0.0)
+                + ip_stats.map(|(_, _, _, s)| s * 0.5).unwrap_or(0.0);
+
             let mut base_score = ((site_delay + ip_delay) / 2.0) * delay_weight
                 + packet_loss * packet_loss_weight
                 + rtt * rtt_weight
+                + stability_penalty // Add stability penalty
                 + if alive { 0.0 } else { alive_penalty }
                 + penalty_score;
 
