@@ -406,14 +406,6 @@ impl TrafficStatsCollector {
         self.throughput_samples
             .retain(|session_id, _| self.connection_start.contains_key(session_id));
     }
-
-    // /// Get the number of active sessions
-    // ///
-    // /// # Returns
-    // /// Number of currently tracked sessions
-    // pub fn active_session_count(&self) -> usize {
-    //     self.connection_start.len()
-    // }
 }
 
 impl Default for TrafficStatsCollector {
