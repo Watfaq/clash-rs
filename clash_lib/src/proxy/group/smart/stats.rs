@@ -456,13 +456,14 @@ mod tests {
     fn test_site_stats_trend() {
         let mut stats = SiteStats::new();
 
-        // Add older failures
+        // Add older failures (not added to delay history)
         stats.add_result(100.0, false);
         stats.add_result(100.0, false);
 
-        // Add recent successes
-        stats.add_result(100.0, true);
-        stats.add_result(100.0, true);
+        // Add recent successes with decreasing delays
+        stats.add_result(150.0, true); // high delay
+        stats.add_result(120.0, true); // medium delay
+        stats.add_result(100.0, true); // low delay
 
         assert_eq!(stats.get_trend(), 1); // Improving
     }
