@@ -144,20 +144,54 @@ impl DomainSet {
 }
 
 impl DomainSet {
+    pub(crate) fn from_mrs_parts(
+        leaves: Vec<u64>,
+        label_bit_map: Vec<u64>,
+        labels: Vec<u8>,
+    ) -> Self {
+        let mut set = Self {
+            leaves,
+            label_bit_map,
+            labels,
+            ranks: Vec::new(),
+            selects: Vec::new(),
+        };
+        set.init();
+        set
+    }
+
     fn init(&mut self) {
+        self.ranks.clear(); // Ensure clean state
+        self.selects.clear();
+
         self.ranks.push(0);
         for i in 0..self.label_bit_map.len() {
             let n = self.label_bit_map[i].count_ones();
-            self.ranks.push(self.ranks.last().unwrap() + n as i32);
+            // Ensure ranks has enough capacity or handle potential panic if last()
+            // is called on empty vec
+            let last_rank = self.ranks.last().copied().unwrap_or(0);
+            self.ranks.push(last_rank + n as i32);
         }
 
-        let mut n = 0;
-        for i in 0..self.label_bit_map.len() << 6 {
-            let z = (self.label_bit_map[i >> 6] >> (i & 63)) & 1;
-            if z == 1 && n & 63 == 0 {
-                self.selects.push(i as i32);
+        let mut n: u64 = 0; // bit counting
+        let total_bits = self.label_bit_map.len() * 64;
+
+        for i in 0..total_bits {
+            let word_index = i >> 6;
+            let bit_index = i & 63;
+
+            if word_index >= self.label_bit_map.len() {
+                break;
             }
-            n += z;
+
+            let is_set = (self.label_bit_map[word_index] >> bit_index) & 1;
+            if is_set == 1 {
+                if n & 63 == 0 {
+                    // Check if it's the start of a select block (every 64th '1' bit)
+                    self.selects.push(i as i32);
+                }
+                n += 1;
+            }
         }
     }
 
@@ -274,9 +308,12 @@ impl<T> From<StringTrie<T>> for DomainSet {
                     e: j,
                     col: col + 1,
                 });
-                rv.labels.push(keys[frm].chars().nth(col).unwrap() as u8);
-                set_bit(&mut rv.label_bit_map, l_idx, false);
-                l_idx += 1;
+                // Safely handle potential None if keys[frm] is shorter than col
+                if let Some(char_at_col) = keys[frm].chars().nth(col) {
+                    rv.labels.push(char_at_col as u8);
+                    set_bit(&mut rv.label_bit_map, l_idx, false);
+                    l_idx += 1;
+                }
             }
 
             set_bit(&mut rv.label_bit_map, l_idx, true);
