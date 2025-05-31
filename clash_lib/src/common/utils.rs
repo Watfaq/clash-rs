@@ -56,6 +56,12 @@ pub fn md5(bytes: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
+pub fn md5_str(bytes: &[u8]) -> String {
+    let mut hasher = md5::Md5::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
 /// Default value true for bool on serde
 /// use this if you don't want do deal with Option<bool>
 /// Use Default::default() for false

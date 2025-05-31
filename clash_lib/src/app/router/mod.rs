@@ -166,9 +166,12 @@ impl Router {
                         resolver.clone(),
                     );
 
+                    // Default to yaml if not specified
+                    let format = http.format.unwrap_or_default();
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         http.behavior,
+                        format,
                         Duration::from_secs(http.interval),
                         Arc::new(vehicle),
                         mmdb.clone(),
@@ -185,9 +188,12 @@ impl Router {
                             .unwrap(),
                     );
 
+                    // Default to yaml if not specified
+                    let format = file.format.unwrap_or_default();
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         file.behavior,
+                        format,
                         Duration::from_secs(file.interval.unwrap_or_default()),
                         Arc::new(vehicle),
                         mmdb.clone(),
