@@ -340,7 +340,9 @@ impl SmartState {
         self.traffic_collector.cleanup_old_sessions();
 
         // Clean up old site preferences (older than 1 hour with poor performance)
-        let cutoff = Instant::now() - Duration::from_secs(3600);
+        let cutoff = Instant::now()
+            .checked_sub(Duration::from_secs(3600))
+            .unwrap_or(Instant::now());
         self.site_preferences
             .retain(|_, pref| pref.last_used > cutoff || pref.success_rate > 0.7);
 

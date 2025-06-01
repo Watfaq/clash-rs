@@ -24,6 +24,7 @@ mod instant_serde {
     use super::*;
     use serde::{Deserializer, Serializer};
 
+    // Serialize Instant as UNIX timestamp (seconds)
     pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -36,6 +37,7 @@ mod instant_serde {
         serializer.serialize_u64(timestamp.as_secs())
     }
 
+    // Deserialize UNIX timestamp to Instant, fallback to now if overflow
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
     where
         D: Deserializer<'de>,
@@ -48,7 +50,11 @@ mod instant_serde {
 
         if now_duration > timestamp {
             let elapsed = now_duration - timestamp;
-            Ok(Instant::now() - elapsed)
+            if let Some(inst) = Instant::now().checked_sub(elapsed) {
+                Ok(inst)
+            } else {
+                Ok(Instant::now())
+            }
         } else {
             Ok(Instant::now())
         }

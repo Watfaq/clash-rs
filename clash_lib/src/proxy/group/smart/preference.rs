@@ -9,8 +9,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub struct SitePreference {
     /// Preferred proxy name for this site
     pub preferred_proxy: String,
-    /// Last used time
+    /// Last used time (runtime only, not serialized)
     pub last_used: Instant,
+    /// Last used time for persistence
+    pub last_used_persist: SystemTime,
     /// Success rate with this proxy (0.0 - 1.0)
     pub success_rate: f64,
     /// Total connection attempts
@@ -23,17 +25,15 @@ impl Serialize for SitePreference {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("SitePreference", 4)?;
+        let mut state = serializer.serialize_struct("SitePreference", 5)?;
         state.serialize_field("preferred_proxy", &self.preferred_proxy)?;
-
-        // Convert Instant to timestamp
-        let duration = SystemTime::now()
+        // Persist as UNIX timestamp (seconds)
+        let timestamp = self
+            .last_used_persist
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        let elapsed = self.last_used.elapsed();
-        let timestamp = duration.saturating_sub(elapsed);
-        state.serialize_field("last_used", &timestamp.as_secs())?;
-
+            .unwrap_or_default()
+            .as_secs();
+        state.serialize_field("last_used", &timestamp)?;
         state.serialize_field("success_rate", &self.success_rate)?;
         state.serialize_field("total_attempts", &self.total_attempts)?;
         state.end()
@@ -54,23 +54,19 @@ impl<'de> Deserialize<'de> for SitePreference {
         }
 
         let data = SitePreferenceData::deserialize(deserializer)?;
-
-        // Convert timestamp back to Instant
-        let timestamp = Duration::from_secs(data.last_used);
-        let now_duration = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-
-        let last_used = if now_duration > timestamp {
-            let elapsed = now_duration - timestamp;
+        let last_used_persist = UNIX_EPOCH + Duration::from_secs(data.last_used);
+        // Convert to Instant for runtime use; fallback to now if in the future
+        let now = SystemTime::now();
+        let last_used = if now > last_used_persist {
+            let elapsed = now.duration_since(last_used_persist).unwrap_or_default();
             Instant::now() - elapsed
         } else {
             Instant::now()
         };
-
         Ok(SitePreference {
             preferred_proxy: data.preferred_proxy,
             last_used,
+            last_used_persist,
             success_rate: data.success_rate,
             total_attempts: data.total_attempts,
         })
@@ -80,9 +76,11 @@ impl<'de> Deserialize<'de> for SitePreference {
 impl SitePreference {
     /// Create a new site preference for a proxy
     pub fn new(proxy_name: String) -> Self {
+        let now = SystemTime::now();
         Self {
             preferred_proxy: proxy_name,
             last_used: Instant::now(),
+            last_used_persist: now,
             success_rate: 1.0,
             total_attempts: 1,
         }
@@ -95,6 +93,7 @@ impl SitePreference {
             + if success { 1.0 } else { 0.0 };
         self.success_rate = success_count / self.total_attempts as f64;
         self.last_used = Instant::now();
+        self.last_used_persist = SystemTime::now();
     }
 
     /// Check if preference is still valid

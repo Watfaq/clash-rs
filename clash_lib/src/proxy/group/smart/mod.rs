@@ -456,6 +456,11 @@ impl Handler {
             a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        if candidates.is_empty() {
+            debug!("{} no candidates after filtering", self.name());
+            return None;
+        }
+
         // Implement smart selection with weighted randomization for site stickiness
         let best_candidate = if site_stickiness > 0.0 && candidates.len() > 1 {
             let top_candidates = std::cmp::min(3, candidates.len());
@@ -468,7 +473,10 @@ impl Handler {
                 .cloned()
                 .collect();
 
-            if viable_candidates.len() > 1 {
+            // Defensive: If no viable candidates, fallback to first candidate
+            if viable_candidates.is_empty() {
+                candidates[0].clone()
+            } else if viable_candidates.len() > 1 {
                 // Weighted random selection favoring better scores
                 let weights: Vec<f64> = viable_candidates
                     .iter()
@@ -486,7 +494,10 @@ impl Handler {
                         break;
                     }
                 }
-                viable_candidates[selected_index].clone()
+                viable_candidates
+                    .get(selected_index)
+                    .cloned()
+                    .unwrap_or_else(|| viable_candidates[0].clone())
             } else {
                 viable_candidates[0].clone()
             }
