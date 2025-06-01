@@ -37,7 +37,7 @@ mock! {
         async fn proxies(&self) -> Vec<AnyOutboundHandler>;
         async fn touch(&self);
         async fn healthcheck(&self);
-        async fn ensure_healthcheck_running(&self, default_interval: u64); // Add missing method signature
+        async fn ensure_healthcheck_running(&self, default_interval: u64);
     }
 }
 

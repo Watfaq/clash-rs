@@ -358,7 +358,7 @@ async fn create_components(
 
     debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
-        cwd.join("cache.db").as_path().to_str().unwrap(),
+        cwd.join("cache.redb").as_path().to_str().unwrap(),
         config.profile.store_selected,
     );
 

@@ -10,7 +10,8 @@ use std::{
 };
 
 use crate::{
-    app::remote_content_manager::TrafficStats, common::utils::current_timestamp_secs,
+    app::{profile::MAX_HISTORY_LENGTH, remote_content_manager::TrafficStats},
+    common::utils::current_timestamp_secs,
 };
 
 /// Unified site statistics and preference tracking
@@ -19,44 +20,32 @@ use crate::{
 /// utilizing traffic statistics from session data when available.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SiteStats {
-    /// History of connection delays (milliseconds) - Public for bincode
-    /// serialization
+    /// History of connection delays in seconds.
     pub delay_history: Vec<f64>,
-    /// Track connection success/failure history - Public for bincode
-    /// serialization
+    /// History of connection success/failure.
     pub success_history: Vec<bool>,
-    /// Last time this site was accessed (Unix timestamp seconds)
+    /// Last attempt time (Unix timestamp seconds).
     last_attempt_secs: u64,
 }
-
-const MAX_HISTORY_SIZE: usize = 10;
 
 impl SiteStats {
     /// Create a new SiteStats instance
     pub fn new() -> Self {
         Self {
-            delay_history: Vec::with_capacity(MAX_HISTORY_SIZE),
-            success_history: Vec::with_capacity(MAX_HISTORY_SIZE),
+            // Use the centralized history length definition for capacity.
+            delay_history: Vec::with_capacity(MAX_HISTORY_LENGTH),
+            success_history: Vec::with_capacity(MAX_HISTORY_LENGTH),
             last_attempt_secs: current_timestamp_secs(),
         }
     }
 
-    /// Create a SiteStats instance from stored database values.
-    ///
-    /// # Arguments
-    /// * `delay_history` - Deserialized delay history.
-    /// * `success_history` - Deserialized success history.
-    /// * `last_attempt_secs` - The last attempt time as UNIX timestamp
-    ///   (seconds).
-    /// * `_max_history` - The stored max history size (ignored).
-    // This function is now used by profile/mod.rs to reconstruct state from the DB.
+    /// Creates a `SiteStats` instance from stored data.
+    /// Used internally when loading data from the cache file.
     pub fn from_stored(
         delay_history: Vec<f64>,
         success_history: Vec<bool>,
         last_attempt_secs: u64,
-        _max_history: usize, // Parameter kept for compatibility, but ignored
     ) -> Self {
-        // Directly use the stored timestamp
         Self {
             delay_history,
             success_history,
@@ -74,51 +63,54 @@ impl SiteStats {
         (success_count as f64) / (self.success_history.len() as f64)
     }
 
-    /// Add a new connection result with optional session data
-    ///
-    /// Enhanced to utilize traffic statistics from session when available
+    /// Adds a new connection result.
     pub fn add_result(&mut self, delay: f64, success: bool) {
-        // Update delay history (only for successful connections)
+        // Update delay history (only for successful connections).
         if success {
-            if self.delay_history.len() >= MAX_HISTORY_SIZE {
+            if self.delay_history.len() >= MAX_HISTORY_LENGTH {
+                // Use centralized limit
                 self.delay_history.remove(0);
             }
             self.delay_history.push(delay);
         }
 
-        // Update success history
-        if self.success_history.len() >= MAX_HISTORY_SIZE {
-            self.success_history.remove(0);
+        // Update success history.
+        if self.success_history.len() >= MAX_HISTORY_LENGTH {
+            // Use centralized limit
+            self.success_history.remove(0); // Remove the oldest entry if full.
         }
         self.success_history.push(success);
 
         self.last_attempt_secs = current_timestamp_secs();
     }
 
-    /// Check if stats are stale and should be cleaned up
+    /// Checks if the stats haven't been updated recently (stale).
+    /// Stale stats might be candidates for cleanup.
     pub fn is_stale(&self) -> bool {
         let now_secs = current_timestamp_secs();
-        // Use saturating_sub for u64 subtraction
-        now_secs.saturating_sub(self.last_attempt_secs) > 300 // 5 minutes
+        // Consider stale if no attempt in the last 5 minutes.
+        now_secs.saturating_sub(self.last_attempt_secs) > 300
     }
 
-    /// Calculate weighted delay score considering recent history and success
-    /// rate
+    /// Calculates a weighted delay score.
+    /// Considers recent history, success rate, and applies time decay.
+    /// Lower scores are better.
     pub fn get_delay_score(&self) -> f64 {
         if self.delay_history.is_empty() {
-            return 9999.0;
+            return 9999.0; // Return a high score if no successful delays recorded.
         }
 
         let mut sum = 0.0;
         let mut weight_sum = 0.0;
         let now_secs = current_timestamp_secs();
 
-        // Calculate age based on last_attempt_secs and current time
+        // Calculate age based on the last attempt time.
         let age_secs = now_secs.saturating_sub(self.last_attempt_secs) as f64;
+        // Apply a time decay factor based on age. Older entries have less weight.
+        let time_weight = (-0.1 * age_secs).exp();
 
         for delay in self.delay_history.iter() {
-            // Use the calculated age for time weighting
-            let time_weight = (-0.1 * age_secs as f64).exp();
+            // Apply a delay weight factor. Lower delays get higher weight.
             let delay_weight = (-0.001 * *delay).exp();
             let weight = time_weight * delay_weight;
 
@@ -132,19 +124,22 @@ impl SiteStats {
             9999.0
         };
 
-        // Adjust based on success rate
+        // Adjust based on success rate. Higher success rate reduces the effective
+        // delay score.
         let success_rate = self.success_rate();
-        avg_delay * (2.0 - success_rate) // Higher success rate reduces effective delay
+        avg_delay * (2.0 - success_rate)
     }
 
-    /// Get recent performance trend
-    /// Calculate trend using linear regression for more accurate prediction
+    /// Gets the recent performance trend based on delay history.
+    /// Uses linear regression slope to determine if latency is improving,
+    /// degrading, or stable. Returns: 1 (improving), -1 (degrading), 0
+    /// (stable or insufficient data).
     pub fn get_trend(&self) -> i8 {
         if self.delay_history.len() < 3 {
-            return 0; // Not enough data
+            return 0; // Not enough data for a meaningful trend.
         }
 
-        // Calculate linear regression slope for delay history
+        // Calculate linear regression slope for delay history.
         let mut sum_x = 0.0;
         let mut sum_y = 0.0;
         let mut sum_xy = 0.0;
@@ -161,35 +156,36 @@ impl SiteStats {
 
         let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
 
-        // Determine trend based on slope
+        // Determine trend based on the slope.
         if slope < -0.5 {
-            1 // Improving: significant negative slope
+            1 // Improving (significant negative slope).
         } else if slope > 0.5 {
-            -1 // Degrading: significant positive slope
+            -1 // Degrading (significant positive slope).
         } else {
-            0 // Stable
+            0 // Stable.
         }
     }
 
-    /// Calculate standard deviation of latency for stability metric
+    /// Calculates the standard deviation of latency as a stability metric.
+    /// Lower values indicate more stable latency.
     pub fn latency_stability(&self) -> f64 {
         if self.delay_history.is_empty() {
-            return 0.0;
+            return 0.0; // No data, perfectly stable (or undefined).
         }
 
-        let mean =
-            self.delay_history.iter().sum::<f64>() / self.delay_history.len() as f64;
+        let n = self.delay_history.len() as f64;
+        let mean = self.delay_history.iter().sum::<f64>() / n;
         let variance = self
             .delay_history
             .iter()
             .map(|&d| (d - mean).powi(2))
             .sum::<f64>()
-            / self.delay_history.len() as f64;
+            / n;
 
         variance.sqrt()
     }
 
-    /// Get the last attempt timestamp (seconds)
+    /// Returns the Unix timestamp (seconds) of the last connection attempt.
     #[inline]
     pub fn last_attempt_secs(&self) -> u64 {
         self.last_attempt_secs

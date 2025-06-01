@@ -1199,10 +1199,10 @@ dependencies = [
  "quinn-proto 0.11.12",
  "rand 0.9.1",
  "rand_chacha 0.3.1",
+ "redb",
  "regex",
  "register-count",
  "ring-compat",
- "rusqlite",
  "russh",
  "rustls 0.23.27",
  "rustls-pemfile",
@@ -3599,7 +3599,6 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -4966,6 +4965,15 @@ dependencies = [
  "rustls-pki-types",
  "time",
  "yasna",
+]
+
+[[package]]
+name = "redb"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cef6a6d3a65ea334d6cdfb31fa2525c20184b7aa7bd1ad1e2e37502610d4609f"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
