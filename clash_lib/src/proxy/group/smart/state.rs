@@ -237,10 +237,12 @@ impl SmartState {
                 // Collect site entries into a Vec to sort them by last attempt time
                 let mut site_vec: Vec<_> = sites.drain().collect();
                 // Sort by last_attempt_secs ascending (oldest first)
-                site_vec.sort_unstable_by_key(|(_, stats)| stats.last_attempt_secs());
+                site_vec
+                    .sort_unstable_by_key(|(_, stats)| stats.last_attempt_secs());
 
                 // Keep only the MAX_SITES_PER_PROXY most recent entries
-                let retained_sites = site_vec.split_off(site_vec.len() - MAX_SITES_PER_PROXY);
+                let retained_sites =
+                    site_vec.split_off(site_vec.len() - MAX_SITES_PER_PROXY);
                 // Re-insert the retained entries back into the HashMap
                 *sites = retained_sites.into_iter().collect();
             }
