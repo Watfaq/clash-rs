@@ -13,6 +13,9 @@ use super::{
     stats::{SiteStats, TrafficStatsCollector},
 };
 
+// Define a maximum number of sites to track per proxy to limit memory usage.
+const MAX_SITES_PER_PROXY: usize = 1000;
+
 /// Data structure representing the persisted state of a smart group.
 /// This structure is now persisted across multiple SQLite tables.
 #[derive(Debug, Clone, Default)]
@@ -226,12 +229,24 @@ impl SmartState {
     /// Removes outdated statistics, preferences, and other data
     /// that is no longer relevant or useful.
     pub fn cleanup_stale(&mut self) {
-        // Clean up stale site statistics and remove empty proxy entries
+        // Clean up stale site statistics (based on inactivity time)
         self.site_stats.retain(|_proxy, sites| {
             sites.retain(|_, site_stat| !site_stat.is_stale());
-            !sites.is_empty() // Remove proxy entry if no sites left
-        });
 
+            if sites.len() > MAX_SITES_PER_PROXY {
+                // Collect site entries into a Vec to sort them by last attempt time
+                let mut site_vec: Vec<_> = sites.drain().collect();
+                // Sort by last_attempt_secs ascending (oldest first)
+                site_vec.sort_unstable_by_key(|(_, stats)| stats.last_attempt_secs());
+
+                // Keep only the MAX_SITES_PER_PROXY most recent entries
+                let retained_sites = site_vec.split_off(site_vec.len() - MAX_SITES_PER_PROXY);
+                // Re-insert the retained entries back into the HashMap
+                *sites = retained_sites.into_iter().collect();
+            }
+
+            !sites.is_empty()
+        });
         // Clean up old traffic data
         self.traffic_collector.cleanup_old_sessions();
 
