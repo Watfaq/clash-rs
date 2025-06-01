@@ -96,4 +96,8 @@ impl ProxyProvider for PlainProvider {
     async fn healthcheck(&self) {
         self.hc.check().await;
     }
+
+    async fn ensure_healthcheck_running(&self, default_interval: u64) {
+        self.hc.force_kick_off(default_interval).await;
+    }
 }

@@ -19,6 +19,10 @@ pub struct DomainSet {
 
 impl DomainSet {
     pub fn has(&self, key: &str) -> bool {
+        if self.labels.is_empty() || self.label_bit_map.is_empty() {
+            return false;
+        }
+
         let key = key
             .chars()
             .rev()

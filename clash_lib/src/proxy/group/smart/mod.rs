@@ -636,6 +636,15 @@ impl Handler {
         // Record failed request
         state_guard.record_request(sess);
     }
+
+    /// Get the names of the providers used by this smart group.
+    pub async fn get_provider_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for provider in &self.providers {
+            names.push(provider.read().await.name().to_string());
+        }
+        names
+    }
 }
 impl DialWithConnector for Handler {}
 #[async_trait::async_trait]
