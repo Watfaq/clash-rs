@@ -175,7 +175,6 @@ pub enum ConnectorType {
 }
 
 #[async_trait]
-// Require Any trait for downcasting
 pub trait OutboundHandler:
     Any + Sync + Send + Unpin + DialWithConnector + Debug
 {
