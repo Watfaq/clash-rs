@@ -116,7 +116,7 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[derive(Serialize, Deserialize, Debug)] // Added Debug derive here
+#[derive(Serialize, Deserialize, Debug)]
 pub enum OutboundType {
     Shadowsocks,
     Vmess,

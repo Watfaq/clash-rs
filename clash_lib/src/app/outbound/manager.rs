@@ -38,13 +38,8 @@ use crate::{
     Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        AnyOutboundHandler,
-        OutboundHandler,
-        direct,
-        reject,
-        relay,
-        selector::ThreadSafeSelectorControl,
-        urltest,
+        AnyOutboundHandler, OutboundHandler, direct, reject, relay,
+        selector::ThreadSafeSelectorControl, urltest,
     },
 };
 
