@@ -1,7 +1,6 @@
-use ipnet::{IpNet, Ipv6Net};
+use ipnet::IpNet;
 use std::{
     io,
-    mem::transmute_copy,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     ptr::null_mut,
 };
@@ -13,9 +12,9 @@ use windows::{
             IpHelper::{
                 CreateIpForwardEntry2, CreateUnicastIpAddressEntry,
                 DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1,
-                DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER, GetBestInterfaceEx,
-                GetIfEntry2, IP_ADDRESS_PREFIX, InitializeIpForwardEntry,
-                MIB_IF_ROW2, MIB_IPFORWARD_ROW2, MIB_UNICASTIPADDRESS_ROW,
+                DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER, GetIfEntry2,
+                IP_ADDRESS_PREFIX, InitializeIpForwardEntry, MIB_IF_ROW2,
+                MIB_IPFORWARD_ROW2, MIB_UNICASTIPADDRESS_ROW,
                 SetInterfaceDnsSettings,
             },
             Rras::{
@@ -67,7 +66,7 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
     row.NextHop = next_hop.into();
     row.Metric = metric;
 
-    unsafe { CreateIpForwardEntry2(&mut row) }
+    unsafe { CreateIpForwardEntry2(&row) }
         .to_hresult()
         .ok()
         .map_err(new_io_error)
@@ -94,7 +93,7 @@ fn get_guid(iface: &OutboundInterface) -> Option<GUID> {
 // See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
 pub fn set_dns_v4(
     iface: &OutboundInterface,
-    name_servers: &Vec<Ipv4Addr>,
+    name_servers: &[Ipv4Addr],
 ) -> anyhow::Result<()> {
     let mut dns_wstr = name_servers
         .iter()
@@ -123,9 +122,10 @@ pub fn set_dns_v4(
 
 // SetInterfaceDnsSettings()
 // See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
+#[allow(dead_code)]
 pub fn set_dns_v6(
     iface: &OutboundInterface,
-    name_servers: &Vec<Ipv6Addr>,
+    name_servers: &[Ipv6Addr],
 ) -> anyhow::Result<()> {
     let mut dns_wstr = name_servers
         .iter()
@@ -154,6 +154,7 @@ pub fn set_dns_v6(
 
 /// Adding ipv4/v6 address to the interface.
 /// See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-createunicastipaddressentry
+#[allow(dead_code)]
 pub fn add_address(
     iface: &OutboundInterface,
     addr_net: IpNet,
@@ -162,45 +163,42 @@ pub fn add_address(
     match addr_net {
         IpNet::V4(ipv4_net) => {
             addr_inet.Ipv4.sin_family =
-                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(
-                    AF_INET.0 as u16,
-                );
+                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(AF_INET.0);
             addr_inet.Ipv4.sin_addr.S_un.S_addr =
                 u32::from_le_bytes(ipv4_net.addr().octets());
         }
         IpNet::V6(ipv6_net) => {
             addr_inet.Ipv6.sin6_family =
-                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(
-                    AF_INET6.0 as u16,
-                );
-            addr_inet.Ipv6.sin6_addr.u.Byte = ipv6_net.addr().octets().into();
+                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(AF_INET6.0);
+            addr_inet.Ipv6.sin6_addr.u.Byte = ipv6_net.addr().octets();
         }
     }
 
-    let mut row: MIB_UNICASTIPADDRESS_ROW = Default::default();
+    let row = MIB_UNICASTIPADDRESS_ROW {
+        // Set the interface index
+        InterfaceIndex: iface.index,
 
-    // Set the interface index
-    row.InterfaceIndex = iface.index;
+        // Copy the address
+        Address: addr_inet,
 
-    // Copy the address
-    row.Address = addr_inet;
+        // Set prefix length (subnet mask equivalent for IPv6)
+        OnLinkPrefixLength: addr_net.prefix_len(),
 
-    // Set prefix length (subnet mask equivalent for IPv6)
-    row.OnLinkPrefixLength = addr_net.prefix_len();
+        // Set address origin and suffix origin
+        PrefixOrigin: IpPrefixOriginManual,
+        SuffixOrigin: IpSuffixOriginManual,
 
-    // Set address origin and suffix origin
-    row.PrefixOrigin = IpPrefixOriginManual;
-    row.SuffixOrigin = IpSuffixOriginManual;
+        // Set valid and preferred lifetimes (0xffffffff means infinite)
+        ValidLifetime: 0xffffffff,
+        PreferredLifetime: 0xffffffff,
 
-    // Set valid and preferred lifetimes (0xffffffff means infinite)
-    row.ValidLifetime = 0xffffffff;
-    row.PreferredLifetime = 0xffffffff;
-
-    // Skip duplicate address detection
-    row.SkipAsSource = false.into();
+        // Skip duplicate address detection
+        SkipAsSource: false,
+        ..Default::default()
+    };
 
     unsafe {
-        CreateUnicastIpAddressEntry(&mut row)
+        CreateUnicastIpAddressEntry(&row)
             .to_hresult()
             .ok()
             .map_err(|e| {
