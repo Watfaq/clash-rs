@@ -99,18 +99,23 @@ impl DomainSet {
                         return false;
                     }
 
-                    if self.labels[bm_idx as usize - node_id] == COMPLEX_WILDCARD {
+                    let label_idx = bm_idx as usize - node_id;
+                    if label_idx >= self.labels.len() {
+                        bm_idx += 1;
+                        continue;
+                    }
+
+                    if self.labels[label_idx] == COMPLEX_WILDCARD {
                         return true;
-                    } else if self.labels[bm_idx as usize - node_id] == WILDCARD {
+                    } else if self.labels[label_idx] == WILDCARD {
                         let cursor = Cursor {
                             bm_idx: bm_idx as usize,
                             index: i,
                         };
                         stack.push(cursor);
-                    } else if self.labels[bm_idx as usize - node_id] == c as u8 {
+                    } else if self.labels[label_idx] == c as u8 {
                         break;
                     }
-
                     bm_idx += 1;
                 }
 
@@ -332,7 +337,30 @@ impl<T> From<StringTrie<T>> for DomainSet {
 }
 
 fn get_bit(bm: &[u64], i: isize) -> bool {
-    bm[(i >> 6) as usize] & (1 << (i & 63) as usize) != 0
+    // Check for negative index first
+    if i < 0 {
+        tracing::warn!("Negative index requested in get_bit: {}", i);
+        return false;
+    }
+    let idx = i as usize;
+    let word_index = idx >> 6;
+
+    // Check bounds *before* accessing bm[word_index]
+    if word_index >= bm.len() {
+        if idx != 0 || !bm.is_empty() {
+            tracing::warn!(
+                "Index out of bounds in get_bit: index {} (word {}), bitmap len {}",
+                i,
+                word_index,
+                bm.len()
+            );
+        }
+        return false; // Index is out of bounds
+    }
+
+    // Bounds check passed, safe to access bm[word_index]
+    let bit_index = idx & 63;
+    (bm[word_index] >> bit_index) & 1 != 0
 }
 
 fn set_bit(bm: &mut Vec<u64>, i: usize, v: bool) {

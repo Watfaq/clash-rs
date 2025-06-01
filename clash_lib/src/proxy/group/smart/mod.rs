@@ -4,9 +4,7 @@
 //! the best proxy based on performance metrics, site preferences, traffic
 //! patterns, and adaptive learning algorithms.
 //!
-//! - [`config`] - Configuration management and weight rules
 //! - [`penalty`] - Proxy penalty system for performance tracking
-//! - [`preference`] - Site preference and stickiness functionality
 //! - [`stats`] - Statistics collection and performance metrics
 //! - [`state`] - Centralized state management
 
@@ -29,22 +27,16 @@ use crate::{
         },
     },
     proxy::{
-        AnyOutboundHandler, ConnectorType, DialWithConnector, OutboundHandler,
-        OutboundType,
+        AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
+        OutboundHandler, OutboundType,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
 
-// Public modules
-pub mod config;
 pub mod penalty;
-pub mod preference;
 pub mod state;
 pub mod stats;
-
-// Re-export commonly used types
-pub use config::{HandlerOptions, WeightConfig};
 pub use state::SmartState;
 
 /// Error type for smart group failures
@@ -81,6 +73,20 @@ impl SmartError {
     }
 }
 
+#[derive(Default, Clone)]
+pub struct HandlerOptions {
+    /// Common proxy handler options
+    pub common_opts: HandlerCommonOptions,
+    /// Name of this proxy group
+    pub name: String,
+    /// Whether UDP is supported
+    pub udp: bool,
+    /// Maximum retries for failed connections
+    pub max_retries: Option<u32>,
+    /// Bandwidth consideration weight
+    pub bandwidth_weight: Option<f64>,
+}
+
 /// Smart proxy group handler
 pub struct Handler {
     /// Configuration options
@@ -99,7 +105,6 @@ impl std::fmt::Debug for Handler {
             .field("name", &self.opts.name)
             .field("udp", &self.opts.udp)
             .field("max_retries", &self.opts.max_retries)
-            .field("site_stickiness", &self.opts.site_stickiness)
             .finish()
     }
 }
@@ -125,18 +130,8 @@ impl Handler {
             let state = rt.block_on(async {
                 let stored_data =
                     thread_cache_store.get_smart_stats(&thread_group_name).await;
-                let policy_priority_str = thread_cache_store
-                    .get_smart_policy_priority(&thread_group_name)
-                    .await;
 
-                let weight_config = match policy_priority_str {
-                    Some(priority_str) => {
-                        WeightConfig::parse(&priority_str).unwrap_or_default()
-                    }
-                    None => WeightConfig::default(),
-                };
-
-                SmartState::new_with_imported_data(stored_data, weight_config)
+                SmartState::new_with_imported_data(stored_data)
             });
 
             tx.send(state).expect("Failed to send smart state");
@@ -161,12 +156,24 @@ impl Handler {
             loop {
                 interval.tick().await;
                 let state_guard = state_clone.lock().await;
-                let data = state_guard.export_data();
+                let data_to_save = state_guard.export_data();
                 drop(state_guard);
 
-                cache_store_clone
-                    .set_smart_stats(&group_name_clone, data)
-                    .await;
+                // Save only stats
+                let save_stats_fut = cache_store_clone
+                    .set_smart_stats(&group_name_clone, data_to_save);
+
+                // Execute save
+                let stats_res = save_stats_fut.await;
+
+                // Optional: Log errors if saving failed
+                if let Err(e) = stats_res {
+                    tracing::error!(
+                        "Failed to save smart group stats for {}: {}",
+                        group_name_clone,
+                        e
+                    );
+                }
             }
         });
 
@@ -219,42 +226,6 @@ impl Handler {
         let mut state_guard = self.smart_state.lock().await;
         state_guard.cleanup_stale();
 
-        // Check site stickiness first
-        let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
-        let preferred_proxy_info = if site_stickiness > 0.0 {
-            state_guard
-                .get_site_preference(&site)
-                .filter(|preference| preference.is_valid(0.7, 300))
-                .map(|preference| {
-                    (preference.preferred_proxy.clone(), preference.success_rate)
-                })
-        } else {
-            None
-        };
-
-        if let Some((preferred_proxy_name, success_rate)) = preferred_proxy_info {
-            // Try to find the preferred proxy
-            for proxy in &proxies {
-                if proxy.name() == preferred_proxy_name {
-                    debug!(
-                        "{} using site preference: {} for {} (success rate: {:.1}%)",
-                        self.name(),
-                        preferred_proxy_name,
-                        site,
-                        success_rate * 100.0
-                    );
-
-                    return Some(proxy.clone());
-                }
-            }
-            debug!(
-                "{} preferred proxy {} not available, falling back to smart \
-                 selection",
-                self.name(),
-                preferred_proxy_name
-            );
-        }
-
         // Create enhanced session with traffic stats for site tuning
         let mut enhanced_sess = sess.clone();
         if let Some(traffic_stats) = state_guard.get_traffic_stats(sess) {
@@ -269,7 +240,7 @@ impl Handler {
         // Drop the lock temporarily to call get_site_tuning
         drop(state_guard);
         let site_tuning = self.proxy_manager.get_site_tuning(&enhanced_sess).await;
-        let mut state_guard = self.smart_state.lock().await;
+        let state_guard = self.smart_state.lock().await;
 
         let mut candidates: Vec<(f64, AnyOutboundHandler, String)> = Vec::new();
 
@@ -295,15 +266,6 @@ impl Handler {
                 packet_loss * 100.0,
                 rtt,
                 alive
-            );
-
-            // Apply custom weight configuration
-            let custom_weight = state_guard.get_weight(&name);
-            debug!(
-                "{} proxy {} custom weight: {:.2}",
-                self.name(),
-                name,
-                custom_weight
             );
 
             // Use traffic-aware tuning parameters
@@ -436,16 +398,13 @@ impl Handler {
                 base_score += bandwidth_score * bandwidth_weight;
             }
 
-            // Apply custom weight multiplier
-            let final_score = base_score * custom_weight;
+            let final_score = base_score; // Use base score directly
 
             debug!(
-                "{} proxy {} final score: {:.1} (base: {:.1}, custom_weight: {:.2})",
+                "{} proxy {} final score: {:.1}",
                 self.name(),
                 name,
-                final_score,
-                base_score,
-                custom_weight
+                final_score
             );
 
             candidates.push((final_score, proxy, name));
@@ -461,61 +420,8 @@ impl Handler {
             return None;
         }
 
-        // Implement smart selection with weighted randomization for site stickiness
-        let best_candidate = if site_stickiness > 0.0 && candidates.len() > 1 {
-            let top_candidates = std::cmp::min(3, candidates.len());
-            let threshold = candidates[0].0 * 1.2; // Within 20% of best score
-
-            let viable_candidates: Vec<_> = candidates
-                .iter()
-                .take(top_candidates)
-                .filter(|(score, ..)| *score <= threshold)
-                .cloned()
-                .collect();
-
-            // Defensive: If no viable candidates, fallback to first candidate
-            if viable_candidates.is_empty() {
-                candidates[0].clone()
-            } else if viable_candidates.len() > 1 {
-                // Weighted random selection favoring better scores
-                let weights: Vec<f64> = viable_candidates
-                    .iter()
-                    .map(|(score, ..)| 1.0 / (1.0 + score))
-                    .collect();
-
-                let total_weight: f64 = weights.iter().sum();
-                let mut random_val = rand::random::<f64>() * total_weight;
-
-                let mut selected_index = 0;
-                for (i, weight) in weights.iter().enumerate() {
-                    random_val -= weight;
-                    if random_val <= 0.0 {
-                        selected_index = i;
-                        break;
-                    }
-                }
-                viable_candidates
-                    .get(selected_index)
-                    .cloned()
-                    .unwrap_or_else(|| viable_candidates[0].clone())
-            } else {
-                viable_candidates[0].clone()
-            }
-        } else {
-            candidates[0].clone()
-        };
-
-        let (_, selected_proxy, selected_name) = best_candidate;
-
-        // Update site preference for stickiness
-        if site_stickiness > 0.0 {
-            state_guard.update_site_preference(
-                &site,
-                &selected_name,
-                true,
-                site_stickiness,
-            );
-        }
+        // Select the best candidate (lowest score)
+        let (_, selected_proxy, selected_name) = candidates[0].clone();
 
         debug!("{} selected proxy: {}", self.name(), selected_name);
         Some(selected_proxy)
@@ -709,10 +615,6 @@ impl Handler {
         // Record connection result
         state_guard.record_connection_result(proxy_name, site, dest_ip, delay, true);
 
-        // Update site preference
-        let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
-        state_guard.update_site_preference(site, proxy_name, true, site_stickiness);
-
         // Record traffic data (approximate handshake bytes)
         state_guard.record_traffic(sess, 500, 500);
     }
@@ -730,10 +632,6 @@ impl Handler {
         // Record connection result - this will apply penalty and update stats
         state_guard
             .record_connection_result(proxy_name, site, dest_ip, 9999.0, false);
-
-        // Update site preference
-        let site_stickiness = self.opts.site_stickiness.unwrap_or(0.8);
-        state_guard.update_site_preference(site, proxy_name, false, site_stickiness);
 
         // Record failed request
         state_guard.record_request(sess);
@@ -903,7 +801,6 @@ mod tests {
             name: "test-smart-group".to_string(),
             udp: true,
             max_retries: Some(3),
-            site_stickiness: Some(0.8),
             bandwidth_weight: Some(0.1),
         };
 

@@ -4,98 +4,63 @@
 //! management, leveraging session traffic stats from the existing
 //! infrastructure.
 
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
-use crate::app::remote_content_manager::TrafficStats;
+use crate::{
+    app::remote_content_manager::TrafficStats, common::utils::current_timestamp_secs,
+};
 
 /// Unified site statistics and preference tracking
 ///
 /// Combines performance metrics and site preference functionality,
 /// utilizing traffic statistics from session data when available.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SiteStats {
-    /// History of connection delays (milliseconds)
-    delay_history: Vec<f64>,
-    /// Track connection success/failure history
-    success_history: Vec<bool>,
-    /// Last time this site was accessed
-    last_attempt: Instant,
-    /// Maximum history size to prevent unbounded growth
-    max_history: usize,
+    /// History of connection delays (milliseconds) - Public for bincode
+    /// serialization
+    pub delay_history: Vec<f64>,
+    /// Track connection success/failure history - Public for bincode
+    /// serialization
+    pub success_history: Vec<bool>,
+    /// Last time this site was accessed (Unix timestamp seconds)
+    last_attempt_secs: u64,
 }
 
-impl Serialize for SiteStats {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("SiteStats", 4)?;
-        state.serialize_field("delay_history", &self.delay_history)?;
-        state.serialize_field("success_history", &self.success_history)?;
-
-        // Convert Instant to timestamp
-        let duration = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        let elapsed = self.last_attempt.elapsed();
-        let timestamp = duration.saturating_sub(elapsed);
-        state.serialize_field("last_attempt", &timestamp.as_secs())?;
-
-        state.serialize_field("max_history", &self.max_history)?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for SiteStats {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct SiteStatsData {
-            delay_history: Vec<f64>,
-            success_history: Vec<bool>,
-            last_attempt: u64,
-            max_history: usize,
-        }
-
-        let data = SiteStatsData::deserialize(deserializer)?;
-
-        // Convert timestamp back to Instant
-        let timestamp = Duration::from_secs(data.last_attempt);
-        let now_duration = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-
-        let last_attempt = if now_duration > timestamp {
-            let elapsed = now_duration - timestamp;
-            Instant::now() - elapsed
-        } else {
-            Instant::now()
-        };
-
-        Ok(SiteStats {
-            delay_history: data.delay_history,
-            success_history: data.success_history,
-            last_attempt,
-            max_history: data.max_history,
-        })
-    }
-}
+const MAX_HISTORY_SIZE: usize = 10;
 
 impl SiteStats {
     /// Create a new SiteStats instance
     pub fn new() -> Self {
         Self {
-            delay_history: Vec::with_capacity(10),
-            success_history: Vec::with_capacity(10),
-            last_attempt: Instant::now(),
-            max_history: 10,
+            delay_history: Vec::with_capacity(MAX_HISTORY_SIZE),
+            success_history: Vec::with_capacity(MAX_HISTORY_SIZE),
+            last_attempt_secs: current_timestamp_secs(),
+        }
+    }
+
+    /// Create a SiteStats instance from stored database values.
+    ///
+    /// # Arguments
+    /// * `delay_history` - Deserialized delay history.
+    /// * `success_history` - Deserialized success history.
+    /// * `last_attempt_secs` - The last attempt time as UNIX timestamp
+    ///   (seconds).
+    /// * `_max_history` - The stored max history size (ignored).
+    // This function is now used by profile/mod.rs to reconstruct state from the DB.
+    pub fn from_stored(
+        delay_history: Vec<f64>,
+        success_history: Vec<bool>,
+        last_attempt_secs: u64,
+        _max_history: usize, // Parameter kept for compatibility, but ignored
+    ) -> Self {
+        // Directly use the stored timestamp
+        Self {
+            delay_history,
+            success_history,
+            last_attempt_secs,
         }
     }
 
@@ -115,24 +80,26 @@ impl SiteStats {
     pub fn add_result(&mut self, delay: f64, success: bool) {
         // Update delay history (only for successful connections)
         if success {
-            if self.delay_history.len() >= self.max_history {
+            if self.delay_history.len() >= MAX_HISTORY_SIZE {
                 self.delay_history.remove(0);
             }
             self.delay_history.push(delay);
         }
 
         // Update success history
-        if self.success_history.len() >= self.max_history {
+        if self.success_history.len() >= MAX_HISTORY_SIZE {
             self.success_history.remove(0);
         }
         self.success_history.push(success);
 
-        self.last_attempt = Instant::now();
+        self.last_attempt_secs = current_timestamp_secs();
     }
 
     /// Check if stats are stale and should be cleaned up
     pub fn is_stale(&self) -> bool {
-        self.last_attempt.elapsed().as_secs() > 300 // 5 minutes
+        let now_secs = current_timestamp_secs();
+        // Use saturating_sub for u64 subtraction
+        now_secs.saturating_sub(self.last_attempt_secs) > 300 // 5 minutes
     }
 
     /// Calculate weighted delay score considering recent history and success
@@ -144,13 +111,15 @@ impl SiteStats {
 
         let mut sum = 0.0;
         let mut weight_sum = 0.0;
-        let now = Instant::now();
+        let now_secs = current_timestamp_secs();
+
+        // Calculate age based on last_attempt_secs and current time
+        let age_secs = now_secs.saturating_sub(self.last_attempt_secs) as f64; // u64 -> f64
 
         for delay in self.delay_history.iter() {
-            let age = now.duration_since(self.last_attempt).as_secs_f64();
-            // Faster decay for older samples and higher delays
-            let time_weight = (-0.1 * age).exp();
-            let delay_weight = (-0.001 * delay).exp(); // Higher delays get less weight
+            // Use the calculated age for time weighting
+            let time_weight = (-0.1 * age_secs as f64).exp(); // Specify f64
+            let delay_weight = (-0.001 * *delay).exp(); // Dereference delay, remove redundant cast. Higher delays get less weight
             let weight = time_weight * delay_weight;
 
             sum += delay * weight;
@@ -219,6 +188,12 @@ impl SiteStats {
 
         variance.sqrt()
     }
+
+    /// Get the last attempt timestamp (seconds)
+    #[inline]
+    pub fn last_attempt_secs(&self) -> u64 {
+        self.last_attempt_secs
+    }
 }
 
 impl Default for SiteStats {
@@ -233,13 +208,13 @@ impl Default for SiteStats {
 /// to support traffic-aware proxy selection decisions.
 pub struct TrafficStatsCollector {
     /// Connection start time for duration calculation
-    connection_start: HashMap<String, Instant>,
+    connection_start: HashMap<String, Instant>, // Reverted back to Instant
     /// Accumulated bytes per session (uploaded, downloaded)
     session_bytes: HashMap<String, (u64, u64)>,
     /// Request frequency tracking
-    request_counts: HashMap<String, VecDeque<Instant>>,
+    request_counts: HashMap<String, VecDeque<Instant>>, // Reverted back to Instant
     /// Throughput samples for bandwidth analysis
-    throughput_samples: HashMap<String, VecDeque<(Instant, f64)>>,
+    throughput_samples: HashMap<String, VecDeque<(Instant, f64)>>, /* Reverted back to Instant */
 }
 
 impl TrafficStatsCollector {
