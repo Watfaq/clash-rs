@@ -39,7 +39,7 @@ use crate::{
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
         AnyOutboundHandler,
-        OutboundHandler, // Ensure OutboundHandler is imported
+        OutboundHandler,
         direct,
         reject,
         relay,
@@ -49,7 +49,7 @@ use crate::{
 };
 
 use super::utils::proxy_groups_dag_sort;
-use std::{any::Any, collections::HashSet}; // Import Any for downcasting
+use std::{any::Any, collections::HashSet};
 
 #[cfg(feature = "shadowquic")]
 use crate::proxy::shadowquic;
