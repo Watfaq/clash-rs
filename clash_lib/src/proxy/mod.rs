@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use std::{
+    any::Any,
     collections::HashMap,
     fmt::{Debug, Display},
     io,
@@ -115,7 +116,7 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum OutboundType {
     Shadowsocks,
     Vmess,
@@ -174,7 +175,9 @@ pub enum ConnectorType {
 }
 
 #[async_trait]
-pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
+pub trait OutboundHandler:
+    Any + Sync + Send + Unpin + DialWithConnector + Debug
+{
     /// The name of the outbound handler
     fn name(&self) -> &str;
 

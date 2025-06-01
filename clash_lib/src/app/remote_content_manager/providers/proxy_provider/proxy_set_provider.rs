@@ -255,6 +255,15 @@ impl ProxyProvider for ProxySetProvider {
     async fn healthcheck(&self) {
         self.inner.read().await.hc.check().await;
     }
+
+    async fn ensure_healthcheck_running(&self, default_interval: u64) {
+        self.inner
+            .read()
+            .await
+            .hc
+            .force_kick_off(default_interval)
+            .await;
+    }
 }
 
 #[cfg(test)]

@@ -38,12 +38,13 @@ use crate::{
     Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        AnyOutboundHandler, direct, reject, relay,
+        AnyOutboundHandler, OutboundHandler, direct, reject, relay,
         selector::ThreadSafeSelectorControl, urltest,
     },
 };
 
 use super::utils::proxy_groups_dag_sort;
+use std::{any::Any, collections::HashSet};
 
 #[cfg(feature = "shadowquic")]
 use crate::proxy::shadowquic;
@@ -103,6 +104,10 @@ impl OutboundManager {
 
         debug!("initializing connectors");
         m.init_handler_connectors().await?;
+
+        // Ensure healthchecks for Smart and UrlTest group dependencies are running
+        // Using a default interval of 600 seconds (10 minutes) for forced checks
+        m.ensure_group_dependencies_healthcheck(600).await?;
 
         Ok(m)
     }
@@ -825,6 +830,84 @@ impl OutboundManager {
             info!("initialized provider {}", p.name());
         }
 
+        Ok(())
+    }
+
+    /// Ensures that health checks are running for providers used by Smart or
+    /// UrlTest groups.
+    async fn ensure_group_dependencies_healthcheck(
+        &self,
+        default_interval: u64,
+    ) -> Result<(), Error> {
+        info!(
+            "Ensuring healthchecks are running for providers used by Smart or \
+             UrlTest groups..."
+        );
+        let mut referenced_providers = HashSet::new();
+
+        // Iterate through all handlers to find Smart or UrlTest groups
+        for handler in self.handlers.values() {
+            let handler_any: &dyn Any = handler.as_ref();
+
+            let provider_names: Option<Vec<String>> = match handler.proto() {
+                OutboundType::Smart => {
+                    // Try downcasting to smart::Handler
+                    if let Some(smart_handler) =
+                        handler_any.downcast_ref::<smart::Handler>()
+                    {
+                        debug!("Found Smart group: {}", smart_handler.name());
+                        Some(smart_handler.get_provider_names().await)
+                    } else {
+                        warn!(
+                            "Handler identified as Smart but failed to downcast: {}",
+                            handler.name()
+                        );
+                        None
+                    }
+                }
+                OutboundType::UrlTest => {
+                    // Try downcasting to urltest::Handler
+                    if let Some(urltest_handler) =
+                        handler_any.downcast_ref::<urltest::Handler>()
+                    {
+                        debug!("Found UrlTest group: {}", urltest_handler.name());
+                        Some(urltest_handler.get_provider_names().await)
+                    } else {
+                        warn!(
+                            "Handler identified as UrlTest but failed to downcast: \
+                             {}",
+                            handler.name()
+                        );
+                        None
+                    }
+                }
+                _ => None, // Ignore other handler types
+            };
+
+            // Add provider names to the set if found
+            if let Some(names) = provider_names {
+                for name in names {
+                    debug!("Group {} references provider {}", handler.name(), name);
+                    referenced_providers.insert(name);
+                }
+            }
+        }
+
+        // Iterate through registered providers and ensure healthcheck is running if
+        // referenced
+        for (provider_name, provider_arc) in &self.proxy_providers {
+            if referenced_providers.contains(provider_name) {
+                info!(
+                    "Provider {} is used by a Smart or UrlTest group, ensuring \
+                     healthcheck is running.",
+                    provider_name
+                );
+                let provider = provider_arc.write().await;
+                provider.ensure_healthcheck_running(default_interval).await;
+            }
+        }
+
+        info!("Group dependencies healthcheck assurance completed.");
         Ok(())
     }
 }
