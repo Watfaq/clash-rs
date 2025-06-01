@@ -114,12 +114,12 @@ impl SiteStats {
         let now_secs = current_timestamp_secs();
 
         // Calculate age based on last_attempt_secs and current time
-        let age_secs = now_secs.saturating_sub(self.last_attempt_secs) as f64; // u64 -> f64
+        let age_secs = now_secs.saturating_sub(self.last_attempt_secs) as f64;
 
         for delay in self.delay_history.iter() {
             // Use the calculated age for time weighting
-            let time_weight = (-0.1 * age_secs as f64).exp(); // Specify f64
-            let delay_weight = (-0.001 * *delay).exp(); // Dereference delay, remove redundant cast. Higher delays get less weight
+            let time_weight = (-0.1 * age_secs as f64).exp();
+            let delay_weight = (-0.001 * *delay).exp();
             let weight = time_weight * delay_weight;
 
             sum += delay * weight;
@@ -208,13 +208,13 @@ impl Default for SiteStats {
 /// to support traffic-aware proxy selection decisions.
 pub struct TrafficStatsCollector {
     /// Connection start time for duration calculation
-    connection_start: HashMap<String, Instant>, // Reverted back to Instant
+    connection_start: HashMap<String, Instant>,
     /// Accumulated bytes per session (uploaded, downloaded)
     session_bytes: HashMap<String, (u64, u64)>,
     /// Request frequency tracking
-    request_counts: HashMap<String, VecDeque<Instant>>, // Reverted back to Instant
+    request_counts: HashMap<String, VecDeque<Instant>>,
     /// Throughput samples for bandwidth analysis
-    throughput_samples: HashMap<String, VecDeque<(Instant, f64)>>, /* Reverted back to Instant */
+    throughput_samples: HashMap<String, VecDeque<(Instant, f64)>>,
 }
 
 impl TrafficStatsCollector {
