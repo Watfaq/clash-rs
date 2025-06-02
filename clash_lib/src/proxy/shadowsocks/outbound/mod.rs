@@ -19,6 +19,7 @@ use crate::{
     proxy::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        shadowsocks::map_cipher,
         transport::Sip003Plugin,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
     },
@@ -27,8 +28,7 @@ use crate::{
 use async_trait::async_trait;
 use shadowsocks::{
     ProxyClientStream, ProxySocket, ServerConfig, config::ServerType,
-    context::Context, crypto::CipherKind,
-    relay::udprelay::proxy_socket::UdpSocketType,
+    context::Context, relay::udprelay::proxy_socket::UdpSocketType,
 };
 use std::{fmt::Debug, io, sync::Arc};
 use tracing::debug;
@@ -96,25 +96,7 @@ impl Handler {
         ServerConfig::new(
             (self.opts.server.to_owned(), self.opts.port),
             self.opts.password.to_owned(),
-            match self.opts.cipher.as_str() {
-                "aes-128-gcm" => CipherKind::AES_128_GCM,
-                "aes-256-gcm" => CipherKind::AES_256_GCM,
-                "chacha20-ietf-poly1305" => CipherKind::CHACHA20_POLY1305,
-
-                "2022-blake3-aes-128-gcm" => CipherKind::AEAD2022_BLAKE3_AES_128_GCM,
-                "2022-blake3-aes-256-gcm" => CipherKind::AEAD2022_BLAKE3_AES_256_GCM,
-                "2022-blake3-chacha20-ietf-poly1305" => {
-                    CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305
-                }
-
-                "rc4-md5" => CipherKind::SS_RC4_MD5,
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "unsupported cipher",
-                    ));
-                }
-            },
+            map_cipher(self.opts.cipher.as_str())?,
         )
         .map_err(|e| new_io_error(e.to_string()))
     }

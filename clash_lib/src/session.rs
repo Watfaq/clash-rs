@@ -411,6 +411,7 @@ pub enum Type {
     #[cfg(target_os = "linux")]
     Tproxy,
     Tunnel,
+    Shadowsocks,
     Ignore,
 }
 

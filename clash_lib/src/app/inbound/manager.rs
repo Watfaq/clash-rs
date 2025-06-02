@@ -44,7 +44,6 @@ pub struct InboundManager {
 impl InboundManager {
     pub async fn new(
         bind_address: BindAddress,
-        _authentication: Vec<String>, // TODO
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
         inbounds_opt: HashMap<String, InboundOpts>,

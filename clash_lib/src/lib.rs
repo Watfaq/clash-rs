@@ -443,7 +443,6 @@ async fn create_components(
     let inbound_manager = Arc::new(
         InboundManager::new(
             config.general.bind_address,
-            config.general.authentication,
             dispatcher.clone(),
             authenticator,
             config.listeners,
