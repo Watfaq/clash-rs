@@ -2,23 +2,17 @@ mod datagram;
 
 use crate::{
     Dispatcher,
-    common::auth::ThreadSafeAuthenticator,
-    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
-};
-
-use crate::{common::errors::new_io_error, proxy::shadowsocks::map_cipher};
-use async_trait::async_trait;
-use russh::server::Auth::Accept;
-use shadowsocks::context::{Context, SharedContext};
-
-use crate::{
+    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
-        shadowsocks::inbound::datagram::InboundShadowsocksDatagram,
-        socks::handle_tcp, utils::new_udp_socket,
+        inbound::InboundHandlerTrait,
+        shadowsocks::{inbound::datagram::InboundShadowsocksDatagram, map_cipher},
+        utils::{apply_tcp_options, new_udp_socket},
     },
     session::{Network, Session, SocksAddr, Type},
 };
-use shadowsocks::{net::AcceptOpts, relay::Address};
+
+use async_trait::async_trait;
+use shadowsocks::{ProxySocket, context::Context, net::AcceptOpts, relay::Address};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::warn;
@@ -160,12 +154,13 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         )
         .await?;
 
-        let proxy_socket = shadowsocks::relay::udprelay::ProxySocket::from_socket(
-            shadowsocks::relay::udprelay::proxy_socket::UdpSocketType::Server,
-            context,
-            &config,
-            socket,
-        );
+        let proxy_socket: ProxySocket<shadowsocks::net::UdpSocket> =
+            ProxySocket::from_socket(
+                shadowsocks::relay::udprelay::proxy_socket::UdpSocketType::Server,
+                context,
+                &config,
+                socket.into(),
+            );
 
         let dispatcher = self.dispatcher.clone();
         let wrapped_socket = Box::new(InboundShadowsocksDatagram::new(proxy_socket));

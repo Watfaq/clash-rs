@@ -2,12 +2,7 @@ use crate::{
     common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
 };
 use futures::ready;
-use shadowsocks::{
-    ProxySocket,
-    relay::udprelay::{
-        options::UdpSocketControlData, proxy_socket::ProxySocketResult,
-    },
-};
+use shadowsocks::{ProxySocket, relay::udprelay::options::UdpSocketControlData};
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -17,7 +12,7 @@ use tracing::{debug, error};
 
 pub(crate) struct InboundShadowsocksDatagram {
     control: UdpSocketControlData,
-    socket: ProxySocket<tokio::net::UdpSocket>,
+    socket: ProxySocket<shadowsocks::net::UdpSocket>,
 
     // for Sink
     flushed: bool,
@@ -27,13 +22,22 @@ pub(crate) struct InboundShadowsocksDatagram {
     buf: bytes::BytesMut,
 }
 
+impl std::fmt::Debug for InboundShadowsocksDatagram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InboundShadowsocksDatagram")
+            .field("control", &self.control)
+            .field("socket", &self.socket)
+            .finish()
+    }
+}
+
 impl InboundShadowsocksDatagram {
-    pub fn new(socket: ProxySocket<tokio::net::UdpSocket>) -> Self {
+    pub fn new(socket: ProxySocket<shadowsocks::net::UdpSocket>) -> Self {
         let mut control = UdpSocketControlData::default();
         control.client_session_id = rand::random::<u64>();
 
         Self {
-            buf: bytes::BytesMut::new(),
+            buf: bytes::BytesMut::with_capacity(65535),
             socket,
             control,
 
@@ -50,23 +54,27 @@ impl futures::Stream for InboundShadowsocksDatagram {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let mut this = self.get_mut();
-        let mut buf = tokio::io::ReadBuf::new(&mut this.buf);
-        let socket = &mut this.socket;
-        match socket.poll_recv(cx, &mut buf) {
-            Poll::Ready(Ok((payload_len, src, _))) => Poll::Ready(Some(UdpPacket {
-                data: buf.filled().to_vec(),
+        let &mut Self {
+            ref mut buf,
+            ref socket,
+            ..
+        } = self.get_mut();
+
+        let mut buf = ReadBuf::new(buf);
+
+        let rv = ready!(socket.poll_recv(cx, &mut buf));
+        debug!("recv udp packet from inbound: {:?}", rv);
+
+        match rv {
+            Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
+                data: buf.filled()[..n].to_vec(),
                 src_addr: match src {
                     shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                    _ => crate::session::SocksAddr::any_ipv4(),
+                    _ => SocksAddr::any_ipv4(),
                 },
-                dst_addr: crate::session::SocksAddr::any_ipv4(),
+                dst_addr: SocksAddr::any_ipv4(),
             })),
-            Poll::Ready(Err(e)) => {
-                error!("Failed to receive UDP packet: {}", e);
-                Poll::Ready(None)
-            }
-            Poll::Pending => Poll::Pending,
+            Err(_) => Poll::Ready(None),
         }
     }
 }
@@ -78,28 +86,14 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        let &mut Self {
-            ref mut buf,
-            ref socket,
-            ..
-        } = self.get_mut();
-
-        let mut buf = ReadBuf::new(buf);
-
-        let rv = ready!(socket.poll_recv(cx, &mut buf));
-        debug!("recv udp packet from remote ss server: {:?}", rv);
-
-        match rv {
-            Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
-                data: buf.filled()[..n].to_vec(),
-                src_addr: match src {
-                    shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                    _ => SocksAddr::any_ipv4(),
-                },
-                dst_addr: SocksAddr::any_ipv4(),
-            })),
-            Err(e) => Poll::Ready(Err(new_io_error(e.to_string()))),
+        if !self.flushed {
+            match self.poll_flush(cx)? {
+                Poll::Ready(()) => {}
+                Poll::Pending => return Poll::Pending,
+            }
         }
+
+        Poll::Ready(Ok(()))
     }
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
@@ -110,7 +104,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
     }
 
     fn poll_flush(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if self.flushed {
@@ -135,14 +129,14 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
 
             let n = ready!(socket.poll_send_with_ctrl(&addr, control, data, cx))?;
 
-            debug!("send udp packet {}", pkt);
+            debug!("send udp packet to client {}", pkt);
 
             control.packet_id = match control.packet_id.checked_add(1) {
                 Some(id) => id,
                 None => {
                     error!("packet_id overflow, closing socket");
-                    return Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Poll::Ready(Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
                         "packet_id overflow",
                     )));
                 }
@@ -163,8 +157,8 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
+            Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
                 "no packet to send",
             )))
         }

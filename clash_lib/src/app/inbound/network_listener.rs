@@ -111,7 +111,11 @@ impl NetworkInboundHandler {
                     self.fw_mark,
                 )) as _)
             }
-            InboundOpts::TProxy { common_opts, .. } => {
+            InboundOpts::TProxy {
+                #[cfg(target_os = "linux")]
+                common_opts,
+                ..
+            } => {
                 #[cfg(target_os = "linux")]
                 {
                     Some(Box::new(TproxyInbound::new(
