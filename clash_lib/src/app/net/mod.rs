@@ -97,7 +97,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         })
         .collect::<Vec<_>>();
 
-    let priority = ["eth", "en", "pdp_ip"];
+    let priority = ["eth", "en", "pdp_ip", "WLAN", "wlp"];
 
     all_outbounds.sort_by(|left, right| {
         match (left.addr_v6, right.addr_v6) {
