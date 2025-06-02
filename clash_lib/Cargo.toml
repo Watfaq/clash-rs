@@ -187,7 +187,7 @@ unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd
 security-framework = "3.2.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
-tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
+tracing-oslog = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
