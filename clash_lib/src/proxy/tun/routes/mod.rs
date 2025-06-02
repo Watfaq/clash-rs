@@ -79,7 +79,18 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
                 for r in default_routes {
                     add_route(&tun_iface, &r)?;
                 }
-
+                #[cfg(target_os = "windows")]
+                {
+                    // Set DNS server or DNS hijack won't work
+                    // We can't set name server to clash DNS listener address
+                    // because it may not be on standard port 53
+                    // Windows only support DNS server on port 53
+                    let name_server = vec!["1.1.1.1".parse().unwrap()];
+                    let _ =
+                        windows::set_dns_v4(&tun_iface, &name_server).map_err(|e| {
+                            tracing::error!("failed to set dns due to:{}", e)
+                        });
+                }
                 #[cfg(target_os = "macos")]
                 {
                     macos::maybe_add_default_route()?;
