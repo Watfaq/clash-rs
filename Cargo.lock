@@ -7679,7 +7679,8 @@ dependencies = [
 [[package]]
 name = "tracing-oslog"
 version = "0.3.0"
-source = "git+https://github.com/Absolucy/tracing-oslog.git?branch=main#cd534f5848d5aa19ca5bfe778879430eff95f373"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d76902d2a8d5f9f55a81155c08971734071968c90f2d9bfe645fe700579b2950"
 dependencies = [
  "cc",
  "cfg-if",

@@ -129,14 +129,23 @@ impl Handler {
             let rt =
                 tokio::runtime::Runtime::new().expect("Failed to create runtime");
             let state = rt.block_on(async {
-                info!("{} attempting to load smart stats from cache", thread_group_name);
+                info!(
+                    "{} attempting to load smart stats from cache",
+                    thread_group_name
+                );
                 let stored_data: Option<state::SmartStateData> =
                     thread_cache_store.get_smart_stats(&thread_group_name).await;
 
                 if stored_data.is_some() {
-                   info!("{} successfully loaded smart stats from cache", thread_group_name);
+                    info!(
+                        "{} successfully loaded smart stats from cache",
+                        thread_group_name
+                    );
                 } else {
-                   info!("{} no smart stats found in cache, initializing new state", thread_group_name);
+                    info!(
+                        "{} no smart stats found in cache, initializing new state",
+                        thread_group_name
+                    );
                 }
                 SmartState::new_with_imported_data(stored_data)
             });
