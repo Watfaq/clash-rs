@@ -1,7 +1,12 @@
 use async_recursion::async_recursion;
 use futures::StreamExt;
 use http_body_util::BodyDataStream;
-use std::{fmt::Write, num::ParseIntError, path::Path};
+use std::{
+    fmt::Write,
+    num::ParseIntError,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{Error, common::errors::new_io_error};
 use rand::{
@@ -60,6 +65,13 @@ pub fn md5_str(bytes: &[u8]) -> String {
     let mut hasher = md5::Md5::new();
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())
+}
+
+pub fn current_timestamp_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 /// Default value true for bool on serde

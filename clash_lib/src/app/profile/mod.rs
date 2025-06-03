@@ -122,15 +122,6 @@ impl ThreadSafeCacheFile {
         let g = self.0.read().await;
         g.get_smart_stats(group_name)
     }
-
-    /// Get smart proxy group policy priority
-    pub async fn get_smart_policy_priority(
-        &self,
-        group_name: &str,
-    ) -> Option<String> {
-        let g = self.0.read().await;
-        g.get_smart_policy_priority(group_name)
-    }
 }
 
 struct CacheFile {
@@ -221,9 +212,5 @@ impl CacheFile {
         group_name: &str,
     ) -> Option<crate::proxy::group::smart::state::SmartStateData> {
         self.db.smart_stats.get(group_name).cloned()
-    }
-
-    pub fn get_smart_policy_priority(&self, group_name: &str) -> Option<String> {
-        self.db.smart_policy_priority.get(group_name).cloned()
     }
 }
