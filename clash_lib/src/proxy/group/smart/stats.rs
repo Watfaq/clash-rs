@@ -42,29 +42,6 @@ impl SiteStats {
         }
     }
 
-    // /// Create a SiteStats instance from stored database values.
-    // ///
-    // /// # Arguments
-    // /// * `delay_history` - Deserialized delay history.
-    // /// * `success_history` - Deserialized success history.
-    // /// * `last_attempt_secs` - The last attempt time as UNIX timestamp
-    // ///   (seconds).
-    // /// * `_max_history` - The stored max history size (ignored).
-
-    // pub fn from_stored(
-    //     delay_history: Vec<f64>,
-    //     success_history: Vec<bool>,
-    //     last_attempt_secs: u64,
-    //     _max_history: usize, // Parameter kept for compatibility, but ignored
-    // ) -> Self {
-    //     // Directly use the stored timestamp
-    //     Self {
-    //         delay_history,
-    //         success_history,
-    //         last_attempt_secs,
-    //     }
-    // }
-
     /// Calculate success rate for this site
     pub fn success_rate(&self) -> f64 {
         if self.success_history.is_empty() {
@@ -189,13 +166,6 @@ impl SiteStats {
 
         variance.sqrt()
     }
-
-    // /// Get the last attempt timestamp (seconds)
-
-    // #[inline]
-    // pub fn last_attempt_secs(&self) -> u64 {
-    //     self.last_attempt_secs
-    // }
 }
 
 impl Default for SiteStats {
