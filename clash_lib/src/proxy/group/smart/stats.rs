@@ -50,7 +50,7 @@ impl SiteStats {
     // /// * `last_attempt_secs` - The last attempt time as UNIX timestamp
     // ///   (seconds).
     // /// * `_max_history` - The stored max history size (ignored).
-    // // This function is now used by profile/mod.rs to reconstruct state from the DB.
+
     // pub fn from_stored(
     //     delay_history: Vec<f64>,
     //     success_history: Vec<bool>,
@@ -191,6 +191,7 @@ impl SiteStats {
     }
 
     // /// Get the last attempt timestamp (seconds)
+
     // #[inline]
     // pub fn last_attempt_secs(&self) -> u64 {
     //     self.last_attempt_secs
