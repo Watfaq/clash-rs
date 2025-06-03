@@ -1,16 +1,36 @@
 use ipnet::IpNet;
-use std::{io, ptr::null_mut};
+use std::{
+    io,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    ptr::null_mut,
+};
 use tracing::{error, info};
-use windows::Win32::{
-    Foundation::{ERROR_SUCCESS, GetLastError},
-    NetworkManagement::Rras::{
-        RTM_ENTITY_ID, RTM_ENTITY_ID_0, RTM_ENTITY_ID_0_0, RTM_ENTITY_INFO,
-        RTM_NET_ADDRESS, RTM_NEXTHOP_INFO, RTM_REGN_PROFILE, RTM_ROUTE_CHANGE_NEW,
-        RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST, RTM_VIEW_MASK_UCAST, RtmAddNextHop,
-        RtmAddRouteToDest, RtmDeregisterEntity, RtmRegisterEntity,
-        RtmReleaseNextHops,
+use windows::{
+    Win32::{
+        Foundation::{ERROR_SUCCESS, GetLastError},
+        NetworkManagement::{
+            IpHelper::{
+                CreateIpForwardEntry2, CreateUnicastIpAddressEntry,
+                DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1,
+                DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER, GetIfEntry2,
+                IP_ADDRESS_PREFIX, InitializeIpForwardEntry, MIB_IF_ROW2,
+                MIB_IPFORWARD_ROW2, MIB_UNICASTIPADDRESS_ROW,
+                SetInterfaceDnsSettings,
+            },
+            Rras::{
+                RTM_ENTITY_ID, RTM_ENTITY_ID_0, RTM_ENTITY_ID_0_0, RTM_ENTITY_INFO,
+                RTM_NET_ADDRESS, RTM_NEXTHOP_INFO, RTM_REGN_PROFILE,
+                RTM_ROUTE_CHANGE_NEW, RTM_ROUTE_INFO, RTM_VIEW_MASK_MCAST,
+                RTM_VIEW_MASK_UCAST, RtmAddNextHop, RtmAddRouteToDest,
+                RtmDeregisterEntity, RtmRegisterEntity, RtmReleaseNextHops,
+            },
+        },
+        Networking::WinSock::{
+            AF_INET, AF_INET6, IpPrefixOriginManual, IpSuffixOriginManual,
+            PROTO_IP_RIP, SOCKADDR_INET,
+        },
     },
-    Networking::WinSock::{AF_INET, AF_INET6, PROTO_IP_RIP},
+    core::{GUID, PWSTR},
 };
 
 use crate::{
@@ -26,31 +46,169 @@ fn protocol_id(typ: u32, vendor_id: u32, protocol_id: u32) -> u32 {
 }
 
 pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
-    let cmd = format!(
-        "route add {} mask {} {} if {}",
-        dest.addr(),
-        dest.netmask(),
-        via.addr_v4.expect("tun interface has no ipv4 address"),
-        via.index,
-    );
-
-    info!("executing: {}", cmd);
-
-    let output = std::process::Command::new("cmd")
-        .args(["/C", &cmd])
-        .output()
-        .map_err(|e| new_io_error(e.to_string().as_str()))?;
-
-    if output.status.success() {
-        info!("{} is now routed through {}", dest, via.name);
-        Ok(())
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr);
-        error!("failed to add route: {}", err);
-        Err(new_io_error(err.to_string().as_str()))
+    let mut row = MIB_IPFORWARD_ROW2::default();
+    unsafe {
+        InitializeIpForwardEntry(&mut row);
     }
+
+    row.InterfaceIndex = via.index;
+    row.DestinationPrefix = IP_ADDRESS_PREFIX {
+        Prefix: SocketAddr::new(dest.addr(), 0).into(),
+        PrefixLength: dest.prefix_len(),
+    };
+    // May be too harsh to set zero
+    let metric = 0;
+    let next_hop: SocketAddr = if dest.addr().is_ipv4() {
+        "0.0.0.0:0".parse().unwrap()
+    } else {
+        "[::]:0".parse().unwrap()
+    };
+    row.NextHop = next_hop.into();
+    row.Metric = metric;
+
+    unsafe { CreateIpForwardEntry2(&row) }
+        .to_hresult()
+        .ok()
+        .map_err(new_io_error)
 }
 
+fn get_guid(iface: &OutboundInterface) -> Option<GUID> {
+    let mut if_row: MIB_IF_ROW2 = unsafe { std::mem::zeroed() };
+    if_row.InterfaceIndex = iface.index;
+
+    let result = unsafe { GetIfEntry2(&mut if_row) }.to_hresult().ok();
+
+    match result {
+        Ok(_) => Some(if_row.InterfaceGuid),
+        Err(e) => {
+            error!(
+                "failed to get interface row with index: {} due to {}",
+                iface.index, e
+            );
+            None
+        }
+    }
+}
+// SetInterfaceDnsSettings()
+// See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
+pub fn set_dns_v4(
+    iface: &OutboundInterface,
+    name_servers: &[Ipv4Addr],
+) -> anyhow::Result<()> {
+    let mut dns_wstr = name_servers
+        .iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    dns_wstr.push(0); // ensure ending with null
+
+    let dns_settings = DNS_INTERFACE_SETTINGS {
+        Version: DNS_INTERFACE_SETTINGS_VERSION1,
+        Flags: DNS_SETTING_NAMESERVER as u64,
+        NameServer: PWSTR::from_raw(dns_wstr.as_mut_ptr()),
+        ..Default::default()
+    };
+
+    let guid =
+        get_guid(iface).ok_or(anyhow!("interface {} not found", iface.name))?;
+
+    unsafe { SetInterfaceDnsSettings(guid, &dns_settings) }
+        .to_hresult()
+        .ok()
+        .map_err(|e| anyhow::anyhow!(e))
+}
+
+// SetInterfaceDnsSettings()
+// See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
+#[allow(dead_code)]
+pub fn set_dns_v6(
+    iface: &OutboundInterface,
+    name_servers: &[Ipv6Addr],
+) -> anyhow::Result<()> {
+    let mut dns_wstr = name_servers
+        .iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>()
+        .join(",")
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    dns_wstr.push(0); // ensure ending with null
+
+    let dns_settings = DNS_INTERFACE_SETTINGS {
+        Version: DNS_INTERFACE_SETTINGS_VERSION1,
+        Flags: (DNS_SETTING_NAMESERVER | DNS_SETTING_IPV6) as u64,
+        NameServer: PWSTR::from_raw(dns_wstr.as_mut_ptr()),
+        ..Default::default()
+    };
+
+    let guid =
+        get_guid(iface).ok_or(anyhow!("interface {} not found", iface.name))?;
+
+    unsafe { SetInterfaceDnsSettings(guid, &dns_settings) }
+        .to_hresult()
+        .ok()
+        .map_err(|e| anyhow::anyhow!(e))
+}
+
+/// Adding ipv4/v6 address to the interface.
+/// See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-createunicastipaddressentry
+#[allow(dead_code)]
+pub fn add_address(
+    iface: &OutboundInterface,
+    addr_net: IpNet,
+) -> anyhow::Result<()> {
+    let mut addr_inet = SOCKADDR_INET::default();
+    match addr_net {
+        IpNet::V4(ipv4_net) => {
+            addr_inet.Ipv4.sin_family =
+                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(AF_INET.0);
+            addr_inet.Ipv4.sin_addr.S_un.S_addr =
+                u32::from_le_bytes(ipv4_net.addr().octets());
+        }
+        IpNet::V6(ipv6_net) => {
+            addr_inet.Ipv6.sin6_family =
+                windows::Win32::Networking::WinSock::ADDRESS_FAMILY(AF_INET6.0);
+            addr_inet.Ipv6.sin6_addr.u.Byte = ipv6_net.addr().octets();
+        }
+    }
+
+    let row = MIB_UNICASTIPADDRESS_ROW {
+        // Set the interface index
+        InterfaceIndex: iface.index,
+
+        // Copy the address
+        Address: addr_inet,
+
+        // Set prefix length (subnet mask equivalent for IPv6)
+        OnLinkPrefixLength: addr_net.prefix_len(),
+
+        // Set address origin and suffix origin
+        PrefixOrigin: IpPrefixOriginManual,
+        SuffixOrigin: IpSuffixOriginManual,
+
+        // Set valid and preferred lifetimes (0xffffffff means infinite)
+        ValidLifetime: 0xffffffff,
+        PreferredLifetime: 0xffffffff,
+
+        // Skip duplicate address detection
+        SkipAsSource: false,
+        ..Default::default()
+    };
+
+    unsafe {
+        CreateUnicastIpAddressEntry(&row)
+            .to_hresult()
+            .ok()
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "failed to add address to tun interface due to:{}",
+                    e
+                )
+            })
+    }
+}
 pub fn maybe_routes_clean_up(_: &TunConfig) -> std::io::Result<()> {
     Ok(())
 }
