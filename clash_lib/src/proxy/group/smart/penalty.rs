@@ -37,12 +37,12 @@ impl ProxyPenalty {
     /// # Arguments
     /// * `value` - The stored penalty value.
     /// * `last_update_secs` - The last update time as UNIX timestamp (seconds).
-    pub fn from_stored(value: f64, last_update_secs: u64) -> Self {
-        Self {
-            value,
-            last_update_secs,
-        }
-    }
+    // pub fn from_stored(value: f64, last_update_secs: u64) -> Self {
+    //     Self {
+    //         value,
+    //         last_update_secs,
+    //     }
+    // }
 
     /// Get the current penalty value
     ///
@@ -54,10 +54,10 @@ impl ProxyPenalty {
     }
 
     /// Get the last update timestamp (seconds)
-    #[inline]
-    pub fn last_update_secs(&self) -> u64 {
-        self.last_update_secs
-    }
+    // #[inline]
+    // pub fn last_update_secs(&self) -> u64 {
+    //     self.last_update_secs
+    // }
 
     /// Increase penalty exponentially after a failure
     ///
