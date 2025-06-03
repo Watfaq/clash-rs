@@ -679,7 +679,6 @@ impl OutboundManager {
                             },
                             udp: proto.udp.unwrap_or(true),
                             max_retries: proto.max_retries,
-                            site_stickiness: proto.site_stickiness,
                             bandwidth_weight: proto.bandwidth_weight,
                         },
                         providers,

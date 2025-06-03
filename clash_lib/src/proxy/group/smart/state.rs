@@ -4,31 +4,23 @@
 //! group, coordinating between different components like penalties,
 //! statistics, and preferences.
 
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
-use tracing::debug;
+use std::collections::HashMap;
 
 use crate::{app::remote_content_manager::TrafficStats, session::Session};
+use serde::{Deserialize, Serialize};
 
 use super::{
-    config::WeightConfig,
     penalty::ProxyPenalty,
-    preference::SitePreference,
     stats::{SiteStats, TrafficStatsCollector},
 };
 
 /// Serializable data for smart state persistence
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SmartStateData {
     /// Penalty tracking per proxy
     pub penalty: HashMap<String, ProxyPenalty>,
     /// Site-specific statistics per proxy
     pub site_stats: HashMap<String, HashMap<String, SiteStats>>,
-    /// Site preferences for sticky behavior
-    pub site_preferences: HashMap<String, SitePreference>,
 }
 
 /// Centralized state manager for smart proxy group
@@ -42,10 +34,6 @@ pub struct SmartState {
     pub site_stats: HashMap<String, HashMap<String, SiteStats>>, /* Proxy name -> Site -> Stats */
     /// Real-time traffic statistics collector
     traffic_collector: TrafficStatsCollector,
-    /// Site preferences for sticky behavior
-    site_preferences: HashMap<String, SitePreference>, // Site -> Preference
-    /// Parsed weight configuration for custom proxy priorities
-    weight_config: WeightConfig,
 }
 
 impl SmartState {
@@ -58,50 +46,25 @@ impl SmartState {
             penalty: HashMap::new(),
             site_stats: HashMap::new(),
             traffic_collector: TrafficStatsCollector::new(),
-            site_preferences: HashMap::new(),
-            weight_config: WeightConfig::default(),
         }
     }
 
-    /// Create a new SmartState with a given weight configuration
-    ///
-    /// # Arguments
-    /// * `weight_config` - The weight configuration to use
-    ///
-    /// # Returns
-    /// New SmartState instance with specified weight configuration
-    pub fn new_with_weight_config(weight_config: WeightConfig) -> Self {
-        Self {
-            penalty: HashMap::new(),
-            site_stats: HashMap::new(),
-            traffic_collector: TrafficStatsCollector::new(),
-            site_preferences: HashMap::new(),
-            weight_config,
-        }
-    }
-
-    /// Create a new SmartState from imported data and weight configuration
+    /// Create a new SmartState from imported data
     ///
     /// # Arguments
     /// * `data` - Optional `SmartStateData` to import
-    /// * `weight_config` - The weight configuration to use
     ///
     /// # Returns
     /// New SmartState instance initialized from data or defaults
-    pub fn new_with_imported_data(
-        data: Option<SmartStateData>,
-        weight_config: WeightConfig,
-    ) -> Self {
+    pub fn new_with_imported_data(data: Option<SmartStateData>) -> Self {
         if let Some(imported_data) = data {
             Self {
                 penalty: imported_data.penalty,
                 site_stats: imported_data.site_stats,
-                traffic_collector: TrafficStatsCollector::new(), /* Traffic collector is not persisted */
-                site_preferences: imported_data.site_preferences,
-                weight_config,
+                traffic_collector: TrafficStatsCollector::new(),
             }
         } else {
-            Self::new_with_weight_config(weight_config)
+            Self::new() // Use default constructor
         }
     }
 
@@ -125,17 +88,6 @@ impl SmartState {
     /// Reference to the proxy's penalty tracker, or None if not found
     pub fn get_penalty(&self, proxy_name: &str) -> Option<&ProxyPenalty> {
         self.penalty.get(proxy_name)
-    }
-
-    /// Get weight multiplier for a proxy from configuration
-    ///
-    /// # Arguments
-    /// * `proxy_name` - Name of the proxy
-    ///
-    /// # Returns
-    /// Weight multiplier (default: 1.0)
-    pub fn get_weight(&self, proxy_name: &str) -> f64 {
-        self.weight_config.get_weight(proxy_name)
     }
 
     /// Get or create site statistics for a proxy-site combination
@@ -211,62 +163,6 @@ impl SmartState {
         }
     }
 
-    /// Get site preference for a site
-    ///
-    /// # Arguments
-    /// * `site` - Site identifier
-    ///
-    /// # Returns
-    /// Reference to site preference, or None if not found
-    pub fn get_site_preference(&self, site: &str) -> Option<&SitePreference> {
-        self.site_preferences.get(site)
-    }
-
-    /// Update site preference based on connection result
-    ///
-    /// # Arguments
-    /// * `site` - Site identifier
-    /// * `proxy_name` - Name of the proxy used
-    /// * `success` - Whether the connection was successful
-    /// * `site_stickiness` - Site stickiness configuration (0.0-1.0)
-    pub fn update_site_preference(
-        &mut self,
-        site: &str,
-        proxy_name: &str,
-        success: bool,
-        site_stickiness: f64,
-    ) {
-        if site_stickiness <= 0.0 {
-            return;
-        }
-
-        if let Some(preference) = self.site_preferences.get_mut(site) {
-            if preference.preferred_proxy == proxy_name {
-                preference.update_success(success);
-                if !success && preference.success_rate < 0.5 {
-                    debug!(
-                        "Removing site preference for {} from {} (poor performance)",
-                        site, proxy_name
-                    );
-                    self.site_preferences.remove(site);
-                }
-            } else if success && preference.success_rate < 0.8 {
-                // Switch to this better performing proxy
-                debug!(
-                    "Switching site preference for {} from {} to {} (better \
-                     performance)",
-                    site, preference.preferred_proxy, proxy_name
-                );
-                *preference = SitePreference::new(proxy_name.to_string());
-            }
-        } else if success {
-            self.site_preferences.insert(
-                site.to_string(),
-                SitePreference::new(proxy_name.to_string()),
-            );
-        }
-    }
-
     /// Generate session ID from session information
     ///
     /// # Arguments
@@ -339,11 +235,6 @@ impl SmartState {
         // Clean up old traffic data
         self.traffic_collector.cleanup_old_sessions();
 
-        // Clean up old site preferences (older than 1 hour with poor performance)
-        let cutoff = Instant::now() - Duration::from_secs(3600);
-        self.site_preferences
-            .retain(|_, pref| pref.last_used > cutoff || pref.success_rate > 0.7);
-
         // Clean up penalties: decay and remove negligible ones
         let negligible_threshold = 0.01;
         self.penalty.retain(|_, penalty| {
@@ -357,7 +248,6 @@ impl SmartState {
         SmartStateData {
             penalty: self.penalty.clone(),
             site_stats: self.site_stats.clone(),
-            site_preferences: self.site_preferences.clone(),
         }
     }
 }
@@ -377,7 +267,6 @@ mod tests {
         let state = SmartState::new();
         assert!(state.penalty.is_empty());
         assert!(state.site_stats.is_empty());
-        assert!(state.site_preferences.is_empty());
     }
 
     #[test]
@@ -390,17 +279,5 @@ mod tests {
         let penalty = state.get_penalty("proxy1");
         assert!(penalty.is_some());
         assert!(penalty.unwrap().value() > 0.0);
-    }
-
-    #[test]
-    fn test_site_preference() {
-        let mut state = SmartState::new();
-
-        // Record successful connection
-        state.update_site_preference("example.com", "proxy1", true, 0.8);
-
-        let preference = state.get_site_preference("example.com");
-        assert!(preference.is_some());
-        assert_eq!(preference.unwrap().preferred_proxy, "proxy1");
     }
 }
