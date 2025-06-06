@@ -71,7 +71,7 @@ impl InboundHandlerTrait for HttpInbound {
                 continue;
             }
 
-            let socket = apply_tcp_options(socket)?;
+            apply_tcp_options(&socket)?;
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();

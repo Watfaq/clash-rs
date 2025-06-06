@@ -63,12 +63,21 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
         redir_port: ports.redir_port,
         tproxy_port: ports.tproxy_port,
         mixed_port: ports.mixed_port,
-        bind_address: Some(state.inbound_manager.get_bind_address().0.to_string()),
+        bind_address: Some(
+            state.inbound_manager.get_bind_address().await.0.to_string(),
+        ),
 
         mode: Some(run_mode),
         log_level: Some(global_state.log_level),
         ipv6: Some(dns_resolver.ipv6()),
-        allow_lan: Some(state.inbound_manager.get_bind_address().0.is_unspecified()),
+        allow_lan: Some(
+            state
+                .inbound_manager
+                .get_bind_address()
+                .await
+                .0
+                .is_unspecified(),
+        ),
     })
 }
 
@@ -201,15 +210,12 @@ async fn patch_configs(
     let mut global_state = state.global_state.lock().await;
 
     if payload.rebuild_listeners() {
-        // TODO: maybe buggy
-        let current_ports = inbound_manager.get_ports().await;
-
         let ports = Ports {
-            port: payload.port.or(current_ports.port),
-            socks_port: payload.socks_port.or(current_ports.socks_port),
-            redir_port: payload.redir_port.or(current_ports.redir_port),
-            tproxy_port: payload.tproxy_port.or(current_ports.tproxy_port),
-            mixed_port: payload.mixed_port.or(current_ports.mixed_port),
+            port: payload.port,
+            socks_port: payload.socks_port,
+            redir_port: payload.redir_port,
+            tproxy_port: payload.tproxy_port,
+            mixed_port: payload.mixed_port,
         };
         inbound_manager.change_ports(ports).await;
         need_restart = true;

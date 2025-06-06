@@ -41,7 +41,7 @@ impl InboundShadowsocksDatagram {
             socket,
             control,
 
-            flushed: false,
+            flushed: true,
             pkt: None,
         }
     }
@@ -60,21 +60,28 @@ impl futures::Stream for InboundShadowsocksDatagram {
             ..
         } = self.get_mut();
 
+        buf.resize(buf.capacity(), 0);
         let mut buf = ReadBuf::new(buf);
 
-        let rv = ready!(socket.poll_recv(cx, &mut buf));
+        let rv = ready!(socket.poll_recv_from(cx, &mut buf));
         debug!("recv udp packet from inbound: {:?}", rv);
 
         match rv {
-            Ok((n, src, ..)) => Poll::Ready(Some(UdpPacket {
+            Ok((n, src, target, ..)) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled()[..n].to_vec(),
-                src_addr: match src {
+                src_addr: src.into(),
+                dst_addr: match target {
                     shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                    _ => SocksAddr::any_ipv4(),
+                    shadowsocks::relay::Address::DomainNameAddress(domain, port) => {
+                        SocksAddr::Domain(domain, port)
+                    }
                 },
-                dst_addr: SocksAddr::any_ipv4(),
             })),
-            Err(_) => Poll::Ready(None),
+            Err(e) => {
+                error!("failed to receive udp packet: {}", e);
+                // Don't close the stream.
+                Poll::Pending
+            }
         }
     }
 }
@@ -100,6 +107,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
         let pin = self.get_mut();
         pin.pkt = Some(item);
         pin.flushed = false;
+        debug!("start sending udp packet: {:?}", pin.pkt);
         Ok(())
     }
 
@@ -123,11 +131,25 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
         let pkt_container = pkt;
 
         if let Some(pkt) = pkt_container {
-            let data = pkt.data.as_ref();
-            let addr: shadowsocks::relay::Address =
-                (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
+            let addr: shadowsocks::relay::Address = match &pkt.src_addr {
+                SocksAddr::Ip(addr) => {
+                    shadowsocks::relay::Address::SocketAddress(addr.clone())
+                }
+                SocksAddr::Domain(host, port) => {
+                    shadowsocks::relay::Address::DomainNameAddress(
+                        host.clone(),
+                        *port,
+                    )
+                }
+            };
 
-            let n = ready!(socket.poll_send_with_ctrl(&addr, control, data, cx))?;
+            let n = ready!(socket.poll_send_to_with_ctrl(
+                (&pkt.dst_addr).clone().must_into_socket_addr(),
+                &addr,
+                control,
+                pkt.data.as_ref(),
+                cx
+            ))?;
 
             debug!("send udp packet to client {}", pkt);
 
@@ -142,7 +164,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
                 }
             };
 
-            let wrote_all = n == data.len();
+            let wrote_all = n == pkt.data.len();
             *pkt_container = None;
             *flushed = true;
 

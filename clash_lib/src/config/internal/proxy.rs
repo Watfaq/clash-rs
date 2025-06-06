@@ -41,7 +41,7 @@ pub fn map_serde_error(
                 name
             ))
         } else {
-            Error::InvalidConfig(format!("error while parsine {}: {}", name, x))
+            Error::InvalidConfig(format!("error while parsing {}: {}", name, x))
         }
     }
 }

@@ -188,7 +188,7 @@ pub async fn start(
     let components = create_components(cwd.clone(), config).await?;
 
     let inbound_manager = components.inbound_manager.clone();
-    inbound_manager.start_listen_blocking().await;
+    inbound_manager.start_all_listeners().await;
 
     let tun_runner_handle = components.tun_runner.map(tokio::spawn);
     let dns_listener_handle = components.dns_listener.map(tokio::spawn);
@@ -441,13 +441,8 @@ async fn create_components(
 
     debug!("initializing inbound manager");
     let inbound_manager = Arc::new(
-        InboundManager::new(
-            config.general.bind_address,
-            dispatcher.clone(),
-            authenticator,
-            config.listeners,
-        )
-        .await?,
+        InboundManager::new(dispatcher.clone(), authenticator, config.listeners)
+            .await,
     );
 
     debug!("initializing tun runner");

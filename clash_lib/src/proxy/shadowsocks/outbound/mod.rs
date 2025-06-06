@@ -74,6 +74,10 @@ impl Handler {
         sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
+        debug!(
+            "Proxying stream for session: {:?}, server: {}, port: {}",
+            sess, self.opts.server, self.opts.port
+        );
         let stream: AnyStream = match &self.opts.plugin {
             Some(plugin) => plugin.proxy_stream(s).await?,
             None => s,

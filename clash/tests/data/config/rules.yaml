@@ -226,10 +226,10 @@ proxies:
 
   - name: "ss-simple"
     type: ss
-    server: 10.0.0.13
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
+    server: 127.0.0.1
+    port: 8901
+    cipher: 2022-blake3-aes-256-gcm
+    password: "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU="
     udp: true
 
   - name: "trojan"
@@ -266,7 +266,7 @@ proxies:
     ip: 172.16.0.2/32
     ipv6: 2606:4700:110:8e5e:fa1:3f30:c077:e17c/128
     public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
-    allowed-ips: ["0.0.0.0/0", "::/0"]
+    allowed-ips: [ "0.0.0.0/0", "::/0" ]
     remote-dns-resolve: true
     dns:
       - 1.1.1.1
@@ -304,10 +304,10 @@ rule-providers:
     behavior: classical
 
 rules:
-  - IP-CIDR,1.1.1.1/32,udp-relay
-  - IP-CIDR,8.8.8.8/32,udp-relay
+  - IP-CIDR,1.1.1.1/32,ss-simple
+  - IP-CIDR,8.8.8.8/32,ss-simple
   - DOMAIN-REGEX,^www.google.com$,DIRECT
-  - DOMAIN,google.com,ws-vmess
+  - DOMAIN,google.com,ss-simple
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
   - DOMAIN,ipinfo.io,DIRECT
   - RULE-SET,file-provider2,DIRECT

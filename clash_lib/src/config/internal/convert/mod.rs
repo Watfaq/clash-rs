@@ -131,7 +131,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                     .expect("proxy provider parse error")
             })
             .unwrap_or_default(),
-        listeners: listener::convert(c.listener.take(), &c)?,
+        listeners: listener::convert(c.listeners.take(), &c)?,
     }
     .validate()
 }

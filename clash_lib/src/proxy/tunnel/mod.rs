@@ -80,7 +80,7 @@ impl InboundHandlerTrait for TunnelInbound {
         loop {
             let (socket, src_addr) = listener.accept().await?;
 
-            let stream = apply_tcp_options(socket)?;
+            apply_tcp_options(&socket)?;
 
             let dispatcher = self.dispatcher.clone();
             let sess = Session {
@@ -93,7 +93,7 @@ impl InboundHandlerTrait for TunnelInbound {
             };
 
             tokio::spawn(async move {
-                dispatcher.dispatch_stream(sess, Box::new(stream)).await;
+                dispatcher.dispatch_stream(sess, Box::new(socket)).await;
             });
         }
     }

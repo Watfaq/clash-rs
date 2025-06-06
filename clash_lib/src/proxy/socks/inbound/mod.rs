@@ -69,7 +69,7 @@ impl InboundHandlerTrait for SocksInbound {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
-            let socket = apply_tcp_options(socket)?;
+            apply_tcp_options(&socket)?;
 
             let mut sess = Session {
                 network: Network::Tcp,

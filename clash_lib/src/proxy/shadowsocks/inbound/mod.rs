@@ -15,17 +15,21 @@ use async_trait::async_trait;
 use shadowsocks::{ProxySocket, context::Context, net::AcceptOpts, relay::Address};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
-use tracing::warn;
+use tracing::{debug, warn};
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
     addr: SocketAddr,
     password: String,
+    udp: bool,
     cipher: String,
     allow_lan: bool,
     dispatcher: Arc<Dispatcher>,
+    #[allow(unused)]
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
+
+    udp_closer: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<u8>>>>,
 }
 
 impl Drop for ShadowsocksInbound {
@@ -38,6 +42,7 @@ impl ShadowsocksInbound {
     pub fn new(
         addr: SocketAddr,
         password: String,
+        udp: bool,
         cipher: String,
         allow_lan: bool,
         dispatcher: Arc<Dispatcher>,
@@ -47,11 +52,13 @@ impl ShadowsocksInbound {
         Self {
             addr,
             password,
+            udp,
             cipher,
             allow_lan,
             dispatcher,
             authenticator,
             fw_mark,
+            udp_closer: Default::default(),
         }
     }
 }
@@ -63,12 +70,12 @@ impl InboundHandlerTrait for ShadowsocksInbound {
     }
 
     fn handle_udp(&self) -> bool {
-        true
+        self.udp
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
-        let mut config = shadowsocks::config::ServerConfig::new(
+        let config = shadowsocks::config::ServerConfig::new(
             &self.addr.into(),
             &self.password,
             map_cipher(&self.cipher)?,
@@ -78,9 +85,9 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         })?;
 
         // TODO: support multiple users
-        let user_manager = shadowsocks::config::ServerUserManager::new();
-
-        config.set_user_manager(user_manager);
+        // let user_manager = shadowsocks::config::ServerUserManager::new();
+        //
+        // config.set_user_manager(user_manager);
 
         let listener = TcpListener::bind(self.addr).await?;
 
@@ -94,8 +101,23 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         );
 
         loop {
-            let (mut socket, _) = ss_listener.accept().await?;
-            let src_addr = socket.get_ref().peer_addr()?;
+            let (mut socket, _) = match ss_listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to accept Shadowsocks TCP connection: {}", e);
+                    continue;
+                }
+            };
+
+            debug!(
+                "Accepted Shadowsocks TCP connection from {}",
+                socket.get_ref().peer_addr()?
+            );
+
+            let Ok(src_addr) = socket.get_ref().peer_addr() else {
+                warn!("Failed to get peer address for Shadowsocks TCP connection");
+                continue;
+            };
 
             if !self.allow_lan
                 && src_addr.ip() != socket.get_ref().local_addr()?.ip()
@@ -104,9 +126,17 @@ impl InboundHandlerTrait for ShadowsocksInbound {
                 continue;
             }
 
-            let target = socket.handshake().await?;
+            let Ok(target) = socket.handshake().await else {
+                warn!("Failed to perform Shadowsocks handshake");
+                continue;
+            };
 
-            let socket = apply_tcp_options(socket.into_inner())?;
+            debug!("Shadowsocks TCP connection target: {:?}", target);
+
+            if apply_tcp_options(socket.get_ref()).is_err() {
+                warn!("Failed to apply TCP options to Shadowsocks socket");
+                continue;
+            };
 
             let sess = Session {
                 network: Network::Tcp,
@@ -132,7 +162,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
 
     async fn listen_udp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
-        let mut config = shadowsocks::config::ServerConfig::new(
+        let config = shadowsocks::config::ServerConfig::new(
             &self.addr.into(),
             &self.password,
             map_cipher(&self.cipher)?,
@@ -142,9 +172,9 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         })?;
 
         // TODO: support multiple users
-        let user_manager = shadowsocks::config::ServerUserManager::new();
-
-        config.set_user_manager(user_manager);
+        // let user_manager = shadowsocks::config::ServerUserManager::new();
+        //
+        // config.set_user_manager(user_manager);
 
         let socket = new_udp_socket(
             Some(self.addr),
@@ -173,7 +203,9 @@ impl InboundHandlerTrait for ShadowsocksInbound {
             ..Default::default()
         };
 
-        let _ = dispatcher.dispatch_datagram(sess, wrapped_socket).await;
+        let closer = dispatcher.dispatch_datagram(sess, wrapped_socket).await;
+        let mut g = self.udp_closer.lock().await;
+        *g = Some(closer);
         Ok(())
     }
 }
