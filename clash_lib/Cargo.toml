@@ -62,7 +62,7 @@ regex = "1"
 byteorder = "1"
 lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
-network-interface = { version = "2", git = "https://github.com/Watfaq/network-interface.git", rev = "db9f1bcd2faa5122f694283bd300bf42d166d2f3" } # temp workaround for https://github.com/cross-rs/cross/issues/1627
+network-interface = { version = "2" }
 base64 = "0.22"
 zstd = "0.13.3"
 

@@ -51,7 +51,7 @@ impl InboundHandlerTrait for TproxyInbound {
         true
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         let socket = socket2::Socket::new(
             socket2::Domain::IPV4,
             socket2::Type::STREAM,
@@ -95,7 +95,7 @@ impl InboundHandlerTrait for TproxyInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
+    async fn listen_udp(&self) -> std::io::Result<()> {
         let socket =
             socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
         socket.set_ip_transparent(true)?;
@@ -130,7 +130,7 @@ async fn handle_inbound_datagram(
     allow_lan: bool,
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
-) -> anyhow::Result<()> {
+) -> std::io::Result<()> {
     // dispatcher <-> tproxy communications
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
 
