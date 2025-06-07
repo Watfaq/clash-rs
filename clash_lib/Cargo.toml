@@ -50,7 +50,6 @@ thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "=0.3.39", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
 
@@ -64,7 +63,6 @@ lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 network-interface = { version = "2", git = "https://github.com/Watfaq/network-interface.git", rev = "db9f1bcd2faa5122f694283bd300bf42d166d2f3" } # temp workaround for https://github.com/cross-rs/cross/issues/1627
 base64 = "0.22"
-arc-swap = "1"
 zstd = "0.13.3"
 
 h2 = "0.4"
@@ -76,7 +74,6 @@ ip_network_table-deps-treebitmap = "0.5"
 
 # Algorithms
 crc32fast = "1"
-brotli = "8"
 hmac = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
@@ -106,7 +103,6 @@ erased-serde = "0.4"
 
 # Macro Magic
 educe = "0.6"
-enum_dispatch = "0.3"
 
 # DNS
 watfaq-dns = { version = "0.1.2" }

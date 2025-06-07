@@ -5,7 +5,6 @@ use crate::{
     session::{Network, Session, Type},
 };
 
-use socket2::{Domain, Socket};
 use std::{
     net::SocketAddr,
     os::fd::{AsFd, AsRawFd},
@@ -17,7 +16,7 @@ use tracing::{trace, warn};
 pub struct TproxyInbound {
     addr: SocketAddr,
     allow_lan: bool,
-    dispather: Arc<Dispatcher>,
+    dispatcher: Arc<Dispatcher>,
     fw_mark: Option<u32>,
 }
 
@@ -31,13 +30,13 @@ impl TproxyInbound {
     pub fn new(
         addr: SocketAddr,
         allow_lan: bool,
-        dispather: Arc<Dispatcher>,
+        dispatcher: Arc<Dispatcher>,
         fw_mark: Option<u32>,
     ) -> Self {
         Self {
             addr,
             allow_lan,
-            dispather,
+            dispatcher,
             fw_mark,
         }
     }
@@ -53,8 +52,11 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_tcp(&self) -> anyhow::Result<()> {
-        let socket =
-            Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?;
+        let socket = socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::STREAM,
+            None,
+        )?;
         socket.set_ip_transparent(true)?;
         socket.set_nonblocking(true)?;
         socket.bind(&self.addr.into())?;
@@ -70,7 +72,7 @@ impl InboundHandlerTrait for TproxyInbound {
                 continue;
             }
 
-            let socket = apply_tcp_options(socket)?;
+            apply_tcp_options(&socket)?;
 
             // local_addr is getsockname
             let orig_dst = socket.local_addr()?;
@@ -86,7 +88,7 @@ impl InboundHandlerTrait for TproxyInbound {
 
             trace!("tproxy new tcp conn {}", sess);
 
-            let dispatcher = self.dispather.clone();
+            let dispatcher = self.dispatcher.clone();
             tokio::spawn(async move {
                 dispatcher.dispatch_stream(sess, Box::new(socket)).await;
             });
@@ -94,7 +96,8 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_udp(&self) -> anyhow::Result<()> {
-        let socket = Socket::new(Domain::IPV4, socket2::Type::DGRAM, None)?;
+        let socket =
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
         socket.set_ip_transparent(true)?;
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
@@ -107,7 +110,7 @@ impl InboundHandlerTrait for TproxyInbound {
                 libc::IPPROTO_IP,
                 libc::IP_RECVORIGDSTADDR,
                 payload,
-                std::mem::size_of_val(&enable) as libc::socklen_t,
+                size_of_val(&enable) as libc::socklen_t,
             )
         };
         socket.bind(&self.addr.into())?;
@@ -117,7 +120,7 @@ impl InboundHandlerTrait for TproxyInbound {
         handle_inbound_datagram(
             self.allow_lan,
             Arc::new(listener),
-            self.dispather.clone(),
+            self.dispatcher.clone(),
         )
         .await
     }
