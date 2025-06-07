@@ -42,7 +42,7 @@ async fn smoke_test() {
         })
         .expect("Failed to start client");
     });
-    
+
     let curl_cmd = "curl -v google.com";
     let output = tokio::process::Command::new("sh")
         .arg("-c")
@@ -56,7 +56,7 @@ async fn smoke_test() {
         "Curl command failed with output: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    
+
     wait_port_ready(8899).expect("Proxy port is not ready");
 
     let curl_cmd = "curl -v -x socks5h://127.0.0.1:8899 google.com";
