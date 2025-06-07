@@ -26,7 +26,7 @@ pub(super) fn convert(
     let inbounds = raw
         .unwrap_or_default()
         .into_iter()
-        .map(|mapping| InboundOpts::try_from(mapping))
+        .map(InboundOpts::try_from)
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut all_inbounds = HashSet::new();

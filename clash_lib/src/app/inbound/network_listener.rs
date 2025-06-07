@@ -14,7 +14,7 @@ use crate::proxy::tproxy::TproxyInbound;
 use crate::Dispatcher;
 use tracing::{error, info, warn};
 
-use crate::proxy::shadowsocks::inbound::ShadowsocksInbound;
+use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
 use std::sync::Arc;
 
 pub(crate) fn build_network_listeners(
@@ -146,15 +146,15 @@ fn build_handler(
             udp,
             cipher,
             password,
-        } => Some(Arc::new(ShadowsocksInbound::new(
-            (common_opts.listen.0, common_opts.port).into(),
-            password.clone(),
-            *udp,
-            cipher.clone(),
-            common_opts.allow_lan,
+        } => Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
+            addr: (common_opts.listen.0, common_opts.port).into(),
+            password: password.clone(),
+            udp: *udp,
+            cipher: cipher.clone(),
+            allow_lan: common_opts.allow_lan,
             dispatcher,
             authenticator,
-            common_opts.fw_mark,
-        ))),
+            fw_mark: common_opts.fw_mark,
+        }))),
     }
 }

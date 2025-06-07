@@ -50,6 +50,7 @@ thiserror = "2"
 anyhow = "1"
 
 # logging
+time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
 

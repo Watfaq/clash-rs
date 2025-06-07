@@ -133,7 +133,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
         if let Some(pkt) = pkt_container {
             let addr: shadowsocks::relay::Address = match &pkt.src_addr {
                 SocksAddr::Ip(addr) => {
-                    shadowsocks::relay::Address::SocketAddress(addr.clone())
+                    shadowsocks::relay::Address::SocketAddress(*addr)
                 }
                 SocksAddr::Domain(host, port) => {
                     shadowsocks::relay::Address::DomainNameAddress(
@@ -144,7 +144,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             };
 
             let n = ready!(socket.poll_send_to_with_ctrl(
-                (&pkt.dst_addr).clone().must_into_socket_addr(),
+                pkt.dst_addr.clone().must_into_socket_addr(),
                 &addr,
                 control,
                 pkt.data.as_ref(),

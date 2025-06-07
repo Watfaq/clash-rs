@@ -120,7 +120,7 @@ impl InboundManager {
     pub async fn get_bind_address(&self) -> BindAddress {
         let guard = self.inbound_handlers.read().await;
         if let Some((opts, _)) = guard.iter().next() {
-            opts.common_opts().listen.clone()
+            opts.common_opts().listen
         } else {
             BindAddress::default()
         }
@@ -131,7 +131,7 @@ impl InboundManager {
         let new_map = guard
             .drain()
             .map(|(mut opts, handler)| {
-                opts.common_opts_mut().listen = bind_address.clone();
+                opts.common_opts_mut().listen = bind_address;
                 (opts, handler)
             })
             .collect::<HashMap<_, _>>();

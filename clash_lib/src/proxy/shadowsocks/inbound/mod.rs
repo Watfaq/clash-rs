@@ -38,28 +38,43 @@ impl Drop for ShadowsocksInbound {
     }
 }
 
+pub struct InboundOptions {
+    pub addr: SocketAddr,
+    pub password: String,
+    pub udp: bool,
+    pub cipher: String,
+    pub allow_lan: bool,
+    pub dispatcher: Arc<Dispatcher>,
+    pub authenticator: ThreadSafeAuthenticator,
+    pub fw_mark: Option<u32>,
+}
+
 impl ShadowsocksInbound {
-    pub fn new(
-        addr: SocketAddr,
-        password: String,
-        udp: bool,
-        cipher: String,
-        allow_lan: bool,
-        dispatcher: Arc<Dispatcher>,
-        authenticator: ThreadSafeAuthenticator,
-        fw_mark: Option<u32>,
-    ) -> Self {
+    pub fn new(opts: InboundOptions) -> Self {
         Self {
-            addr,
-            password,
-            udp,
-            cipher,
-            allow_lan,
-            dispatcher,
-            authenticator,
-            fw_mark,
+            addr: opts.addr,
+            password: opts.password,
+            udp: opts.udp,
+            cipher: opts.cipher,
+            allow_lan: opts.allow_lan,
+            dispatcher: opts.dispatcher,
+            authenticator: opts.authenticator,
+            fw_mark: opts.fw_mark,
             udp_closer: Default::default(),
         }
+    }
+
+    fn get_server_config(
+        &self,
+    ) -> std::io::Result<shadowsocks::config::ServerConfig> {
+        shadowsocks::config::ServerConfig::new(
+            self.addr,
+            &self.password,
+            map_cipher(&self.cipher)?,
+        )
+        .map_err(|e| {
+            new_io_error(format!("Failed to create Shadowsocks config: {}", e))
+        })
     }
 }
 
@@ -75,14 +90,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
-        let config = shadowsocks::config::ServerConfig::new(
-            &self.addr.into(),
-            &self.password,
-            map_cipher(&self.cipher)?,
-        )
-        .map_err(|e| {
-            new_io_error(format!("Failed to create Shadowsocks config: {}", e))
-        })?;
+        let config = self.get_server_config()?;
 
         // TODO: support multiple users
         // let user_manager = shadowsocks::config::ServerUserManager::new();
@@ -162,14 +170,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
 
     async fn listen_udp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
-        let config = shadowsocks::config::ServerConfig::new(
-            &self.addr.into(),
-            &self.password,
-            map_cipher(&self.cipher)?,
-        )
-        .map_err(|e| {
-            new_io_error(format!("Failed to create Shadowsocks config: {}", e))
-        })?;
+        let config = self.get_server_config()?;
 
         // TODO: support multiple users
         // let user_manager = shadowsocks::config::ServerUserManager::new();

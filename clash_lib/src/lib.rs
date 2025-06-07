@@ -124,6 +124,7 @@ pub struct GlobalState {
     cwd: String,
 }
 
+#[derive(Default)]
 pub struct RuntimeController {
     runtime_counter: AtomicUsize,
     shutdown_txs: HashMap<usize, mpsc::Sender<()>>,
@@ -131,10 +132,7 @@ pub struct RuntimeController {
 
 impl RuntimeController {
     pub fn new() -> Self {
-        Self {
-            runtime_counter: AtomicUsize::new(0),
-            shutdown_txs: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn register_runtime(&mut self, shutdown_tx: mpsc::Sender<()>) -> usize {
@@ -206,9 +204,10 @@ pub async fn start(
 ) -> Result<()> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
-    let mut rt_ctrl = RUNTIME_CONTROLLER.lock().unwrap();
-    rt_ctrl.register_runtime(shutdown_tx);
-    drop(rt_ctrl);
+    {
+        let mut rt_ctrl = RUNTIME_CONTROLLER.lock().unwrap();
+        rt_ctrl.register_runtime(shutdown_tx);
+    }
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
