@@ -15,7 +15,7 @@ use super::{to_clash_socks_addr, to_sq_socks_addr};
 pub struct UdpSessionWrapper {
     pub s: PollSender<(Bytes, SQAddr)>,
     pub r: Receiver<(Bytes, SQAddr)>,
-    pub src_addr: SocksAddr, /* source address of local socket, binded during
+    pub src_addr: SocksAddr, /* source address of local socket, bound during
                               * associate task
                               * started */
 }
