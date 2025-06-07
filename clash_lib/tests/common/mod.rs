@@ -15,7 +15,8 @@ pub(crate) fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
             return Ok(());
         }
         attempts += 1;
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // it may take some time for downloading the mmdbs
+        std::thread::sleep(std::time::Duration::from_secs(2));
     }
     Err(clash_lib::Error::Io(std::io::Error::new(
         std::io::ErrorKind::TimedOut,
