@@ -3514,7 +3514,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -5789,6 +5789,8 @@ dependencies = [
 [[package]]
 name = "shadowsocks"
 version = "1.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e78db9c9912c90ea7487f49bc149b329b535806bfa12b740fbade73f573a3d9f"
 dependencies = [
  "aes",
  "arc-swap",

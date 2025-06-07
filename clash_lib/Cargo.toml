@@ -120,7 +120,7 @@ ring-compat = { version = "0.8", features = ["aead"] }
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"], path = "../../../shadowsocks-rust/crates/shadowsocks" }
+shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
 maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
