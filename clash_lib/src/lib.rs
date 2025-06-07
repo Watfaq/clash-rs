@@ -262,8 +262,8 @@ pub async fn start(
                 Ok(())
             }
             None => {
-                error!("shutdown channel closed unexpectedly");
-                Err(Error::Operation("shutdown channel closed".into()))
+                info!("runtime controller shutdown");
+                Ok(())
             }
         }
     }));
