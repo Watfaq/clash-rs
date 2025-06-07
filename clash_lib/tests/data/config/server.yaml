@@ -14,14 +14,5 @@ mode: rule
 log-level: trace
 external-controller: :9091
 
-proxies:
-  - name: "ss-simple"
-    type: ss
-    server: 127.0.0.1
-    port: 8901
-    cipher: 2022-blake3-aes-256-gcm
-    password: "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU="
-    udp: true
-
 rules:
   - MATCH, DIRECT

@@ -80,5 +80,5 @@ proxies:
 rules:
   - IP-CIDR,1.1.1.1/32,ss-simple
   - IP-CIDR,8.8.8.8/32,ss-simple
-  - DOMAIN,google.com,ss-simple
-  - MATCH, DIRECT
+  - DOMAIN,example.com,ss-simple
+  - MATCH, ss-simple

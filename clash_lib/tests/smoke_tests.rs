@@ -43,7 +43,7 @@ async fn smoke_test() {
         .expect("Failed to start client");
     });
 
-    let curl_cmd = "curl -v google.com";
+    let curl_cmd = "curl -v example.com";
     let output = tokio::process::Command::new("sh")
         .arg("-c")
         .arg(curl_cmd)
@@ -59,7 +59,7 @@ async fn smoke_test() {
 
     wait_port_ready(8899).expect("Proxy port is not ready");
 
-    let curl_cmd = "curl -v -x socks5h://127.0.0.1:8899 google.com";
+    let curl_cmd = "curl -v -x socks5h://127.0.0.1:8899 example.com";
     let output = tokio::process::Command::new("sh")
         .arg("-c")
         .arg(curl_cmd)
