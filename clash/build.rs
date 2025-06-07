@@ -9,7 +9,7 @@ fn main() {
         && let Some(sha) = option_env!("CLASH_GIT_SHA")
     {
         let short_sha = &sha[..7];
-        // Nightly relase below
+        // Nightly release below
         format!("{}-alpha+sha.{short_sha}", env!("CARGO_PKG_VERSION"))
     } else {
         env!("CARGO_PKG_VERSION").into()

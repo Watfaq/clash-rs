@@ -129,7 +129,7 @@ impl Handler {
         let newconn = ep.get_conn().await.map_err(|x| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("can't open shadowquic conection due to:{}", x),
+                format!("can't open shadowquic connection due to:{}", x),
             )
         })?;
         conn.replace(newconn.clone());
