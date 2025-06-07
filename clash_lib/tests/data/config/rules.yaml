@@ -4,11 +4,11 @@ socks-port: "8889"
 mixed-port: 8899
 # tproxy-port: 8900
 
-ipv6: true
+ipv6: false
 
 dns:
   enable: true
-  ipv6: true
+  ipv6: false
   listen:
     udp: 127.0.0.1:53553
     tcp: 127.0.0.1:53553
