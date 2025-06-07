@@ -22,8 +22,8 @@ use tokio_util::udp::UdpFramed;
 use tracing::{instrument, trace, warn};
 
 #[instrument(skip(sess, s, dispatcher, authenticator))]
-pub async fn handle_tcp<'a>(
-    sess: &'a mut Session,
+pub async fn handle_tcp(
+    sess: &mut Session,
     mut s: TcpStream,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,

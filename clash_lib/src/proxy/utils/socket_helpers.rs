@@ -10,27 +10,25 @@ use tokio::{
 #[cfg(not(target_os = "android"))]
 use tracing::{debug, error};
 
-pub fn apply_tcp_options(s: TcpStream) -> std::io::Result<TcpStream> {
+pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]
     {
-        let s = socket2::Socket::from(s.into_std()?);
+        let s = socket2::SockRef::from(s);
         s.set_tcp_keepalive(
             &TcpKeepalive::new()
                 .with_time(Duration::from_secs(10))
                 .with_interval(Duration::from_secs(1))
                 .with_retries(3),
-        )?;
-        TcpStream::from_std(s.into())
+        )
     }
     #[cfg(target_os = "windows")]
     {
-        let s = socket2::Socket::from(s.into_std()?);
+        let s = socket2::SockRef::from(s);
         s.set_tcp_keepalive(
             &TcpKeepalive::new()
                 .with_time(Duration::from_secs(10))
                 .with_interval(Duration::from_secs(1)),
-        )?;
-        TcpStream::from_std(s.into())
+        )
     }
 }
 

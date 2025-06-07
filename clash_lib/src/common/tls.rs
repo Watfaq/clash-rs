@@ -1,4 +1,3 @@
-use once_cell::sync::Lazy;
 use rustls::{
     RootCertStore,
     client::{WebPkiServerVerifier, danger::ServerCertVerifier},
@@ -6,10 +5,10 @@ use rustls::{
 };
 use tracing::warn;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
-pub static GLOBAL_ROOT_STORE: Lazy<Arc<RootCertStore>> =
-    Lazy::new(global_root_store);
+pub static GLOBAL_ROOT_STORE: LazyLock<Arc<RootCertStore>> =
+    LazyLock::new(global_root_store);
 
 fn global_root_store() -> Arc<RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
@@ -68,10 +67,6 @@ impl ServerCertVerifier for DefaultTlsVerifier {
         )
     }
 
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.pki.supported_verify_schemes()
-    }
-
     fn verify_tls12_signature(
         &self,
         message: &[u8],
@@ -88,6 +83,10 @@ impl ServerCertVerifier for DefaultTlsVerifier {
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
         self.pki.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.pki.supported_verify_schemes()
     }
 }
 

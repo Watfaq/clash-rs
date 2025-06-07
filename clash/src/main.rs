@@ -153,7 +153,8 @@ fn main() {
         log_file: cli.log_file,
     }) {
         Ok(_) => {}
-        Err(_) => {
+        Err(e) => {
+            eprintln!("Failed to start clash: {}", e);
             exit(1);
         }
     }

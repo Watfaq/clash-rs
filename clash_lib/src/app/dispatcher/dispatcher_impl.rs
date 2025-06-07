@@ -433,7 +433,7 @@ impl Dispatcher {
             }
         });
 
-        return close_sender;
+        close_sender
     }
 }
 
