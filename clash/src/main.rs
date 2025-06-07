@@ -55,7 +55,7 @@ struct Cli {
         help = "Print clash-rs version and exit"
     )]
     version: bool,
-    #[clap(short, long, help = "Additinally log to file")]
+    #[clap(short, long, help = "Additionally log to file")]
     log_file: Option<String>,
 
     #[clap(

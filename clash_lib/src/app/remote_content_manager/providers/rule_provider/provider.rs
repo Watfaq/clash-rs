@@ -361,7 +361,7 @@ fn make_classical_rules(
         let parts = rule.split(',').map(str::trim).collect::<Vec<&str>>();
 
         // the rule inside RULE-SET is slightly different from the rule in
-        // config the target is always empty as it's holded in the
+        // config the target is always empty as it's held in the
         // RULE-SET container let's parse it manually
         let rule_type = match parts.as_slice() {
             [proto, payload] => RuleType::new(proto, payload, "", None),

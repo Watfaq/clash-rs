@@ -64,7 +64,7 @@ async fn handle_inbound_datagram(
 ) {
     // tun i/o
     // lr: app packets went into tun will be accessed from lr
-    // ls: packet writen into ls will go back to app from tun
+    // ls: packet written into ls will go back to app from tun
     let (mut lr, mut ls) = socket.split();
     // ideally we clone the WriteHalf ls, but it's not Clone and it's a Sink so the
     // send method is mut
@@ -81,8 +81,8 @@ async fn handle_inbound_datagram(
     let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
-    // l_tx: dispatcher write packet responsed from remote proxy
-    // l_rx: in fut1 items are forwared to ls
+    // l_tx: dispatcher write packet responded from remote proxy
+    // l_rx: in fut1 items are forwarded to ls
     let (l_tx, mut l_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
 
     // forward packets from tun to dispatcher

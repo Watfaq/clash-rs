@@ -404,7 +404,7 @@ pub struct Config {
     #[educe(Default = "Country.mmdb")]
     pub mmdb: String,
     /// Country database download url
-    // TODO not compatiable with clash-meta
+    // TODO not compatible with clash-meta
     #[educe(Default = Some("https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb".into()))]
     pub mmdb_download_url: Option<String>,
     /// Optional ASN database path relative to the working dir
@@ -495,7 +495,7 @@ impl FromStr for Config {
 
         serde_yaml::from_value(val).map_err(|e| {
             Error::InvalidConfig(format!(
-                "counldn't not parse config content {s}: {e}"
+                "could not parse config content {s}: {e}"
             ))
         })
     }

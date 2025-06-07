@@ -1,0 +1,15 @@
+[default]
+locale = "en"
+
+[default.extend-words]
+# Session:typ
+typ = "typ"
+
+[files]
+extend-exclude = [
+  "docs",
+  "bench",
+  "clash/tests/data/config/public",
+  "clash/tests/data/config/*.cert",
+]
+

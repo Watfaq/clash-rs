@@ -256,7 +256,7 @@ mod tests {
     async fn test_vmess_ws() -> anyhow::Result<()> {
         let span = tracing::info_span!("test_vmess_ws");
         let _enter = span.enter();
-        let ws_cilent = WsClient::new(
+        let ws_client = WsClient::new(
             "".to_owned(),
             10002,
             "".to_owned(),
@@ -278,7 +278,7 @@ mod tests {
             security: "auto".into(),
             udp: true,
             tls: tls_client(None),
-            transport: Some(Box::new(ws_cilent)),
+            transport: Some(Box::new(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
         let runner = get_ws_runner().await?;

@@ -37,7 +37,8 @@ pub(super) fn convert(
         }
         all_inbounds.insert(inbound);
     }
-    // Add top-level proxies to inbounds if they are not override
+  
+    // Add short-handed top-level proxies to inbounds
     if let Some(Port(http_port)) = http_port {
         if !all_inbounds.insert(InboundOpts::Http {
             common_opts: CommonInboundOpts {
