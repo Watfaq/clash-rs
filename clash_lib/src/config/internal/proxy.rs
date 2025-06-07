@@ -379,6 +379,8 @@ pub enum OutboundGroupProtocol {
     Fallback(OutboundGroupFallback),
     #[serde(rename = "load-balance")]
     LoadBalance(OutboundGroupLoadBalance),
+    #[serde(rename = "smart")]
+    Smart(OutboundGroupSmart),
     #[serde(rename = "select")]
     Select(OutboundGroupSelect),
 }
@@ -390,6 +392,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => &g.name,
             OutboundGroupProtocol::Fallback(g) => &g.name,
             OutboundGroupProtocol::LoadBalance(g) => &g.name,
+            OutboundGroupProtocol::Smart(g) => &g.name,
             OutboundGroupProtocol::Select(g) => &g.name,
         }
     }
@@ -400,6 +403,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Fallback(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::Smart(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Select(g) => g.proxies.as_ref(),
         }
     }
@@ -413,6 +417,7 @@ impl Display for OutboundGroupProtocol {
             OutboundGroupProtocol::Fallback(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::LoadBalance(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::Select(g) => write!(f, "{}", g.name),
+            OutboundGroupProtocol::Smart(g) => write!(f, "{}", g.name),
         }
     }
 }
@@ -481,6 +486,33 @@ pub enum LoadBalanceStrategy {
     RoundRobin,
     #[serde(rename = "sticky-session")]
     StickySession,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+pub struct OutboundGroupSmart {
+    pub name: String,
+
+    pub proxies: Option<Vec<String>>,
+    pub udp: Option<bool>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
+    pub lazy: Option<bool>,
+    pub icon: Option<String>,
+
+    /// Maximum retries for failed connections (default: 3)
+    #[serde(rename = "max-retries")]
+    pub max_retries: Option<u32>,
+
+    /// Site stickiness factor (0.0-1.0, default: 0.8)
+    /// Higher values make the same site more likely to use the same proxy
+    #[serde(rename = "site-stickiness")]
+    pub site_stickiness: Option<f64>,
+
+    /// Bandwidth consideration weight (default: 0.0 - disabled)
+    /// When > 0, bandwidth metrics are included in selection algorithm
+    #[serde(rename = "bandwidth-weight")]
+    pub bandwidth_weight: Option<f64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]

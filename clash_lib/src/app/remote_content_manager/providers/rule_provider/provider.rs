@@ -35,7 +35,26 @@ struct ProviderScheme {
     pub payload: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleSetFormat {
+    #[default]
+    Yaml,
+    Text,
+    Mrs,
+}
+
+impl Display for RuleSetFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuleSetFormat::Yaml => write!(f, "yaml"),
+            RuleSetFormat::Text => write!(f, "text"),
+            RuleSetFormat::Mrs => write!(f, "mrs"),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleSetBehavior {
     Domain,
@@ -53,7 +72,7 @@ impl Display for RuleSetBehavior {
     }
 }
 
-enum RuleContent {
+pub enum RuleContent {
     // the left will converted into a right
     Domain(succinct_set::DomainSet),
     Ipcidr(Box<CidrTrie>),
@@ -67,6 +86,7 @@ struct Inner {
 pub trait RuleProvider: Provider {
     fn search(&self, sess: &Session) -> bool;
     fn behavior(&self) -> RuleSetBehavior;
+    fn format(&self) -> RuleSetFormat;
 }
 
 pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
@@ -80,19 +100,21 @@ pub struct RuleProviderImpl {
     fetcher: Fetcher<RuleUpdater, RuleParser>,
     inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
     behavior: RuleSetBehavior,
+    format: RuleSetFormat,
 }
 
 impl RuleProviderImpl {
     pub fn new(
         name: String,
-        behovior: RuleSetBehavior,
+        behavior: RuleSetBehavior,
+        format: RuleSetFormat,
         interval: Duration,
         vehicle: ThreadSafeProviderVehicle,
         mmdb: Arc<Mmdb>,
         geodata: Arc<GeoData>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
-            content: match behovior {
+            content: match behavior {
                 RuleSetBehavior::Domain => {
                     RuleContent::Domain(succinct_set::DomainSet::default())
                 }
@@ -108,32 +130,81 @@ impl RuleProviderImpl {
         let n = name.clone();
         let updater: RuleUpdater =
             Box::new(move |input: RuleContent| -> BoxFuture<'static, ()> {
-                let n = n.clone();
+                let n = n.clone(); // Clone name for the async block
                 let inner: Arc<tokio::sync::RwLock<Inner>> = inner_clone.clone();
                 Box::pin(async move {
                     let mut inner = inner.write().await;
-                    trace!("updated rules for: {}", n);
+                    trace!("updated rules for provider: {}", n);
                     inner.content = input;
                 })
             });
 
-        let n = name.clone();
+        let n_parser = name.clone(); // Clone name specifically for the parser closure
+        let current_behavior = behavior;
+        let current_format = format;
         let parser: RuleParser =
             Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
-                let scheme: ProviderScheme =
-                    serde_yaml::from_slice(input).map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "proxy provider parse error {}: {}",
-                            n, x
-                        ))
-                    })?;
-                let rules = make_rules(
-                    behovior,
-                    scheme.payload,
-                    mmdb.clone(),
-                    geodata.clone(),
-                )?;
-                Ok(rules)
+                match current_format {
+                    RuleSetFormat::Yaml => {
+                        let scheme: ProviderScheme = serde_yaml::from_slice(input)
+                            .map_err(|x| {
+                            Error::InvalidConfig(format!(
+                                "rule provider parse error (yaml) {}: {}",
+                                n_parser, x
+                            ))
+                        })?;
+                        // For Yaml, we still need to convert Vec<String> to
+                        // RuleContent
+                        make_rules(
+                            current_behavior,
+                            scheme.payload,
+                            mmdb.clone(),
+                            geodata.clone(),
+                        )
+                        .map_err(anyhow::Error::new)
+                    }
+                    RuleSetFormat::Text => {
+                        let text = std::str::from_utf8(input).map_err(|e| {
+                            Error::InvalidConfig(format!(
+                                "invalid utf-8 in text rule provider {}: {}",
+                                n_parser, e
+                            ))
+                        })?;
+
+                        let payload: Vec<String> = text
+                            .lines()
+                            .map(str::trim)
+                            .filter(|line| {
+                                !line.is_empty()
+                                    && !line.starts_with('#')
+                                    && !line.starts_with("//")
+                            })
+                            .map(String::from)
+                            .collect();
+                        // For Text, we also convert Vec<String> to RuleContent
+                        make_rules(
+                            current_behavior,
+                            payload,
+                            mmdb.clone(),
+                            geodata.clone(),
+                        )
+                        .map_err(anyhow::Error::new)
+                    }
+                    RuleSetFormat::Mrs => {
+                        if matches!(current_behavior, RuleSetBehavior::Classical) {
+                            return Err(anyhow::Error::new(Error::InvalidConfig(
+                                format!(
+                                    "MRS format is not supported for classical \
+                                     behavior in rule provider {}",
+                                    n_parser
+                                ),
+                            )));
+                        }
+                        // Parse MRS format using the updated function signature.
+                        // It directly returns the required RuleContent.
+                        super::mrs::rules_mrs_parse(input, current_behavior)
+                    }
+                }
             });
 
         let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
@@ -141,7 +212,8 @@ impl RuleProviderImpl {
         Self {
             fetcher,
             inner,
-            behavior: behovior,
+            behavior,
+            format,
         }
     }
 }
@@ -178,6 +250,10 @@ impl RuleProvider for RuleProviderImpl {
     fn behavior(&self) -> RuleSetBehavior {
         self.behavior
     }
+
+    fn format(&self) -> RuleSetFormat {
+        self.format
+    }
 }
 
 #[async_trait]
@@ -198,7 +274,8 @@ impl Provider for RuleProviderImpl {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
         if let Some(updater) = self.fetcher.on_update.as_ref() {
-            updater.lock().await(ele).await;
+            let f = updater.lock().await;
+            f(ele).await; // Directly pass RuleContent
         }
         Ok(())
     }
@@ -209,7 +286,7 @@ impl Provider for RuleProviderImpl {
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
                 let f = updater.lock().await;
-                f(ele).await;
+                f(ele).await; // Directly pass RuleContent
             }
         }
         Ok(())
@@ -231,14 +308,16 @@ impl Provider for RuleProviderImpl {
         );
 
         m.insert("behavior".to_owned(), Box::new(self.behavior().to_string()));
+        m.insert("format".to_owned(), Box::new(self.format().to_string()));
 
         m
     }
 }
 
+// --- make_rules is needed for Yaml and Text formats ---
 fn make_rules(
     behavior: RuleSetBehavior,
-    rules: Vec<String>,
+    rules: Vec<String>, // Input is Vec<String> for Yaml/Text
     mmdb: Arc<Mmdb>,
     geodata: Arc<GeoData>,
 ) -> Result<RuleContent, Error> {

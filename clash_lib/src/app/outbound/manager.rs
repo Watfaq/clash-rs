@@ -26,7 +26,9 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        OutboundType, fallback, loadbalance, selector, socks, trojan,
+        OutboundType, fallback,
+        group::smart,
+        loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg,
     },
@@ -638,6 +640,53 @@ impl OutboundManager {
                     handlers.insert(proto.name.clone(), Arc::new(selector.clone()));
                     selector_control
                         .insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
+                }
+                OutboundGroupProtocol::Smart(proto) => {
+                    if check_group_empty(&proto.proxies, &proto.use_provider) {
+                        return Err(Error::InvalidConfig(format!(
+                            "proxy group {} has no proxies",
+                            proto.name
+                        )));
+                    }
+
+                    let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
+
+                    if let Some(proxies) = &proto.proxies {
+                        providers.push(make_provider_from_proxies(
+                            &proto.name,
+                            proxies,
+                            0,
+                            proto.lazy.unwrap_or_default(),
+                            handlers,
+                            proxy_manager.clone(),
+                            &mut proxy_providers,
+                            provider_registry,
+                        )?);
+                    }
+
+                    maybe_append_providers(
+                        &proto.use_provider,
+                        provider_registry,
+                        &mut providers,
+                    );
+
+                    let smart_handler = smart::Handler::new_with_cache(
+                        smart::HandlerOptions {
+                            name: proto.name.clone(),
+                            common_opts: crate::proxy::HandlerCommonOptions {
+                                icon: proto.icon.clone(),
+                                ..Default::default()
+                            },
+                            udp: proto.udp.unwrap_or(true),
+                            max_retries: proto.max_retries,
+                            bandwidth_weight: proto.bandwidth_weight,
+                        },
+                        providers,
+                        proxy_manager.clone(),
+                        cache_store.clone(),
+                    );
+
+                    handlers.insert(proto.name.clone(), Arc::new(smart_handler));
                 }
             }
         }

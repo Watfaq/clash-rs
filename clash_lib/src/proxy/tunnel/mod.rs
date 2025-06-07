@@ -35,7 +35,7 @@ pub struct TunnelInbound {
 
 impl Drop for TunnelInbound {
     fn drop(&mut self) {
-        warn!("HTTP inbound listener on {} stopped", self.listen);
+        warn!("Tunnel inbound listener on {} stopped", self.listen);
     }
 }
 

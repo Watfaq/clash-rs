@@ -133,6 +133,7 @@ pub enum OutboundType {
     Selector,
     Relay,
     LoadBalance,
+    Smart,
     Fallback,
 
     Direct,
@@ -157,6 +158,7 @@ impl Display for OutboundType {
             OutboundType::Selector => write!(f, "Selector"),
             OutboundType::Relay => write!(f, "Relay"),
             OutboundType::LoadBalance => write!(f, "LoadBalance"),
+            OutboundType::Smart => write!(f, "Smart"),
             OutboundType::Fallback => write!(f, "Fallback"),
 
             OutboundType::Direct => write!(f, "Direct"),
