@@ -83,7 +83,7 @@ Options:
   -c, --config <FILE>          Specify configuration file [default: config.yaml] [short aliases: f]
   -t, --test-config            Test configuration and exit
   -v, --version                Print clash-rs version and exit [short aliases: V]
-  -l, --log-file <LOG_FILE>    Additinally log to file
+  -l, --log-file <LOG_FILE>    Additionally log to file
       --help-improve           Enable crash report to help improve clash
   -h, --help                   Print help
 ```

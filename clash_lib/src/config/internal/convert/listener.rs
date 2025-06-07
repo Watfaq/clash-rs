@@ -85,7 +85,7 @@ pub(super) fn convert(
             Ok::<HashMap<String, InboundOpts>, Error>(accum)
         },
     )?;
-    // Add top-level proxies to inbounds if they are not overrided
+    // Add short-handed top-level proxies to inbounds
     if let Some(Port(http_port)) = http_port {
         inbounds.insert(
             "HTTP-IN".into(),
