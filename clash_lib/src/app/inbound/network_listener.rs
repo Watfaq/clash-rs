@@ -107,11 +107,11 @@ fn build_handler(
         } => {
             #[cfg(target_os = "linux")]
             {
-                Some(Box::new(TproxyInbound::new(
+                Some(Arc::new(TproxyInbound::new(
                     (common_opts.listen.0, common_opts.port).into(),
                     common_opts.allow_lan,
-                    self.dispatcher.clone(),
-                    self.fw_mark,
+                    dispatcher,
+                    fw_mark,
                 )))
             }
 
