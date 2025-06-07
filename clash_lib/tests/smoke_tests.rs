@@ -43,7 +43,7 @@ async fn smoke_test() {
         .expect("Failed to start client");
     });
     
-    let curl_cmd = "curl -v -x google.com";
+    let curl_cmd = "curl -v google.com";
     let output = tokio::process::Command::new("sh")
         .arg("-c")
         .arg(curl_cmd)
