@@ -19,7 +19,7 @@ pub(super) fn convert(
     let http_port = c.port;
     let socks_port = c.socks_port;
     let mixed_port = c.mixed_port;
-    let tpoxy_port = c.tproxy_port;
+    let tproxy_port = c.tproxy_port;
     let redir_port = c.redir_port;
     let bind_address = c.bind_address;
 
@@ -92,7 +92,7 @@ pub(super) fn convert(
             warn!("Duplicate REDIR inbound listener found: {}", redir_port);
         }
     }
-    if let Some(Port(tproxy_port)) = tpoxy_port {
+    if let Some(Port(tproxy_port)) = tproxy_port {
         if !all_inbounds.insert(InboundOpts::TProxy {
             common_opts: CommonInboundOpts {
                 name: "TPROXY-IN".into(),
