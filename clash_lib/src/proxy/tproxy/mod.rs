@@ -5,6 +5,7 @@ use crate::{
     session::{Network, Session, Type},
 };
 
+use async_trait::async_trait;
 use std::{
     net::SocketAddr,
     os::fd::{AsFd, AsRawFd},
@@ -42,6 +43,7 @@ impl TproxyInbound {
     }
 }
 
+#[async_trait]
 impl InboundHandlerTrait for TproxyInbound {
     fn handle_tcp(&self) -> bool {
         true
