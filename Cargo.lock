@@ -1170,7 +1170,6 @@ dependencies = [
  "murmur3",
  "netstack-smoltcp",
  "network-interface",
- "once_cell",
  "prost",
  "prost-build",
  "public-suffix",

@@ -1,6 +1,5 @@
-use std::io::IsTerminal;
-
 use crate::def::LogLevel;
+use std::{io::IsTerminal, sync::Once};
 
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
@@ -70,16 +69,36 @@ where
     }
 }
 
+static SETUP_LOGGING: Once = Once::new();
+static mut LOGGING_GUARD: Option<WorkerGuard> = None;
+
 pub fn setup_logging(
+    level: LogLevel,
+    collector: EventCollector,
+    cwd: &str,
+    log_file: Option<String>,
+) {
+    unsafe {
+        SETUP_LOGGING.call_once(|| {
+            LOGGING_GUARD = setup_logging_inner(level, collector, cwd, log_file)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to setup logging: {}", e);
+                    None
+                });
+        });
+    }
+}
+
+fn setup_logging_inner(
     level: LogLevel,
     collector: EventCollector,
     cwd: &str,
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::from_default_env()
-        .add_directive(format!("clash={}", level).parse().unwrap())
-        .add_directive(format!("clash_lib={}", level).parse().unwrap())
-        .add_directive("warn".parse().unwrap());
+        .add_directive(format!("clash={}", level).parse()?)
+        .add_directive(format!("clash_lib={}", level).parse()?)
+        .add_directive("warn".parse()?);
 
     let (appender, guard) = if let Some(log_file) = log_file {
         let file_appender = tracing_appender::rolling::daily(cwd, log_file);
@@ -149,8 +168,8 @@ pub fn setup_logging(
 struct EventVisitor<'a>(&'a mut Vec<String>);
 
 impl tracing::field::Visit for EventVisitor<'_> {
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        println!("bool {} = {}", field.name(), value);
+    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
+        println!("f64 {} = {}", field.name(), value);
     }
 
     fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
@@ -161,8 +180,28 @@ impl tracing::field::Visit for EventVisitor<'_> {
         println!("u64 {} = {}", field.name(), value);
     }
 
+    fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
+        println!("i128 {} = {}", field.name(), value);
+    }
+
+    fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
+        println!("u128 {} = {}", field.name(), value);
+    }
+
+    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
+        println!("bool {} = {}", field.name(), value);
+    }
+
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         println!("str {} = {}", field.name(), value);
+    }
+
+    fn record_error(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &(dyn std::error::Error + 'static),
+    ) {
+        println!("error {} = {}", field.name(), value);
     }
 
     fn record_debug(
@@ -175,25 +214,5 @@ impl tracing::field::Visit for EventVisitor<'_> {
         } else {
             println!("debug {} = {:?}", field.name(), value);
         }
-    }
-
-    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        println!("f64 {} = {}", field.name(), value);
-    }
-
-    fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
-        println!("u128 {} = {}", field.name(), value);
-    }
-
-    fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
-        println!("i128 {} = {}", field.name(), value);
-    }
-
-    fn record_error(
-        &mut self,
-        field: &tracing::field::Field,
-        value: &(dyn std::error::Error + 'static),
-    ) {
-        println!("error {} = {}", field.name(), value);
     }
 }

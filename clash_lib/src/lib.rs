@@ -2,6 +2,7 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
 #![feature(let_chains)]
+#![feature(lazy_get)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 
 #[macro_use]
@@ -26,10 +27,14 @@ use app::{
 };
 use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
-use once_cell::sync::OnceCell;
 use proxy::tun::get_tun_runner;
 
-use std::{io, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    io,
+    path::PathBuf,
+    sync::{Arc, LazyLock, atomic::AtomicUsize},
+};
 use thiserror::Error;
 use tokio::{
     sync::{Mutex, broadcast, mpsc, oneshot},
@@ -120,10 +125,33 @@ pub struct GlobalState {
 }
 
 pub struct RuntimeController {
-    shutdown_tx: mpsc::Sender<()>,
+    runtime_counter: AtomicUsize,
+    shutdown_txs: HashMap<usize, mpsc::Sender<()>>,
 }
 
-static RUNTIME_CONTROLLER: OnceCell<RuntimeController> = OnceCell::new();
+impl RuntimeController {
+    pub fn new() -> Self {
+        Self {
+            runtime_counter: AtomicUsize::new(0),
+            shutdown_txs: HashMap::new(),
+        }
+    }
+
+    pub fn register_runtime(&mut self, shutdown_tx: mpsc::Sender<()>) -> usize {
+        let id = self
+            .runtime_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.shutdown_txs.insert(id, shutdown_tx);
+        id
+    }
+
+    pub fn unregister_runtime(&mut self, id: usize) {
+        self.shutdown_txs.remove(&id);
+    }
+}
+
+static RUNTIME_CONTROLLER: LazyLock<std::sync::Mutex<RuntimeController>> =
+    LazyLock::new(|| std::sync::Mutex::new(RuntimeController::new()));
 
 pub fn start_scaffold(opts: Options) -> Result<()> {
     let rt = match opts.rt.as_ref().unwrap_or(&TokioRuntime::MultiThread) {
@@ -140,14 +168,12 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
 
     let log_collector = app::logging::EventCollector::new(vec![log_tx.clone()]);
 
-    let _g = app::logging::setup_logging(
+    app::logging::setup_logging(
         config.general.log_level,
         log_collector,
         &cwd,
         opts.log_file,
-    )
-    .map_err(|x| eprintln!("failed to setup logging: {}", x))
-    .unwrap_or_default();
+    );
 
     rt.block_on(async {
         match start(config, cwd, log_tx).await {
@@ -161,10 +187,16 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
 }
 
 pub fn shutdown() -> bool {
-    match RUNTIME_CONTROLLER.get() {
-        Some(controller) => controller.shutdown_tx.blocking_send(()).is_ok(),
-        _ => false,
+    let mut rt_ctrl = RUNTIME_CONTROLLER.lock().unwrap();
+    if rt_ctrl
+        .runtime_counter
+        .load(std::sync::atomic::Ordering::SeqCst)
+        == 0
+    {
+        return false; // No runtime to shut down
     }
+    rt_ctrl.shutdown_txs.clear();
+    true
 }
 
 pub async fn start(
@@ -174,7 +206,9 @@ pub async fn start(
 ) -> Result<()> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
-    let _ = RUNTIME_CONTROLLER.get_or_init(|| RuntimeController { shutdown_tx });
+    let mut rt_ctrl = RUNTIME_CONTROLLER.lock().unwrap();
+    rt_ctrl.register_runtime(shutdown_tx);
+    drop(rt_ctrl);
 
     let mut tasks = Vec::<Runner>::new();
     let mut runners = Vec::new();
@@ -223,9 +257,16 @@ pub async fn start(
     }
 
     runners.push(Box::pin(async move {
-        shutdown_rx.recv().await;
-        info!("receiving shutdown signal");
-        Ok(())
+        match shutdown_rx.recv().await {
+            Some(_) => {
+                info!("received shutdown signal");
+                Ok(())
+            }
+            None => {
+                error!("shutdown channel closed unexpectedly");
+                Err(Error::Operation("shutdown channel closed".into()))
+            }
+        }
     }));
 
     tasks.push(Box::pin(async move {

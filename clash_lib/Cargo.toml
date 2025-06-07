@@ -72,7 +72,6 @@ tower = { version = "0.5", features = ["util"] }
 libc = "0.2"
 
 ip_network_table-deps-treebitmap = "0.5"
-once_cell = "1"
 
 # Algorithms
 crc32fast = "1"
