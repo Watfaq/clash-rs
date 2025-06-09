@@ -14,7 +14,10 @@ concurrency:
 jobs:
   compile:
     name: Coverage
-    runs-on: 'macos-14' # https://github.com/smol-rs/async-process/pull/96
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ 'macos-14',  'windows-latest', 'ubuntu-latest' ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +50,7 @@ jobs:
           args: --workspace --exclude clash_ffi -F "plus" --codecov --output-path codecov.json
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          CLASH_DOCKER_TEST: 'true'
+          CLASH_DOCKER_TEST: ${{ startsWith(matrix.os, 'ubuntu') && 'true' || 'false' }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
