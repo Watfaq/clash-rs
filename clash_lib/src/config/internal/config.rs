@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -40,7 +40,7 @@ pub struct Config {
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
-    pub listeners: HashMap<String, InboundOpts>,
+    pub listeners: HashSet<InboundOpts>,
 }
 
 impl Config {
@@ -97,7 +97,7 @@ pub struct TunConfig {
     pub dns_hijack: bool,
 }
 
-#[derive(Serialize, Clone, Debug, Copy, PartialEq)]
+#[derive(Serialize, Clone, Debug, Copy, PartialEq, Hash, Eq)]
 #[serde(transparent)]
 pub struct BindAddress(pub IpAddr);
 impl BindAddress {
@@ -209,11 +209,11 @@ mod tests {
         assert_eq!(c.mixed_port.map(|x| x.into()), Some(9091));
         let cc = convert(c).expect("should convert");
 
-        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+        assert!(cc.listeners.iter().any(|listener| match listener {
             InboundOpts::Http { common_opts, .. } => common_opts.port == 9090,
             _ => false,
         }));
-        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+        assert!(cc.listeners.iter().any(|listener| match listener {
             InboundOpts::Mixed { common_opts, .. } => common_opts.port == 9091,
             _ => false,
         }));

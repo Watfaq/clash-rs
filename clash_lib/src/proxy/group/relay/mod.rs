@@ -231,7 +231,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_1() -> anyhow::Result<()> {
-        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -243,7 +243,8 @@ mod tests {
         };
         let port = ss_opts.port;
         let ss_handler: AnyOutboundHandler =
-            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
+            Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
+                as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -267,7 +268,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_2() -> anyhow::Result<()> {
-        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -279,7 +280,8 @@ mod tests {
         };
         let port = ss_opts.port;
         let ss_handler: AnyOutboundHandler =
-            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
+            Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
+                as _;
 
         let mut provider = MockDummyProxyProvider::new();
 

@@ -780,7 +780,7 @@ mod tests {
     #[serial_test::serial]
     async fn test_smart_group_smoke() -> anyhow::Result<()> {
         let ss_port = 10003;
-        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss-for-smart".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -791,7 +791,8 @@ mod tests {
             udp: true,
         };
         let ss_handler: AnyOutboundHandler =
-            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
+            Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
+                as _;
 
         let mut provider = MockDummyProxyProvider::new();
         provider.expect_touch().returning(|| ());

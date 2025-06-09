@@ -10,6 +10,8 @@ use crate::{
 
 pub use proxy::handle as handle_http;
 
+use crate::common::errors::new_io_error;
+use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::warn;
@@ -47,6 +49,7 @@ impl HttpInbound {
     }
 }
 
+#[async_trait]
 impl InboundHandlerTrait for HttpInbound {
     fn handle_tcp(&self) -> bool {
         true
@@ -56,7 +59,7 @@ impl InboundHandlerTrait for HttpInbound {
         false
     }
 
-    async fn listen_tcp(&self) -> anyhow::Result<()> {
+    async fn listen_tcp(&self) -> std::io::Result<()> {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
@@ -68,7 +71,7 @@ impl InboundHandlerTrait for HttpInbound {
                 continue;
             }
 
-            let socket = apply_tcp_options(socket)?;
+            apply_tcp_options(&socket)?;
 
             let dispatcher = self.dispatcher.clone();
             let author = self.authenticator.clone();
@@ -86,7 +89,7 @@ impl InboundHandlerTrait for HttpInbound {
         }
     }
 
-    async fn listen_udp(&self) -> anyhow::Result<()> {
-        Err(anyhow!("unsupported"))
+    async fn listen_udp(&self) -> std::io::Result<()> {
+        Err(new_io_error("unsupported UDP protocol for HTTP inbound"))
     }
 }
