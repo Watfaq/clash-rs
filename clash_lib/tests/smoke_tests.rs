@@ -43,7 +43,38 @@ async fn smoke_test() {
         .expect("Failed to start client");
     });
 
-    let curl_cmd = "curl -v example.com";
+    let mock_server = httpmock::MockServer::start();
+    let mock = mock_server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/");
+        then.status(200).body("Mock response for testing");
+    });
+
+    let curl_cmd = format!("curl -s {}", mock_server.url("/"));
+    let output = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg(curl_cmd)
+        .output()
+        .await
+        .expect("Failed to execute curl command");
+
+    assert!(
+        output.status.success(),
+        "Curl command failed with output: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(mock.hits(), 1, "Mock server was not hit exactly once");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "Mock response for testing",
+        "Unexpected response from mock server"
+    );
+
+    wait_port_ready(8899).expect("Proxy port is not ready");
+
+    let curl_cmd = format!(
+        "curl -s -x socks5h://127.0.0.1:8899 {}",
+        mock_server.url("/")
+    );
     let output = tokio::process::Command::new("sh")
         .arg("-c")
         .arg(curl_cmd)
@@ -57,19 +88,10 @@ async fn smoke_test() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    wait_port_ready(8899).expect("Proxy port is not ready");
-
-    let curl_cmd = "curl -v -x socks5h://127.0.0.1:8899 example.com";
-    let output = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(curl_cmd)
-        .output()
-        .await
-        .expect("Failed to execute curl command");
-
-    assert!(
-        output.status.success(),
-        "Curl command failed with output: {}",
-        String::from_utf8_lossy(&output.stderr)
+    assert_eq!(mock.hits(), 2, "Mock server was not hit exactly twice");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "Mock response for testing",
+        "Unexpected response from mock server"
     );
 }
