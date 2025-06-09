@@ -6,8 +6,6 @@ mod common;
 
 #[tokio::test(flavor = "current_thread")]
 /// Test Shadowsocks inbound and outbound functionality
-#[ignore = "https://github.com/smol-rs/async-process/pull/96 wait for upgrades of \
-            upstream dependencies until ubuntu-latest"]
 async fn smoke_test() {
     let wd = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config");
     let server_config = wd.join("server.yaml");

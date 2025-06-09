@@ -23,3 +23,7 @@ lto = "thin"
 strip = true
 debug = 2
 panic = "abort"
+
+
+[patch.crates-io]
+async-process = { git = 'https://github.com/smol-rs/async-process.git', branch = "taiki-e/next" } # https://github.com/smol-rs/async-process/pull/96 is published to crates.io

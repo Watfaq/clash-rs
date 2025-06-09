@@ -458,9 +458,8 @@ dependencies = [
 
 [[package]]
 name = "async-process"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde3f4e40e6021d7acffc90095cbd6dc54cb593903d1de5832f435eb274b85dc"
+version = "2.3.2"
+source = "git+https://github.com/smol-rs/async-process.git?branch=taiki-e%2Fnext#90873bf02a83b28ec21e392de86d49ca13b5354f"
 dependencies = [
  "async-channel 2.3.1",
  "async-io",
