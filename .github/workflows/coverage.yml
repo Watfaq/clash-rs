@@ -14,7 +14,7 @@ concurrency:
 jobs:
   compile:
     name: Coverage
-    runs-on: 'ubuntu-latest'
+    runs-on: 'macos-14' # https://github.com/smol-rs/async-process/pull/96
     steps:
       - uses: actions/checkout@v4
         with:
