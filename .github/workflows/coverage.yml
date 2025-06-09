@@ -32,7 +32,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: coverage-${{ hashFiles('**/Cargo.toml') }}
+          key: coverage-${{ hashFiles('**/Cargo.toml') }}-${{ matrix.os }}
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
