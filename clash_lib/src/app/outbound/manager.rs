@@ -139,28 +139,22 @@ impl OutboundManager {
         }
 
         for (k, v) in self.handlers.iter().chain(provider_handlers.iter()) {
-            let mut m = v.as_map().await;
+            let mut m = if let Some(g) = v.try_as_group_handler() {
+                g.as_map().await
+            } else {
+                let mut m = HashMap::new();
+                m.insert("type".to_string(), Box::new(v.proto()) as _);
+                m
+            };
 
             let alive = proxy_manager.alive(k).await;
             let history = proxy_manager.delay_history(k).await;
             let support_udp = v.support_udp().await;
-            let icon = v.icon();
 
             m.insert("history".to_string(), Box::new(history));
             m.insert("alive".to_string(), Box::new(alive));
             m.insert("name".to_string(), Box::new(k.to_owned()));
             m.insert("udp".to_string(), Box::new(support_udp));
-
-            if matches!(
-                v.proto(),
-                OutboundType::UrlTest
-                    | OutboundType::Relay
-                    | OutboundType::Selector
-                    | OutboundType::Fallback
-                    | OutboundType::LoadBalance
-            ) {
-                m.insert("icon".to_string(), Box::new(icon));
-            }
 
             r.insert(k.clone(), Box::new(m) as _);
         }
@@ -172,7 +166,13 @@ impl OutboundManager {
         &self,
         proxy: &AnyOutboundHandler,
     ) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let mut r = proxy.as_map().await;
+        let mut r = if let Some(g) = proxy.try_as_group_handler() {
+            g.as_map().await
+        } else {
+            let mut m = HashMap::new();
+            m.insert("type".to_string(), Box::new(proxy.proto()) as _);
+            m
+        };
 
         let proxy_manager = self.proxy_manager.clone();
 

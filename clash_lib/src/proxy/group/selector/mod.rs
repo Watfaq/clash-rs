@@ -15,6 +15,7 @@ use crate::{
     proxy::{
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        group::GroupProxyAPIResponse,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
@@ -127,19 +128,13 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let s = self
-            .selected_proxy(true)
-            .await
-            .connect_stream(sess, resolver)
-            .await;
+        let selected = self.selected_proxy(true).await;
+        let s = selected.connect_stream(sess, resolver).await?;
 
-        match s {
-            Ok(s) => {
-                s.append_to_chain(self.name()).await;
-                Ok(s)
-            }
-            Err(e) => Err(e),
-        }
+        s.append_to_chain(self.name()).await;
+        s.append_to_chain(selected.name()).await;
+
+        Ok(s)
     }
 
     async fn connect_datagram(
@@ -147,10 +142,13 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        self.selected_proxy(true)
-            .await
-            .connect_datagram(sess, resolver)
-            .await
+        let selected = self.selected_proxy(true).await;
+        let s = selected.connect_datagram(sess, resolver).await?;
+
+        s.append_to_chain(self.name()).await;
+        s.append_to_chain(selected.name()).await;
+
+        Ok(s)
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -185,19 +183,19 @@ impl OutboundHandler for Handler {
             .await
     }
 
-    /// for API
-    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let all = get_proxies_from_providers(&self.providers, false).await;
+    fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
+        Some(self as _)
+    }
+}
 
-        let mut m = HashMap::new();
-        m.insert("type".to_string(), Box::new(self.proto()) as _);
-        m.insert("now".to_string(), Box::new(self.current().await) as _);
-        m.insert(
-            "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
-                as _,
-        );
-        m
+#[async_trait]
+impl GroupProxyAPIResponse for Handler {
+    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
+        get_proxies_from_providers(&self.providers, false).await
+    }
+
+    async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
+        Some(Handler::selected_proxy(&self, false).await)
     }
 
     fn icon(&self) -> Option<String> {
