@@ -9,7 +9,7 @@ pub(crate) fn start_clash(
 pub(crate) fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     let addr = format!("127.0.0.1:{}", port);
     let mut attempts = 0;
-    while attempts < 10 {
+    while attempts < 30 {
         if let Ok(stream) = TcpStream::connect(&addr) {
             stream.shutdown(Shutdown::Both).ok();
             return Ok(());

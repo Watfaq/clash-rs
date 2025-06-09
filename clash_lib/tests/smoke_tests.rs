@@ -7,9 +7,12 @@ mod common;
 #[tokio::test(flavor = "current_thread")]
 /// Test Shadowsocks inbound and outbound functionality
 async fn smoke_test() {
-    let wd = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config");
-    let server_config = wd.join("server.yaml");
-    let client_config = wd.join("rules.yaml");
+    let wd_server =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
+    let wd_client =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let server_config = wd_server.join("server.yaml");
+    let client_config = wd_client.join("rules.yaml");
 
     assert!(
         server_config.exists(),
@@ -22,11 +25,10 @@ async fn smoke_test() {
         client_config.to_string_lossy()
     );
 
-    let wds = wd.clone();
     std::thread::spawn(move || {
         start_clash(Options {
             config: Config::File(server_config.to_string_lossy().to_string()),
-            cwd: Some(wds.to_string_lossy().to_string()),
+            cwd: Some(wd_server.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         })
@@ -36,7 +38,7 @@ async fn smoke_test() {
     std::thread::spawn(move || {
         start_clash(Options {
             config: Config::File(client_config.to_string_lossy().to_string()),
-            cwd: Some(wd.to_string_lossy().to_string()),
+            cwd: Some(wd_client.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
         })
