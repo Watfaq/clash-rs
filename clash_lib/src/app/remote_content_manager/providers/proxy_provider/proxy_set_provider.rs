@@ -125,7 +125,8 @@ impl ProxySetProvider {
                                 }
                                 #[cfg(feature = "shadowsocks")]
                                 OutboundProxyProtocol::Ss(s) => {
-                                    let h: shadowsocks::Handler = s.try_into()?;
+                                    let h: shadowsocks::outbound::Handler =
+                                        s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Socks5(s) => {

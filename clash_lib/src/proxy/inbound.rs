@@ -1,26 +1,11 @@
-use enum_dispatch::enum_dispatch;
+use async_trait::async_trait;
 
-use super::{
-    http::HttpInbound, mixed::MixedInbound, socks::SocksInbound,
-    tunnel::TunnelInbound,
-};
-
-#[enum_dispatch(InboudHandler)]
-pub trait InboundHandlerTrait {
+#[async_trait]
+pub trait InboundHandlerTrait: Sync + Send {
     /// support tcp or not
     fn handle_tcp(&self) -> bool;
     /// support udp or not
     fn handle_udp(&self) -> bool;
-    async fn listen_tcp(&self) -> anyhow::Result<()>;
-    async fn listen_udp(&self) -> anyhow::Result<()>;
-}
-
-#[enum_dispatch]
-pub enum InboudHandler {
-    Http(HttpInbound),
-    Socks(SocksInbound),
-    Mixed(MixedInbound),
-    #[cfg(target_os = "linux")]
-    TProxy(super::tproxy::TproxyInbound),
-    Tunnel(TunnelInbound),
+    async fn listen_tcp(&self) -> std::io::Result<()>;
+    async fn listen_udp(&self) -> std::io::Result<()>;
 }

@@ -29,9 +29,14 @@ use crate::{
 /// as underlying I/O
 pub struct OutboundDatagramShadowsocks<S> {
     inner: ProxySocket<S>,
+    /// The SS server addr
     remote_addr: SocketAddr,
+
+    // for Sink
     flushed: bool,
     pkt: Option<UdpPacket>,
+
+    // for Stream
     buf: Vec<u8>,
 
     ss_control: UdpSocketControlData,
