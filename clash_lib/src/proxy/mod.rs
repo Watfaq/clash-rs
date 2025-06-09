@@ -8,13 +8,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
-use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use std::{
-    collections::HashMap,
     fmt::{Debug, Display},
     io,
     sync::Arc,

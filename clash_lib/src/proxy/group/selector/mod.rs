@@ -1,7 +1,6 @@
-use std::{collections::HashMap, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
-use erased_serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
 
@@ -24,7 +23,6 @@ use crate::{
 #[async_trait]
 pub trait SelectorControl {
     async fn select(&mut self, name: &str) -> Result<(), Error>;
-    async fn current(&self) -> String;
 }
 
 pub type ThreadSafeSelectorControl = Arc<Mutex<dyn SelectorControl + Send + Sync>>;
@@ -100,10 +98,6 @@ impl SelectorControl for Handler {
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
         }
-    }
-
-    async fn current(&self) -> String {
-        self.inner.read().await.current.to_owned()
     }
 }
 
@@ -195,7 +189,7 @@ impl GroupProxyAPIResponse for Handler {
     }
 
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
-        Some(Handler::selected_proxy(&self, false).await)
+        Some(Handler::selected_proxy(self, false).await)
     }
 
     fn icon(&self) -> Option<String> {

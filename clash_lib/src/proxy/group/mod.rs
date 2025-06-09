@@ -12,7 +12,7 @@ pub mod urltest;
 
 /// Convenience trait for group proxy serializing API responses.
 #[async_trait]
-pub(crate) trait GroupProxyAPIResponse: OutboundHandler {
+pub trait GroupProxyAPIResponse: OutboundHandler {
     /// Returns all proxies in the group, which are usually stored in a list of
     /// ProxyProviders.
     async fn get_proxies(&self) -> Vec<AnyOutboundHandler>;

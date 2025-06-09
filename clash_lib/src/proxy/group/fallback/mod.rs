@@ -144,11 +144,11 @@ impl OutboundHandler for Handler {
 #[async_trait]
 impl GroupProxyAPIResponse for Handler {
     async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
-        Handler::get_proxies(&self, false).await
+        Handler::get_proxies(self, false).await
     }
 
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
-        Some(Handler::find_alive_proxy(&self, false).await)
+        Some(Handler::find_alive_proxy(self, false).await)
     }
 
     fn icon(&self) -> Option<String> {

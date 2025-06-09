@@ -26,7 +26,7 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        OutboundType, fallback,
+        fallback,
         group::smart,
         loadbalance, selector, socks, trojan,
         utils::{DirectConnector, ProxyConnector},

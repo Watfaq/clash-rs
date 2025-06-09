@@ -1,9 +1,8 @@
 mod helpers;
 
 use async_trait::async_trait;
-use erased_serde::Serialize;
 use helpers::strategy_sticky_session;
-use std::{collections::HashMap, io, sync::Arc};
+use std::{io, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::debug;
 
@@ -161,7 +160,7 @@ impl OutboundHandler for Handler {
 #[async_trait]
 impl GroupProxyAPIResponse for Handler {
     async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
-        Handler::get_proxies(&self, false).await
+        Handler::get_proxies(self, false).await
     }
 
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
