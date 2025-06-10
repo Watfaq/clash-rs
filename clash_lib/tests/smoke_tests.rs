@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod common;
 
 #[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
 /// Test Shadowsocks inbound and outbound functionality
 async fn smoke_test() {
     let wd_server =

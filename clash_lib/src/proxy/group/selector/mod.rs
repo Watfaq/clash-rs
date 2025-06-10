@@ -133,7 +133,6 @@ impl OutboundHandler for Handler {
         let s = selected.connect_stream(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
-        s.append_to_chain(selected.name()).await;
 
         Ok(s)
     }
@@ -147,7 +146,6 @@ impl OutboundHandler for Handler {
         let s = selected.connect_datagram(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
-        s.append_to_chain(selected.name()).await;
 
         Ok(s)
     }

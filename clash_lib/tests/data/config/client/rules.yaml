@@ -76,9 +76,23 @@ proxies:
     password: "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU="
     udp: true
 
+proxy-groups:
+  - name: test 🌏
+    type: select
+    proxies:
+      - url-test
+
+  - name: url-test
+    type: url-test
+    url: 'https://www.gstatic.com/generate_204'
+    interval: 300
+    proxies:
+      - DIRECT
+      - ss-simple
 
 rules:
   - IP-CIDR,1.1.1.1/32,ss-simple
   - IP-CIDR,8.8.8.8/32,ss-simple
   - DOMAIN,example.com,ss-simple
+  - DOMAIN,httpbin.yba.dev,test 🌏
   - MATCH, ss-simple

@@ -112,7 +112,6 @@ impl OutboundHandler for Handler {
         let s = proxy.connect_stream(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
-        s.append_to_chain(proxy.name()).await;
 
         Ok(s)
     }
@@ -130,7 +129,7 @@ impl OutboundHandler for Handler {
         let s = proxy.connect_datagram(sess, resolver).await?;
 
         s.append_to_chain(self.name()).await;
-        s.append_to_chain(proxy.name()).await;
+
         Ok(s)
     }
 

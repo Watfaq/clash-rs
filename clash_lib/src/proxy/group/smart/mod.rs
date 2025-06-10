@@ -508,7 +508,7 @@ impl Handler {
                             );
 
                             stream.append_to_chain(self.name()).await;
-                            stream.append_to_chain(&name).await;
+
                             return Ok(stream);
                         }
                         Err(e) => {
@@ -691,8 +691,9 @@ impl OutboundHandler for Handler {
         if let Some(proxy) = self.pick_smart(sess).await {
             debug!("{} use proxy {} (smart)", self.name(), proxy.name());
             let s = proxy.connect_datagram(sess, resolver).await?;
+
             s.append_to_chain(self.name()).await;
-            s.append_to_chain(proxy.name()).await;
+
             Ok(s)
         } else {
             Err(io::Error::new(

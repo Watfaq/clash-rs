@@ -155,8 +155,9 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedStream> {
         let fastest = self.fastest(false).await;
         let s = fastest.connect_stream(sess, resolver).await?;
+
         s.append_to_chain(self.name()).await;
-        s.append_to_chain(fastest.name()).await;
+
         Ok(s)
     }
 
@@ -168,8 +169,9 @@ impl OutboundHandler for Handler {
     ) -> io::Result<BoxedChainedDatagram> {
         let fastest = self.fastest(false).await;
         let d = fastest.connect_datagram(sess, resolver).await?;
+
         d.append_to_chain(self.name()).await;
-        d.append_to_chain(fastest.name()).await;
+
         Ok(d)
     }
 
