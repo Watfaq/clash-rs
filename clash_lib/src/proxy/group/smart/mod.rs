@@ -8,14 +8,8 @@
 //! - [`stats`] - Statistics collection and performance metrics
 //! - [`state`] - Centralized state management
 
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    sync::Arc,
-    time::Instant,
-};
-
-use erased_serde::Serialize;
+use async_trait::async_trait;
+use std::{collections::HashSet, io, sync::Arc, time::Instant};
 use tracing::{debug, info};
 
 use crate::{
@@ -38,6 +32,7 @@ pub mod penalty;
 pub mod state;
 pub mod stats;
 
+use crate::proxy::group::GroupProxyAPIResponse;
 pub use state::SmartState;
 
 /// Error type for smart group failures
@@ -507,10 +502,13 @@ impl Handler {
                                  {:.2}ms, attempts: {}",
                                 self.name(),
                                 site,
-                                name,
+                                &name,
                                 delay,
                                 retries + 1
                             );
+
+                            stream.append_to_chain(self.name()).await;
+
                             return Ok(stream);
                         }
                         Err(e) => {
@@ -645,7 +643,7 @@ impl Handler {
     }
 }
 impl DialWithConnector for Handler {}
-#[async_trait::async_trait]
+#[async_trait]
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
@@ -692,7 +690,11 @@ impl OutboundHandler for Handler {
         // For UDP we use the best proxy without retries for simplicity
         if let Some(proxy) = self.pick_smart(sess).await {
             debug!("{} use proxy {} (smart)", self.name(), proxy.name());
-            proxy.connect_datagram(sess, resolver).await
+            let s = proxy.connect_datagram(sess, resolver).await?;
+
+            s.append_to_chain(self.name()).await;
+
+            Ok(s)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -724,16 +726,19 @@ impl OutboundHandler for Handler {
         }
     }
 
-    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let all = get_proxies_from_providers(&self.providers, false).await;
-        let mut m = HashMap::new();
-        m.insert("type".to_string(), Box::new(self.proto()) as _);
-        m.insert(
-            "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
-                as _,
-        );
-        m
+    fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl GroupProxyAPIResponse for Handler {
+    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
+        Handler::get_proxies(self, false).await
+    }
+
+    async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
+        None
     }
 
     fn icon(&self) -> Option<String> {

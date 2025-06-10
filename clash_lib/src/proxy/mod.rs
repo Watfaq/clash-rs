@@ -8,13 +8,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
-use erased_serde::Serialize as ESerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use std::{
-    collections::HashMap,
     fmt::{Debug, Display},
     io,
     sync::Arc,
@@ -62,6 +60,7 @@ mod options;
 mod transport;
 pub mod tunnel;
 
+use crate::proxy::group::GroupProxyAPIResponse;
 pub use options::HandlerCommonOptions;
 
 #[cfg(test)]
@@ -227,17 +226,7 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         ))
     }
 
-    /// for API
-    /// the map only contains basic information
-    /// to populate history/liveness information, use the proxy_manager
-    async fn as_map(&self) -> HashMap<String, Box<dyn ESerialize + Send>> {
-        let mut m = HashMap::new();
-        m.insert("type".to_string(), Box::new(self.proto()) as _);
-
-        m
-    }
-
-    fn icon(&self) -> Option<String> {
+    fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
         None
     }
 }
