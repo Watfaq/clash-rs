@@ -23,6 +23,8 @@ use crate::{
 #[async_trait]
 pub trait SelectorControl {
     async fn select(&mut self, name: &str) -> Result<(), Error>;
+    #[cfg(test)]
+    async fn current(&self) -> String;
 }
 
 pub type ThreadSafeSelectorControl = Arc<Mutex<dyn SelectorControl + Send + Sync>>;
@@ -98,6 +100,11 @@ impl SelectorControl for Handler {
         } else {
             Err(Error::Operation(format!("proxy {} not found", name)))
         }
+    }
+
+    #[cfg(test)]
+    async fn current(&self) -> String {
+        self.inner.read().await.current.to_owned()
     }
 }
 
