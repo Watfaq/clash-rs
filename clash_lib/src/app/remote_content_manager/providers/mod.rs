@@ -22,6 +22,8 @@ pub enum ProviderVehicleType {
     File,
     Http,
     Compatible,
+    Inline, /* InlineRuleProvider doesn't have a vehicle type, but we use it for
+             * compatibility */
 }
 
 impl Display for ProviderVehicleType {
@@ -30,6 +32,7 @@ impl Display for ProviderVehicleType {
             ProviderVehicleType::File => write!(f, "File"),
             ProviderVehicleType::Http => write!(f, "HTTP"),
             ProviderVehicleType::Compatible => write!(f, "Compatible"),
+            ProviderVehicleType::Inline => write!(f, "Inline"),
         }
     }
 }

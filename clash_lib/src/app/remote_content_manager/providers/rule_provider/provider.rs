@@ -97,10 +97,15 @@ type RuleParser =
     Box<dyn Fn(&[u8]) -> anyhow::Result<RuleContent> + Send + Sync + 'static>;
 
 pub struct RuleProviderImpl {
-    fetcher: Fetcher<RuleUpdater, RuleParser>,
-    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
+    name: String,
+    fetcher: Option<Fetcher<RuleUpdater, RuleParser>>,
+    inner: Arc<tokio::sync::RwLock<Inner>>,
     behavior: RuleSetBehavior,
     format: RuleSetFormat,
+    inline_rules: Option<Vec<String>>,
+
+    mmdb: Arc<Mmdb>,
+    geodata: Arc<GeoData>,
 }
 
 impl RuleProviderImpl {
@@ -108,10 +113,12 @@ impl RuleProviderImpl {
         name: String,
         behavior: RuleSetBehavior,
         format: RuleSetFormat,
-        interval: Duration,
-        vehicle: ThreadSafeProviderVehicle,
+        // InlineRuleProvider doesn't have an interval and vehicle
+        interval: Option<Duration>,
+        vehicle: Option<ThreadSafeProviderVehicle>,
         mmdb: Arc<Mmdb>,
         geodata: Arc<GeoData>,
+        inline_rules: Option<Vec<String>>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
@@ -142,6 +149,9 @@ impl RuleProviderImpl {
         let n_parser = name.clone(); // Clone name specifically for the parser closure
         let current_behavior = behavior;
         let current_format = format;
+        let inline_rules_clone = inline_rules.clone();
+        let mmdb_clone = mmdb.clone();
+        let geodata_clone = geodata.clone();
         let parser: RuleParser =
             Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
                 match current_format {
@@ -153,13 +163,18 @@ impl RuleProviderImpl {
                                 n_parser, x
                             ))
                         })?;
+
+                        let mut payload =
+                            inline_rules_clone.clone().unwrap_or_default();
+                        payload.extend(scheme.payload);
+
                         // For Yaml, we still need to convert Vec<String> to
                         // RuleContent
                         make_rules(
                             current_behavior,
-                            scheme.payload,
-                            mmdb.clone(),
-                            geodata.clone(),
+                            payload,
+                            mmdb_clone.clone(),
+                            geodata_clone.clone(),
                         )
                         .map_err(anyhow::Error::new)
                     }
@@ -171,7 +186,7 @@ impl RuleProviderImpl {
                             ))
                         })?;
 
-                        let payload: Vec<String> = text
+                        let mut payload: Vec<String> = text
                             .lines()
                             .map(str::trim)
                             .filter(|line| {
@@ -181,12 +196,17 @@ impl RuleProviderImpl {
                             })
                             .map(String::from)
                             .collect();
+
+                        if let Some(inline) = inline_rules_clone.clone() {
+                            payload.extend(inline);
+                        }
+
                         // For Text, we also convert Vec<String> to RuleContent
                         make_rules(
                             current_behavior,
                             payload,
-                            mmdb.clone(),
-                            geodata.clone(),
+                            mmdb_clone.clone(),
+                            geodata_clone.clone(),
                         )
                         .map_err(anyhow::Error::new)
                     }
@@ -207,13 +227,30 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
+        let fetcher = if let Some(interval) = interval
+            && let Some(vehicle) = vehicle
+        {
+            Some(Fetcher::new(
+                name.clone(),
+                interval,
+                vehicle,
+                parser,
+                Some(updater),
+            ))
+        } else {
+            None
+        };
 
         Self {
+            name,
             fetcher,
             inner,
             behavior,
             format,
+            inline_rules,
+
+            mmdb,
+            geodata,
         }
     }
 }
@@ -259,11 +296,15 @@ impl RuleProvider for RuleProviderImpl {
 #[async_trait]
 impl Provider for RuleProviderImpl {
     fn name(&self) -> &str {
-        self.fetcher.name()
+        &self.name
     }
 
     fn vehicle_type(&self) -> ProviderVehicleType {
-        self.fetcher.vehicle_type()
+        if let Some(fetcher) = &self.fetcher {
+            fetcher.vehicle_type()
+        } else {
+            ProviderVehicleType::Inline
+        }
     }
 
     fn typ(&self) -> ProviderType {
@@ -271,24 +312,56 @@ impl Provider for RuleProviderImpl {
     }
 
     async fn initialize(&self) -> std::io::Result<()> {
-        let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
-        if let Some(updater) = self.fetcher.on_update.as_ref() {
-            let f = updater.lock().await;
-            f(ele).await; // Directly pass RuleContent
+
+        if let Some(fetcher) = &self.fetcher {
+            trace!("initializing rule provider {} with fetcher", self.name());
+            let ele = fetcher.initial().await.map_err(map_io_error)?;
+            if let Some(updater) = fetcher.on_update.as_ref() {
+                updater(ele).await; // Directly pass RuleContent
+            }
+        } else {
+            trace!("initializing inline rule provider {}", self.name());
+            let rules = make_rules(
+                self.behavior,
+                self.inline_rules.clone().unwrap_or_default(),
+                self.mmdb.clone(),
+                self.geodata.clone(),
+            );
+
+            match rules {
+                Ok(content) => {
+                    let mut inner = self.inner.write().await;
+                    inner.content = content;
+                }
+                Err(e) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "failed to initialize inline rule provider {}: {}",
+                            self.name(),
+                            e
+                        ),
+                    ));
+                }
+            }
         }
         Ok(())
     }
 
     async fn update(&self) -> std::io::Result<()> {
-        let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
-        debug!("rule provider {} updated. same? {}", self.name(), same);
-        if !same {
-            if let Some(updater) = self.fetcher.on_update.as_ref() {
-                let f = updater.lock().await;
-                f(ele).await; // Directly pass RuleContent
+        if let Some(fetcher) = &self.fetcher {
+            let (ele, same) = fetcher.update().await.map_err(map_io_error)?;
+            debug!("rule provider {} updated. same? {}", self.name(), same);
+            if !same {
+                if let Some(updater) = fetcher.on_update.as_ref() {
+                    updater(ele).await; // Directly pass RuleContent
+                }
             }
+        } else {
+            trace!("no fetcher for rule provider {}", self.name());
         }
+
         Ok(())
     }
 
@@ -302,10 +375,9 @@ impl Provider for RuleProviderImpl {
             Box::new(self.vehicle_type().to_string()),
         );
 
-        m.insert(
-            "updatedAt".to_owned(),
-            Box::new(self.fetcher.updated_at().await),
-        );
+        if let Some(fetcher) = &self.fetcher {
+            m.insert("updatedAt".to_owned(), Box::new(fetcher.updated_at().await));
+        }
 
         m.insert("behavior".to_owned(), Box::new(self.behavior().to_string()));
         m.insert("format".to_owned(), Box::new(self.format().to_string()));

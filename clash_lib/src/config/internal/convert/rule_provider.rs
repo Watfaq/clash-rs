@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize as _, de::value::MapDeserializer};
-use serde_yaml::Value;
 
 use crate::{
     Error,
@@ -10,7 +9,7 @@ use crate::{
 };
 
 pub(super) fn convert(
-    before: Option<HashMap<String, HashMap<String, Value>>>,
+    before: Option<HashMap<String, HashMap<String, serde_yaml::Value>>>,
 ) -> HashMap<String, RuleProviderDef> {
     before
         .map(|m| {
@@ -55,10 +54,12 @@ pub(super) fn convert(
         .unwrap_or_default()
 }
 
-impl TryFrom<HashMap<String, Value>> for RuleProviderDef {
+impl TryFrom<HashMap<String, serde_yaml::Value>> for RuleProviderDef {
     type Error = crate::Error;
 
-    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+    fn try_from(
+        mapping: HashMap<String, serde_yaml::Value>,
+    ) -> Result<Self, Self::Error> {
         let name = mapping
             .get("name")
             .and_then(|x| x.as_str())

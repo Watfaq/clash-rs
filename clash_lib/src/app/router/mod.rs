@@ -107,8 +107,8 @@ impl Router {
                 }
             }
 
-            let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
-            if let (Some(ip), Some(asn_mmdb)) = (mayby_ip, &self.asn_mmdb) {
+            let maybe_ip = sess.resolved_ip.or(sess.destination.ip());
+            if let (Some(ip), Some(asn_mmdb)) = (maybe_ip, &self.asn_mmdb) {
                 // try simplified mmdb first
                 let rv = asn_mmdb.lookup_country(ip);
                 if let Ok(country) = rv {
@@ -172,10 +172,11 @@ impl Router {
                         name.clone(),
                         http.behavior,
                         format,
-                        Duration::from_secs(http.interval),
-                        Arc::new(vehicle),
+                        Some(Duration::from_secs(http.interval)),
+                        Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
+                        http.inline_rules,
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -194,10 +195,25 @@ impl Router {
                         name.clone(),
                         file.behavior,
                         format,
-                        Duration::from_secs(file.interval.unwrap_or_default()),
-                        Arc::new(vehicle),
+                        Some(Duration::from_secs(file.interval.unwrap_or_default())),
+                        Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
+                        file.inline_rules,
+                    );
+
+                    rule_provider_registry.insert(name, Arc::new(provider));
+                }
+                RuleProviderDef::Inline(inline) => {
+                    let provider = RuleProviderImpl::new(
+                        name.clone(),
+                        inline.behavior,
+                        Default::default(), // always yaml for inline rules
+                        None,
+                        None,
+                        mmdb.clone(),
+                        geodata.clone(),
+                        Some(inline.inline_rules),
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
