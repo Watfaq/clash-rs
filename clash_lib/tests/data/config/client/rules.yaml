@@ -88,7 +88,6 @@ proxy-groups:
     interval: 300
     proxies:
       - DIRECT
-      - ss-simple
 
 rules:
   - IP-CIDR,1.1.1.1/32,ss-simple
