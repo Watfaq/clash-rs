@@ -6,7 +6,7 @@ use crate::{
         attribute::{AndAttrMatcher, AttrMatcher},
         matcher_group::{DomainGroupMatcher, SuccinctMatcherGroup},
     },
-    common::geodata::GeoData,
+    common::geodata::GeoDataLookup,
 };
 
 mod attribute;
@@ -51,7 +51,7 @@ impl GeoSiteMatcher {
     pub fn new(
         country_code: String,
         target: String,
-        loader: &GeoData,
+        loader: &GeoDataLookup,
     ) -> anyhow::Result<Self> {
         let (not, code, attr_matcher) =
             parse(&country_code).ok_or(Error::InvalidConfig(
@@ -123,7 +123,11 @@ mod tests {
                 DomainGroupMatcher, SuccinctMatcherGroup,
             },
         },
-        common::{geodata::GeoData, http::new_http_client, utils::download},
+        common::{
+            geodata::{GeoData, GeoDataLookupTrait},
+            http::new_http_client,
+            utils::download,
+        },
     };
 
     const GEOSITE_URL: &str =

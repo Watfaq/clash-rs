@@ -24,7 +24,7 @@ use tracing::{error, info, trace};
 
 mod rules;
 
-use crate::common::{geodata::GeoData, mmdb::MmdbLookup};
+use crate::common::{geodata::GeoDataLookup, mmdb::MmdbLookup};
 pub use rules::RuleMatcher;
 
 pub struct Router {
@@ -45,7 +45,7 @@ impl Router {
         dns_resolver: ThreadSafeDNSResolver,
         country_mmdb: MmdbLookup,
         asn_mmdb: Option<MmdbLookup>,
-        geodata: Arc<GeoData>,
+        geodata: GeoDataLookup,
         cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
@@ -140,7 +140,7 @@ impl Router {
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
         mmdb: MmdbLookup,
-        geodata: Arc<GeoData>,
+        geodata: GeoDataLookup,
         cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
@@ -241,7 +241,7 @@ impl Router {
 pub fn map_rule_type(
     rule_type: RuleType,
     mmdb: MmdbLookup,
-    geodata: Arc<GeoData>,
+    geodata: GeoDataLookup,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
     match rule_type {
@@ -300,12 +300,9 @@ pub fn map_rule_type(
             target,
             country_code,
         } => {
-            let res = rules::geodata::GeoSiteMatcher::new(
-                country_code,
-                target,
-                geodata.as_ref(),
-            )
-            .unwrap();
+            let res =
+                rules::geodata::GeoSiteMatcher::new(country_code, target, &geodata)
+                    .unwrap();
             Box::new(res) as _
         }
         RuleType::SRCPort { target, port } => Box::new(rules::port::Port {

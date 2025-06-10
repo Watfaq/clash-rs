@@ -23,7 +23,8 @@ use crate::{
         router::{RuleMatcher, map_rule_type},
     },
     common::{
-        errors::map_io_error, geodata::GeoData, mmdb::MmdbLookup, succinct_set, trie,
+        errors::map_io_error, geodata::GeoDataLookup, mmdb::MmdbLookup,
+        succinct_set, trie,
     },
     config::internal::rule::RuleType,
     session::Session,
@@ -104,7 +105,7 @@ pub struct RuleProviderImpl {
     inline_rules: Option<Vec<String>>,
 
     mmdb: MmdbLookup,
-    geodata: Arc<GeoData>,
+    geodata: GeoDataLookup,
 }
 
 impl RuleProviderImpl {
@@ -117,7 +118,7 @@ impl RuleProviderImpl {
         interval: Option<Duration>,
         vehicle: Option<ThreadSafeProviderVehicle>,
         mmdb: MmdbLookup,
-        geodata: Arc<GeoData>,
+        geodata: GeoDataLookup,
         inline_rules: Option<Vec<String>>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
@@ -393,7 +394,7 @@ fn make_rules(
     behavior: RuleSetBehavior,
     rules: Vec<String>, // Input is Vec<String> for Yaml/Text
     mmdb: MmdbLookup,
-    geodata: Arc<GeoData>,
+    geodata: GeoDataLookup,
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
@@ -428,7 +429,7 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
 fn make_classical_rules(
     rules: Vec<String>,
     mmdb: MmdbLookup,
-    geodata: Arc<GeoData>,
+    geodata: GeoDataLookup,
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
