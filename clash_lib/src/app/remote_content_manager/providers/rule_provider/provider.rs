@@ -483,7 +483,7 @@ mod tests {
             Arc::new(mock_mmdb),
             Arc::new(mock_geodata),
             Some(vec![
-                "+.google.com".to_owned()
+                "DOMAIN-SUFFIX, google.com".to_owned()
             ])
         );
 
