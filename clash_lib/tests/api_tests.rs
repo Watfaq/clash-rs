@@ -107,7 +107,11 @@ async fn test_connections_returns_proxy_chain_names() {
 
     assert_eq!(
         chains.as_array().unwrap(),
-        &["DIRECT", "url-test", "test 🌏"],
+        &[
+            "DIRECT".to_string(),
+            "url-test".to_string(),
+            "test 🌏".to_string()
+        ],
         "Chains do not match expected values"
     );
 }
