@@ -25,7 +25,8 @@ impl GeoDataLookupTrait for GeoData {
         self.cache
             .entry
             .iter()
-            .find(|x| x.country_code.eq_ignore_ascii_case(list)).cloned()
+            .find(|x| x.country_code.eq_ignore_ascii_case(list))
+            .cloned()
     }
 }
 

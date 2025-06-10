@@ -197,7 +197,8 @@ impl Router {
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         inline.behavior,
-                        Default::default(), // format really doesn't matter for inline rules
+                        Default::default(), /* format really doesn't matter for
+                                             * inline rules */
                         None,
                         None,
                         mmdb.clone(),

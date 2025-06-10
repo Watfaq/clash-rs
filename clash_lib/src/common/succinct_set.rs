@@ -98,7 +98,7 @@ impl DomainSet {
                         }
                         return false;
                     }
-                    
+
                     if self.labels.is_empty() {
                         return false;
                     }

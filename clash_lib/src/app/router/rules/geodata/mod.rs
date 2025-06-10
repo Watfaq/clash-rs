@@ -57,13 +57,10 @@ impl GeoSiteMatcher {
             parse(&country_code).ok_or(Error::InvalidConfig(
                 "invalid geosite matcher, country code is empty".to_owned(),
             ))?;
-        let list =
-            loader
-                .get(&code)
-                .ok_or(Error::InvalidConfig(format!(
-                    "geosite matcher, country code {} not found",
-                    code
-                )))?;
+        let list = loader.get(&code).ok_or(Error::InvalidConfig(format!(
+            "geosite matcher, country code {} not found",
+            code
+        )))?;
         let domains = list
             .domain
             .into_iter()
