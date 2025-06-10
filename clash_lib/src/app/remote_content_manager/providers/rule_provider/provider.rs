@@ -57,8 +57,11 @@ impl Display for RuleSetFormat {
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleSetBehavior {
+    /// Rule contents will be built into a DomainSet
     Domain,
+    /// Rule contents will be built into a IpCidr Trie
     Ipcidr,
+    /// Classical line based rules
     Classical,
 }
 
@@ -455,6 +458,81 @@ fn make_classical_rules(
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio_test::assert_ok;
+    use crate::app::remote_content_manager::providers::{MockProviderVehicle, Provider, ProviderVehicleType};
+    use crate::app::remote_content_manager::providers::rule_provider::{RuleProviderImpl, RuleSetBehavior, RuleSetFormat};
+    use crate::app::remote_content_manager::providers::rule_provider::provider::RuleProvider;
+    use crate::common::geodata::MockGeoDataLookupTrait;
+    use crate::common::mmdb::MockMmdbLookupTrait;
+    use crate::session::{Session, SocksAddr};
+
     #[tokio::test]
-    async fn test_file_provider_with_inline_rules() {}
+    async fn test_inline_provider(){
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+
+        let provider = RuleProviderImpl::new(
+            "test".to_string(),
+            RuleSetBehavior::Classical,
+            RuleSetFormat::Text,
+            None,
+            None,
+            Arc::new(mock_mmdb),
+            Arc::new(mock_geodata),
+            Some(vec![
+                "+.google.com".to_owned()
+            ])
+        );
+
+        assert_ok!( provider.initialize().await);
+
+        assert!(provider.search(&Session{
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_file_provider_with_inline_rules() {
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+        let mut mock_vehicle = MockProviderVehicle::new();
+
+        let mock_file = std::env::temp_dir().join("mock_provider_vehicle");
+        if Path::new(mock_file.to_str().unwrap()).exists() {
+            std::fs::remove_file(&mock_file).unwrap();
+        }
+        std::fs::write(&mock_file, "twitter.com").unwrap();
+
+        mock_vehicle
+            .expect_path()
+            .return_const(mock_file.to_str().unwrap().to_owned());
+        mock_vehicle.expect_read().returning(|| Ok("twitter.com".into()));
+        mock_vehicle
+            .expect_typ()
+            .return_const(ProviderVehicleType::File);
+
+        let provider = RuleProviderImpl::new(
+            "test".to_string(),
+            RuleSetBehavior::Domain,
+            RuleSetFormat::Text,
+            Some(Duration::from_secs(5)),
+            Some(Arc::new(mock_vehicle)),
+            Arc::new(mock_mmdb),
+            Arc::new(mock_geodata),
+            Some(vec![
+                "+.google.com".to_owned()
+            ])
+        );
+
+        assert_ok!( provider.initialize().await);
+
+        assert!(provider.search(&Session{
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        }));
+    }
 }

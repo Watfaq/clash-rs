@@ -15,16 +15,17 @@ pub struct GeoData {
 
 pub type GeoDataLookup = std::sync::Arc<dyn GeoDataLookupTrait + Send + Sync>;
 
+#[cfg_attr(test, mockall::automock)]
 pub trait GeoDataLookupTrait {
-    fn get(&self, list: &str) -> Option<&geodata_proto::GeoSite>;
+    fn get(&self, list: &str) -> Option<geodata_proto::GeoSite>;
 }
 
 impl GeoDataLookupTrait for GeoData {
-    fn get(&self, list: &str) -> Option<&geodata_proto::GeoSite> {
+    fn get(&self, list: &str) -> Option<geodata_proto::GeoSite> {
         self.cache
             .entry
             .iter()
-            .find(|x| x.country_code.eq_ignore_ascii_case(list))
+            .find(|x| x.country_code.eq_ignore_ascii_case(list)).cloned()
     }
 }
 

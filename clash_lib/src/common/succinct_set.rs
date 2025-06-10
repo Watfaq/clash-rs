@@ -98,6 +98,10 @@ impl DomainSet {
                         }
                         return false;
                     }
+                    
+                    if self.labels.is_empty() {
+                        return false;
+                    }
 
                     if self.labels[bm_idx as usize - node_id] == COMPLEX_WILDCARD {
                         return true;
@@ -332,6 +336,9 @@ impl<T> From<StringTrie<T>> for DomainSet {
 }
 
 fn get_bit(bm: &[u64], i: isize) -> bool {
+    if bm.len() == 0 {
+        return false;
+    }
     bm[(i >> 6) as usize] & (1 << (i & 63) as usize) != 0
 }
 

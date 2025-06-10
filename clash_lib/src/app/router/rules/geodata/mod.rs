@@ -60,7 +60,6 @@ impl GeoSiteMatcher {
         let list =
             loader
                 .get(&code)
-                .cloned()
                 .ok_or(Error::InvalidConfig(format!(
                     "geosite matcher, country code {} not found",
                     code
@@ -191,7 +190,7 @@ mod tests {
         for suite in suites.iter() {
             // the same code of GeoMatcher
             let (not, code, attr_matcher) = parse(suite.country_code).unwrap();
-            let list = loader.get(&code).cloned().unwrap();
+            let list = loader.get(&code).unwrap();
             let domains = list
                 .domain
                 .into_iter()
