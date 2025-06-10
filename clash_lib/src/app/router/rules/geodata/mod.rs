@@ -6,7 +6,7 @@ use crate::{
         attribute::{AndAttrMatcher, AttrMatcher},
         matcher_group::{DomainGroupMatcher, SuccinctMatcherGroup},
     },
-    common::geodata::GeoData,
+    common::geodata::GeoDataLookup,
 };
 
 mod attribute;
@@ -51,20 +51,16 @@ impl GeoSiteMatcher {
     pub fn new(
         country_code: String,
         target: String,
-        loader: &GeoData,
+        loader: &GeoDataLookup,
     ) -> anyhow::Result<Self> {
         let (not, code, attr_matcher) =
             parse(&country_code).ok_or(Error::InvalidConfig(
                 "invalid geosite matcher, country code is empty".to_owned(),
             ))?;
-        let list =
-            loader
-                .get(&code)
-                .cloned()
-                .ok_or(Error::InvalidConfig(format!(
-                    "geosite matcher, country code {} not found",
-                    code
-                )))?;
+        let list = loader.get(&code).ok_or(Error::InvalidConfig(format!(
+            "geosite matcher, country code {} not found",
+            code
+        )))?;
         let domains = list
             .domain
             .into_iter()
@@ -123,7 +119,11 @@ mod tests {
                 DomainGroupMatcher, SuccinctMatcherGroup,
             },
         },
-        common::{geodata::GeoData, http::new_http_client, utils::download},
+        common::{
+            geodata::{GeoData, GeoDataLookupTrait},
+            http::new_http_client,
+            utils::download,
+        },
     };
 
     const GEOSITE_URL: &str =
@@ -187,7 +187,7 @@ mod tests {
         for suite in suites.iter() {
             // the same code of GeoMatcher
             let (not, code, attr_matcher) = parse(suite.country_code).unwrap();
-            let list = loader.get(&code).cloned().unwrap();
+            let list = loader.get(&code).unwrap();
             let domains = list
                 .domain
                 .into_iter()

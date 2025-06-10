@@ -7,7 +7,7 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
 
 use crate::common::utils;
@@ -26,9 +26,9 @@ pub struct Fetcher<U, P> {
     interval: Duration,
     vehicle: ThreadSafeProviderVehicle,
     ticker_interval: Duration,
-    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
-    parser: Arc<Mutex<P>>,
-    pub on_update: Option<Arc<Mutex<U>>>,
+    inner: Arc<RwLock<Inner>>,
+    parser: Arc<P>,
+    pub on_update: Option<Arc<U>>,
 }
 
 impl<T, U, P> Fetcher<U, P>
@@ -54,8 +54,8 @@ where
                 hash: [0; 16],
                 thread_handle: None,
             })),
-            parser: Arc::new(Mutex::new(parser)),
-            on_update: on_update.map(|f| Arc::new(Mutex::new(f))),
+            parser: Arc::new(parser),
+            on_update: on_update.map(|f| Arc::new(f)),
         }
     }
 
@@ -63,7 +63,7 @@ where
         self.name.as_str()
     }
 
-    pub fn vehicle_type(&self) -> super::ProviderVehicleType {
+    pub fn vehicle_type(&self) -> ProviderVehicleType {
         self.vehicle.typ()
     }
 
@@ -93,9 +93,9 @@ where
             Err(_) => self.vehicle.read().await?,
         };
 
-        let parser_guard = self.parser.lock().await;
+        let parser_guard = &self.parser;
 
-        let proxies = match (parser_guard)(&content) {
+        let items = match (parser_guard)(&content) {
             Ok(proxies) => proxies,
             Err(e) => {
                 if !is_local {
@@ -130,7 +130,7 @@ where
             .await;
         }
 
-        Ok(proxies)
+        Ok(items)
     }
 
     pub async fn update(&self) -> anyhow::Result<(T, bool)> {
@@ -145,11 +145,11 @@ where
     async fn update_inner(
         inner: Arc<RwLock<Inner>>,
         vehicle: ThreadSafeProviderVehicle,
-        parser: Arc<Mutex<P>>,
+        parser: Arc<P>,
     ) -> anyhow::Result<(T, bool)> {
         let mut this = inner.write().await;
         let content = vehicle.read().await?;
-        let proxies = (parser.lock().await)(&content)?;
+        let proxies = parser(&content)?;
 
         let now = SystemTime::now();
         let hash = utils::md5(&content)[..16]
@@ -225,7 +225,7 @@ where
 
                     if let Some(on_update) = on_update {
                         info!("fetcher {} updated", &name);
-                        on_update.lock().await(elm).await;
+                        on_update(elm).await;
                     }
                 };
 

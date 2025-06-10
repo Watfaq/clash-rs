@@ -1,6 +1,5 @@
-use std::{fs, net::IpAddr, path::Path};
-
 use maxminddb::geoip2;
+use std::{fs, net::IpAddr, path::Path, sync::Arc};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -12,6 +11,61 @@ use super::http::HttpClient;
 
 pub struct Mmdb {
     reader: maxminddb::Reader<Vec<u8>>,
+}
+
+pub type MmdbLookup = Arc<dyn MmdbLookupTrait + Send + Sync>;
+
+// mockall can't seem to mock the return value mmdb::Country<'a> with lifetime
+// issue
+#[derive(Debug)]
+pub struct MmdbLookupCountry {
+    pub country_code: String,
+}
+
+#[derive(Debug)]
+pub struct MmdbLookupAsn {
+    pub asn_name: String,
+}
+
+#[cfg_attr(test, mockall::automock)]
+pub trait MmdbLookupTrait {
+    fn lookup_country(&self, ip: IpAddr) -> std::io::Result<MmdbLookupCountry>;
+    fn lookup_asn(&self, ip: IpAddr) -> std::io::Result<MmdbLookupAsn>;
+}
+
+impl MmdbLookupTrait for Mmdb {
+    fn lookup_country(&self, ip: IpAddr) -> std::io::Result<MmdbLookupCountry> {
+        self.reader
+            .lookup::<geoip2::Country>(ip)
+            .map_err(map_io_error)?
+            .map(|c| MmdbLookupCountry {
+                country_code: c
+                    .country
+                    .and_then(|x| x.iso_code)
+                    .unwrap_or_default()
+                    .to_string(),
+            })
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "country not found",
+            ))
+    }
+
+    fn lookup_asn(&self, ip: IpAddr) -> std::io::Result<MmdbLookupAsn> {
+        self.reader
+            .lookup::<geoip2::Asn>(ip)
+            .map_err(map_io_error)?
+            .map(|c| MmdbLookupAsn {
+                asn_name: c
+                    .autonomous_system_organization
+                    .unwrap_or_default()
+                    .to_string(),
+            })
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "asn not found",
+            ))
+    }
 }
 
 impl Mmdb {
@@ -90,29 +144,5 @@ impl Mmdb {
                 ))),
             },
         }
-    }
-
-    pub fn lookup_country(&self, ip: IpAddr) -> std::io::Result<geoip2::Country> {
-        self.reader
-            .lookup::<geoip2::Country>(ip)
-            .map_err(map_io_error)
-            .and_then(|c| {
-                c.ok_or(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "country not found",
-                ))
-            })
-    }
-
-    pub fn lookup_asn(&self, ip: IpAddr) -> std::io::Result<geoip2::Asn> {
-        self.reader
-            .lookup::<geoip2::Asn>(ip)
-            .map_err(map_io_error)
-            .and_then(|c| {
-                c.ok_or(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "asn not found",
-                ))
-            })
     }
 }

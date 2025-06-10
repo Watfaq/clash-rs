@@ -202,7 +202,7 @@ impl Provider for ProxySetProvider {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.as_ref() {
-            updater.lock().await(ele).await;
+            updater(ele).await;
         }
         Ok(())
     }
@@ -217,8 +217,7 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                let f = updater.lock().await;
-                f(ele).await;
+                updater(ele).await;
             }
         }
         Ok(())

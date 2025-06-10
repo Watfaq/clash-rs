@@ -12,6 +12,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
+use super::cidr_trie::CidrTrie;
 use crate::{
     Error,
     app::{
@@ -22,13 +23,12 @@ use crate::{
         router::{RuleMatcher, map_rule_type},
     },
     common::{
-        errors::map_io_error, geodata::GeoData, mmdb::Mmdb, succinct_set, trie,
+        errors::map_io_error, geodata::GeoDataLookup, mmdb::MmdbLookup,
+        succinct_set, trie,
     },
     config::internal::rule::RuleType,
     session::Session,
 };
-
-use super::cidr_trie::CidrTrie;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -57,8 +57,11 @@ impl Display for RuleSetFormat {
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleSetBehavior {
+    /// Rule contents will be built into a DomainSet
     Domain,
+    /// Rule contents will be built into a IpCidr Trie
     Ipcidr,
+    /// Classical line based rules
     Classical,
 }
 
@@ -97,21 +100,29 @@ type RuleParser =
     Box<dyn Fn(&[u8]) -> anyhow::Result<RuleContent> + Send + Sync + 'static>;
 
 pub struct RuleProviderImpl {
-    fetcher: Fetcher<RuleUpdater, RuleParser>,
-    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
+    name: String,
+    fetcher: Option<Fetcher<RuleUpdater, RuleParser>>,
+    inner: Arc<tokio::sync::RwLock<Inner>>,
     behavior: RuleSetBehavior,
     format: RuleSetFormat,
+    inline_rules: Option<Vec<String>>,
+
+    mmdb: MmdbLookup,
+    geodata: GeoDataLookup,
 }
 
 impl RuleProviderImpl {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
         behavior: RuleSetBehavior,
         format: RuleSetFormat,
-        interval: Duration,
-        vehicle: ThreadSafeProviderVehicle,
-        mmdb: Arc<Mmdb>,
-        geodata: Arc<GeoData>,
+        // InlineRuleProvider doesn't have an interval and vehicle
+        interval: Option<Duration>,
+        vehicle: Option<ThreadSafeProviderVehicle>,
+        mmdb: MmdbLookup,
+        geodata: GeoDataLookup,
+        inline_rules: Option<Vec<String>>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
@@ -142,6 +153,9 @@ impl RuleProviderImpl {
         let n_parser = name.clone(); // Clone name specifically for the parser closure
         let current_behavior = behavior;
         let current_format = format;
+        let inline_rules_clone = inline_rules.clone();
+        let mmdb_clone = mmdb.clone();
+        let geodata_clone = geodata.clone();
         let parser: RuleParser =
             Box::new(move |input: &[u8]| -> anyhow::Result<RuleContent> {
                 match current_format {
@@ -153,13 +167,20 @@ impl RuleProviderImpl {
                                 n_parser, x
                             ))
                         })?;
+
+                        // Fn: we need to clone the values anyway to avoid moving
+                        // `inline_rules` from the "Environment"
+                        let mut payload =
+                            inline_rules_clone.clone().unwrap_or_default();
+                        payload.extend(scheme.payload);
+
                         // For Yaml, we still need to convert Vec<String> to
                         // RuleContent
                         make_rules(
                             current_behavior,
-                            scheme.payload,
-                            mmdb.clone(),
-                            geodata.clone(),
+                            payload,
+                            mmdb_clone.clone(),
+                            geodata_clone.clone(),
                         )
                         .map_err(anyhow::Error::new)
                     }
@@ -171,7 +192,7 @@ impl RuleProviderImpl {
                             ))
                         })?;
 
-                        let payload: Vec<String> = text
+                        let mut payload: Vec<String> = text
                             .lines()
                             .map(str::trim)
                             .filter(|line| {
@@ -181,12 +202,17 @@ impl RuleProviderImpl {
                             })
                             .map(String::from)
                             .collect();
+
+                        if let Some(inline) = inline_rules_clone.clone() {
+                            payload.extend(inline);
+                        }
+
                         // For Text, we also convert Vec<String> to RuleContent
                         make_rules(
                             current_behavior,
                             payload,
-                            mmdb.clone(),
-                            geodata.clone(),
+                            mmdb_clone.clone(),
+                            geodata_clone.clone(),
                         )
                         .map_err(anyhow::Error::new)
                     }
@@ -207,13 +233,30 @@ impl RuleProviderImpl {
                 }
             });
 
-        let fetcher = Fetcher::new(name, interval, vehicle, parser, Some(updater));
+        let fetcher = if let Some(interval) = interval
+            && let Some(vehicle) = vehicle
+        {
+            Some(Fetcher::new(
+                name.clone(),
+                interval,
+                vehicle,
+                parser,
+                Some(updater),
+            ))
+        } else {
+            None
+        };
 
         Self {
+            name,
             fetcher,
             inner,
             behavior,
             format,
+            inline_rules,
+
+            mmdb,
+            geodata,
         }
     }
 }
@@ -259,11 +302,15 @@ impl RuleProvider for RuleProviderImpl {
 #[async_trait]
 impl Provider for RuleProviderImpl {
     fn name(&self) -> &str {
-        self.fetcher.name()
+        &self.name
     }
 
     fn vehicle_type(&self) -> ProviderVehicleType {
-        self.fetcher.vehicle_type()
+        if let Some(fetcher) = &self.fetcher {
+            fetcher.vehicle_type()
+        } else {
+            ProviderVehicleType::Inline
+        }
     }
 
     fn typ(&self) -> ProviderType {
@@ -271,24 +318,56 @@ impl Provider for RuleProviderImpl {
     }
 
     async fn initialize(&self) -> std::io::Result<()> {
-        let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("initializing rule provider {}", self.name());
-        if let Some(updater) = self.fetcher.on_update.as_ref() {
-            let f = updater.lock().await;
-            f(ele).await; // Directly pass RuleContent
+
+        if let Some(fetcher) = &self.fetcher {
+            trace!("initializing rule provider {} with fetcher", self.name());
+            let ele = fetcher.initial().await.map_err(map_io_error)?;
+            if let Some(updater) = fetcher.on_update.as_ref() {
+                updater(ele).await; // Directly pass RuleContent
+            }
+        } else {
+            trace!("initializing inline rule provider {}", self.name());
+            let rules = make_rules(
+                self.behavior,
+                self.inline_rules.clone().unwrap_or_default(),
+                self.mmdb.clone(),
+                self.geodata.clone(),
+            );
+
+            match rules {
+                Ok(content) => {
+                    let mut inner = self.inner.write().await;
+                    inner.content = content;
+                }
+                Err(e) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "failed to initialize inline rule provider {}: {}",
+                            self.name(),
+                            e
+                        ),
+                    ));
+                }
+            }
         }
         Ok(())
     }
 
     async fn update(&self) -> std::io::Result<()> {
-        let (ele, same) = self.fetcher.update().await.map_err(map_io_error)?;
-        debug!("rule provider {} updated. same? {}", self.name(), same);
-        if !same {
-            if let Some(updater) = self.fetcher.on_update.as_ref() {
-                let f = updater.lock().await;
-                f(ele).await; // Directly pass RuleContent
+        if let Some(fetcher) = &self.fetcher {
+            let (ele, same) = fetcher.update().await.map_err(map_io_error)?;
+            debug!("rule provider {} updated. same? {}", self.name(), same);
+            if !same {
+                if let Some(updater) = fetcher.on_update.as_ref() {
+                    updater(ele).await; // Directly pass RuleContent
+                }
             }
+        } else {
+            trace!("no fetcher for rule provider {}", self.name());
         }
+
         Ok(())
     }
 
@@ -302,10 +381,9 @@ impl Provider for RuleProviderImpl {
             Box::new(self.vehicle_type().to_string()),
         );
 
-        m.insert(
-            "updatedAt".to_owned(),
-            Box::new(self.fetcher.updated_at().await),
-        );
+        if let Some(fetcher) = &self.fetcher {
+            m.insert("updatedAt".to_owned(), Box::new(fetcher.updated_at().await));
+        }
 
         m.insert("behavior".to_owned(), Box::new(self.behavior().to_string()));
         m.insert("format".to_owned(), Box::new(self.format().to_string()));
@@ -318,8 +396,8 @@ impl Provider for RuleProviderImpl {
 fn make_rules(
     behavior: RuleSetBehavior,
     rules: Vec<String>, // Input is Vec<String> for Yaml/Text
-    mmdb: Arc<Mmdb>,
-    geodata: Arc<GeoData>,
+    mmdb: MmdbLookup,
+    geodata: GeoDataLookup,
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
@@ -353,8 +431,8 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
 
 fn make_classical_rules(
     rules: Vec<String>,
-    mmdb: Arc<Mmdb>,
-    geodata: Arc<GeoData>,
+    mmdb: MmdbLookup,
+    geodata: GeoDataLookup,
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
@@ -376,4 +454,86 @@ fn make_classical_rules(
         rv.push(rule_matcher);
     }
     Ok(rv)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        app::remote_content_manager::providers::{
+            MockProviderVehicle, Provider, ProviderVehicleType,
+            rule_provider::{
+                RuleProviderImpl, RuleSetBehavior, RuleSetFormat,
+                provider::RuleProvider,
+            },
+        },
+        common::{geodata::MockGeoDataLookupTrait, mmdb::MockMmdbLookupTrait},
+        session::{Session, SocksAddr},
+    };
+    use std::{path::Path, sync::Arc, time::Duration};
+    use tokio_test::assert_ok;
+
+    #[tokio::test]
+    async fn test_inline_provider() {
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+
+        let provider = RuleProviderImpl::new(
+            "test".to_string(),
+            RuleSetBehavior::Classical,
+            RuleSetFormat::Text,
+            None,
+            None,
+            Arc::new(mock_mmdb),
+            Arc::new(mock_geodata),
+            Some(vec!["DOMAIN-SUFFIX, google.com".to_owned()]),
+        );
+
+        assert_ok!(provider.initialize().await);
+
+        assert!(provider.search(&Session {
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_file_provider_with_inline_rules() {
+        let mock_mmdb = MockMmdbLookupTrait::new();
+        let mock_geodata = MockGeoDataLookupTrait::new();
+        let mut mock_vehicle = MockProviderVehicle::new();
+
+        let mock_file = std::env::temp_dir().join("mock_provider_vehicle");
+        if Path::new(mock_file.to_str().unwrap()).exists() {
+            std::fs::remove_file(&mock_file).unwrap();
+        }
+        std::fs::write(&mock_file, "twitter.com").unwrap();
+
+        mock_vehicle
+            .expect_path()
+            .return_const(mock_file.to_str().unwrap().to_owned());
+        mock_vehicle
+            .expect_read()
+            .returning(|| Ok("twitter.com".into()));
+        mock_vehicle
+            .expect_typ()
+            .return_const(ProviderVehicleType::File);
+
+        let provider = RuleProviderImpl::new(
+            "test".to_string(),
+            RuleSetBehavior::Domain,
+            RuleSetFormat::Text,
+            Some(Duration::from_secs(5)),
+            Some(Arc::new(mock_vehicle)),
+            Arc::new(mock_mmdb),
+            Arc::new(mock_geodata),
+            Some(vec!["+.google.com".to_owned()]),
+        );
+
+        assert_ok!(provider.initialize().await);
+
+        assert!(provider.search(&Session {
+            destination: SocksAddr::Domain("test.google.com".to_owned(), 443),
+            ..Default::default()
+        }));
+    }
 }

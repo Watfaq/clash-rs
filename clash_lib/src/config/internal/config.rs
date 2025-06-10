@@ -176,6 +176,7 @@ pub struct Controller {
 pub enum RuleProviderDef {
     Http(HttpRuleProvider),
     File(FileRuleProvider),
+    Inline(InlineRuleProvider),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -185,6 +186,8 @@ pub struct HttpRuleProvider {
     pub behavior: RuleSetBehavior,
     pub path: String,
     pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -193,6 +196,16 @@ pub struct FileRuleProvider {
     pub interval: Option<u64>,
     pub behavior: RuleSetBehavior,
     pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct InlineRuleProvider {
+    pub path: String,
+    pub behavior: RuleSetBehavior,
+    #[serde(alias = "payload")]
+    pub inline_rules: Vec<String>,
 }
 
 #[cfg(test)]

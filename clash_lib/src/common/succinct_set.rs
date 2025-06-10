@@ -1,6 +1,6 @@
 //! idea: https://github.com/openacid/succinct
 //! impl: https://github.com/MetaCubeX/mihomo/blob/Meta/component/trie/domain_set.go
-//! I have not idea what's going on here, just copy the code from above link.
+//! I have no idea what's going on here, just copy the code from above link.
 
 use super::trie::StringTrie;
 
@@ -99,6 +99,10 @@ impl DomainSet {
                         return false;
                     }
 
+                    if self.labels.is_empty() {
+                        return false;
+                    }
+
                     if self.labels[bm_idx as usize - node_id] == COMPLEX_WILDCARD {
                         return true;
                     } else if self.labels[bm_idx as usize - node_id] == WILDCARD {
@@ -173,7 +177,7 @@ impl DomainSet {
             self.ranks.push(last_rank + n as i32);
         }
 
-        let mut n: u64 = 0; // bit counting
+        let mut n: u64 = 0; // a bit counting
         let total_bits = self.label_bit_map.len() * 64;
 
         for i in 0..total_bits {
@@ -332,6 +336,9 @@ impl<T> From<StringTrie<T>> for DomainSet {
 }
 
 fn get_bit(bm: &[u64], i: isize) -> bool {
+    if bm.is_empty() {
+        return false;
+    }
     bm[(i >> 6) as usize] & (1 << (i & 63) as usize) != 0
 }
 

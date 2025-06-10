@@ -13,14 +13,15 @@ use std::sync::Arc;
 pub use enhanced::EnhancedResolver;
 pub use system::SystemResolver;
 
-use crate::{app::profile::ThreadSafeCacheFile, common::mmdb::Mmdb, print_and_exit};
-
 use super::{Config, ThreadSafeDNSResolver};
+use crate::{
+    app::profile::ThreadSafeCacheFile, common::mmdb::MmdbLookup, print_and_exit,
+};
 
 pub async fn new(
     cfg: Config,
     store: Option<ThreadSafeCacheFile>,
-    mmdb: Option<Arc<Mmdb>>,
+    mmdb: Option<MmdbLookup>,
 ) -> ThreadSafeDNSResolver {
     if cfg.enable {
         match (store, mmdb) {
