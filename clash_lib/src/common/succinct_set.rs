@@ -1,6 +1,6 @@
 //! idea: https://github.com/openacid/succinct
 //! impl: https://github.com/MetaCubeX/mihomo/blob/Meta/component/trie/domain_set.go
-//! I have not idea what's going on here, just copy the code from above link.
+//! I have no idea what's going on here, just copy the code from above link.
 
 use super::trie::StringTrie;
 
@@ -177,7 +177,7 @@ impl DomainSet {
             self.ranks.push(last_rank + n as i32);
         }
 
-        let mut n: u64 = 0; // bit counting
+        let mut n: u64 = 0; // a bit counting
         let total_bits = self.label_bit_map.len() * 64;
 
         for i in 0..total_bits {
