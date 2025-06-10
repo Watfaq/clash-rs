@@ -1,17 +1,14 @@
-use std::sync::Arc;
-
 use tracing::debug;
 
-use crate::{common::mmdb, session::Session};
-
 use super::RuleMatcher;
+use crate::{common::mmdb::MmdbLookup, session::Session};
 
 #[derive(Clone)]
 pub struct GeoIP {
     pub target: String,
     pub country_code: String,
     pub no_resolve: bool,
-    pub mmdb: Arc<mmdb::Mmdb>,
+    pub mmdb: MmdbLookup,
 }
 
 impl std::fmt::Display for GeoIP {
@@ -26,14 +23,7 @@ impl RuleMatcher for GeoIP {
 
         if let Some(ip) = ip {
             match self.mmdb.lookup_country(ip) {
-                Ok(country) => {
-                    country
-                        .country
-                        .map(|x| x.iso_code)
-                        .unwrap_or_default()
-                        .unwrap_or_default()
-                        == self.country_code
-                }
+                Ok(country) => country.country_code == self.country_code,
                 Err(e) => {
                     debug!("GeoIP lookup failed: {}", e);
                     false
@@ -48,15 +38,15 @@ impl RuleMatcher for GeoIP {
         self.target.as_str()
     }
 
-    fn should_resolve_ip(&self) -> bool {
-        !self.no_resolve
-    }
-
     fn payload(&self) -> String {
         self.country_code.clone()
     }
 
     fn type_name(&self) -> &str {
         "GeoIP"
+    }
+
+    fn should_resolve_ip(&self) -> bool {
+        !self.no_resolve
     }
 }

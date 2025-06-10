@@ -51,7 +51,7 @@ mod config;
 mod proxy;
 mod session;
 
-use crate::common::geodata;
+use crate::common::{geodata, mmdb::MmdbLookup};
 pub use config::{
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
     def::{Config as ClashConfigDef, DNS as ClashDNSConfigDef},
@@ -385,7 +385,7 @@ async fn create_components(
             client.clone(),
         )
         .await?,
-    );
+    ) as MmdbLookup;
 
     let geodata = Arc::new(
         geodata::GeoData::new(
@@ -445,7 +445,7 @@ async fn create_components(
         Some(Arc::new(
             mmdb::Mmdb::new(p, config.general.asn_mmdb_download_url, client.clone())
                 .await?,
-        ))
+        ) as MmdbLookup)
     } else {
         None
     };

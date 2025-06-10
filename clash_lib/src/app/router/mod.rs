@@ -1,25 +1,3 @@
-use crate::{
-    Error,
-    app::router::rules::{
-        domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
-        ipcidr::IpCidr, ruleset::RuleSet,
-    },
-    print_and_exit,
-};
-
-use crate::{
-    common::mmdb::Mmdb,
-    config::internal::{config::RuleProviderDef, rule::RuleType},
-    session::Session,
-};
-
-use crate::app::router::rules::final_::Final;
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-
-use hyper::Uri;
-use rules::domain_regex::DomainRegex;
-use tracing::{error, info, trace};
-
 use super::{
     dns::ThreadSafeDNSResolver,
     remote_content_manager::providers::{
@@ -27,17 +5,33 @@ use super::{
         rule_provider::{RuleProviderImpl, ThreadSafeRuleProvider},
     },
 };
+use crate::{
+    Error,
+    app::router::rules::{
+        domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
+        final_::Final, ipcidr::IpCidr, ruleset::RuleSet,
+    },
+    config::internal::{config::RuleProviderDef, rule::RuleType},
+    print_and_exit,
+    session::Session,
+};
+
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+
+use hyper::Uri;
+use rules::domain_regex::DomainRegex;
+use tracing::{error, info, trace};
 
 mod rules;
 
-use crate::common::geodata::GeoData;
+use crate::common::{geodata::GeoData, mmdb::MmdbLookup};
 pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
     dns_resolver: ThreadSafeDNSResolver,
 
-    asn_mmdb: Option<Arc<Mmdb>>,
+    asn_mmdb: Option<MmdbLookup>,
 }
 
 pub type ThreadSafeRouter = Arc<Router>;
@@ -49,8 +43,8 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        country_mmdb: Arc<Mmdb>,
-        asn_mmdb: Option<Arc<Mmdb>>,
+        country_mmdb: MmdbLookup,
+        asn_mmdb: Option<MmdbLookup>,
         geodata: Arc<GeoData>,
         cwd: String,
     ) -> Self {
@@ -112,18 +106,13 @@ impl Router {
                 // try simplified mmdb first
                 let rv = asn_mmdb.lookup_country(ip);
                 if let Ok(country) = rv {
-                    sess.asn = country
-                        .country
-                        .and_then(|c| c.iso_code)
-                        .map(|s| s.to_string());
+                    sess.asn = Some(country.country_code);
                 }
                 if sess.asn.is_none() {
                     match asn_mmdb.lookup_asn(ip) {
                         Ok(asn) => {
                             trace!("asn for {} is {:?}", ip, asn);
-                            sess.asn = asn
-                                .autonomous_system_organization
-                                .map(|s| s.to_string());
+                            sess.asn = Some(asn.asn_name);
                         }
                         Err(e) => {
                             trace!("failed to lookup ASN for {}: {}", ip, e);
@@ -150,7 +139,7 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
-        mmdb: Arc<Mmdb>,
+        mmdb: MmdbLookup,
         geodata: Arc<GeoData>,
         cwd: String,
     ) -> Result<(), Error> {
@@ -251,7 +240,7 @@ impl Router {
 
 pub fn map_rule_type(
     rule_type: RuleType,
-    mmdb: Arc<Mmdb>,
+    mmdb: MmdbLookup,
     geodata: Arc<GeoData>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
