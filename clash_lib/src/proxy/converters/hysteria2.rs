@@ -1,15 +1,12 @@
-use std::{
-    num::{NonZeroU16, ParseIntError},
-    ops::RangeInclusive,
-    sync::Arc,
-};
-
-use rand::Rng;
-
 use crate::{
     config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
     proxy::hysteria2::{self, Handler, HystOption, SalamanderObfs},
     session::SocksAddr,
+};
+use rand::Rng;
+use std::{
+    num::{NonZeroU16, ParseIntError},
+    ops::RangeInclusive,
 };
 
 #[derive(Clone)]

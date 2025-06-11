@@ -1,51 +1,41 @@
-use anyhow::Result;
-use erased_serde::Serialize;
-use http_body_util::BodyExt;
-use hyper::Uri;
-use std::{
-    collections::HashMap, ops::Index, path::PathBuf, sync::Arc, time::Duration,
-};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, warn};
-
-use tracing::info;
-
-use crate::app::{
-    dns::ThreadSafeDNSResolver,
-    profile::ThreadSafeCacheFile,
-    remote_content_manager::{
-        ProxyManager,
-        healthcheck::HealthCheck,
-        providers::{file_vehicle, http_vehicle},
-    },
-};
-
+use super::utils::proxy_groups_dag_sort;
 use crate::{
-    app::remote_content_manager::providers::proxy_provider::{
-        PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
+    Error,
+    app::{
+        dns::ThreadSafeDNSResolver,
+        profile::ThreadSafeCacheFile,
+        remote_content_manager::{
+            ProxyManager,
+            healthcheck::HealthCheck,
+            providers::{
+                file_vehicle, http_vehicle,
+                proxy_provider::{
+                    PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
+                },
+            },
+        },
     },
     config::internal::proxy::{
-        OutboundProxyProviderDef, PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
+        OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
+        PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
     print_and_exit,
     proxy::{
-        fallback,
+        AnyOutboundHandler, direct, fallback,
         group::smart,
-        loadbalance, selector, socks, trojan,
+        hysteria2, loadbalance, reject, relay, selector,
+        selector::ThreadSafeSelectorControl,
+        socks, trojan, urltest,
         utils::{DirectConnector, ProxyConnector},
         vmess, wg,
     },
 };
-
-use super::utils::proxy_groups_dag_sort;
-use crate::{
-    Error,
-    config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
-    proxy::{
-        AnyOutboundHandler, direct, hysteria2, reject, relay,
-        selector::ThreadSafeSelectorControl, urltest,
-    },
-};
+use anyhow::Result;
+use erased_serde::Serialize;
+use hyper::Uri;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "shadowquic")]
 use crate::proxy::shadowquic;
@@ -260,124 +250,125 @@ impl OutboundManager {
                     Some(Arc::new(reject::Handler::new()) as _)
                 }
                 #[cfg(feature = "shadowsocks")]
-                OutboundProxyProtocol::Ss(s) => s
-                    .try_into()
-                    .map(|x: shadowsocks::outbound::Handler| {
-                        Arc::new(x) as AnyOutboundHandler
-                    })
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load shadowsocks outbound {}: {}",
-                            s.common_opts.name, e
-                        );
-                    })
-                    .ok(),
-                OutboundProxyProtocol::Socks5(s) => s
-                    .try_into()
-                    .map(|x: socks::outbound::Handler| {
-                        Arc::new(x) as AnyOutboundHandler
-                    })
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load socks5 outbound {}: {}",
-                            s.common_opts.name, e
-                        );
-                    })
-                    .ok(),
-                OutboundProxyProtocol::Vmess(v) => v
-                    .try_into()
-                    .map(|x: vmess::Handler| Arc::new(x) as AnyOutboundHandler)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load vmess outbound {}: {}",
-                            v.common_opts.name, e
-                        );
-                    })
-                    .ok(),
-                OutboundProxyProtocol::Trojan(v) => v
-                    .try_into()
-                    .map(|x: trojan::Handler| Arc::new(x) as _)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load trojan outbound {}: {}",
-                            v.common_opts.name, e
-                        );
-                    })
-                    .ok(),
-                OutboundProxyProtocol::Hysteria2(h) => h
-                    .try_into()
-                    .map(|x: hysteria2::Handler| Arc::new(x) as _)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load hysteria2 outbound {}: {}",
-                            h.name, e
-                        );
-                    })
-                    .ok(),
+                OutboundProxyProtocol::Ss(s) => {
+                    let name = s.common_opts.name.clone();
+                    s.try_into()
+                        .map(|x: shadowsocks::outbound::Handler| {
+                            Arc::new(x) as AnyOutboundHandler
+                        })
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load shadowsocks outbound {}: {}",
+                                name, e
+                            );
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Socks5(s) => {
+                    let name = s.common_opts.name.clone();
+                    s.try_into()
+                        .map(|x: socks::outbound::Handler| {
+                            Arc::new(x) as AnyOutboundHandler
+                        })
+                        .inspect_err(|e| {
+                            error!("failed to load socks5 outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Vmess(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: vmess::Handler| Arc::new(x) as AnyOutboundHandler)
+                        .inspect_err(|e| {
+                            error!("failed to load vmess outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Trojan(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: trojan::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load trojan outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Hysteria2(h) => {
+                    let name = h.name.clone();
+                    h.try_into()
+                        .map(|x: hysteria2::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load hysteria2 outbound {}: {}",
+                                name, e
+                            );
+                        })
+                        .ok()
+                }
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
+                    let name = wg.common_opts.name.clone();
                     wg.try_into()
                         .map(|x: wg::Handler| Arc::new(x) as AnyOutboundHandler)
                         .inspect_err(|e| {
                             error!(
                                 "failed to load wireguard outbound {}: {}",
-                                wg.common_opts.name, e
+                                name, e
                             );
                         })
                         .ok()
                 }
                 #[cfg(feature = "ssh")]
-                OutboundProxyProtocol::Ssh(ssh) => ssh
-                    .try_into()
-                    .map(|x: ssh::Handler| Arc::new(x) as _)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load ssh outbound {}: {}",
-                            ssh.common_opts.name, e
-                        );
-                    })
-                    .ok(),
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    let name = ssh.common_opts.name.clone();
+                    ssh.try_into()
+                        .map(|x: ssh::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load ssh outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
                 #[cfg(feature = "onion")]
-                OutboundProxyProtocol::Tor(tor) => tor
-                    .try_into()
-                    .map(|x: tor::Handler| Arc::new(x) as _)
-                    .inspect_err(|e| {
-                        error!("failed to load tor outbound {}: {}", tor.name, e);
-                    })
-                    .ok(),
+                OutboundProxyProtocol::Tor(tor) => {
+                    let name = tor.name.clone();
+                    tor.try_into()
+                        .map(|x: tor::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load tor outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
                 #[cfg(feature = "tuic")]
-                OutboundProxyProtocol::Tuic(tuic) => tuic
-                    .try_into()
-                    .map(|x: tuic::Handler| Arc::new(x) as _)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load tuic outbound {}: {}",
-                            tuic.common_opts.name, e
-                        );
-                    })
-                    .ok(),
+                OutboundProxyProtocol::Tuic(tuic) => {
+                    let name = tuic.common_opts.name.clone();
+                    tuic.try_into()
+                        .map(|x: tuic::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load tuic outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
                 #[cfg(feature = "shadowquic")]
-                OutboundProxyProtocol::ShadowQuic(sqcfg) => sqcfg
-                    .try_into()
-                    .map(|x: shadowquic::Handler| Arc::new(x) as AnyOutboundHandler)
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to load shadowquic outbound {}: {}",
-                            sqcfg.common_opts.name, e
-                        );
-                    })
-                    .ok(),
+                OutboundProxyProtocol::ShadowQuic(sqcfg) => {
+                    let name = sqcfg.common_opts.name.clone();
+                    sqcfg
+                        .try_into()
+                        .map(|x: shadowquic::Handler| {
+                            Arc::new(x) as AnyOutboundHandler
+                        })
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load shadowquic outbound {}: {}",
+                                name, e
+                            );
+                        })
+                        .ok()
+                }
             })
             .collect();
 
         handlers.extend(loaded_outbounds.into_iter().map(|h| {
             let name = h.name().to_owned();
-            if handlers.contains_key(&name) {
-                warn!(
-                    "outbound {} duplicate."
-                    name
-                );
-            }
             (name, h)
         }));
 
