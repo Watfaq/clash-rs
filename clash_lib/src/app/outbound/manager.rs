@@ -1,7 +1,10 @@
 use anyhow::Result;
 use erased_serde::Serialize;
+use http_body_util::BodyExt;
 use hyper::Uri;
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, ops::Index, path::PathBuf, sync::Arc, time::Duration,
+};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, warn};
 
@@ -34,16 +37,15 @@ use crate::{
     },
 };
 
+use super::utils::proxy_groups_dag_sort;
 use crate::{
     Error,
     config::internal::proxy::{OutboundGroupProtocol, OutboundProxyProtocol},
     proxy::{
-        AnyOutboundHandler, direct, reject, relay,
+        AnyOutboundHandler, direct, hysteria2, reject, relay,
         selector::ThreadSafeSelectorControl, urltest,
     },
 };
-
-use super::utils::proxy_groups_dag_sort;
 
 #[cfg(feature = "shadowquic")]
 use crate::proxy::shadowquic;
@@ -247,93 +249,137 @@ impl OutboundManager {
 
         let mut proxy_providers = vec![];
 
-        // Initialize handlers for each outbound proxy protocol
-        for outbound in outbounds.iter() {
-            match outbound {
+        // load handlers and collect failed outbounds
+        let loaded_outbounds: Vec<_> = outbounds
+            .into_iter()
+            .filter_map(|outbound| match outbound {
                 OutboundProxyProtocol::Direct => {
-                    handlers.insert(PROXY_DIRECT.to_string(), {
-                        let h = direct::Handler::new();
-                        Arc::new(h)
-                    });
+                    Some(Arc::new(direct::Handler::new()) as _)
                 }
-
                 OutboundProxyProtocol::Reject => {
-                    handlers.insert(PROXY_REJECT.to_string(), {
-                        let h = reject::Handler::new();
-                        Arc::new(h)
-                    });
+                    Some(Arc::new(reject::Handler::new()) as _)
                 }
                 #[cfg(feature = "shadowsocks")]
-                OutboundProxyProtocol::Ss(s) => {
-                    handlers.insert(s.common_opts.name.clone(), {
-                        let h: shadowsocks::outbound::Handler = s.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
-
-                OutboundProxyProtocol::Socks5(s) => {
-                    handlers.insert(s.common_opts.name.clone(), {
-                        let h: socks::Handler = s.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
-
-                OutboundProxyProtocol::Vmess(v) => {
-                    handlers.insert(v.common_opts.name.clone(), {
-                        let h: vmess::Handler = v.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
-
-                OutboundProxyProtocol::Trojan(v) => {
-                    handlers.insert(v.common_opts.name.clone(), {
-                        let h: trojan::Handler = v.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
-                OutboundProxyProtocol::Hysteria2(h) => {
-                    handlers.insert(h.name.clone(), h.clone().try_into()?);
-                }
-
+                OutboundProxyProtocol::Ss(s) => s
+                    .try_into()
+                    .map(|x: shadowsocks::outbound::Handler| {
+                        Arc::new(x) as AnyOutboundHandler
+                    })
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load shadowsocks outbound {}: {}",
+                            s.common_opts.name, e
+                        );
+                    })
+                    .ok(),
+                OutboundProxyProtocol::Socks5(s) => s
+                    .try_into()
+                    .map(|x: socks::outbound::Handler| {
+                        Arc::new(x) as AnyOutboundHandler
+                    })
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load socks5 outbound {}: {}",
+                            s.common_opts.name, e
+                        );
+                    })
+                    .ok(),
+                OutboundProxyProtocol::Vmess(v) => v
+                    .try_into()
+                    .map(|x: vmess::Handler| Arc::new(x) as AnyOutboundHandler)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load vmess outbound {}: {}",
+                            v.common_opts.name, e
+                        );
+                    })
+                    .ok(),
+                OutboundProxyProtocol::Trojan(v) => v
+                    .try_into()
+                    .map(|x: trojan::Handler| Arc::new(x) as _)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load trojan outbound {}: {}",
+                            v.common_opts.name, e
+                        );
+                    })
+                    .ok(),
+                OutboundProxyProtocol::Hysteria2(h) => h
+                    .try_into()
+                    .map(|x: hysteria2::Handler| Arc::new(x) as _)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load hysteria2 outbound {}: {}",
+                            h.name, e
+                        );
+                    })
+                    .ok(),
                 OutboundProxyProtocol::Wireguard(wg) => {
                     warn!("wireguard is experimental");
-                    handlers.insert(wg.common_opts.name.clone(), {
-                        let h: wg::Handler = wg.try_into()?;
-                        Arc::new(h) as _
-                    });
+                    wg.try_into()
+                        .map(|x: wg::Handler| Arc::new(x) as AnyOutboundHandler)
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load wireguard outbound {}: {}",
+                                wg.common_opts.name, e
+                            );
+                        })
+                        .ok()
                 }
-
                 #[cfg(feature = "ssh")]
-                OutboundProxyProtocol::Ssh(ssh) => {
-                    handlers.insert(ssh.common_opts.name.clone(), {
-                        let h: ssh::Handler = ssh.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
-
+                OutboundProxyProtocol::Ssh(ssh) => ssh
+                    .try_into()
+                    .map(|x: ssh::Handler| Arc::new(x) as _)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load ssh outbound {}: {}",
+                            ssh.common_opts.name, e
+                        );
+                    })
+                    .ok(),
                 #[cfg(feature = "onion")]
-                OutboundProxyProtocol::Tor(tor) => {
-                    handlers.insert(tor.name.clone(), {
-                        let h: tor::Handler = tor.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
+                OutboundProxyProtocol::Tor(tor) => tor
+                    .try_into()
+                    .map(|x: tor::Handler| Arc::new(x) as _)
+                    .inspect_err(|e| {
+                        error!("failed to load tor outbound {}: {}", tor.name, e);
+                    })
+                    .ok(),
                 #[cfg(feature = "tuic")]
-                OutboundProxyProtocol::Tuic(tuic) => {
-                    handlers.insert(tuic.common_opts.name.clone(), {
-                        let h: tuic::Handler = tuic.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
+                OutboundProxyProtocol::Tuic(tuic) => tuic
+                    .try_into()
+                    .map(|x: tuic::Handler| Arc::new(x) as _)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load tuic outbound {}: {}",
+                            tuic.common_opts.name, e
+                        );
+                    })
+                    .ok(),
                 #[cfg(feature = "shadowquic")]
-                OutboundProxyProtocol::ShadowQuic(sqcfg) => {
-                    handlers.insert(sqcfg.common_opts.name.clone(), {
-                        let h: shadowquic::Handler = sqcfg.try_into()?;
-                        Arc::new(h) as _
-                    });
-                }
+                OutboundProxyProtocol::ShadowQuic(sqcfg) => sqcfg
+                    .try_into()
+                    .map(|x: shadowquic::Handler| Arc::new(x) as AnyOutboundHandler)
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to load shadowquic outbound {}: {}",
+                            sqcfg.common_opts.name, e
+                        );
+                    })
+                    .ok(),
+            })
+            .collect();
+
+        handlers.extend(loaded_outbounds.into_iter().map(|h| {
+            let name = h.name().to_owned();
+            if handlers.contains_key(&name) {
+                warn!(
+                    "outbound {} duplicate."
+                    name
+                );
             }
-        }
+            (name, h)
+        }));
 
         // Sort outbound groups to ensure dependencies are resolved
         let mut outbound_groups = outbound_groups;
@@ -693,8 +739,15 @@ impl OutboundManager {
 
         // insert GLOBAL
         let mut g = vec![];
-        for name in proxy_names {
-            g.push(handlers.get(&name).unwrap().clone());
+        let mut keys = handlers.keys().collect::<Vec<_>>();
+        keys.sort_by(|a, b| {
+            proxy_names
+                .iter()
+                .position(|x| &x == a)
+                .cmp(&proxy_names.iter().position(|x| &x == b))
+        });
+        for name in keys {
+            g.push(handlers.get(name).unwrap().clone());
         }
         let hc = HealthCheck::new(
             g.clone(),

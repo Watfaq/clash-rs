@@ -8,12 +8,10 @@ use rand::Rng;
 
 use crate::{
     config::internal::proxy::{Hysteria2Obfs, OutboundHysteria2},
-    proxy::{
-        AnyOutboundHandler,
-        hysteria2::{self, Handler, HystOption, SalamanderObfs},
-    },
+    proxy::hysteria2::{self, Handler, HystOption, SalamanderObfs},
     session::SocksAddr,
 };
+
 #[derive(Clone)]
 pub struct PortGenerator {
     // must have a default port
@@ -80,7 +78,7 @@ impl PortGenerator {
     }
 }
 
-impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
+impl TryFrom<OutboundHysteria2> for Handler {
     type Error = crate::Error;
 
     fn try_from(value: OutboundHysteria2) -> Result<Self, Self::Error> {
@@ -135,8 +133,7 @@ impl TryFrom<OutboundHysteria2> for AnyOutboundHandler {
             disable_mtu_discovery: value.disable_mtu_discovery.unwrap_or(false),
         };
 
-        let c = Handler::new(opts).unwrap();
-        Ok(Arc::new(c))
+        Ok(Handler::new(opts))
     }
 }
 

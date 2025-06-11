@@ -74,7 +74,7 @@ pub enum OutboundProxyProtocol {
     Hysteria2(OutboundHysteria2),
     #[serde(rename = "ssh")]
     #[cfg(feature = "ssh")]
-    Ssh(OutBoundSsh),
+    Ssh(OutboundSsh),
     #[serde(rename = "shadowquic")]
     #[cfg(feature = "shadowquic")]
     ShadowQuic(OutboundShadowQuic),
@@ -337,7 +337,7 @@ pub struct OutboundShadowQuic {
 #[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
-pub struct OutBoundSsh {
+pub struct OutboundSsh {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
     pub username: String,
@@ -366,6 +366,40 @@ pub struct Totp {
     pub step: u64,
     pub digits: usize,
     pub algorithm: totp_rs::Algorithm,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundHysteria2 {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    /// port hopping
+    pub ports: Option<String>,
+    pub password: String,
+    pub obfs: Option<Hysteria2Obfs>,
+    pub obfs_password: Option<String>,
+    pub alpn: Option<Vec<String>>,
+    /// set burtal congestion control, need compare with tx which is received by
+    /// auth request
+    pub up: Option<u64>,
+    /// receive_bps: send by auth request
+    pub down: Option<u64>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: bool,
+    pub ca: Option<String>,
+    pub ca_str: Option<String>,
+    pub fingerprint: Option<String>,
+    pub udp_mtu: Option<u32>,
+    pub disable_mtu_discovery: Option<bool>,
+    /// bbr congestion control window
+    pub cwnd: Option<u64>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Hysteria2Obfs {
+    Salamander,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -579,37 +613,4 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
         ))
         .map_err(map_serde_error(name))
     }
-}
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
-#[serde(rename_all = "kebab-case")]
-pub struct OutboundHysteria2 {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
-    /// port hopping
-    pub ports: Option<String>,
-    pub password: String,
-    pub obfs: Option<Hysteria2Obfs>,
-    pub obfs_password: Option<String>,
-    pub alpn: Option<Vec<String>>,
-    /// set burtal congestion control, need compare with tx which is received by
-    /// auth request
-    pub up: Option<u64>,
-    /// receive_bps: send by auth request
-    pub down: Option<u64>,
-    pub sni: Option<String>,
-    pub skip_cert_verify: bool,
-    pub ca: Option<String>,
-    pub ca_str: Option<String>,
-    pub fingerprint: Option<String>,
-    pub udp_mtu: Option<u32>,
-    pub disable_mtu_discovery: Option<bool>,
-    /// bbr congestion control window
-    pub cwnd: Option<u64>,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum Hysteria2Obfs {
-    Salamander,
 }

@@ -4,7 +4,7 @@ use crate::{
     config::listener::InboundOpts,
     proxy::{
         http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
-        socks::SocksInbound, tunnel::TunnelInbound,
+        socks::inbound::SocksInbound, tunnel::TunnelInbound,
     },
 };
 
