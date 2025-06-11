@@ -380,7 +380,7 @@ pub struct OutboundHysteria2 {
     pub obfs: Option<Hysteria2Obfs>,
     pub obfs_password: Option<String>,
     pub alpn: Option<Vec<String>>,
-    /// set burtal congestion control, need compare with tx which is received by
+    /// set brutal congestion control, need compare with tx which is received by
     /// auth request
     pub up: Option<u64>,
     /// receive_bps: send by auth request
