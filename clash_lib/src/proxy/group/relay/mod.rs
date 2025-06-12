@@ -1,7 +1,6 @@
-use std::{collections::HashMap, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
-use erased_serde::Serialize;
 use futures::stream::{self, StreamExt};
 use tracing::debug;
 
@@ -18,6 +17,7 @@ use crate::{
     proxy::{
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        group::GroupProxyAPIResponse,
         utils::{
             DirectConnector, ProxyConnector, RemoteConnector,
             provider_helper::get_proxies_from_providers,
@@ -178,18 +178,19 @@ impl OutboundHandler for Handler {
         ConnectorType::None
     }
 
-    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let all = get_proxies_from_providers(&self.providers, false).await;
+    fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
+        Some(self as _)
+    }
+}
 
-        let mut m = HashMap::new();
-        m.insert("type".to_string(), Box::new(self.proto()) as _);
-        m.insert(
-            "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
-                as _,
-        );
+#[async_trait]
+impl GroupProxyAPIResponse for Handler {
+    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
+        Handler::get_proxies(self, false).await
+    }
 
-        m
+    async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
+        None
     }
 
     fn icon(&self) -> Option<String> {
@@ -231,7 +232,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_1() -> anyhow::Result<()> {
-        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -243,7 +244,8 @@ mod tests {
         };
         let port = ss_opts.port;
         let ss_handler: AnyOutboundHandler =
-            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
+            Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
+                as _;
 
         let mut provider = MockDummyProxyProvider::new();
 
@@ -267,7 +269,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_2() -> anyhow::Result<()> {
-        let ss_opts = crate::proxy::shadowsocks::HandlerOptions {
+        let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.to_owned(),
@@ -279,7 +281,8 @@ mod tests {
         };
         let port = ss_opts.port;
         let ss_handler: AnyOutboundHandler =
-            Arc::new(crate::proxy::shadowsocks::Handler::new(ss_opts)) as _;
+            Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
+                as _;
 
         let mut provider = MockDummyProxyProvider::new();
 

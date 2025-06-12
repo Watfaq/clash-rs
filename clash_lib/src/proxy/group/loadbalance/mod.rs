@@ -1,12 +1,12 @@
 mod helpers;
 
-use std::{collections::HashMap, io, sync::Arc};
-
-use erased_serde::Serialize;
+use async_trait::async_trait;
 use helpers::strategy_sticky_session;
+use std::{io, sync::Arc};
 use tokio::sync::Mutex;
 use tracing::debug;
 
+use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
@@ -19,12 +19,11 @@ use crate::{
     proxy::{
         AnyOutboundHandler, ConnectorType, DialWithConnector, HandlerCommonOptions,
         OutboundHandler, OutboundType,
+        group::GroupProxyAPIResponse,
         utils::{RemoteConnector, provider_helper::get_proxies_from_providers},
     },
     session::Session,
 };
-
-use self::helpers::{StrategyFn, strategy_consistent_hashring, strategy_rr};
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
@@ -82,7 +81,7 @@ impl Handler {
 
 impl DialWithConnector for Handler {}
 
-#[async_trait::async_trait]
+#[async_trait]
 impl OutboundHandler for Handler {
     /// The name of the outbound handler
     fn name(&self) -> &str {
@@ -109,13 +108,12 @@ impl OutboundHandler for Handler {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        match proxy.connect_stream(sess, resolver).await {
-            Ok(s) => {
-                s.append_to_chain(self.name()).await;
-                Ok(s)
-            }
-            Err(e) => Err(e),
-        }
+
+        let s = proxy.connect_stream(sess, resolver).await?;
+
+        s.append_to_chain(self.name()).await;
+
+        Ok(s)
     }
 
     /// connect to remote target via UDP
@@ -127,7 +125,12 @@ impl OutboundHandler for Handler {
         let proxies = self.get_proxies(false).await;
         let proxy = (self.inner.lock().await.strategy_fn)(proxies, sess).await?;
         debug!("{} use proxy {}", self.name(), proxy.name());
-        proxy.connect_datagram(sess, resolver).await
+
+        let s = proxy.connect_datagram(sess, resolver).await?;
+
+        s.append_to_chain(self.name()).await;
+
+        Ok(s)
     }
 
     async fn support_connector(&self) -> ConnectorType {
@@ -148,18 +151,19 @@ impl OutboundHandler for Handler {
             .await
     }
 
-    async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let all = get_proxies_from_providers(&self.providers, false).await;
+    fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
+        Some(self as _)
+    }
+}
 
-        let mut m = HashMap::new();
-        m.insert("type".to_string(), Box::new(self.proto()) as _);
+#[async_trait]
+impl GroupProxyAPIResponse for Handler {
+    async fn get_proxies(&self) -> Vec<AnyOutboundHandler> {
+        Handler::get_proxies(self, false).await
+    }
 
-        m.insert(
-            "all".to_string(),
-            Box::new(all.iter().map(|x| x.name().to_owned()).collect::<Vec<_>>())
-                as _,
-        );
-        m
+    async fn get_active_proxy(&self) -> Option<AnyOutboundHandler> {
+        None
     }
 
     fn icon(&self) -> Option<String> {

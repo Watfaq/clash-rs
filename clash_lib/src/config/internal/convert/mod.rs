@@ -56,6 +56,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
         tun: tun::convert(c.tun.take())?,
         profile: Profile {
             store_selected: c.profile.store_selected,
+            store_smart_stats: c.profile.store_smart_stats,
         },
         rules: c
             .rule
@@ -131,7 +132,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                     .expect("proxy provider parse error")
             })
             .unwrap_or_default(),
-        listeners: listener::convert(c.listener.take(), &c)?,
+        listeners: listener::convert(c.listeners.take(), &c)?,
     }
     .validate()
 }

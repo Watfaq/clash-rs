@@ -8,6 +8,14 @@ use serde_yaml::Value;
 use tracing::debug;
 
 use super::ProxyProvider;
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 use crate::{
     Error,
     app::remote_content_manager::{
@@ -19,17 +27,10 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{AnyOutboundHandler, direct, reject, socks, trojan, vmess, wg},
+    proxy::{
+        AnyOutboundHandler, direct, hysteria2, reject, socks, trojan, vmess, wg,
+    },
 };
-
-#[cfg(feature = "shadowsocks")]
-use crate::proxy::shadowsocks;
-#[cfg(feature = "ssh")]
-use crate::proxy::ssh;
-#[cfg(feature = "onion")]
-use crate::proxy::tor;
-#[cfg(feature = "tuic")]
-use crate::proxy::tuic;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -54,7 +55,7 @@ type ProxyParser = Box<
 
 pub struct ProxySetProvider {
     fetcher: Fetcher<ProxyUpdater, ProxyParser>,
-    inner: std::sync::Arc<tokio::sync::RwLock<Inner>>,
+    inner: Arc<tokio::sync::RwLock<Inner>>,
 }
 
 impl ProxySetProvider {
@@ -125,11 +126,13 @@ impl ProxySetProvider {
                                 }
                                 #[cfg(feature = "shadowsocks")]
                                 OutboundProxyProtocol::Ss(s) => {
-                                    let h: shadowsocks::Handler = s.try_into()?;
+                                    let h: shadowsocks::outbound::Handler =
+                                        s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Socks5(s) => {
-                                    let h: socks::Handler = s.try_into()?;
+                                    let h: socks::outbound::Handler =
+                                        s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Trojan(tr) => {
@@ -140,7 +143,10 @@ impl ProxySetProvider {
                                     let h: vmess::Handler = vm.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
-                                OutboundProxyProtocol::Hysteria2(h) => h.try_into(),
+                                OutboundProxyProtocol::Hysteria2(h) => {
+                                    let h: hysteria2::Handler = h.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
                                 #[cfg(feature = "ssh")]
                                 OutboundProxyProtocol::Ssh(s) => {
                                     let h: ssh::Handler = s.try_into()?;
@@ -201,7 +207,7 @@ impl Provider for ProxySetProvider {
         let ele = self.fetcher.initial().await.map_err(map_io_error)?;
         debug!("{} initialized with {} proxies", self.name(), ele.len());
         if let Some(updater) = self.fetcher.on_update.as_ref() {
-            updater.lock().await(ele).await;
+            updater(ele).await;
         }
         Ok(())
     }
@@ -216,8 +222,7 @@ impl Provider for ProxySetProvider {
         );
         if !same {
             if let Some(updater) = self.fetcher.on_update.as_ref() {
-                let f = updater.lock().await;
-                f(ele).await;
+                updater(ele).await;
             }
         }
         Ok(())
@@ -313,8 +318,7 @@ proxies:
             0,
             true,
             latency_manager.clone(),
-        )
-        .unwrap();
+        );
 
         let provider = ProxySetProvider::new(
             "test".to_owned(),

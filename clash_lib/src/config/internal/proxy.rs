@@ -41,7 +41,7 @@ pub fn map_serde_error(
                 name
             ))
         } else {
-            Error::InvalidConfig(format!("error while parsine {}: {}", name, x))
+            Error::InvalidConfig(format!("error while parsing {}: {}", name, x))
         }
     }
 }
@@ -74,7 +74,7 @@ pub enum OutboundProxyProtocol {
     Hysteria2(OutboundHysteria2),
     #[serde(rename = "ssh")]
     #[cfg(feature = "ssh")]
-    Ssh(OutBoundSsh),
+    Ssh(OutboundSsh),
     #[serde(rename = "shadowquic")]
     #[cfg(feature = "shadowquic")]
     ShadowQuic(OutboundShadowQuic),
@@ -337,7 +337,7 @@ pub struct OutboundShadowQuic {
 #[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
-pub struct OutBoundSsh {
+pub struct OutboundSsh {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
     pub username: String,
@@ -368,6 +368,40 @@ pub struct Totp {
     pub algorithm: totp_rs::Algorithm,
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundHysteria2 {
+    pub name: String,
+    pub server: String,
+    pub port: u16,
+    /// port hopping
+    pub ports: Option<String>,
+    pub password: String,
+    pub obfs: Option<Hysteria2Obfs>,
+    pub obfs_password: Option<String>,
+    pub alpn: Option<Vec<String>>,
+    /// set brutal congestion control, need compare with tx which is received by
+    /// auth request
+    pub up: Option<u64>,
+    /// receive_bps: send by auth request
+    pub down: Option<u64>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: bool,
+    pub ca: Option<String>,
+    pub ca_str: Option<String>,
+    pub fingerprint: Option<String>,
+    pub udp_mtu: Option<u32>,
+    pub disable_mtu_discovery: Option<bool>,
+    /// bbr congestion control window
+    pub cwnd: Option<u64>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Hysteria2Obfs {
+    Salamander,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum OutboundGroupProtocol {
@@ -379,6 +413,8 @@ pub enum OutboundGroupProtocol {
     Fallback(OutboundGroupFallback),
     #[serde(rename = "load-balance")]
     LoadBalance(OutboundGroupLoadBalance),
+    #[serde(rename = "smart")]
+    Smart(OutboundGroupSmart),
     #[serde(rename = "select")]
     Select(OutboundGroupSelect),
 }
@@ -390,6 +426,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => &g.name,
             OutboundGroupProtocol::Fallback(g) => &g.name,
             OutboundGroupProtocol::LoadBalance(g) => &g.name,
+            OutboundGroupProtocol::Smart(g) => &g.name,
             OutboundGroupProtocol::Select(g) => &g.name,
         }
     }
@@ -400,6 +437,7 @@ impl OutboundGroupProtocol {
             OutboundGroupProtocol::UrlTest(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Fallback(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::LoadBalance(g) => g.proxies.as_ref(),
+            OutboundGroupProtocol::Smart(g) => g.proxies.as_ref(),
             OutboundGroupProtocol::Select(g) => g.proxies.as_ref(),
         }
     }
@@ -413,6 +451,7 @@ impl Display for OutboundGroupProtocol {
             OutboundGroupProtocol::Fallback(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::LoadBalance(g) => write!(f, "{}", g.name),
             OutboundGroupProtocol::Select(g) => write!(f, "{}", g.name),
+            OutboundGroupProtocol::Smart(g) => write!(f, "{}", g.name),
         }
     }
 }
@@ -484,6 +523,33 @@ pub enum LoadBalanceStrategy {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+pub struct OutboundGroupSmart {
+    pub name: String,
+
+    pub proxies: Option<Vec<String>>,
+    pub udp: Option<bool>,
+    #[serde(rename = "use")]
+    pub use_provider: Option<Vec<String>>,
+
+    pub lazy: Option<bool>,
+    pub icon: Option<String>,
+
+    /// Maximum retries for failed connections (default: 3)
+    #[serde(rename = "max-retries")]
+    pub max_retries: Option<u32>,
+
+    /// Site stickiness factor (0.0-1.0, default: 0.8)
+    /// Higher values make the same site more likely to use the same proxy
+    #[serde(rename = "site-stickiness")]
+    pub site_stickiness: Option<f64>,
+
+    /// Bandwidth consideration weight (default: 0.0 - disabled)
+    /// When > 0, bandwidth metrics are included in selection algorithm
+    #[serde(rename = "bandwidth-weight")]
+    pub bandwidth_weight: Option<f64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 pub struct OutboundGroupSelect {
     pub name: String,
 
@@ -547,37 +613,4 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
         ))
         .map_err(map_serde_error(name))
     }
-}
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Default)]
-#[serde(rename_all = "kebab-case")]
-pub struct OutboundHysteria2 {
-    pub name: String,
-    pub server: String,
-    pub port: u16,
-    /// port hopping
-    pub ports: Option<String>,
-    pub password: String,
-    pub obfs: Option<Hysteria2Obfs>,
-    pub obfs_password: Option<String>,
-    pub alpn: Option<Vec<String>>,
-    /// set burtal congestion control, need compare with tx which is received by
-    /// auth request
-    pub up: Option<u64>,
-    /// receive_bps: send by auth request
-    pub down: Option<u64>,
-    pub sni: Option<String>,
-    pub skip_cert_verify: bool,
-    pub ca: Option<String>,
-    pub ca_str: Option<String>,
-    pub fingerprint: Option<String>,
-    pub udp_mtu: Option<u32>,
-    pub disable_mtu_discovery: Option<bool>,
-    /// bbr congestion control window
-    pub cwnd: Option<u64>,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
-#[serde(rename_all = "lowercase")]
-pub enum Hysteria2Obfs {
-    Salamander,
 }

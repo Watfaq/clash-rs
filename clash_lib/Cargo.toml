@@ -26,7 +26,7 @@ tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
 futures = "0.3"
 async-recursion = "1"
 async-trait = "0.1"
-hyper = { version = "1", features = ["http1","http2","client", "server"] }
+hyper = { version = "1", features = ["http1", "http2", "client", "server"] }
 hyper-util = "0.1"
 
 # Network proto
@@ -38,20 +38,19 @@ tokio-tungstenite = "0.26.2"
 # TLS
 tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2"] }
-rustls = { version  = "0.23", default-features = false, features=["ring"] }
-rustls-pemfile = "2"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 webpki-roots = "1.0"
 
 # shadow-tls
-tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"]}
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false, features=["ring"] }
+tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false, features = ["ring"] }
 
 # Error handing & logging
 thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "=0.3.39", features = ["macros", "local-offset"] }
+time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
 
@@ -61,25 +60,21 @@ bytes = "1"
 ipnet = "2"
 regex = "1"
 byteorder = "1"
-lru_time_cache ="0.11"
+lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
-foreign-types-shared = "0.3"
-network-interface = { version = "2", git = "https://github.com/Watfaq/network-interface.git", rev = "db9f1bcd2faa5122f694283bd300bf42d166d2f3" } # temp workaround for https://github.com/cross-rs/cross/issues/1627
+network-interface = { version = "2" }
 base64 = "0.22"
-arc-swap = "1"
+zstd = "0.13.3"
 
-httparse = "1"
 h2 = "0.4"
 prost = "0.13"
 tower = { version = "0.5", features = ["util"] }
 libc = "0.2"
 
 ip_network_table-deps-treebitmap = "0.5"
-once_cell = "1"
 
 # Algorithms
 crc32fast = "1"
-brotli = "8"
 hmac = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
@@ -96,12 +91,12 @@ axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
-tun = { version = "0.7", features = ["async"] }
+tun = { version = "0.8", features = ["async"] }
 netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp.git", rev = "62260478079d96b42fa524caa855609312c2cf43" }
 boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e01409626a15a987b0174d8c78b8181031c37309", package = "boring-noise" }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
-serde = { version = "1", features=["derive"] }
+serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
 erased-serde = "0.4"
@@ -109,21 +104,20 @@ erased-serde = "0.4"
 
 # Macro Magic
 educe = "0.6"
-enum_dispatch = "0.3"
 
 # DNS
 watfaq-dns = { version = "0.1.2" }
 hickory-client = "0.25"
 hickory-resolver = "0.25"
-hickory-proto = { version = "0.25"}
+hickory-proto = { version = "0.25" }
 
-dhcproto = "0.12"
+dhcproto = "0.13"
 ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version="1.23", optional = true, features=["aead-cipher-2022","stream-cipher"] }
+shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
 maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
@@ -146,17 +140,16 @@ blake2 = "0.10.6"
 digest = "0.10.7"
 
 console-subscriber = { version = "0.4" }
-tracing-timing = { version = "0.6" }
-criterion = { version = "0.5", features = ["html_reports", "async_tokio"], optional = true }
+criterion = { version = "0.6", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
 # ssh
-russh = { version = "0.52", features = ["async-trait"] , optional = true }
+russh = { version = "0.52", features = ["async-trait"], optional = true }
 dirs = { version = "6.0", optional = true }
-totp-rs = { version = "^5.7", features = ["serde_support"] , optional = true }
+totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic 
-shadowquic = { version = "0.1.6", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+shadowquic = { version = "0.1.11", optional = true, git = "https://github.com/spongebob888/shadowquic" }
 
 # experimental
 downcast-rs = "2.0"
@@ -166,27 +159,30 @@ tempfile = "3.20"
 mockall = "0.13.1"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
-bollard = "0.18"
+bollard = "0.19"
 serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
+httpmock = "0.7.0"
 
 [build-dependencies]
 prost-build = "0.13"
 
 [target.'cfg(target_os="linux")'.dependencies]
-unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18"}
+unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18" }
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "3.2.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
-tracing-oslog = { branch = "main", git = "https://github.com/Absolucy/tracing-oslog.git" }
+tracing-oslog = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",
-]}
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis"
+] }

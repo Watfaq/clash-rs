@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -11,8 +11,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     Error,
     app::{
-        dns, net::Interface,
-        remote_content_manager::providers::rule_provider::RuleSetBehavior,
+        dns,
+        net::Interface,
+        remote_content_manager::providers::rule_provider::{
+            RuleSetBehavior, RuleSetFormat,
+        },
     },
     common::auth,
     config::{
@@ -37,7 +40,7 @@ pub struct Config {
     pub proxies: HashMap<String, OutboundProxy>,
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
-    pub listeners: HashMap<String, InboundOpts>,
+    pub listeners: HashSet<InboundOpts>,
 }
 
 impl Config {
@@ -76,6 +79,7 @@ pub struct General {
 
 pub struct Profile {
     pub store_selected: bool,
+    pub store_smart_stats: bool,
     // this is read to dns config directly
     // store_fake_ip: bool,
 }
@@ -93,7 +97,7 @@ pub struct TunConfig {
     pub dns_hijack: bool,
 }
 
-#[derive(Serialize, Clone, Debug, Copy, PartialEq)]
+#[derive(Serialize, Clone, Debug, Copy, PartialEq, Hash, Eq)]
 #[serde(transparent)]
 pub struct BindAddress(pub IpAddr);
 impl BindAddress {
@@ -163,6 +167,7 @@ pub struct Controller {
     pub external_controller: Option<String>,
     pub external_ui: Option<String>,
     pub secret: Option<String>,
+    pub cors_allow_origins: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -171,6 +176,7 @@ pub struct Controller {
 pub enum RuleProviderDef {
     Http(HttpRuleProvider),
     File(FileRuleProvider),
+    Inline(InlineRuleProvider),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -179,6 +185,9 @@ pub struct HttpRuleProvider {
     pub interval: u64,
     pub behavior: RuleSetBehavior,
     pub path: String,
+    pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -186,6 +195,17 @@ pub struct FileRuleProvider {
     pub path: String,
     pub interval: Option<u64>,
     pub behavior: RuleSetBehavior,
+    pub format: Option<RuleSetFormat>,
+    #[serde(alias = "payload")]
+    pub inline_rules: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct InlineRuleProvider {
+    pub path: String,
+    pub behavior: RuleSetBehavior,
+    #[serde(alias = "payload")]
+    pub inline_rules: Vec<String>,
 }
 
 #[cfg(test)]
@@ -202,11 +222,11 @@ mod tests {
         assert_eq!(c.mixed_port.map(|x| x.into()), Some(9091));
         let cc = convert(c).expect("should convert");
 
-        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+        assert!(cc.listeners.iter().any(|listener| match listener {
             InboundOpts::Http { common_opts, .. } => common_opts.port == 9090,
             _ => false,
         }));
-        assert!(cc.listeners.iter().any(|(_, listener)| match listener {
+        assert!(cc.listeners.iter().any(|listener| match listener {
             InboundOpts::Mixed { common_opts, .. } => common_opts.port == 9091,
             _ => false,
         }));

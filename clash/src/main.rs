@@ -55,7 +55,7 @@ struct Cli {
         help = "Print clash-rs version and exit"
     )]
     version: bool,
-    #[clap(short, long, help = "Additinally log to file")]
+    #[clap(short, long, help = "Additionally log to file")]
     log_file: Option<String>,
 
     #[clap(
@@ -153,7 +153,8 @@ fn main() {
         log_file: cli.log_file,
     }) {
         Ok(_) => {}
-        Err(_) => {
+        Err(e) => {
+            eprintln!("Failed to start clash: {}", e);
             exit(1);
         }
     }

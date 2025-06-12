@@ -262,7 +262,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::proxy::{
-        socks::{Handler, HandlerOptions},
+        socks::outbound::{Handler, HandlerOptions},
         utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{

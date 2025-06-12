@@ -13,6 +13,23 @@ pub struct GeoData {
     cache: geodata_proto::GeoSiteList,
 }
 
+pub type GeoDataLookup = std::sync::Arc<dyn GeoDataLookupTrait + Send + Sync>;
+
+#[cfg_attr(test, mockall::automock)]
+pub trait GeoDataLookupTrait {
+    fn get(&self, list: &str) -> Option<geodata_proto::GeoSite>;
+}
+
+impl GeoDataLookupTrait for GeoData {
+    fn get(&self, list: &str) -> Option<geodata_proto::GeoSite> {
+        self.cache
+            .entry
+            .iter()
+            .find(|x| x.country_code.eq_ignore_ascii_case(list))
+            .cloned()
+    }
+}
+
 impl GeoData {
     pub async fn new<P: AsRef<Path>>(
         path: P,
@@ -57,12 +74,5 @@ impl GeoData {
                 Error::InvalidConfig(format!("geosite decode failed: {}", x))
             })?;
         Ok(Self { cache })
-    }
-
-    pub fn get(&self, list: &str) -> Option<&geodata_proto::GeoSite> {
-        self.cache
-            .entry
-            .iter()
-            .find(|x| x.country_code.eq_ignore_ascii_case(list))
     }
 }

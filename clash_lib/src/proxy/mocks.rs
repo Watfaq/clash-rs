@@ -3,6 +3,7 @@ use std::{collections::HashMap, io};
 use erased_serde::Serialize;
 use mockall::mock;
 
+use super::{AnyOutboundHandler, DialWithConnector, OutboundHandler, OutboundType};
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
@@ -14,8 +15,6 @@ use crate::{
     },
     session::Session,
 };
-
-use super::{AnyOutboundHandler, DialWithConnector, OutboundHandler, OutboundType};
 
 mock! {
     pub DummyProxyProvider {}

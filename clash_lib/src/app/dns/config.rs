@@ -59,6 +59,7 @@ pub struct Config {
     pub fake_ip_range: ipnet::IpNet,
     pub fake_ip_filter: Vec<String>,
     pub store_fake_ip: bool,
+    pub store_smart_stats: bool,
     pub hosts: Option<trie::StringTrie<IpAddr>>,
     pub nameserver_policy: HashMap<String, NameServer>,
 }
@@ -354,6 +355,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             )?,
             fake_ip_filter: dc.fake_ip_filter.clone(),
             store_fake_ip: c.profile.store_fake_ip,
+            store_smart_stats: c.profile.store_smart_stats,
             hosts: if dc.user_hosts && !c.hosts.is_empty() {
                 Config::parse_hosts(&c.hosts).ok()
             } else {

@@ -174,7 +174,8 @@ pub fn proxy_groups_dag_sort(
 mod tests {
     use crate::config::internal::proxy::{
         OutboundGroupFallback, OutboundGroupLoadBalance, OutboundGroupProtocol,
-        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupUrlTest,
+        OutboundGroupRelay, OutboundGroupSelect, OutboundGroupSmart,
+        OutboundGroupUrlTest,
     };
 
     #[test]
@@ -186,6 +187,7 @@ mod tests {
                 "auto".to_owned(),
                 "fallback-auto".to_owned(),
                 "load-balance".to_owned(),
+                "smart".to_owned(),
                 "select".to_owned(),
                 "DIRECT".to_owned(),
             ]),
@@ -206,7 +208,12 @@ mod tests {
             proxies: Some(vec!["ss".to_owned(), "DIRECT".to_owned()]),
             ..Default::default()
         };
-        let g5 = OutboundGroupSelect {
+        let g5 = OutboundGroupSmart {
+            name: "smart".to_owned(),
+            proxies: Some(vec!["ss".to_owned(), "DIRECT".to_owned()]),
+            ..Default::default()
+        };
+        let g6 = OutboundGroupSelect {
             name: "select".to_owned(),
             proxies: Some(vec![
                 "ss".to_owned(),
@@ -221,7 +228,8 @@ mod tests {
             OutboundGroupProtocol::UrlTest(g2),
             OutboundGroupProtocol::Fallback(g3),
             OutboundGroupProtocol::LoadBalance(g4),
-            OutboundGroupProtocol::Select(g5),
+            OutboundGroupProtocol::Smart(g5),
+            OutboundGroupProtocol::Select(g6),
         ];
 
         super::proxy_groups_dag_sort(&mut groups).unwrap();

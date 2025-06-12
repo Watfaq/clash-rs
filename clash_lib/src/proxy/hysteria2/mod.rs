@@ -128,7 +128,7 @@ impl Handler {
     const DEFAULT_MAX_IDLE_TIMEOUT: std::time::Duration =
         std::time::Duration::from_secs(300);
 
-    pub fn new(opts: HystOption) -> anyhow::Result<Self> {
+    pub fn new(opts: HystOption) -> Self {
         if opts.ca.is_some() {
             warn!("hysteria2 does not support ca yet");
         }
@@ -163,7 +163,7 @@ impl Handler {
         client_config.transport_config(Arc::new(transport));
         let ep_config = quinn::EndpointConfig::default();
 
-        Ok(Self {
+        Self {
             opts,
             ep_config,
             client_config,
@@ -171,7 +171,7 @@ impl Handler {
             conn: Mutex::new(None),
             guard: Mutex::new(None),
             support_udp: RwLock::new(true),
-        })
+        }
     }
 
     // connect and auth
@@ -673,7 +673,7 @@ mod tests {
             disable_mtu_discovery: false,
         };
 
-        let handler = Arc::new(Handler::new(opts)?);
+        let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;

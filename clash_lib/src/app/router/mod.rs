@@ -1,25 +1,3 @@
-use crate::{
-    Error,
-    app::router::rules::{
-        domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
-        ipcidr::IpCidr, ruleset::RuleSet,
-    },
-    print_and_exit,
-};
-
-use crate::{
-    common::mmdb::Mmdb,
-    config::internal::{config::RuleProviderDef, rule::RuleType},
-    session::Session,
-};
-
-use crate::app::router::rules::final_::Final;
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-
-use hyper::Uri;
-use rules::domain_regex::DomainRegex;
-use tracing::{error, info, trace};
-
 use super::{
     dns::ThreadSafeDNSResolver,
     remote_content_manager::providers::{
@@ -27,17 +5,33 @@ use super::{
         rule_provider::{RuleProviderImpl, ThreadSafeRuleProvider},
     },
 };
+use crate::{
+    Error,
+    app::router::rules::{
+        domain::Domain, domain_keyword::DomainKeyword, domain_suffix::DomainSuffix,
+        final_::Final, ipcidr::IpCidr, ruleset::RuleSet,
+    },
+    config::internal::{config::RuleProviderDef, rule::RuleType},
+    print_and_exit,
+    session::Session,
+};
+
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+
+use hyper::Uri;
+use rules::domain_regex::DomainRegex;
+use tracing::{error, info, trace};
 
 mod rules;
 
-use crate::common::geodata::GeoData;
+use crate::common::{geodata::GeoDataLookup, mmdb::MmdbLookup};
 pub use rules::RuleMatcher;
 
 pub struct Router {
     rules: Vec<Box<dyn RuleMatcher>>,
     dns_resolver: ThreadSafeDNSResolver,
 
-    asn_mmdb: Option<Arc<Mmdb>>,
+    asn_mmdb: Option<MmdbLookup>,
 }
 
 pub type ThreadSafeRouter = Arc<Router>;
@@ -49,9 +43,9 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        country_mmdb: Arc<Mmdb>,
-        asn_mmdb: Option<Arc<Mmdb>>,
-        geodata: Arc<GeoData>,
+        country_mmdb: MmdbLookup,
+        asn_mmdb: Option<MmdbLookup>,
+        geodata: GeoDataLookup,
         cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
@@ -107,23 +101,18 @@ impl Router {
                 }
             }
 
-            let mayby_ip = sess.resolved_ip.or(sess.destination.ip());
-            if let (Some(ip), Some(asn_mmdb)) = (mayby_ip, &self.asn_mmdb) {
+            let maybe_ip = sess.resolved_ip.or(sess.destination.ip());
+            if let (Some(ip), Some(asn_mmdb)) = (maybe_ip, &self.asn_mmdb) {
                 // try simplified mmdb first
                 let rv = asn_mmdb.lookup_country(ip);
                 if let Ok(country) = rv {
-                    sess.asn = country
-                        .country
-                        .and_then(|c| c.iso_code)
-                        .map(|s| s.to_string());
+                    sess.asn = Some(country.country_code);
                 }
                 if sess.asn.is_none() {
                     match asn_mmdb.lookup_asn(ip) {
                         Ok(asn) => {
                             trace!("asn for {} is {:?}", ip, asn);
-                            sess.asn = asn
-                                .autonomous_system_organization
-                                .map(|s| s.to_string());
+                            sess.asn = Some(asn.asn_name);
                         }
                         Err(e) => {
                             trace!("failed to lookup ASN for {}: {}", ip, e);
@@ -150,8 +139,8 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
-        mmdb: Arc<Mmdb>,
-        geodata: Arc<GeoData>,
+        mmdb: MmdbLookup,
+        geodata: GeoDataLookup,
         cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
@@ -166,13 +155,17 @@ impl Router {
                         resolver.clone(),
                     );
 
+                    // Default to yaml if not specified
+                    let format = http.format.unwrap_or_default();
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         http.behavior,
-                        Duration::from_secs(http.interval),
-                        Arc::new(vehicle),
+                        format,
+                        Some(Duration::from_secs(http.interval)),
+                        Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
+                        http.inline_rules,
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -185,13 +178,32 @@ impl Router {
                             .unwrap(),
                     );
 
+                    // Default to yaml if not specified
+                    let format = file.format.unwrap_or_default();
                     let provider = RuleProviderImpl::new(
                         name.clone(),
                         file.behavior,
-                        Duration::from_secs(file.interval.unwrap_or_default()),
-                        Arc::new(vehicle),
+                        format,
+                        Some(Duration::from_secs(file.interval.unwrap_or_default())),
+                        Some(Arc::new(vehicle)),
                         mmdb.clone(),
                         geodata.clone(),
+                        file.inline_rules,
+                    );
+
+                    rule_provider_registry.insert(name, Arc::new(provider));
+                }
+                RuleProviderDef::Inline(inline) => {
+                    let provider = RuleProviderImpl::new(
+                        name.clone(),
+                        inline.behavior,
+                        Default::default(), /* format really doesn't matter for
+                                             * inline rules */
+                        None,
+                        None,
+                        mmdb.clone(),
+                        geodata.clone(),
+                        Some(inline.inline_rules),
                     );
 
                     rule_provider_registry.insert(name, Arc::new(provider));
@@ -229,8 +241,8 @@ impl Router {
 
 pub fn map_rule_type(
     rule_type: RuleType,
-    mmdb: Arc<Mmdb>,
-    geodata: Arc<GeoData>,
+    mmdb: MmdbLookup,
+    geodata: GeoDataLookup,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
     match rule_type {
@@ -289,12 +301,9 @@ pub fn map_rule_type(
             target,
             country_code,
         } => {
-            let res = rules::geodata::GeoSiteMatcher::new(
-                country_code,
-                target,
-                geodata.as_ref(),
-            )
-            .unwrap();
+            let res =
+                rules::geodata::GeoSiteMatcher::new(country_code, target, &geodata)
+                    .unwrap();
             Box::new(res) as _
         }
         RuleType::SRCPort { target, port } => Box::new(rules::port::Port {

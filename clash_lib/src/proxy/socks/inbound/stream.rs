@@ -3,14 +3,15 @@ use crate::{
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
         socks::{
-            SOCKS5_VERSION, Socks5UDPCodec,
-            inbound::datagram::InboundUdp,
+            SOCKS5_VERSION,
+            inbound::{Socks5UDPCodec, datagram::InboundUdp},
             socks5::{auth_methods, response_code, socks_command},
         },
         utils::new_udp_socket,
     },
     session::{Network, Session, SocksAddr, Type},
 };
+
 use bytes::{BufMut, BytesMut};
 
 use std::{io, net::SocketAddr, str, sync::Arc};
@@ -22,8 +23,8 @@ use tokio_util::udp::UdpFramed;
 use tracing::{instrument, trace, warn};
 
 #[instrument(skip(sess, s, dispatcher, authenticator))]
-pub async fn handle_tcp<'a>(
-    sess: &'a mut Session,
+pub async fn handle_tcp(
+    sess: &mut Session,
     mut s: TcpStream,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,

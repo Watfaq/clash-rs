@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.8"
+version = "0.8.0"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
@@ -23,3 +23,5 @@ strip = true
 debug = 2
 panic = "abort"
 
+[patch.crates-io]
+async-process = { git = 'https://github.com/smol-rs/async-process.git', branch = "taiki-e/next" } # https://github.com/smol-rs/async-process/pull/96 is published to crates.io

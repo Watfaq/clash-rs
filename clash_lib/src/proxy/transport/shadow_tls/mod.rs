@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use once_cell::sync::Lazy;
 use rand::{Rng, distr::Distribution};
-use std::{io, ptr::copy_nonoverlapping, sync::Arc};
+use std::{
+    io,
+    ptr::copy_nonoverlapping,
+    sync::{Arc, LazyLock},
+};
 use stream::{ProxyTlsStream, VerifiedStream};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_watfaq_rustls::{TlsConnector, client::TlsStream};
 use utils::Hmac;
-use watfaq_rustls::RootCertStore;
 
 mod prelude;
 mod stream;
@@ -16,9 +18,10 @@ use super::Transport;
 use crate::{common::errors::map_io_error, proxy::AnyStream};
 use prelude::*;
 
-static ROOT_STORE: Lazy<Arc<RootCertStore>> = Lazy::new(root_store);
+static ROOT_STORE: LazyLock<Arc<watfaq_rustls::RootCertStore>> =
+    LazyLock::new(root_store);
 
-fn root_store() -> Arc<RootCertStore> {
+fn root_store() -> Arc<watfaq_rustls::RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
     Arc::new(root_store)
 }

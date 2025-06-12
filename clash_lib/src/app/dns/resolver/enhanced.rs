@@ -17,17 +17,16 @@ use hickory_proto::{op, rr};
 use crate::{
     Error,
     app::profile::ThreadSafeCacheFile,
-    common::{mmdb::Mmdb, trie},
+    common::{mmdb::MmdbLookup, trie},
     config::def::DNSMode,
-    dns::{ThreadSafeDNSClient, helper::make_clients},
-};
-
-use crate::dns::{
-    ClashResolver, Config, ResolverKind,
-    fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
-    filters::{
-        DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
-        IPNetFilter,
+    dns::{
+        ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
+        fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
+        filters::{
+            DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
+            IPNetFilter,
+        },
+        helper::make_clients,
     },
 };
 
@@ -87,7 +86,7 @@ impl EnhancedResolver {
     pub async fn new(
         cfg: Config,
         store: ThreadSafeCacheFile,
-        mmdb: Arc<Mmdb>,
+        mmdb: MmdbLookup,
     ) -> Self {
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),

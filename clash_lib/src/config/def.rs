@@ -1,9 +1,8 @@
 use crate::Error;
-use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
-
 use educe::Educe;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
+use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
 const DEFAULT_SO_MARK: u32 = 3389;
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
@@ -181,7 +180,9 @@ impl Display for LogLevel {
 ///   store-fake-ip: false
 ///
 /// proxy-groups:
-///   - name: "relay" type: relay proxies:
+///   - name: "relay"
+///     type: relay
+///     proxies:
 ///       - "plain-vmess"
 ///       - "ws-vmess"
 ///       - "auto"
@@ -190,24 +191,32 @@ impl Display for LogLevel {
 ///       - "select"
 ///       - DIRECT
 ///
-///   - name: "relay-one" type: relay use:
+///   - name: "relay-one"
+///     type: relay
+///     use:
 ///       - "file-provider"
 ///
-///   - name: "auto" type: url-test use:
-///       - "file-provider"
-///     proxies:
-///       - DIRECT
-///     url: "http://www.gstatic.com/generate_204"
-///     interval: 300
-///
-///   - name: "fallback-auto" type: fallback use:
+///   - name: "auto"
+///     type: url-test
+///     use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
 ///     url: "http://www.gstatic.com/generate_204"
 ///     interval: 300
 ///
-///   - name: "load-balance" type: load-balance use:
+///   - name: "fallback-auto"
+///     type: fallback
+///     use:
+///       - "file-provider"
+///     proxies:
+///       - DIRECT
+///     url: "http://www.gstatic.com/generate_204"
+///     interval: 300
+///
+///   - name: "load-balance"
+///     type: load-balance
+///     use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
@@ -215,39 +224,94 @@ impl Display for LogLevel {
 ///     url: "http://www.gstatic.com/generate_204"
 ///     interval: 300
 ///
-///   - name: select type: select use:
+///   - name: select
+///     type: select
+///     use:
 ///       - "file-provider"
 ///
-///   - name: test 🌏 type: select use:
+///   - name: test 🌏
+///     type: select
+///     use:
 ///       - "file-provider"
 ///     proxies:
 ///       - DIRECT
 ///
 /// proxies:
-///   - name: plain-vmess type: vmess server: 10.0.0.13 port: 16823 uuid:
-///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
+///   - name: plain-vmess
+///     type: vmess
+///     server: 10.0.0.13
+///     port: 16823
+///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+///     alterId: 0
+///     cipher: auto
+///     udp: true
 ///     skip-cert-verify: true
-///   - name: ws-vmess type: vmess server: 10.0.0.13 port: 16824 uuid:
-///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
-///     skip-cert-verify: true network: ws ws-opts: path:
-///     /api/v3/download.getFile headers: Host: www.amazon.com
+///   - name: ws-vmess
+///     type: vmess
+///     server: 10.0.0.13
+///     port: 16824
+///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+///     alterId: 0
+///     cipher: auto
+///     udp: true
+///     skip-cert-verify: true
+///     network: ws
+///     ws-opts:
+///         path: /api/v3/download.getFile
+///         headers: Host: www.amazon.com
 ///
-///   - name: tls-vmess type: vmess server: 10.0.0.13 port: 8443 uuid:
-///     23ad6b10-8d1a-40f7-8ad0-e3e35cd38297 alterId: 0 cipher: auto udp: true
-///     skip-cert-verify: true tls: true
+///   - name: tls-vmess
+///     type: vmess
+///     server: 10.0.0.13
+///     port: 8443
+///     uuid: 23ad6b10-8d1a-40f7-8ad0-e3e35cd38297
+///     alterId: 0
+///     cipher: auto
+///     udp: true
+///     skip-cert-verify: true
+///     tls: true
 ///
-///   - name: h2-vmess type: vmess server: 10.0.0.13 port: 8444 uuid:
-///     b831381d-6324-4d53-ad4f-8cda48b30811 alterId: 0 cipher: auto udp: true
-///     skip-cert-verify: true tls: true network: h2 h2-opts: path: /ray
+///   - name: h2-vmess
+///     type: vmess
+///     server: 10.0.0.13
+///     port: 8444
+///     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+///     alterId: 0
+///     cipher: auto
+///     udp: true
+///     skip-cert-verify: true
+///     tls: true
+///     network: h2
+///     h2-opts:
+///         path: /ray
 ///
-///   - name: vmess-altid type: vmess server: tw-1.ac.laowanxiang.com port: 153
-///     uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687 alterId: 64 cipher: auto udp:
-///     true network: ws ws-opts: path: /api/v3/download.getFile headers: Host:
-///     5607b9d187e655736f563fee87d7283994721.laowanxiang.com
-///   - name: "ss-simple" type: ss server: 10.0.0.13 port: 8388 cipher:
-///     aes-256-gcm password: "password" udp: true
-///   - name: "trojan" type: trojan server: 10.0.0.13 port: 9443 password:
-///     password1 udp: true # sni: example.com # aka server name alpn:
+///   - name: vmess-altid
+///     type: vmess
+///     server: tw-1.ac.laowanxiang.com
+///     port: 153
+///     uuid: 46dd0dd3-2cc0-3f55-907c-d94e54877687
+///     alterId: 64
+///     cipher: auto udp: true
+///     network: ws
+///     ws-opts:
+///         path: /api/v3/download.getFile
+///         headers:
+///             Host: 5607b9d187e655736f563fee87d7283994721.laowanxiang.com
+///   - name: "ss-simple"
+///     type: ss
+///     server: 10.0.0.13
+///     port: 8388
+///     cipher: aes-256-gcm
+///     password: "password"
+///     udp: true
+///   - name: "trojan"
+///     type: trojan
+///     server: 10.0.0.13 p
+///     ort: 9443
+///     password: password1
+///     udp: true
+///     # sni: example.com # aka server name
+///     alpn:
 ///       - h2
 ///       - http/1.1
 ///     skip-cert-verify: true
@@ -340,7 +404,7 @@ pub struct Config {
     #[educe(Default = "Country.mmdb")]
     pub mmdb: String,
     /// Country database download url
-    // TODO not compatiable with clash-meta
+    // TODO not compatible with clash-meta
     #[educe(Default = Some("https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb".into()))]
     pub mmdb_download_url: Option<String>,
     /// Optional ASN database path relative to the working dir
@@ -367,7 +431,13 @@ pub struct Config {
     pub external_ui: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
-    #[serde(rename = "interface-name")]
+    /// CORS allowed origins
+    /// # examples
+    /// ```yaml
+    /// cors-allow-origins:
+    ///   - "https://example.com"
+    #[serde(rename = "cors-allow-origins")]
+    pub cors_allow_origins: Option<Vec<String>>,
     /// outbound interface name
     /// # Note
     /// - not implemented yet
@@ -394,8 +464,7 @@ pub struct Config {
     /// ```
     pub tun: Option<TunConfig>,
 
-    #[serde(rename = "listeners")]
-    pub listener: Option<Vec<HashMap<String, Value>>>,
+    pub listeners: Option<Vec<HashMap<String, Value>>>,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -425,9 +494,7 @@ impl FromStr for Config {
         })?;
 
         serde_yaml::from_value(val).map_err(|e| {
-            Error::InvalidConfig(format!(
-                "counldn't not parse config content {s}: {e}"
-            ))
+            Error::InvalidConfig(format!("could not parse config content {s}: {e}"))
         })
     }
 }
@@ -538,7 +605,11 @@ pub struct Profile {
     /// Store the `select` results in $CWD/cache.db
     pub store_selected: bool,
     /// persistence fakeip
+    #[serde(rename = "store-fake-ip")]
     pub store_fake_ip: bool,
+    /// Store smart proxy group statistics and preferences
+    #[serde(rename = "store-smart-stats")]
+    pub store_smart_stats: bool,
 }
 
 impl Default for Profile {
@@ -546,6 +617,7 @@ impl Default for Profile {
         Self {
             store_selected: true,
             store_fake_ip: false,
+            store_smart_stats: true,
         }
     }
 }
