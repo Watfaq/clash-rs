@@ -41,6 +41,7 @@ impl From<ClashConfigDef> for GeneralConfig {
 
 #[derive(uniffi::Record)]
 pub struct ConfigOverride {
+    pub mode: Option<String>,
     pub tun_fd: Option<i32>,
     pub http_port: Option<u16>,
     pub dns_server: Option<String>,
@@ -70,6 +71,12 @@ fn apply_config_override(
             ..Default::default()
         };
         cfg_def.tun = Some(tun_cfg);
+    }
+
+    if let Some(mode) = cfg_override.mode.as_ref() {
+        cfg_def.mode = mode
+            .parse::<clash_lib::ClashRunMode>()
+            .map_err(|e| FFIError::ParseConfig(e.to_string()))?;
     }
 
     if cfg_def.port.is_none() && cfg_def.mixed_port.is_none() {
@@ -137,10 +144,7 @@ pub fn start_clash_with_config(
     match cfg_def {
         Ok(mut cfg_def) => {
             if let Some(cfg_override) = cfg_override {
-                if let Err(err) = apply_config_override(&cfg_override, &mut cfg_def)
-                {
-                    return Err(err);
-                }
+                apply_config_override(&cfg_override, &mut cfg_def)?;
             }
 
             let opts = clash_lib::Options {
@@ -239,6 +243,7 @@ mod tests {
             .unwrap();
 
         let cfg_override = super::ConfigOverride {
+            mode: Some("rule".to_string()),
             tun_fd: Some(1989),
             http_port: Some(7891),
             dns_server: Some("127.0.0.1:53".to_string()),
@@ -261,6 +266,8 @@ mod tests {
         };
 
         assert!(super::apply_config_override(&cfg_override, &mut cfg_def).is_ok());
+
+        assert_eq!(cfg_def.mode.to_string(), "rule");
 
         assert_eq!(cfg_def.bind_address, "240.0.0.2".parse().unwrap());
         assert!(!cfg_def.dns.enable);

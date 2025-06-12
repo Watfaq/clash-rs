@@ -52,11 +52,12 @@ mod proxy;
 mod session;
 
 use crate::common::{geodata, mmdb::MmdbLookup};
+/// Re-export the config types for FFI usage
 pub use config::{
     DNSListen as ClashDNSListen, RuntimeConfig as ClashRuntimeConfig,
     def::{
         Config as ClashConfigDef, DNS as ClashDNSConfigDef, Port,
-        TunConfig as ClashTunConfig,
+        RunMode as ClashRunMode, TunConfig as ClashTunConfig,
     },
 };
 

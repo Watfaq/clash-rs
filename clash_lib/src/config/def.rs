@@ -83,6 +83,19 @@ pub enum RunMode {
     Direct,
 }
 
+impl FromStr for RunMode {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "global" => Ok(RunMode::Global),
+            "rule" => Ok(RunMode::Rule),
+            "direct" => Ok(RunMode::Direct),
+            _ => Err(Error::InvalidConfig(format!("invalid run mode: {s}"))),
+        }
+    }
+}
+
 impl Display for RunMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
