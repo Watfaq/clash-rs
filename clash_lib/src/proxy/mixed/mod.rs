@@ -86,7 +86,7 @@ impl InboundHandlerTrait for MixedInbound {
                     };
 
                     tokio::spawn(async move {
-                        socks::handle_tcp(
+                        socks::inbound::handle_tcp(
                             &mut sess,
                             socket,
                             dispatcher,

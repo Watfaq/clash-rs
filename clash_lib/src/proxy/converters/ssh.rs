@@ -2,17 +2,17 @@ use russh::keys::{EcdsaCurve, HashAlg};
 use totp_rs::{Rfc6238, Secret, TOTP};
 
 use crate::{
-    config::internal::proxy::{OutBoundSsh, Totp},
+    config::internal::proxy::{OutboundSsh, Totp},
     proxy::{
         HandlerCommonOptions,
         ssh::{Handler, HandlerOptions},
     },
 };
 
-impl TryFrom<OutBoundSsh> for Handler {
+impl TryFrom<OutboundSsh> for Handler {
     type Error = crate::Error;
 
-    fn try_from(value: OutBoundSsh) -> Result<Self, Self::Error> {
+    fn try_from(value: OutboundSsh) -> Result<Self, Self::Error> {
         (&value).try_into()
     }
 }
@@ -48,10 +48,10 @@ fn str_to_algo(value: &str) -> Option<russh::keys::Algorithm> {
     }
 }
 
-impl TryFrom<&OutBoundSsh> for Handler {
+impl TryFrom<&OutboundSsh> for Handler {
     type Error = crate::Error;
 
-    fn try_from(s: &OutBoundSsh) -> Result<Self, Self::Error> {
+    fn try_from(s: &OutboundSsh) -> Result<Self, Self::Error> {
         let host_key_algorithms = s.host_key_algorithms.clone().map(|algos| {
             algos
                 .iter()

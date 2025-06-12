@@ -10,7 +10,7 @@ use tokio_util::udp::UdpFramed;
 use tracing::{error, trace};
 
 use crate::{
-    proxy::{AnyStream, datagram::UdpPacket, socks::Socks5UDPCodec},
+    proxy::{AnyStream, datagram::UdpPacket, socks::inbound::Socks5UDPCodec},
     session::SocksAddr,
 };
 

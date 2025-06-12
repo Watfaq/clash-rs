@@ -2,7 +2,7 @@ use crate::{
     config::internal::proxy::OutboundSocks5,
     proxy::{
         HandlerCommonOptions,
-        socks::{Handler, HandlerOptions},
+        socks::outbound::{Handler, HandlerOptions},
         transport::TlsClient,
     },
 };
