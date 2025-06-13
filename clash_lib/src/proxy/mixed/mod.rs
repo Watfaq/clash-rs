@@ -129,7 +129,8 @@ impl InboundHandlerTrait for MixedInbound {
                             dispatcher,
                             authenticator,
                             fw_mark,
-                        ).await;
+                        )
+                        .await;
                     });
                 }
             }
