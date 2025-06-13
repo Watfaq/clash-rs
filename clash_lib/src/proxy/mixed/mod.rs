@@ -119,18 +119,13 @@ impl InboundHandlerTrait for MixedInbound {
 
                 _ => {
                     let src = socket.peer_addr()?;
-                    let dispatcher = dispatcher.clone();
-                    let authenticator = authenticator.clone();
-                    let fw_mark = fw_mark;
-                    tokio::spawn(async move {
-                        http::handle_http(
-                            Box::new(socket),
-                            src,
-                            dispatcher,
-                            authenticator,
-                            fw_mark,
-                        ).await;
-                    });
+                    http::handle_http(
+                        Box::new(socket),
+                        src,
+                        dispatcher,
+                        authenticator,
+                        fw_mark,
+                   );
                 }
             }
         }
