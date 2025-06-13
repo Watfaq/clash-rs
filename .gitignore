@@ -28,4 +28,5 @@ shell.nix
 
 codecov.json
 
-bindings
+bindings/
+out/

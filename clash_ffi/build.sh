@@ -5,6 +5,9 @@ set -e
 LIB=libclash_rs.a
 FRAMEWORK=out/clash-rs-ffi.xcframework
 
+[[ -d out ]] && rm -rf out
+mkdir -p out
+
 [[ -d bindings ]] && rm -rf bindings
 mkdir -p bindings
  
@@ -16,11 +19,8 @@ cargo run --features=uniffi/cli --bin uniffi-bindgen generate --library target/d
  
 # Add the iOS targets and build
 for TARGET in \
-        aarch64-apple-darwin \
         aarch64-apple-ios \
-        aarch64-apple-ios-sim \
-        x86_64-apple-darwin \
-        x86_64-apple-ios
+        aarch64-apple-ios-sim
 do
     rustup target add $TARGET
     cargo build -p clash_ffi --release --target=$TARGET
