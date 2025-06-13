@@ -148,23 +148,22 @@ pub async fn handle(
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
 ) {
-    tokio::task::spawn(async move {
-        if let Err(http_err) = http1::Builder::new()
-            .preserve_header_case(true)
-            .title_case_headers(true)
-            .serve_connection(
-                stream,
-                ProxyService {
-                    src,
-                    dispatcher,
-                    authenticator,
-                    fw_mark,
-                },
-            )
-            .with_upgrades()
-            .await
-        {
-            warn!("Error while serving HTTP connection: {}", http_err);
-        }
-    });
+    let result = http1::Builder::new()
+        .preserve_header_case(true)
+        .title_case_headers(true)
+        .serve_connection(
+            stream,
+            ProxyService {
+                src,
+                dispatcher,
+                authenticator,
+                fw_mark,
+            },
+        )
+        .with_upgrades()
+        .await;
+
+    if let Err(http_err) = result {
+        warn!("Error while serving HTTP connection: {}", http_err);
+    }
 }

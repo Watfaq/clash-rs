@@ -57,8 +57,20 @@ impl InboundHandlerTrait for MixedInbound {
         let listener = TcpListener::bind(self.addr).await?;
 
         loop {
-            let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?;
+            let (socket, _) = match listener.accept().await {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("failed to accept socket on {}: {:?}", self.addr, e);
+                    continue;
+                }
+            };
+            let src_addr = match socket.peer_addr() {
+                Ok(a) => a,
+                Err(e) => {
+                    warn!("failed to get peer address: {:?}", e);
+                    continue;
+                }
+            };
             if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
@@ -66,7 +78,16 @@ impl InboundHandlerTrait for MixedInbound {
             apply_tcp_options(&socket)?;
 
             let mut p = [0; 1];
-            let n = socket.peek(&mut p).await?;
+            let n = match socket.peek(&mut p).await {
+                Ok(n) => n,
+                Err(e) => {
+                    warn!(
+                        "failed to peek socket on mixed listener {}: {:?}",
+                        self.addr, e
+                    );
+                    continue;
+                }
+            };
             if n != 1 {
                 warn!("failed to peek socket on mixed listener {}", self.addr);
                 continue;
@@ -98,14 +119,18 @@ impl InboundHandlerTrait for MixedInbound {
 
                 _ => {
                     let src = socket.peer_addr()?;
-                    http::handle_http(
-                        Box::new(socket),
-                        src,
-                        dispatcher,
-                        authenticator,
-                        fw_mark,
-                    )
-                    .await;
+                    let dispatcher = dispatcher.clone();
+                    let authenticator = authenticator.clone();
+                    tokio::spawn(async move {
+                        http::handle_http(
+                            Box::new(socket),
+                            src,
+                            dispatcher,
+                            authenticator,
+                            fw_mark,
+                        )
+                        .await;
+                    });
                 }
             }
         }
