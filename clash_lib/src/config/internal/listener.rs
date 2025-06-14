@@ -84,7 +84,6 @@ impl InboundOpts {
 pub struct CommonInboundOpts {
     pub name: String,
     pub listen: BindAddress,
-    // TODO: make this reloadable in inbound listeners
     #[serde(default)]
     pub allow_lan: bool,
     pub port: u16,
