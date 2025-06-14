@@ -30,12 +30,11 @@ pub(crate) fn build_network_listeners(
         let mut runners: Vec<Runner> = Vec::new();
 
         if handler.handle_tcp() {
-            info!("{} TCP listening at: {}:{}", name, addr, port,);
-
             let tcp_listener = handler.clone();
 
             let name = name.clone();
             runners.push(Box::pin(async move {
+                info!("{} TCP listening at: {}:{}", name, addr, port,);
                 tcp_listener
                     .listen_tcp()
                     .await
@@ -47,10 +46,10 @@ pub(crate) fn build_network_listeners(
         }
 
         if handler.handle_udp() {
-            info!("{} UDP listening at: {}:{}", name, addr, port,);
             let udp_listener = handler.clone();
             let name = name.clone();
             runners.push(Box::pin(async move {
+                info!("{} UDP listening at: {}:{}", name, addr, port,);
                 udp_listener
                     .listen_udp()
                     .await

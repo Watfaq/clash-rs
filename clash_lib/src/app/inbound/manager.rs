@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use tracing::warn;
+use tracing::{trace, warn};
 
 /// Legacy ports configuration for inbounds.
 /// Newer inbounds have their own port configuration
@@ -56,14 +56,24 @@ impl InboundManager {
     /// If a listener is already running, it will be restarted.
     pub async fn start_all_listeners(&self) {
         for (opts, handler) in self.inbound_handlers.write().await.iter_mut() {
-            if let Some(handler) = handler {
+            if let Some(handler) = handler.take() {
                 warn!(
                     "Restarting inbound handler for: {}",
                     opts.common_opts().name
                 );
                 handler.abort();
+                let _ = handler.await.map_err(|e| {
+                    trace!(
+                        "Inbound {} listener task aborted: {}",
+                        opts.common_opts().name,
+                        e
+                    );
+                });
             }
+            *handler = None;
+        }
 
+        for (opts, handler) in self.inbound_handlers.write().await.iter_mut() {
             *handler = build_network_listeners(
                 opts,
                 self.dispatcher.clone(),

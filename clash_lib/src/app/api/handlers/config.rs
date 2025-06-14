@@ -207,7 +207,9 @@ async fn patch_configs(
         need_restart = true;
     }
 
-    if let Some(allow_lan) = payload.allow_lan {
+    if let Some(allow_lan) = payload.allow_lan
+        && allow_lan != inbound_manager.get_allow_lan().await
+    {
         inbound_manager.set_allow_lan(allow_lan).await;
         // TODO: can be done with AtomicBool, but requires more changes
         need_restart = true;
