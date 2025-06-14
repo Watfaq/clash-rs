@@ -117,6 +117,27 @@ impl InboundManager {
         ports
     }
 
+    pub async fn get_allow_lan(&self) -> bool {
+        let guard = self.inbound_handlers.read().await;
+        if let Some((opts, _)) = guard.iter().next() {
+            opts.common_opts().allow_lan
+        } else {
+            false
+        }
+    }
+
+    pub async fn set_allow_lan(&self, allow_lan: bool) {
+        let mut guard = self.inbound_handlers.write().await;
+        let new_map = guard
+            .drain()
+            .map(|(mut opts, handler)| {
+                opts.common_opts_mut().allow_lan = allow_lan;
+                (opts, handler)
+            })
+            .collect::<HashMap<_, _>>();
+        *guard = new_map;
+    }
+
     pub async fn get_bind_address(&self) -> BindAddress {
         let guard = self.inbound_handlers.read().await;
         if let Some((opts, _)) = guard.iter().next() {

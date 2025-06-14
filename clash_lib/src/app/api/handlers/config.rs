@@ -54,6 +54,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
     let run_mode = state.dispatcher.get_mode().await;
     let global_state = state.global_state.lock().await;
     let dns_resolver = state.dns_resolver;
+    let inbound_manager = state.inbound_manager;
 
     let ports = state.inbound_manager.get_ports().await;
 
@@ -70,14 +71,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
         mode: Some(run_mode),
         log_level: Some(global_state.log_level),
         ipv6: Some(dns_resolver.ipv6()),
-        allow_lan: Some(
-            state
-                .inbound_manager
-                .get_bind_address()
-                .await
-                .0
-                .is_unspecified(),
-        ),
+        allow_lan: Some(inbound_manager.get_allow_lan().await),
     })
 }
 
@@ -182,13 +176,6 @@ async fn patch_configs(
     State(state): State<ConfigState>,
     Json(payload): Json<PatchConfigRequest>,
 ) -> impl IntoResponse {
-    if payload.allow_lan.is_some() {
-        warn!(
-            "setting allow_lan doesn't do anything. please set bind_address to a \
-             LAN address instead."
-        );
-    }
-
     let inbound_manager = state.inbound_manager.clone();
     let mut need_restart = false;
     if let Some(bind_address) = payload.bind_address.clone() {
@@ -220,6 +207,13 @@ async fn patch_configs(
         inbound_manager.change_ports(ports).await;
         need_restart = true;
     }
+
+    if let Some(allow_lan) = payload.allow_lan {
+        inbound_manager.set_allow_lan(allow_lan).await;
+        // TODO: can be done with AtomicBool, but requires more changes
+        need_restart = true;
+    }
+
     if need_restart {
         inbound_manager.restart().await;
     }
