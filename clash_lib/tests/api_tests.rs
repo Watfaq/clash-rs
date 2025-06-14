@@ -48,10 +48,10 @@ async fn test_get_set_allow_lan() {
         let response = String::from_utf8_lossy(&output.stdout);
         let json = serde_json::from_str::<serde_json::Value>(&response)
             .expect("Failed to parse JSON response");
-        json.get("allow_lan")
-            .expect("No 'allow_lan' field in response")
+        json.get("allow-lan")
+            .expect("No 'allow-lan' field in response")
             .as_bool()
-            .expect("'allow_lan' is not a boolean")
+            .expect("'allow-lan' is not a boolean")
     }
 
     assert!(
@@ -62,7 +62,7 @@ async fn test_get_set_allow_lan() {
     let configs_url = "http://localhost:9090/configs";
     let curl_cmd = format!(
         "curl -s -X PATCH -H 'Authorization: Bearer {}' -H 'Content-Type: \
-         application/json' -d '{{\"allow_lan\": false}}' {configs_url}",
+         application/json' -d '{{\"allow-lan\": false}}' {configs_url}",
         "clash-rs"
     );
     let output = tokio::process::Command::new("sh")
