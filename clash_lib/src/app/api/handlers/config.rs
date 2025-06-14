@@ -10,7 +10,6 @@ use axum::{
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use tracing::warn;
 
 use crate::{
     GlobalState,
