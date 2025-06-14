@@ -7,7 +7,8 @@ mod common;
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 async fn test_get_set_allow_lan() {
-    let wd = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
     let config_path = wd.join("rules.yaml");
     assert!(
         config_path.exists(),
@@ -22,14 +23,10 @@ async fn test_get_set_allow_lan() {
             rt: None,
             log_file: None,
         })
-            .expect("Failed to start clash");
+        .expect("Failed to start clash");
     });
 
     wait_port_ready(9090).expect("Clash server is not ready");
-
-
-
-
 
     async fn get_allow_lan() -> bool {
         let get_configs_url = "http://localhost:9090/configs";
@@ -43,31 +40,47 @@ async fn test_get_set_allow_lan() {
             .output()
             .await
             .expect("Failed to execute curl command");
-        assert!(output.status.success(), "Curl command failed with output: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "Curl command failed with output: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         let response = String::from_utf8_lossy(&output.stdout);
         let json = serde_json::from_str::<serde_json::Value>(&response)
             .expect("Failed to parse JSON response");
-        json
-            .get("allow_lan")
+        json.get("allow_lan")
             .expect("No 'allow_lan' field in response")
             .as_bool()
             .expect("'allow_lan' is not a boolean")
     }
 
-    assert!(get_allow_lan().await, "'allow_lan' should be true by config");
+    assert!(
+        get_allow_lan().await,
+        "'allow_lan' should be true by config"
+    );
 
     let configs_url = "http://localhost:9090/configs";
     let curl_cmd = format!(
-        "curl -s -X PATCH -H 'Authorization: Bearer {}' -H 'Content-Type: application/json' -d '{{\"allow_lan\": false}}' {configs_url}", "clash-rs");
+        "curl -s -X PATCH -H 'Authorization: Bearer {}' -H 'Content-Type: \
+         application/json' -d '{{\"allow_lan\": false}}' {configs_url}",
+        "clash-rs"
+    );
     let output = tokio::process::Command::new("sh")
         .arg("-c")
         .arg(curl_cmd)
         .output()
         .await
         .expect("Failed to execute curl command");
-    assert!(output.status.success(), "Curl command failed with output: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "Curl command failed with output: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
-    assert!(!get_allow_lan().await, "'allow_lan' should be false after update");
+    assert!(
+        !get_allow_lan().await,
+        "'allow_lan' should be false after update"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -98,7 +111,7 @@ async fn test_connections_returns_proxy_chain_names() {
             rt: None,
             log_file: None,
         })
-            .expect("Failed to start server");
+        .expect("Failed to start server");
     });
 
     std::thread::spawn(move || {
@@ -108,7 +121,7 @@ async fn test_connections_returns_proxy_chain_names() {
             rt: None,
             log_file: None,
         })
-            .expect("Failed to start client");
+        .expect("Failed to start client");
     });
 
     wait_port_ready(8899).expect("Proxy port is not ready");
