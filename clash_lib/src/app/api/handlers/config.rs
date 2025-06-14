@@ -54,7 +54,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
     let run_mode = state.dispatcher.get_mode().await;
     let global_state = state.global_state.lock().await;
     let dns_resolver = state.dns_resolver;
-    let inbound_manager = state.inbound_manager;
+    let inbound_manager = state.inbound_manager.clone();
 
     let ports = state.inbound_manager.get_ports().await;
 
