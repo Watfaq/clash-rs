@@ -133,7 +133,7 @@ pub fn get_api_runner(
                     );
             }
 
-            let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
+            let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
             if let Ok(addr) = listener.local_addr() {
                 if !addr.ip().is_loopback()
                     && controller_cfg.secret.unwrap_or_default().is_empty()

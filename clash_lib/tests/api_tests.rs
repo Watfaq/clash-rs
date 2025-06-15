@@ -1,5 +1,7 @@
-use crate::common::{start_clash, wait_port_ready};
+use crate::common::{send_http_request, start_clash, wait_port_ready};
+use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options};
+use http_body_util::BodyExt;
 use std::{path::PathBuf, time::Duration};
 
 mod common;
@@ -29,25 +31,27 @@ async fn test_get_set_allow_lan() {
     wait_port_ready(9090).expect("Clash server is not ready");
 
     async fn get_allow_lan() -> bool {
-        let get_configs_url = "http://localhost:9090/configs";
-        let curl_cmd = format!(
-            "curl -s -H 'Authorization: Bearer {}' {}",
-            "clash-rs", get_configs_url
-        );
-        let output = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(curl_cmd)
-            .output()
+        let get_configs_url = "http://127.0.0.1:9090/configs";
+        let req = hyper::Request::builder()
+            .uri(get_configs_url)
+            .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .method(http::method::Method::GET)
+            .body(http_body_util::Empty::<Bytes>::new())
+            .expect("Failed to build request");
+
+        let response = send_http_request(get_configs_url.parse().unwrap(), req)
             .await
-            .expect("Failed to execute curl command");
-        assert!(
-            output.status.success(),
-            "Curl command failed with output: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let response = String::from_utf8_lossy(&output.stdout);
-        let json = serde_json::from_str::<serde_json::Value>(&response)
-            .expect("Failed to parse JSON response");
+            .expect("Failed to send request");
+        let json: serde_json::Value = serde_json::from_reader(
+            response
+                .collect()
+                .await
+                .expect("Failed to collect response body")
+                .aggregate()
+                .reader(),
+        )
+        .expect("Failed to parse JSON response");
         json.get("allow-lan")
             .expect("No 'allow-lan' field in response")
             .as_bool()
@@ -59,23 +63,19 @@ async fn test_get_set_allow_lan() {
         "'allow_lan' should be true by config"
     );
 
-    let configs_url = "http://localhost:9090/configs";
-    let curl_cmd = format!(
-        "curl -s -X PATCH -H 'Authorization: Bearer {}' -H 'Content-Type: \
-         application/json' -d '{{\"allow-lan\": false}}' {configs_url}",
-        "clash-rs"
-    );
-    let output = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(curl_cmd)
-        .output()
+    let configs_url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body("{\"allow-lan\": false}".into())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(configs_url.parse().unwrap(), req)
         .await
-        .expect("Failed to execute curl command");
-    assert!(
-        output.status.success(),
-        "Curl command failed with output: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+        .expect("Failed to send request");
+    assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
     assert!(
         !get_allow_lan().await,
@@ -126,50 +126,50 @@ async fn test_connections_returns_proxy_chain_names() {
 
     wait_port_ready(8899).expect("Proxy port is not ready");
 
-    tokio::spawn(async {
-        let curl_cmd = format!(
-            "curl -s -x socks5h://127.0.0.1:8899 {}",
-            "https://httpbin.yba.dev/drip?duration=100&delay=1&numbytes=1000"
-        );
+    std::thread::spawn(move || {
+        // NOTE: use curl here for easy socks5h testing
+        let curl_args = vec![
+            "-s",
+            "-x",
+            "socks5h://127.0.0.1:8899",
+            "https://httpbin.yba.dev/drip?duration=100&delay=1&numbytes=1000",
+        ];
 
-        let output = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(curl_cmd)
+        let output = std::process::Command::new("curl")
+            .args(curl_args)
             .output()
-            .await
             .expect("Failed to execute curl command");
 
         assert!(
             output.status.success(),
-            "Curl command failed with output: {}",
+            "Curl command failed with output: {}, stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     });
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let connections_url = "http://localhost:9090/connections";
-    let curl_cmd = format!(
-        "curl -s -H 'Authorization: Bearer {}' {}",
-        "clash-rs", connections_url
-    );
-    let output = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(curl_cmd)
-        .output()
+    let connections_url = "http://127.0.0.1:9090/connections";
+
+    let req = hyper::Request::builder()
+        .uri(connections_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+    let response = send_http_request(connections_url.parse().unwrap(), req);
+    let response = response
         .await
-        .expect("Failed to execute curl command");
+        .expect("Failed to send request")
+        .collect()
+        .await
+        .expect("Failed to collect response body")
+        .aggregate()
+        .reader();
 
-    assert!(
-        output.status.success(),
-        "Curl command failed with output: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let response = String::from_utf8_lossy(&output.stdout);
-
-    let json = serde_json::from_str::<serde_json::Value>(&response)
-        .expect("Failed to parse JSON response");
+    let json: serde_json::Value =
+        serde_json::from_reader(response).expect("Failed to parse JSON response");
     let connections = json
         .get("connections")
         .expect("No 'connections' field in response");
