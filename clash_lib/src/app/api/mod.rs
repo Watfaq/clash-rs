@@ -175,11 +175,11 @@ pub fn get_api_runner(
                 listener,
                 app.into_make_service_with_connect_info::<SocketAddr>(),
             )
-                .await
-                .map_err(|x| {
-                    error!("API server error: {}", x);
-                    crate::Error::Operation(format!("API server error: {}", x))
-                })
+            .await
+            .map_err(|x| {
+                error!("API server error: {}", x);
+                crate::Error::Operation(format!("API server error: {}", x))
+            })
         };
         Some(Box::pin(runner))
     } else {
