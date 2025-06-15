@@ -103,6 +103,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         "pdp_ip",
         "WLAN",
         "wlp",
+        "Ethernet",
         "vEthernet",
         "Wi-Fi",
         "Tailscale",

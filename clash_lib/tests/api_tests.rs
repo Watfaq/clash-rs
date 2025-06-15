@@ -142,7 +142,8 @@ async fn test_connections_returns_proxy_chain_names() {
 
         assert!(
             output.status.success(),
-            "Curl command failed with output: {}",
+            "Curl command failed with output: {}, stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     });
