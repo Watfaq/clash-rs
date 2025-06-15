@@ -42,6 +42,7 @@ pub enum InboundOpts {
         network: Vec<String>,
         target: String,
     },
+    #[cfg(feature = "shadowsocks")]
     #[serde(alias = "shadowsocks")]
     Shadowsocks {
         #[serde(flatten)]
@@ -62,6 +63,7 @@ impl InboundOpts {
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
         }
     }
@@ -74,6 +76,7 @@ impl InboundOpts {
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
         }
     }

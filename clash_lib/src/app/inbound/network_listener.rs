@@ -14,6 +14,7 @@ use crate::proxy::tproxy::TproxyInbound;
 use crate::Dispatcher;
 use tracing::{error, info, warn};
 
+#[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
 use std::sync::Arc;
 
@@ -140,6 +141,7 @@ fn build_handler(
         })
         .map(|x| Arc::new(x) as _)
         .ok(),
+        #[cfg(feature = "shadowsocks")]
         InboundOpts::Shadowsocks {
             common_opts,
             udp,
