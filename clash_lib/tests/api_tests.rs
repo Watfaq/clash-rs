@@ -31,7 +31,7 @@ async fn test_get_set_allow_lan() {
     wait_port_ready(9090).expect("Clash server is not ready");
 
     async fn get_allow_lan() -> bool {
-        let get_configs_url = "http://localhost:9090/configs";
+        let get_configs_url = "http://127.0.0.1:9090/configs";
         let req = hyper::Request::builder()
             .uri(get_configs_url)
             .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
@@ -63,7 +63,7 @@ async fn test_get_set_allow_lan() {
         "'allow_lan' should be true by config"
     );
 
-    let configs_url = "http://localhost:9090/configs";
+    let configs_url = "http://127.0.0.1:9090/configs";
     let req = hyper::Request::builder()
         .uri(configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
@@ -150,7 +150,7 @@ async fn test_connections_returns_proxy_chain_names() {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let connections_url = "http://localhost:9090/connections";
+    let connections_url = "http://127.0.0.1:9090/connections";
 
     let req = hyper::Request::builder()
         .uri(connections_url)

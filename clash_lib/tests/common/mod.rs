@@ -24,6 +24,11 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
         format!("Port {} is not ready after 10 attempts", port),
     )))
 }
+
+/// Sends an HTTP request to the specified URL using a TCP connection.
+/// Don't use any domain name in the URL, which will trigger DNS resolution.
+/// And libnss_files will likely cause a coredump(in static crt build).
+/// TODO: Use a DNS resolver to resolve the domain name in the URL.
 pub async fn send_http_request<T>(
     url: hyper::Uri,
     req: hyper::Request<T>,
