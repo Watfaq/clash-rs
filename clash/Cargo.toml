@@ -34,5 +34,5 @@ clash_lib = { path = "../clash_lib", default-features = false }
 dhat = { version = "0.3", optional = true }
 tikv-jemallocator = { version = "0.6", optional = true }
 
-sentry = { version = "0.38", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+sentry = { version = "0.39", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 human-panic = "2.0"
