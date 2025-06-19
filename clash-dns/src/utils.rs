@@ -16,7 +16,7 @@ pub fn load_cert_chain(
     cert_path: &Path,
 ) -> std::io::Result<Vec<CertificateDer<'static>>> {
     let cert_chain = fs::read(cert_path)?;
-    if cert_path.extension().map_or(false, |x| x == "der") {
+    if cert_path.extension().is_some_and(|x| x == "der") {
         Ok(vec![CertificateDer::from(cert_chain)])
     } else {
         rustls_pemfile::certs(&mut &*cert_chain).collect::<Result<_, _>>()
@@ -25,7 +25,7 @@ pub fn load_cert_chain(
 
 pub fn load_priv_key(key_path: &Path) -> std::io::Result<PrivateKeyDer<'static>> {
     let key = fs::read(key_path)?;
-    if key_path.extension().map_or(false, |x| x == "der") {
+    if key_path.extension().is_some_and(|x| x == "der") {
         Ok(PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)))
     } else {
         rustls_pemfile::private_key(&mut &*key)?

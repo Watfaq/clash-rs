@@ -29,10 +29,10 @@ struct CertificateKeyPair {
     key: rustls::pki_types::PrivateKeyDer<'static>,
 }
 
-impl Into<Arc<dyn rustls::server::ResolvesServerCert>> for CertificateKeyPair {
-    fn into(self) -> Arc<dyn rustls::server::ResolvesServerCert> {
+impl From<CertificateKeyPair> for Arc<dyn rustls::server::ResolvesServerCert> {
+    fn from(pair: CertificateKeyPair) -> Self {
         Arc::new(AlwaysResolvesServerRawPublicKeys::new(Arc::new(
-            CertifiedKey::new(self.certs, any_supported_type(&self.key).unwrap()),
+            CertifiedKey::new(pair.certs, any_supported_type(&pair.key).unwrap()),
         )))
     }
 }

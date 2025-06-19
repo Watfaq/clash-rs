@@ -93,7 +93,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 tun = { version = "0.8", features = ["async"] }
 netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp.git", rev = "62260478079d96b42fa524caa855609312c2cf43" }
-boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e01409626a15a987b0174d8c78b8181031c37309", package = "boring-noise" }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "1f57e8830ea2aea09c3b2f2d990bf3097ceb1bf5", package = "boring-noise" }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
 
 serde = { version = "1", features = ["derive"] }
