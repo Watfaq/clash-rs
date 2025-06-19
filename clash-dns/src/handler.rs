@@ -16,7 +16,7 @@ use hickory_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
 use rustls::{
-    crypto::ring::sign::any_supported_type,
+    crypto::aws_lc_rs::sign::any_supported_type,
     server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey,
 };
 use std::{sync::Arc, time::Duration};
@@ -167,15 +167,14 @@ where
             request.src()
         );
 
-        match self.handle(request, response_handle).await {
-            Ok(info) => info,
-            Err(e) => {
+        self.handle(request, response_handle)
+            .await
+            .unwrap_or_else(|e| {
                 debug!("dns request error: {}", e);
                 let mut h = Header::new();
                 h.set_response_code(ResponseCode::ServFail);
                 h.into()
-            }
-        }
+            })
     }
 }
 
@@ -355,29 +354,16 @@ mod tests {
     };
 
     async fn send_query(client: &mut Client) {
-        // Specify the name, note the final '.' which specifies it's an FQDN
         let name = Name::from_ascii("www.example.com.").unwrap();
 
-        // NOTE: see 'Setup a connection' example above
-        // Send the query and get a message response, see RecordType for all
-        // supported options
         let response = client
             .query(name, DNSClass::IN, RecordType::A)
             .await
             .unwrap();
 
-        // Messages are the packets sent between client and server in DNS.
-        //  there are many fields to a Message, DnsResponse can be dereferenced into
-        //  a Message. It's beyond the scope of these examples
-        //  to explain all the details of a Message. See
-        // hickory_client::op::message::Message for more details.  generally
-        // we will be interested in the Message::answers
         let answers = response.answers();
 
-        // Records are generic objects which can contain any data.
-        //  In order to access it we need to first check what type of record it is
-        //  In this case we are interested in A, IPv4 address
-        if let RData::A(ref ip) = answers[0].data() {
+        if let RData::A(ip) = answers[0].data() {
             assert_eq!(*ip, A::new(93, 184, 215, 14))
         } else {
             unreachable!("unexpected result")

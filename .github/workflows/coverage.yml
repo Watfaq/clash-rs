@@ -33,7 +33,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
           key: coverage-${{ hashFiles('**/Cargo.toml') }}-${{ matrix.os }}
-
+      - uses: ilammy/setup-nasm@v1
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Install Protoc
