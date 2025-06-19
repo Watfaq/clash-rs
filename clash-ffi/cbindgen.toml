@@ -1,0 +1,8 @@
+language = "C"
+
+[export]
+include = ["clash_start", "clash_shutdown", "clash_free_string"]
+
+[parse]
+parse_deps = false
+include = ["clash_ffi"]
