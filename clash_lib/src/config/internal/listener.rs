@@ -42,6 +42,7 @@ pub enum InboundOpts {
         network: Vec<String>,
         target: String,
     },
+    #[cfg(feature = "shadowsocks")]
     #[serde(alias = "shadowsocks")]
     Shadowsocks {
         #[serde(flatten)]
@@ -62,6 +63,7 @@ impl InboundOpts {
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
         }
     }
@@ -74,6 +76,7 @@ impl InboundOpts {
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
+            #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
         }
     }
@@ -84,7 +87,6 @@ impl InboundOpts {
 pub struct CommonInboundOpts {
     pub name: String,
     pub listen: BindAddress,
-    // TODO: make this reloadable in inbound listeners
     #[serde(default)]
     pub allow_lan: bool,
     pub port: u16,
