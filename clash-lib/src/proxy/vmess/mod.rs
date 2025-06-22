@@ -212,18 +212,20 @@ impl OutboundHandler for Handler {
 mod tests {
     use std::collections::HashMap;
 
-    use crate::proxy::{
-        transport::{GrpcClient, H2Client, TlsClient, WsClient},
-        utils::test_utils::{
-            Suite,
-            config_helper::test_config_base_dir,
-            consts::*,
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup,
-        },
-    };
-
     use super::*;
+    use crate::{
+        proxy::{
+            transport::{GrpcClient, H2Client, TlsClient, WsClient},
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                consts::*,
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
 
     fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
         Some(Box::new(TlsClient::new(
@@ -254,6 +256,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_vmess_ws() -> anyhow::Result<()> {
+        initialize();
         let span = tracing::info_span!("test_vmess_ws");
         let _enter = span.enter();
         let ws_client = WsClient::new(
@@ -305,6 +308,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_vmess_grpc() -> anyhow::Result<()> {
+        initialize();
         let grpc_client = GrpcClient::new(
             "example.org".to_owned(),
             "example!".to_owned().try_into()?,
@@ -346,6 +350,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_vmess_h2() -> anyhow::Result<()> {
+        initialize();
         let h2_client = H2Client::new(
             vec!["example.org".into()],
             std::collections::HashMap::new(),

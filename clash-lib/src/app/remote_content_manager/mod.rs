@@ -947,14 +947,14 @@ mod tests {
         },
         config::internal::proxy::PROXY_DIRECT,
         proxy::{direct, mocks::MockDummyOutboundHandler},
-        setup_default_crypto_provider,
+        tests::initialize,
     };
     use futures::TryFutureExt;
     use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
     #[tokio::test]
     async fn test_proxy_manager_alive() {
-        setup_default_crypto_provider();
+        initialize();
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|_, _| {
             Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67))))
@@ -995,12 +995,12 @@ mod tests {
 
         assert!(manager.alive(PROXY_DIRECT).await);
         assert!(manager.last_delay(PROXY_DIRECT).await > 0);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 10);
+        assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 10);
     }
 
     #[tokio::test]
     async fn test_proxy_manager_timeout() {
-        setup_default_crypto_provider();
+        initialize();
 
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|_, _| {
@@ -1035,7 +1035,7 @@ mod tests {
 
         assert!(result.is_err());
         assert!(!manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await == u16::MAX);
-        assert!(manager.delay_history(PROXY_DIRECT).await.len() == 1);
+        assert_eq!(manager.last_delay(PROXY_DIRECT).await, u16::MAX);
+        assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 1);
     }
 }
