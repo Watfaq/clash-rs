@@ -33,7 +33,7 @@ use std::{
     collections::HashMap,
     io,
     path::PathBuf,
-    sync::{Arc, LazyLock, atomic::AtomicUsize},
+    sync::{Arc, LazyLock, OnceLock, atomic::AtomicUsize},
 };
 use thiserror::Error;
 use tokio::{
@@ -197,11 +197,22 @@ pub fn shutdown() -> bool {
     true
 }
 
+static CRYPTO_PROVIDER_LOCK: OnceLock<()> = OnceLock::new();
+
+pub fn setup_default_crypto_provider() {
+    CRYPTO_PROVIDER_LOCK.get_or_init(|| {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .unwrap()
+    });
+}
 pub async fn start(
     config: InternalConfig,
     cwd: String,
     log_tx: broadcast::Sender<LogEvent>,
 ) -> Result<()> {
+    setup_default_crypto_provider();
+
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
 
     {

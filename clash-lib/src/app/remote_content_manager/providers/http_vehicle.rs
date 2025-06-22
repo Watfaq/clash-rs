@@ -68,14 +68,16 @@ impl ProviderVehicle for Vehicle {
 #[cfg(test)]
 mod tests {
     use super::ProviderVehicle;
-    use std::{str, sync::Arc};
-
+    use crate::{
+        app::dns::{EnhancedResolver, ThreadSafeDNSResolver},
+        setup_default_crypto_provider,
+    };
     use hyper::Uri;
-
-    use crate::app::dns::{EnhancedResolver, ThreadSafeDNSResolver};
+    use std::{str, sync::Arc};
 
     #[tokio::test]
     async fn test_http_vehicle() {
+        setup_default_crypto_provider();
         let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
             .parse::<Uri>()
             .unwrap();

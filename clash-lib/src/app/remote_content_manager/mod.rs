@@ -940,10 +940,6 @@ impl ProxyManager {
 
 #[cfg(test)]
 mod tests {
-    use std::{net::Ipv4Addr, sync::Arc, time::Duration};
-
-    use futures::TryFutureExt;
-
     use crate::{
         app::{
             dispatcher::ChainedStreamWrapper, dns::MockClashResolver,
@@ -951,10 +947,14 @@ mod tests {
         },
         config::internal::proxy::PROXY_DIRECT,
         proxy::{direct, mocks::MockDummyOutboundHandler},
+        setup_default_crypto_provider,
     };
+    use futures::TryFutureExt;
+    use std::{net::Ipv4Addr, sync::Arc, time::Duration};
 
     #[tokio::test]
     async fn test_proxy_manager_alive() {
+        setup_default_crypto_provider();
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|_, _| {
             Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67))))
@@ -1000,6 +1000,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_proxy_manager_timeout() {
+        setup_default_crypto_provider();
+
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|_, _| {
             Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))))

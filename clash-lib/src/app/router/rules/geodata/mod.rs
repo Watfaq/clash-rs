@@ -124,6 +124,7 @@ mod tests {
             http::new_http_client,
             utils::download,
         },
+        setup_default_crypto_provider,
     };
 
     const GEOSITE_URL: &str =
@@ -136,6 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_and_apply() -> anyhow::Result<()> {
+        setup_default_crypto_provider();
         let system_resolver = Arc::new(
             SystemResolver::new(false)
                 .map_err(|x| Error::DNSError(x.to_string()))

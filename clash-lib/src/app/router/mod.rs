@@ -364,6 +364,7 @@ mod tests {
         common::{geodata::GeoData, http::new_http_client, mmdb::Mmdb},
         config::internal::rule::RuleType,
         session::Session,
+        setup_default_crypto_provider,
     };
 
     const GEO_DATA_DOWNLOAD_URL:&str = "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
@@ -371,6 +372,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_route_match() {
+        setup_default_crypto_provider();
+
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|host, _| {
             if host == "china.com" {
