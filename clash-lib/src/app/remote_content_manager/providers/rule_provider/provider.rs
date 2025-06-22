@@ -14,13 +14,12 @@ use tracing::{debug, trace};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
-    Error,
     app::{
         remote_content_manager::providers::{
-            Provider, ProviderType, ProviderVehicleType, ThreadSafeProviderVehicle,
-            fetcher::Fetcher,
+            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
+            ThreadSafeProviderVehicle,
         },
-        router::{RuleMatcher, map_rule_type},
+        router::{map_rule_type, RuleMatcher},
     },
     common::{
         errors::map_io_error, geodata::GeoDataLookup, mmdb::MmdbLookup,
@@ -28,6 +27,7 @@ use crate::{
     },
     config::internal::rule::RuleType,
     session::Session,
+    Error,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -460,11 +460,11 @@ fn make_classical_rules(
 mod tests {
     use crate::{
         app::remote_content_manager::providers::{
-            MockProviderVehicle, Provider, ProviderVehicleType,
             rule_provider::{
-                RuleProviderImpl, RuleSetBehavior, RuleSetFormat,
-                provider::RuleProvider,
-            },
+                provider::RuleProvider, RuleProviderImpl, RuleSetBehavior,
+                RuleSetFormat,
+            }, MockProviderVehicle, Provider,
+            ProviderVehicleType,
         },
         common::{geodata::MockGeoDataLookupTrait, mmdb::MockMmdbLookupTrait},
         session::{Session, SocksAddr},
@@ -502,7 +502,7 @@ mod tests {
         let mock_geodata = MockGeoDataLookupTrait::new();
         let mut mock_vehicle = MockProviderVehicle::new();
 
-        let mock_file = std::env::temp_dir().join("mock_provider_vehicle");
+        let mock_file = std::env::temp_dir().join("mock_rule_provider_vehicle");
         if Path::new(mock_file.to_str().unwrap()).exists() {
             std::fs::remove_file(&mock_file).unwrap();
         }

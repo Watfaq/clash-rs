@@ -64,4 +64,8 @@ impl rustls::client::danger::ServerCertVerifier for DummyTlsVerifier {
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
         self.0.supported_verify_schemes()
     }
+
+    fn requires_raw_public_keys(&self) -> bool {
+        true
+    }
 }

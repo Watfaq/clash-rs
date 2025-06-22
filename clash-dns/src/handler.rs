@@ -333,8 +333,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
-
+    use crate::{
+        DNSListenAddr, DoH3Config, DoHConfig, DoTConfig, MockDnsMessageExchanger,
+        tests::setup_default_crypto_provider,
+        tls::{self, global_root_store},
+    };
     use futures::FutureExt;
     use hickory_client::client::{self, Client, ClientHandle};
     use hickory_proto::{
@@ -347,11 +350,7 @@ mod tests {
         udp::UdpClientStream,
     };
     use rustls::ClientConfig;
-
-    use crate::{
-        DNSListenAddr, DoH3Config, DoHConfig, DoTConfig, MockDnsMessageExchanger,
-        tls::{self, global_root_store},
-    };
+    use std::{sync::Arc, time::Duration};
 
     async fn send_query(client: &mut Client) {
         let name = Name::from_ascii("www.example.com.").unwrap();
@@ -372,6 +371,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_dns_server() {
+        setup_default_crypto_provider();
+        env_logger::init();
+
         let mut mock_exchanger = MockDnsMessageExchanger::new();
         mock_exchanger.expect_ipv6().returning(|| false);
         mock_exchanger.expect_exchange().returning(|_| {
@@ -405,7 +407,7 @@ mod tests {
                 ca_cert: None,
             }),
             doh3: Some(DoH3Config {
-                addr: "127.0.0.1:53556".parse().unwrap(),
+                addr: "127.0.0.1:53557".parse().unwrap(),
                 hostname: Some("dns.example.com".to_string()),
                 ca_key: None,
                 ca_cert: None,
@@ -448,7 +450,7 @@ mod tests {
         let mut tls_config = ClientConfig::builder()
             .with_root_certificates(global_root_store().clone())
             .with_no_client_auth();
-        tls_config.alpn_protocols = vec!["h2".into()];
+        tls_config.alpn_protocols = vec!["dot".into()];
         tls_config
             .dangerous()
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
@@ -467,6 +469,9 @@ mod tests {
             None,
         )
         .await
+        .inspect_err(|e| {
+            assert!(false, "Failed to connect to DoT server: {}", e);
+        })
         .unwrap();
         tokio::spawn(handle);
 
@@ -509,7 +514,7 @@ mod tests {
             .crypto_config(tls_config)
             .clone()
             .build(
-                "127.0.0.1:53556".parse().unwrap(),
+                "127.0.0.1:53557".parse().unwrap(),
                 "dns.example.com".to_owned(),
                 "/dns-query".to_owned(),
             );

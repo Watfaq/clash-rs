@@ -27,3 +27,4 @@ hickory-proto = { version = "0.25", features = ["dnssec-aws-lc-rs"] }
 
 [dev-dependencies]
 mockall = "0.13.0"
+env_logger = "0.11"

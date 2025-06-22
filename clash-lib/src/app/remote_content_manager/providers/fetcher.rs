@@ -262,7 +262,7 @@ mod tests {
         let tx1 = tx.clone();
 
         let mut mock_vehicle = MockProviderVehicle::new();
-        let mock_file = std::env::temp_dir().join("mock_provider_vehicle");
+        let mock_file = std::env::temp_dir().join("mock_fetcher_provider_vehicle");
         if Path::new(mock_file.to_str().unwrap()).exists() {
             std::fs::remove_file(&mock_file).unwrap();
         }

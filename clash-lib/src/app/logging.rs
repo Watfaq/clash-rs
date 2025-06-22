@@ -9,7 +9,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
+    filter::filter_fn, fmt::time::LocalTime, prelude::*, EnvFilter, Layer,
 };
 
 impl From<LogLevel> for LevelFilter {
@@ -97,7 +97,7 @@ fn setup_logging_inner(
 ) -> anyhow::Result<Option<WorkerGuard>> {
     let filter = EnvFilter::from_default_env()
         .add_directive(format!("clash={}", level).parse()?)
-        .add_directive(format!("clash_lib={}", level).parse()?)
+        .add_directive(format!("clash-lib={}", level).parse()?)
         .add_directive("warn".parse()?);
 
     let (appender, guard) = if let Some(log_file) = log_file {

@@ -1,7 +1,6 @@
-use std::{future::Future, net::SocketAddr};
-
 use hickory_proto::op::Message;
 use serde::Deserialize;
+use std::{future::Future, net::SocketAddr};
 
 mod dummy_keys;
 
@@ -11,7 +10,7 @@ mod handler;
 mod tls;
 mod utils;
 
-pub use handler::{DNSError, get_dns_listener};
+pub use handler::{get_dns_listener, DNSError};
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -58,4 +57,19 @@ pub trait DnsMessageExchanger {
         &self,
         message: &Message,
     ) -> impl Future<Output = Result<Message, DNSError>> + Send;
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::sync::OnceLock;
+
+    static CRYPTO_PROVIDER_LOCK: OnceLock<()> = OnceLock::new();
+
+    pub(crate) fn setup_default_crypto_provider() {
+        CRYPTO_PROVIDER_LOCK.get_or_init(|| {
+            rustls::crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .unwrap()
+        });
+    }
 }
