@@ -68,10 +68,12 @@ impl ProviderVehicle for Vehicle {
 #[cfg(test)]
 mod tests {
     use super::ProviderVehicle;
-    use crate::app::dns::{EnhancedResolver, ThreadSafeDNSResolver};
+    use crate::{
+        app::dns::{EnhancedResolver, ThreadSafeDNSResolver},
+        tests::initialize,
+    };
     use hyper::Uri;
     use std::{str, sync::Arc};
-    use crate::tests::initialize;
 
     #[tokio::test]
     async fn test_http_vehicle() {

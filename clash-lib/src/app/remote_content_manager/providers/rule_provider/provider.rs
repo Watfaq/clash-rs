@@ -14,12 +14,13 @@ use tracing::{debug, trace};
 
 use super::cidr_trie::CidrTrie;
 use crate::{
+    Error,
     app::{
         remote_content_manager::providers::{
-            fetcher::Fetcher, Provider, ProviderType, ProviderVehicleType,
-            ThreadSafeProviderVehicle,
+            Provider, ProviderType, ProviderVehicleType, ThreadSafeProviderVehicle,
+            fetcher::Fetcher,
         },
-        router::{map_rule_type, RuleMatcher},
+        router::{RuleMatcher, map_rule_type},
     },
     common::{
         errors::map_io_error, geodata::GeoDataLookup, mmdb::MmdbLookup,
@@ -27,7 +28,6 @@ use crate::{
     },
     config::internal::rule::RuleType,
     session::Session,
-    Error,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -460,11 +460,11 @@ fn make_classical_rules(
 mod tests {
     use crate::{
         app::remote_content_manager::providers::{
+            MockProviderVehicle, Provider, ProviderVehicleType,
             rule_provider::{
-                provider::RuleProvider, RuleProviderImpl, RuleSetBehavior,
-                RuleSetFormat,
-            }, MockProviderVehicle, Provider,
-            ProviderVehicleType,
+                RuleProviderImpl, RuleSetBehavior, RuleSetFormat,
+                provider::RuleProvider,
+            },
         },
         common::{geodata::MockGeoDataLookupTrait, mmdb::MockMmdbLookupTrait},
         session::{Session, SocksAddr},
