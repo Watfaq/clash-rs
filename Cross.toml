@@ -1,7 +1,8 @@
 [build]
 pre-build = [
     "apt update",
-    "apt install -y protobuf-compiler"
+    "apt install -y protobuf-compiler",
+    "cargo install bindgen-cli",
 ]
 
 [build.env]

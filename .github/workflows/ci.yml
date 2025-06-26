@@ -248,10 +248,6 @@ jobs:
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install bindgen-cli
-        run: |
-          cargo install bindgen-cli
-
       - name: Set environment variables (non Windows)
         if: matrix.os != 'windows-latest'
         run: |
