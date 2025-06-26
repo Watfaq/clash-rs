@@ -227,7 +227,7 @@ jobs:
         with:
           key: ${{ matrix.os }}
           read-only: ${{ matrix.target != 'x86_64-unknown-linux-gnu' }}
-
+      - uses: ilammy/setup-nasm@v1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
@@ -248,7 +248,6 @@ jobs:
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set environment variables (non Windows)
         if: matrix.os != 'windows-latest'
         run: |
@@ -284,7 +283,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: "test"
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --workspace --exclude clash-ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}

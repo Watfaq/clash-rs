@@ -2,10 +2,11 @@
 resolver = "2"
 
 members = [
-    "clash",
-    "clash_lib",
-    "clash_doc",
-    "clash_ffi",
+    "clash-bin",
+    "clash-lib",
+    "clash-doc",
+    "clash-ffi",
+    "clash-dns"
 ]
 
 
