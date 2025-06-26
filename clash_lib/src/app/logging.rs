@@ -106,19 +106,13 @@ fn setup_logging_inner(
 
     let (appender, guard) = if let Some(log_file) = log_file {
         let path_buf = std::path::PathBuf::from(&log_file);
-        let (dir, file_name) = if path_buf.is_absolute() {
-            (
-                path_buf.parent().and_then(|p| p.to_str()).unwrap_or(cwd),
-                path_buf
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or("clash.log"),
-            )
+        let log_path = if path_buf.is_absolute() {
+            log_file
         } else {
-            (cwd, log_file.as_str())
+            format!("{}/{}", cwd, log_file)
         };
-        let file_appender = tracing_appender::rolling::daily(dir, file_name);
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        let writer = std::fs::File::open(log_path)?;
+        let (non_blocking, guard) = tracing_appender::non_blocking(writer);
         (Some(non_blocking), Some(guard))
     } else {
         (None, None)
