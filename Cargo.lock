@@ -1383,7 +1383,7 @@ dependencies = [
  "murmur3",
  "netstack-smoltcp",
  "network-interface",
- "prost 0.14.0",
+ "prost 0.14.1",
  "prost-build",
  "public-suffix",
  "quinn 0.11.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1394,7 +1394,7 @@ dependencies = [
  "register-count",
  "ring-compat",
  "russh",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "security-framework",
  "serde",
  "serde_json",
@@ -1431,7 +1431,7 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-rustls",
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
  "windows 0.61.3",
  "zstd",
 ]
@@ -2691,7 +2691,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pki-types",
 ]
 
@@ -3056,7 +3056,7 @@ dependencies = [
  "quinn 0.11.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.9.1",
  "ring",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pki-types",
  "serde",
  "thiserror 2.0.12",
@@ -3084,7 +3084,7 @@ dependencies = [
  "quinn 0.11.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.9.1",
  "resolv-conf",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "serde",
  "smallvec",
  "thiserror 2.0.12",
@@ -3113,7 +3113,7 @@ dependencies = [
  "http 1.3.1",
  "ipnet",
  "prefix-trie",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "serde",
  "thiserror 2.0.12",
  "time",
@@ -3380,12 +3380,12 @@ dependencies = [
  "http 1.3.1",
  "hyper 1.6.0",
  "hyper-util",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
 ]
 
 [[package]]
@@ -3917,9 +3917,9 @@ checksum = "db13adb97ab515a3691f56e4dbab09283d0b86cb45abd991d8634a9d6f501760"
 
 [[package]]
 name = "libc"
-version = "0.2.173"
+version = "0.2.174"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8cfeafaffdbc32176b64fb251369d52ea9f0a8fbc6f8759edffef7b525d64bb"
+checksum = "1171693293099992e19cddea4e8b849964e9846f4acee11b3948bcc337be8776"
 
 [[package]]
 name = "libloading"
@@ -5017,19 +5017,19 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbe28332295ca4451b7d779aff2749b144cabe5e6e05fe86f31337831d7df232"
+checksum = "7231bd9b3d3d33c86b58adbac74b5ec0ad9f496b19d22801d773636feaa95f3d"
 dependencies = [
  "bytes",
- "prost-derive 0.14.0",
+ "prost-derive 0.14.1",
 ]
 
 [[package]]
 name = "prost-build"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8189daf915866b24b097b7775fbdd5a105cc3a44da13637d4b0961be73e8bc2d"
+checksum = "ac6c3320f9abac597dcbc668774ef006702672474aad53c6d596b62e487b40b1"
 dependencies = [
  "heck",
  "itertools 0.14.0",
@@ -5038,8 +5038,8 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost 0.14.0",
- "prost-types 0.14.0",
+ "prost 0.14.1",
+ "prost-types 0.14.1",
  "regex",
  "syn 2.0.101",
  "tempfile",
@@ -5060,9 +5060,9 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26ac3e3c6b0e1c219e61ceda600eaad26d7195ecc9b5c027925c904091374ab5"
+checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
  "itertools 0.14.0",
@@ -5082,11 +5082,11 @@ dependencies = [
 
 [[package]]
 name = "prost-types"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2bfff0dbd11dbadf180fea466aa146cdf20aed230e1c42b8bae192df8f0469a"
+checksum = "b9b4db3d6da204ed77bb26ba83b6122a73aeb2e87e25fbf7ad2e84c4ccbf8f72"
 dependencies = [
- "prost 0.14.0",
+ "prost 0.14.1",
 ]
 
 [[package]]
@@ -5126,7 +5126,7 @@ dependencies = [
  "quinn-proto 0.11.12",
  "quinn-udp 0.5.9",
  "rustc-hash 2.1.0",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "socket2 0.5.10",
  "thiserror 2.0.12",
  "tokio",
@@ -5185,7 +5185,7 @@ dependencies = [
  "rand 0.9.1",
  "ring",
  "rustc-hash 2.1.0",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pki-types",
  "slab",
  "thiserror 2.0.12",
@@ -5469,7 +5469,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn 0.11.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pemfile",
  "rustls-pki-types",
  "serde",
@@ -5752,9 +5752,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.27"
+version = "0.23.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "730944ca083c1c233a75c09f199e973ca499344a2b7ba9e755c457e86fb4a321"
+checksum = "7160e3e10bf4535308537f3c4e1641468cd0e485175d6163087c0393c7d46643"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -5959,7 +5959,7 @@ checksum = "69ccd7644577f876e92e7873d505ad35c30fc4fcf1654d4885c74605c95d0a07"
 dependencies = [
  "httpdate",
  "reqwest",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "sentry-backtrace",
  "sentry-contexts",
  "sentry-core",
@@ -6935,7 +6935,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e727b36a1a0e8b74c376ac2211e40c2c8af09fb4013c60d910495810f008e9b"
 dependencies = [
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "tokio",
 ]
 
@@ -7955,7 +7955,7 @@ dependencies = [
  "libc",
  "paste",
  "pin-project",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pki-types",
  "rustls-webpki 0.103.3",
  "thiserror 2.0.12",
@@ -8241,8 +8241,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tuic"
-version = "1.4.5"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.4.5#17ee3f702e26aca048495d4c66ad5316bb8eaf98"
+version = "1.4.6"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.4.6#3591624c0ab5abcdfc47256fb74ada440699593f"
 dependencies = [
  "bytes",
  "futures-util",
@@ -8254,8 +8254,8 @@ dependencies = [
 
 [[package]]
 name = "tuic-quinn"
-version = "1.4.5"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.4.5#17ee3f702e26aca048495d4c66ad5316bb8eaf98"
+version = "1.4.6"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.4.6#3591624c0ab5abcdfc47256fb74ada440699593f"
 dependencies = [
  "bytes",
  "eyre",
@@ -8435,7 +8435,7 @@ dependencies = [
  "base64 0.22.1",
  "log",
  "percent-encoding",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pemfile",
  "rustls-pki-types",
  "ureq-proto",
@@ -8682,13 +8682,13 @@ dependencies = [
  "hickory-proto",
  "hickory-server",
  "mockall",
- "rustls 0.23.27",
+ "rustls 0.23.28",
  "rustls-pemfile",
  "serde",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
 ]
 
 [[package]]
@@ -8737,14 +8737,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2853738d1cc4f2da3a225c18ec6c3721abb31961096e9dbf5ab35fa88b19cfdb"
+checksum = "8782dd5a41a24eed3a4f40b606249b3e236ca61adf1f25ea4d45c73de122b502"
 dependencies = [
  "rustls-pki-types",
 ]
