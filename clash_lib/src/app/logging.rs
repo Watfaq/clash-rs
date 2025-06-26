@@ -111,7 +111,7 @@ fn setup_logging_inner(
         } else {
             format!("{}/{}", cwd, log_file)
         };
-        let writer = std::fs::File::open(log_path)?;
+        let writer = std::fs::File::options().append(true).open(log_path)?;
         let (non_blocking, guard) = tracing_appender::non_blocking(writer);
         (Some(non_blocking), Some(guard))
     } else {
