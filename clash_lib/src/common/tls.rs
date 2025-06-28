@@ -73,6 +73,9 @@ impl ServerCertVerifier for DefaultTlsVerifier {
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        if self.skip {
+            return Ok(rustls::client::danger::HandshakeSignatureValid::assertion());
+        }
         self.pki.verify_tls12_signature(message, cert, dss)
     }
 
@@ -82,6 +85,9 @@ impl ServerCertVerifier for DefaultTlsVerifier {
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        if self.skip {
+            return Ok(rustls::client::danger::HandshakeSignatureValid::assertion());
+        }
         self.pki.verify_tls13_signature(message, cert, dss)
     }
 

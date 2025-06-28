@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use tracing::warn;
+use tracing::{trace, warn};
 
 /// Legacy ports configuration for inbounds.
 /// Newer inbounds have their own port configuration
@@ -56,14 +56,24 @@ impl InboundManager {
     /// If a listener is already running, it will be restarted.
     pub async fn start_all_listeners(&self) {
         for (opts, handler) in self.inbound_handlers.write().await.iter_mut() {
-            if let Some(handler) = handler {
+            if let Some(handler) = handler.take() {
                 warn!(
                     "Restarting inbound handler for: {}",
                     opts.common_opts().name
                 );
                 handler.abort();
+                let _ = handler.await.map_err(|e| {
+                    trace!(
+                        "Inbound {} listener task aborted: {}",
+                        opts.common_opts().name,
+                        e
+                    );
+                });
             }
+            *handler = None;
+        }
 
+        for (opts, handler) in self.inbound_handlers.write().await.iter_mut() {
             *handler = build_network_listeners(
                 opts,
                 self.dispatcher.clone(),
@@ -115,6 +125,27 @@ impl InboundManager {
             }
         }
         ports
+    }
+
+    pub async fn get_allow_lan(&self) -> bool {
+        let guard = self.inbound_handlers.read().await;
+        if let Some((opts, _)) = guard.iter().next() {
+            opts.common_opts().allow_lan
+        } else {
+            false
+        }
+    }
+
+    pub async fn set_allow_lan(&self, allow_lan: bool) {
+        let mut guard = self.inbound_handlers.write().await;
+        let new_map = guard
+            .drain()
+            .map(|(mut opts, handler)| {
+                opts.common_opts_mut().allow_lan = allow_lan;
+                (opts, handler)
+            })
+            .collect::<HashMap<_, _>>();
+        *guard = new_map;
     }
 
     pub async fn get_bind_address(&self) -> BindAddress {

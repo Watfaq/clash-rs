@@ -17,6 +17,10 @@ use network_interface::{Addr, NetworkInterfaceConfig};
 use std::{net::IpAddr, sync::Arc};
 use tracing::{error, info, warn};
 
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
+use std::sync::Arc;
+
 pub(crate) fn build_network_listeners(
     inbound_opts: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
@@ -95,12 +99,11 @@ fn get_runners_for_handler(
     let mut runners: Vec<Runner> = Vec::new();
 
     if handler.handle_tcp() {
-        info!("{} TCP listening at: {}:{}", name, addr, port);
-
         let tcp_listener = handler.clone();
 
         let name = name.clone();
         runners.push(Box::pin(async move {
+            info!("{} TCP listening at: {}:{}", name, addr, port,);
             tcp_listener
                 .listen_tcp()
                 .await
@@ -112,10 +115,10 @@ fn get_runners_for_handler(
     }
 
     if handler.handle_udp() {
-        info!("{} UDP listening at: {}:{}", name, addr, port,);
         let udp_listener = handler.clone();
         let name = name.clone();
         runners.push(Box::pin(async move {
+            info!("{} UDP listening at: {}:{}", name, addr, port,);
             udp_listener
                 .listen_udp()
                 .await
@@ -204,6 +207,7 @@ fn build_handler(
         })
         .map(|x| Arc::new(x) as _)
         .ok(),
+        #[cfg(feature = "shadowsocks")]
         InboundOpts::Shadowsocks {
             common_opts,
             udp,

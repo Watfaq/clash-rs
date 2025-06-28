@@ -557,8 +557,11 @@ impl DeviceManager {
                                 if socket.is_active() {
                                     true
                                 } else {
-                                    let port = socket.local_endpoint().unwrap().port;
-                                    tcp_port_to_release.push(port);
+                                    if let Some(port) = socket.local_endpoint().map(|x| x.port) {
+                                        tcp_port_to_release.push(port);
+                                    } else {
+                                        warn!("tcp socket {} was never connected, cannot release port", handle);
+                                    }
 
                                     trace!("socket {} closed, shutting down connection and releasing resources", handle);
                                     sockets.remove(*handle);
