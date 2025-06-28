@@ -5,12 +5,8 @@ use crate::{
     common::auth::ThreadSafeAuthenticator,
     config::{config::BindAddress, listener::InboundOpts},
     proxy::{
-        http::HttpInbound,
-        inbound::InboundHandlerTrait,
-        mixed::MixedInbound,
-        shadowsocks::inbound::{InboundOptions, ShadowsocksInbound},
-        socks::inbound::SocksInbound,
-        tunnel::TunnelInbound,
+        http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
+        socks::inbound::SocksInbound, tunnel::TunnelInbound,
     },
 };
 use network_interface::{Addr, NetworkInterfaceConfig};
@@ -19,7 +15,6 @@ use tracing::{error, info, warn};
 
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
-use std::sync::Arc;
 
 pub(crate) fn build_network_listeners(
     inbound_opts: &InboundOpts,
