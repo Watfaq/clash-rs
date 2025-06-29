@@ -15,6 +15,9 @@ use crate::{
 
 use super::ProxyProvider;
 
+/// A plain provider that holds a list of outbound handlers (proxies).
+/// No vehicle no background update.
+/// Used in GroupOutbounds to manage proxy health checks.
 pub struct PlainProvider {
     name: String,
     proxies: Vec<AnyOutboundHandler>,
