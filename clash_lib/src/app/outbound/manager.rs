@@ -1,4 +1,14 @@
 use super::utils::proxy_groups_dag_sort;
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic;
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 use crate::{
     Error,
     app::{
@@ -8,7 +18,7 @@ use crate::{
             ProxyManager,
             healthcheck::HealthCheck,
             providers::{
-                file_vehicle, http_vehicle,
+                ProviderVehicleType, file_vehicle, http_vehicle,
                 proxy_provider::{
                     PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
                 },
@@ -36,17 +46,6 @@ use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
-
-#[cfg(feature = "shadowquic")]
-use crate::proxy::shadowquic;
-#[cfg(feature = "shadowsocks")]
-use crate::proxy::shadowsocks;
-#[cfg(feature = "ssh")]
-use crate::proxy::ssh;
-#[cfg(feature = "onion")]
-use crate::proxy::tor;
-#[cfg(feature = "tuic")]
-use crate::proxy::tuic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -237,8 +236,6 @@ impl OutboundManager {
         let handlers = &mut self.handlers;
         let selector_control = &mut self.selector_control;
 
-        let mut proxy_providers = vec![];
-
         // load handlers and collect failed outbounds
         let loaded_outbounds: Vec<_> = outbounds
             .into_iter()
@@ -384,7 +381,6 @@ impl OutboundManager {
             lazy: bool,
             handlers: &HashMap<String, AnyOutboundHandler>,
             proxy_manager: ProxyManager,
-            proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
             provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         ) -> Result<ThreadSafeProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
@@ -419,13 +415,12 @@ impl OutboundManager {
                 })?,
             ));
 
-            proxy_providers.push(pd.clone());
             provider_registry.insert(name.to_owned(), pd.clone());
 
             Ok(pd)
         }
 
-        fn maybe_append_providers(
+        fn maybe_append_use_providers(
             provider_names: &Option<Vec<String>>,
             provider_registry: &HashMap<String, ThreadSafeProxyProvider>,
             providers: &mut Vec<ThreadSafeProxyProvider>,
@@ -452,6 +447,7 @@ impl OutboundManager {
                 + use_provider.as_ref().map(|x| x.len()).unwrap_or_default()
                 == 0
         }
+
         // Initialize handlers for each outbound group protocol
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
@@ -473,12 +469,11 @@ impl OutboundManager {
                             true,
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -514,12 +509,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -558,12 +552,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -602,12 +595,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -646,12 +638,11 @@ impl OutboundManager {
                             true,
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -696,12 +687,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -756,7 +746,16 @@ impl OutboundManager {
 
         let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
         let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
-        providers.extend(proxy_providers);
+        for p in provider_registry.values() {
+            let vehicle_type = p.read().await.vehicle_type();
+            if matches!(
+                vehicle_type,
+                ProviderVehicleType::Http | ProviderVehicleType::File
+            ) {
+                providers.push(p.clone());
+            }
+        }
+
         let h = selector::Handler::new(
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),
