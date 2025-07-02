@@ -140,8 +140,9 @@ async fn find_proxy_provider_proxy_by_name(
     mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    let proxy = provider.read().await.proxies().await;
-    let proxy = proxy.iter().find(|x| x.name() == proxy_name);
+    let provider = provider.read().await;
+    let proxies = provider.proxies().await;
+    let proxy = proxies.iter().find(|x| x.name() == proxy_name);
 
     if let Some(proxy) = proxy {
         req.extensions_mut().insert(proxy.clone());
@@ -152,7 +153,7 @@ async fn find_proxy_provider_proxy_by_name(
             format!(
                 "proxy {} not found in provider {}",
                 proxy_name,
-                provider.read().await.name()
+                provider.name()
             ),
         )
             .into_response()
