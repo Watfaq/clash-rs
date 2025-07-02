@@ -115,21 +115,13 @@ impl OutboundManager {
         self.selector_control.get(name).cloned()
     }
 
-    /// Get all proxies in the manager, including those from providers.
+    /// Get all proxies in the manager, excluding those in providers.
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
         let proxy_manager = &self.proxy_manager;
 
-        let mut provider_handlers = HashMap::new();
-        for provider in self.proxy_providers.values() {
-            let proxies = provider.read().await.proxies().await;
-            for proxy in proxies {
-                provider_handlers.insert(proxy.name().to_owned(), proxy.clone());
-            }
-        }
-
-        for (k, v) in self.handlers.iter().chain(provider_handlers.iter()) {
+        for (k, v) in self.handlers.iter() {
             let mut m = if let Some(g) = v.try_as_group_handler() {
                 g.as_map().await
             } else {
