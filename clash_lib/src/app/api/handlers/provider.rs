@@ -38,7 +38,7 @@ pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppStat
                         .route("/healthcheck", get(get_proxy_delay))
                         .layer(middleware::from_fn_with_state(
                             state.clone(),
-                            find_provider_proxy_by_name,
+                            find_proxy_provider_proxy_by_name,
                         ))
                         .with_state(state.clone()),
                 )
@@ -72,21 +72,25 @@ async fn get_providers(State(state): State<ProviderState>) -> impl IntoResponse 
     axum::response::Json(res)
 }
 
+#[derive(Deserialize)]
+struct ProviderNamePath {
+    provider_name: String,
+}
 async fn find_proxy_provider_by_name(
     State(state): State<ProviderState>,
-    Path(name): Path<String>,
+    Path(ProviderNamePath { provider_name }): Path<ProviderNamePath>,
     mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
     let outbound_manager = state.outbound_manager.clone();
-    match outbound_manager.get_proxy_provider(&name) {
+    match outbound_manager.get_proxy_provider(&provider_name) {
         Some(provider) => {
             req.extensions_mut().insert(provider);
             next.run(req).await
         }
         _ => (
             StatusCode::NOT_FOUND,
-            format!("proxy provider {} not found", name),
+            format!("proxy provider {} not found", provider_name),
         )
             .into_response(),
     }
@@ -126,16 +130,18 @@ async fn provider_healthcheck(
     (StatusCode::ACCEPTED, "provider healthcheck")
 }
 
-async fn find_provider_proxy_by_name(
+#[derive(Deserialize)]
+struct ProviderProxyPath {
+    proxy_name: String,
+}
+async fn find_proxy_provider_proxy_by_name(
     Extension(provider): Extension<ThreadSafeProxyProvider>,
-    Path(params): Path<HashMap<String, String>>,
+    Path(ProviderProxyPath { proxy_name }): Path<ProviderProxyPath>,
     mut req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
     let proxy = provider.read().await.proxies().await;
-    let proxy = proxy
-        .iter()
-        .find(|x| Some(&x.name().to_string()) == params.get("proxy_name"));
+    let proxy = proxy.iter().find(|x| x.name() == proxy_name);
 
     if let Some(proxy) = proxy {
         req.extensions_mut().insert(proxy.clone());
@@ -145,7 +151,7 @@ async fn find_provider_proxy_by_name(
             StatusCode::NOT_FOUND,
             format!(
                 "proxy {} not found in provider {}",
-                params.get("proxy_name").unwrap(),
+                proxy_name,
                 provider.read().await.name()
             ),
         )
