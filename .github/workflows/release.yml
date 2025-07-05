@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'minor'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-set-version
+        run: cargo install cargo-set-version
+
+      - name: Bump version
+        run: cargo set-version --bump ${{ github.event.inputs.version_type }}
+
+      - name: Get new version
+        id: version
+        run: |
+          VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "clash-rs") | .version')
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "New version: v$VERSION"
+
+      - name: Commit version bump
+        run: |
+          git add Cargo.toml clash/Cargo.toml clash_lib/Cargo.toml clash_doc/Cargo.toml clash_ffi/Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+
+      - name: Create tag
+        run: git tag ${{ steps.version.outputs.version }}
+
+      - name: Push changes
+        run: |
+          git push origin master
+          git push origin ${{ steps.version.outputs.version }}
