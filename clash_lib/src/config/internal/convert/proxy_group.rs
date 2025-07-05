@@ -11,7 +11,7 @@ pub fn convert(
     before.unwrap_or_default().into_iter().try_fold(
         HashMap::<String, OutboundProxy>::new(),
         |mut rv, mapping| {
-            let name = mapping.get("name").map(|x| x.clone());
+            let name = mapping.get("name").cloned();
             let group =
                 OutboundProxy::ProxyGroup(mapping.try_into().map_err(|x| {
                     if let Some(name) = name {

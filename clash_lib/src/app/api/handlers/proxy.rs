@@ -149,7 +149,7 @@ async fn get_proxy_delay(
             )
             .await;
         match results.first().unwrap() {
-            Ok(latency) => latency.clone(),
+            Ok(latency) => *latency,
             Err(err) => {
                 return (
                     StatusCode::BAD_REQUEST,
@@ -164,7 +164,7 @@ async fn get_proxy_delay(
             .url_test(&vec![proxy], &q.url, timeout)
             .await;
         match result.first().unwrap() {
-            Ok(latency) => latency.clone(),
+            Ok(latency) => *latency,
             Err(err) => {
                 return (
                     StatusCode::BAD_REQUEST,
