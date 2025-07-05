@@ -174,12 +174,12 @@ impl OutboundManager {
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
     pub async fn url_test(
         &self,
-        proxy: AnyOutboundHandler,
+        proxy: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Duration,
-    ) -> std::io::Result<(u16, u16)> {
+    ) -> Vec<std::io::Result<(u16, u16)>> {
         let proxy_manager = self.proxy_manager.clone();
-        proxy_manager.url_test(proxy, url, Some(timeout)).await
+        proxy_manager.check(proxy, url, Some(timeout)).await
     }
 
     pub fn get_proxy_providers(&self) -> HashMap<String, ThreadSafeProxyProvider> {
@@ -476,7 +476,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                         },
                         providers,
@@ -516,7 +517,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -559,7 +561,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -602,7 +605,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -649,7 +653,8 @@ impl OutboundManager {
                             udp: proto.udp.unwrap_or(true),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                         },
                         providers,
@@ -694,7 +699,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                             udp: proto.udp.unwrap_or(true),
                             max_retries: proto.max_retries,

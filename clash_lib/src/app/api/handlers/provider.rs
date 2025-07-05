@@ -181,7 +181,10 @@ async fn get_proxy_delay(
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
     let n = proxy.name().to_owned();
-    match outbound_manager.url_test(proxy, &q.url, timeout).await {
+    let result = outbound_manager
+        .url_test(&vec![proxy], &q.url, timeout)
+        .await;
+    match result.first().unwrap() {
         Ok((delay, mean_delay)) => {
             let mut r = HashMap::new();
             r.insert("delay".to_owned(), delay);

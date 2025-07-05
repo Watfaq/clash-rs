@@ -137,18 +137,47 @@ async fn get_proxy_delay(
     let n = proxy.name().to_owned();
     let mut headers = HeaderMap::new();
     headers.insert(header::CONNECTION, "close".parse().unwrap());
-    match outbound_manager.url_test(proxy, &q.url, timeout).await {
-        Ok((delay, mean_delay)) => {
-            let mut r = HashMap::new();
-            r.insert("delay".to_owned(), delay);
-            r.insert("meanDelay".to_owned(), mean_delay);
-            (headers, axum::response::Json(r)).into_response()
+
+    let (delay, mean_delay) = if let Some(group) = proxy.try_as_group_handler() {
+        let latency_test_url = group.get_latency_test_url();
+        let proxies = group.get_proxies().await;
+        let results = outbound_manager
+            .url_test(
+                &[vec![proxy], proxies].concat(),
+                &latency_test_url.unwrap_or(q.url),
+                timeout,
+            )
+            .await;
+        match results.first().unwrap() {
+            Ok(latency) => latency.clone(),
+            Err(err) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    headers,
+                    format!("get delay for {} failed with error: {}", n, err),
+                )
+                    .into_response();
+            }
         }
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            headers,
-            format!("get delay for {} failed with error: {}", n, err),
-        )
-            .into_response(),
-    }
+    } else {
+        let result = outbound_manager
+            .url_test(&vec![proxy], &q.url, timeout)
+            .await;
+        match result.first().unwrap() {
+            Ok(latency) => latency.clone(),
+            Err(err) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    headers,
+                    format!("get delay for {} failed with error: {}", n, err),
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    let mut r = HashMap::new();
+    r.insert("delay".to_owned(), delay);
+    r.insert("meanDelay".to_owned(), mean_delay);
+    (headers, axum::response::Json(r)).into_response()
 }

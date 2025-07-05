@@ -21,6 +21,9 @@ pub trait GroupProxyAPIResponse: OutboundHandler {
     /// urltest, it returns the fastest proxy, etc.
     async fn get_active_proxy(&self) -> Option<AnyOutboundHandler>;
 
+    /// Returns the latency test URL for the group.
+    fn get_latency_test_url(&self) -> Option<String>;
+
     /// used in the API responses.
     async fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let all = self.get_proxies().await;

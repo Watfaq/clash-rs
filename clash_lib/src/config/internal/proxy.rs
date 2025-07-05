@@ -419,7 +419,10 @@ pub enum OutboundGroupProtocol {
     Select(OutboundGroupSelect),
 }
 
+/// Only used statically in config parsing.
+/// Runtime access is done via the `try_as_group_handler`.
 impl OutboundGroupProtocol {
+    /// Returns the name of the group.
     pub fn name(&self) -> &str {
         match &self {
             OutboundGroupProtocol::Relay(g) => &g.name,
@@ -431,6 +434,7 @@ impl OutboundGroupProtocol {
         }
     }
 
+    /// Returns the proxies in the group, if any.
     pub fn proxies(&self) -> Option<&Vec<String>> {
         match &self {
             OutboundGroupProtocol::Relay(g) => g.proxies.as_ref(),
@@ -463,6 +467,7 @@ pub struct OutboundGroupRelay {
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
     pub icon: Option<String>,
+    pub url: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
@@ -533,6 +538,7 @@ pub struct OutboundGroupSmart {
 
     pub lazy: Option<bool>,
     pub icon: Option<String>,
+    pub url: Option<String>,
 
     /// Maximum retries for failed connections (default: 3)
     #[serde(rename = "max-retries")]
@@ -557,6 +563,8 @@ pub struct OutboundGroupSelect {
     #[serde(rename = "use")]
     pub use_provider: Option<Vec<String>>,
     pub udp: Option<bool>,
+
+    pub url: Option<String>,
     pub icon: Option<String>,
 }
 
