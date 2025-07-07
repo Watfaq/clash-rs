@@ -13,8 +13,8 @@ standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "clash-lib/zero_copy"]
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
-android = ["shadowsocks", "tuic", "aws-lc-rs"] # Android build failed with libc
-bsd = ["shadowsocks", "tuic", "ring"]
+android = ["shadowsocks", "tuic", "aws-lc-rs", "clash-lib/zero_copy"] # Android build failed with libc
+bsd = ["shadowsocks", "tuic", "ring", "clash-lib/zero_copy", "clash-lib/ring"]
 
 shadowsocks = ["clash-lib/shadowsocks"]
 ssh = ["clash-lib/ssh"]

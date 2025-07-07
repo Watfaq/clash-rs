@@ -12,11 +12,13 @@ aws-lc-rs = [
     "watfaq-rustls/aws-lc-rs",
     "quinn-proto/rustls-aws-lc-rs",
     "dep:aws-lc-rs",
+    "watfaq-dns/aws-lc-rs",
 ]
 ring = [
     "rustls/ring",
     "watfaq-rustls/ring",
     "quinn-proto/ring",
+    "watfaq-dns/ring",
 ]
 
 internal = []
