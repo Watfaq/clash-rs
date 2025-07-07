@@ -29,7 +29,7 @@ impl Tracked {
 
 #[async_trait]
 pub trait ChainedStream:
-    Downcast + AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync
+    Downcast + AsyncRead + AsyncWrite + Unpin + Send + Sync
 {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
@@ -38,7 +38,6 @@ impl_downcast!(ChainedStream);
 
 pub type BoxedChainedStream = Box<dyn ChainedStream>;
 
-#[derive(Debug)]
 pub struct ChainedStreamWrapper<T> {
     inner: T,
     chain: ProxyChain,
@@ -61,7 +60,7 @@ impl<T> ChainedStreamWrapper<T> {
 #[async_trait]
 impl<T> ChainedStream for ChainedStreamWrapper<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin + Debug + Send + Sync + 'static,
+    T: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
     fn chain(&self) -> &ProxyChain {
         &self.chain

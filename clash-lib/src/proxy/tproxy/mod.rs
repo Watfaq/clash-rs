@@ -59,7 +59,7 @@ impl InboundHandlerTrait for TproxyInbound {
             socket2::Type::STREAM,
             None,
         )?;
-        socket.set_ip_transparent(true)?;
+        socket.set_ip_transparent_v4(true)?;
         socket.set_nonblocking(true)?;
         socket.bind(&self.addr.into())?;
         socket.listen(1024)?;
@@ -100,7 +100,7 @@ impl InboundHandlerTrait for TproxyInbound {
     async fn listen_udp(&self) -> std::io::Result<()> {
         let socket =
             socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
-        socket.set_ip_transparent(true)?;
+        socket.set_ip_transparent_v4(true)?;
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
 
