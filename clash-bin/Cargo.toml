@@ -14,7 +14,7 @@ plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
 android = ["shadowsocks", "tuic", "aws-lc-rs"] # Android build failed with libc
-bsd = ["shadowsocks", "tuic", "aws-lc-rs"]
+bsd = ["shadowsocks", "tuic", "ring"]
 
 shadowsocks = ["clash-lib/shadowsocks"]
 ssh = ["clash-lib/ssh"]
