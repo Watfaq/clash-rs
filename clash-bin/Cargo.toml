@@ -9,13 +9,12 @@ authors = { workspace = true }
 [features]
 default = ["standard", "aws-lc-rs"]
 standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "clash-lib/zero_copy"]
-aws-lc-rs = ["clash-lib/aws-lc-rs"]
-ring = ["clash-lib/ring"]
+
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
 
-android = ["shadowsocks", "tuic"] # Android build failed with libc
-bsd = ["shadowsocks", "tuic"]
+android = ["shadowsocks", "tuic", "aws-lc-rs"] # Android build failed with libc
+bsd = ["shadowsocks", "tuic", "aws-lc-rs"]
 
 shadowsocks = ["clash-lib/shadowsocks"]
 ssh = ["clash-lib/ssh"]
@@ -27,6 +26,9 @@ bench = ["clash-lib/bench"]
 dhat-heap = ["dep:dhat"]
 tokio-console = ["clash-lib/tokio-console"]
 jemallocator = ["dep:tikv-jemallocator"]
+
+aws-lc-rs = ["clash-lib/aws-lc-rs"]
+ring = ["clash-lib/ring"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
