@@ -35,8 +35,8 @@ rustls-pemfile = "2"
 webpki-roots = "1.0.0"
 
 hickory-client = { version = "0.25", default-features = false }
-hickory-server = { version = "0.25" }
-hickory-proto = { version = "0.25" }
+hickory-server = { version = "0.25", default-features = false }
+hickory-proto = { version = "0.25", default-features = false }
 
 
 
