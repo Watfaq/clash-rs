@@ -15,10 +15,11 @@ use hickory_server::{
     authority::MessageResponseBuilder,
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
-use rustls::{
-    crypto::aws_lc_rs::sign::any_supported_type,
-    server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey,
-};
+#[cfg(feature = "aws-lc-rs")]
+use rustls::crypto::aws_lc_rs::sign::any_supported_type;
+#[cfg(feature = "ring")]
+use rustls::crypto::ring::sign::any_supported_type;
+use rustls::{server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey};
 use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::net::{TcpListener, UdpSocket};
