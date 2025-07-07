@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use ipnet::IpNet;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -90,7 +90,8 @@ pub struct TunConfig {
     pub device_id: String,
     pub route_all: bool,
     pub routes: Vec<IpNet>,
-    pub gateway: IpNet,
+    pub gateway: Ipv4Net,
+    pub gateway_v6: Option<Ipv6Net>,
     pub mtu: Option<u16>,
     pub so_mark: u32,
     pub route_table: u32,

@@ -26,6 +26,14 @@ pub fn convert(
             gateway: t.gateway.parse().map_err(|x| {
                 Error::InvalidConfig(format!("parse tun gateway: {}", x))
             })?,
+            gateway_v6: t
+                .gateway_v6
+                .map(|x| {
+                    x.parse().map_err(|x| {
+                        Error::InvalidConfig(format!("parse tun gateway_v6: {}", x))
+                    })
+                })
+                .transpose()?,
             mtu: t.mtu,
             so_mark: t.so_mark,
             route_table: t.route_table,

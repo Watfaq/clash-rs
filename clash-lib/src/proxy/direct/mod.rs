@@ -89,7 +89,7 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let d = new_udp_socket(
-            None,
+            Some(sess.source),
             sess.iface.clone(),
             #[cfg(target_os = "linux")]
             sess.so_mark,

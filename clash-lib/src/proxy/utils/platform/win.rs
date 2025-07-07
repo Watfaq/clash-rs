@@ -4,7 +4,7 @@ use tracing::{debug, error, warn};
 use windows::Win32::{
     Foundation::GetLastError,
     Networking::WinSock::{
-        IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, SOCKET, setsockopt,
+        IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, IPV6_UNICAST_IF, SOCKET, setsockopt,
     },
 };
 
@@ -57,19 +57,9 @@ pub(crate) fn must_bind_socket_on_interface(
             };
 
             debug!(
-                "binding socket to interface: {}, index {}, ip {:?}",
-                name, idx, ip
+                "binding socket to interface: {}, index {}, ip {:?}, family {:?}",
+                name, idx, ip, family
             );
-
-            if let Some(ip) = ip {
-                socket.bind(&SocketAddr::new(ip, 0).into())?;
-            } else {
-                warn!("failed to get address for interface {}", name);
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("failed to get address for interface {}", name),
-                ));
-            }
 
             let handle = SOCKET(socket.as_raw_socket().try_into().unwrap());
 
@@ -86,7 +76,7 @@ pub(crate) fn must_bind_socket_on_interface(
                     Ok(setsockopt(
                         handle,
                         IPPROTO_IPV6.0,
-                        IP_UNICAST_IF,
+                        IPV6_UNICAST_IF,
                         Some(idx.to_be_bytes().as_ref()),
                     ))
                 },
@@ -98,7 +88,10 @@ pub(crate) fn must_bind_socket_on_interface(
                 Ok(errno) => {
                     if errno != 0 {
                         let err = unsafe { GetLastError().to_hresult().message() };
-                        error!("bind socket to interface failed: {}", err);
+                        error!(
+                            "bind socket to interface failed: {}, errno: {}",
+                            err, errno
+                        );
                         return Err(new_io_error(err));
                     }
                     Ok(())

@@ -83,7 +83,10 @@ impl ClashResolver for SystemResolver {
         &self,
         _: &hickory_proto::op::Message,
     ) -> anyhow::Result<hickory_proto::op::Message> {
-        Err(anyhow::anyhow!("unsupported"))
+        Err(anyhow::anyhow!(
+            "system resolver does not support advanced dns features, please enable \
+             the dns server in your config"
+        ))
     }
 
     fn ipv6(&self) -> bool {

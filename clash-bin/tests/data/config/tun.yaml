@@ -1,17 +1,21 @@
 ---
 port: 8888
 
+log-level: trace
+
 tun:
   enable: true
   device-id: "dev://utun1989"
   route-all: false
   gateway: "198.19.0.1/24"
+  gateway-v6: "2001:fac::1/64"
   so-mark: 3389
   dns-hijack: false
   # dns-hijack:
   #   - 1.1.1.1:53
-  # routes:
-  #   - 1.1.1.1/32
+  routes:
+    - 1.1.1.1/32
+    - 2001:4860:4860::8888/128
 
 rules:
   - MATCH, DIRECT

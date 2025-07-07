@@ -55,6 +55,12 @@ pub struct TunConfig {
     /// tun interface address
     #[serde(default = "default_tun_address")]
     pub gateway: String,
+    /// tun interface address for IPv6
+    /// # Note
+    /// - set this to enable IPv6 support in the tun interface
+    /// - Example: `2001:fac::1/64`
+    #[serde(alias = "gateway-v6")]
+    pub gateway_v6: Option<String>,
     pub routes: Option<Vec<String>>,
     #[serde(default)]
     pub route_all: bool,
