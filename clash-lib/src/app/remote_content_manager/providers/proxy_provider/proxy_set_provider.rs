@@ -16,6 +16,8 @@ use crate::proxy::ssh;
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
+#[cfg(feature = "wireguard")]
+use crate::proxy::wg;
 use crate::{
     Error,
     app::remote_content_manager::{
@@ -27,9 +29,7 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{
-        AnyOutboundHandler, direct, hysteria2, reject, socks, trojan, vmess, wg,
-    },
+    proxy::{AnyOutboundHandler, direct, hysteria2, reject, socks, trojan, vmess},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -152,6 +152,7 @@ impl ProxySetProvider {
                                     let h: ssh::Handler = s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
+                                #[cfg(feature = "wireguard")]
                                 OutboundProxyProtocol::Wireguard(wg) => {
                                     let h: wg::Handler = wg.try_into()?;
                                     Ok(Arc::new(h) as _)

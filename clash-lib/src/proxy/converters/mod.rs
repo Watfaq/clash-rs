@@ -1,4 +1,6 @@
 pub mod hysteria2;
+#[cfg(feature = "shadowquic")]
+pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
 pub mod shadowsocks;
 pub mod socks5;
@@ -9,9 +11,7 @@ pub mod tor;
 pub mod trojan;
 #[cfg(feature = "tuic")]
 pub mod tuic;
-pub mod vmess;
-pub mod wireguard;
-
-#[cfg(feature = "shadowquic")]
-pub mod shadowquic;
 mod utils;
+pub mod vmess;
+#[cfg(feature = "wireguard")]
+pub mod wireguard;

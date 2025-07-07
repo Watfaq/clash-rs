@@ -9,6 +9,8 @@ use crate::proxy::ssh;
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
 use crate::proxy::tuic;
+#[cfg(feature = "wireguard")]
+use crate::proxy::wg;
 use crate::{
     Error,
     app::{
@@ -37,7 +39,7 @@ use crate::{
         selector::ThreadSafeSelectorControl,
         socks, trojan, urltest,
         utils::{DirectConnector, ProxyConnector},
-        vmess, wg,
+        vmess,
     },
 };
 use anyhow::Result;
@@ -45,7 +47,7 @@ use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -294,8 +296,8 @@ impl OutboundManager {
                         })
                         .ok()
                 }
+                #[cfg(feature = "wireguard")]
                 OutboundProxyProtocol::Wireguard(wg) => {
-                    warn!("wireguard is experimental");
                     let name = wg.common_opts.name.clone();
                     wg.try_into()
                         .map(|x: wg::Handler| Arc::new(x) as AnyOutboundHandler)
