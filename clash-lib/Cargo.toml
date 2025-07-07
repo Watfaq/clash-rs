@@ -120,7 +120,7 @@ erased-serde = "0.4"
 educe = "0.6"
 
 # DNS
-watfaq-dns = { path = "../clash-dns" }
+watfaq-dns = { path = "../clash-dns", default-features = false }
 hickory-client = { version = "0.25", default-features = false }
 hickory-resolver = { version = "0.25", default-features = false }
 hickory-proto = { version = "0.25", default-features = false }
