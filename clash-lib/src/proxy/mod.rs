@@ -49,6 +49,7 @@ pub mod tuic;
 pub mod tun;
 pub mod utils;
 pub mod vmess;
+#[cfg(feature = "wireguard")]
 pub mod wg;
 
 pub mod group;
