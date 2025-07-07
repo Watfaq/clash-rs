@@ -5,7 +5,19 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["zero_copy"]
+default = ["zero_copy", "aws-lc-rs"]
+
+aws-lc-rs = [
+    "rustls/aws-lc-rs",
+    "watfaq-rustls/aws-lc-rs",
+    "quinn-proto/rustls-aws-lc-rs",
+    "dep:aws-lc-rs",
+]
+ring = [
+    "rustls/ring",
+    "watfaq-rustls/ring",
+    "quinn-proto/ring",
+]
 
 internal = []
 # Protos
@@ -38,12 +50,12 @@ tokio-tungstenite = "0.27.0"
 # TLS
 tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2"] }
-rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+rustls = { version = "0.23", default-features = false }
 webpki-roots = "1.0"
 
 # shadow-tls
 tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false, features = ["aws-lc-rs"] }
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false }
 
 # Error handing & logging
 thiserror = "2"
@@ -135,7 +147,7 @@ quinn = { version = "0.11", default-features = false, features = ["futures-io", 
 # hysteria2
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
-quinn-proto = { version = "0.11.12", default-features = false, features = ["rustls-aws-lc-rs"] }
+quinn-proto = { version = "0.11.12", default-features = false }
 blake2 = "0.10.6"
 digest = "0.10.7"
 
@@ -153,6 +165,9 @@ shadowquic = { version = "0.1.11", optional = true, git = "https://github.com/sp
 
 # experimental
 downcast-rs = "2.0"
+
+# workaround for https://github.com/cross-rs/cross/issues/16
+aws-lc-rs = { version = "1.13", default-features = false, optional = true, features = ["bindgen"] }
 
 [dev-dependencies]
 tempfile = "3.20"

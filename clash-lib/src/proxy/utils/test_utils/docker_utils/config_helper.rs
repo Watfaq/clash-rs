@@ -13,7 +13,7 @@ use crate::{
 
 pub fn root_dir() -> PathBuf {
     let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR").to_owned());
-    // remove the clash_lib
+    // remove the clash-lib
     root.pop();
     root
 }
