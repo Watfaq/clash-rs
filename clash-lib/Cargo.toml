@@ -47,7 +47,7 @@ hyper-util = "0.1"
 # Network proto
 http = { version = "1" }
 http-body-util = "0.1.3"
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 tokio-tungstenite = "0.27.0"
 
 # TLS
@@ -164,7 +164,7 @@ dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic
-shadowquic = { version = "0.1.11", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+shadowquic = { version = "=0.1.11", optional = true, git = "https://github.com/spongebob888/shadowquic" }
 
 # experimental
 downcast-rs = "2.0"

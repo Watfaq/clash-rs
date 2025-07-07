@@ -69,7 +69,7 @@ pub async fn new_tcp_stream(
     }
 
     socket.set_keepalive(true)?;
-    socket.set_nodelay(true)?;
+    socket.set_tcp_nodelay(true)?;
     socket.set_nonblocking(true)?;
 
     timeout(

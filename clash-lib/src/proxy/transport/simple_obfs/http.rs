@@ -25,7 +25,6 @@ impl Transport for Client {
     }
 }
 
-#[derive(Debug)]
 pub struct HTTPObfs {
     inner: AnyStream,
     host: String,

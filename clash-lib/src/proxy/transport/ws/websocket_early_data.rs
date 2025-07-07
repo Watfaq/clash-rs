@@ -43,7 +43,6 @@ pub struct WebsocketEarlyDataConn {
 impl Debug for WebsocketEarlyDataConn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WebsocketEarlyDataConn")
-            .field("stream", &self.stream)
             .field("req", &self.req)
             .field("early_waker", &self.early_waker)
             .field("flush_waker", &self.flush_waker)

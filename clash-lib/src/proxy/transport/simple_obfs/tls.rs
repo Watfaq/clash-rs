@@ -47,7 +47,6 @@ enum WriteState {
     Writing(usize, usize), // current, total
 }
 
-#[derive(Debug)]
 pub struct TLSObfs {
     inner: AnyStream,
     server: String,
