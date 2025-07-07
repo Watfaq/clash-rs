@@ -1,0 +1,160 @@
+{
+  "log": {
+    "loglevel": "debug" // Level of log
+  },
+  "inbounds": [
+    {
+      "port": 16823, // 服务器监听端口
+      "protocol": "vmess", // 主传入协议
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+            "alterId": 64
+          }
+        ]
+      }
+    },
+    {
+      "port": 8443, // 建议使用 443 端口
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297",
+            "alterId": 64
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls", // security 要设置为 tls 才会启用 TLS
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "/etc/v2ray/v2ray.crt", // 证书文件
+              "keyFile": "/etc/v2ray/v2ray.key" // 密钥文件
+            }
+          ]
+        }
+      }
+    },
+    {
+      "port": 9443,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "password1"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/v2ray/v2ray.crt", // 证书文件
+              "keyFile": "/etc/v2ray/v2ray.key" // 密钥文件
+            }
+          ]
+        }
+      }
+    },
+    {
+      "port": 9444,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "password1" // 填写你的 password
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "grpcSettings": {
+          "serviceName": "def" // 填写你的 ServiceName
+        },
+        "security": "none"
+      }
+    },
+    {
+      "port": 16824,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+            "alterId": 64
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/api/v3/download.getFile",
+          "headers": {
+            "Host": "www.amazon.com"
+          }
+        }
+      }
+    },
+    {
+      "port": 16825,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+            "alterId": 64
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "grpcSettings": {
+          "serviceName": "abc"
+        },
+        "security": "none"
+      }
+    },
+    {
+      "port": 8444,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+            "alterId": 64
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "h2", // h2 也可写成 http，效果一样
+        "httpSettings": { //此项是关于 HTTP/2 的设置
+          "path": "/ray"
+        },
+        "security": "tls", // 配置tls
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "/etc/v2ray/v2ray.crt", // 证书文件，详见 tls 小节
+              "keyFile": "/etc/v2ray/v2ray.key" // 密钥文件
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom", // 主传出协议
+      "settings": {}
+    }
+  ]
+}

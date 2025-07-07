@@ -1,0 +1,206 @@
+[package]
+name = "clash-lib"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[features]
+default = ["zero_copy", "aws-lc-rs"]
+
+aws-lc-rs = [
+    "rustls/aws-lc-rs",
+    "watfaq-rustls/aws-lc-rs",
+    "quinn-proto/rustls-aws-lc-rs",
+    "dep:aws-lc-rs",
+    "watfaq-dns/aws-lc-rs",
+]
+ring = [
+    "rustls/ring",
+    "watfaq-rustls/ring",
+    "quinn-proto/ring",
+    "watfaq-dns/ring",
+]
+
+internal = []
+# Protos
+shadowsocks = ["dep:shadowsocks"]
+tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]
+ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
+onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
+shadowquic = ["dep:shadowquic"]
+wireguard = ["dep:boringtun"]
+
+zero_copy = []
+bench = ["dep:criterion"]
+tokio-console = ["tokio/tracing"]
+
+[dependencies]
+# Async
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["net", "codec", "io", "compat"] }
+futures = "0.3"
+async-recursion = "1"
+async-trait = "0.1"
+hyper = { version = "1", features = ["http1", "http2", "client", "server"] }
+hyper-util = "0.1"
+
+# Network proto
+http = { version = "1" }
+http-body-util = "0.1.3"
+socket2 = { version = "0.5", features = ["all"] }
+tokio-tungstenite = "0.27.0"
+
+# TLS
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2"] }
+rustls = { version = "0.23", default-features = false }
+webpki-roots = "1.0"
+
+# shadow-tls
+tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false }
+
+# Error handing & logging
+thiserror = "2"
+anyhow = "1"
+
+# logging
+time = { version = "=0.3", features = ["macros", "local-offset"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+tracing-appender = "0.2"
+
+# Data structures
+url = "2"
+bytes = "1"
+ipnet = "2"
+regex = "1"
+byteorder = "1"
+lru_time_cache = "0.11"
+uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
+network-interface = { version = "2" }
+base64 = "0.22"
+zstd = "0.13.3"
+
+h2 = "0.4"
+prost = "0.14"
+tower = { version = "0.5", features = ["util"] }
+libc = "0.2"
+
+ip_network_table-deps-treebitmap = "0.5"
+
+# Algorithms
+crc32fast = "1"
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+md-5 = "0.10"
+chacha20poly1305 = "0.10"
+aead = { version = "0.5", features = ["std"] }
+aes = "0.8"
+aes-gcm = "0.10"
+cfb-mode = "0.8"
+const-fnv1a-hash = "1"
+
+filetime = "0.2"
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+tun = { version = "0.8", features = ["async"] }
+netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp.git", rev = "62260478079d96b42fa524caa855609312c2cf43" }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "1f57e8830ea2aea09c3b2f2d990bf3097ceb1bf5", package = "boring-noise", optional = true }
+smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+erased-serde = "0.4"
+
+
+# Macro Magic
+educe = "0.6"
+
+# DNS
+watfaq-dns = { path = "../clash-dns", default-features = false }
+hickory-client = { version = "0.25", default-features = false }
+hickory-resolver = { version = "0.25", default-features = false }
+hickory-proto = { version = "0.25", default-features = false }
+
+dhcproto = "0.13"
+ring-compat = { version = "0.8", features = ["aead"] }
+
+rand = "0.9"
+tracing = "0.1"
+
+shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
+maxminddb = "0.26"
+public-suffix = "0.1"
+murmur3 = "0.5"
+
+arti-client = { version = "0.31", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.31", optional = true, default-features = false }
+
+# tuic
+tuic = { tag = "v1.4.6", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.4.6", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+register-count = { version = "0.1", optional = true }
+
+quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
+
+# hysteria2
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+quinn-proto = { version = "0.11.12", default-features = false }
+blake2 = "0.10.6"
+digest = "0.10.7"
+
+console-subscriber = { version = "0.4" }
+criterion = { version = "0.6", features = ["html_reports", "async_tokio"], optional = true }
+memory-stats = "1.0.0"
+
+# ssh
+russh = { version = "0.52", features = ["async-trait"], optional = true }
+dirs = { version = "6.0", optional = true }
+totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
+
+# shadowquic
+shadowquic = { version = "0.1.11", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+
+# experimental
+downcast-rs = "2.0"
+
+# workaround for https://github.com/cross-rs/cross/issues/16
+aws-lc-rs = { version = "1.13", default-features = false, optional = true, features = ["bindgen"] }
+
+[dev-dependencies]
+tempfile = "3.20"
+mockall = "0.13.1"
+tokio-test = "0.4.4"
+axum-macros = "0.5.0"
+bollard = "0.19"
+serial_test = "3.2"
+env_logger = "0.11"
+# donnot change the version, russh is not compatible with the latest version of rand_core
+rand_chacha = "=0.3"
+httpmock = "0.7.0"
+
+[build-dependencies]
+prost-build = "0.14"
+
+[target.'cfg(target_os="linux")'.dependencies]
+unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18" }
+
+[target.'cfg(macos)'.dependencies]
+security-framework = "3.2.0"
+
+[target.'cfg(target_os="ios")'.dependencies]
+tracing-oslog = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Networking_WinSock",
+    "Win32_Foundation",
+    "Win32_NetworkManagement_Rras",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis"
+] }
