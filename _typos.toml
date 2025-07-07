@@ -7,9 +7,8 @@ typ = "typ"
 
 [files]
 extend-exclude = [
-  "docs",
-  "bench",
-  "clash/tests/data/config/public",
-  "clash/tests/data/config/*.cert",
+    "docs",
+    "bench",
+    "clash-bin/tests/data/config/public",
+    "clash-bin/tests/data/config/*.cert",
 ]
-
