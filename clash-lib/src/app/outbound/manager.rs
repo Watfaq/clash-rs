@@ -1,4 +1,14 @@
 use super::utils::proxy_groups_dag_sort;
+#[cfg(feature = "shadowquic")]
+use crate::proxy::shadowquic;
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks;
+#[cfg(feature = "ssh")]
+use crate::proxy::ssh;
+#[cfg(feature = "onion")]
+use crate::proxy::tor;
+#[cfg(feature = "tuic")]
+use crate::proxy::tuic;
 use crate::{
     Error,
     app::{
@@ -8,7 +18,7 @@ use crate::{
             ProxyManager,
             healthcheck::HealthCheck,
             providers::{
-                file_vehicle, http_vehicle,
+                ProviderVehicleType, file_vehicle, http_vehicle,
                 proxy_provider::{
                     PlainProvider, ProxySetProvider, ThreadSafeProxyProvider,
                 },
@@ -36,17 +46,6 @@ use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
-
-#[cfg(feature = "shadowquic")]
-use crate::proxy::shadowquic;
-#[cfg(feature = "shadowsocks")]
-use crate::proxy::shadowsocks;
-#[cfg(feature = "ssh")]
-use crate::proxy::ssh;
-#[cfg(feature = "onion")]
-use crate::proxy::tor;
-#[cfg(feature = "tuic")]
-use crate::proxy::tuic;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -116,21 +115,13 @@ impl OutboundManager {
         self.selector_control.get(name).cloned()
     }
 
-    /// Get all proxies in the manager, including those from providers.
+    /// Get all proxies in the manager, excluding those in providers.
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
         let proxy_manager = &self.proxy_manager;
 
-        let mut provider_handlers = HashMap::new();
-        for provider in self.proxy_providers.values() {
-            let proxies = provider.read().await.proxies().await;
-            for proxy in proxies {
-                provider_handlers.insert(proxy.name().to_owned(), proxy.clone());
-            }
-        }
-
-        for (k, v) in self.handlers.iter().chain(provider_handlers.iter()) {
+        for (k, v) in self.handlers.iter() {
             let mut m = if let Some(g) = v.try_as_group_handler() {
                 g.as_map().await
             } else {
@@ -183,12 +174,12 @@ impl OutboundManager {
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
     pub async fn url_test(
         &self,
-        proxy: AnyOutboundHandler,
+        proxy: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Duration,
-    ) -> std::io::Result<(u16, u16)> {
+    ) -> Vec<std::io::Result<(u16, u16)>> {
         let proxy_manager = self.proxy_manager.clone();
-        proxy_manager.url_test(proxy, url, Some(timeout)).await
+        proxy_manager.check(proxy, url, Some(timeout)).await
     }
 
     pub fn get_proxy_providers(&self) -> HashMap<String, ThreadSafeProxyProvider> {
@@ -236,8 +227,6 @@ impl OutboundManager {
         let provider_registry = &mut self.proxy_providers;
         let handlers = &mut self.handlers;
         let selector_control = &mut self.selector_control;
-
-        let mut proxy_providers = vec![];
 
         // load handlers and collect failed outbounds
         let loaded_outbounds: Vec<_> = outbounds
@@ -384,7 +373,6 @@ impl OutboundManager {
             lazy: bool,
             handlers: &HashMap<String, AnyOutboundHandler>,
             proxy_manager: ProxyManager,
-            proxy_providers: &mut Vec<ThreadSafeProxyProvider>,
             provider_registry: &mut HashMap<String, ThreadSafeProxyProvider>,
         ) -> Result<ThreadSafeProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
@@ -419,13 +407,12 @@ impl OutboundManager {
                 })?,
             ));
 
-            proxy_providers.push(pd.clone());
             provider_registry.insert(name.to_owned(), pd.clone());
 
             Ok(pd)
         }
 
-        fn maybe_append_providers(
+        fn maybe_append_use_providers(
             provider_names: &Option<Vec<String>>,
             provider_registry: &HashMap<String, ThreadSafeProxyProvider>,
             providers: &mut Vec<ThreadSafeProxyProvider>,
@@ -452,6 +439,7 @@ impl OutboundManager {
                 + use_provider.as_ref().map(|x| x.len()).unwrap_or_default()
                 == 0
         }
+
         // Initialize handlers for each outbound group protocol
         for outbound_group in outbound_groups.iter() {
             match outbound_group {
@@ -473,12 +461,11 @@ impl OutboundManager {
                             true,
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -489,7 +476,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                         },
                         providers,
@@ -514,12 +502,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -530,7 +517,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -558,12 +546,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -574,7 +561,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -602,12 +590,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -618,7 +605,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: Some(proto.url.clone()),
+                                connector: None,
                             },
                             ..Default::default()
                         },
@@ -646,12 +634,11 @@ impl OutboundManager {
                             true,
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -666,7 +653,8 @@ impl OutboundManager {
                             udp: proto.udp.unwrap_or(true),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                         },
                         providers,
@@ -696,12 +684,11 @@ impl OutboundManager {
                             proto.lazy.unwrap_or_default(),
                             handlers,
                             proxy_manager.clone(),
-                            &mut proxy_providers,
                             provider_registry,
                         )?);
                     }
 
-                    maybe_append_providers(
+                    maybe_append_use_providers(
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
@@ -712,7 +699,8 @@ impl OutboundManager {
                             name: proto.name.clone(),
                             common_opts: crate::proxy::HandlerCommonOptions {
                                 icon: proto.icon.clone(),
-                                ..Default::default()
+                                url: proto.url.clone(),
+                                connector: None,
                             },
                             udp: proto.udp.unwrap_or(true),
                             max_retries: proto.max_retries,
@@ -756,7 +744,16 @@ impl OutboundManager {
 
         let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
         let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
-        providers.extend(proxy_providers);
+        for p in provider_registry.values() {
+            let vehicle_type = p.read().await.vehicle_type();
+            if matches!(
+                vehicle_type,
+                ProviderVehicleType::Http | ProviderVehicleType::File
+            ) {
+                providers.push(p.clone());
+            }
+        }
+
         let h = selector::Handler::new(
             selector::HandlerOptions {
                 name: PROXY_GLOBAL.to_owned(),

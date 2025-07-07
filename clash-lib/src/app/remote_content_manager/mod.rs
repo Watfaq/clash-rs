@@ -124,12 +124,13 @@ impl ProxyManager {
         }
     }
 
+    /// Handy wrapper of `url_test` that checks multiple proxies
     pub async fn check(
         &self,
         proxies: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Option<Duration>,
-    ) {
+    ) -> Vec<std::io::Result<(u16, u16)>> {
         let mut futs = vec![];
         for proxy in proxies {
             let proxy = proxy.clone();
@@ -139,12 +140,21 @@ impl ProxyManager {
                 manager
                     .url_test(proxy, url.as_str(), timeout)
                     .await
-                    .map_err(|e| debug!("healthcheck failed: {}", e))
+                    .inspect_err(|e| debug!("healthcheck failed: {}", e))
             }));
         }
 
         let futs: FuturesUnordered<_> = futs.into_iter().collect();
-        let _: Vec<_> = futs.collect().await;
+        let r: Vec<_> = futs.collect().await;
+
+        let mut results = vec![];
+        for res in r {
+            match res {
+                Ok(r) => results.push(r),
+                Err(e) => results.push(Err(new_io_error(e.to_string()))),
+            }
+        }
+        results
     }
 
     pub async fn alive(&self, name: &str) -> bool {

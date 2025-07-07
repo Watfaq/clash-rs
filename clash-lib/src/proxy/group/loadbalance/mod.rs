@@ -166,6 +166,10 @@ impl GroupProxyAPIResponse for Handler {
         None
     }
 
+    fn get_latency_test_url(&self) -> Option<String> {
+        self.opts.common_opts.url.clone()
+    }
+
     fn icon(&self) -> Option<String> {
         self.opts.common_opts.icon.clone()
     }

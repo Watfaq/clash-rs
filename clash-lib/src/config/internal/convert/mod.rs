@@ -105,7 +105,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                 Ok(rv)
             },
         )?,
-        proxy_groups: proxy_group::concert(c.proxy_group.take(), &mut proxy_names)?,
+        proxy_groups: proxy_group::convert(c.proxy_group.take(), &mut proxy_names)?,
         proxy_names,
         proxy_providers: c
             .proxy_provider
