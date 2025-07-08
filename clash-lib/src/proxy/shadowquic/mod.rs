@@ -107,8 +107,9 @@ impl Handler {
                 let mut ep = ShadowQuicClient::new_with_socket(
                     self.opts.clone(),
                     socket.into_std()?,
-                );
-                ep.dst_addr = addr.to_string();
+                )
+                .map_err(new_io_error)?;
+                ep.config.addr = addr.to_string();
                 Ok(ep) as io::Result<ShadowQuicClient>
             })
             .await
