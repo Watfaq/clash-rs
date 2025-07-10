@@ -73,7 +73,7 @@ impl Client for DhcpClient {
 impl DhcpClient {
     pub async fn new(iface: &str) -> Self {
         let iface = get_outbound_interface_by_name(iface)
-            .expect(format!("can not find interface: {}", iface).as_str());
+            .unwrap_or_else(|| panic!("can not find interface: {}", iface));
         Self {
             iface,
             inner: Mutex::new(Inner {

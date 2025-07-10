@@ -149,7 +149,7 @@ pub async fn new_udp_socket(
     match (src, iface) {
         (Some(_), Some(iface)) => {
             debug!("both src and iface are set, iface will be used: {:?}", src);
-            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
+            must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                 |x| {
                     error!("failed to bind socket to interface: {}", x);
                 },
@@ -161,7 +161,7 @@ pub async fn new_udp_socket(
         }
         (None, Some(iface)) => {
             debug!("binding udp socket to interface: {:?}", iface);
-            must_bind_socket_on_interface(&socket, &iface, family).inspect_err(
+            must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                 |x| {
                     error!("failed to bind socket to interface: {}", x);
                 },

@@ -66,12 +66,12 @@ impl From<NetworkInterface> for OutboundInterface {
                             && !addr.ip.is_link_local()
                             && !addr.ip.is_unspecified()
                         {
-                            v4 = Some(addr.clone());
+                            v4 = Some(*addr);
                         }
                     }
                     network_interface::Addr::V6(addr) => {
                         if addr.ip.is_global() && !addr.ip.is_unspecified() {
-                            v6 = Some(addr.clone());
+                            v6 = Some(*addr);
                         }
                     }
                 }

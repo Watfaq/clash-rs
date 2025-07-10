@@ -353,12 +353,12 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into(), "h2".into()];
 
-            let addr = addr.clone();
+            let addr = *addr;
             let host = host.clone();
             let iface = iface.clone();
             let fut = async move {
                 new_tcp_stream(
-                    addr.clone(),
+                    addr,
                     iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     *TUN_SOMARK.read().await,
