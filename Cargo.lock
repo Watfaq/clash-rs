@@ -1440,7 +1440,7 @@ dependencies = [
  "sha2",
  "shadowquic",
  "shadowsocks",
- "smoltcp 0.12.0",
+ "smoltcp",
  "socket2 0.6.0",
  "tempfile",
  "thiserror 2.0.12",
@@ -4376,12 +4376,12 @@ dependencies = [
 [[package]]
 name = "netstack-smoltcp"
 version = "0.1.3"
-source = "git+https://github.com/automesh-network/netstack-smoltcp.git?rev=62260478079d96b42fa524caa855609312c2cf43#62260478079d96b42fa524caa855609312c2cf43"
+source = "git+https://github.com/Watfaq/netstack-smoltcp.git?rev=08ff363356e7914fefca5f6e7fc4c4d8a83d65aa#08ff363356e7914fefca5f6e7fc4c4d8a83d65aa"
 dependencies = [
  "etherparse",
  "futures",
  "rand 0.8.5",
- "smoltcp 0.11.0",
+ "smoltcp",
  "spin 0.9.8",
  "tokio",
  "tokio-util",
@@ -6603,21 +6603,6 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
-
-[[package]]
-name = "smoltcp"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a1a996951e50b5971a2c8c0fa05a381480d70a933064245c4a223ddc87ccc97"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "cfg-if",
- "defmt",
- "heapless",
- "log",
- "managed",
-]
 
 [[package]]
 name = "smoltcp"

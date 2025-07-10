@@ -29,6 +29,7 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
 /// Don't use any domain name in the URL, which will trigger DNS resolution.
 /// And libnss_files will likely cause a coredump(in static crt build).
 /// TODO: Use a DNS resolver to resolve the domain name in the URL.
+#[allow(unused)]
 pub async fn send_http_request<T>(
     url: hyper::Uri,
     req: hyper::Request<T>,
