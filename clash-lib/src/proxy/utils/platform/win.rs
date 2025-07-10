@@ -1,5 +1,5 @@
 use std::{io, os::windows::io::AsRawSocket};
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 use windows::Win32::{
     Foundation::GetLastError,
     Networking::WinSock::{
@@ -14,8 +14,6 @@ pub(crate) fn must_bind_socket_on_interface(
     iface: &OutboundInterface,
     family: socket2::Domain,
 ) -> io::Result<()> {
-    debug!("binding socket to interface: {iface:?}, family {family:?}",);
-
     let handle = SOCKET(socket.as_raw_socket().try_into().unwrap());
 
     let idx = iface.index;

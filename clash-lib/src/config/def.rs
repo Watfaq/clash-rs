@@ -106,6 +106,7 @@ pub enum LogLevel {
     Debug,
     #[default]
     Info,
+    #[serde(alias = "warn")]
     Warning,
     Error,
     #[serde(alias = "off")]

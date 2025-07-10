@@ -408,13 +408,10 @@ impl Dispatcher {
         let ss = s.clone();
         let t2 = tokio::spawn(async move {
             while let Some(packet) = remote_receiver_r.recv().await {
-                match local_w.send(packet.clone()).await {
+                match local_w.send(packet).await {
                     Ok(_) => {}
                     Err(err) => {
-                        error!(
-                            "failed to send packet to local: {}, packet: {}",
-                            err, packet
-                        );
+                        error!("failed to send packet to local: {}", err);
                     }
                 }
             }
@@ -424,7 +421,7 @@ impl Dispatcher {
         let (close_sender, close_receiver) = tokio::sync::oneshot::channel::<u8>();
 
         tokio::spawn(async move {
-            if (close_receiver.await).is_ok() {
+            if close_receiver.await.is_ok() {
                 trace!("UDP close signal for {} received", s);
                 t1.abort();
                 t2.abort();

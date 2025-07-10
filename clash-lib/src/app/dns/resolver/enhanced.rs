@@ -489,7 +489,7 @@ impl ClashResolver for EnhancedResolver {
                     return Ok(r.0);
                 }
                 let r = futures::future::select_all(r.1).await;
-                return r.0;
+                r.0
             }
             false => self
                 .resolve_v4(host, enhanced)

@@ -1,12 +1,12 @@
 use std::sync::atomic::AtomicBool;
 
-use async_trait::async_trait;
-use rand::seq::IteratorRandom;
-
 use crate::{
     Error,
     app::dns::{ClashResolver, ResolverKind},
 };
+use async_trait::async_trait;
+use rand::seq::IteratorRandom;
+use tracing::{debug, warn};
 
 pub struct SystemResolver {
     ipv6: AtomicBool,
@@ -16,6 +16,7 @@ pub struct SystemResolver {
 /// hostnames.
 impl SystemResolver {
     pub fn new(ipv6: bool) -> anyhow::Result<Self> {
+        debug!("creating system resolver with ipv6={}", ipv6);
         Ok(Self {
             ipv6: AtomicBool::new(ipv6),
         })
@@ -35,6 +36,11 @@ impl ClashResolver for SystemResolver {
                 if self.ipv6() || x.is_ipv4() {
                     Some(x.ip())
                 } else {
+                    warn!(
+                        "resolved v6 address {} for {} but ipv6 is disabled",
+                        x.ip(),
+                        host
+                    );
                     None
                 }
             })

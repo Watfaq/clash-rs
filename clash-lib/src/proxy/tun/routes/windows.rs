@@ -4,7 +4,7 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     ptr::null_mut,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use windows::{
     Win32::{
         Foundation::{ERROR_SUCCESS, GetLastError},
@@ -46,6 +46,7 @@ fn protocol_id(typ: u32, vendor_id: u32, protocol_id: u32) -> u32 {
 }
 
 pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
+    warn!("adding route to destination {} via {}", dest, via.name);
     let mut row = MIB_IPFORWARD_ROW2::default();
     unsafe {
         InitializeIpForwardEntry(&mut row);
@@ -53,15 +54,38 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
 
     row.InterfaceIndex = via.index;
     row.DestinationPrefix = IP_ADDRESS_PREFIX {
-        Prefix: SocketAddr::new(dest.addr(), 0).into(),
+        Prefix: match dest {
+            IpNet::V4(ipv4) => {
+                let mut s = SOCKADDR_INET::default();
+                s.Ipv4.sin_family = AF_INET;
+                s.Ipv4.sin_addr = ipv4.addr().into();
+                s
+            }
+            IpNet::V6(ipv6) => {
+                let mut s = SOCKADDR_INET::default();
+                s.Ipv6.sin6_family = AF_INET6;
+                s.Ipv6.sin6_addr = ipv6.addr().into();
+                s
+            }
+        },
         PrefixLength: dest.prefix_len(),
     };
     // May be too harsh to set zero
     let metric = 0;
     let next_hop: SocketAddr = if dest.addr().is_ipv4() {
-        "0.0.0.0:0".parse().unwrap()
+        (
+            via.addr_v4
+                .ok_or(std::io::Error::other("tun interface has no ipv4 address"))?,
+            0,
+        )
+            .into()
     } else {
-        "[::]:0".parse().unwrap()
+        (
+            via.addr_v6
+                .ok_or(std::io::Error::other("tun interface has no ipv6 address"))?,
+            0,
+        )
+            .into()
     };
     row.NextHop = next_hop.into();
     row.Metric = metric;
@@ -69,6 +93,12 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> io::Result<()> {
     unsafe { CreateIpForwardEntry2(&row) }
         .to_hresult()
         .ok()
+        .inspect_err(|e| {
+            error!(
+                "failed to add route to destination {} via {}: {}",
+                dest, via.name, e
+            );
+        })
         .map_err(new_io_error)
 }
 
@@ -122,7 +152,6 @@ pub fn set_dns_v4(
 
 // SetInterfaceDnsSettings()
 // See https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings
-#[allow(dead_code)]
 pub fn set_dns_v6(
     iface: &OutboundInterface,
     name_servers: &[Ipv6Addr],

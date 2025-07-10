@@ -18,13 +18,12 @@ use crate::{
     session::Session,
 };
 
-use async_trait::async_trait;
-use futures::TryFutureExt;
-use serde::Serialize;
-
 use super::{
     ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
 };
+use async_trait::async_trait;
+use futures::TryFutureExt;
+use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct Handler;

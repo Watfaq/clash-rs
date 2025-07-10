@@ -1,7 +1,7 @@
 use super::dns_client::DNSNetMode;
 use crate::{
     Error,
-    app::net::{OutboundInterface, get_outbound_interface_by_name},
+    app::net::{OutboundInterface, get_interface_by_name},
     common::trie,
     config::def::{DNSListen, DNSMode},
 };
@@ -114,12 +114,12 @@ impl Config {
                 net,
                 interface: iface
                     .map(|x| {
-                        get_outbound_interface_by_name(x).ok_or(
-                            Error::InvalidConfig(format!(
+                        get_interface_by_name(x).ok_or(Error::InvalidConfig(
+                            format!(
                                 "DNS nameserver [{}] invalid interface: {}",
                                 i, x
-                            )),
-                        )
+                            ),
+                        ))
                     })
                     .transpose()?,
             });

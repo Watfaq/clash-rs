@@ -20,7 +20,7 @@ use std::{
 use tokio::{net::UdpSocket, sync::Mutex, task::yield_now};
 
 use super::config::NameServer;
-use crate::app::net::{OutboundInterface, get_outbound_interface_by_name};
+use crate::app::net::{OutboundInterface, get_interface_by_name};
 use hickory_proto::op::Message;
 use tracing::debug;
 
@@ -72,7 +72,7 @@ impl Client for DhcpClient {
 
 impl DhcpClient {
     pub async fn new(iface: &str) -> Self {
-        let iface = get_outbound_interface_by_name(iface)
+        let iface = get_interface_by_name(iface)
             .unwrap_or_else(|| panic!("can not find interface: {}", iface));
         Self {
             iface,

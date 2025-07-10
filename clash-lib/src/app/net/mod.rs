@@ -70,7 +70,7 @@ impl From<NetworkInterface> for OutboundInterface {
                         }
                     }
                     network_interface::Addr::V6(addr) => {
-                        if addr.ip.is_global() && !addr.ip.is_unspecified() {
+                        if addr.ip.is_unique_local() || addr.ip.is_global() {
                             v6 = Some(*addr);
                         }
                     }
@@ -112,7 +112,7 @@ impl std::fmt::Display for OutboundInterface {
     }
 }
 
-pub fn get_outbound_interface_by_name(name: &str) -> Option<OutboundInterface> {
+pub fn get_interface_by_name(name: &str) -> Option<OutboundInterface> {
     let now = std::time::Instant::now();
 
     let outbound = network_interface::NetworkInterface::show()
@@ -122,7 +122,7 @@ pub fn get_outbound_interface_by_name(name: &str) -> Option<OutboundInterface> {
         .into();
 
     trace!(
-        "found outbound interface by name: {:?}, took: {}ms",
+        "found interface by name: {:?}, took: {}ms",
         outbound,
         now.elapsed().as_millis()
     );

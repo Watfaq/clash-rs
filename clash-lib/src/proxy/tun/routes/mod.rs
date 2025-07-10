@@ -30,15 +30,15 @@ use tracing::warn;
 
 use crate::config::internal::config::TunConfig;
 
-use crate::app::net::get_outbound_interface_by_name;
+use crate::app::net::get_interface_by_name;
 
 pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> {
     if cfg.route_all || !cfg.routes.is_empty() {
         #[cfg(target_os = "linux")]
         linux::check_ip_command_installed()?;
 
-        let tun_iface = get_outbound_interface_by_name(tun_name)
-            .expect("tun interface not found");
+        let tun_iface =
+            get_interface_by_name(tun_name).expect("tun interface not found");
 
         if cfg.route_all {
             warn!(
@@ -52,26 +52,60 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
 
                 use std::net::Ipv4Addr;
 
-                let default_routes = vec![
+                let mut default_routes = vec![
                     IpNet::new(std::net::IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1)
                         .unwrap(),
                     IpNet::new(std::net::IpAddr::V4(Ipv4Addr::new(128, 0, 0, 0)), 1)
                         .unwrap(),
                 ];
+
+                if tun_iface.addr_v6.is_some() {
+                    // Add default IPv6 route
+                    default_routes.append(&mut vec![
+                        IpNet::new(
+                            std::net::IpAddr::V6(std::net::Ipv6Addr::new(
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                            )),
+                            1,
+                        )
+                        .unwrap(),
+                        IpNet::new(
+                            std::net::IpAddr::V6(std::net::Ipv6Addr::new(
+                                0x8000, 0, 0, 0, 0, 0, 0, 0,
+                            )),
+                            1,
+                        )
+                        .unwrap(),
+                    ]);
+                }
+
                 for r in default_routes {
                     add_route(&tun_iface, &r)?;
                 }
+
                 #[cfg(target_os = "windows")]
                 {
                     // Set DNS server or DNS hijack won't work
                     // We can't set name server to clash DNS listener address
                     // because it may not be on standard port 53
                     // Windows only support DNS server on port 53
-                    let name_server = vec!["1.1.1.1".parse().unwrap()];
-                    let _ =
-                        windows::set_dns_v4(&tun_iface, &name_server).map_err(|e| {
-                            tracing::error!("failed to set dns due to:{}", e)
-                        });
+                    if cfg.dns_hijack {
+                        warn!(
+                            "DNS hijack is enabled, setting fake DNS servers for \
+                             the tun interface"
+                        );
+                        let name_server = vec!["1.1.1.1".parse().unwrap()];
+                        let _ = windows::set_dns_v4(&tun_iface, &name_server)
+                            .map_err(|e| {
+                                tracing::error!("failed to set dns due to:{}", e)
+                            });
+                        let name_server_v6 =
+                            vec!["2606:4700:4700::1111".parse().unwrap()];
+                        let _ = windows::set_dns_v6(&tun_iface, &name_server_v6)
+                            .map_err(|e| {
+                                tracing::error!("failed to set dns due to:{}", e)
+                            });
+                    }
                 }
                 #[cfg(target_os = "macos")]
                 {

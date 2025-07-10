@@ -59,7 +59,7 @@ pub async fn new_tcp_stream(
 
     #[cfg(not(target_os = "android"))]
     if let Some(iface) = iface {
-        debug!("binding tcp socket to interface: {:?}", iface);
+        debug!("binding tcp socket to interface: {iface:?}, family: {family:?}");
         must_bind_socket_on_interface(&socket, &iface, family)?;
     }
 
