@@ -11,7 +11,7 @@ dns:
 tun:
   enable: true
   device-id: "dev://utun1989"
-  route-all: false
+  route-all: true
   gateway: "198.19.0.1/24"
   gateway-v6: "fd00:fac::1/64"
   so-mark: 3389

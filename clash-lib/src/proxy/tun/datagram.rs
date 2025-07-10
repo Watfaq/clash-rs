@@ -82,18 +82,21 @@ impl Sink<UdpPacket> for TunDatagram {
             ..
         } = *self;
 
-        let pkt_container = pkt;
+        let pkt = pkt
+            .take()
+            .ok_or(new_io_error("no packet to send, call start_send first"))?;
 
-        if let Some(pkt) = pkt_container.take() {
-            match tx.try_send(pkt) {
-                Ok(_) => {
-                    *flushed = true;
-                    Poll::Ready(Ok(()))
-                }
-                Err(err) => Poll::Ready(Err(new_io_error(err.to_string().as_str()))),
+        match tx.try_send(pkt) {
+            Ok(_) => {
+                *flushed = true;
+                Poll::Ready(Ok(()))
             }
-        } else {
-            Poll::Ready(Err(new_io_error("no packet to send")))
+            Err(err) => {
+                self.pkt = Some(err.into_inner());
+                Poll::Ready(Err(new_io_error(
+                    "could not send packet, queue full or disconnected",
+                )))
+            }
         }
     }
 
