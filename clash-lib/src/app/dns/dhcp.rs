@@ -8,7 +8,6 @@ use crate::{
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
-use network_interface::{Addr, NetworkInterfaceConfig};
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -20,10 +19,10 @@ use std::{
 };
 use tokio::{net::UdpSocket, sync::Mutex, task::yield_now};
 
+use super::config::NameServer;
+use crate::app::net::{OutboundInterface, get_outbound_interface_by_name};
 use hickory_proto::op::Message;
 use tracing::debug;
-
-use super::config::NameServer;
 
 const IFACE_TTL: Duration = Duration::from_secs(20);
 const DHCP_TTL: Duration = Duration::from_secs(3600);
@@ -37,7 +36,7 @@ struct Inner {
 }
 
 pub struct DhcpClient {
-    iface: String,
+    iface: OutboundInterface,
 
     inner: Mutex<Inner>,
 }
@@ -53,7 +52,7 @@ impl Debug for DhcpClient {
 #[async_trait]
 impl Client for DhcpClient {
     fn id(&self) -> String {
-        format!("dhcp#{}", self.iface)
+        format!("dhcp#{}", self.iface.name)
     }
 
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
@@ -73,8 +72,10 @@ impl Client for DhcpClient {
 
 impl DhcpClient {
     pub async fn new(iface: &str) -> Self {
+        let iface = get_outbound_interface_by_name(iface)
+            .expect(format!("can not find interface: {}", iface).as_str());
         Self {
-            iface: iface.to_owned(),
+            iface,
             inner: Mutex::new(Inner {
                 clients: vec![],
                 iface_expires_at: Instant::now(),
@@ -120,66 +121,48 @@ impl DhcpClient {
 
         inner.iface_expires_at = Instant::now().add(IFACE_TTL);
 
-        let iface = network_interface::NetworkInterface::show()
-            .map_err(|x| {
-                io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", x))
-            })?
-            .into_iter()
-            .find(|x| {
-                x.name == self.iface
-                    && x.addr.first().map(|x| x.ip().is_ipv4()).unwrap_or(false)
-            })
-            .ok_or(io::Error::new(
-                io::ErrorKind::Other,
-                format!("can not find interface: {}", self.iface),
-            ))?;
+        let iface = &self.iface;
 
-        // TODO: this API changed, need to check if .first() is expected. same
-        // to L103
-        let addr = iface.addr.first().ok_or(io::Error::new(
+        let addr = iface.addr_v4.ok_or(io::Error::new(
             io::ErrorKind::Other,
-            format!("no address on interface: {}", self.iface),
+            format!("no address on interface: {:?}", self.iface),
         ))?;
 
-        match addr {
-            Addr::V4(v4) => {
-                if Instant::now() < inner.dns_expires_at
-                    && inner.iface_addr.addr() == v4.ip
-                    && inner.iface_addr.netmask()
-                        == v4.netmask.ok_or(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("no netmask on iface: {}", self.iface),
-                        ))?
-                {
-                    Ok(false)
-                } else {
-                    inner.dns_expires_at = Instant::now().add(DHCP_TTL);
-                    inner.iface_addr = ipnet::IpNet::new(
-                        v4.ip.into(),
-                        u32::from(v4.netmask.ok_or(io::Error::new(
-                            io::ErrorKind::Other,
-                            "no netmask",
-                        ))?)
-                        .count_ones() as _,
-                    )
-                    .map_err(|_x| {
-                        io::Error::new(
-                            io::ErrorKind::Other,
-                            format!(
-                                "invalid netmask: {}",
-                                v4.netmask.expect("expect netmask parse error")
-                            ),
-                        )
-                    })?;
-                    Ok(true)
-                }
-            }
-            Addr::V6(_) => unreachable!("should only run on V4"),
+        if Instant::now() < inner.dns_expires_at
+            && inner.iface_addr.addr() == addr
+            && inner.iface_addr.netmask()
+                == iface.netmask_v4.ok_or(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("no netmask on iface: {:?}", self.iface),
+                ))?
+        {
+            Ok(false)
+        } else {
+            inner.dns_expires_at = Instant::now().add(DHCP_TTL);
+            inner.iface_addr = ipnet::IpNet::new(
+                addr.into(),
+                u32::from(
+                    iface
+                        .netmask_v4
+                        .ok_or(io::Error::new(io::ErrorKind::Other, "no netmask"))?,
+                )
+                .count_ones() as _,
+            )
+            .map_err(|_x| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "invalid netmask: {}",
+                        iface.netmask_v4.expect("expect netmask parse error")
+                    ),
+                )
+            })?;
+            Ok(true)
         }
     }
 }
 
-async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
+async fn listen_dhcp_client(iface: &OutboundInterface) -> io::Result<UdpSocket> {
     let listen_addr = match env::consts::OS {
         "linux" => "255.255.255.255:68",
         _ => "0.0.0.0:68",
@@ -187,31 +170,23 @@ async fn listen_dhcp_client(iface: &str) -> io::Result<UdpSocket> {
 
     new_udp_socket(
         Some(listen_addr.parse().expect("must parse")),
-        Some(iface.into()),
+        Some(iface),
         #[cfg(target_os = "linux")]
         None,
     )
     .await
 }
 
-async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
+async fn probe_dns_server(iface: &OutboundInterface) -> io::Result<Vec<Ipv4Addr>> {
     debug!("probing NS servers from DHCP");
     let socket = listen_dhcp_client(iface).await?;
 
-    let mac_address: Vec<u8> = network_interface::NetworkInterface::show()
-        .map_err(|_x| {
-            io::Error::new(io::ErrorKind::Other, format!("list ifaces: {:?}", iface))
-        })?
-        .into_iter()
-        .find(|x| x.name == iface)
-        .ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("can not find interface: {}", iface),
-        ))?
+    let mac_address = &iface
         .mac_addr
+        .as_ref()
         .ok_or(io::Error::new(
             io::ErrorKind::Other,
-            format!("no MAC address on interface: {}", iface),
+            format!("no MAC address on interface: {:?}", iface),
         ))?
         .split(':')
         .map(|x| {
@@ -313,12 +288,15 @@ async fn probe_dns_server(iface: &str) -> io::Result<Vec<Ipv4Addr>> {
 
 #[cfg(test)]
 mod test {
-    use crate::dns::dhcp::probe_dns_server;
+    use crate::{app::net::get_outbound_interface, dns::dhcp::probe_dns_server};
 
     #[tokio::test]
-    #[ignore]
     async fn test_probe_ns() {
-        let ns = probe_dns_server("en0").await.expect("must prob");
+        let ns = probe_dns_server(
+            &get_outbound_interface().expect("cant find outbound interface"),
+        )
+        .await
+        .expect("must prob");
         assert!(!ns.is_empty());
     }
 }

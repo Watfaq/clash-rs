@@ -204,7 +204,7 @@ impl Handler {
         let create_socket = || async {
             new_udp_socket(
                 Some(src),
-                sess.iface.clone(),
+                sess.iface.as_ref(),
                 #[cfg(target_os = "linux")]
                 sess.so_mark,
             )

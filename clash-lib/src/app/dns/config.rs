@@ -1,40 +1,31 @@
+use super::dns_client::DNSNetMode;
+use crate::{
+    Error,
+    app::net::{OutboundInterface, get_outbound_interface_by_name},
+    common::trie,
+    config::def::{DNSListen, DNSMode},
+};
+use ipnet::AddrParseError;
+use regex::Regex;
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     fmt::Display,
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
-
-use ipnet::AddrParseError;
-use regex::Regex;
-
-use serde::Deserialize;
 use url::Url;
 use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
-
-use crate::{
-    Error,
-    common::trie,
-    config::def::{DNSListen, DNSMode},
-};
-
-use super::dns_client::DNSNetMode;
 
 #[derive(Clone, Debug)]
 pub struct NameServer {
     pub net: DNSNetMode,
     pub address: String,
-    pub interface: Option<String>,
+    pub interface: Option<OutboundInterface>,
 }
 impl Display for NameServer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}://{}#{}",
-            self.net,
-            self.address,
-            self.interface.as_ref().unwrap_or(&"".to_owned())
-        )
+        write!(f, "{}://{}#{:?}", self.net, self.address, self.interface,)
     }
 }
 
@@ -121,7 +112,16 @@ impl Config {
             nameservers.push(NameServer {
                 address: addr,
                 net,
-                interface: iface.map(String::from),
+                interface: iface
+                    .map(|x| {
+                        get_outbound_interface_by_name(x).ok_or(
+                            Error::InvalidConfig(format!(
+                                "DNS nameserver [{}] invalid interface: {}",
+                                i, x
+                            )),
+                        )
+                    })
+                    .transpose()?,
             });
         }
 

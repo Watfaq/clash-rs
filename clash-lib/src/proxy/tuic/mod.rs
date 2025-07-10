@@ -203,7 +203,7 @@ impl Handler {
             if resolver.ipv6() {
                 new_udp_socket(
                     Some((Ipv6Addr::UNSPECIFIED, 0).into()),
-                    sess.iface.clone(),
+                    sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
                 )

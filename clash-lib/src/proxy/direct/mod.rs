@@ -72,7 +72,7 @@ impl OutboundHandler for Handler {
 
         let s = new_tcp_stream(
             (remote_ip, sess.destination.port()).into(),
-            sess.iface.clone(),
+            sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
         )
@@ -90,7 +90,7 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedDatagram> {
         let d = new_udp_socket(
             Some(sess.source),
-            sess.iface.clone(),
+            sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
         )
@@ -138,7 +138,7 @@ impl OutboundHandler for Handler {
                 resolver,
                 None,
                 sess.destination.clone(),
-                sess.iface.clone(),
+                sess.iface.as_ref(),
                 #[cfg(target_os = "linux")]
                 sess.so_mark,
             )

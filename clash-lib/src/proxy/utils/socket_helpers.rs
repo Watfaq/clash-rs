@@ -1,8 +1,8 @@
 #[cfg(not(target_os = "android"))]
 use super::platform::must_bind_socket_on_interface;
-use crate::app::net::Interface;
+use crate::app::net::OutboundInterface;
 use socket2::TcpKeepalive;
-use std::{io, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
@@ -35,9 +35,9 @@ pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
 #[allow(unused_variables)]
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
-    iface: Option<Interface>,
+    iface: Option<&OutboundInterface>,
     #[cfg(target_os = "linux")] so_mark: Option<u32>,
-) -> io::Result<TcpStream> {
+) -> std::io::Result<TcpStream> {
     let (socket, family) = match endpoint {
         SocketAddr::V4(_) => (
             socket2::Socket::new(
@@ -79,15 +79,15 @@ pub async fn new_tcp_stream(
     .await?
 }
 
-#[allow(unused_variables)]
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
-    iface: Option<Interface>,
+    iface: Option<&OutboundInterface>,
     #[cfg(target_os = "linux")] so_mark: Option<u32>,
-) -> io::Result<UdpSocket> {
+) -> std::io::Result<UdpSocket> {
     let (socket, family) = match src {
         Some(src) => {
             if src.is_ipv4() {
+                debug!("resolved v4 socket for v4 src {src:?}");
                 (
                     socket2::Socket::new(
                         socket2::Domain::IPV4,
@@ -97,6 +97,7 @@ pub async fn new_udp_socket(
                     socket2::Domain::IPV4,
                 )
             } else {
+                debug!("resolved v6 socket for v6 src {src:?}");
                 (
                     socket2::Socket::new(
                         socket2::Domain::IPV6,
@@ -107,10 +108,41 @@ pub async fn new_udp_socket(
                 )
             }
         }
-        None => (
-            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
-            socket2::Domain::IPV4,
-        ),
+        None => {
+            if let Some(iface) = iface.as_ref() {
+                if iface.addr_v6.is_some() {
+                    debug!("resolved v6 socket for v6 iface {:?}", iface.addr_v6);
+                    (
+                        socket2::Socket::new(
+                            socket2::Domain::IPV6,
+                            socket2::Type::DGRAM,
+                            None,
+                        )?,
+                        socket2::Domain::IPV6,
+                    )
+                } else {
+                    debug!("resolved v4 socket for v4 iface {:?}", iface.addr_v4);
+                    (
+                        socket2::Socket::new(
+                            socket2::Domain::IPV4,
+                            socket2::Type::DGRAM,
+                            None,
+                        )?,
+                        socket2::Domain::IPV4,
+                    )
+                }
+            } else {
+                debug!("no src or iface provided, using default v4 socket");
+                (
+                    socket2::Socket::new(
+                        socket2::Domain::IPV4,
+                        socket2::Type::DGRAM,
+                        None,
+                    )?,
+                    socket2::Domain::IPV4,
+                )
+            }
+        }
     };
 
     #[cfg(not(target_os = "android"))]

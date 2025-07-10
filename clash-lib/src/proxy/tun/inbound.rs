@@ -36,14 +36,12 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
-            .inspect(|x| {
-                debug!(
-                    "selecting outbound interface: {:?} for tun TCP connection",
-                    x
-                );
-            }),
+        iface: get_outbound_interface().inspect(|x| {
+            debug!(
+                "selecting outbound interface: {:?} for tun TCP connection",
+                x
+            );
+        }),
         so_mark: Some(so_mark),
         ..Default::default()
     };
@@ -93,11 +91,9 @@ async fn handle_inbound_datagram(
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
-            .inspect(|x| {
-                debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
-            }),
+        iface: get_outbound_interface().inspect(|x| {
+            debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
+        }),
         so_mark: Some(so_mark),
         ..Default::default()
     };

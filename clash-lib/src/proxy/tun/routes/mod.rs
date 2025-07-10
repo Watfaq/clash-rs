@@ -28,34 +28,16 @@ pub use other::maybe_routes_clean_up;
 
 use tracing::warn;
 
-use crate::{
-    app::net::OutboundInterface, common::errors::map_io_error,
-    config::internal::config::TunConfig,
-};
+use crate::config::internal::config::TunConfig;
 
-use network_interface::NetworkInterfaceConfig;
+use crate::app::net::get_outbound_interface_by_name;
 
 pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> {
     if cfg.route_all || !cfg.routes.is_empty() {
         #[cfg(target_os = "linux")]
         linux::check_ip_command_installed()?;
 
-        let tun_iface = network_interface::NetworkInterface::show()
-            .map_err(map_io_error)?
-            .into_iter()
-            .find(|iface| iface.name == tun_name)
-            .map(|x| OutboundInterface {
-                name: x.name,
-                addr_v4: x.addr.iter().find_map(|addr| match addr {
-                    network_interface::Addr::V4(addr) => Some(addr.ip),
-                    _ => None,
-                }),
-                addr_v6: x.addr.iter().find_map(|addr| match addr {
-                    network_interface::Addr::V6(addr) => Some(addr.ip),
-                    _ => None,
-                }),
-                index: x.index,
-            })
+        let tun_iface = get_outbound_interface_by_name(tun_name)
             .expect("tun interface not found");
 
         if cfg.route_all {

@@ -98,7 +98,7 @@ impl Handler {
                     new_udp_socket(
                         Some(bind_addr.parse().unwrap()), /* Used to indicate the
                                                            * address family */
-                        sess.iface.clone(),
+                        sess.iface.as_ref(),
                         #[cfg(target_os = "linux")]
                         sess.so_mark,
                     )
