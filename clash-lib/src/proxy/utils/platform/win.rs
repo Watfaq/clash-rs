@@ -26,6 +26,8 @@ pub(crate) fn must_bind_socket_on_interface(
                 handle,
                 IPPROTO_IP.0,
                 IP_UNICAST_IF,
+                // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
+                // a 4-byte IPv4 address in network byte order
                 Some(idx.to_be_bytes().as_ref()),
             ))
         },
@@ -34,7 +36,11 @@ pub(crate) fn must_bind_socket_on_interface(
                 handle,
                 IPPROTO_IPV6.0,
                 IPV6_UNICAST_IF,
-                Some(idx.to_be_bytes().as_ref()),
+                // https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-ipv6-socket-options
+                // 4-byte interface index of the desired outgoing interface in host
+                // byte order
+                // OMG Windows!
+                Some(idx.to_ne_bytes().as_ref()),
             ))
         },
         _ => Err(io::Error::new(

@@ -148,7 +148,7 @@ pub async fn new_udp_socket(
     #[cfg(not(target_os = "android"))]
     match (src, iface) {
         (Some(_), Some(iface)) => {
-            debug!("both src and iface are set, iface will be used: {:?}", src);
+            debug!("both src and iface are set, iface will be used: {iface:?}");
             must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                 |x| {
                     error!("failed to bind socket to interface: {}", x);
