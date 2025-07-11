@@ -1,15 +1,4 @@
 use super::datagram::TunDatagram;
-use std::{net::SocketAddr, sync::Arc};
-
-use futures::{SinkExt, StreamExt};
-
-use hickory_proto::rr::RecordType;
-
-use netstack_smoltcp::StackBuilder;
-use tracing::{debug, error, info, trace, warn};
-use tun_rs::DeviceBuilder;
-use url::Url;
-
 use crate::{
     Error, Runner,
     app::{
@@ -18,11 +7,19 @@ use crate::{
         net::get_outbound_interface,
     },
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
+    defer,
+    proxy::{
+        datagram::UdpPacket,
+        tun::{routes, routes::maybe_add_routes},
+    },
     session::{Network, Session, Type},
 };
-
-use crate::{defer, proxy::tun::routes};
+use futures::{SinkExt, StreamExt};
+use netstack_smoltcp::StackBuilder;
+use std::{net::SocketAddr, sync::Arc};
+use tracing::{debug, error, info, trace, warn};
+use tun_rs::DeviceBuilder;
+use url::Url;
 
 async fn handle_inbound_stream(
     stream: netstack_smoltcp::TcpStream,
@@ -172,18 +169,6 @@ async fn handle_inbound_datagram(
                             };
 
                         trace!("hijack dns request: {:?}", msg);
-                        if msg.query().map(|q| q.query_type())
-                            == Some(RecordType::AAAA)
-                        {
-                            trace!("dns hijack does not support AAAA query");
-                            let resp = hickory_proto::op::Message::error_msg(
-                                msg.id(),
-                                msg.op_code(),
-                                hickory_proto::op::ResponseCode::Refused,
-                            );
-                            send_response(resp, &pkt).await;
-                            continue 'read_packet;
-                        }
 
                         let mut resp =
                             match exchange_with_resolver(&resolver_dns, &msg, true)

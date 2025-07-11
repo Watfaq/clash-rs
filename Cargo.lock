@@ -4375,8 +4375,8 @@ dependencies = [
 
 [[package]]
 name = "netstack-smoltcp"
-version = "0.1.3"
-source = "git+https://github.com/Watfaq/netstack-smoltcp.git?rev=08ff363356e7914fefca5f6e7fc4c4d8a83d65aa#08ff363356e7914fefca5f6e7fc4c4d8a83d65aa"
+version = "0.1.4"
+source = "git+https://github.com/automesh-network/netstack-smoltcp?rev=ab06bc3de566fc6485a238dd4c746bb3e4f79484#ab06bc3de566fc6485a238dd4c746bb3e4f79484"
 dependencies = [
  "etherparse",
  "futures",

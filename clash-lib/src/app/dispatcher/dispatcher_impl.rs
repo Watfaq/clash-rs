@@ -365,8 +365,8 @@ impl Dispatcher {
                                     Ok(_) => {}
                                     Err(err) => {
                                         warn!(
-                                            "failed to send packet to remote: {}",
-                                            err
+                                            "failed to send packet to remote: \
+                                             {err:?}"
                                         );
                                     }
                                 }

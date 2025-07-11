@@ -291,6 +291,7 @@ mod test {
     use crate::{app::net::get_outbound_interface, dns::dhcp::probe_dns_server};
 
     #[tokio::test]
+    #[ignore = "requires DHCP server on CI"]
     async fn test_probe_ns() {
         let ns = probe_dns_server(
             &get_outbound_interface().expect("cant find outbound interface"),
