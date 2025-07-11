@@ -4,7 +4,7 @@ use hickory_proto::{
 };
 use tracing::debug;
 
-use crate::app::dns::ThreadSafeDNSResolver;
+use crate::app::dns::{ThreadSafeDNSResolver, helper::build_dns_response_message};
 
 use super::DEFAULT_DNS_SERVER_TTL;
 
@@ -38,17 +38,7 @@ pub async fn exchange_with_resolver<'a>(
         .map(|x| x.name().to_ascii().trim_end_matches('.').to_owned())
         .unwrap();
 
-    let mut res = Message::new();
-    res.set_id(req.id());
-    res.set_message_type(hickory_proto::op::MessageType::Response);
-    res.add_queries(req.queries().iter().map(|x| x.to_owned()));
-    res.set_recursion_available(false);
-    res.set_authoritative(true);
-    res.set_recursion_desired(req.recursion_desired());
-    res.set_checking_disabled(req.checking_disabled());
-    if let Some(edns) = req.extensions().clone() {
-        res.set_edns(edns);
-    }
+    let mut res = build_dns_response_message(req, false, false);
 
     match resolver.resolve_v4(&host, enhanced).await {
         Ok(resp) => match resp {

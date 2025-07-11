@@ -56,3 +56,25 @@ pub async fn make_clients(
 
     rv
 }
+
+pub fn build_dns_response_message(
+    req: &hickory_proto::op::Message,
+    recursive_available: bool,
+    authoritative: bool,
+) -> hickory_proto::op::Message {
+    let mut res = hickory_proto::op::Message::new();
+
+    res.set_id(req.id());
+    res.set_op_code(req.op_code());
+    res.set_message_type(hickory_proto::op::MessageType::Response);
+    res.add_queries(req.queries().iter().cloned());
+    res.set_recursion_available(recursive_available);
+    res.set_authoritative(authoritative);
+    res.set_recursion_desired(req.recursion_desired());
+    res.set_checking_disabled(req.checking_disabled());
+    if let Some(edns) = req.extensions().clone() {
+        res.set_edns(edns);
+    }
+
+    res
+}

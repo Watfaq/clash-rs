@@ -4,7 +4,7 @@ use crate::{
     app::{
         dispatcher::Dispatcher,
         dns::{ThreadSafeDNSResolver, exchange_with_resolver},
-        net::{DEFAULT_OUTBOUND_INTERFACE, get_outbound_interface},
+        net::DEFAULT_OUTBOUND_INTERFACE,
     },
     config::internal::config::TunConfig,
     defer,
@@ -33,12 +33,16 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: get_outbound_interface().inspect(|x| {
-            debug!(
-                "selecting outbound interface: {:?} for tun TCP connection",
-                x
-            );
-        }),
+        iface: DEFAULT_OUTBOUND_INTERFACE
+            .read()
+            .await
+            .clone()
+            .inspect(|x| {
+                debug!(
+                    "selecting outbound interface: {:?} for tun TCP connection",
+                    x
+                );
+            }),
         so_mark: Some(so_mark),
         ..Default::default()
     };

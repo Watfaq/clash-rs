@@ -16,7 +16,7 @@ use hickory_proto::{op, rr};
 
 use crate::{
     Error,
-    app::profile::ThreadSafeCacheFile,
+    app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
     common::{mmdb::MmdbLookup, trie},
     config::def::DNSMode,
     dns::{
@@ -289,16 +289,23 @@ impl EnhancedResolver {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
                 if let Some(cached) = lru.read().await.get(q, Instant::now()) {
-                    trace!("dns query {} hit lru cache", q.to_string());
-                    let cached = cached.inspect_err(|x| {
-                        warn!("failed to get cached message: {}", x);
-                    })?;
-                    let mut reply = op::Message::new();
-                    reply.set_id(message.id());
-                    for r in cached.records() {
-                        reply.add_answer(r.clone());
+                    if !message.recursion_desired() {
+                        trace!("cache hit for DNS query {}", q.to_string());
+                        if let Ok(cached) = cached.inspect_err(|x| {
+                            warn!("failed to get cached message: {}", x);
+                        }) {
+                            let mut reply =
+                                build_dns_response_message(message, true, false);
+                            reply.add_answers(cached.records().iter().cloned());
+                            return Ok(reply);
+                        }
+                    } else {
+                        trace!(
+                            "cache hit for DNS query {} but RA desired, bypassing \
+                             cache",
+                            q.to_string()
+                        );
                     }
-                    return Ok(reply);
                 }
             }
             self.exchange_no_cache(message).await
