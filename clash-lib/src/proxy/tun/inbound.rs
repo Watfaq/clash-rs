@@ -4,13 +4,13 @@ use crate::{
     app::{
         dispatcher::Dispatcher,
         dns::{ThreadSafeDNSResolver, exchange_with_resolver},
-        net::get_outbound_interface,
+        net::{DEFAULT_OUTBOUND_INTERFACE, get_outbound_interface},
     },
     config::internal::config::TunConfig,
     defer,
     proxy::{
         datagram::UdpPacket,
-        tun::{routes, routes::maybe_add_routes},
+        tun::routes::{self, maybe_add_routes},
     },
     session::{Network, Session, Type},
 };
@@ -85,10 +85,11 @@ async fn handle_inbound_datagram(
     // is to the tun
     let udp_stream = TunDatagram::new(l_tx, d_rx);
 
+    let default_outbound = DEFAULT_OUTBOUND_INTERFACE.read().await;
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
-        iface: get_outbound_interface().inspect(|x| {
+        iface: default_outbound.clone().inspect(|x| {
             debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
         }),
         so_mark: Some(so_mark),

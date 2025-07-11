@@ -7,7 +7,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering::Relaxed},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::RwLock;
 use tracing::{debug, error, instrument, trace, warn};
@@ -30,8 +30,6 @@ use crate::{
     },
 };
 
-static TTL: Duration = Duration::from_secs(60);
-
 pub struct EnhancedResolver {
     ipv6: AtomicBool,
     hosts: Option<trie::StringTrie<net::IpAddr>>,
@@ -41,8 +39,7 @@ pub struct EnhancedResolver {
     fallback_domain_filters: Option<Vec<Box<dyn FallbackDomainFilter>>>,
     fallback_ip_filters: Option<Vec<Box<dyn FallbackIPFilter>>>,
 
-    // TODO: replace this with hickory_resolver::dns_lru::DnsLru
-    lru_cache: Option<Arc<RwLock<lru_time_cache::LruCache<String, op::Message>>>>,
+    lru_cache: Option<Arc<RwLock<hickory_resolver::dns_lru::DnsLru>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
     fake_dns: Option<ThreadSafeFakeDns>,
@@ -155,8 +152,14 @@ impl EnhancedResolver {
                 None
             },
             lru_cache: Some(Arc::new(RwLock::new(
-                lru_time_cache::LruCache::with_expiry_duration_and_capacity(
-                    TTL, 4096,
+                hickory_resolver::dns_lru::DnsLru::new(
+                    4096,
+                    hickory_resolver::dns_lru::TtlConfig::new(
+                        Some(Duration::from_secs(1)),
+                        Some(Duration::from_secs(1)),
+                        Some(Duration::from_secs(60)),
+                        Some(Duration::from_secs(10)),
+                    ),
                 ),
             ))),
             policy: if !cfg.nameserver_policy.is_empty() {
@@ -285,11 +288,17 @@ impl EnhancedResolver {
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
             if let Some(lru) = &self.lru_cache {
-                if let Some(cached) = lru.read().await.peek(q.to_string().as_str()) {
+                if let Some(cached) = lru.read().await.get(q, Instant::now()) {
                     trace!("dns query {} hit lru cache", q.to_string());
-                    let mut cached = cached.clone();
-                    cached.set_id(message.id());
-                    return Ok(cached);
+                    let cached = cached.inspect_err(|x| {
+                        warn!("failed to get cached message: {}", x);
+                    })?;
+                    let mut reply = op::Message::new();
+                    reply.set_id(message.id());
+                    for r in cached.records() {
+                        reply.add_answer(r.clone());
+                    }
+                    return Ok(reply);
                 }
             }
             self.exchange_no_cache(message).await
@@ -323,29 +332,11 @@ impl EnhancedResolver {
                 if !(q.query_type() == rr::RecordType::TXT
                     && q.name().to_ascii().starts_with("_acme-challenge."))
                 {
-                    // TODO: make this TTL wired to LRU cache
-                    #[allow(unused_variables)]
-                    let ttl = if msg.answer_count() != 0 {
-                        msg.answers()
-                            .iter()
-                            .map(|x| x.ttl())
-                            .min()
-                            .unwrap_or_default()
-                    } else if msg.name_server_count() != 0 {
-                        msg.name_servers()
-                            .iter()
-                            .map(|x| x.ttl())
-                            .min()
-                            .unwrap_or_default()
-                    } else {
-                        msg.additionals()
-                            .iter()
-                            .map(|x| x.ttl())
-                            .min()
-                            .unwrap_or_default()
-                    };
-
-                    lru.write().await.insert(q.to_string(), msg.clone());
+                    lru.write().await.insert_records(
+                        q.clone(),
+                        msg.answers().iter().cloned(),
+                        Instant::now(),
+                    );
                 }
             }
         }
@@ -576,7 +567,7 @@ impl ClashResolver for EnhancedResolver {
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
         if let Some(lru) = &self.reverse_lookup_cache {
             if let Some(cached) = lru.read().await.peek(&ip) {
-                trace!("reverse lookup cache hit: {} -> {}", ip, cached);
+                trace!("reverse lookup cache hit: {cached} -> {ip}");
                 return Some(cached.clone());
             }
         }

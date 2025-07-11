@@ -195,33 +195,39 @@ where
     let mut has_server = false;
 
     if let Some(addr) = listen.udp {
-        has_server = true;
-        UdpSocket::bind(addr)
+        has_server = UdpSocket::bind(addr)
             .await
             .map(|x| {
                 info!("UDP dns server listening on: {}", addr);
                 s.register_socket(x);
             })
-            .ok()?;
+            .inspect_err(|x| {
+                error!("failed to listen UDP DNS server on {}: {}", addr, x);
+            })
+            .is_ok();
     }
     if let Some(addr) = listen.tcp {
-        has_server = true;
-        TcpListener::bind(addr)
+        has_server |= TcpListener::bind(addr)
             .await
             .map(|x| {
                 info!("TCP dns server listening on: {}", addr);
                 s.register_listener(x, DEFAULT_DNS_SERVER_TIMEOUT);
             })
-            .ok()?;
+            .inspect_err(|x| {
+                error!("failed to listen TCP DNS server on {}: {}", addr, x);
+            })
+            .is_ok();
     }
     if let Some(c) = listen.doh {
-        has_server = true;
-        TcpListener::bind(c.addr)
+        has_server |= TcpListener::bind(c.addr)
             .await
             .and_then(|x| {
-                info!("DoH server listening on: {}", c.addr);
                 if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
-                    debug!("using custom key and cert for doh: {}/{}", k, c);
+                    debug!(
+                        "using custom key and cert for DoH: {:?}/{:?}",
+                        cwd.join(k),
+                        cwd.join(c)
+                    );
                 }
 
                 let server_key = c
@@ -245,18 +251,24 @@ where
                     c.hostname,
                     "/dns-query".to_string(),
                 )?;
+                info!("DoH server listening on: {}", c.addr);
                 Ok(())
             })
-            .ok()?;
+            .inspect_err(|x| {
+                error!("failed to listen DoH server on {}: {}", c.addr, x);
+            })
+            .is_ok();
     }
     if let Some(c) = listen.dot {
-        has_server = true;
-        TcpListener::bind(c.addr)
+        has_server |= TcpListener::bind(c.addr)
             .await
             .and_then(|x| {
-                info!("DoT dns server listening on: {}", c.addr);
                 if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
-                    debug!("using custom key and cert for dot: {}/{}", k, c);
+                    debug!(
+                        "using custom key and cert for DoT: {:?}/{:?}",
+                        cwd.join(k),
+                        cwd.join(c)
+                    );
                 }
 
                 let server_key = c
@@ -278,19 +290,25 @@ where
                     }
                     .into(),
                 )?;
+                info!("DoT dns server listening on: {}", c.addr);
                 Ok(())
             })
-            .ok()?;
+            .inspect_err(|x| {
+                error!("failed to listen DoT DNS server on {}: {}", c.addr, x);
+            })
+            .is_ok();
     }
 
     if let Some(c) = listen.doh3 {
-        has_server = true;
-        UdpSocket::bind(c.addr)
+        has_server |= UdpSocket::bind(c.addr)
             .await
             .and_then(|x| {
-                info!("DoT3 dns server listening on: {}", c.addr);
                 if let (Some(k), Some(c)) = (&c.ca_key, &c.ca_cert) {
-                    debug!("using custom key and cert for dot: {}/{}", k, c);
+                    debug!(
+                        "using custom key and cert for DoH3: {:?}/{:?}",
+                        cwd.join(k),
+                        cwd.join(c)
+                    );
                 }
 
                 let server_key = c
@@ -313,9 +331,13 @@ where
                     .into(),
                     c.hostname,
                 )?;
+                info!("DoT3 dns server listening on: {}", c.addr);
                 Ok(())
             })
-            .ok()?;
+            .inspect_err(|x| {
+                error!("failed to listen DoH3 DNS server on {}: {}", c.addr, x);
+            })
+            .is_ok();
     }
 
     if !has_server {
@@ -325,6 +347,7 @@ where
     let mut l = DnsListener { server: s };
 
     Some(Box::pin(async move {
+        info!("starting DNS server");
         l.server.block_until_done().await.map_err(|x| {
             warn!("dns server error: {}", x);
             DNSError::Io(new_io_error(format!("dns server error: {}", x)))

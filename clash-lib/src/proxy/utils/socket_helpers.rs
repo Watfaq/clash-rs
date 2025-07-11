@@ -84,64 +84,44 @@ pub async fn new_udp_socket(
     iface: Option<&OutboundInterface>,
     #[cfg(target_os = "linux")] so_mark: Option<u32>,
 ) -> std::io::Result<UdpSocket> {
-    let (socket, family) = match src {
-        Some(src) => {
-            if src.is_ipv4() {
-                debug!("resolved v4 socket for v4 src {src:?}");
-                (
-                    socket2::Socket::new(
-                        socket2::Domain::IPV4,
-                        socket2::Type::DGRAM,
-                        None,
-                    )?,
-                    socket2::Domain::IPV4,
-                )
-            } else {
-                debug!("resolved v6 socket for v6 src {src:?}");
-                (
-                    socket2::Socket::new(
-                        socket2::Domain::IPV6,
-                        socket2::Type::DGRAM,
-                        None,
-                    )?,
+    // Determine the socket family based on the source address or interface
+    // logic:
+    // - If interface is provided and supports IPv6, use IPv6 socket
+    // - If source address is provided and is IPv6, use IPv6 socket
+    // - Otherwise, default to IPv4 socket
+    let (socket, family) = match (src, iface) {
+        (_, Some(iface)) if iface.addr_v6.is_some() => {
+            debug!("resolved v6 socket for v6 iface {:?}", iface.addr_v6);
+            (
+                socket2::Socket::new(
                     socket2::Domain::IPV6,
-                )
-            }
+                    socket2::Type::DGRAM,
+                    None,
+                )?,
+                socket2::Domain::IPV6,
+            )
         }
-        None => {
-            if let Some(iface) = iface.as_ref() {
-                if iface.addr_v6.is_some() {
-                    debug!("resolved v6 socket for v6 iface {:?}", iface.addr_v6);
-                    (
-                        socket2::Socket::new(
-                            socket2::Domain::IPV6,
-                            socket2::Type::DGRAM,
-                            None,
-                        )?,
-                        socket2::Domain::IPV6,
-                    )
-                } else {
-                    debug!("resolved v4 socket for v4 iface {:?}", iface.addr_v4);
-                    (
-                        socket2::Socket::new(
-                            socket2::Domain::IPV4,
-                            socket2::Type::DGRAM,
-                            None,
-                        )?,
-                        socket2::Domain::IPV4,
-                    )
-                }
-            } else {
-                debug!("no src or iface provided, using default v4 socket");
-                (
-                    socket2::Socket::new(
-                        socket2::Domain::IPV4,
-                        socket2::Type::DGRAM,
-                        None,
-                    )?,
+        (Some(src), _) if src.is_ipv6() => {
+            debug!("resolved v6 socket for v6 src {src:?}");
+            (
+                socket2::Socket::new(
+                    socket2::Domain::IPV6,
+                    socket2::Type::DGRAM,
+                    None,
+                )?,
+                socket2::Domain::IPV6,
+            )
+        }
+        _ => {
+            debug!("defaulting to v4 socket");
+            (
+                socket2::Socket::new(
                     socket2::Domain::IPV4,
-                )
-            }
+                    socket2::Type::DGRAM,
+                    None,
+                )?,
+                socket2::Domain::IPV4,
+            )
         }
     };
 

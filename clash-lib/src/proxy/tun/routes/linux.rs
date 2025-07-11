@@ -120,6 +120,7 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     if !(tun_cfg.enable && tun_cfg.route_all) {
         return Ok(());
     }
+
     let table = tun_cfg.route_table.to_string();
     let so_mark = tun_cfg.so_mark.to_string();
     let enable_v6 = tun_cfg.gateway_v6.is_some();
