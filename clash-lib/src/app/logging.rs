@@ -126,7 +126,6 @@ fn setup_logging_inner(
     let exclude = filter_fn(|metadata| {
         !metadata.target().contains("tokio")
             && !metadata.target().contains("runtime")
-            || true
     });
 
     let timer = LocalTime::new(time::macros::format_description!(
