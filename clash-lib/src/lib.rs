@@ -27,6 +27,7 @@ use app::{
 };
 use common::{auth, http::new_http_client, mmdb};
 use config::def::LogLevel;
+#[cfg(feature = "tun")]
 use proxy::tun::get_tun_runner;
 
 use std::{
@@ -116,7 +117,7 @@ impl Config {
 
 pub struct GlobalState {
     log_level: LogLevel,
-
+    #[cfg(feature = "tun")]
     tunnel_listener_handle: Option<JoinHandle<Result<()>>>,
     api_listener_handle: Option<JoinHandle<Result<()>>>,
     dns_listener_handle: Option<JoinHandle<Result<()>>>,
@@ -243,6 +244,7 @@ pub async fn start(
     let inbound_manager = components.inbound_manager.clone();
     inbound_manager.start_all_listeners().await;
 
+    #[cfg(feature = "tun")]
     let tun_runner_handle = components.tun_runner.map(tokio::spawn);
     let dns_listener_handle = components.dns_listener.map(tokio::spawn);
 
@@ -250,6 +252,7 @@ pub async fn start(
 
     let global_state = Arc::new(Mutex::new(GlobalState {
         log_level,
+        #[cfg(feature = "tun")]
         tunnel_listener_handle: tun_runner_handle,
         dns_listener_handle,
         reload_tx,
@@ -320,6 +323,7 @@ pub async fn start(
             inbound_manager.shutdown().await;
             let mut g = global_state.lock().await;
 
+            #[cfg(feature = "tun")]
             if let Some(h) = g.tunnel_listener_handle.take() {
                 h.abort();
             }
@@ -334,7 +338,9 @@ pub async fn start(
             debug!("reloading inbound listener");
             inbound_manager.restart().await;
 
+            #[cfg(feature = "tun")]
             debug!("reloading tun runner");
+            #[cfg(feature = "tun")]
             let tun_runner_handle = new_components.tun_runner.map(tokio::spawn);
 
             debug!("reloading dns listener");
@@ -356,7 +362,10 @@ pub async fn start(
             )
             .map(tokio::spawn);
 
-            g.tunnel_listener_handle = tun_runner_handle;
+            #[cfg(feature = "tun")]
+            {
+                g.tunnel_listener_handle = tun_runner_handle;
+            }
             g.dns_listener_handle = dns_listener_handle;
             g.api_listener_handle = api_listener_handle;
         }
@@ -378,6 +387,7 @@ struct RuntimeComponents {
     statistics_manager: Arc<StatisticsManager>,
     inbound_manager: Arc<InboundManager>,
 
+    #[cfg(feature = "tun")]
     tun_runner: Option<Runner>,
     dns_listener: Option<Runner>,
 }
@@ -505,7 +515,9 @@ async fn create_components(
             .await,
     );
 
+    #[cfg(feature = "tun")]
     debug!("initializing tun runner");
+    #[cfg(feature = "tun")]
     let tun_runner =
         get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
 
@@ -522,6 +534,7 @@ async fn create_components(
         dispatcher,
         statistics_manager,
         inbound_manager,
+        #[cfg(feature = "tun")]
         tun_runner,
         dns_listener,
     })

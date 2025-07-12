@@ -95,10 +95,15 @@ fn setup_logging_inner(
     cwd: &str,
     log_file: Option<String>,
 ) -> anyhow::Result<Option<WorkerGuard>> {
-    let filter = EnvFilter::from_default_env()
-        .add_directive(format!("clash={}", level).parse()?)
-        .add_directive(format!("clash-lib={}", level).parse()?)
-        .add_directive("warn".parse()?);
+    let default_log_level = format!("warn,clash={level}");
+    let filter = EnvFilter::try_from_default_env()
+        .inspect_err(|_| {
+            if let Ok(log_level) = std::env::var("RUST_LOG") {
+                eprintln!("Failed to parse log level from environment: {log_level}");
+                eprintln!("Using default log level: {default_log_level}");
+            }
+        })
+        .unwrap_or(EnvFilter::new(default_log_level));
 
     let (appender, guard) = if let Some(log_file) = log_file {
         let file_appender = tracing_appender::rolling::daily(cwd, log_file);

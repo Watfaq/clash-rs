@@ -12,7 +12,7 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 
 use erased_serde::Serialize as ESerialize;
 
-use crate::app::net::Interface;
+use crate::app::net::OutboundInterface;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
@@ -407,8 +407,9 @@ pub enum Type {
     Http,
     HttpConnect,
     Socks5,
+    #[cfg(feature = "tun")]
     Tun,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "tproxy"))]
     Tproxy,
     Tunnel,
     Shadowsocks,
@@ -439,7 +440,7 @@ pub struct Session {
     /// The packet mark SO_MARK
     pub so_mark: Option<u32>,
     /// The bind interface
-    pub iface: Option<Interface>,
+    pub iface: Option<OutboundInterface>,
     /// The ASN of the destination IP address. Only for display.
     pub asn: Option<String>,
     /// Traffic statistics for intelligent proxy selection

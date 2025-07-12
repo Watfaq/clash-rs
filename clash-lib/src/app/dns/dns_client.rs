@@ -20,7 +20,8 @@ use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, warn};
 
 use crate::{
-    app::net::{Interface, TUN_SOMARK},
+    Error,
+    app::net::{OutboundInterface, TUN_SOMARK},
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
     proxy::utils::new_tcp_stream,
@@ -32,8 +33,6 @@ use hickory_proto::{
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
 };
 use tokio::net::TcpStream as TokioTcpStream;
-
-use crate::Error;
 
 use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
 
@@ -79,14 +78,14 @@ pub struct Opts {
     pub host: String,
     pub port: u16,
     pub net: DNSNetMode,
-    pub iface: Option<Interface>,
+    pub iface: Option<OutboundInterface>,
 }
 
 enum DnsConfig {
-    Udp(net::SocketAddr, Option<Interface>),
-    Tcp(net::SocketAddr, Option<Interface>),
-    Tls(net::SocketAddr, String, Option<Interface>),
-    Https(net::SocketAddr, String, Option<Interface>),
+    Udp(net::SocketAddr, Option<OutboundInterface>),
+    Tcp(net::SocketAddr, Option<OutboundInterface>),
+    Tls(net::SocketAddr, String, Option<OutboundInterface>),
+    Https(net::SocketAddr, String, Option<OutboundInterface>),
 }
 
 impl Display for DnsConfig {
@@ -139,7 +138,7 @@ pub struct DnsClient {
     host: String,
     port: u16,
     net: DNSNetMode,
-    iface: Option<Interface>,
+    iface: Option<OutboundInterface>,
 }
 
 impl DnsClient {
@@ -354,26 +353,28 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["dot".into(), "h2".into()];
 
-            let fut = new_tcp_stream(
-                *addr,
-                iface.clone(),
-                #[cfg(target_os = "linux")]
-                *TUN_SOMARK.read().await,
-            )
-            .map_ok(AsyncIoTokioAsStd);
+            let addr = *addr;
+            let host = host.clone();
+            let iface = iface.clone();
+            let fut = async move {
+                new_tcp_stream(
+                    addr,
+                    iface.as_ref(),
+                    #[cfg(target_os = "linux")]
+                    *TUN_SOMARK.read().await,
+                )
+                .map_ok(AsyncIoTokioAsStd)
+                .await
+            };
 
-            let (stream, sender) = tls_client_connect_with_future::<
-                AsyncIoTokioAsStd<TokioTcpStream>,
-                BoxFuture<
-                    'static,
-                    std::io::Result<AsyncIoTokioAsStd<TokioTcpStream>>,
-                >,
-            >(
-                Box::pin(fut),
-                net::SocketAddr::new(addr.ip(), addr.port()),
-                host.clone(),
-                Arc::new(tls_config),
-            );
+            let (stream, sender) =
+                tls_client_connect_with_future::<
+                    AsyncIoTokioAsStd<TokioTcpStream>,
+                    BoxFuture<
+                        'static,
+                        std::io::Result<AsyncIoTokioAsStd<TokioTcpStream>>,
+                    >,
+                >(Box::pin(fut), addr, host, Arc::new(tls_config));
 
             client::Client::with_timeout(
                 stream,

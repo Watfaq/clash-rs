@@ -1,10 +1,11 @@
+use network_interface::{
+    NetworkInterface, NetworkInterfaceConfig, V4IfAddr, V6IfAddr,
+};
 use std::{
     fmt::Display,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{Arc, LazyLock},
 };
-
-use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
 use serde::{Deserialize, Serialize};
 use tracing::trace;
@@ -30,70 +31,115 @@ pub async fn init_net_config(tun_somark: u32) {
     );
 }
 
-#[derive(Debug, Clone)]
+/// Represents a parsed outbound interface for use in runtime.
+#[derive(Serialize, Debug, Clone)]
 pub struct OutboundInterface {
     pub name: String,
-    #[allow(unused)]
     pub addr_v4: Option<Ipv4Addr>,
-    #[allow(unused)]
+    pub netmask_v4: Option<Ipv4Addr>,
+    pub broadcast_v4: Option<Ipv4Addr>,
     pub addr_v6: Option<Ipv6Addr>,
-    #[allow(unused)]
+    pub netmask_v6: Option<Ipv6Addr>,
+    pub broadcast_v6: Option<Ipv6Addr>,
     pub index: u32,
+    pub mac_addr: Option<String>,
+}
+
+impl From<NetworkInterface> for OutboundInterface {
+    fn from(iface: NetworkInterface) -> Self {
+        fn get_outbound_ip_from_interface(
+            iface: &NetworkInterface,
+        ) -> (Option<V4IfAddr>, Option<V6IfAddr>) {
+            let mut v4 = None;
+            let mut v6 = None;
+
+            for addr in iface.addr.iter() {
+                trace!("inspect interface address: {:?} on {}", addr, iface.name);
+
+                if v4.is_some() && v6.is_some() {
+                    break;
+                }
+
+                match addr {
+                    network_interface::Addr::V4(addr) => {
+                        if !addr.ip.is_loopback()
+                            && !addr.ip.is_link_local()
+                            && !addr.ip.is_unspecified()
+                        {
+                            v4 = Some(*addr);
+                        }
+                    }
+                    network_interface::Addr::V6(addr) => {
+                        if addr.ip.is_unique_local() || addr.ip.is_global() {
+                            v6 = Some(*addr);
+                        }
+                    }
+                }
+            }
+
+            (v4, v6)
+        }
+
+        let addr = get_outbound_ip_from_interface(&iface);
+        OutboundInterface {
+            name: iface.name,
+            addr_v4: addr.0.map(|x| x.ip),
+            netmask_v4: addr.0.and_then(|x| x.netmask),
+            broadcast_v4: addr.0.and_then(|x| x.broadcast),
+            addr_v6: addr.1.map(|x| x.ip),
+            netmask_v6: addr.1.and_then(|x| x.netmask),
+            broadcast_v6: addr.1.and_then(|x| x.broadcast),
+            index: iface.index,
+            mac_addr: iface.mac_addr,
+        }
+    }
+}
+impl std::fmt::Display for OutboundInterface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (v4: {}, v6: {}, index: {}, mac: {})",
+            self.name,
+            self.addr_v4
+                .map(|ip| ip.to_string())
+                .unwrap_or_else(|| "None".to_string()),
+            self.addr_v6
+                .map(|ip| ip.to_string())
+                .unwrap_or_else(|| "None".to_string()),
+            self.index,
+            self.mac_addr.clone().unwrap_or_else(|| "None".to_string())
+        )
+    }
+}
+
+pub fn get_interface_by_name(name: &str) -> Option<OutboundInterface> {
+    let now = std::time::Instant::now();
+
+    let outbound = network_interface::NetworkInterface::show()
+        .ok()?
+        .into_iter()
+        .find(|iface| iface.name == name)?
+        .into();
+
+    trace!(
+        "found interface by name: {:?}, took: {}ms",
+        outbound,
+        now.elapsed().as_millis()
+    );
+
+    Some(outbound)
 }
 
 pub fn get_outbound_interface() -> Option<OutboundInterface> {
-    fn get_outbound_ip_from_interface(
-        iface: &NetworkInterface,
-    ) -> (Option<Ipv4Addr>, Option<Ipv6Addr>) {
-        let mut v4 = None;
-        let mut v6 = None;
-
-        for addr in iface.addr.iter() {
-            trace!("inspect interface address: {:?} on {}", addr, iface.name);
-
-            if v4.is_some() && v6.is_some() {
-                break;
-            }
-
-            match addr {
-                network_interface::Addr::V4(addr) => {
-                    if !addr.ip.is_loopback()
-                        && !addr.ip.is_link_local()
-                        && !addr.ip.is_unspecified()
-                    {
-                        v4 = Some(addr.ip);
-                    }
-                }
-                network_interface::Addr::V6(addr) => {
-                    if addr.ip.is_global() && !addr.ip.is_unspecified() {
-                        v6 = Some(addr.ip);
-                    }
-                }
-            }
-        }
-
-        (v4, v6)
-    }
-
     let now = std::time::Instant::now();
 
     let mut all_outbounds = network_interface::NetworkInterface::show()
         .ok()?
         .into_iter()
-        .filter(|iface| {
-            !iface.name.contains("tun") && {
-                let found = get_outbound_ip_from_interface(iface);
-                found.0.is_some() || found.1.is_some()
-            }
-        })
-        .map(|x| {
-            let addr = get_outbound_ip_from_interface(&x);
-            OutboundInterface {
-                name: x.name,
-                addr_v4: addr.0,
-                addr_v6: addr.1,
-                index: x.index,
-            }
+        .map(Into::into)
+        .filter(|iface: &OutboundInterface| {
+            !iface.name.contains("tun")
+                && (iface.addr_v4.is_some() || iface.addr_v6.is_some())
         })
         .collect::<Vec<_>>();
 
@@ -143,6 +189,7 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
     all_outbounds.into_iter().next()
 }
 
+/// Represents a network interface in configuration.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Interface {
     IpAddr(IpAddr),

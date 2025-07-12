@@ -41,90 +41,70 @@ pub fn add_route(via: &OutboundInterface, dest: &IpNet) -> std::io::Result<()> {
     Ok(())
 }
 
+fn run_ip_cmd(args: &[&str], enable_v6: bool) -> std::io::Result<()> {
+    // IPv4
+    let cmd_str = format!("ip {}", args.join(" "));
+    let cmd = std::process::Command::new("ip").args(args).output()?;
+    warn!("executing: {}", cmd_str);
+    if !cmd.status.success() {
+        return Err(new_io_error(format!(
+            "{} failed: {}",
+            cmd_str,
+            String::from_utf8_lossy(&cmd.stderr)
+        )));
+    }
+
+    // IPv6
+    if enable_v6 {
+        let mut v6_args = vec!["-6"];
+        v6_args.extend_from_slice(args);
+        let v6_cmd_str = format!("ip -6 {}", args.join(" "));
+        let v6_cmd = std::process::Command::new("ip").args(&v6_args).output()?;
+        warn!("executing: {}", v6_cmd_str);
+        if !v6_cmd.status.success() {
+            return Err(new_io_error(format!(
+                "{} failed: {}",
+                v6_cmd_str,
+                String::from_utf8_lossy(&v6_cmd.stderr)
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 /// three rules are added:
 /// # ip route add default dev wg0 table 2468
 /// # ip rule add not fwmark 1234 table 2468
 /// # ip rule add table main suppress_prefixlength 0
+/// for ipv6
+/// # ip -6 ...
 pub fn setup_policy_routing(
     tun_cfg: &TunConfig,
     via: &OutboundInterface,
 ) -> std::io::Result<()> {
-    let cmd = std::process::Command::new("ip")
-        .arg("route")
-        .arg("add")
-        .arg("default")
-        .arg("dev")
-        .arg(via.name.as_str())
-        .arg("table")
-        .arg(tun_cfg.route_table.to_string())
-        .output()?;
-    warn!(
-        "executing: ip route add default dev {} table {}",
-        via.name, tun_cfg.route_table
-    );
-    if !cmd.status.success() {
-        return Err(new_io_error(format!(
-            "add default route failed: {}",
-            String::from_utf8_lossy(&cmd.stderr)
-        )));
-    }
+    let table = tun_cfg.route_table.to_string();
+    let dev = via.name.as_str();
+    let so_mark = tun_cfg.so_mark.to_string();
+    let enable_v6 = tun_cfg.gateway_v6.is_some();
 
-    let cmd = std::process::Command::new("ip")
-        .arg("rule")
-        .arg("add")
-        .arg("not")
-        .arg("fwmark")
-        .arg(tun_cfg.so_mark.to_string())
-        .arg("table")
-        .arg(tun_cfg.route_table.to_string())
-        .output()?;
-    warn!(
-        "executing: ip rule add not fwmark {} table {}",
-        tun_cfg.so_mark, tun_cfg.route_table
-    );
-    if !cmd.status.success() {
-        return Err(new_io_error(format!(
-            "add rule failed: {}",
-            String::from_utf8_lossy(&cmd.stderr)
-        )));
-    }
+    run_ip_cmd(
+        &["route", "add", "default", "dev", dev, "table", &table],
+        enable_v6,
+    )?;
 
-    let cmd = std::process::Command::new("ip")
-        .arg("rule")
-        .arg("add")
-        .arg("table")
-        .arg("main")
-        .arg("suppress_prefixlength")
-        .arg("0")
-        .output()?;
-    warn!("executing: ip rule add table main suppress_prefixlength 0");
-    if !cmd.status.success() {
-        return Err(new_io_error(format!(
-            "add rule failed: {}",
-            String::from_utf8_lossy(&cmd.stderr)
-        )));
-    }
+    run_ip_cmd(
+        &["rule", "add", "not", "fwmark", &so_mark, "table", &table],
+        enable_v6,
+    )?;
+
+    run_ip_cmd(
+        &["rule", "add", "table", "main", "suppress_prefixlength", "0"],
+        enable_v6,
+    )?;
 
     if tun_cfg.dns_hijack {
-        // route all dport 53 to tun interface with ip rule
-        let cmd = std::process::Command::new("ip")
-            .arg("rule")
-            .arg("add")
-            .arg("dport")
-            .arg("53")
-            .arg("table")
-            .arg(tun_cfg.route_table.to_string())
-            .output()?;
-        warn!(
-            "executing: ip rule add dport 53 table {}",
-            tun_cfg.route_table
-        );
-        if !cmd.status.success() {
-            return Err(new_io_error(format!(
-                "add rule failed: {}",
-                String::from_utf8_lossy(&cmd.stderr)
-            )));
-        }
+        run_ip_cmd(&["rule", "add", "dport", "53", "table", &table], enable_v6)?;
     }
 
     Ok(())
@@ -134,67 +114,28 @@ pub fn setup_policy_routing(
 /// # ip rule del not fwmark $SO_MARK table $TABLE
 /// # ip rule del table main suppress_prefixlength 0
 /// # ip rule del dport 53 table $TABLE
+/// for v6
+/// # ip -6 ...
 pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     if !(tun_cfg.enable && tun_cfg.route_all) {
         return Ok(());
     }
 
-    let cmd = std::process::Command::new("ip")
-        .arg("rule")
-        .arg("del")
-        .arg("not")
-        .arg("fwmark")
-        .arg(tun_cfg.so_mark.to_string())
-        .arg("table")
-        .arg(tun_cfg.route_table.to_string())
-        .output()?;
-    warn!(
-        "executing: ip rule del not fwmark {} table {}",
-        tun_cfg.so_mark, tun_cfg.route_table
-    );
-    if !cmd.status.success() {
-        return Err(new_io_error(format!(
-            "delete rule failed: {}",
-            String::from_utf8_lossy(&cmd.stderr)
-        )));
-    }
+    let table = tun_cfg.route_table.to_string();
+    let so_mark = tun_cfg.so_mark.to_string();
+    let enable_v6 = tun_cfg.gateway_v6.is_some();
 
-    let cmd = std::process::Command::new("ip")
-        .arg("rule")
-        .arg("del")
-        .arg("table")
-        .arg("main")
-        .arg("suppress_prefixlength")
-        .arg("0")
-        .output()?;
-
-    warn!("executing: ip rule del table main suppress_prefixlength 0");
-    if !cmd.status.success() {
-        return Err(new_io_error(format!(
-            "delete rule failed: {}",
-            String::from_utf8_lossy(&cmd.stderr)
-        )));
-    }
+    run_ip_cmd(
+        &["rule", "del", "not", "fwmark", &so_mark, "table", &table],
+        enable_v6,
+    )?;
+    run_ip_cmd(
+        &["rule", "del", "table", "main", "suppress_prefixlength", "0"],
+        enable_v6,
+    )?;
 
     if tun_cfg.dns_hijack {
-        let cmd = std::process::Command::new("ip")
-            .arg("rule")
-            .arg("del")
-            .arg("dport")
-            .arg("53")
-            .arg("table")
-            .arg(tun_cfg.route_table.to_string())
-            .output()?;
-        warn!(
-            "executing: ip rule del dport 53 table {}",
-            tun_cfg.route_table
-        );
-        if !cmd.status.success() {
-            return Err(new_io_error(format!(
-                "delete rule failed: {}",
-                String::from_utf8_lossy(&cmd.stderr)
-            )));
-        }
+        run_ip_cmd(&["rule", "del", "dport", "53", "table", &table], enable_v6)?;
     }
 
     Ok(())

@@ -6,6 +6,7 @@ use std::{
 };
 use tracing::trace;
 
+use super::{new_tcp_stream, new_udp_socket};
 use crate::{
     app::{
         dispatcher::{
@@ -13,7 +14,7 @@ use crate::{
             ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
-        net::Interface,
+        net::OutboundInterface,
     },
     common::errors::new_io_error,
     proxy::{
@@ -23,8 +24,6 @@ use crate::{
     session::{Network, Session, SocksAddr, Type},
 };
 
-use super::{new_tcp_stream, new_udp_socket};
-
 /// allows a proxy to get a connection to a remote server
 #[async_trait]
 pub trait RemoteConnector: Send + Sync + Debug {
@@ -33,7 +32,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyStream>;
 
@@ -42,7 +41,7 @@ pub trait RemoteConnector: Send + Sync + Debug {
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
         destination: SocksAddr,
-        iface: Option<Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] packet_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram>;
 }
@@ -70,7 +69,7 @@ impl RemoteConnector for DirectConnector {
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let dial_addr = resolver
@@ -81,7 +80,7 @@ impl RemoteConnector for DirectConnector {
 
         new_tcp_stream(
             (dial_addr, port).into(),
-            iface.cloned(),
+            iface,
             #[cfg(target_os = "linux")]
             so_mark,
         )
@@ -94,7 +93,7 @@ impl RemoteConnector for DirectConnector {
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
         _destination: SocksAddr,
-        iface: Option<Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let dgram = new_udp_socket(
@@ -141,13 +140,13 @@ impl RemoteConnector for ProxyConnector {
         resolver: ThreadSafeDNSResolver,
         address: &str,
         port: u16,
-        iface: Option<&Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyStream> {
         let sess = Session {
             network: Network::Tcp,
             typ: Type::Ignore,
-            destination: crate::session::SocksAddr::Domain(address.to_owned(), port),
+            destination: SocksAddr::Domain(address.to_owned(), port),
             iface: iface.cloned(),
             #[cfg(target_os = "linux")]
             so_mark,
@@ -176,13 +175,13 @@ impl RemoteConnector for ProxyConnector {
         resolver: ThreadSafeDNSResolver,
         _src: Option<SocketAddr>,
         destination: SocksAddr,
-        iface: Option<Interface>,
+        iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
         let sess = Session {
             network: Network::Udp,
             typ: Type::Ignore,
-            iface,
+            iface: iface.cloned(),
             destination: destination.clone(),
             #[cfg(target_os = "linux")]
             so_mark,

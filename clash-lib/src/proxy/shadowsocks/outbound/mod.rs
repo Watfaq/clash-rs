@@ -205,7 +205,7 @@ impl OutboundHandler for Handler {
                 resolver.clone(),
                 None,
                 (self.opts.server.clone(), self.opts.port).try_into()?,
-                sess.iface.as_ref().cloned(),
+                sess.iface.as_ref(),
                 #[cfg(target_os = "linux")]
                 sess.so_mark,
             )

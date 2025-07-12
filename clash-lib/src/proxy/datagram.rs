@@ -2,7 +2,7 @@ use crate::{
     app::dns::ThreadSafeDNSResolver, common::errors::new_io_error,
     session::SocksAddr,
 };
-use futures::{Sink, Stream, ready};
+use futures::{FutureExt, Sink, Stream, ready};
 use std::{
     fmt::{Debug, Display, Formatter},
     io,
@@ -127,7 +127,16 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = *port;
-                    let mut fut = resolver.resolve(domain.as_str(), false);
+                    let mut fut = {
+                        if inner.local_addr()?.is_ipv6() {
+                            resolver.resolve(domain.as_str(), false)
+                        } else {
+                            resolver
+                                .resolve_v4(domain.as_str(), false)
+                                .map(|x| x.map(|ip| ip.map(Into::into)))
+                                .boxed()
+                        }
+                    };
                     let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
                         io::Error::new(io::ErrorKind::Other, "resolve domain failed")
                     }))?;

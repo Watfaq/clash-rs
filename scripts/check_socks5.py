@@ -27,6 +27,18 @@ def check_socks5_tun():
             "got response %s from %s for request to %s" % (
                 res, address, "1.1.1.1:53")
         )
+    else:
+        print("got invalid response %s from %s" % (res, address))
+        return False
+
+    s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+    s.sendto(req, ("2001:4860:4860::8888", 53))
+    (res, address) = s.recvfrom(4096)
+    if res[0] == req[0] and res[1] == req[1]:
+        print(
+            "got response %s from %s for request to %s" % (
+                res, address, "2001:4860:4860::8888:53")
+        )
         return True
     else:
         print("got invalid response %s from %s" % (res, address))

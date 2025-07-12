@@ -8,7 +8,7 @@ use crate::{
     },
 };
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "tproxy"))]
 use crate::proxy::tproxy::TproxyInbound;
 
 use crate::Dispatcher;
@@ -100,6 +100,7 @@ fn build_handler(
             authenticator,
             fw_mark,
         ))),
+        #[cfg(feature = "tproxy")]
         InboundOpts::TProxy {
             #[cfg(target_os = "linux")]
             common_opts,

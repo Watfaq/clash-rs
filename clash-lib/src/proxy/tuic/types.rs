@@ -1,9 +1,9 @@
 use crate::{
-    app::{dns::ThreadSafeDNSResolver, net::get_outbound_interface},
-    proxy::utils::new_udp_socket,
+    app::dns::ThreadSafeDNSResolver, proxy::utils::new_udp_socket,
     session::SocksAddr as ClashSocksAddr,
 };
 
+use crate::{app::net::DEFAULT_OUTBOUND_INTERFACE, proxy::datagram::UdpPacket};
 use anyhow::Result;
 use quinn::{
     Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
@@ -19,8 +19,6 @@ use tokio::sync::RwLock as AsyncRwLock;
 use tracing::debug;
 use tuic_quinn::Connection as InnerConnection;
 use uuid::Uuid;
-
-use crate::proxy::datagram::UdpPacket;
 
 pub struct TuicEndpoint {
     pub ep: QuinnEndpoint,
@@ -47,10 +45,10 @@ impl TuicEndpoint {
                 debug!("rebinding endpoint UDP socket");
 
                 let socket = {
-                    let iface = get_outbound_interface();
+                    let iface = DEFAULT_OUTBOUND_INTERFACE.read().await;
                     new_udp_socket(
                         None,
-                        iface.map(|x| x.name.as_str().into()),
+                        iface.as_ref(),
                         #[cfg(target_os = "linux")]
                         None,
                     )

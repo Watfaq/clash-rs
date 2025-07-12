@@ -1,5 +1,5 @@
 use crate::{
-    app::net::{DEFAULT_OUTBOUND_INTERFACE, get_outbound_interface},
+    app::net::DEFAULT_OUTBOUND_INTERFACE,
     dns::{
         ClashResolver, ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
@@ -43,18 +43,9 @@ pub async fn make_clients(
             iface: s
                 .interface
                 .as_ref()
-                .and_then(|x| match x.as_str() {
-                    "auto" => {
-                        get_outbound_interface().map(|x| x.name.as_str().into())
-                    }
-                    _ => Some(x.as_str().into()),
-                })
-                .or(DEFAULT_OUTBOUND_INTERFACE
-                    .read()
-                    .await
-                    .as_ref()
-                    .map(|x| x.name.as_str().into()))
-                .inspect(|x| debug!("DNS client interface: {:?}", x)),
+                .or(DEFAULT_OUTBOUND_INTERFACE.read().await.as_ref())
+                .inspect(|x| debug!("DNS client interface: {:?}", x))
+                .cloned(),
         })
         .await
         {
@@ -64,4 +55,26 @@ pub async fn make_clients(
     }
 
     rv
+}
+
+pub fn build_dns_response_message(
+    req: &hickory_proto::op::Message,
+    recursive_available: bool,
+    authoritative: bool,
+) -> hickory_proto::op::Message {
+    let mut res = hickory_proto::op::Message::new();
+
+    res.set_id(req.id());
+    res.set_op_code(req.op_code());
+    res.set_message_type(hickory_proto::op::MessageType::Response);
+    res.add_queries(req.queries().iter().cloned());
+    res.set_recursion_available(recursive_available);
+    res.set_authoritative(authoritative);
+    res.set_recursion_desired(req.recursion_desired());
+    res.set_checking_disabled(req.checking_disabled());
+    if let Some(edns) = req.extensions().clone() {
+        res.set_edns(edns);
+    }
+
+    res
 }

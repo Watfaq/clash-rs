@@ -1,31 +1,24 @@
 use super::datagram::TunDatagram;
-use std::{
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-};
-
-use futures::{SinkExt, StreamExt};
-
-use hickory_proto::rr::RecordType;
-use netstack_smoltcp::StackBuilder;
-use tracing::{debug, error, info, trace, warn};
-use tun::AbstractDevice;
-use url::Url;
-
 use crate::{
     Error, Runner,
     app::{
         dispatcher::Dispatcher,
         dns::{ThreadSafeDNSResolver, exchange_with_resolver},
-        net::get_outbound_interface,
+        net::DEFAULT_OUTBOUND_INTERFACE,
     },
-    common::errors::{map_io_error, new_io_error},
     config::internal::config::TunConfig,
-    proxy::{datagram::UdpPacket, tun::routes::maybe_add_routes},
+    defer,
+    proxy::{
+        datagram::UdpPacket,
+        tun::routes::{self},
+    },
     session::{Network, Session, Type},
 };
-
-use crate::{defer, proxy::tun::routes};
+use futures::{SinkExt, StreamExt};
+use netstack_smoltcp::StackBuilder;
+use std::{net::SocketAddr, sync::Arc};
+use tracing::{debug, error, info, trace, warn};
+use url::Url;
 
 async fn handle_inbound_stream(
     stream: netstack_smoltcp::TcpStream,
@@ -39,8 +32,10 @@ async fn handle_inbound_stream(
         typ: Type::Tun,
         source: local_addr,
         destination: remote_addr.into(),
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
+        iface: DEFAULT_OUTBOUND_INTERFACE
+            .read()
+            .await
+            .clone()
             .inspect(|x| {
                 debug!(
                     "selecting outbound interface: {:?} for tun TCP connection",
@@ -66,7 +61,7 @@ async fn handle_inbound_datagram(
     // lr: app packets went into tun will be accessed from lr
     // ls: packet written into ls will go back to app from tun
     let (mut lr, mut ls) = socket.split();
-    // ideally we clone the WriteHalf ls, but it's not Clone and it's a Sink so the
+    // ideally we clone the WriteHalf ls, but it's not Clone, and it's a Sink so the
     // send method is mut
     let (dup_ls, mut dup_lr) = tokio::sync::mpsc::channel(32);
     tokio::spawn(async move {
@@ -93,14 +88,13 @@ async fn handle_inbound_datagram(
     // is to the tun
     let udp_stream = TunDatagram::new(l_tx, d_rx);
 
+    let default_outbound = DEFAULT_OUTBOUND_INTERFACE.read().await;
     let sess = Session {
         network: Network::Udp,
         typ: Type::Tun,
-        iface: get_outbound_interface()
-            .map(|x| x.name.as_str().into())
-            .inspect(|x| {
-                debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
-            }),
+        iface: default_outbound.clone().inspect(|x| {
+            debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
+        }),
         so_mark: Some(so_mark),
         ..Default::default()
     };
@@ -179,18 +173,6 @@ async fn handle_inbound_datagram(
                             };
 
                         trace!("hijack dns request: {:?}", msg);
-                        if msg.query().map(|q| q.query_type())
-                            == Some(RecordType::AAAA)
-                        {
-                            trace!("dns hijack does not support AAAA query");
-                            let resp = hickory_proto::op::Message::error_msg(
-                                msg.id(),
-                                msg.op_code(),
-                                hickory_proto::op::ResponseCode::Refused,
-                            );
-                            send_response(resp, &pkt).await;
-                            continue 'read_packet;
-                        }
 
                         let mut resp =
                             match exchange_with_resolver(&resolver_dns, &msg, true)
@@ -238,6 +220,14 @@ async fn handle_inbound_datagram(
     let _ = futures::future::join(fut1, fut2).await;
 }
 
+#[derive(Default)]
+struct TunInitializationConfig {
+    fd: Option<u32>,
+    tun_name: Option<String>,
+    #[cfg(target_os = "windows")]
+    guid: Option<u128>,
+}
+
 pub fn get_runner(
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
@@ -248,8 +238,7 @@ pub fn get_runner(
         return Ok(None);
     }
 
-    let mut tun_cfg = tun::Configuration::default();
-
+    let mut tun_init_config = TunInitializationConfig::default();
     match Url::parse(&cfg.device_id) {
         Ok(u) => match u.scheme() {
             "fd" => {
@@ -259,7 +248,7 @@ pub fn get_runner(
                     .to_string()
                     .parse()
                     .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
-                tun_cfg.raw_fd(fd);
+                tun_init_config.fd = Some(fd);
             }
             "dev" => {
                 let dev = u.host().expect("tun dev must be provided").to_string();
@@ -269,7 +258,7 @@ pub fn get_runner(
                         cfg.device_id
                     )));
                 }
-                tun_cfg.tun_name(dev);
+                tun_init_config.tun_name = Some(dev);
                 #[cfg(target_os = "windows")]
                 {
                     let guid = u.query_pairs().find(|(k, _)| k == "guid");
@@ -277,9 +266,7 @@ pub fn get_runner(
                         let guid = uuid::Uuid::parse_str(&v).map_err(|x| {
                             Error::InvalidConfig(format!("invalid guid: {}", x))
                         })?;
-                        tun_cfg.platform_config(|cfg| {
-                            cfg.device_guid(guid.as_u128());
-                        });
+                        tun_init_config.guid = Some(guid.as_u128());
                     }
                 }
             }
@@ -297,38 +284,77 @@ pub fn get_runner(
                     cfg.device_id
                 )));
             }
-            tun_cfg.tun_name(&cfg.device_id);
+            tun_init_config.tun_name = Some(cfg.device_id.clone());
         }
-    }
+    };
 
-    let gw = cfg.gateway;
-    tun_cfg
-        .address(gw.addr())
-        .netmask(gw.netmask())
-        .mtu(
-            cfg.mtu
-                .unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }),
-        )
-        .up();
+    let tun = if let Some(fd) = tun_init_config.fd {
+        #[cfg(target_family = "unix")]
+        {
+            info!("tun started with fd {}", fd);
+            unsafe { tun_rs::AsyncDevice::from_fd(fd as _)? }
+        }
 
-    let tun = tun::create_as_async(&tun_cfg)
-        .map_err(|x| new_io_error(format!("failed to create tun device: {}", x)))?;
+        #[cfg(not(target_family = "unix"))]
+        {
+            return Err(Error::InvalidConfig(format!(
+                "tun fd({}) is only supported on Unix-like systems",
+                fd
+            )));
+        }
+    } else {
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        {
+            use crate::proxy::tun::routes::maybe_add_routes;
+            use tun_rs::DeviceBuilder;
 
-    let tun_name = tun.tun_name().map_err(map_io_error)?;
-    info!("tun started at {}", tun_name);
+            let tun_name =
+                tun_init_config.tun_name.expect("tun name must be provided");
+            info!("tun started at {}", &tun_name);
 
-    maybe_add_routes(&cfg, &tun_name)?;
+            let mut tun_builder = DeviceBuilder::new()
+                .name(&tun_name)
+                .mtu(cfg.mtu.unwrap_or(if cfg!(windows) {
+                    65535u16
+                } else {
+                    1500u16
+                }))
+                .ipv4(cfg.gateway.addr(), cfg.gateway.netmask(), None);
+
+            if let Some(gateway_v6) = cfg.gateway_v6 {
+                tun_builder =
+                    tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(guid) = tun_init_config.guid {
+                    tun_builder = tun_builder.device_guid(guid);
+                }
+            }
+
+            maybe_add_routes(&cfg, &tun_name)?;
+
+            tun_builder.build_async()?
+        }
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        {
+            return Err(Error::InvalidConfig(
+                "only fd is supported on mobile platforms".to_string(),
+            ));
+        }
+    };
 
     let mut builder = StackBuilder::default()
         .enable_tcp(true)
         .enable_udp(true)
         .enable_icmp(true);
-    if let Some(device_broadcast) = get_device_broadcast(&tun) {
-        builder = builder
+    let device_broadcast = cfg.gateway.broadcast();
+    builder = builder
             // .add_ip_filter(Box::new(move |src, dst| *src != device_broadcast && *dst != device_broadcast));
             .add_ip_filter_fn(move |src, dst| *src != device_broadcast && *dst != device_broadcast);
-    }
-    let (stack, runner, udp_socket, tcp_listener) = builder.build().unwrap();
+
+    let (stack, runner, udp_socket, tcp_listener) = builder.build()?;
     let udp_socket = udp_socket.unwrap(); // udp enabled
     let mut tcp_listener = tcp_listener.unwrap(); // tcp enabled or icmp enabled
     if let Some(runner) = runner {
@@ -349,9 +375,12 @@ pub fn get_runner(
 
         let so_mark = cfg.so_mark;
 
-        let framed = tun.into_framed();
+        let framed = tun_rs::async_framed::DeviceFramed::new(
+            tun,
+            tun_rs::async_framed::BytesCodec::new(),
+        );
 
-        let (mut tun_sink, mut tun_stream) = framed.split();
+        let (mut tun_sink, mut tun_stream) = framed.split::<bytes::Bytes>();
         let (mut stack_sink, mut stack_stream) = stack.split();
 
         let mut futs: Vec<Runner> = vec![];
@@ -361,7 +390,7 @@ pub fn get_runner(
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(pkt).await {
+                        if let Err(e) = tun_sink.send(pkt.into()).await {
                             error!("failed to send pkt to tun: {}", e);
                             break;
                         }
@@ -381,7 +410,7 @@ pub fn get_runner(
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt).await {
+                        if let Err(e) = stack_sink.send(pkt.into()).await {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -432,49 +461,4 @@ pub fn get_runner(
             x
         })
     })))
-}
-
-fn get_device_broadcast(device: &tun::AsyncDevice) -> Option<std::net::Ipv4Addr> {
-    let mtu = device.mtu().unwrap();
-
-    let address = match device.address() {
-        Ok(a) => match a {
-            IpAddr::V4(v4) => v4,
-            IpAddr::V6(_) => return None,
-        },
-        Err(_) => return None,
-    };
-
-    let netmask = match device.netmask() {
-        Ok(n) => match n {
-            IpAddr::V4(v4) => v4,
-            IpAddr::V6(_) => return None,
-        },
-        Err(_) => return None,
-    };
-
-    match smoltcp::wire::Ipv4Cidr::from_netmask(address, netmask) {
-        Ok(address_net) => match address_net.broadcast() {
-            Some(broadcast) => {
-                info!(
-                    "tun device network: {} (address: {}, netmask: {}, broadcast: \
-                     {}, mtu: {})",
-                    address_net, address, netmask, broadcast, mtu,
-                );
-
-                Some(broadcast)
-            }
-            None => {
-                error!("invalid tun address {}, netmask {}", address, netmask);
-                None
-            }
-        },
-        Err(err) => {
-            error!(
-                "invalid tun address {}, netmask {}, error: {}",
-                address, netmask, err
-            );
-            None
-        }
-    }
 }

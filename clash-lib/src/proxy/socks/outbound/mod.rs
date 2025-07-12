@@ -129,7 +129,7 @@ impl Handler {
 
         let udp_socket = new_udp_socket(
             None,
-            sess.iface.clone(),
+            sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
         )
