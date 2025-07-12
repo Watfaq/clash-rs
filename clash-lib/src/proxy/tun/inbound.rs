@@ -10,7 +10,7 @@ use crate::{
     defer,
     proxy::{
         datagram::UdpPacket,
-        tun::routes::{self, maybe_add_routes},
+        tun::routes::{self},
     },
     session::{Network, Session, Type},
 };
@@ -305,7 +305,9 @@ pub fn get_runner(
     } else {
         #[cfg(not(any(target_os = "ios", target_os = "android")))]
         {
+            use crate::proxy::tun::routes::maybe_add_routes;
             use tun_rs::DeviceBuilder;
+
             let tun_name =
                 tun_init_config.tun_name.expect("tun name must be provided");
             info!("tun started at {}", &tun_name);

@@ -4,9 +4,9 @@ use crate::app::net::OutboundInterface;
 
 #[allow(dead_code)]
 pub(crate) fn must_bind_socket_on_interface(
-    socket: &socket2::Socket,
+    #[allow(unused)] socket: &socket2::Socket,
     iface: &OutboundInterface,
-    _family: socket2::Domain,
+    #[allow(unused)] family: socket2::Domain,
 ) -> io::Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
     {

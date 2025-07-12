@@ -90,6 +90,7 @@ pub async fn new_udp_socket(
     // - If interface is provided and supports IPv6, use IPv6 socket
     // - If source address is provided and is IPv6, use IPv6 socket
     // - Otherwise, default to IPv4 socket
+    #[allow(unused_variables)]
     let (socket, family) = match (src, iface) {
         (_, Some(iface)) if iface.addr_v6.is_some() => {
             debug!("resolved v6 socket for v6 iface {:?}", iface.addr_v6);
