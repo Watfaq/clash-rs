@@ -163,8 +163,7 @@ impl RuleProviderImpl {
                         let scheme: ProviderScheme = serde_yaml::from_slice(input)
                             .map_err(|x| {
                             Error::InvalidConfig(format!(
-                                "rule provider parse error (yaml) {}: {}",
-                                n_parser, x
+                                "rule provider parse error (yaml) {n_parser}: {x}"
                             ))
                         })?;
 
@@ -187,8 +186,8 @@ impl RuleProviderImpl {
                     RuleSetFormat::Text => {
                         let text = std::str::from_utf8(input).map_err(|e| {
                             Error::InvalidConfig(format!(
-                                "invalid utf-8 in text rule provider {}: {}",
-                                n_parser, e
+                                "invalid utf-8 in text rule provider {n_parser}: \
+                                 {e}"
                             ))
                         })?;
 
@@ -221,8 +220,7 @@ impl RuleProviderImpl {
                             return Err(anyhow::Error::new(Error::InvalidConfig(
                                 format!(
                                     "MRS format is not supported for classical \
-                                     behavior in rule provider {}",
-                                    n_parser
+                                     behavior in rule provider {n_parser}"
                                 ),
                             )));
                         }
@@ -359,10 +357,8 @@ impl Provider for RuleProviderImpl {
         if let Some(fetcher) = &self.fetcher {
             let (ele, same) = fetcher.update().await.map_err(map_io_error)?;
             debug!("rule provider {} updated. same? {}", self.name(), same);
-            if !same {
-                if let Some(updater) = fetcher.on_update.as_ref() {
-                    updater(ele).await; // Directly pass RuleContent
-                }
+            if !same && let Some(updater) = fetcher.on_update.as_ref() {
+                updater(ele).await; // Directly pass RuleContent
             }
         } else {
             trace!("no fetcher for rule provider {}", self.name());
@@ -446,7 +442,7 @@ fn make_classical_rules(
             [proto, payload, params @ ..] => {
                 RuleType::new(proto, payload, "", Some(params.to_vec()))
             }
-            _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", rule))),
+            _ => Err(Error::InvalidConfig(format!("invalid rule line: {rule}"))),
         }?;
 
         let rule_matcher =

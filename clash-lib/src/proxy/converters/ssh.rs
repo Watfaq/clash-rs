@@ -64,21 +64,18 @@ impl TryFrom<&OutboundSsh> for Handler {
                     let rfc6238 = Rfc6238::with_defaults(
                         Secret::Encoded(secret).to_bytes().map_err(|e| {
                             crate::Error::InvalidConfig(format!(
-                                "ssh totp, invalid secret {:?}",
-                                e
+                                "ssh totp, invalid secret {e:?}"
                             ))
                         })?,
                     )
                     .map_err(|e| {
                         crate::Error::InvalidConfig(format!(
-                            "ssh totp, invalid totp: {}",
-                            e
+                            "ssh totp, invalid totp: {e}"
                         ))
                     })?;
                     TOTP::from_rfc6238(rfc6238).map_err(|e| {
                         crate::Error::InvalidConfig(format!(
-                            "ssh totp, invalid totp: {}",
-                            e
+                            "ssh totp, invalid totp: {e}"
                         ))
                     })
                 }
@@ -97,15 +94,13 @@ impl TryFrom<&OutboundSsh> for Handler {
                         step,
                         Secret::Encoded(secret).to_bytes().map_err(|e| {
                             crate::Error::InvalidConfig(format!(
-                                "ssh totp, invalid secret {:?}",
-                                e
+                                "ssh totp, invalid secret {e:?}"
                             ))
                         })?,
                     )
                     .map_err(|e| {
                         crate::Error::InvalidConfig(format!(
-                            "ssh totp, invalid totp: {}",
-                            e
+                            "ssh totp, invalid totp: {e}"
                         ))
                     })
                 }

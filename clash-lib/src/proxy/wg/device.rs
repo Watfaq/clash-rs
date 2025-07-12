@@ -419,8 +419,8 @@ impl DeviceManager {
                                     }
                                 }
 
-                                if socket.may_send() {
-                                    if let Some(queue) = tcp_queue.get_mut(handle) {
+                                if socket.may_send()
+                                    && let Some(queue) = tcp_queue.get_mut(handle) {
                                         let data = queue.pop_front();
                                         match data { Some((to_transfer_slice, active)) => {
                                             if !active {
@@ -450,7 +450,6 @@ impl DeviceManager {
                                             // let the dispatcher timeout to close the connection
                                         }}
                                     }
-                                }
                             }
                             SenderType::Udp(sender) => {
                                 let socket = sockets.get_mut::<udp::Socket>(*handle);
@@ -474,8 +473,8 @@ impl DeviceManager {
                                     }
                                 }
 
-                                if socket.can_send() {
-                                    if let Some(queue) = udp_queue.get_mut(handle) {
+                                if socket.can_send()
+                                    && let Some(queue) = udp_queue.get_mut(handle) {
                                         let data = queue.pop_front();
                                         if let Some((pkt, active)) = data {
                                             if !active {
@@ -541,7 +540,6 @@ impl DeviceManager {
                                             // let the dispatcher timeout to close the connection
                                         }
                                     }
-                                }
 
                             }
                         };
@@ -638,9 +636,8 @@ impl DeviceManager {
         let tx_data = vec![0u8; MAX_PACKET];
         let udp_rx_buffer = udp::PacketBuffer::new(rx_meta, rx_data);
         let udp_tx_buffer = udp::PacketBuffer::new(tx_meta, tx_data);
-        let socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
 
-        socket
+        udp::Socket::new(udp_rx_buffer, udp_tx_buffer)
     }
 }
 

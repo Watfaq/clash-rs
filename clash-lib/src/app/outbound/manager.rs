@@ -197,8 +197,7 @@ impl OutboundManager {
             if let Some(connector_name) = handler.support_dialer() {
                 let outbound = self.get_outbound(connector_name).ok_or(
                     Error::InvalidConfig(format!(
-                        "connector {} not found",
-                        connector_name
+                        "connector {connector_name} not found"
                     )),
                 )?;
                 let connector =
@@ -379,8 +378,7 @@ impl OutboundManager {
         ) -> Result<ThreadSafeProxyProvider, Error> {
             if name == PROXY_DIRECT || name == PROXY_REJECT {
                 return Err(Error::InvalidConfig(format!(
-                    "proxy group name `{}` is reserved",
-                    name
+                    "proxy group name `{name}` is reserved"
                 )));
             }
             let proxies = proxies
@@ -389,7 +387,7 @@ impl OutboundManager {
                     handlers
                         .get(x)
                         .ok_or_else(|| {
-                            Error::InvalidConfig(format!("proxy {} not found", x))
+                            Error::InvalidConfig(format!("proxy {x} not found"))
                         })
                         .cloned()
                 })
@@ -405,7 +403,7 @@ impl OutboundManager {
 
             let pd = Arc::new(RwLock::new(
                 PlainProvider::new(name.to_owned(), proxies, hc).map_err(|x| {
-                    Error::InvalidConfig(format!("invalid provider config: {}", x))
+                    Error::InvalidConfig(format!("invalid provider config: {x}"))
                 })?,
             ));
 
@@ -811,10 +809,7 @@ impl OutboundManager {
                         hc,
                     )
                     .map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "invalid provider config: {}",
-                            x
-                        ))
+                        Error::InvalidConfig(format!("invalid provider config: {x}"))
                     })?;
 
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
@@ -841,10 +836,7 @@ impl OutboundManager {
                         hc,
                     )
                     .map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "invalid provider config: {}",
-                            x
-                        ))
+                        Error::InvalidConfig(format!("invalid provider config: {x}"))
                     })?;
 
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));

@@ -768,11 +768,11 @@ impl ProxyManager {
                                 e,
                                 e.source()
                             );
-                            Err(new_io_error(format!("{}: {}", url, e).as_str()))
+                            Err(new_io_error(format!("{url}: {e}").as_str()))
                         }
                     },
                     Err(_) => {
-                        Err(new_io_error(format!("timeout for {}", url).as_str()))
+                        Err(new_io_error(format!("timeout for {url}").as_str()))
                     }
                 }?;
 

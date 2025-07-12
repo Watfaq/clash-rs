@@ -90,7 +90,7 @@ impl Mmdb {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
                 download(url, &mmdb_file, http_client).await.map_err(|x| {
-                    Error::InvalidConfig(format!("mmdb download failed: {}", x))
+                    Error::InvalidConfig(format!("mmdb download failed: {x}"))
                 })?;
             } else {
                 return Err(Error::InvalidConfig(format!(
@@ -118,8 +118,7 @@ impl Mmdb {
                         download(url, &mmdb_file, http_client).await.map_err(
                             |x| {
                                 Error::InvalidConfig(format!(
-                                    "mmdb download failed: {}",
-                                    x
+                                    "mmdb download failed: {x}"
                                 ))
                             },
                         )?;

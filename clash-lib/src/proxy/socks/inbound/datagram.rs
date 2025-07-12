@@ -61,10 +61,7 @@ impl Decoder for Socks5UDPCodec {
         }
 
         if src[2] != 0 {
-            return Err(std::io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported FRAG",
-            ));
+            return Err(std::io::Error::other("unsupported FRAG"));
         }
 
         src.advance(3);

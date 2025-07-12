@@ -89,8 +89,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                      {}",
                     pkt.dst_addr, remote_addr
                 );
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Poll::Ready(Err(io::Error::other(
                     "udp packet dst_addr not match",
                 )));
             }
@@ -127,10 +126,7 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(io::Error::other("no packet to send")))
         }
     }
 

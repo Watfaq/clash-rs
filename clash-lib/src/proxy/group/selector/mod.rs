@@ -98,7 +98,7 @@ impl SelectorControl for Handler {
             name.clone_into(&mut self.inner.write().await.current);
             Ok(())
         } else {
-            Err(Error::Operation(format!("proxy {} not found", name)))
+            Err(Error::Operation(format!("proxy {name} not found")))
         }
     }
 

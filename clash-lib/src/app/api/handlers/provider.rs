@@ -90,7 +90,7 @@ async fn find_proxy_provider_by_name(
         }
         _ => (
             StatusCode::NOT_FOUND,
-            format!("proxy provider {} not found", provider_name),
+            format!("proxy provider {provider_name} not found"),
         )
             .into_response(),
     }
@@ -193,7 +193,7 @@ async fn get_proxy_delay(
         }
         Err(err) => (
             StatusCode::BAD_REQUEST,
-            format!("get delay for {} failed with error: {}", n, err),
+            format!("get delay for {n} failed with error: {err}"),
         )
             .into_response(),
     }

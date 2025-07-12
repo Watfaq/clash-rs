@@ -88,7 +88,7 @@ async fn close_connection(
 ) -> impl IntoResponse {
     let mgr = state.statistics_manager;
     mgr.close(id).await;
-    format!("connection {} closed", id).into_response()
+    format!("connection {id} closed").into_response()
 }
 
 async fn close_all_connection(

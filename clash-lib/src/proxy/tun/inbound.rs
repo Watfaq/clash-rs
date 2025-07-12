@@ -247,7 +247,7 @@ pub fn get_runner(
                     .expect("tun fd must be provided")
                     .to_string()
                     .parse()
-                    .map_err(|x| Error::InvalidConfig(format!("tun fd {}", x)))?;
+                    .map_err(|x| Error::InvalidConfig(format!("tun fd {x}")))?;
                 tun_init_config.fd = Some(fd);
             }
             "dev" => {

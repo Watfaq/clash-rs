@@ -73,7 +73,7 @@ impl ShadowsocksInbound {
             map_cipher(&self.cipher)?,
         )
         .map_err(|e| {
-            new_io_error(format!("Failed to create Shadowsocks config: {}", e))
+            new_io_error(format!("Failed to create Shadowsocks config: {e}"))
         })
     }
 }

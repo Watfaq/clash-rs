@@ -37,18 +37,12 @@ pub async fn handle_tcp(
         s.read_exact(&mut buf[..]).await?;
 
         if buf[0] != SOCKS5_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported SOCKS version",
-            ));
+            return Err(io::Error::other("unsupported SOCKS version"));
         }
 
         let n_methods = buf[1] as usize;
         if n_methods == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "malformed SOCKS data",
-            ));
+            return Err(io::Error::other("malformed SOCKS data"));
         }
 
         buf.resize(n_methods, 0);
@@ -104,10 +98,7 @@ pub async fn handle_tcp(
                     response = [0x1, response_code::FAILURE];
                     s.write_all(&response).await?;
                     s.shutdown().await?;
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "auth failure",
-                    ));
+                    return Err(io::Error::other("auth failure"));
                 }
             }
         } else if methods.contains(&auth_methods::NO_AUTH) {
@@ -117,17 +108,14 @@ pub async fn handle_tcp(
             response[1] = auth_methods::NO_METHODS;
             s.write_all(&response).await?;
             s.shutdown().await?;
-            return Err(io::Error::new(io::ErrorKind::Other, "auth failure"));
+            return Err(io::Error::other("auth failure"));
         }
     }
 
     buf.resize(3, 0);
     s.read_exact(&mut buf[..]).await?;
     if buf[0] != SOCKS5_VERSION {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "unsupported SOCKS version",
-        ));
+        return Err(io::Error::other("unsupported SOCKS version"));
     }
 
     let dst = SocksAddr::read_from(&mut s).await?;
@@ -220,10 +208,7 @@ pub async fn handle_tcp(
             buf.put_u8(0x0);
             SocksAddr::any_ipv4().write_buf(&mut buf);
             s.write_all(&buf).await?;
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported SOCKS command",
-            ))
+            Err(io::Error::other("unsupported SOCKS command"))
         }
     }
 }

@@ -65,9 +65,7 @@ impl OutboundHandler for Handler {
             .resolve(sess.destination.host().as_str(), false)
             .map_err(map_io_error)
             .await?
-            .ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "no dns result")
-            })?;
+            .ok_or_else(|| std::io::Error::other("no dns result"))?;
 
         let s = new_tcp_stream(
             (remote_ip, sess.destination.port()).into(),

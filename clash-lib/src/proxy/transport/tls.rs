@@ -73,17 +73,14 @@ impl Transport for Client {
                 .map_err(map_io_error)?;
 
         let c = connector.connect(dns_name, stream).await.and_then(|x| {
-            if let Some(expected_alpn) = self.expected_alpn.as_ref() {
-                if x.get_ref().1.alpn_protocol() != Some(expected_alpn.as_bytes()) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!(
-                            "unexpected alpn protocol: {:?}, expected: {:?}",
-                            x.get_ref().1.alpn_protocol(),
-                            expected_alpn
-                        ),
-                    ));
-                }
+            if let Some(expected_alpn) = self.expected_alpn.as_ref()
+                && x.get_ref().1.alpn_protocol() != Some(expected_alpn.as_bytes())
+            {
+                return Err(io::Error::other(format!(
+                    "unexpected alpn protocol: {:?}, expected: {:?}",
+                    x.get_ref().1.alpn_protocol(),
+                    expected_alpn
+                )));
             }
 
             Ok(x)

@@ -49,7 +49,7 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+        Err(io::Error::other("REJECT"))
     }
 
     async fn connect_datagram(
@@ -57,7 +57,7 @@ impl OutboundHandler for Handler {
         #[allow(unused_variables)] sess: &Session,
         #[allow(unused_variables)] _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(io::ErrorKind::Other, "REJECT"))
+        Err(io::Error::other("REJECT"))
     }
 
     async fn support_connector(&self) -> ConnectorType {

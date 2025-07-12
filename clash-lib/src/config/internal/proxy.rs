@@ -41,7 +41,7 @@ pub fn map_serde_error(
                 name
             ))
         } else {
-            Error::InvalidConfig(format!("error while parsing {}: {}", name, x))
+            Error::InvalidConfig(format!("error while parsing {name}: {x}"))
         }
     }
 }
@@ -130,8 +130,8 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
-            OutboundProxyProtocol::Direct => write!(f, "{}", PROXY_DIRECT),
-            OutboundProxyProtocol::Reject => write!(f, "{}", PROXY_REJECT),
+            OutboundProxyProtocol::Direct => write!(f, "{PROXY_DIRECT}"),
+            OutboundProxyProtocol::Reject => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             #[cfg(feature = "wireguard")]

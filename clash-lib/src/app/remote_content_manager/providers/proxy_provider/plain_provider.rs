@@ -34,7 +34,7 @@ impl PlainProvider {
 
         if proxies.is_empty() {
             return Err(
-                Error::InvalidConfig(format!("{}: proxies is empty", name)).into()
+                Error::InvalidConfig(format!("{name}: proxies is empty")).into()
             );
         }
 

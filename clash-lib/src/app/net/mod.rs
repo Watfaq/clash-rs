@@ -211,8 +211,8 @@ impl From<IpAddr> for Interface {
 impl Display for Interface {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Interface::IpAddr(ip) => write!(f, "{}", ip),
-            Interface::Name(name) => write!(f, "{}", name),
+            Interface::IpAddr(ip) => write!(f, "{ip}"),
+            Interface::Name(name) => write!(f, "{name}"),
         }
     }
 }

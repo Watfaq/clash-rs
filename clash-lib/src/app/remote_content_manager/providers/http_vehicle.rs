@@ -48,7 +48,7 @@ impl ProviderVehicle for Vehicle {
         self.http_client
             .get(self.url.clone())
             .await
-            .map_err(|x| io::Error::new(io::ErrorKind::Other, x.to_string()))?
+            .map_err(|x| io::Error::other(x.to_string()))?
             .into_body()
             .collect()
             .await

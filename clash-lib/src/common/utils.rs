@@ -44,7 +44,7 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
 pub fn encode_hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
-        write!(&mut s, "{:02x}", b).unwrap();
+        write!(&mut s, "{b:02x}").unwrap();
     }
     s
 }
@@ -102,7 +102,7 @@ where
             res.headers()
                 .get("Location")
                 .ok_or(new_io_error(
-                    format!("failed to download from {}", url).as_str(),
+                    format!("failed to download from {url}").as_str(),
                 ))?
                 .to_str()?,
             path,

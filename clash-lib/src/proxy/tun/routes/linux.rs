@@ -15,10 +15,7 @@ pub fn check_ip_command_installed() -> std::io::Result<()> {
             if output.status.success() {
                 Ok(())
             } else {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "ip command not found",
-                ))
+                Err(std::io::Error::other("ip command not found"))
             }
         })
 }

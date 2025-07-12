@@ -126,12 +126,11 @@ where
                     m.additionals(),
                 );
 
-                if let Some(edns) = request.edns() {
-                    if edns.flags().dnssec_ok {
-                        if let Some(edns) = m.extensions() {
-                            rv.set_edns(edns.clone());
-                        }
-                    }
+                if let Some(edns) = request.edns()
+                    && edns.flags().dnssec_ok
+                    && let Some(edns) = m.extensions()
+                {
+                    rv.set_edns(edns.clone());
                 }
 
                 debug!(
@@ -350,7 +349,7 @@ where
         info!("starting DNS server");
         l.server.block_until_done().await.map_err(|x| {
             warn!("dns server error: {}", x);
-            DNSError::Io(new_io_error(format!("dns server error: {}", x)))
+            DNSError::Io(new_io_error(format!("dns server error: {x}")))
         })
     }))
 }

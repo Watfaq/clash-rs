@@ -94,30 +94,30 @@ impl Display for DnsConfig {
             DnsConfig::Udp(addr, iface) => {
                 write!(f, "UDP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {} ", iface)?;
+                    write!(f, "bind: {iface} ")?;
                 }
                 Ok(())
             }
             DnsConfig::Tcp(addr, iface) => {
                 write!(f, "TCP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {} ", iface)?;
+                    write!(f, "bind: {iface} ")?;
                 }
                 Ok(())
             }
             DnsConfig::Tls(addr, host, iface) => {
                 write!(f, "TLS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {} ", iface)?;
+                    write!(f, "bind: {iface} ")?;
                 }
-                write!(f, "host: {}", host)
+                write!(f, "host: {host}")
             }
             DnsConfig::Https(addr, host, iface) => {
                 write!(f, "HTTPS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
-                    write!(f, "bind: {} ", iface)?;
+                    write!(f, "bind: {iface} ")?;
                 }
-                write!(f, "host: {}", host)
+                write!(f, "host: {host}")
             }
         }
     }

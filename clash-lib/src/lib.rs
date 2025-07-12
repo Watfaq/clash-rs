@@ -177,7 +177,7 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
     rt.block_on(async {
         match start(config, cwd, log_tx).await {
             Err(e) => {
-                eprintln!("start error: {}", e);
+                eprintln!("start error: {e}");
                 Err(e)
             }
             Ok(_) => Ok(()),
