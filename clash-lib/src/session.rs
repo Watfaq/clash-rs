@@ -407,8 +407,9 @@ pub enum Type {
     Http,
     HttpConnect,
     Socks5,
+    #[cfg(feature = "tun")]
     Tun,
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "tproxy"))]
     Tproxy,
     Tunnel,
     Shadowsocks,

@@ -27,7 +27,7 @@ pub mod reject;
 
 pub mod http;
 pub mod mixed;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "tproxy"))]
 pub mod tproxy;
 
 pub(crate) mod datagram;
@@ -46,6 +46,7 @@ pub mod tor;
 pub mod trojan;
 #[cfg(feature = "tuic")]
 pub mod tuic;
+#[cfg(feature = "tun")]
 pub mod tun;
 pub mod utils;
 pub mod vmess;

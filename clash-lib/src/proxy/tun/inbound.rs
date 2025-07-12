@@ -18,7 +18,6 @@ use futures::{SinkExt, StreamExt};
 use netstack_smoltcp::StackBuilder;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::{debug, error, info, trace, warn};
-use tun_rs::DeviceBuilder;
 use url::Url;
 
 async fn handle_inbound_stream(
@@ -304,28 +303,41 @@ pub fn get_runner(
             )));
         }
     } else {
-        let tun_name = tun_init_config.tun_name.expect("tun name must be provided");
-        info!("tun started at {}", &tun_name);
-
-        let mut tun_builder = DeviceBuilder::new()
-            .name(tun_name)
-            .mtu(
-                cfg.mtu
-                    .unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }),
-            )
-            .ipv4(cfg.gateway.addr(), cfg.gateway.netmask(), None);
-
-        if let Some(gateway_v6) = cfg.gateway_v6 {
-            tun_builder = tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
-        }
-        #[cfg(target_os = "windows")]
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         {
-            if let Some(guid) = tun_init_config.guid {
-                tun_builder = tun_builder.device_guid(guid);
-            }
-        }
+            use tun_rs::DeviceBuilder;
+            let tun_name =
+                tun_init_config.tun_name.expect("tun name must be provided");
+            info!("tun started at {}", &tun_name);
 
-        tun_builder.build_async()?
+            let mut tun_builder = DeviceBuilder::new()
+                .name(tun_name)
+                .mtu(cfg.mtu.unwrap_or(if cfg!(windows) {
+                    65535u16
+                } else {
+                    1500u16
+                }))
+                .ipv4(cfg.gateway.addr(), cfg.gateway.netmask(), None);
+
+            if let Some(gateway_v6) = cfg.gateway_v6 {
+                tun_builder =
+                    tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
+            }
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(guid) = tun_init_config.guid {
+                    tun_builder = tun_builder.device_guid(guid);
+                }
+            }
+
+            tun_builder.build_async()?
+        }
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        {
+            return Err(Error::InvalidConfig(
+                "only fd is supported on mobile platforms".to_string(),
+            ));
+        }
     };
 
     if let Ok(tun_name) = tun.name() {

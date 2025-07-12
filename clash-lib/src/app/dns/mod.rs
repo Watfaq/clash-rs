@@ -22,7 +22,10 @@ pub use config::Config;
 
 pub use resolver::{EnhancedResolver, SystemResolver, new as new_resolver};
 
-pub use server::{exchange_with_resolver, get_dns_listener};
+#[cfg(feature = "tun")]
+pub use server::exchange_with_resolver;
+pub use server::get_dns_listener;
+
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
     /// used to identify the client for logging

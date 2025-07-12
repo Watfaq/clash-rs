@@ -24,6 +24,7 @@ pub enum InboundOpts {
         common_opts: CommonInboundOpts,
         udp: bool, // TODO users
     },
+    #[cfg(feature = "tproxy")]
     #[serde(alias = "tproxy")]
     TProxy {
         #[serde(flatten)]
@@ -60,6 +61,7 @@ impl InboundOpts {
             InboundOpts::Http { common_opts, .. } => common_opts,
             InboundOpts::Socks { common_opts, .. } => common_opts,
             InboundOpts::Mixed { common_opts, .. } => common_opts,
+            #[cfg(feature = "tproxy")]
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
@@ -73,6 +75,7 @@ impl InboundOpts {
             InboundOpts::Http { common_opts, .. } => common_opts,
             InboundOpts::Socks { common_opts, .. } => common_opts,
             InboundOpts::Mixed { common_opts, .. } => common_opts,
+            #[cfg(feature = "tproxy")]
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
             InboundOpts::Redir { common_opts, .. } => common_opts,
