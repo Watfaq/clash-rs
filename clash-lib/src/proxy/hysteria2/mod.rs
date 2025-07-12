@@ -519,7 +519,7 @@ impl HysteriaConnection {
         for frag in fragments {
             self.conn
                 .send_datagram(frag)
-                .map_err(|e| std::io::Error::other(e))?;
+                .map_err(std::io::Error::other)?;
         }
         Ok(())
     }

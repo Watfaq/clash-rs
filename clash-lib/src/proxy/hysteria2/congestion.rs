@@ -5,6 +5,7 @@ use std::{
 
 use quinn_proto::congestion::{Bbr, BbrConfig, Controller, ControllerFactory};
 
+#[allow(dead_code)]
 pub struct DynCongestion;
 
 impl ControllerFactory for DynCongestion {

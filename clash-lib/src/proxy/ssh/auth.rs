@@ -241,8 +241,7 @@ fn load_private_key(opts: &HandlerOptions) -> io::Result<PrivateKey> {
     };
     if key_path_or_content.contains("PRIVATE KEY") {
         // raw content
-        PrivateKey::from_openssh(&key_path_or_content)
-            .map_err(|e| io::Error::other(e))
+        PrivateKey::from_openssh(&key_path_or_content).map_err(io::Error::other)
     } else {
         // file path
         let key_path = if key_path_or_content.starts_with("~") {
@@ -258,7 +257,7 @@ fn load_private_key(opts: &HandlerOptions) -> io::Result<PrivateKey> {
             key_path_or_content
         };
         load_secret_key(key_path, opts.private_key_passphrase.as_deref())
-            .map_err(|e| io::Error::other(e))
+            .map_err(io::Error::other)
     }
 }
 

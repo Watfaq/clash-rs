@@ -2,7 +2,6 @@ use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{
-    io,
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},

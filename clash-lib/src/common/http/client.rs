@@ -51,7 +51,7 @@ impl Service<Uri> for LocalConnector {
             let remote_ip = dns
                 .resolve(host.as_str(), false)
                 .await
-                .map_err(|v| std::io::Error::other(v))?
+                .map_err(std::io::Error::other)?
                 .ok_or(std::io::Error::other("no dns result"))?;
             let remote_port =
                 remote.port_u16().unwrap_or(match remote.scheme_str() {
