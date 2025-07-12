@@ -7,8 +7,9 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
+use tracing::debug;
 #[cfg(not(target_os = "android"))]
-use tracing::{debug, error};
+use tracing::error;
 
 pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]

@@ -19,6 +19,9 @@ pub(crate) fn must_bind_socket_on_interface(
     )))]
     {
         use crate::common::errors::new_io_error;
-        Err(new_io_error(format!("unsupported platform: {}", name)))
+        Err(new_io_error(format!(
+            "unsupported platform: {}",
+            iface.name
+        )))
     }
 }

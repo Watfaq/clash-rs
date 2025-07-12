@@ -311,7 +311,7 @@ pub fn get_runner(
             info!("tun started at {}", &tun_name);
 
             let mut tun_builder = DeviceBuilder::new()
-                .name(tun_name)
+                .name(&tun_name)
                 .mtu(cfg.mtu.unwrap_or(if cfg!(windows) {
                     65535u16
                 } else {
@@ -323,12 +323,15 @@ pub fn get_runner(
                 tun_builder =
                     tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
             }
+
             #[cfg(target_os = "windows")]
             {
                 if let Some(guid) = tun_init_config.guid {
                     tun_builder = tun_builder.device_guid(guid);
                 }
             }
+
+            maybe_add_routes(&cfg, &tun_name)?;
 
             tun_builder.build_async()?
         }
@@ -339,10 +342,6 @@ pub fn get_runner(
             ));
         }
     };
-
-    if let Ok(tun_name) = tun.name() {
-        maybe_add_routes(&cfg, &tun_name)?;
-    }
 
     let mut builder = StackBuilder::default()
         .enable_tcp(true)
