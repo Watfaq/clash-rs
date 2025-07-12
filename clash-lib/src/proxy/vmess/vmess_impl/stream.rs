@@ -155,10 +155,7 @@ where
                 (Some(read_cipher), Some(write_cipher))
             }
             _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "unsupported security",
-                ));
+                return Err(std::io::Error::other("unsupported security"));
             }
         };
 

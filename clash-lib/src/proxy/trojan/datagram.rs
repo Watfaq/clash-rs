@@ -127,10 +127,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             Poll::Ready(Ok(()))
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(io::Error::other("no packet to send")))
         }
     }
 

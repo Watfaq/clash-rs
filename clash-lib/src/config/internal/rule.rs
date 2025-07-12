@@ -87,10 +87,10 @@ impl Display for RuleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RuleType::Domain { domain, target } => {
-                write!(f, "DOMAIN,{},{}", domain, target)
+                write!(f, "DOMAIN,{domain},{target}")
             }
             RuleType::DomainRegex { regex, target } => {
-                write!(f, "DOMAIN-REGEX,{},{}", regex, target)
+                write!(f, "DOMAIN-REGEX,{regex},{target}")
             }
             RuleType::DomainSuffix { .. } => write!(f, "DOMAIN-SUFFIX"),
             RuleType::DomainKeyword { .. } => write!(f, "DOMAIN-KEYWORD"),
@@ -192,8 +192,7 @@ impl RuleType {
                 target: target.to_string(),
             }),
             _ => Err(Error::InvalidConfig(format!(
-                "unsupported rule type: {}",
-                proto
+                "unsupported rule type: {proto}"
             ))),
         }
     }
@@ -211,7 +210,7 @@ impl TryFrom<String> for RuleType {
             [proto, payload, target, params @ ..] => {
                 RuleType::new(proto, payload, target, Some(params.to_vec()))
             }
-            _ => Err(Error::InvalidConfig(format!("invalid rule line: {}", line))),
+            _ => Err(Error::InvalidConfig(format!("invalid rule line: {line}"))),
         }
     }
 }

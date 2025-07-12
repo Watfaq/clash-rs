@@ -30,8 +30,7 @@ pub fn proxy_groups_dag_sort(
         if let Some(node) = node {
             if node.borrow().proto.is_some() {
                 return Err(Error::InvalidConfig(format!(
-                    "duplicate proxy group name: {}",
-                    group_name
+                    "duplicate proxy group name: {group_name}"
                 )));
             } else {
                 node.borrow_mut().proto = Some(group.clone());
@@ -165,8 +164,7 @@ pub fn proxy_groups_dag_sort(
     let looped_groups: Vec<String> = graph.keys().map(|s| s.to_owned()).collect();
 
     Err(Error::InvalidConfig(format!(
-        "loop detected in proxy groups: {:?}",
-        looped_groups
+        "loop detected in proxy groups: {looped_groups:?}"
     )))
 }
 

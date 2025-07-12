@@ -70,7 +70,7 @@ async fn find_proxy_by_name(
             req.extensions_mut().insert(proxy);
             next.run(req).await
         }
-        _ => (StatusCode::NOT_FOUND, format!("proxy {} not found", name))
+        _ => (StatusCode::NOT_FOUND, format!("proxy {name} not found"))
             .into_response(),
     }
 }
@@ -154,7 +154,7 @@ async fn get_proxy_delay(
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {} failed with error: {}", n, err),
+                    format!("get delay for {n} failed with error: {err}"),
                 )
                     .into_response();
             }
@@ -169,7 +169,7 @@ async fn get_proxy_delay(
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {} failed with error: {}", n, err),
+                    format!("get delay for {n} failed with error: {err}"),
                 )
                     .into_response();
             }

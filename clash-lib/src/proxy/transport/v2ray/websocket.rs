@@ -14,10 +14,7 @@ impl TryFrom<V2RayOBFSOption> for V2rayWsClient {
 
     fn try_from(opt: V2RayOBFSOption) -> Result<Self, Self::Error> {
         if opt.mode != "websocket" {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "v2ray plugin does not support this mode",
-            ));
+            return Err(io::Error::other("v2ray plugin does not support this mode"));
         }
         Self::try_new(
             opt.host,
@@ -48,10 +45,7 @@ impl V2rayWsClient {
         mux: bool,
     ) -> std::io::Result<Self> {
         if mux {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "v2ray plugin does not support mux",
-            ));
+            return Err(io::Error::other("v2ray plugin does not support mux"));
         }
 
         let tls_client = if tls {

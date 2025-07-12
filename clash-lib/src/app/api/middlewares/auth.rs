@@ -75,10 +75,10 @@ where
 
         if self.is_websocket(&req) {
             let q = Query::<AuthQuery>::try_from_uri(req.uri()).ok();
-            if let Some(q) = q {
-                if q.token == self.token {
-                    return Box::pin(self.inner.call(req));
-                }
+            if let Some(q) = q
+                && q.token == self.token
+            {
+                return Box::pin(self.inner.call(req));
             }
         }
 

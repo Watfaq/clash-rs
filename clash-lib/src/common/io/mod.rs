@@ -30,13 +30,13 @@ impl std::fmt::Display for CopyBidirectionalError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             CopyBidirectionalError::LeftClosed(e) => {
-                write!(f, "left side closed with error: {}", e)
+                write!(f, "left side closed with error: {e}")
             }
             CopyBidirectionalError::RightClosed(e) => {
-                write!(f, "right side closed with error: {}", e)
+                write!(f, "right side closed with error: {e}")
             }
             CopyBidirectionalError::Other(e) => {
-                write!(f, "error: {}", e)
+                write!(f, "error: {e}")
             }
         }
     }
@@ -83,12 +83,8 @@ impl CopyBuffer {
 
     pub fn new_with_capacity(size: usize) -> Result<Self, std::io::Error> {
         let mut buf = Vec::new();
-        buf.try_reserve(size).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("new buffer failed: {}", e),
-            )
-        })?;
+        buf.try_reserve(size)
+            .map_err(|e| std::io::Error::other(format!("new buffer failed: {e}")))?;
         buf.resize(size, 0);
         Ok(Self {
             read_done: false,

@@ -152,41 +152,38 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                         }
                         APPLICATION_DATA => {
                             this.read_authorized = false;
-                            if body.len() > HMAC_SIZE {
-                                if let Some(Certs { hmac, key, .. }) =
+                            if body.len() > HMAC_SIZE
+                                && let Some(Certs { hmac, key, .. }) =
                                     this.certs.as_mut()
-                                {
-                                    hmac.update(&body[HMAC_SIZE..]);
-                                    if hmac.finalize() == body[0..HMAC_SIZE] {
-                                        // 1. xor to the the original data
-                                        xor_slice(&mut body[HMAC_SIZE..], key);
-                                        // 2. remove the hmac
-                                        unsafe {
-                                            copy(
-                                                body.as_ptr().add(HMAC_SIZE),
-                                                body.as_mut_ptr(),
-                                                body.len() - HMAC_SIZE,
-                                            )
-                                        };
-                                        // 3. rewrite the data size in the header
-                                        (&mut header[3..5])
-                                            .write_u16::<BigEndian>(
-                                                size as u16 - HMAC_SIZE as u16,
-                                            )
-                                            .unwrap();
-                                        this.read_authorized = true;
-                                        // 4. rewrite the body length to be put into
-                                        //    the read buf
-                                        unsafe {
-                                            body.set_len(body.len() - HMAC_SIZE);
-                                        }
-                                        // 4. put the header and body into our
-                                        //    own read buf
-                                    } else {
-                                        tracing::debug!(
-                                            "shadowtls verification failed"
-                                        );
+                            {
+                                hmac.update(&body[HMAC_SIZE..]);
+                                if hmac.finalize() == body[0..HMAC_SIZE] {
+                                    // 1. xor to the the original data
+                                    xor_slice(&mut body[HMAC_SIZE..], key);
+                                    // 2. remove the hmac
+                                    unsafe {
+                                        copy(
+                                            body.as_ptr().add(HMAC_SIZE),
+                                            body.as_mut_ptr(),
+                                            body.len() - HMAC_SIZE,
+                                        )
+                                    };
+                                    // 3. rewrite the data size in the header
+                                    (&mut header[3..5])
+                                        .write_u16::<BigEndian>(
+                                            size as u16 - HMAC_SIZE as u16,
+                                        )
+                                        .unwrap();
+                                    this.read_authorized = true;
+                                    // 4. rewrite the body length to be put into the
+                                    //    read buf
+                                    unsafe {
+                                        body.set_len(body.len() - HMAC_SIZE);
                                     }
+                                    // 4. put the header and body into our own
+                                    //    read buf
+                                } else {
+                                    tracing::debug!("shadowtls verification failed");
                                 }
                             }
                         }

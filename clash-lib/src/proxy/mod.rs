@@ -207,10 +207,10 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         _connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedStream> {
         error!("tcp relay not supported for {}", self.proto());
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("tcp relay not supported for {}", self.proto()),
-        ))
+        Err(io::Error::other(format!(
+            "tcp relay not supported for {}",
+            self.proto()
+        )))
     }
 
     async fn connect_datagram_with_connector(
@@ -219,10 +219,10 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
         _resolver: ThreadSafeDNSResolver,
         _connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("udp relay not supported for {}", self.proto()),
-        ))
+        Err(io::Error::other(format!(
+            "udp relay not supported for {}",
+            self.proto()
+        )))
     }
 
     fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {

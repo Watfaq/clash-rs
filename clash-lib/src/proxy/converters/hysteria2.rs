@@ -104,8 +104,7 @@ impl TryFrom<OutboundHysteria2> for Handler {
                     .parse_ports_str(&ports)
                     .map_err(|e| {
                         crate::Error::InvalidConfig(format!(
-                            "hysteria2 parse ports error: {:?}, ports: {:?}",
-                            e, ports
+                            "hysteria2 parse ports error: {e:?}, ports: {ports:?}"
                         ))
                     })?,
             )

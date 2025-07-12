@@ -129,7 +129,7 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedStream> {
         self.do_connect_stream(sess, resolver).await.map_err(|e| {
             tracing::error!("{:?}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+            std::io::Error::other(e.to_string())
         })
     }
 
@@ -140,7 +140,7 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedDatagram> {
         self.do_connect_datagram(sess, resolver).await.map_err(|e| {
             tracing::error!("{:?}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+            std::io::Error::other(e.to_string())
         })
     }
 

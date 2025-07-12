@@ -157,8 +157,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
                 Some(id) => id,
                 None => {
                     error!("packet_id overflow, closing socket");
-                    return Poll::Ready(Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Poll::Ready(Err(std::io::Error::other(
                         "packet_id overflow",
                     )));
                 }
@@ -172,17 +171,13 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
                 Ok(())
             } else {
                 Err(new_io_error(format!(
-                    "failed to write entire datagram, written: {}",
-                    n
+                    "failed to write entire datagram, written: {n}"
                 )))
             };
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(std::io::Error::other("no packet to send")))
         }
     }
 

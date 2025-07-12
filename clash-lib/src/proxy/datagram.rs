@@ -138,15 +138,14 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         }
                     };
                     let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
-                        io::Error::new(io::ErrorKind::Other, "resolve domain failed")
+                        io::Error::other("resolve domain failed")
                     }))?;
                     if let Some(ip) = ip {
                         (ip, port).into()
                     } else {
-                        return Poll::Ready(Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("resolve domain failed: {}", domain),
-                        )));
+                        return Poll::Ready(Err(io::Error::other(format!(
+                            "resolve domain failed: {domain}"
+                        ))));
                     }
                 }
                 SocksAddr::Ip(addr) => *addr,
@@ -161,16 +160,12 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                 Ok(())
             } else {
                 Err(new_io_error(format!(
-                    "failed to send all data, only sent {} bytes",
-                    n
+                    "failed to send all data, only sent {n} bytes"
                 )))
             };
             Poll::Ready(res)
         } else {
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(io::Error::other("no packet to send")))
         }
     }
 

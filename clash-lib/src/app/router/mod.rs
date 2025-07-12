@@ -90,15 +90,13 @@ impl Router {
             if sess.destination.is_domain()
                 && r.should_resolve_ip()
                 && !sess_resolved
-            {
-                if let Ok(Some(ip)) = self
+                && let Ok(Some(ip)) = self
                     .dns_resolver
                     .resolve(sess.destination.domain().unwrap(), false)
                     .await
-                {
-                    sess.resolved_ip = Some(ip);
-                    sess_resolved = true;
-                }
+            {
+                sess.resolved_ip = Some(ip);
+                sess_resolved = true;
             }
 
             let maybe_ip = sess.resolved_ip.or(sess.destination.ip());

@@ -107,8 +107,7 @@ impl ProxySetProvider {
                 let scheme: ProviderScheme =
                     serde_yaml::from_slice(input).map_err(|x| {
                         Error::InvalidConfig(format!(
-                            "proxy provider parse error {}: {}",
-                            n, x
+                            "proxy provider parse error {n}: {x}"
                         ))
                     })?;
                 let proxies = scheme.proxies;
@@ -177,10 +176,8 @@ impl ProxySetProvider {
                             .collect::<Result<Vec<_>, crate::Error>>();
                         Ok(proxies?)
                     }
-                    _ => {
-                        Err(Error::InvalidConfig(format!("{}: proxies is empty", n))
-                            .into())
-                    }
+                    _ => Err(Error::InvalidConfig(format!("{n}: proxies is empty"))
+                        .into()),
                 }
             },
         );
@@ -221,10 +218,8 @@ impl Provider for ProxySetProvider {
             ele.len(),
             same
         );
-        if !same {
-            if let Some(updater) = self.fetcher.on_update.as_ref() {
-                updater(ele).await;
-            }
+        if !same && let Some(updater) = self.fetcher.on_update.as_ref() {
+            updater(ele).await;
         }
         Ok(())
     }

@@ -40,8 +40,8 @@ pub(super) fn convert(
     }
 
     // Add short-handed top-level proxies to inbounds
-    if let Some(Port(http_port)) = http_port {
-        if !all_inbounds.insert(InboundOpts::Http {
+    if let Some(Port(http_port)) = http_port
+        && !all_inbounds.insert(InboundOpts::Http {
             common_opts: CommonInboundOpts {
                 name: "HTTP-IN".into(),
                 listen: bind_address,
@@ -49,12 +49,12 @@ pub(super) fn convert(
                 allow_lan: c.allow_lan.unwrap_or_default(),
                 fw_mark: c.routing_mask,
             },
-        }) {
-            warn!("Duplicate HTTP inbound listener found: {}", http_port);
-        }
+        })
+    {
+        warn!("Duplicate HTTP inbound listener found: {}", http_port);
     }
-    if let Some(Port(socks_port)) = socks_port {
-        if !all_inbounds.insert(InboundOpts::Socks {
+    if let Some(Port(socks_port)) = socks_port
+        && !all_inbounds.insert(InboundOpts::Socks {
             common_opts: CommonInboundOpts {
                 name: "SOCKS-IN".into(),
                 listen: bind_address,
@@ -63,12 +63,12 @@ pub(super) fn convert(
                 fw_mark: c.routing_mask,
             },
             udp: true,
-        }) {
-            warn!("Duplicate SOCKS inbound listener found: {}", socks_port);
-        }
+        })
+    {
+        warn!("Duplicate SOCKS inbound listener found: {}", socks_port);
     }
-    if let Some(Port(mixed_port)) = mixed_port {
-        if !all_inbounds.insert(InboundOpts::Mixed {
+    if let Some(Port(mixed_port)) = mixed_port
+        && !all_inbounds.insert(InboundOpts::Mixed {
             common_opts: CommonInboundOpts {
                 name: "MIXED-IN".into(),
                 listen: bind_address,
@@ -77,12 +77,12 @@ pub(super) fn convert(
                 fw_mark: c.routing_mask,
             },
             udp: true,
-        }) {
-            warn!("Duplicate MIXED inbound listener found: {}", mixed_port);
-        }
+        })
+    {
+        warn!("Duplicate MIXED inbound listener found: {}", mixed_port);
     }
-    if let Some(Port(redir_port)) = redir_port {
-        if !all_inbounds.insert(InboundOpts::Redir {
+    if let Some(Port(redir_port)) = redir_port
+        && !all_inbounds.insert(InboundOpts::Redir {
             common_opts: CommonInboundOpts {
                 name: "REDIR-IN".into(),
                 listen: bind_address,
@@ -90,13 +90,13 @@ pub(super) fn convert(
                 allow_lan: c.allow_lan.unwrap_or_default(),
                 fw_mark: c.routing_mask,
             },
-        }) {
-            warn!("Duplicate REDIR inbound listener found: {}", redir_port);
-        }
+        })
+    {
+        warn!("Duplicate REDIR inbound listener found: {}", redir_port);
     }
     #[cfg(feature = "tproxy")]
-    if let Some(Port(tproxy_port)) = tproxy_port {
-        if !all_inbounds.insert(InboundOpts::TProxy {
+    if let Some(Port(tproxy_port)) = tproxy_port
+        && !all_inbounds.insert(InboundOpts::TProxy {
             common_opts: CommonInboundOpts {
                 name: "TPROXY-IN".into(),
                 listen: bind_address,
@@ -105,9 +105,9 @@ pub(super) fn convert(
                 fw_mark: c.routing_mask,
             },
             udp: true,
-        }) {
-            warn!("Duplicate TPROXY inbound listener found: {}", tproxy_port);
-        }
+        })
+    {
+        warn!("Duplicate TPROXY inbound listener found: {}", tproxy_port);
     }
     Ok(all_inbounds)
 }

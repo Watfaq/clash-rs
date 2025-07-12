@@ -58,8 +58,7 @@ impl TryFrom<&OutboundWireguard> for Handler {
                         })
                         .map_err(|e| {
                             Error::InvalidConfig(format!(
-                                "invalid ipv6 address: {}, {}",
-                                e, x
+                                "invalid ipv6 address: {e}, {x}"
                             ))
                         })
                         .ok()

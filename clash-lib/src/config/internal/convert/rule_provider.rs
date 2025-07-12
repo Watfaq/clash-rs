@@ -34,7 +34,7 @@ pub(super) fn convert(
                             .and_then(|v| v.as_str())
                             .unwrap_or(&name);
                         let md5 = md5_str(key.as_bytes());
-                        let path = format!("rules/{}", md5);
+                        let path = format!("rules/{md5}");
                         body.insert(
                             "path".to_owned(),
                             serde_yaml::Value::String(path),

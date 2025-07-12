@@ -48,8 +48,7 @@ impl ServerCertVerifier for DefaultTlsVerifier {
                 super::utils::encode_hex(&super::utils::sha256(end_entity.as_ref()));
             if &cert_hex != fingerprint {
                 return Err(rustls::Error::General(format!(
-                    "cert hash mismatch: found: {}\nexcept: {}",
-                    cert_hex, fingerprint
+                    "cert hash mismatch: found: {cert_hex}\nexcept: {fingerprint}"
                 )));
             }
         }

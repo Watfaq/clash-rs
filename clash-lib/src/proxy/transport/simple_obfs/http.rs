@@ -154,10 +154,7 @@ impl AsyncRead for HTTPObfs {
                                 std::task::Poll::Ready(Ok(()))
                             }
                         } else {
-                            std::task::Poll::Ready(Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                "EOF",
-                            )))
+                            std::task::Poll::Ready(Err(std::io::Error::other("EOF")))
                         }
                     }
                     Err(e) => std::task::Poll::Ready(Err(e)),

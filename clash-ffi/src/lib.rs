@@ -36,7 +36,7 @@ pub unsafe extern "C" fn clash_start(
 
         match start_scaffold(options) {
             Ok(_) => CString::new("").unwrap().into_raw(),
-            Err(e) => CString::new(format!("Error: {}", e)).unwrap().into_raw(),
+            Err(e) => CString::new(format!("Error: {e}")).unwrap().into_raw(),
         }
     }
 }

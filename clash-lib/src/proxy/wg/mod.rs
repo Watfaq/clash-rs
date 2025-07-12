@@ -122,8 +122,7 @@ impl Handler {
                             .map(|ip| {
                                 ip.parse::<IpNet>().map_err(|e| {
                                     new_io_error(
-                                        format!("invalid allowed ip: {}", e)
-                                            .as_str(),
+                                        format!("invalid allowed ip: {e}").as_str(),
                                     )
                                 })
                             })

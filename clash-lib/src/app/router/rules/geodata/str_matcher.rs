@@ -55,7 +55,7 @@ pub fn try_new_matcher(
         Type::Plain => Box::new(SubStrMatcher(domain)),
         Type::Regex => {
             Box::new(RegexMatcher(regex::Regex::new(&domain).map_err(|x| {
-                crate::Error::InvalidConfig(format!("invalid regex: {}", x))
+                crate::Error::InvalidConfig(format!("invalid regex: {x}"))
             })?))
         }
         Type::Domain => Box::new(DomainMatcher(domain)),

@@ -2,7 +2,6 @@ use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{
-    io,
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
@@ -61,10 +60,7 @@ impl Decoder for Socks5UDPCodec {
         }
 
         if src[2] != 0 {
-            return Err(std::io::Error::new(
-                io::ErrorKind::Other,
-                "unsupported FRAG",
-            ));
+            return Err(std::io::Error::other("unsupported FRAG"));
         }
 
         src.advance(3);

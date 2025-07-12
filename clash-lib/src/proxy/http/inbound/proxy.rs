@@ -49,10 +49,10 @@ async fn proxy(
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
 ) -> Result<Response<HyperResponseBody>, ProxyError> {
-    if authenticator.enabled() {
-        if let Some(res) = authenticate_req(&req, authenticator) {
-            return Ok(res);
-        }
+    if authenticator.enabled()
+        && let Some(res) = authenticate_req(&req, authenticator)
+    {
+        return Ok(res);
     }
 
     let client = Client::builder(TokioExecutor::new())

@@ -58,8 +58,7 @@ impl GeoSiteMatcher {
                 "invalid geosite matcher, country code is empty".to_owned(),
             ))?;
         let list = loader.get(&code).ok_or(Error::InvalidConfig(format!(
-            "geosite matcher, country code {} not found",
-            code
+            "geosite matcher, country code {code} not found"
         )))?;
         let domains = list
             .domain

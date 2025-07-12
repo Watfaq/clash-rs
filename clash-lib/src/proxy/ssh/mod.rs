@@ -195,7 +195,7 @@ impl OutboundHandler for Handler {
         let mut session =
             client::connect(config, (self.opts.server.as_str(), self.opts.port), sh)
                 .await
-                .map_err(|ssh_e| io::Error::new(io::ErrorKind::Other, ssh_e))?;
+                .map_err(io::Error::other)?;
 
         auth0(&mut session, &self.opts).await?;
 
@@ -208,7 +208,7 @@ impl OutboundHandler for Handler {
                 0,
             )
             .await
-            .map_err(|ssh_e| io::Error::new(io::ErrorKind::Other, ssh_e))?;
+            .map_err(io::Error::other)?;
         let s = Box::new(ChannelStreamWrapper {
             inner: channel.into_stream(),
         });

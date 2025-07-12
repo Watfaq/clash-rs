@@ -84,8 +84,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                             "grpc_opts is required for grpc".to_owned(),
                         )),
                     _ => Err(Error::InvalidConfig(format!(
-                        "unsupported network: {}",
-                        x
+                        "unsupported network: {x}"
                     ))),
                 })
                 .transpose()?,
@@ -112,8 +111,7 @@ impl TryFrom<&OutboundVmess> for Handler {
                                 "http" => Ok(vec![]),
                                 "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
                                 _ => Err(Error::InvalidConfig(format!(
-                                    "unsupported network: {}",
-                                    x
+                                    "unsupported network: {x}"
                                 ))),
                             })
                             .transpose()?,

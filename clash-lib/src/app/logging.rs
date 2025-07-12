@@ -82,7 +82,7 @@ pub fn setup_logging(
         SETUP_LOGGING.call_once(|| {
             LOGGING_GUARD = setup_logging_inner(level, collector, cwd, log_file)
                 .unwrap_or_else(|e| {
-                    eprintln!("Failed to setup logging: {}", e);
+                    eprintln!("Failed to setup logging: {e}");
                     None
                 });
         });
@@ -215,7 +215,7 @@ impl tracing::field::Visit for EventVisitor<'_> {
         value: &dyn std::fmt::Debug,
     ) {
         if field.name() == "message" {
-            self.0.push(format!("{:?}", value));
+            self.0.push(format!("{value:?}"));
         } else {
             println!("debug {} = {:?}", field.name(), value);
         }
