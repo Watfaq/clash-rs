@@ -12,7 +12,7 @@ mkdir -p out
 mkdir -p bindings
 
 # Build the dylib
-cargo build -p clash_ffi
+cargo build -F ring -p clash-ffi
 
 # Generate bindings
 cargo run --features=uniffi/cli --bin uniffi-bindgen generate --library target/debug/$LIB --out-dir bindings --language swift
@@ -20,12 +20,18 @@ cargo run --features=uniffi/cli --bin uniffi-bindgen generate --library target/d
 # Add the iOS targets and build
 for TARGET in \
         aarch64-apple-ios \
-        aarch64-apple-ios-sim
-do
-    rustup target add $TARGET
-    cargo build -p clash_ffi --release --target=$TARGET
-done
+        aarch64-apple-ios-sim; do
+        rustup target add $TARGET
+        # if simulator
+        if [[ $TARGET == *-sim ]]; then
+                export BINDGEN_EXTRA_CLANG_ARGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"
 
+        else
+                export BINDGEN_EXTRA_CLANG_ARGS="-isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+
+        fi
+        cargo build -F ring -p clash-ffi --release --target=$TARGET
+done
 
 # Recreate XCFramework
 rm -rf "$FRAMEWORK"

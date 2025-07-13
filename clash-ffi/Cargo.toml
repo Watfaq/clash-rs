@@ -4,8 +4,12 @@ repository = { workspace = true }
 version = { workspace = true }
 edition = { workspace = true }
 
+[features]
+aws-lc-rs = ["clash-lib/aws-lc-rs"]
+ring = ["clash-lib/ring"]
+
 [dependencies]
-clash-lib = { path = "../clash-lib", default-features = false, features = ["shadowsocks", "tuic", "zero_copy", "onion"] }
+clash-lib = { path = "../clash-lib", default-features = false, features = ["shadowsocks", "tuic", "zero_copy", "onion", "tun"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
 
