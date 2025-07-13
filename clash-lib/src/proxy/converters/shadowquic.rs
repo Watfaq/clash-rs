@@ -30,8 +30,8 @@ impl TryFrom<&OutboundShadowQuic> for Handler {
                     s.common_opts.port,
                 ))?
                 .to_string(),
-                jls_pwd: s.jls_pwd.clone(),
-                jls_iv: s.jls_iv.clone(),
+                password: s.password.clone(),
+                username: s.username.clone(),
                 server_name: s.server_name.clone(),
                 alpn: s.alpn.clone().unwrap_or(default_alpn()),
                 initial_mtu: s.initial_mtu.unwrap_or(default_initial_mtu()),

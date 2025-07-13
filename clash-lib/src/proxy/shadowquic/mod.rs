@@ -268,8 +268,8 @@ mod tests {
     fn gen_options(over_stream: bool) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
             addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(), PORT).to_string(),
-            jls_pwd: "12345678".into(),
-            jls_iv: "87654321".into(),
+            password: "12345678".into(),
+            username: "87654321".into(),
             server_name: "echo.free.beeceptor.com".into(),
             alpn: vec!["h3".into()],
             initial_mtu: 1400,
