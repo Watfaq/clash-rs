@@ -863,7 +863,7 @@ dependencies = [
  "bitflags 2.8.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -1967,7 +1967,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1b84d32b18d9a256d81e4fec2e4cfd0ab6dde5e5ff49be1713ae0adbd0060c2"
 dependencies = [
  "heck",
- "indexmap 2.7.1",
+ "indexmap 1.9.3",
  "itertools 0.13.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -1985,7 +1985,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b48e8e38a4aa565da767322b5ca55fb0f8347983c5bc7f7647db069405420479"
 dependencies = [
  "heck",
- "indexmap 2.7.1",
+ "indexmap 1.9.3",
  "itertools 0.14.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -2156,7 +2156,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3387,7 +3387,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3998,7 +3998,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -5264,7 +5264,7 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 [[package]]
 name = "quinn"
 version = "0.11.7"
-source = "git+https://github.com/spongebob888/quinn-jls#b4e767af20691c91d08f2ada578d255b397c612c"
+source = "git+https://github.com/spongebob888/quinn-jls#72dcb6e40e8c857d46561b14c96eadf07376d074"
 dependencies = [
  "bytes",
  "cfg_aliases",
@@ -5304,7 +5304,7 @@ dependencies = [
 [[package]]
 name = "quinn-proto"
 version = "0.11.10"
-source = "git+https://github.com/spongebob888/quinn-jls#b4e767af20691c91d08f2ada578d255b397c612c"
+source = "git+https://github.com/spongebob888/quinn-jls#72dcb6e40e8c857d46561b14c96eadf07376d074"
 dependencies = [
  "bytes",
  "getrandom 0.3.2",
@@ -5359,7 +5359,7 @@ dependencies = [
 [[package]]
 name = "quinn-udp"
 version = "0.5.10"
-source = "git+https://github.com/spongebob888/quinn-jls#b4e767af20691c91d08f2ada578d255b397c612c"
+source = "git+https://github.com/spongebob888/quinn-jls#72dcb6e40e8c857d46561b14c96eadf07376d074"
 dependencies = [
  "cfg_aliases",
  "libc",
@@ -5900,7 +5900,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.25"
-source = "git+https://github.com/spongebob888/rustls-jls#7492120f056900478f522f2c51c2fb5a70245f4d"
+source = "git+https://github.com/spongebob888/rustls-jls#70e0553c809ae4a6a3eb1229e864f20d4fc5e611"
 dependencies = [
  "aes-gcm",
  "once_cell",
@@ -6412,8 +6412,8 @@ dependencies = [
 
 [[package]]
 name = "shadowquic"
-version = "0.1.15"
-source = "git+https://github.com/spongebob888/shadowquic#d3045188d49eda5499546ff73d0a61305b24a1c4"
+version = "0.2.0"
+source = "git+https://github.com/spongebob888/shadowquic#9057239934b635dab725eb7fb386044f2ab0f659"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6439,8 +6439,8 @@ dependencies = [
 
 [[package]]
 name = "shadowquic-macros"
-version = "0.1.15"
-source = "git+https://github.com/spongebob888/shadowquic#d3045188d49eda5499546ff73d0a61305b24a1c4"
+version = "0.2.0"
+source = "git+https://github.com/spongebob888/shadowquic#9057239934b635dab725eb7fb386044f2ab0f659"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8958,7 +8958,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
