@@ -146,7 +146,7 @@ maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.31", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+arti-client = { version = "0.32", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
 tor-rtcompat = { version = "0.31", optional = true, default-features = false }
 
 # tuic
