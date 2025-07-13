@@ -1,31 +1,17 @@
 {
-    "extends": [
-        "config:base"
-    ],
-    "packageRules": [
-        {
-            "matchManagers": [
-                "cargo"
-            ],
-            "groupName": "rust-dependencies",
-            "matchPackagePatterns": [
-                ".*"
-            ],
-            "schedule": [
-                "before 5am on Sunday"
-            ]
-        },
-        {
-            "matchManagers": [
-                "github-actions"
-            ],
-            "groupName": "actions-dependencies",
-            "matchPackagePatterns": [
-                ".*"
-            ],
-            "schedule": [
-                "before 5am on Sunday"
-            ]
-        }
-    ]
+  "groupName": "all dependencies",
+  "groupSlug": "all",
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+  "packageRules": [
+    {
+      "groupName": "all dependencies",
+      "groupSlug": "all",
+      "matchPackageNames": [
+        "*"
+      ]
+    }
+  ],
+  "separateMajorMinor": false
 }
