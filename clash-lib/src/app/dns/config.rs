@@ -122,8 +122,7 @@ impl Config {
                         }
                         name => get_interface_by_name(name).ok_or(
                             Error::InvalidConfig(format!(
-                                "DNS nameserver [{}] invalid interface: {}",
-                                i, name
+                                "DNS nameserver [{i}] invalid interface: {name}"
                             )),
                         ),
                     })
@@ -192,7 +191,7 @@ impl Config {
         if has_port_suffix.is_match(host) {
             Ok(host.into())
         } else {
-            Ok(format!("{}:{}", host, port))
+            Ok(format!("{host}:{port}"))
         }
     }
 }
@@ -247,8 +246,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                     DNSListen::Udp(u) => {
                         let addr = u.parse::<SocketAddr>().map_err(|_| {
                             Error::InvalidConfig(format!(
-                                "invalid dns udp listen address: {}",
-                                u
+                                "invalid dns udp listen address: {u}"
                             ))
                         })?;
                         Ok(DNSListenAddr {
@@ -270,14 +268,12 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .as_str()
                                         .ok_or(Error::InvalidConfig(format!(
                                             "invalid udp dns listen address - must \
-                                             be string: {:?}",
-                                            v
+                                             be string: {v:?}"
                                         )))?
                                         .parse::<SocketAddr>()
                                         .map_err(|_| {
                                             Error::InvalidConfig(format!(
-                                                "invalid dns listen address: {:?}",
-                                                v
+                                                "invalid dns listen address: {v:?}"
                                             ))
                                         })?;
                                     udp = Some(addr)
@@ -287,14 +283,12 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .as_str()
                                         .ok_or(Error::InvalidConfig(format!(
                                             "invalid tcp dns listen address - must \
-                                             be string: {:?}",
-                                            v
+                                             be string: {v:?}"
                                         )))?
                                         .parse::<SocketAddr>()
                                         .map_err(|_| {
                                             Error::InvalidConfig(format!(
-                                                "invalid dns listen address: {:?}",
-                                                v
+                                                "invalid dns listen address: {v:?}"
                                             ))
                                         })?;
                                     tcp = Some(addr)
@@ -304,8 +298,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         DoHConfig::deserialize(v).map_err(|x| {
                                             Error::InvalidConfig(format!(
                                                 "invalid doh dns listen config: \
-                                                 {:?}",
-                                                x
+                                                 {x:?}"
                                             ))
                                         })?;
 
@@ -316,8 +309,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         DoTConfig::deserialize(v).map_err(|x| {
                                             Error::InvalidConfig(format!(
                                                 "invalid dot dns listen config: \
-                                                 {:?}",
-                                                x
+                                                 {x:?}"
                                             ))
                                         })?;
                                     dot = Some(c)
@@ -327,8 +319,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         DoH3Config::deserialize(v).map_err(|x| {
                                             Error::InvalidConfig(format!(
                                                 "invalid doh3 dns listen config: \
-                                                 {:?}",
-                                                x
+                                                 {x:?}"
                                             ))
                                         })?;
 
@@ -336,8 +327,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                 }
                                 _ => {
                                     return Err(Error::InvalidConfig(format!(
-                                        "invalid dns listen address: {}",
-                                        k
+                                        "invalid dns listen address: {k}"
                                     )));
                                 }
                             }

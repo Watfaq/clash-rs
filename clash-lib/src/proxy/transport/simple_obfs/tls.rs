@@ -215,7 +215,7 @@ fn reading(
     }
 }
 
-fn make_client_hello_msg<'a>(data: &[u8], server: &str) -> Cow<'a, Vec<u8>> {
+fn make_client_hello_msg<'a>(data: &[u8], server: &str) -> Cow<'a, [u8]> {
     let random_bytes = rand::random::<[u8; 28]>();
     let session_id = rand::random::<[u8; 32]>();
 

@@ -119,12 +119,12 @@ async fn update_configs(
             if !PathBuf::from(&path).exists() {
                 return (
                     StatusCode::BAD_REQUEST,
-                    format!("config file {} not found", path),
+                    format!("config file {path} not found"),
                 )
                     .into_response();
             }
 
-            let msg = format!("config reloading from file {}", path);
+            let msg = format!("config reloading from file {path}");
             let cfg: crate::Config = crate::Config::File(path);
             match g.reload_tx.send((cfg, done)).await {
                 Ok(_) => {
@@ -186,7 +186,7 @@ async fn patch_configs(
             Err(_) => {
                 return (
                     StatusCode::BAD_REQUEST,
-                    format!("invalid bind address: {}", bind_address),
+                    format!("invalid bind address: {bind_address}"),
                 )
                     .into_response();
             }

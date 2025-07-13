@@ -17,6 +17,6 @@ pub(crate) fn map_cipher(cipher: &str) -> std::io::Result<CipherKind> {
         }
 
         "rc4-md5" => Ok(CipherKind::SS_RC4_MD5),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "unsupported cipher")),
+        _ => Err(io::Error::other("unsupported cipher")),
     }
 }

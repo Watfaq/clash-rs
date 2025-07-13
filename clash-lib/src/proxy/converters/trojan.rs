@@ -90,8 +90,7 @@ impl TryFrom<&OutboundTrojan> for Handler {
                             "grpc_opts is required for grpc".to_owned(),
                         )),
                     _ => Err(Error::InvalidConfig(format!(
-                        "unsupported trojan network: {}",
-                        x
+                        "unsupported trojan network: {x}"
                     ))),
                 })
                 .transpose()?,

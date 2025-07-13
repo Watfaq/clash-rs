@@ -95,31 +95,30 @@ fn main() {
         let mut config_file = match std::fs::File::create(&file) {
             Ok(config_file) => config_file,
             _ => {
-                eprintln!("default profile cannot be created: {}", file);
+                eprintln!("default profile cannot be created: {file}");
                 exit(1);
             }
         };
 
         if config_file.write_all(default_config.as_bytes()).is_err() {
-            eprintln!("default profile cannot be written: {}", file);
+            eprintln!("default profile cannot be written: {file}");
             exit(1);
         };
 
         println!(
             "the configuration file cannot be found, the template has been created \
-             and used: {}",
-            file
+             and used: {file}"
         );
     }
 
     if cli.test_config {
         match clash::Config::File(file.clone()).try_parse() {
             Ok(_) => {
-                println!("configuration file {} test is successful", file);
+                println!("configuration file {file} test is successful");
                 exit(0);
             }
             Err(e) => {
-                eprintln!("configuration file {} test failed: {}", file, e);
+                eprintln!("configuration file {file} test failed: {e}");
                 exit(1);
             }
         }
@@ -154,7 +153,7 @@ fn main() {
     }) {
         Ok(_) => {}
         Err(e) => {
-            eprintln!("Failed to start clash: {}", e);
+            eprintln!("Failed to start clash: {e}");
             exit(1);
         }
     }

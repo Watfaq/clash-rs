@@ -19,18 +19,16 @@ pub fn convert(
                         .collect::<Result<Vec<_>, _>>()
                 })
                 .transpose()
-                .map_err(|x| {
-                    Error::InvalidConfig(format!("parse tun routes: {}", x))
-                })?
+                .map_err(|x| Error::InvalidConfig(format!("parse tun routes: {x}")))?
                 .unwrap_or_default(),
             gateway: t.gateway.parse().map_err(|x| {
-                Error::InvalidConfig(format!("parse tun gateway: {}", x))
+                Error::InvalidConfig(format!("parse tun gateway: {x}"))
             })?,
             gateway_v6: t
                 .gateway_v6
                 .map(|x| {
                     x.parse().map_err(|x| {
-                        Error::InvalidConfig(format!("parse tun gateway_v6: {}", x))
+                        Error::InvalidConfig(format!("parse tun gateway_v6: {x}"))
                     })
                 })
                 .transpose()?,

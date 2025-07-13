@@ -59,7 +59,7 @@ impl Client for DhcpClient {
         let clients = self.resolve().await?;
         let mut dbg_str = vec![];
         for c in &clients {
-            dbg_str.push(format!("{:?}", c));
+            dbg_str.push(format!("{c:?}"));
         }
         debug!("using clients: {:?}", dbg_str);
         tokio::time::timeout(
@@ -73,7 +73,7 @@ impl Client for DhcpClient {
 impl DhcpClient {
     pub async fn new(iface: &str) -> Self {
         let iface = get_interface_by_name(iface)
-            .unwrap_or_else(|| panic!("can not find interface: {}", iface));
+            .unwrap_or_else(|| panic!("can not find interface: {iface}"));
         Self {
             iface,
             inner: Mutex::new(Inner {
@@ -95,7 +95,7 @@ impl DhcpClient {
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::Udp,
-                        address: format!("{}:53", s),
+                        address: format!("{s}:53"),
                         interface: None,
                     })
                     .collect(),
@@ -123,39 +123,32 @@ impl DhcpClient {
 
         let iface = &self.iface;
 
-        let addr = iface.addr_v4.ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("no address on interface: {:?}", self.iface),
-        ))?;
+        let addr = iface.addr_v4.ok_or(io::Error::other(format!(
+            "no address on interface: {:?}",
+            self.iface
+        )))?;
 
         if Instant::now() < inner.dns_expires_at
             && inner.iface_addr.addr() == addr
             && inner.iface_addr.netmask()
-                == iface.netmask_v4.ok_or(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("no netmask on iface: {:?}", self.iface),
-                ))?
+                == iface.netmask_v4.ok_or(io::Error::other(format!(
+                    "no netmask on iface: {:?}",
+                    self.iface
+                )))?
         {
             Ok(false)
         } else {
             inner.dns_expires_at = Instant::now().add(DHCP_TTL);
             inner.iface_addr = ipnet::IpNet::new(
                 addr.into(),
-                u32::from(
-                    iface
-                        .netmask_v4
-                        .ok_or(io::Error::new(io::ErrorKind::Other, "no netmask"))?,
-                )
-                .count_ones() as _,
+                u32::from(iface.netmask_v4.ok_or(io::Error::other("no netmask"))?)
+                    .count_ones() as _,
             )
             .map_err(|_x| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "invalid netmask: {}",
-                        iface.netmask_v4.expect("expect netmask parse error")
-                    ),
-                )
+                io::Error::other(format!(
+                    "invalid netmask: {}",
+                    iface.netmask_v4.expect("expect netmask parse error")
+                ))
             })?;
             Ok(true)
         }
@@ -184,15 +177,13 @@ async fn probe_dns_server(iface: &OutboundInterface) -> io::Result<Vec<Ipv4Addr>
     let mac_address = &iface
         .mac_addr
         .as_ref()
-        .ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            format!("no MAC address on interface: {:?}", iface),
-        ))?
+        .ok_or(io::Error::other(format!(
+            "no MAC address on interface: {iface:?}"
+        )))?
         .split(':')
         .map(|x| {
-            u8::from_str_radix(x, 16).map_err(|_x| {
-                io::Error::new(io::ErrorKind::Other, "malformed MAC addr")
-            })
+            u8::from_str_radix(x, 16)
+                .map_err(|_x| io::Error::other("malformed MAC addr"))
         })
         .collect::<io::Result<Vec<u8>>>()?;
 
@@ -232,18 +223,18 @@ async fn probe_dns_server(iface: &OutboundInterface) -> io::Result<Vec<Ipv4Addr>
 
                 // fucking deep if-else hell
                 if let Ok(reply) = dhcproto::v4::Message::from_bytes(&buf[..n_read])
-                {
-                    if let Some(op) =
+                    && let Some(op) =
                         reply.opts().get(dhcproto::v4::OptionCode::MessageType)
-                    {
-                        match op {
-                            dhcproto::v4::DhcpOption::MessageType(msg_type) => {
-                                if msg_type == &dhcproto::v4::MessageType::Offer {
-                                    if reply.xid() == xid {
-                                        if let Some(op) = reply.opts().get(
-                                            dhcproto::v4::OptionCode::DomainNameServer,
-                                        ) {
-                                            match op {
+                {
+                    match op {
+                        dhcproto::v4::DhcpOption::MessageType(msg_type) => {
+                            if msg_type == &dhcproto::v4::MessageType::Offer {
+                                if reply.xid() == xid
+                                    && let Some(op) = reply.opts().get(
+                                        dhcproto::v4::OptionCode::DomainNameServer,
+                                    )
+                                {
+                                    match op {
                                                 dhcproto::v4::DhcpOption::DomainNameServer(dns) => {
                                                     debug!(
                                                         "got NS servers {:?} from DHCP",
@@ -253,13 +244,11 @@ async fn probe_dns_server(iface: &OutboundInterface) -> io::Result<Vec<Ipv4Addr>
                                                 }
                                                 _ => yield_now().await,
                                             }
-                                        }
-                                    }
-                                    yield_now().await
                                 }
+                                yield_now().await
                             }
-                            _ => yield_now().await,
                         }
+                        _ => yield_now().await,
                     }
                 }
             }
@@ -276,12 +265,12 @@ async fn probe_dns_server(iface: &OutboundInterface) -> io::Result<Vec<Ipv4Addr>
 
     tokio::select! {
         result = &mut rx => {
-            result.map_err(|_x| io::Error::new(io::ErrorKind::Other, "channel error"))
+            result.map_err(|_x| io::Error::other("channel error"))
         },
 
         _ = tokio::time::sleep(Duration::from_secs(10)) => {
             debug!("DHCP timeout after 10 secs");
-            Err(io::Error::new(io::ErrorKind::Other, "dhcp timeout"))
+            Err(io::Error::other("dhcp timeout"))
         }
     }
 }

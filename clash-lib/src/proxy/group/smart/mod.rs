@@ -49,7 +49,7 @@ impl std::fmt::Display for SmartError {
         match self {
             Self::NoProxy => write!(f, "no available proxy in smart group"),
             Self::AllProxiesFailed(names) => {
-                write!(f, "all proxies failed: {:?}", names)
+                write!(f, "all proxies failed: {names:?}")
             }
         }
     }
@@ -561,17 +561,13 @@ impl Handler {
         if tried.is_empty() {
             let error = SmartError::NoProxy;
             error.log_error();
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no available proxy in smart group",
-            ))
+            Err(io::Error::other("no available proxy in smart group"))
         } else {
             let error = SmartError::AllProxiesFailed(tried.into_iter().collect());
             error.log_error();
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("smart proxy selection failed after {} retries", retries),
-            ))
+            Err(io::Error::other(format!(
+                "smart proxy selection failed after {retries} retries"
+            )))
         }
     }
 
@@ -696,10 +692,7 @@ impl OutboundHandler for Handler {
 
             Ok(s)
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no available proxy in smart group",
-            ))
+            Err(io::Error::other("no available proxy in smart group"))
         }
     }
 
@@ -719,10 +712,7 @@ impl OutboundHandler for Handler {
                 .connect_stream_with_connector(sess, resolver, connector)
                 .await
         } else {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no available proxy in smart group",
-            ))
+            Err(io::Error::other("no available proxy in smart group"))
         }
     }
 

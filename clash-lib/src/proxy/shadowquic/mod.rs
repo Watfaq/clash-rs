@@ -79,8 +79,7 @@ impl Handler {
                                     io::ErrorKind::AddrNotAvailable,
                                     format!(
                                         "failed to resolve shadowquic domain \
-                                         name:{:?}",
-                                        x
+                                         name:{x:?}"
                                     ),
                                 )
                             })?
@@ -121,17 +120,14 @@ impl Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<SQConn> {
         let ep = self.prepare_endpoint(sess, resolver).await?;
-        if let Some(x) = &*self.conn.read().await {
-            if x.close_reason().is_none() {
-                return Ok(x.clone());
-            }
+        if let Some(x) = &*self.conn.read().await
+            && x.close_reason().is_none()
+        {
+            return Ok(x.clone());
         }
         let mut conn = self.conn.write().await;
         let newconn = ep.get_conn().await.map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("can't open shadowquic connection due to:{}", x),
-            )
+            io::Error::other(format!("can't open shadowquic connection due to:{x}"))
         })?;
         conn.replace(newconn.clone());
         Ok(newconn)
@@ -170,10 +166,9 @@ impl OutboundHandler for Handler {
             SQ::connect_tcp(&conn, to_sq_socks_addr(sess.destination.clone()))
                 .await
                 .map_err(|x| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("can't open shadowquic stream due to:{}", x),
-                    )
+                    io::Error::other(format!(
+                        "can't open shadowquic stream due to:{x}"
+                    ))
                 })?;
         let s = ChainedStreamWrapper::new(conn);
         s.append_to_chain(self.name()).await;
@@ -201,10 +196,7 @@ impl OutboundHandler for Handler {
         )
         .await
         .map_err(|x| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("can't open shadowquic stream due to:{}", x),
-            )
+            io::Error::other(format!("can't open shadowquic stream due to:{x}"))
         })?;
         let chain = ChainedDatagramWrapper::new(UdpSessionWrapper {
             s: PollSender::new(socket.0),

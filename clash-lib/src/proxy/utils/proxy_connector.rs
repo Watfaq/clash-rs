@@ -75,7 +75,7 @@ impl RemoteConnector for DirectConnector {
         let dial_addr = resolver
             .resolve(address, false)
             .await
-            .map_err(|v| new_io_error(format!("can't resolve dns: {}", v)))?
+            .map_err(|v| new_io_error(format!("can't resolve dns: {v}")))?
             .ok_or(new_io_error("no dns result"))?;
 
         new_tcp_stream(

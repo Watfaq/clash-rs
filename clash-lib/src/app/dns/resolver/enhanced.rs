@@ -287,25 +287,24 @@ impl EnhancedResolver {
 
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
-            if let Some(lru) = &self.lru_cache {
-                if let Some(cached) = lru.read().await.get(q, Instant::now()) {
-                    if !message.recursion_desired() {
-                        trace!("cache hit for DNS query {}", q.to_string());
-                        if let Ok(cached) = cached.inspect_err(|x| {
-                            warn!("failed to get cached message: {}", x);
-                        }) {
-                            let mut reply =
-                                build_dns_response_message(message, true, false);
-                            reply.add_answers(cached.records().iter().cloned());
-                            return Ok(reply);
-                        }
-                    } else {
-                        trace!(
-                            "cache hit for DNS query {} but RA desired, bypassing \
-                             cache",
-                            q.to_string()
-                        );
+            if let Some(lru) = &self.lru_cache
+                && let Some(cached) = lru.read().await.get(q, Instant::now())
+            {
+                if !message.recursion_desired() {
+                    trace!("cache hit for DNS query {}", q.to_string());
+                    if let Ok(cached) = cached.inspect_err(|x| {
+                        warn!("failed to get cached message: {}", x);
+                    }) {
+                        let mut reply =
+                            build_dns_response_message(message, true, false);
+                        reply.add_answers(cached.records().iter().cloned());
+                        return Ok(reply);
                     }
+                } else {
+                    trace!(
+                        "cache hit for DNS query {} but RA desired, bypassing cache",
+                        q.to_string()
+                    );
                 }
             }
             self.exchange_no_cache(message).await
@@ -334,18 +333,16 @@ impl EnhancedResolver {
 
         let rv = query.await;
 
-        if let Ok(msg) = &rv {
-            if let Some(lru) = &self.lru_cache {
-                if !(q.query_type() == rr::RecordType::TXT
-                    && q.name().to_ascii().starts_with("_acme-challenge."))
-                {
-                    lru.write().await.insert_records(
-                        q.clone(),
-                        msg.answers().iter().cloned(),
-                        Instant::now(),
-                    );
-                }
-            }
+        if let Ok(msg) = &rv
+            && let Some(lru) = &self.lru_cache
+            && !(q.query_type() == rr::RecordType::TXT
+                && q.name().to_ascii().starts_with("_acme-challenge."))
+        {
+            lru.write().await.insert_records(
+                q.clone(),
+                msg.answers().iter().cloned(),
+                Instant::now(),
+            );
         }
 
         rv
@@ -354,10 +351,9 @@ impl EnhancedResolver {
     fn match_policy(&self, m: &op::Message) -> Option<&Vec<ThreadSafeDNSClient>> {
         if let (Some(_fallback), Some(_fallback_domain_filters), Some(policy)) =
             (&self.fallback, &self.fallback_domain_filters, &self.policy)
+            && let Some(domain) = EnhancedResolver::domain_name_of_message(m)
         {
-            if let Some(domain) = EnhancedResolver::domain_name_of_message(m) {
-                return policy.search(&domain).map(|n| n.get_data().unwrap());
-            }
+            return policy.search(&domain).map(|n| n.get_data().unwrap());
         }
         None
     }
@@ -406,12 +402,11 @@ impl EnhancedResolver {
     fn should_only_query_fallback(&self, message: &op::Message) -> bool {
         if let (Some(_), Some(fallback_domain_filters)) =
             (&self.fallback, &self.fallback_domain_filters)
+            && let Some(domain) = EnhancedResolver::domain_name_of_message(message)
         {
-            if let Some(domain) = EnhancedResolver::domain_name_of_message(message) {
-                for f in fallback_domain_filters.iter() {
-                    if f.apply(domain.as_str()) {
-                        return true;
-                    }
+            for f in fallback_domain_filters.iter() {
+                if f.apply(domain.as_str()) {
+                    return true;
                 }
             }
         }
@@ -501,15 +496,14 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::Ipv4Addr>> {
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V4(v4) => *v4,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
-            }
+        if enhanced
+            && let Some(hosts) = &self.hosts
+            && let Some(v) = hosts.search(host)
+        {
+            return Ok(v.get_data().map(|v| match v {
+                net::IpAddr::V4(v4) => *v4,
+                _ => unreachable!("invalid IP family"),
+            }));
         }
 
         if let Ok(ip) = host.parse::<net::Ipv4Addr>() {
@@ -546,15 +540,14 @@ impl ClashResolver for EnhancedResolver {
             return Err(Error::DNSError("ipv6 disabled".into()).into());
         }
 
-        if enhanced {
-            if let Some(hosts) = &self.hosts {
-                if let Some(v) = hosts.search(host) {
-                    return Ok(v.get_data().map(|v| match v {
-                        net::IpAddr::V6(v6) => *v6,
-                        _ => unreachable!("invalid IP family"),
-                    }));
-                }
-            }
+        if enhanced
+            && let Some(hosts) = &self.hosts
+            && let Some(v) = hosts.search(host)
+        {
+            return Ok(v.get_data().map(|v| match v {
+                net::IpAddr::V6(v6) => *v6,
+                _ => unreachable!("invalid IP family"),
+            }));
         }
 
         if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
@@ -572,11 +565,11 @@ impl ClashResolver for EnhancedResolver {
     }
 
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
-        if let Some(lru) = &self.reverse_lookup_cache {
-            if let Some(cached) = lru.read().await.peek(&ip) {
-                trace!("reverse lookup cache hit: {cached} -> {ip}");
-                return Some(cached.clone());
-            }
+        if let Some(lru) = &self.reverse_lookup_cache
+            && let Some(cached) = lru.read().await.peek(&ip)
+        {
+            trace!("reverse lookup cache hit: {cached} -> {ip}");
+            return Some(cached.clone());
         }
 
         None

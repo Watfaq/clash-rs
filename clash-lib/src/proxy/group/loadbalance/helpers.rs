@@ -39,7 +39,7 @@ fn get_key_src_and_dst(sess: &Session) -> String {
         std::net::SocketAddr::V4(socket_addr_v4) => socket_addr_v4.ip().to_string(),
         std::net::SocketAddr::V6(socket_addr_v6) => socket_addr_v6.ip().to_string(),
     };
-    format!("{}-{}", src, dst)
+    format!("{src}-{dst}")
 }
 
 fn jump_hash(key: u64, buckets: i32) -> i32 {
@@ -74,8 +74,7 @@ pub fn strategy_consistent_hashring() -> StrategyFn {
                 return Box::pin(futures::future::ok(proxy.clone()));
             }
         }
-        Box::pin(futures::future::err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Box::pin(futures::future::err(std::io::Error::other(
             "no proxy found",
         )))
     })
@@ -129,25 +128,25 @@ pub fn strategy_sticky_session(proxy_manager: ProxyManager) -> StrategyFn {
             // use `do - while` since we have the cached result
             let mut index = start_index;
             for _ in 0..max_retry {
-                if let Some(proxy) = proxies.get(index) {
-                    if proxy_manager_clone.alive(proxy.name()).await {
-                        // now it's a valid proxy
-                        // check if it's the same as the last one(likely)
-                        // update the cache if:
-                        //   1. the index is not the same as the start_index
-                        //   2. the start_index is not fetched from the cache
-                        if index != start_index || !hit {
-                            lru_cache_clone.lock().await.insert(key, index);
-                            #[cfg(test)]
-                            {
-                                TEST_LRU_STATE.store(
-                                    CACHE_UPDATE,
-                                    std::sync::atomic::Ordering::Relaxed,
-                                );
-                            }
+                if let Some(proxy) = proxies.get(index)
+                    && proxy_manager_clone.alive(proxy.name()).await
+                {
+                    // now it's a valid proxy
+                    // check if it's the same as the last one(likely)
+                    // update the cache if:
+                    //   1. the index is not the same as the start_index
+                    //   2. the start_index is not fetched from the cache
+                    if index != start_index || !hit {
+                        lru_cache_clone.lock().await.insert(key, index);
+                        #[cfg(test)]
+                        {
+                            TEST_LRU_STATE.store(
+                                CACHE_UPDATE,
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
                         }
-                        return Ok(proxy.clone());
                     }
+                    return Ok(proxy.clone());
                 }
                 // the cached proxy is dead, change the key by a new timestamp and
                 // try again
@@ -160,10 +159,7 @@ pub fn strategy_sticky_session(proxy_manager: ProxyManager) -> StrategyFn {
                 TEST_LRU_STATE
                     .store(CACHE_MISS, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "no proxy found",
-            ))
+            Err(std::io::Error::other("no proxy found"))
         })
     })
 }

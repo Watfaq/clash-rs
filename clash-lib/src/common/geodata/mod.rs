@@ -46,10 +46,7 @@ impl GeoData {
                 download(url, &geosite_file, &http_client)
                     .await
                     .map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "geosite download failed: {}",
-                            x
-                        ))
+                        Error::InvalidConfig(format!("geosite download failed: {x}"))
                     })?;
             } else {
                 return Err(Error::InvalidConfig(format!(
@@ -61,7 +58,7 @@ impl GeoData {
         let bytes = tokio::fs::read(path).await?;
         let cache =
             geodata_proto::GeoSiteList::decode(bytes.as_slice()).map_err(|x| {
-                Error::InvalidConfig(format!("geosite decode failed: {}", x))
+                Error::InvalidConfig(format!("geosite decode failed: {x}"))
             })?;
         Ok(Self { cache })
     }

@@ -130,10 +130,7 @@ where
                 Some(id) => id,
                 None => {
                     error!("packet_id overflow, closing socket");
-                    return Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "packet_id overflow",
-                    )));
+                    return Poll::Ready(Err(io::Error::other("packet_id overflow")));
                 }
             };
 
@@ -145,17 +142,13 @@ where
                 Ok(())
             } else {
                 Err(new_io_error(format!(
-                    "failed to write entire datagram, written: {}",
-                    n
+                    "failed to write entire datagram, written: {n}"
                 )))
             };
             Poll::Ready(res)
         } else {
             debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::Other,
-                "no packet to send",
-            )))
+            Poll::Ready(Err(io::Error::other("no packet to send")))
         }
     }
 

@@ -164,7 +164,7 @@ fn parse_ipcidr_payload<R: Read>(reader: &mut R) -> Result<RuleContent> {
         let mut range_buf = [0u8; 32];
         reader
             .read_exact(&mut range_buf)
-            .with_context(|| format!("Failed to read IP range #{}", i))?;
+            .with_context(|| format!("Failed to read IP range #{i}"))?;
 
         let from_ip_bytes: [u8; 16] = range_buf[0..16].try_into().unwrap();
         let to_ip_bytes: [u8; 16] = range_buf[16..32].try_into().unwrap();
@@ -193,7 +193,7 @@ fn parse_ipcidr_payload<R: Read>(reader: &mut R) -> Result<RuleContent> {
                 );
                 // Decide whether to continue or bail out
                 // continue; // Skip this range
-                return Err(e).context(format!("Error processing IP range #{}", i)); // Bail out
+                return Err(e).context(format!("Error processing IP range #{i}")); // Bail out
             }
         }
     }
@@ -209,7 +209,7 @@ fn parse_ipcidr_payload<R: Read>(reader: &mut R) -> Result<RuleContent> {
 fn read_u64_length<R: Read>(reader: &mut R, field_name: &str) -> Result<usize> {
     let len = reader
         .read_i64::<BigEndian>()
-        .with_context(|| format!("Failed to read MRS {} length", field_name))?;
+        .with_context(|| format!("Failed to read MRS {field_name} length"))?;
     if len < 0 {
         bail!("Invalid negative length for {}: {}", field_name, len);
     }
@@ -224,7 +224,7 @@ fn read_u64_vec<R: Read>(
     let mut vec = Vec::with_capacity(count);
     for i in 0..count {
         let val = reader.read_u64::<BigEndian>().with_context(|| {
-            format!("Failed to read {} data element #{}", field_name, i)
+            format!("Failed to read {field_name} data element #{i}")
         })?;
         vec.push(val);
     }
@@ -247,7 +247,7 @@ fn read_byte_vec<R: Read>(
     }
     let mut vec = vec![0u8; len];
     reader.read_exact(&mut vec).with_context(|| {
-        format!("Failed to read {} data ({} bytes)", field_name, len)
+        format!("Failed to read {field_name} data ({len} bytes)")
     })?;
     Ok(vec)
 }

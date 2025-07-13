@@ -94,10 +94,10 @@ impl<T> StringTrie<T> {
             return None;
         }
 
-        if let Some(n) = Self::search_inner(&self.root, parts) {
-            if n.data.is_some() {
-                return Some(n);
-            }
+        if let Some(n) = Self::search_inner(&self.root, parts)
+            && n.data.is_some()
+        {
+            return Some(n);
         }
 
         None
@@ -109,10 +109,10 @@ impl<T> StringTrie<T> {
     {
         for (key, child) in self.root.get_children() {
             Self::traverse_inner(&[key], child, &mut f);
-            if let Some(data) = child.get_data() {
-                if !f(key, data) {
-                    return;
-                }
+            if let Some(data) = child.get_data()
+                && !f(key, data)
+            {
+                return;
             }
         }
     }
@@ -170,22 +170,18 @@ impl<T> StringTrie<T> {
             return Some(node);
         }
 
-        if let Some(c) = node.get_child(parts.last().unwrap().to_owned()) {
-            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
-            {
-                if n.data.is_some() {
-                    return Some(n);
-                }
-            }
+        if let Some(c) = node.get_child(parts.last().unwrap().to_owned())
+            && let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
+            && n.data.is_some()
+        {
+            return Some(n);
         }
 
-        if let Some(c) = node.get_child(WILDCARD) {
-            if let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
-            {
-                if n.data.is_some() {
-                    return Some(n);
-                }
-            }
+        if let Some(c) = node.get_child(WILDCARD)
+            && let Some(n) = Self::search_inner(c, parts[0..parts.len() - 1].into())
+            && n.data.is_some()
+        {
+            return Some(n);
         }
 
         node.get_child(DOT_WILDCARD)

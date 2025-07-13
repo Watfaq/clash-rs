@@ -86,8 +86,7 @@ impl TryFrom<&OutboundShadowsocks> for Handler {
                     }
                     _ => {
                         return Err(Error::InvalidConfig(format!(
-                            "unsupported plugin: {}",
-                            plugin
+                            "unsupported plugin: {plugin}"
                         )));
                     }
                 },
@@ -123,7 +122,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for SimpleOBFSOption {
                 mode: SimpleOBFSMode::Tls,
                 host: host.to_owned(),
             }),
-            _ => Err(Error::InvalidConfig(format!("invalid obfs mode: {}", mode))),
+            _ => Err(Error::InvalidConfig(format!("invalid obfs mode: {mode}"))),
         }
     }
 }
@@ -149,10 +148,7 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             as u16;
 
         if mode != "websocket" {
-            return Err(Error::InvalidConfig(format!(
-                "invalid obfs mode: {}",
-                mode
-            )));
+            return Err(Error::InvalidConfig(format!("invalid obfs mode: {mode}")));
         }
 
         let path = value.get("path").and_then(|x| x.as_str()).unwrap_or("");
@@ -164,12 +160,12 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             .unwrap_or(false);
 
         let mut headers = HashMap::new();
-        if let Some(h) = value.get("headers") {
-            if let Some(h) = h.as_mapping() {
-                for (k, v) in h {
-                    if let (Some(k), Some(v)) = (k.as_str(), v.as_str()) {
-                        headers.insert(k.to_owned(), v.to_owned());
-                    }
+        if let Some(h) = value.get("headers")
+            && let Some(h) = h.as_mapping()
+        {
+            for (k, v) in h {
+                if let (Some(k), Some(v)) = (k.as_str(), v.as_str()) {
+                    headers.insert(k.to_owned(), v.to_owned());
                 }
             }
         }

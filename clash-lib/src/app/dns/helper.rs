@@ -26,7 +26,7 @@ pub async fn make_clients(
             let port = s.address.split(':').next_back().unwrap();
             let host = s
                 .address
-                .strip_suffix(format!(":{}", port).as_str())
+                .strip_suffix(format!(":{port}").as_str())
                 .unwrap_or_else(|| {
                     print_and_exit!("invalid address: {}", s.address);
                 });
