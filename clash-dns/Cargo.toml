@@ -1,0 +1,45 @@
+[package]
+name = "watfaq-dns"
+description = "A good DNS server"
+license = "MIT"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+
+[features]
+default = ["aws-lc-rs"]
+aws-lc-rs = [
+    "rustls/aws-lc-rs",
+    "hickory-server/https-aws-lc-rs",
+    "hickory-server/h3-aws-lc-rs",
+    "hickory-proto/dnssec-aws-lc-rs",
+]
+ring = [
+    "rustls/ring",
+    "hickory-server/https-ring",
+    "hickory-server/h3-ring",
+    "hickory-proto/dnssec-ring",
+]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+async-trait = "0.1"
+futures = "0.3"
+
+
+rustls = { version = "0.23", default-features = false }
+rustls-pemfile = "2"
+webpki-roots = "1.0.0"
+
+hickory-client = { version = "0.25", default-features = false }
+hickory-server = { version = "0.25", default-features = false }
+hickory-proto = { version = "0.25", default-features = false }
+
+
+
+[dev-dependencies]
+mockall = "0.13.0"
+env_logger = "0.11"

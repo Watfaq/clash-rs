@@ -1,0 +1,45 @@
+[package]
+name = "clash-rs"
+repository = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+
+[features]
+default = ["standard", "aws-lc-rs"]
+standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "wireguard", "clash-lib/zero_copy", "tproxy", "tun"]
+
+plus = ["standard", "onion"]
+perf = ["plus", "jemallocator"]
+
+android = ["shadowsocks", "tuic", "aws-lc-rs", "wireguard", "clash-lib/zero_copy", "tproxy"] # Android build failed with libc
+bsd = ["shadowsocks", "tuic", "ring", "clash-lib/zero_copy"] # BSD build failed with aws-lc-rs, and cross compile also fail with missing headers for tun->route_manager
+
+shadowsocks = ["clash-lib/shadowsocks"]
+ssh = ["clash-lib/ssh"]
+tuic = ["clash-lib/tuic"]
+onion = ["clash-lib/onion"]
+shadowquic = ["clash-lib/shadowquic"]
+wireguard = ["clash-lib/wireguard"]
+tproxy = ["clash-lib/tproxy"]
+tun = ["clash-lib/tun"]
+
+bench = ["clash-lib/bench"]
+dhat-heap = ["dep:dhat"]
+tokio-console = ["clash-lib/tokio-console"]
+jemallocator = ["dep:tikv-jemallocator"]
+
+aws-lc-rs = ["clash-lib/aws-lc-rs"]
+ring = ["clash-lib/ring"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+
+clash-lib = { path = "../clash-lib", default-features = false }
+
+dhat = { version = "0.3", optional = true }
+tikv-jemallocator = { version = "0.6", optional = true }
+
+sentry = { version = "0.41", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
+human-panic = "2.0"

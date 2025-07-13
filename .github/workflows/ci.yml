@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    tags: [ "v*" ]
-    branches: [ "master" ]
+    tags: ["v*"]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -16,7 +16,7 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly-2025-03-01"
+  RUST_TOOLCHAIN: "nightly-2025-06-30"
   SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
@@ -45,7 +45,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             tool: cross
             extra-args: -F "plus"
-            zig: "2.17"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
@@ -227,7 +226,7 @@ jobs:
         with:
           key: ${{ matrix.os }}
           read-only: ${{ matrix.target != 'x86_64-unknown-linux-gnu' }}
-
+      - uses: ilammy/setup-nasm@v1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
@@ -248,7 +247,6 @@ jobs:
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set environment variables (non Windows)
         if: matrix.os != 'windows-latest'
         run: |
@@ -284,7 +282,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: "test"
-          args: --workspace --exclude clash_ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --workspace --exclude clash-ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
@@ -320,7 +318,7 @@ jobs:
 
   release:
     name: Release
-    needs: [ compile ]
+    needs: [compile]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -402,7 +400,7 @@ jobs:
             LICENSE*
 
   docker-image:
-    needs: [ compile ]
+    needs: [compile]
     name: Docker Image
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest

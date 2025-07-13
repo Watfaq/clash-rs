@@ -2,14 +2,15 @@
 resolver = "2"
 
 members = [
-    "clash",
-    "clash_lib",
-    "clash_doc",
-    "clash_ffi",
+    "clash-bin",
+    "clash-lib",
+    "clash-doc",
+    "clash-ffi",
+    "clash-dns"
 ]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]

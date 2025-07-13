@@ -1,0 +1,79 @@
+version: "3.9"
+
+services:
+  socks5-auth:
+    image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
+    network_mode: "host"
+    command:
+      - "-u"
+      - "user"
+      - "-p"
+      - "password"
+      - "-a"
+      - "0.0.0.0:10801"
+    restart: unless-stopped
+
+  socks5-noauth:
+    image: ghcr.io/wzshiming/socks5/socks5:v0.4.3
+    network_mode: "host"
+    command:
+      - "-a"
+      - "0.0.0.0:10800"
+    restart: unless-stopped
+  shadowsocks:
+    build: ./ss
+    network_mode: "host"
+    command: ["-s", "ss://AEAD_AES_256_GCM:password@:8388", "-udp", "-verbose"]
+    restart: unless-stopped
+
+  v2ray-vmess:
+    image: v2fly/v2fly-core
+    environment:
+      - V2RAY_VMESS_AEAD_FORCED=false
+    network_mode: "host"
+    command: ["run", "-c", "/etc/v2ray/config.json"]
+    volumes:
+      - type: bind
+        source: ./v2ray/config.json
+        target: /etc/v2ray/config.json
+      - type: bind
+        source: ./v2ray/cert.pem
+        target: /etc/v2ray/v2ray.crt
+      - type: bind
+        source: ./v2ray/key.pem
+        target: /etc/v2ray/v2ray.key
+    restart: unless-stopped
+
+  nginx:
+    image: nginx
+    network_mode: "host"
+    volumes:
+      - type: bind
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+      - type: bind
+        source: ./v2ray/cert.pem
+        target: /etc/v2ray/v2ray.crt
+      - type: bind
+        source: ./v2ray/key.pem
+        target: /etc/v2ray/v2ray.key
+    restart: unless-stopped
+
+  hysteria2:
+    image: tobyxdd/hysteria
+    network_mode: "host"
+    command:
+      - server
+      - "-c"
+      - "/etc/hysteria/config.yaml"
+    volumes:
+      - type: bind
+        source: ./hysteria2/config.yaml
+        target: /etc/hysteria/config.yaml
+      - type: bind
+        source: ./v2ray/cert.pem
+        target: /etc/hysteria/cert.pem
+      - type: bind
+        source: ./v2ray/key.pem
+        target: /etc/hysteria/key.pem
+    restart: unless-stopped
