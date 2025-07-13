@@ -41,10 +41,7 @@ pub(crate) fn must_bind_socket_on_interface(
                 Some(idx.to_ne_bytes().as_ref()),
             ))
         },
-        _ => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "unsupported socket family",
-        )),
+        _ => Err(io::Error::other("unsupported socket family")),
     } {
         Ok(errno) => {
             if errno != 0 {
@@ -56,10 +53,9 @@ pub(crate) fn must_bind_socket_on_interface(
         }
         Err(e) => {
             warn!("failed to bind socket to interface: {}", e);
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("failed to bind socket to interface: {}", e),
-            ))
+            Err(io::Error::other(format!(
+                "failed to bind socket to interface: {e}"
+            )))
         }
     }
 }

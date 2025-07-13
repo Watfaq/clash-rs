@@ -264,7 +264,7 @@ pub fn get_runner(
                     let guid = u.query_pairs().find(|(k, _)| k == "guid");
                     if let Some((_, v)) = guid {
                         let guid = uuid::Uuid::parse_str(&v).map_err(|x| {
-                            Error::InvalidConfig(format!("invalid guid: {}", x))
+                            Error::InvalidConfig(format!("invalid guid: {x}"))
                         })?;
                         tun_init_config.guid = Some(guid.as_u128());
                     }
@@ -298,8 +298,7 @@ pub fn get_runner(
         #[cfg(not(target_family = "unix"))]
         {
             return Err(Error::InvalidConfig(format!(
-                "tun fd({}) is only supported on Unix-like systems",
-                fd
+                "tun fd({fd}) is only supported on Unix-like systems"
             )));
         }
     } else {
