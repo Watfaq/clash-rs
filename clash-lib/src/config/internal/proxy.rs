@@ -311,9 +311,9 @@ pub struct OutboundShadowQuic {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
     /// jls password, must be the same as the server
-    pub jls_pwd: String,
-    /// jls initial vector, must be the same as the server
-    pub jls_iv: String,
+    pub password: String,
+    /// jls username, must be the same as the server
+    pub username: String,
     /// server name, must be the same as the server jls_upstream
     /// domain name
     pub server_name: String,
