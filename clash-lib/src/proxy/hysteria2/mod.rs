@@ -597,7 +597,7 @@ impl AsyncWrite for HystStream {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::net::IpAddr;
+    use std::net::{IpAddr, Ipv4Addr};
 
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
