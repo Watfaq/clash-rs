@@ -1,4 +1,3 @@
-#[cfg(not(target_os = "android"))]
 use super::platform::must_bind_socket_on_interface;
 use crate::{
     app::{dns::ThreadSafeDNSResolver, net::OutboundInterface},
@@ -11,9 +10,7 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-use tracing::debug;
-#[cfg(not(target_os = "android"))]
-use tracing::error;
+use tracing::{debug, error};
 
 pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]
