@@ -166,6 +166,7 @@ async fn listen_dhcp_client(iface: &OutboundInterface) -> io::Result<UdpSocket> 
         Some(iface),
         #[cfg(target_os = "linux")]
         None,
+        None,
     )
     .await
 }

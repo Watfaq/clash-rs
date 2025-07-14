@@ -61,7 +61,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
     fn bind_udp(
         &self,
         _local_addr: SocketAddr,
-        _server_addr: SocketAddr,
+        server_addr: SocketAddr,
     ) -> std::pin::Pin<Box<dyn Send + Future<Output = std::io::Result<Self::Udp>>>>
     {
         let iface = self.iface.clone();
@@ -72,6 +72,7 @@ impl RuntimeProvider for DnsRuntimeProvider {
                 iface.as_ref(),
                 #[cfg(target_os = "linux")]
                 _so_mark,
+                Some(server_addr),
             )
             .await
         })

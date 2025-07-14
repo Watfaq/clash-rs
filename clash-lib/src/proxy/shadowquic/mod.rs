@@ -88,21 +88,15 @@ impl Handler {
                     }
                     SocksAddr::Ip(socket_addr) => socket_addr,
                 };
-                let socket = {
-                    let bind_addr = if addr.is_ipv4() {
-                        "0.0.0.0:0"
-                    } else {
-                        "[::]:0"
-                    };
-                    new_udp_socket(
-                        Some(bind_addr.parse().unwrap()), /* Used to indicate the
-                                                           * address family */
-                        sess.iface.as_ref(),
-                        #[cfg(target_os = "linux")]
-                        sess.so_mark,
-                    )
-                    .await?
-                };
+                let socket = new_udp_socket(
+                    None,
+                    sess.iface.as_ref(),
+                    #[cfg(target_os = "linux")]
+                    sess.so_mark,
+                    Some(addr),
+                )
+                .await?;
+
                 let mut ep = ShadowQuicClient::new_with_socket(
                     self.opts.clone(),
                     socket.into_std()?,
