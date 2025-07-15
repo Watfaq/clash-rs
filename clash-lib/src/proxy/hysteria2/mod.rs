@@ -16,7 +16,7 @@ use quinn_proto::TransportConfig;
 use std::{
     collections::HashMap,
     fmt::{Debug, Formatter},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::SocketAddr,
     num::ParseIntError,
     path::PathBuf,
     pin::Pin,
@@ -193,20 +193,15 @@ impl Handler {
             }
         };
 
-        let src = if resolver.ipv6() {
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-        } else {
-            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
-        };
-
         // Here maybe we should use a AsyncUdpSocket which implement salamander obfs
         // and port hopping
         let create_socket = || async {
             new_udp_socket(
-                Some(src),
+                None,
                 sess.iface.as_ref(),
                 #[cfg(target_os = "linux")]
                 sess.so_mark,
+                Some(server_socket_addr),
             )
             .await
         };
@@ -602,7 +597,7 @@ impl AsyncWrite for HystStream {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::net::IpAddr;
+    use std::net::{IpAddr, Ipv4Addr};
 
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,

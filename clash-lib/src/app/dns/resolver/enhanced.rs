@@ -233,11 +233,7 @@ impl EnhancedResolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            error!(
-                                "DNS client {} resolve error: {}",
-                                c.id(),
-                                x.to_string()
-                            )
+                            error!("DNS client {} resolve error: {:?}", c.id(), x)
                         })
                         .await
                 }

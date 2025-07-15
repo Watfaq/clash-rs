@@ -13,7 +13,7 @@ use crate::{
     proxy::{
         OutboundHandler,
         datagram::OutboundDatagramImpl,
-        utils::{new_tcp_stream, new_udp_socket},
+        utils::{family_hint_for_session, new_tcp_stream, new_udp_socket},
     },
     session::Session,
 };
@@ -85,11 +85,13 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
+        let family_hint = family_hint_for_session(sess, &resolver).await;
         let d = new_udp_socket(
             Some(sess.source),
             sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
+            family_hint,
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;
