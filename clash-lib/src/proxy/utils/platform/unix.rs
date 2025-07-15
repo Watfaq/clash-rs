@@ -2,15 +2,19 @@ use std::io;
 
 use crate::app::net::OutboundInterface;
 
-#[allow(dead_code)]
 pub(crate) fn must_bind_socket_on_interface(
-    #[allow(unused)] socket: &socket2::Socket,
+    #[allow(unused_variables)] socket: &socket2::Socket,
     iface: &OutboundInterface,
-    #[allow(unused)] family: socket2::Domain,
+    #[allow(unused_variables)] family: socket2::Domain,
 ) -> io::Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
     {
-        socket.bind_device(Some(iface.name.as_bytes()))
+        use tracing::error;
+        socket
+            .bind_device(Some(iface.name.as_bytes()))
+            .inspect_err(|e| {
+                error!("failed to bind socket to interface {}: {e}", iface.name);
+            })
     }
     #[cfg(not(any(
         target_os = "android",

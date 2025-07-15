@@ -199,6 +199,7 @@ impl Handler {
 
         quinn_config.transport_config(Arc::new(transport_config));
 
+        // TODO: we should try to resolve the server address once?
         let socket = {
             if resolver.ipv6() {
                 new_udp_socket(
@@ -206,6 +207,7 @@ impl Handler {
                     sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
+                    None,
                 )
                 .await?
             } else {
@@ -214,6 +216,7 @@ impl Handler {
                     None,
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
+                    None,
                 )
                 .await?
             }

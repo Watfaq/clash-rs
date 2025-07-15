@@ -92,7 +92,7 @@ impl RemoteConnector for DirectConnector {
         &self,
         resolver: ThreadSafeDNSResolver,
         src: Option<SocketAddr>,
-        _destination: SocksAddr,
+        destination: SocksAddr,
         iface: Option<&OutboundInterface>,
         #[cfg(target_os = "linux")] so_mark: Option<u32>,
     ) -> std::io::Result<AnyOutboundDatagram> {
@@ -101,6 +101,9 @@ impl RemoteConnector for DirectConnector {
             iface,
             #[cfg(target_os = "linux")]
             so_mark,
+            destination
+                .ip()
+                .map(|ip| SocketAddr::new(ip, destination.port())),
         )
         .await
         .map(|x| OutboundDatagramImpl::new(x, resolver))?;

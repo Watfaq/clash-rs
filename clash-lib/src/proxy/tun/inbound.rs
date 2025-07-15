@@ -332,9 +332,11 @@ pub fn get_runner(
                 }
             }
 
+            let dev = tun_builder.build_async()?;
+
             maybe_add_routes(&cfg, &tun_name)?;
 
-            tun_builder.build_async()?
+            dev
         }
         #[cfg(any(target_os = "ios", target_os = "android"))]
         {

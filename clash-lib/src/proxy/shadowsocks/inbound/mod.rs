@@ -182,6 +182,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
             None,
             #[cfg(target_os = "linux")]
             self.fw_mark,
+            None,
         )
         .await?;
 
