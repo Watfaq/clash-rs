@@ -9,6 +9,7 @@ pub(crate) fn must_bind_socket_on_interface(
 ) -> io::Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
     {
+        use tracing::error;
         socket
             .bind_device(Some(iface.name.as_bytes()))
             .inspect_err(|e| {
