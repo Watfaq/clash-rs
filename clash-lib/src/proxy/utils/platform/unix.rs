@@ -9,25 +9,19 @@ pub(crate) fn must_bind_socket_on_interface(
 ) -> io::Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",))]
     {
-        if iface.index == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "OutboundInterface index is 0, cannot bind to interface",
-            ));
-        }
+        use std::num::NonZeroU32;
+
+        let index = NonZeroU32::new(iface.index).ok_or(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "interface index cannot be zero",
+        ))?;
         match family {
-            socket2::Domain::IPV4 => {
-                socket.bind_device_by_index_v4(Some(iface.index))?
-            }
-            socket2::Domain::IPV6 => {
-                socket.bind_device_by_index_v6(Some(iface.index))?
-            }
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "unsupported address family",
-                ));
-            }
+            socket2::Domain::IPV4 => socket.bind_device_by_index_v4(Some(index)),
+            socket2::Domain::IPV6 => socket.bind_device_by_index_v6(Some(index)),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "unsupported address family",
+            )),
         }
     }
     #[cfg(not(any(
