@@ -1,12 +1,16 @@
 use super::{inbound::InboundHandlerTrait, tun::TunDatagram};
 use crate::{
     app::dispatcher::Dispatcher,
-    proxy::{datagram::UdpPacket, utils::apply_tcp_options},
+    proxy::{
+        datagram::UdpPacket,
+        utils::{ToCanonical, apply_tcp_options, try_create_dualstack_socket},
+    },
     session::{Network, Session, Type},
 };
 
 use async_trait::async_trait;
 use std::{
+    io,
     net::SocketAddr,
     os::fd::{AsFd, AsRawFd},
     sync::Arc,
@@ -54,12 +58,13 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        let socket = socket2::Socket::new(
-            socket2::Domain::IPV4,
-            socket2::Type::STREAM,
-            None,
-        )?;
-        socket.set_ip_transparent_v4(true)?;
+        let (socket, dualstack) =
+            try_create_dualstack_socket(self.addr, socket2::Type::STREAM)?;
+        set_ip_transparent(&socket, self.addr.is_ipv6())?;
+        if dualstack {
+            // set ipv4 transparent
+            set_ip_transparent(&socket, false)?;
+        }
         socket.set_nonblocking(true)?;
         socket.bind(&self.addr.into())?;
         socket.listen(1024)?;
@@ -68,8 +73,9 @@ impl InboundHandlerTrait for TproxyInbound {
 
         loop {
             let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?;
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+            let src_addr = socket.peer_addr()?.to_canonical();
+            // for dualstack socket src_addr may be ipv4 or ipv6
+            if !self.allow_lan && !src_addr.ip().is_loopback() {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
@@ -77,7 +83,7 @@ impl InboundHandlerTrait for TproxyInbound {
             apply_tcp_options(&socket)?;
 
             // local_addr is getsockname
-            let orig_dst = socket.local_addr()?;
+            let orig_dst = socket.local_addr()?.to_canonical();
 
             let sess = Session {
                 network: Network::Tcp,
@@ -98,9 +104,12 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        let socket =
-            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
+        let (socket, dual_stack) =
+            try_create_dualstack_socket(self.addr, socket2::Type::DGRAM)?;
         socket.set_ip_transparent_v4(true)?;
+        if dual_stack {
+            set_ip_transparent(&socket, true)?;
+        }
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
 
@@ -221,5 +230,35 @@ async fn handle_inbound_datagram(
     });
 
     let _ = futures::future::join(fut1, fut2).await;
+    Ok(())
+}
+
+// socket2 doesn't provide set_ip_transparent_v6
+// So we must implement it ourselves
+fn set_ip_transparent(socket: &socket2::Socket, ipv6: bool) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let (opt, level) = if ipv6 {
+        (libc::IPV6_TRANSPARENT, libc::IPPROTO_IPV6)
+    } else {
+        (libc::IP_TRANSPARENT, libc::IPPROTO_IP)
+    };
+
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            std::mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
     Ok(())
 }
