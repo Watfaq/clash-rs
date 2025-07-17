@@ -10,7 +10,7 @@ use crate::{
 
 use async_trait::async_trait;
 use std::{
-    io,
+    io, mem,
     net::SocketAddr,
     os::fd::{AsFd, AsRawFd},
     sync::Arc,
@@ -80,8 +80,8 @@ impl InboundHandlerTrait for TproxyInbound {
             // No simple way to implement allow lan logic
             // TODO
             // if !self.allow_lan && !src_addr.ip().is_loopback() {
-            //     warn!("Connection from {} is not allowed localaddr:{}", src_addr,listener.local_addr()?);
-            //     continue;
+            //     warn!("Connection from {} is not allowed localaddr:{}",
+            // src_addr,listener.local_addr()?);     continue;
             // }
 
             apply_tcp_options(&socket)?;
@@ -115,20 +115,20 @@ impl InboundHandlerTrait for TproxyInbound {
             // IPv6 doesn't require this
             socket.set_ip_transparent_v4(true)?;
         }
+
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
-
-        let enable = 1u32;
-        let payload = std::ptr::addr_of!(enable).cast();
-        unsafe {
-            libc::setsockopt(
-                socket.as_fd().as_raw_fd(),
-                libc::IPPROTO_IP,
-                libc::IP_RECVORIGDSTADDR,
-                payload,
-                size_of_val(&enable) as libc::socklen_t,
-            )
-        };
+        set_ip_recv_orig_dstaddr(
+            if self.addr.is_ipv4() {
+                libc::IPPROTO_IP
+            } else {
+                libc::IPPROTO_IPV6
+            },
+            &socket,
+        )?;
+        if dual_stack {
+            set_ip_recv_orig_dstaddr(libc::IPPROTO_IP, &socket)?;
+        }
         socket.bind(&self.addr.into())?;
 
         let listener = unix_udp_sock::UdpSocket::from_std(socket.into())?;
@@ -202,7 +202,12 @@ async fn handle_inbound_datagram(
                         continue;
                     }
 
-                    trace!("recv msg:{:?} orig_dst:{:?}, local_addr:{:?}", meta, orig_dst, socket.local_addr());
+                    trace!(
+                        "recv msg:{:?} orig_dst:{:?}, local_addr:{:?}",
+                        meta,
+                        orig_dst,
+                        socket.local_addr()
+                    );
                     if !allow_lan
                         && let Ok(local_addr) = socket.local_addr()
                         && meta.addr.ip() != local_addr.ip()
@@ -212,8 +217,8 @@ async fn handle_inbound_datagram(
                     }
                     let pkt = UdpPacket {
                         data: buf[..meta.len].to_vec(),
-                        src_addr: meta.addr.into(),
-                        dst_addr: orig_dst.into(),
+                        src_addr: meta.addr.to_canonical().into(),
+                        dst_addr: orig_dst.to_canonical().into(),
                     };
                     trace!("tproxy -> dispatcher: {:?}", pkt);
                     match d_tx.send(pkt).await {
@@ -225,6 +230,11 @@ async fn handle_inbound_datagram(
                     }
                 }
                 None => {
+                    trace!(
+                        "recv msg:{:?} local_addr:{:?}",
+                        meta,
+                        socket.local_addr()
+                    );
                     warn!("failed to get orig_dst");
                     continue;
                 }
@@ -235,5 +245,36 @@ async fn handle_inbound_datagram(
     });
 
     let _ = futures::future::join(fut1, fut2).await;
+    Ok(())
+}
+
+fn set_ip_recv_orig_dstaddr(
+    level: libc::c_int,
+    socket: &socket2::Socket,
+) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_RECVORIGDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_RECVORIGDSTADDR,
+        _ => unreachable!("invalid sockopt level {}", level),
+    };
+
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
     Ok(())
 }
