@@ -10,13 +10,15 @@ use crate::{
 
 use async_trait::async_trait;
 use std::{
+    collections::{HashMap, hash_map},
     io, mem,
     net::SocketAddr,
-    os::fd::{AsFd, AsRawFd},
+    os::fd::AsRawFd,
     sync::Arc,
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time::Instant};
 use tracing::{trace, warn};
+use unix_udp_sock::UdpSocket;
 
 pub struct TproxyInbound {
     addr: SocketAddr,
@@ -141,6 +143,21 @@ impl InboundHandlerTrait for TproxyInbound {
         .await
     }
 }
+fn bind_nonlocal_socket(src_addr: SocketAddr) -> io::Result<UdpSocket> {
+    let domain = if src_addr.is_ipv4() {
+        socket2::Domain::IPV4
+    } else {
+        socket2::Domain::IPV6
+    };
+    let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
+    if src_addr.is_ipv4() {
+        socket.set_ip_transparent_v4(true)?;
+    }
+    socket.bind(&src_addr.into())?;
+
+    let socket = UdpSocket::from_std(socket.into())?;
+    Ok(socket)
+}
 
 async fn handle_inbound_datagram(
     allow_lan: bool,
@@ -148,7 +165,7 @@ async fn handle_inbound_datagram(
     dispatcher: Arc<Dispatcher>,
 ) -> std::io::Result<()> {
     // dispatcher <-> tproxy communications
-    let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
+    let (l_tx, l_rx) = tokio::sync::mpsc::channel(32);
 
     // forward packets from tproxy to dispatcher
     let (d_tx, d_rx) = tokio::sync::mpsc::channel(32);
@@ -164,28 +181,12 @@ async fn handle_inbound_datagram(
         ..Default::default()
     };
 
-    let closer = dispatcher
+    let closer: tokio::sync::oneshot::Sender<u8> = dispatcher
         .dispatch_datagram(sess, Box::new(udp_stream))
         .await;
 
     // dispatcher -> tproxy
-    let responder = socket.clone();
-    let fut1 = tokio::spawn(async move {
-        while let Some(pkt) = l_rx.recv().await {
-            trace!("tproxy <- dispatcher: {:?}", pkt);
-
-            // remote -> local
-            match responder
-                .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
-                .await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("failed to send udp packet to proxy: {}", e);
-                }
-            }
-        }
-    });
+    let fut1 = tokio::spawn(handle_packet_from_dispatcher(l_rx));
 
     // tproxy -> dispatcher
     let fut2 = tokio::spawn(async move {
@@ -277,4 +278,51 @@ fn set_ip_recv_orig_dstaddr(
     }
 
     Ok(())
+}
+
+async fn handle_packet_from_dispatcher(
+    mut l_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
+) {
+    let mut responder_map = HashMap::<SocketAddr, (Arc<UdpSocket>, Instant)>::new();
+    while let Some(pkt) = l_rx.recv().await {
+        trace!("tproxy <- dispatcher: {:?}", pkt);
+
+        // We must modify set the src address for the outgoing packet by binding
+        // address to src_addr
+        // To avoid repeated creating sockets, sockets need be cached here
+        // We can't use tproxy listen socket, because the bound address is localhost
+        // remote -> local
+        let now = Instant::now();
+        let src_addr = pkt.src_addr.must_into_socket_addr();
+        let responder = match responder_map.entry(src_addr) {
+            hash_map::Entry::Occupied(mut occupied_entry) => {
+                occupied_entry.get_mut().1 = now;
+                occupied_entry.get().0.clone()
+            }
+            hash_map::Entry::Vacant(vacant_entry) => {
+                let socket = match bind_nonlocal_socket(src_addr) {
+                    Ok(x) => Arc::new(x),
+                    Err(e) => {
+                        tracing::error!(
+                            "failed to bind nonlocal socket for tproxy:{}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+                vacant_entry.insert((socket.clone(), now));
+                socket
+            }
+        };
+        match responder
+            .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("failed to send udp packet to proxy: {}", e);
+            }
+        }
+        responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
+    }
 }
