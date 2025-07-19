@@ -116,9 +116,6 @@ pub fn get_api_runner(
                 handlers::provider::routes(outbound_manager),
             )
             .nest("/dns", handlers::dns::routes(dns_resolver))
-            .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
-                controller_cfg.secret.clone().unwrap_or_default(),
-            ))
             .route_layer(cors)
             .with_state(app_state)
             .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
@@ -141,7 +138,11 @@ pub fn get_api_runner(
             } else {
                 bind_addr
             };
-            let app_clone = app.clone();
+            let app_clone = app.clone().route_layer(
+                middlewares::auth::AuthMiddlewareLayer::new(
+                    controller_cfg.secret.clone().unwrap_or_default(),
+                ),
+            );
             Some(async move {
                 info!("Starting API server on TCP address {bind_addr}");
                 let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
@@ -212,7 +213,7 @@ pub fn get_api_runner(
                         && e.kind() != std::io::ErrorKind::NotFound
                     {
                         return Err(crate::Error::Operation(format!(
-                            "Cannnot remove existing IPC file: {e}",
+                            "Cannot remove existing IPC file: {e}",
                         )));
                     }
 
