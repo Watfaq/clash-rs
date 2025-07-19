@@ -4,6 +4,8 @@ use crate::{
     session::Session,
 };
 
+use futures::io;
+use tokio::net::TcpListener;
 use socket2::TcpKeepalive;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
@@ -236,4 +238,16 @@ pub fn try_create_dualstack_socket(
         }
     };
     Ok((socket, dualstack))
+}
+
+pub fn try_create_dualstack_tcplistener(addr: SocketAddr) -> io::Result<TcpListener>{
+            let (socket, _dualstack) =
+            try_create_dualstack_socket(addr, socket2::Type::STREAM)?;
+
+        socket.set_nonblocking(true)?;
+        socket.bind(&addr.into())?;
+        socket.listen(1024)?;
+
+        let listener = TcpListener::from_std(socket.into())?;
+        Ok(listener)
 }
