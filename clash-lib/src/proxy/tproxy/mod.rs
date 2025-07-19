@@ -121,7 +121,7 @@ impl InboundHandlerTrait for TproxyInbound {
             // This might not be necessary
             set_ip_transparent_v6(&socket)?;
         }
-
+        socket.set_reuse_port(true)?;
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
         set_ip_recv_orig_dstaddr(
