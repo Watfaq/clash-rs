@@ -246,6 +246,8 @@ pub fn try_create_dualstack_tcplistener(
         try_create_dualstack_socket(addr, socket2::Type::STREAM)?;
 
     socket.set_nonblocking(true)?;
+    // For fast restart avoid Address In Use Error
+    socket.set_reuse_address(true)?;
     socket.bind(&addr.into())?;
     socket.listen(1024)?;
 
