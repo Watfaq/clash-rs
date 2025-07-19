@@ -265,8 +265,57 @@ pub fn get_api_runner(
             }
             #[cfg(windows)]
             {
-                error!("TODO {ipc_path}");
-                Some(async move { Err(crate::Error::Operation("TODO".to_string())) })
+                use tokio::net::windows::named_pipe::ServerOptions;
+
+                info!("Starting API server on NamedPipe {ipc_path}");
+                let pipe_name = ipc_path;
+                let app_clone = app.clone();
+                let server = ServerOptions::new()
+                    .first_pipe_instance(true)
+                    .create(&pipe_name)
+                    .map_err(|e| {
+                        crate::Error::Operation(format!("Cannot create pipe {e}"))
+                    })?;
+                Some(async move {
+                    let mut server = server;
+                    loop {
+                        server.connect().await.map_err(|e| {
+                            crate::Error::Operation(format!("NamedPipe error: {e}"))
+                        })?;
+                        let connected_client = server;
+                        server = ServerOptions::new()
+                            .first_pipe_instance(true)
+                            .create(&pipe_name)
+                            .map_err(|e| {
+                                crate::Error::Operation(format!(
+                                    "Cannot create pipe: {e}"
+                                ))
+                            })?;
+                        let app_clone = app_clone.clone();
+                        tokio::spawn(async move {
+                            use hyper_util::rt::TokioIo;
+
+                            let io = TokioIo::new(connected_client);
+                            let hyper_service = hyper::service::service_fn(
+                                move |request: hyper::Request<
+                                    hyper::body::Incoming,
+                                >| {
+                                    use tower::Service as _;
+
+                                    app_clone.clone().call(request)
+                                },
+                            );
+
+                            if let Err(e) =
+                                hyper::server::conn::http1::Builder::new()
+                                    .serve_connection(io, hyper_service)
+                                    .await
+                            {
+                                error!("NamedPipe error: {}", e);
+                            }
+                        });
+                    }
+                })
             }
             #[cfg(all(not(unix), not(windows)))]
             {
