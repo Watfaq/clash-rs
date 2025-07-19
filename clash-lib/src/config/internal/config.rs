@@ -166,6 +166,7 @@ impl FromStr for BindAddress {
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Controller {
     pub external_controller: Option<String>,
+    pub external_controller_ipc: Option<String>,
     pub external_ui: Option<String>,
     pub secret: Option<String>,
     pub cors_allow_origins: Option<Vec<String>>,
