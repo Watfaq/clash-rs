@@ -1,4 +1,5 @@
-#![feature(let_chains)]
+#![feature(cfg_version)]
+#![cfg_attr(not(version("1.88.0")), feature(let_chains))]
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
