@@ -11,7 +11,7 @@ use crate::{
 use async_trait::async_trait;
 use std::{
     collections::{HashMap, hash_map},
-    io, mem,
+    io,
     net::SocketAddr,
     os::fd::AsRawFd,
     sync::Arc,
@@ -117,6 +117,10 @@ impl InboundHandlerTrait for TproxyInbound {
             // IPv6 doesn't require this
             socket.set_ip_transparent_v4(true)?;
         }
+        if self.addr.is_ipv6() {
+            // This might not be neccessary
+            set_ip_transparent_v6(&socket)?;
+        }
 
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
@@ -150,9 +154,14 @@ fn bind_nonlocal_socket(src_addr: SocketAddr) -> io::Result<UdpSocket> {
         socket2::Domain::IPV6
     };
     let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
+    // This is required to allow binding to nonlocal address
     if src_addr.is_ipv4() {
         socket.set_ip_transparent_v4(true)?;
+    } else {
+        set_ip_transparent_v6(&socket)?;
     }
+    socket.set_nonblocking(true)?;
+    socket.set_reuse_address(true)?;
     socket.bind(&src_addr.into())?;
 
     let socket = UdpSocket::from_std(socket.into())?;
@@ -241,6 +250,7 @@ async fn handle_inbound_datagram(
                 }
             }
         }
+        warn!("tproxy udp listening ended");
 
         closer.send(0).ok();
     });
@@ -253,8 +263,6 @@ fn set_ip_recv_orig_dstaddr(
     level: libc::c_int,
     socket: &socket2::Socket,
 ) -> io::Result<()> {
-    let fd = socket.as_raw_fd();
-
     let opt = match level {
         libc::IPPROTO_IP => libc::IP_RECVORIGDSTADDR,
         libc::IPPROTO_IPV6 => libc::IPV6_RECVORIGDSTADDR,
@@ -262,22 +270,7 @@ fn set_ip_recv_orig_dstaddr(
     };
 
     let enable: libc::c_int = 1;
-
-    unsafe {
-        let ret = libc::setsockopt(
-            fd,
-            level,
-            opt,
-            &enable as *const _ as *const _,
-            mem::size_of_val(&enable) as libc::socklen_t,
-        );
-
-        if ret != 0 {
-            return Err(io::Error::last_os_error());
-        }
-    }
-
-    Ok(())
+    set_socket_option(socket, level, opt, enable)
 }
 
 async fn handle_packet_from_dispatcher(
@@ -325,4 +318,40 @@ async fn handle_packet_from_dispatcher(
         }
         responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
     }
+}
+
+// socket2 doesn't provide set_ip_transparent_v6
+// So we must implement it ourselves
+fn set_ip_transparent_v6(socket: &socket2::Socket) -> io::Result<()> {
+    let (opt, level) = (libc::IPV6_TRANSPARENT, libc::IPPROTO_IPV6);
+
+    let enable: libc::c_int = 1;
+    set_socket_option(socket, level, opt, enable)
+}
+
+fn set_socket_option(
+    socket: &socket2::Socket,
+    level: i32,
+    opt: i32,
+    val: i32,
+) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let enable: libc::c_int = val;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            std::mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    Ok(())
 }
