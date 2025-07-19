@@ -16,7 +16,6 @@ pub use proxy::handle as handle_http;
 use crate::common::errors::new_io_error;
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tracing::warn;
 
 #[derive(Clone)]

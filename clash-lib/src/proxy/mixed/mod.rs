@@ -9,7 +9,6 @@ use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options}
 use crate::common::errors::new_io_error;
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tracing::warn;
 
 pub struct MixedInbound {

@@ -2,13 +2,18 @@ mod datagram;
 mod stream;
 
 use crate::{
-    common::auth::ThreadSafeAuthenticator, proxy::{inbound::InboundHandlerTrait, utils::{apply_tcp_options, try_create_dualstack_tcplistener, ToCanonical}}, session::{Network, Session, Type}, Dispatcher
+    Dispatcher,
+    common::auth::ThreadSafeAuthenticator,
+    proxy::{
+        inbound::InboundHandlerTrait,
+        utils::{ToCanonical, apply_tcp_options, try_create_dualstack_tcplistener},
+    },
+    session::{Network, Session, Type},
 };
 
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
 pub use stream::handle_tcp;
-use tokio::net::TcpListener;
 use tracing::warn;
 
 use crate::common::errors::new_io_error;
@@ -62,7 +67,9 @@ impl InboundHandlerTrait for SocksInbound {
         loop {
             let (socket, _) = listener.accept().await?;
             let src_addr = socket.peer_addr()?.to_canonical();
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip().to_canonical() {
+            if !self.allow_lan
+                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
+            {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
