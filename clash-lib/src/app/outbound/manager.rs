@@ -47,7 +47,7 @@ use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -174,14 +174,15 @@ impl OutboundManager {
     }
 
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
+    #[instrument(skip(self))]
     pub async fn url_test(
         &self,
-        proxy: &Vec<AnyOutboundHandler>,
+        outbounds: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Duration,
     ) -> Vec<std::io::Result<(u16, u16)>> {
         let proxy_manager = self.proxy_manager.clone();
-        proxy_manager.check(proxy, url, Some(timeout)).await
+        proxy_manager.check(outbounds, url, Some(timeout)).await
     }
 
     pub fn get_proxy_providers(&self) -> HashMap<String, ThreadSafeProxyProvider> {

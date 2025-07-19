@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, VecDeque},
-    error::Error,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -17,15 +16,18 @@ use hyper::Request;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, trace, warn};
 
 use crate::{
-    common::{errors::new_io_error, timed_future::TimedFuture},
+    app::net::DEFAULT_OUTBOUND_INTERFACE,
+    common::{
+        errors::new_io_error, timed_future::TimedFuture, tls::GLOBAL_ROOT_STORE,
+    },
     proxy::AnyOutboundHandler,
     session::Session,
 };
 
-use self::http_client::LocalConnector;
+use self::http_client::ConnectorWithOutbound;
 
 use super::dns::ThreadSafeDNSResolver;
 
@@ -102,9 +104,6 @@ struct ProxyState {
 pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
-
-    connector_map:
-        Arc<RwLock<HashMap<String, hyper_rustls::HttpsConnector<LocalConnector>>>>,
 }
 
 #[derive(Clone, Default)]
@@ -119,28 +118,31 @@ impl ProxyManager {
     pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
         Self {
             dns_resolver,
-            proxy_state: Arc::new(RwLock::new(HashMap::new())),
-            connector_map: Arc::new(RwLock::new(HashMap::new())),
+            proxy_state: Default::default(),
         }
     }
 
     /// Handy wrapper of `url_test` that checks multiple proxies
+    #[instrument(skip(self))]
     pub async fn check(
         &self,
-        proxies: &Vec<AnyOutboundHandler>,
+        outbounds: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Option<Duration>,
     ) -> Vec<std::io::Result<(u16, u16)>> {
         let mut futs = vec![];
-        for proxy in proxies {
-            let proxy = proxy.clone();
+        for outbound in outbounds {
+            let outbound = outbound.clone();
             let url = url.to_owned();
             let manager = self.clone();
             futs.push(tokio::spawn(async move {
+                let proxy_name = outbound.name().to_owned();
                 manager
-                    .url_test(proxy, url.as_str(), timeout)
+                    .url_test(outbound, url.as_str(), timeout)
                     .await
-                    .inspect_err(|e| debug!("healthcheck failed: {}", e))
+                    .inspect_err(|e| {
+                        debug!("healthcheck {} -> {} failed: {}", proxy_name, url, e)
+                    })
             }));
         }
 
@@ -687,43 +689,42 @@ impl ProxyManager {
         }
     }
 
-    #[instrument(skip(self, proxy))]
+    #[instrument(skip(self))]
     pub async fn url_test(
         &self,
-        proxy: AnyOutboundHandler,
+        outbound: AnyOutboundHandler,
         url: &str,
         timeout: Option<Duration>,
     ) -> std::io::Result<(u16, u16)> {
-        let name = proxy.name().to_owned();
+        trace!("started");
+        let name = outbound.name().to_owned();
         let name_clone = name.clone();
         let default_timeout = Duration::from_secs(5);
 
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
             let name = name_clone;
-            let connector = LocalConnector(proxy.clone(), dns_resolver);
+            let connector = ConnectorWithOutbound::new(
+                outbound,
+                dns_resolver,
+                DEFAULT_OUTBOUND_INTERFACE.read().await.clone(),
+            );
 
-            let connector = {
-                use crate::common::tls::GLOBAL_ROOT_STORE;
+            let mut tls_config = rustls::ClientConfig::builder()
+                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                .with_no_client_auth();
 
-                let mut tls_config = rustls::ClientConfig::builder()
-                    .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                    .with_no_client_auth();
-
+            if std::env::var("SSLKEYLOGFILE").is_ok() {
+                debug!("Enabling TLS key logging");
                 tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+            }
 
-                let connector = hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_tls_config(tls_config)
-                    .https_or_http()
-                    .enable_all_versions()
-                    .wrap_connector(connector);
+            let connector = hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config(tls_config)
+                .https_or_http()
+                .enable_all_versions()
+                .wrap_connector(connector);
 
-                let mut g = self.connector_map.write().await;
-                let connector = g.entry(name.clone()).or_insert(connector);
-                connector.clone()
-            };
-
-            // Build the hyper client from the HTTPS connector.
             let client: Client<_, Empty<Bytes>> =
                 Client::builder(TokioExecutor::new()).build(connector);
 
@@ -733,7 +734,7 @@ impl ProxyManager {
                 .body(Empty::new())
                 .unwrap();
 
-            let resp = TimedFuture::new(client.request(req), None);
+            let resp = TimedFuture::new(client.request(req));
 
             let delay: u16 =
                 match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp)
@@ -741,37 +742,28 @@ impl ProxyManager {
                 {
                     Ok((res, delay)) => match res {
                         Ok(res) => {
-                            let delay = delay
-                                .as_millis()
-                                .try_into()
-                                .expect("delay is too large");
+                            let delay =
+                                delay.as_millis().try_into().unwrap_or(u16::MAX);
                             trace!(
-                                "urltest for proxy {} with url {} returned \
-                                 response {} in {}ms",
-                                &name,
-                                url,
-                                res.status(),
-                                delay
+                                delay = delay,
+                                status = ?res.status(),
+                                "success"
                             );
                             Ok(delay)
                         }
                         Err(e) => {
-                            debug!(
-                                "urltest for proxy {} with url {} failed: {}",
-                                &name, url, e
+                            warn!(
+                                e = ?e,
+                                "failed"
                             );
-                            trace!(
-                                "urltest for proxy {} with url {} failed: {:?}, \
-                                 stack: {:?}",
-                                &name,
-                                url,
-                                e,
-                                e.source()
-                            );
-                            Err(new_io_error(format!("{url}: {e}").as_str()))
+                            Err(new_io_error(format!(
+                                "urltest for proxy {} failed: {}",
+                                name, e
+                            )))
                         }
                     },
                     Err(_) => {
+                        warn!("timed out");
                         Err(new_io_error(format!("timeout for {url}").as_str()))
                     }
                 }?;
@@ -781,7 +773,7 @@ impl ProxyManager {
                 .version(hyper::Version::HTTP_11)
                 .body(Empty::new())
                 .unwrap();
-            let resp2 = TimedFuture::new(client.request(req2), None);
+            let resp2 = TimedFuture::new(client.request(req2));
 
             let mean_delay: u16 = match tokio::time::timeout(
                 timeout.unwrap_or(default_timeout),

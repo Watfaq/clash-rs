@@ -2,7 +2,7 @@ use std::{io, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::{
     Error,
@@ -79,7 +79,7 @@ impl Handler {
         let current = &self.inner.read().await.current;
         for proxy in proxies.iter() {
             if proxy.name() == current {
-                debug!("`{}` selected `{}`", self.name(), proxy.name());
+                trace!("`{}` selected `{}`", self.name(), proxy.name());
                 return proxy.clone();
             }
         }

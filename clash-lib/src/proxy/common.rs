@@ -8,7 +8,7 @@ macro_rules! impl_default_connector {
             }
 
             async fn register_connector(&self, connector: Arc<dyn RemoteConnector>) {
-                let mut m = self.connector.lock().await;
+                let mut m = self.connector.write().await;
                 *m = Some(connector);
             }
         }
