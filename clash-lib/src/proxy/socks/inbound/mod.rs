@@ -4,14 +4,16 @@ mod stream;
 use crate::{
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
-    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
+    proxy::{
+        inbound::InboundHandlerTrait,
+        utils::{ToCanonical, apply_tcp_options, try_create_dualstack_tcplistener},
+    },
     session::{Network, Session, Type},
 };
 
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
 pub use stream::handle_tcp;
-use tokio::net::TcpListener;
 use tracing::warn;
 
 use crate::common::errors::new_io_error;
@@ -60,12 +62,14 @@ impl InboundHandlerTrait for SocksInbound {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
             let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?;
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+            let src_addr = socket.peer_addr()?.to_canonical();
+            if !self.allow_lan
+                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
+            {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
@@ -74,7 +78,7 @@ impl InboundHandlerTrait for SocksInbound {
             let mut sess = Session {
                 network: Network::Tcp,
                 typ: Type::Socks5,
-                source: socket.peer_addr()?,
+                source: socket.peer_addr()?.to_canonical(),
                 so_mark: self.fw_mark,
 
                 ..Default::default()

@@ -6,7 +6,10 @@ use crate::{
     proxy::{
         inbound::InboundHandlerTrait,
         shadowsocks::{inbound::datagram::InboundShadowsocksDatagram, map_cipher},
-        utils::{apply_tcp_options, new_udp_socket},
+        utils::{
+            ToCanonical, apply_tcp_options, new_udp_socket,
+            try_create_dualstack_tcplistener,
+        },
     },
     session::{Network, Session, SocksAddr, Type},
 };
@@ -14,7 +17,6 @@ use crate::{
 use async_trait::async_trait;
 use shadowsocks::{ProxySocket, context::Context, net::AcceptOpts, relay::Address};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tracing::{debug, warn};
 
 #[derive(Clone)]
@@ -97,7 +99,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         //
         // config.set_user_manager(user_manager);
 
-        let listener = TcpListener::bind(self.addr).await?;
+        let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         let ss_listener = shadowsocks::relay::tcprelay::ProxyListener::from_listener(
             context,
@@ -130,7 +132,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
             if !self.allow_lan
                 && src_addr.ip() != socket.get_ref().local_addr()?.ip()
             {
-                warn!("Connection from {} is not allowed", src_addr);
+                warn!("Connection from {} is not allowed", src_addr.to_canonical());
                 continue;
             }
 
@@ -149,7 +151,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
             let sess = Session {
                 network: Network::Tcp,
                 typ: Type::Shadowsocks,
-                source: src_addr,
+                source: src_addr.to_canonical(),
                 so_mark: self.fw_mark,
                 destination: match target {
                     Address::SocketAddress(addr) => SocksAddr::Ip(addr),

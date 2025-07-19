@@ -4,6 +4,7 @@
 readonly LOCAL_BY_PASS="\
 127/8 \
 10/8 \
+192/8
 "
 
 # declare ip as local for tproxy
