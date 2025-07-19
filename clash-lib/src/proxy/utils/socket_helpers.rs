@@ -10,7 +10,7 @@ use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, instrument, trace};
 
 pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]
@@ -34,7 +34,7 @@ pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     }
 }
 
-#[allow(unused_variables)]
+#[instrument(skip(so_mark))]
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<&OutboundInterface>,
@@ -58,11 +58,12 @@ pub async fn new_tcp_stream(
             socket2::Domain::IPV6,
         ),
     };
+    debug!("created tcp socket: {socket:?}");
 
     #[cfg(not(target_os = "android"))]
     if let Some(iface) = iface {
-        debug!("binding tcp socket to interface: {iface:?}, family: {family:?}");
         must_bind_socket_on_interface(&socket, iface, family)?;
+        trace!("tcp socket bound to interface: {socket:?}");
     }
 
     #[cfg(target_os = "linux")]
@@ -81,6 +82,7 @@ pub async fn new_tcp_stream(
     .await?
 }
 
+#[instrument(skip(so_mark))]
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<&OutboundInterface>,
@@ -98,72 +100,43 @@ pub async fn new_udp_socket(
     // - Otherwise, default to IPv4.
     let (socket, family) = match (family_hint, src, iface) {
         (Some(family_hint), ..) => {
-            debug!("using provided family hint: {family_hint:?}");
             let domain = socket2::Domain::for_address(family_hint);
             (
                 socket2::Socket::new(domain, socket2::Type::DGRAM, None)?,
                 domain,
             )
         }
-        (None, Some(src), _) if src.is_ipv6() => {
-            debug!("resolved v6 socket for v6 src {src:?}");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV6,
-            )
-        }
-        (None, _, Some(iface)) if iface.addr_v6.is_some() => {
-            debug!("resolved v6 socket for v6 iface {iface:?}");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV6,
-            )
-        }
-        _ => {
-            debug!("defaulting to v4 socket");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV4,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV4,
-            )
-        }
+        (None, Some(src), _) if src.is_ipv6() => (
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV6,
+        ),
+        (None, _, Some(iface)) if iface.addr_v6.is_some() => (
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV6,
+        ),
+        _ => (
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV4,
+        ),
     };
+    debug!("created udp socket: {socket:?}");
 
     if !cfg!(target_os = "android") {
         match (src, iface) {
-            (Some(_), Some(iface)) => {
-                debug!("both src and iface are set, iface will be used: {iface:?}");
+            (_, Some(iface)) => {
                 must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                     |x| {
                         error!("failed to bind socket to interface: {}", x);
                     },
                 )?;
+                trace!(iface = ?iface, "udp socket bound: {socket:?}");
             }
             (Some(src), None) => {
-                debug!("binding socket to: {:?}", src);
                 socket.bind(&src.into())?;
-            }
-            (None, Some(iface)) => {
-                debug!("binding udp socket to interface: {:?}", iface);
-                must_bind_socket_on_interface(&socket, iface, family).inspect_err(
-                    |x| {
-                        error!("failed to bind socket to interface: {}", x);
-                    },
-                )?;
+                trace!(src = ?src, "udp socket bound: {socket:?}");
             }
             (None, None) => {
-                debug!("not binding socket to any address or interface");
+                trace!("udp socket not bound to any specific address: {socket:?}");
             }
         }
     }

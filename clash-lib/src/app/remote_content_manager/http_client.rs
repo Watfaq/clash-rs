@@ -8,19 +8,40 @@ use hyper::Uri;
 
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use tower::Service;
+use tracing::instrument;
 
 use crate::{
-    app::{dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver},
+    app::{
+        dispatcher::BoxedChainedStream, dns::ThreadSafeDNSResolver,
+        net::OutboundInterface,
+    },
     print_and_exit,
     proxy::AnyOutboundHandler,
     session::Session,
 };
 
 #[derive(Clone)]
-/// A LocalConnector that has a enclosed AnyOutboundHandler for url test
-pub struct LocalConnector(pub AnyOutboundHandler, pub ThreadSafeDNSResolver);
+/// A ConnectorWithOutbound that has a enclosed AnyOutboundHandler for url test
+pub struct ConnectorWithOutbound {
+    outbound_handler: AnyOutboundHandler,
+    dns_resolver: ThreadSafeDNSResolver,
+    iface: Option<OutboundInterface>,
+}
+impl ConnectorWithOutbound {
+    pub fn new(
+        outbound: AnyOutboundHandler,
+        dns_resolver: ThreadSafeDNSResolver,
+        iface: Option<OutboundInterface>,
+    ) -> Self {
+        Self {
+            outbound_handler: outbound,
+            dns_resolver,
+            iface,
+        }
+    }
+}
 
-impl Service<Uri> for LocalConnector {
+impl Service<Uri> for ConnectorWithOutbound {
     type Error = std::io::Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -30,6 +51,7 @@ impl Service<Uri> for LocalConnector {
         Poll::Ready(Ok(()))
     }
 
+    #[instrument(skip(self))]
     fn call(&mut self, remote: Uri) -> Self::Future {
         let host = remote
             .host()
@@ -49,10 +71,11 @@ impl Service<Uri> for LocalConnector {
             destination: (host, port)
                 .try_into()
                 .unwrap_or_else(|_| print_and_exit!("invalid url: {}", remote)),
+            iface: self.iface.clone(),
             ..Default::default()
         };
-        let handler = self.0.clone();
-        let resolver = self.1.clone();
+        let handler = self.outbound_handler.clone();
+        let resolver = self.dns_resolver.clone();
 
         Box::pin(async move { handler.connect_stream(&sess, resolver).await })
     }

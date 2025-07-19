@@ -70,7 +70,7 @@ pub struct Handler {
     opts: HandlerOptions,
     inner: OnceCell<Inner>,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -89,7 +89,7 @@ impl Handler {
             opts,
             inner: OnceCell::new(),
 
-            connector: tokio::sync::Mutex::new(None),
+            connector: Default::default(),
         }
     }
 
@@ -171,7 +171,7 @@ impl Handler {
                     recv_pair.0,
                     send_pair.1,
                     resolver.clone(),
-                    self.connector.lock().await.as_ref().cloned(),
+                    self.connector.read().await.as_ref().cloned(),
                     sess,
                 )
                 .await
