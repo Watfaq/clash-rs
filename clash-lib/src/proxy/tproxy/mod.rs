@@ -118,7 +118,7 @@ impl InboundHandlerTrait for TproxyInbound {
             socket.set_ip_transparent_v4(true)?;
         }
         if self.addr.is_ipv6() {
-            // This might not be neccessary
+            // This might not be necessary
             set_ip_transparent_v6(&socket)?;
         }
 
@@ -169,7 +169,7 @@ fn bind_nonlocal_socket(src_addr: SocketAddr) -> io::Result<UdpSocket> {
 }
 
 async fn handle_inbound_datagram(
-    allow_lan: bool,
+    _allow_lan: bool,
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
 ) -> std::io::Result<()> {
@@ -218,13 +218,13 @@ async fn handle_inbound_datagram(
                         orig_dst,
                         socket.local_addr()
                     );
-                    if !allow_lan
-                        && let Ok(local_addr) = socket.local_addr()
-                        && meta.addr.ip() != local_addr.ip()
-                    {
-                        warn!("Connection from {} is not allowed", meta.addr);
-                        continue;
-                    }
+                    // if !allow_lan
+                    //     && let Ok(local_addr) = socket.local_addr()
+                    //     && meta.addr.ip() != local_addr.ip()
+                    // {
+                    //     warn!("Connection from {} is not allowed", meta.addr);
+                    //     continue;
+                    // }
                     let pkt = UdpPacket {
                         data: buf[..meta.len].to_vec(),
                         src_addr: meta.addr.to_canonical().into(),
