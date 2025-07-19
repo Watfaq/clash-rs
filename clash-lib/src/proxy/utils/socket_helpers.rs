@@ -109,11 +109,7 @@ pub async fn new_udp_socket(
         (None, Some(src), _) if src.is_ipv6() => {
             debug!("resolved v6 socket for v6 src {src:?}");
             (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
+                try_create_dualstack_socket(src, socket2::Type::DGRAM)?.0,
                 socket2::Domain::IPV6,
             )
         }
