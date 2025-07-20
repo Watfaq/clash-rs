@@ -124,7 +124,12 @@ fn build_handler(
                 None
             }
         }
-        InboundOpts::Redir { common_opts, .. } => {
+        #[cfg(feature = "redir")]
+        InboundOpts::Redir {
+            #[cfg(target_os = "linux")]
+            common_opts,
+            ..
+        } => {
             #[cfg(target_os = "linux")]
             {
                 Some(Arc::new(RedirInbound::new(

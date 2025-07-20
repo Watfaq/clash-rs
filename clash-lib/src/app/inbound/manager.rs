@@ -119,6 +119,7 @@ impl InboundManager {
                 InboundOpts::TProxy { common_opts, .. } => {
                     ports.tproxy_port = Some(common_opts.port)
                 }
+                #[cfg(feature = "redir")]
                 InboundOpts::Redir { common_opts } => {
                     ports.redir_port = Some(common_opts.port)
                 }
@@ -191,6 +192,7 @@ impl InboundManager {
                     ports.tproxy_port.is_some()
                         && Some(common_opts.port) == ports.tproxy_port
                 }
+                #[cfg(feature = "redir")]
                 InboundOpts::Redir { common_opts } => {
                     ports.redir_port.is_some()
                         && Some(common_opts.port) == ports.redir_port
@@ -214,6 +216,7 @@ impl InboundManager {
                 InboundOpts::TProxy { common_opts, .. } => {
                     ports.tproxy_port.unwrap_or(common_opts.port)
                 }
+                #[cfg(feature = "redir")]
                 InboundOpts::Redir { common_opts } => {
                     ports.redir_port.unwrap_or(common_opts.port)
                 }
