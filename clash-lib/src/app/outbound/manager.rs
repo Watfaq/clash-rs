@@ -46,7 +46,7 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument};
 
 static RESERVED_PROVIDER_NAME: &str = "default";
@@ -664,8 +664,7 @@ impl OutboundManager {
                     .await;
 
                     handlers.insert(proto.name.clone(), Arc::new(selector.clone()));
-                    selector_control
-                        .insert(proto.name.clone(), Arc::new(Mutex::new(selector)));
+                    selector_control.insert(proto.name.clone(), Arc::new(selector));
                 }
                 OutboundGroupProtocol::Smart(proto) => {
                     if check_group_empty(&proto.proxies, &proto.use_provider) {
@@ -771,7 +770,7 @@ impl OutboundManager {
 
         provider_registry.insert(RESERVED_PROVIDER_NAME.to_owned(), pd);
         handlers.insert(PROXY_GLOBAL.to_owned(), Arc::new(h.clone()));
-        selector_control.insert(PROXY_GLOBAL.to_owned(), Arc::new(Mutex::new(h)));
+        selector_control.insert(PROXY_GLOBAL.to_owned(), Arc::new(h));
 
         Ok(())
     }

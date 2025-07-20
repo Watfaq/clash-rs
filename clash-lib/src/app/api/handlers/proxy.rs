@@ -96,7 +96,7 @@ async fn update_proxy(
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
     match outbound_manager.get_selector_control(proxy.name()) {
-        Some(ctrl) => match ctrl.lock().await.select(&payload.name).await {
+        Some(ctrl) => match ctrl.select(&payload.name).await {
             Ok(_) => {
                 let cache_store = state.cache_store;
                 cache_store.set_selected(proxy.name(), &payload.name).await;

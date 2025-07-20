@@ -141,7 +141,7 @@ impl ProxyManager {
                     .url_test(outbound, url.as_str(), timeout)
                     .await
                     .inspect_err(|e| {
-                        debug!("healthcheck {} -> {} failed: {}", proxy_name, url, e)
+                        warn!("healthcheck {} -> {} failed: {}", proxy_name, url, e)
                     })
             }));
         }
