@@ -1,18 +1,24 @@
 use super::{inbound::InboundHandlerTrait, tun::TunDatagram};
 use crate::{
     app::dispatcher::Dispatcher,
-    proxy::{datagram::UdpPacket, utils::apply_tcp_options},
+    proxy::{
+        datagram::UdpPacket,
+        utils::{ToCanonical, apply_tcp_options, try_create_dualstack_socket},
+    },
     session::{Network, Session, Type},
 };
 
 use async_trait::async_trait;
 use std::{
+    collections::{HashMap, hash_map},
+    io,
     net::SocketAddr,
-    os::fd::{AsFd, AsRawFd},
+    os::fd::AsRawFd,
     sync::Arc,
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time::Instant};
 use tracing::{trace, warn};
+use unix_udp_sock::UdpSocket;
 
 pub struct TproxyInbound {
     addr: SocketAddr,
@@ -54,12 +60,13 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        let socket = socket2::Socket::new(
-            socket2::Domain::IPV4,
-            socket2::Type::STREAM,
-            None,
-        )?;
-        socket.set_ip_transparent_v4(true)?;
+        let (socket, dualstack) =
+            try_create_dualstack_socket(self.addr, socket2::Type::STREAM)?;
+        if dualstack || self.addr.is_ipv4() {
+            // set ipv4 transparent
+            // IPV6 doesn't require this
+            socket.set_ip_transparent_v4(true)?;
+        }
         socket.set_nonblocking(true)?;
         socket.bind(&self.addr.into())?;
         socket.listen(1024)?;
@@ -68,16 +75,21 @@ impl InboundHandlerTrait for TproxyInbound {
 
         loop {
             let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?;
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
-                warn!("Connection from {} is not allowed", src_addr);
-                continue;
-            }
+            let src_addr = socket.peer_addr()?.to_canonical();
+            // for dualstack socket src_addr may be ipv4 or ipv6;
+            // tcpstream.local_addr() is the proxy destination
+            // listener.local_addr() is [::]:port for dualstack
+            // No simple way to implement allow lan logic
+            // TODO
+            // if !self.allow_lan && !src_addr.ip().is_loopback() {
+            //     warn!("Connection from {} is not allowed localaddr:{}",
+            // src_addr,listener.local_addr()?);     continue;
+            // }
 
             apply_tcp_options(&socket)?;
 
             // local_addr is getsockname
-            let orig_dst = socket.local_addr()?;
+            let orig_dst = socket.local_addr()?.to_canonical();
 
             let sess = Session {
                 network: Network::Tcp,
@@ -98,23 +110,31 @@ impl InboundHandlerTrait for TproxyInbound {
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        let socket =
-            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
-        socket.set_ip_transparent_v4(true)?;
+        let (socket, dual_stack) =
+            try_create_dualstack_socket(self.addr, socket2::Type::DGRAM)?;
+        if dual_stack || self.addr.is_ipv4() {
+            // set ipv4 transparent
+            // IPv6 doesn't require this
+            socket.set_ip_transparent_v4(true)?;
+        }
+        if self.addr.is_ipv6() {
+            // This might not be necessary
+            set_ip_transparent_v6(&socket)?;
+        }
+        socket.set_reuse_port(true)?;
         socket.set_nonblocking(true)?;
         socket.set_broadcast(true)?;
-
-        let enable = 1u32;
-        let payload = std::ptr::addr_of!(enable).cast();
-        unsafe {
-            libc::setsockopt(
-                socket.as_fd().as_raw_fd(),
-                libc::IPPROTO_IP,
-                libc::IP_RECVORIGDSTADDR,
-                payload,
-                size_of_val(&enable) as libc::socklen_t,
-            )
-        };
+        set_ip_recv_orig_dstaddr(
+            if self.addr.is_ipv4() {
+                libc::IPPROTO_IP
+            } else {
+                libc::IPPROTO_IPV6
+            },
+            &socket,
+        )?;
+        if dual_stack {
+            set_ip_recv_orig_dstaddr(libc::IPPROTO_IP, &socket)?;
+        }
         socket.bind(&self.addr.into())?;
 
         let listener = unix_udp_sock::UdpSocket::from_std(socket.into())?;
@@ -127,14 +147,34 @@ impl InboundHandlerTrait for TproxyInbound {
         .await
     }
 }
+fn bind_nonlocal_socket(src_addr: SocketAddr) -> io::Result<UdpSocket> {
+    let domain = if src_addr.is_ipv4() {
+        socket2::Domain::IPV4
+    } else {
+        socket2::Domain::IPV6
+    };
+    let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
+    // This is required to allow binding to nonlocal address
+    if src_addr.is_ipv4() {
+        socket.set_ip_transparent_v4(true)?;
+    } else {
+        set_ip_transparent_v6(&socket)?;
+    }
+    socket.set_nonblocking(true)?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&src_addr.into())?;
+
+    let socket = UdpSocket::from_std(socket.into())?;
+    Ok(socket)
+}
 
 async fn handle_inbound_datagram(
-    allow_lan: bool,
+    _allow_lan: bool,
     socket: Arc<unix_udp_sock::UdpSocket>,
     dispatcher: Arc<Dispatcher>,
 ) -> std::io::Result<()> {
     // dispatcher <-> tproxy communications
-    let (l_tx, mut l_rx) = tokio::sync::mpsc::channel(32);
+    let (l_tx, l_rx) = tokio::sync::mpsc::channel(32);
 
     // forward packets from tproxy to dispatcher
     let (d_tx, d_rx) = tokio::sync::mpsc::channel(32);
@@ -150,28 +190,12 @@ async fn handle_inbound_datagram(
         ..Default::default()
     };
 
-    let closer = dispatcher
+    let closer: tokio::sync::oneshot::Sender<u8> = dispatcher
         .dispatch_datagram(sess, Box::new(udp_stream))
         .await;
 
     // dispatcher -> tproxy
-    let responder = socket.clone();
-    let fut1 = tokio::spawn(async move {
-        while let Some(pkt) = l_rx.recv().await {
-            trace!("tproxy <- dispatcher: {:?}", pkt);
-
-            // remote -> local
-            match responder
-                .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
-                .await
-            {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("failed to send udp packet to proxy: {}", e);
-                }
-            }
-        }
-    });
+    let fut1 = tokio::spawn(handle_packet_from_dispatcher(l_rx));
 
     // tproxy -> dispatcher
     let fut2 = tokio::spawn(async move {
@@ -188,18 +212,23 @@ async fn handle_inbound_datagram(
                         continue;
                     }
 
-                    trace!("recv msg:{:?} orig_dst:{:?}", meta, orig_dst);
-                    if !allow_lan
-                        && let Ok(local_addr) = socket.local_addr()
-                        && meta.addr.ip() != local_addr.ip()
-                    {
-                        warn!("Connection from {} is not allowed", meta.addr);
-                        continue;
-                    }
+                    trace!(
+                        "recv msg:{:?} orig_dst:{:?}, local_addr:{:?}",
+                        meta,
+                        orig_dst,
+                        socket.local_addr()
+                    );
+                    // if !allow_lan
+                    //     && let Ok(local_addr) = socket.local_addr()
+                    //     && meta.addr.ip() != local_addr.ip()
+                    // {
+                    //     warn!("Connection from {} is not allowed", meta.addr);
+                    //     continue;
+                    // }
                     let pkt = UdpPacket {
                         data: buf[..meta.len].to_vec(),
-                        src_addr: meta.addr.into(),
-                        dst_addr: orig_dst.into(),
+                        src_addr: meta.addr.to_canonical().into(),
+                        dst_addr: orig_dst.to_canonical().into(),
                     };
                     trace!("tproxy -> dispatcher: {:?}", pkt);
                     match d_tx.send(pkt).await {
@@ -211,15 +240,118 @@ async fn handle_inbound_datagram(
                     }
                 }
                 None => {
+                    trace!(
+                        "recv msg:{:?} local_addr:{:?}",
+                        meta,
+                        socket.local_addr()
+                    );
                     warn!("failed to get orig_dst");
                     continue;
                 }
             }
         }
+        warn!("tproxy udp listening ended");
 
         closer.send(0).ok();
     });
 
     let _ = futures::future::join(fut1, fut2).await;
+    Ok(())
+}
+
+fn set_ip_recv_orig_dstaddr(
+    level: libc::c_int,
+    socket: &socket2::Socket,
+) -> io::Result<()> {
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_RECVORIGDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_RECVORIGDSTADDR,
+        _ => unreachable!("invalid sockopt level {}", level),
+    };
+
+    let enable: libc::c_int = 1;
+    set_socket_option(socket, level, opt, enable)
+}
+
+async fn handle_packet_from_dispatcher(
+    mut l_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
+) {
+    let mut responder_map = HashMap::<SocketAddr, (Arc<UdpSocket>, Instant)>::new();
+    while let Some(pkt) = l_rx.recv().await {
+        trace!("tproxy <- dispatcher: {:?}", pkt);
+
+        // We must modify set the src address for the outgoing packet by binding
+        // address to src_addr
+        // To avoid repeated creating sockets, sockets need be cached here
+        // We can't use tproxy listen socket, because the bound address is localhost
+        // remote -> local
+        let now = Instant::now();
+        let src_addr = pkt.src_addr.must_into_socket_addr();
+        let responder = match responder_map.entry(src_addr) {
+            hash_map::Entry::Occupied(mut occupied_entry) => {
+                occupied_entry.get_mut().1 = now;
+                occupied_entry.get().0.clone()
+            }
+            hash_map::Entry::Vacant(vacant_entry) => {
+                let socket = match bind_nonlocal_socket(src_addr) {
+                    Ok(x) => Arc::new(x),
+                    Err(e) => {
+                        tracing::error!(
+                            "failed to bind nonlocal socket for tproxy:{}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+                vacant_entry.insert((socket.clone(), now));
+                socket
+            }
+        };
+        match responder
+            .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("failed to send udp packet to proxy: {}", e);
+            }
+        }
+        responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
+    }
+}
+
+// socket2 doesn't provide set_ip_transparent_v6
+// So we must implement it ourselves
+fn set_ip_transparent_v6(socket: &socket2::Socket) -> io::Result<()> {
+    let (opt, level) = (libc::IPV6_TRANSPARENT, libc::IPPROTO_IPV6);
+
+    let enable: libc::c_int = 1;
+    set_socket_option(socket, level, opt, enable)
+}
+
+fn set_socket_option(
+    socket: &socket2::Socket,
+    level: i32,
+    opt: i32,
+    val: i32,
+) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let enable: libc::c_int = val;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            std::mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
     Ok(())
 }

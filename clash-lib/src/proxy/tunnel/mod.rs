@@ -1,6 +1,7 @@
 use crate::{
     app::dispatcher::Dispatcher,
     common::errors::new_io_error,
+    proxy::utils::{ToCanonical, try_create_dualstack_tcplistener},
     session::{Network, Session, SocksAddr, Type},
 };
 use async_trait::async_trait;
@@ -14,10 +15,7 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{
-    io::ReadBuf,
-    net::{TcpListener, UdpSocket},
-};
+use tokio::{io::ReadBuf, net::UdpSocket};
 use tracing::{info, warn};
 
 use super::{
@@ -75,7 +73,7 @@ impl InboundHandlerTrait for TunnelInbound {
             "[Tunnel-TCP] listening on {}, remote: {}",
             self.listen, self.target
         );
-        let listener = TcpListener::bind(self.listen).await?;
+        let listener = try_create_dualstack_tcplistener(self.listen)?;
 
         loop {
             let (socket, src_addr) = listener.accept().await?;
@@ -86,7 +84,7 @@ impl InboundHandlerTrait for TunnelInbound {
             let sess = Session {
                 network: Network::Tcp,
                 typ: Type::Tunnel,
-                source: src_addr,
+                source: src_addr.to_canonical(),
                 destination: self.target.clone(),
                 so_mark: self.fw_mark,
                 ..Default::default()

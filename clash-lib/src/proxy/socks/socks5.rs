@@ -99,7 +99,11 @@ pub(crate) async fn client_handshake(
     buf.put_u8(command);
     buf.put_u8(0x00);
     if command == socks_command::UDP_ASSOCIATE {
-        let addr = SocksAddr::any_ipv4();
+        let addr = if addr.clone().must_into_socket_addr().is_ipv4() {
+            SocksAddr::any_ipv4()
+        } else {
+            SocksAddr::any_ipv6()
+        };
         addr.write_buf(&mut buf);
     } else {
         addr.write_buf(&mut buf);
