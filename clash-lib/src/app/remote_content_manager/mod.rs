@@ -27,7 +27,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace, warn};
 
 pub mod healthcheck;
-mod http_client;
 pub mod providers;
 
 #[derive(Clone, Debug, Default, Serialize)]
