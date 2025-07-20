@@ -4,7 +4,7 @@ use crate::{
     config::listener::InboundOpts,
     proxy::{
         http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
-        socks::inbound::SocksInbound, tunnel::TunnelInbound,
+        redir::RedirInbound, socks::inbound::SocksInbound, tunnel::TunnelInbound,
     },
 };
 
@@ -122,9 +122,21 @@ fn build_handler(
                 None
             }
         }
-        InboundOpts::Redir { .. } => {
-            warn!("redir is not implemented yet");
-            None
+        InboundOpts::Redir { common_opts, .. } => {
+            #[cfg(target_os = "linux")]
+            {
+                Some(Arc::new(RedirInbound::new(
+                    (common_opts.listen.0, common_opts.port).into(),
+                    common_opts.allow_lan,
+                    dispatcher,
+                    fw_mark,
+                )))
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                warn!("redir is not supported on this platform");
+                None
+            }
         }
         InboundOpts::Tunnel {
             common_opts,
