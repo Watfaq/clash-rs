@@ -12,6 +12,8 @@ use crate::{
     },
 };
 
+/// combines the top-level config and config.listeners to a set of inbound
+/// options.
 pub(super) fn convert(
     raw: Option<Vec<HashMap<String, Value>>>,
     c: &def::Config,
@@ -47,7 +49,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: http_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
         })
     {
@@ -60,7 +62,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: socks_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })
@@ -74,7 +76,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: mixed_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })
@@ -88,7 +90,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: redir_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
         })
     {
@@ -102,7 +104,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: tproxy_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })

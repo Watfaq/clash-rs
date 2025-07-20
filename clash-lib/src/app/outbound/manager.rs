@@ -180,7 +180,7 @@ impl OutboundManager {
         outbounds: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Duration,
-    ) -> Vec<std::io::Result<(u16, u16)>> {
+    ) -> Vec<std::io::Result<(Duration, Duration)>> {
         let proxy_manager = self.proxy_manager.clone();
         proxy_manager.check(outbounds, url, Some(timeout)).await
     }

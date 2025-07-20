@@ -65,7 +65,9 @@ impl Transport for Client {
             DefaultTlsVerifier::new(None, self.skip_cert_verify),
         ));
 
-        tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+        if std::env::var("SSLKEYLOGFILE").is_ok() {
+            tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+        }
 
         let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
         let dns_name =

@@ -111,6 +111,9 @@ fn setup_logging_inner(
 ) -> anyhow::Result<Option<LoggingGuard>> {
     let default_log_level = format!("warn,clash={level}");
     let filter = EnvFilter::try_from_default_env()
+        .inspect(|f| {
+            eprintln!("using env log level: {f}");
+        })
         .inspect_err(|_| {
             if let Ok(log_level) = std::env::var("RUST_LOG") {
                 eprintln!("Failed to parse log level from environment: {log_level}");

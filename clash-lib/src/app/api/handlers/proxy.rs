@@ -138,7 +138,7 @@ async fn get_proxy_delay(
     let mut headers = HeaderMap::new();
     headers.insert(header::CONNECTION, "close".parse().unwrap());
 
-    let (delay, mean_delay) = if let Some(group) = proxy.try_as_group_handler() {
+    let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
         let latency_test_url = group.get_latency_test_url();
         let proxies = group.get_proxies().await;
         let results = outbound_manager
@@ -177,7 +177,7 @@ async fn get_proxy_delay(
     };
 
     let mut r = HashMap::new();
-    r.insert("delay".to_owned(), delay);
-    r.insert("meanDelay".to_owned(), mean_delay);
+    r.insert("delay".to_owned(), actual.as_millis());
+    r.insert("overall".to_owned(), overall.as_millis());
     (headers, axum::response::Json(r)).into_response()
 }

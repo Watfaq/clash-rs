@@ -1,4 +1,4 @@
-use std::{io, sync::atomic::AtomicU16};
+use std::{io, sync::atomic::AtomicU16, time::Duration};
 
 use async_trait::async_trait;
 use tracing::trace;
@@ -72,7 +72,10 @@ impl Handler {
             .first()
             .unwrap_or_else(|| panic!("no proxy found for {}", self.name()));
 
-        let mut fastest_delay = proxy_manager.last_delay(fastest.name()).await;
+        let mut fastest_delay = proxy_manager
+            .last_delay(fastest.name())
+            .await
+            .unwrap_or(Duration::from_secs(u64::MAX));
         let mut fast_not_exist = true;
 
         let current_fastest_index = std::cmp::min(
@@ -91,9 +94,9 @@ impl Handler {
             }
 
             let delay = proxy_manager.last_delay(proxy.name()).await;
-            if delay < fastest_delay {
+            if delay.is_some_and(|d| d < fastest_delay) {
                 fastest = proxy;
-                fastest_delay = delay;
+                fastest_delay = delay.unwrap();
             }
 
             if current_fastest_index != u16::MAX
@@ -102,7 +105,10 @@ impl Handler {
                 || proxy_manager
                     .last_delay(proxies[current_fastest_index as usize].name())
                     .await
-                    > fastest_delay + self.tolerance
+                    .is_some_and(|d| {
+                        d > (fastest_delay
+                            + Duration::from_millis(self.tolerance as u64))
+                    })
             {
                 self.fastest_proxy_index.store(
                     proxies
@@ -116,7 +122,7 @@ impl Handler {
 
         trace!(
             fastest = %fastest.name(),
-            delay = fastest_delay,
+            delay = ?fastest_delay,
             "`{}` fastest",
             self.name(),
         );

@@ -1,3 +1,20 @@
+use super::dns::ThreadSafeDNSResolver;
+use crate::{
+    app::net::DEFAULT_OUTBOUND_INTERFACE,
+    common::{
+        errors::new_io_error, timed_future::TimedFuture, tls::GLOBAL_ROOT_STORE,
+        utils::serialize_duration,
+    },
+    proxy::AnyOutboundHandler,
+    session::Session,
+};
+use bytes::Bytes;
+use chrono::{DateTime, Utc};
+use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
+use http_body_util::Empty;
+use hyper::Request;
+use hyper_util::rt::TokioIo;
+use serde::Serialize;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -6,30 +23,8 @@ use std::{
     },
     time::Duration,
 };
-
-use bytes::Bytes;
-use chrono::{DateTime, Utc};
-
-use futures::{StreamExt, stream::FuturesUnordered};
-use http_body_util::Empty;
-use hyper::Request;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use serde::Serialize;
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace, warn};
-
-use crate::{
-    app::net::DEFAULT_OUTBOUND_INTERFACE,
-    common::{
-        errors::new_io_error, timed_future::TimedFuture, tls::GLOBAL_ROOT_STORE,
-    },
-    proxy::AnyOutboundHandler,
-    session::Session,
-};
-
-use self::http_client::ConnectorWithOutbound;
-
-use super::dns::ThreadSafeDNSResolver;
 
 pub mod healthcheck;
 mod http_client;
@@ -88,9 +83,8 @@ pub struct TrafficPattern {
 #[derive(Clone, Serialize)]
 pub struct DelayHistory {
     time: DateTime<Utc>,
-    delay: u16,
-    #[serde(rename = "meanDelay")]
-    mean_delay: u16,
+    #[serde(serialize_with = "serialize_duration")]
+    delay: Duration,
 }
 
 #[derive(Default)]
@@ -129,7 +123,7 @@ impl ProxyManager {
         outbounds: &Vec<AnyOutboundHandler>,
         url: &str,
         timeout: Option<Duration>,
-    ) -> Vec<std::io::Result<(u16, u16)>> {
+    ) -> Vec<std::io::Result<(Duration, Duration)>> {
         let mut futs = vec![];
         for outbound in outbounds {
             let outbound = outbound.clone();
@@ -184,25 +178,14 @@ impl ProxyManager {
             .into()
     }
 
-    pub async fn last_delay(&self, name: &str) -> u16 {
-        let max = u16::MAX;
+    pub async fn last_delay(&self, name: &str) -> Option<Duration> {
         if !self.alive(name).await {
-            return max;
+            return None;
         }
         self.delay_history(name)
             .await
             .last()
-            .map(|x| x.delay)
-            .unwrap_or(max)
-    }
-
-    pub async fn get_delay(&self, name: &str) -> Option<f64> {
-        let delay = self.last_delay(name).await;
-        if delay == u16::MAX {
-            None
-        } else {
-            Some(delay as f64)
-        }
+            .map(|x| x.delay.to_owned())
     }
 
     pub async fn get_packet_loss(&self, name: &str) -> Option<f64> {
@@ -210,7 +193,7 @@ impl ProxyManager {
         if history.is_empty() {
             None
         } else {
-            let failed_count = history.iter().filter(|x| x.delay == 0).count();
+            let failed_count = history.iter().filter(|x| x.delay.is_zero()).count();
             Some(failed_count as f64 / history.len() as f64)
         }
     }
@@ -220,8 +203,9 @@ impl ProxyManager {
         if history.is_empty() {
             None
         } else {
-            let avg_rtt = history.iter().map(|x| x.delay as f64).sum::<f64>()
-                / history.len() as f64;
+            let avg_rtt =
+                history.iter().map(|x| x.delay.as_millis_f64()).sum::<f64>()
+                    / history.len() as f64;
             Some(avg_rtt)
         }
     }
@@ -690,107 +674,163 @@ impl ProxyManager {
     }
 
     #[instrument(skip(self))]
+    /// returns (actual_http_round_trip_time,
+    /// overall_round_trip_time_including_tls_handshake)
     pub async fn url_test(
         &self,
         outbound: AnyOutboundHandler,
         url: &str,
         timeout: Option<Duration>,
-    ) -> std::io::Result<(u16, u16)> {
+    ) -> std::io::Result<(Duration, Duration)> {
         trace!("started");
         let name = outbound.name().to_owned();
         let name_clone = name.clone();
         let default_timeout = Duration::from_secs(5);
+        let timeout = timeout.unwrap_or(default_timeout);
 
         let dns_resolver = self.dns_resolver.clone();
         let tester = async move {
             let name = name_clone;
-            let connector = ConnectorWithOutbound::new(
-                outbound,
-                dns_resolver,
-                DEFAULT_OUTBOUND_INTERFACE.read().await.clone(),
-            );
 
-            let mut tls_config = rustls::ClientConfig::builder()
-                .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                .with_no_client_auth();
+            let uri = url
+                .parse::<http::Uri>()
+                .map_err(|e| new_io_error(format!("invalid url: {url}: {e}")))?;
 
-            if std::env::var("SSLKEYLOGFILE").is_ok() {
-                debug!("Enabling TLS key logging");
-                tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
-            }
-
-            let connector = hyper_rustls::HttpsConnectorBuilder::new()
-                .with_tls_config(tls_config)
-                .https_or_http()
-                .enable_all_versions()
-                .wrap_connector(connector);
-
-            let client: Client<_, Empty<Bytes>> =
-                Client::builder(TokioExecutor::new()).build(connector);
-
-            let req = Request::get(url)
-                .header("Connection", "Close")
-                .version(hyper::Version::HTTP_11)
-                .body(Empty::new())
-                .unwrap();
-
-            let resp = TimedFuture::new(client.request(req));
-
-            let delay: u16 =
-                match tokio::time::timeout(timeout.unwrap_or(default_timeout), resp)
-                    .await
-                {
-                    Ok((res, delay)) => match res {
-                        Ok(res) => {
-                            let delay =
-                                delay.as_millis().try_into().unwrap_or(u16::MAX);
-                            trace!(
-                                delay = delay,
-                                status = ?res.status(),
-                                "success"
-                            );
-                            Ok(delay)
-                        }
-                        Err(e) => {
-                            warn!(
-                                e = ?e,
-                                "failed"
-                            );
-                            Err(new_io_error(format!(
-                                "urltest for proxy {} failed: {}",
-                                name, e
-                            )))
-                        }
-                    },
-                    Err(_) => {
-                        warn!("timed out");
-                        Err(new_io_error(format!("timeout for {url}").as_str()))
+            let host = uri
+                .host()
+                .ok_or(new_io_error(format!("invalid url: {url}: no host found")))?
+                .to_owned();
+            let port = uri.port_u16().unwrap_or(match uri.scheme_str() {
+                None => 80,
+                Some(s) => match s {
+                    "http" => 80,
+                    "https" => 443,
+                    _ => {
+                        return Err(new_io_error(format!(
+                            "invalid url: {url}: unsupported scheme {s}"
+                        )));
                     }
-                }?;
-
-            let req2 = Request::get(url)
-                .header("Connection", "Close")
-                .version(hyper::Version::HTTP_11)
-                .body(Empty::new())
-                .unwrap();
-            let resp2 = TimedFuture::new(client.request(req2));
-
-            let mean_delay: u16 = match tokio::time::timeout(
-                timeout.unwrap_or(default_timeout),
-                resp2,
-            )
-            .await
-            {
-                Ok((res, delay2)) => match res {
-                    Ok(_) => ((delay2.as_millis() + delay as u128) / 2)
-                        .try_into()
-                        .expect("delay is too large"),
-                    Err(_) => 0,
                 },
-                Err(_) => 0,
+            });
+
+            let sess = Session {
+                destination: (host.to_owned(), port)
+                    .try_into()
+                    .expect("must be valid destination"),
+                iface: DEFAULT_OUTBOUND_INTERFACE.read().await.clone(),
+                ..Default::default()
             };
 
-            Ok((delay, mean_delay))
+            let (stream, connect_delay) = tokio::time::timeout(
+                timeout,
+                TimedFuture::new(outbound.connect_stream(&sess, dns_resolver)),
+            )
+            .await?;
+            let stream = stream?;
+
+            let req = Request::get(url)
+                .header(hyper::header::HOST, host.as_str())
+                .header("Connection", "Close")
+                .version(hyper::Version::HTTP_11)
+                .body(Empty::<Bytes>::new())
+                .unwrap();
+
+            let mut tls_handshake_delay = None;
+            let resp = match uri.scheme() {
+                Some(scheme) if scheme == &http::uri::Scheme::HTTP => {
+                    let io = TokioIo::new(stream);
+                    let (mut sender, conn) =
+                        hyper::client::conn::http1::handshake(io).await.map_err(
+                            |e| new_io_error(format!("failed to handshake: {e}")),
+                        )?;
+
+                    tokio::task::spawn(async move {
+                        if let Err(err) = conn.await {
+                            warn!("HTTP connection error: {}", err);
+                        }
+                    });
+
+                    TimedFuture::new(sender.send_request(req).boxed())
+                }
+                Some(scheme) if scheme == &http::uri::Scheme::HTTPS => {
+                    let mut tls_config = rustls::ClientConfig::builder()
+                        .with_root_certificates(GLOBAL_ROOT_STORE.clone())
+                        .with_no_client_auth();
+
+                    if std::env::var("SSLKEYLOGFILE").is_ok() {
+                        debug!("Enabling TLS key logging");
+                        tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+                    }
+
+                    let connector =
+                        tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+
+                    let (stream, delay) = tokio::time::timeout(
+                        timeout,
+                        TimedFuture::new(connector.connect(
+                            host.try_into().expect("must be valid SNI"),
+                            stream,
+                        )),
+                    )
+                    .await?;
+
+                    let stream = stream?;
+
+                    let io = TokioIo::new(stream);
+
+                    let (mut sender, conn) =
+                        hyper::client::conn::http1::handshake(io).await.map_err(
+                            |e| new_io_error(format!("failed to handshake: {e}")),
+                        )?;
+
+                    tokio::task::spawn(async move {
+                        if let Err(err) = conn.await {
+                            warn!("HTTP connection error: {}", err);
+                        }
+                    });
+
+                    tls_handshake_delay = Some(delay);
+
+                    TimedFuture::new(sender.send_request(req).boxed())
+                }
+                _ => {
+                    return Err(new_io_error(format!(
+                        "invalid url: {url}: unsupported scheme"
+                    )));
+                }
+            };
+
+            let delay = match tokio::time::timeout(timeout, resp).await {
+                Ok((res, delay)) => match res {
+                    Ok(res) => {
+                        trace!(
+                            delay = ?delay,
+                            status = ?res.status(),
+                            "success"
+                        );
+                        Ok(delay)
+                    }
+                    Err(e) => {
+                        warn!(
+                            e = ?e,
+                            "failed"
+                        );
+                        Err(new_io_error(format!(
+                            "urltest for proxy {} failed: {}",
+                            name, e
+                        )))
+                    }
+                },
+                Err(_) => {
+                    warn!("timed out");
+                    Err(new_io_error(format!("timeout for {url}").as_str()))
+                }
+            }?;
+
+            Ok((
+                delay,
+                (connect_delay + tls_handshake_delay.unwrap_or_default() + delay),
+            ))
         };
 
         let result = tester.await;
@@ -799,8 +839,10 @@ impl ProxyManager {
 
         let ins = DelayHistory {
             time: Utc::now(),
-            delay: result.as_ref().map(|x| x.0).unwrap_or(0),
-            mean_delay: result.as_ref().map(|x| x.1).unwrap_or(0),
+            delay: result
+                .as_ref()
+                .map(|(actual, _)| actual.clone())
+                .unwrap_or_default(),
         };
 
         let mut state = self.proxy_state.write().await;
@@ -978,7 +1020,12 @@ mod tests {
             .expect("test failed");
 
         assert!(manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
+        assert!(
+            manager
+                .last_delay(PROXY_DIRECT)
+                .await
+                .is_some_and(|x| x.as_millis() > 0)
+        );
         assert!(!manager.delay_history(PROXY_DIRECT).await.is_empty());
 
         manager.report_alive(PROXY_DIRECT, false).await;
@@ -996,7 +1043,12 @@ mod tests {
         }
 
         assert!(manager.alive(PROXY_DIRECT).await);
-        assert!(manager.last_delay(PROXY_DIRECT).await > 0);
+        assert!(
+            manager
+                .last_delay(PROXY_DIRECT)
+                .await
+                .is_some_and(|x| x.as_millis() > 0)
+        );
         assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 10);
     }
 
@@ -1037,7 +1089,7 @@ mod tests {
 
         assert!(result.is_err());
         assert!(!manager.alive(PROXY_DIRECT).await);
-        assert_eq!(manager.last_delay(PROXY_DIRECT).await, u16::MAX);
+        assert_eq!(manager.last_delay(PROXY_DIRECT).await, None);
         assert_eq!(manager.delay_history(PROXY_DIRECT).await.len(), 1);
     }
 }
