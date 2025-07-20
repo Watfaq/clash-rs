@@ -816,8 +816,7 @@ impl ProxyManager {
                             "failed"
                         );
                         Err(new_io_error(format!(
-                            "urltest for proxy {} failed: {}",
-                            name, e
+                            "urltest for proxy {name} failed: {e}"
                         )))
                     }
                 },
@@ -841,7 +840,7 @@ impl ProxyManager {
             time: Utc::now(),
             delay: result
                 .as_ref()
-                .map(|(actual, _)| actual.clone())
+                .map(|(actual, _)| *actual)
                 .unwrap_or_default(),
         };
 

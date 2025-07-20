@@ -95,7 +95,7 @@ impl Handler {
 impl SelectorControl for Handler {
     async fn select(&self, name: &str) -> Result<(), Error> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
-        if proxies.iter().enumerate().any(|(_, x)| x.name() == name) {
+        if proxies.iter().any(|x| x.name() == name) {
             self.current_selected_index.store(
                 proxies.iter().position(|p| p.name() == name).unwrap() as u16,
                 std::sync::atomic::Ordering::Relaxed,

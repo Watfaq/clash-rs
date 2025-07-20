@@ -88,12 +88,11 @@ async fn get_group_delay(
 
         let mut res = HashMap::new();
 
-        for i in 0..names.len() {
-            let p = &names[i];
+        for (i, name) in names.iter().enumerate() {
             if let Some(Ok(latency)) = results.get(i) {
-                res.insert(p.to_owned(), latency.0.as_millis());
+                res.insert(name.to_owned(), latency.0.as_millis());
             } else {
-                res.insert(p.to_owned(), 0);
+                res.insert(name.to_owned(), 0);
             }
         }
         Json(res).into_response()

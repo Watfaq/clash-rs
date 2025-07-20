@@ -396,10 +396,8 @@ impl EnhancedResolver {
 
         if let Ok(main_result) = main_query.await {
             let ip_list = EnhancedResolver::ip_list_of_message(&main_result);
-            if !ip_list.is_empty() {
-                if !self.should_ip_fallback(&ip_list[0]) {
-                    return Ok(main_result);
-                }
+            if !ip_list.is_empty() && !self.should_ip_fallback(&ip_list[0]) {
+                return Ok(main_result);
             }
         }
 
