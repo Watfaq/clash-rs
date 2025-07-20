@@ -4,10 +4,11 @@ use crate::{
     session::Session,
 };
 
+use futures::io;
 use socket2::TcpKeepalive;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
-    net::{TcpSocket, TcpStream, UdpSocket},
+    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
 use tracing::{debug, error};
@@ -108,11 +109,7 @@ pub async fn new_udp_socket(
         (None, Some(src), _) if src.is_ipv6() => {
             debug!("resolved v6 socket for v6 src {src:?}");
             (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
+                try_create_dualstack_socket(src, socket2::Type::DGRAM)?.0,
                 socket2::Domain::IPV6,
             )
         }
@@ -197,4 +194,59 @@ pub async fn family_hint_for_session(
             })
             .ok()?
     }
+}
+
+/// Convert ipv6 mapped ipv4 address back to ipv4. Other address remain
+/// unchanged. e.g. ::ffff:127.0.0.1 -> 127.0.0.1
+pub trait ToCanonical {
+    fn to_canonical(self) -> SocketAddr;
+}
+
+impl ToCanonical for SocketAddr {
+    fn to_canonical(mut self) -> SocketAddr {
+        self.set_ip(self.ip().to_canonical());
+        self
+    }
+}
+
+/// Create dualstack socket if it can
+/// If failed, fallback to single stack silently
+pub fn try_create_dualstack_socket(
+    addr: SocketAddr,
+    tcp_or_udp: socket2::Type,
+) -> std::io::Result<(socket2::Socket, bool)> {
+    let domain = if addr.is_ipv4() {
+        socket2::Domain::IPV4
+    } else {
+        socket2::Domain::IPV6
+    };
+    let mut dualstack = false;
+    let socket = socket2::Socket::new(domain, tcp_or_udp, None)?;
+    if addr.is_ipv6() && addr.ip().is_unspecified() {
+        if let Err(e) = socket.set_only_v6(false) {
+            // If setting dualstack fails, fallback to single stack
+            tracing::warn!(
+                "dualstack not supported, falling back to ipv6 only: {e}"
+            );
+        } else {
+            dualstack = true;
+        }
+    };
+    Ok((socket, dualstack))
+}
+
+pub fn try_create_dualstack_tcplistener(
+    addr: SocketAddr,
+) -> io::Result<TcpListener> {
+    let (socket, _dualstack) =
+        try_create_dualstack_socket(addr, socket2::Type::STREAM)?;
+
+    socket.set_nonblocking(true)?;
+    // For fast restart avoid Address In Use Error
+    socket.set_reuse_address(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+
+    let listener = TcpListener::from_std(socket.into())?;
+    Ok(listener)
 }

@@ -5,7 +5,10 @@ mod proxy;
 use crate::{
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
-    proxy::{inbound::InboundHandlerTrait, utils::apply_tcp_options},
+    proxy::{
+        inbound::InboundHandlerTrait,
+        utils::{ToCanonical, apply_tcp_options, try_create_dualstack_tcplistener},
+    },
 };
 
 pub use proxy::handle as handle_http;
@@ -13,7 +16,6 @@ pub use proxy::handle as handle_http;
 use crate::common::errors::new_io_error;
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tracing::warn;
 
 #[derive(Clone)]
@@ -60,13 +62,15 @@ impl InboundHandlerTrait for HttpInbound {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
             let (socket, _) = listener.accept().await?;
-            let src_addr = socket.peer_addr()?;
+            let src_addr = socket.peer_addr()?.to_canonical();
 
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+            if !self.allow_lan
+                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
+            {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
