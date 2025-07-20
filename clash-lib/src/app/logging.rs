@@ -146,7 +146,11 @@ fn setup_logging_inner(
     let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         // Customize sampling strategy
         .with_sampler(opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(
-            1.0,
+            if cfg!(debug_assertions) {
+                1.0 // 100% sampling in development
+            } else {
+                0.1 // 10% sampling in production
+            },
         ))))
         .with_id_generator(opentelemetry_sdk::trace::RandomIdGenerator::default())
         .with_resource(opentelemetry_sdk::Resource::builder()

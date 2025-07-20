@@ -84,7 +84,11 @@ impl Handler {
                 return proxy.clone();
             }
         }
-        warn!("selected proxy `{}` not found", current_fastest_index);
+        let proxy_name = proxies
+            .get(current_fastest_index as usize)
+            .map(|p| p.name())
+            .unwrap_or("<unknown>");
+        warn!("selected proxy `{}` not found", proxy_name);
         // in the case the selected proxy is not found(stale cache), return the
         // first one
         proxies.first().unwrap().clone()
