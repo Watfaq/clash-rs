@@ -8,10 +8,10 @@ use crate::{
     },
 };
 
-#[cfg(all(target_os = "linux", feature = "tproxy"))]
-use crate::proxy::tproxy::TproxyInbound;
 #[cfg(all(target_os = "linux", feature = "redir"))]
 use crate::proxy::redir::RedirInbound;
+#[cfg(all(target_os = "linux", feature = "tproxy"))]
+use crate::proxy::tproxy::TproxyInbound;
 
 use crate::Dispatcher;
 use tracing::{error, info, warn};

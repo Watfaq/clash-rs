@@ -1,6 +1,7 @@
 use super::inbound::InboundHandlerTrait;
 use crate::{
     app::dispatcher::Dispatcher,
+    common::errors::new_io_error,
     proxy::utils::{
         ToCanonical, apply_tcp_options, try_create_dualstack_tcplistener,
     },
@@ -72,7 +73,7 @@ impl InboundHandlerTrait for RedirInbound {
 
             let sess = Session {
                 network: Network::Tcp,
-                typ: Type::Tproxy,
+                typ: Type::Redir,
                 source: src_addr,
                 destination: orig_dst.into(),
                 so_mark: self.fw_mark,
@@ -89,7 +90,7 @@ impl InboundHandlerTrait for RedirInbound {
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        panic!("redir doesn't support udp")
+        Err(new_io_error("unsupported UDP protocol for Redir inbound"))
     }
 }
 
