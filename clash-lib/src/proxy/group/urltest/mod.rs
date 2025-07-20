@@ -99,8 +99,7 @@ impl Handler {
                 fastest_delay = delay.unwrap();
             }
 
-            if current_fastest_index != u16::MAX
-                || fast_not_exist
+            if fast_not_exist
                 || proxy_manager.alive(fastest.name()).await
                 || proxy_manager
                     .last_delay(proxies[current_fastest_index as usize].name())

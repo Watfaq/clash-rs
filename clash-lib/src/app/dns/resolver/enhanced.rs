@@ -235,6 +235,7 @@ impl EnhancedResolver {
                     c.exchange(message)
                         .inspect_err(|x| {
                             error!(
+                                client = c.id(),
                                 err = ?x,
                                 "resolve error");
                         })
