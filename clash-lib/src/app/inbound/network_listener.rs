@@ -4,12 +4,14 @@ use crate::{
     config::listener::InboundOpts,
     proxy::{
         http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
-        redir::RedirInbound, socks::inbound::SocksInbound, tunnel::TunnelInbound,
+        socks::inbound::SocksInbound, tunnel::TunnelInbound,
     },
 };
 
 #[cfg(all(target_os = "linux", feature = "tproxy"))]
 use crate::proxy::tproxy::TproxyInbound;
+#[cfg(all(target_os = "linux", feature = "redir"))]
+use crate::proxy::redir::RedirInbound;
 
 use crate::Dispatcher;
 use tracing::{error, info, warn};
