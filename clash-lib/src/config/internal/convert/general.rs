@@ -3,12 +3,17 @@ use std::net::IpAddr;
 use crate::{
     app::net::Interface,
     config::{
-        config::{Controller, General},
+        config::{BindAddress, Controller, General},
         def,
     },
 };
 
 pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {
+    let bind_address = if c.bind_address == BindAddress::default() && c.ipv6 {
+        BindAddress::dual_stack()
+    } else {
+        c.bind_address
+    };
     Ok(General {
         authentication: c.authentication.clone(),
         controller: Controller {
@@ -34,6 +39,6 @@ pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {
         asn_mmdb_download_url: c.asn_mmdb_download_url.to_owned(),
         geosite: c.geosite.to_owned(),
         geosite_download_url: c.geosite_download_url.to_owned(),
-        bind_address: c.bind_address,
+        bind_address,
     })
 }
