@@ -1,9 +1,9 @@
 #![feature(cfg_version)]
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
-#![feature(let_chains)]
 #![feature(lazy_get)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
+#![cfg_attr(not(version("1.88.0")), feature(let_chains))]
 
 #[macro_use]
 extern crate anyhow;
