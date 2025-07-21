@@ -63,9 +63,8 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             release-name: x86_64-unknown-linux-gnu-static-crt
-            tool: cross
             extra-args: -F "plus"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable -Zsanitizer=address"
+            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             release-name: i686-unknown-linux-gnu-static-crt
