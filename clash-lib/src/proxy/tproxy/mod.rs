@@ -320,6 +320,15 @@ async fn handle_packet_from_dispatcher(
     }
 }
 
+// socket2 doesn't provide set_ip_transparent_v6
+// So we must implement it ourselves
+fn set_ip_transparent_v6(socket: &socket2::Socket) -> io::Result<()> {
+    let (opt, level) = (libc::IPV6_TRANSPARENT, libc::IPPROTO_IPV6);
+
+    let enable: libc::c_int = 1;
+    set_socket_option(socket, level, opt, enable)
+}
+
 fn set_socket_option(
     socket: &socket2::Socket,
     level: i32,
