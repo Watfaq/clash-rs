@@ -223,6 +223,7 @@ impl EnhancedResolver {
         }
     }
 
+    #[instrument(skip(message))]
     pub async fn batch_exchange(
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
@@ -233,7 +234,10 @@ impl EnhancedResolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            error!("DNS client {} resolve error: {:?}", c.id(), x)
+                            error!(
+                                client = c.id(),
+                                err = ?x,
+                                "resolve error");
                         })
                         .await
                 }
@@ -281,16 +285,22 @@ impl EnhancedResolver {
         }
     }
 
+    #[instrument(skip_all)]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
+            trace!(q = q.to_string(), "start");
             if let Some(lru) = &self.lru_cache
                 && let Some(cached) = lru.read().await.get(q, Instant::now())
             {
                 if !message.recursion_desired() {
-                    trace!("cache hit for DNS query {}", q.to_string());
+                    trace!(q = q.to_string(), "cache hit, RA not desired");
                     if let Ok(cached) = cached.inspect_err(|x| {
                         warn!("failed to get cached message: {}", x);
                     }) {
+                        trace!(
+                            q = q.to_string(),
+                            "cache hit for DNS query, returning cached response",
+                        );
                         let mut reply =
                             build_dns_response_message(message, true, false);
                         reply.add_answers(cached.records().iter().cloned());
@@ -298,12 +308,15 @@ impl EnhancedResolver {
                     }
                 } else {
                     trace!(
-                        "cache hit for DNS query {} but RA desired, bypassing cache",
-                        q.to_string()
+                        q = q.to_string(),
+                        "cache hit, RA desired, bypassing cache",
                     );
                 }
             }
-            self.exchange_no_cache(message).await
+            trace!(q = q.to_string(), "querying resolver");
+            let res = self.exchange_no_cache(message).await;
+            trace!(q = q.to_string(), "query completed");
+            res
         } else {
             Err(anyhow!("invalid query"))
         }
@@ -354,6 +367,7 @@ impl EnhancedResolver {
         None
     }
 
+    #[instrument(skip_all)]
     async fn ip_exchange(
         &self,
         message: &op::Message,
@@ -363,7 +377,6 @@ impl EnhancedResolver {
         }
 
         if self.should_only_query_fallback(message) {
-            // self.fallback guaranteed in the above check
             return EnhancedResolver::batch_exchange(
                 self.fallback.as_ref().unwrap(),
                 message,
@@ -384,11 +397,8 @@ impl EnhancedResolver {
 
         if let Ok(main_result) = main_query.await {
             let ip_list = EnhancedResolver::ip_list_of_message(&main_result);
-            if !ip_list.is_empty() {
-                // TODO: only check 1st?
-                if !self.should_ip_fallback(&ip_list[0]) {
-                    return Ok(main_result);
-                }
+            if !ip_list.is_empty() && !self.should_ip_fallback(&ip_list[0]) {
+                return Ok(main_result);
             }
         }
 
@@ -487,6 +497,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn resolve_v4(
         &self,
         host: &str,
@@ -527,6 +538,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn resolve_v6(
         &self,
         host: &str,
@@ -560,6 +572,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
         if let Some(lru) = &self.reverse_lookup_cache
             && let Some(cached) = lru.read().await.peek(&ip)
@@ -571,6 +584,7 @@ impl ClashResolver for EnhancedResolver {
         None
     }
 
+    #[instrument(skip(self))]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message

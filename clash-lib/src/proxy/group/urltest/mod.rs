@@ -1,7 +1,6 @@
-use std::{io, sync::Arc};
+use std::{io, sync::atomic::AtomicU16, time::Duration};
 
 use async_trait::async_trait;
-use tokio::sync::Mutex;
 use tracing::trace;
 
 use crate::{
@@ -28,18 +27,13 @@ pub struct HandlerOptions {
     pub udp: bool,
 }
 
-struct HandlerInner {
-    fastest_proxy: Option<AnyOutboundHandler>,
-}
-
 pub struct Handler {
     opts: HandlerOptions,
     tolerance: u16,
 
     providers: Vec<ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
-
-    inner: Arc<Mutex<HandlerInner>>,
+    fastest_proxy_index: AtomicU16,
 }
 
 impl std::fmt::Debug for Handler {
@@ -62,9 +56,7 @@ impl Handler {
             tolerance,
             providers,
             proxy_manager,
-            inner: Arc::new(Mutex::new(HandlerInner {
-                fastest_proxy: None,
-            })),
+            fastest_proxy_index: AtomicU16::new(0),
         }
     }
 
@@ -74,20 +66,26 @@ impl Handler {
 
     async fn fastest(&self, touch: bool) -> AnyOutboundHandler {
         let proxy_manager = self.proxy_manager.clone();
-        let mut inner = self.inner.lock().await;
 
         let proxies = self.get_proxies(touch).await;
         let mut fastest = proxies
             .first()
             .unwrap_or_else(|| panic!("no proxy found for {}", self.name()));
 
-        let mut fastest_delay = proxy_manager.last_delay(fastest.name()).await;
+        let mut fastest_delay = proxy_manager
+            .last_delay(fastest.name())
+            .await
+            .unwrap_or(Duration::from_secs(u64::MAX));
         let mut fast_not_exist = true;
 
+        let current_fastest_index = std::cmp::min(
+            self.fastest_proxy_index
+                .load(std::sync::atomic::Ordering::Relaxed),
+            proxies.len() as u16 - 1,
+        );
+
         for proxy in proxies.iter().skip(1) {
-            if inner.fastest_proxy.is_some()
-                && proxy.name() == inner.fastest_proxy.as_ref().unwrap().name()
-            {
+            if proxy.name() == proxies[current_fastest_index as usize].name() {
                 fast_not_exist = false;
             }
 
@@ -96,35 +94,39 @@ impl Handler {
             }
 
             let delay = proxy_manager.last_delay(proxy.name()).await;
-            if delay < fastest_delay {
+            if delay.is_some_and(|d| d < fastest_delay) {
                 fastest = proxy;
-                fastest_delay = delay;
+                fastest_delay = delay.unwrap();
             }
 
-            if inner.fastest_proxy.is_some()
-                || fast_not_exist
+            if fast_not_exist
                 || proxy_manager.alive(fastest.name()).await
                 || proxy_manager
-                    .last_delay(inner.fastest_proxy.as_ref().unwrap().name())
+                    .last_delay(proxies[current_fastest_index as usize].name())
                     .await
-                    > fastest_delay + self.tolerance
+                    .is_some_and(|d| {
+                        d > (fastest_delay
+                            + Duration::from_millis(self.tolerance as u64))
+                    })
             {
-                inner.fastest_proxy = Some(fastest.clone());
+                self.fastest_proxy_index.store(
+                    proxies
+                        .iter()
+                        .position(|p| p.name() == fastest.name())
+                        .unwrap() as u16,
+                    std::sync::atomic::Ordering::Relaxed,
+                );
             }
         }
 
         trace!(
-            "`{}` fastest is `{}` - delay {}",
+            fastest = %fastest.name(),
+            delay = ?fastest_delay,
+            "`{}` fastest",
             self.name(),
-            fastest.name(),
-            fastest_delay
         );
 
-        inner
-            .fastest_proxy
-            .as_ref()
-            .unwrap_or(proxies.first().unwrap())
-            .clone()
+        fastest.clone()
     }
 }
 

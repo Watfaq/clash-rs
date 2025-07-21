@@ -14,6 +14,8 @@ use hyper::Uri;
 
 use std::io;
 
+use crate::common::http::DEFAULT_USER_AGENT;
+use http::Request;
 use std::path::{Path, PathBuf};
 
 pub struct Vehicle {
@@ -45,8 +47,14 @@ impl Vehicle {
 #[async_trait]
 impl ProviderVehicle for Vehicle {
     async fn read(&self) -> std::io::Result<Vec<u8>> {
+        let mut req = Request::default();
+        req.headers_mut().insert(
+            http::header::USER_AGENT,
+            DEFAULT_USER_AGENT.parse().expect("must parse user agent"),
+        );
+        *req.uri_mut() = self.url.clone();
         self.http_client
-            .get(self.url.clone())
+            .request(req)
             .await
             .map_err(|x| io::Error::other(x.to_string()))?
             .into_body()

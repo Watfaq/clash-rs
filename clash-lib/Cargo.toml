@@ -38,7 +38,7 @@ tun = [
 redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tokio-console = ["tokio/tracing"]
+tracing = ["tokio/tracing"]
 
 [dependencies]
 # Async
@@ -74,6 +74,12 @@ anyhow = "1"
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
+tracing-chrome = { version = "0.7" }
+opentelemetry = { version = "0.30" }
+opentelemetry-otlp = { version = "0.30" }
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
+tracing-opentelemetry = { version = "0.31" }
+opentelemetry-semantic-conventions = { version = "0.30", features = ["semconv_experimental"] }
 
 # Data structures
 url = "2"

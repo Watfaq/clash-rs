@@ -241,7 +241,7 @@ pub async fn ping_pong_udp_test(
 // latency test of the proxy, will reuse the `url_test` ability
 pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
-) -> anyhow::Result<(u16, u16)> {
+) -> anyhow::Result<(Duration, Duration)> {
     let resolver = config_helper::build_dns_resolver().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
     proxy_manager

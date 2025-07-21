@@ -17,7 +17,7 @@ use hickory_proto::{
 };
 use rustls::ClientConfig;
 use tokio::{sync::RwLock, task::JoinHandle};
-use tracing::{info, warn};
+use tracing::{info, instrument, trace, warn};
 
 use crate::{
     Error,
@@ -277,27 +277,40 @@ impl Client for DnsClient {
         format!("{}#{}:{}", &self.net, &self.host, &self.port)
     }
 
+    #[instrument(skip(msg))]
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
-        let mut inner = self.inner.write().await;
+        let need_initialize = {
+            let inner = self.inner.read().await;
+            inner.c.is_none()
+                || inner.bg_handle.as_ref().is_none_or(|bg| bg.is_finished())
+        };
+        if need_initialize {
+            let mut inner = self.inner.write().await;
 
-        match &inner.bg_handle {
-            Some(bg) => {
-                if bg.is_finished() {
-                    warn!(
-                        "dns client background task is finished, likely connection \
-                         closed, restarting a new one"
-                    );
+            match &inner.bg_handle {
+                Some(bg) => {
+                    if bg.is_finished() {
+                        warn!(
+                            "dns client background task is finished, likely \
+                             connection closed, restarting a new one"
+                        );
+                        let (client, bg) = dns_stream_builder(&self.cfg).await?;
+                        inner.c.replace(client);
+                        inner.bg_handle.replace(bg);
+                    } else {
+                        trace!(
+                            "dns client background task is still running, reusing \
+                             existing connection"
+                        );
+                    }
+                }
+                _ => {
+                    // initializing client
+                    info!("initializing dns client: {}", &self.cfg);
                     let (client, bg) = dns_stream_builder(&self.cfg).await?;
                     inner.c.replace(client);
                     inner.bg_handle.replace(bg);
                 }
-            }
-            _ => {
-                // initializing client
-                info!("initializing dns client: {}", &self.cfg);
-                let (client, bg) = dns_stream_builder(&self.cfg).await?;
-                inner.c.replace(client);
-                inner.bg_handle.replace(bg);
             }
         }
 
@@ -305,7 +318,9 @@ impl Client for DnsClient {
         if req.id() == 0 {
             req.set_id(rand::random::<u16>());
         }
-        inner
+        self.inner
+            .read()
+            .await
             .c
             .as_ref()
             .unwrap()
