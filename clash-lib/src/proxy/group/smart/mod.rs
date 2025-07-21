@@ -249,7 +249,12 @@ impl Handler {
             let name = proxy.name().to_string();
 
             // Get basic metrics from proxy manager
-            let delay = self.proxy_manager.get_delay(&name).await.unwrap_or(9999.0);
+            let delay = self
+                .proxy_manager
+                .last_delay(&name)
+                .await
+                .map(|d| d.as_millis_f64())
+                .unwrap_or(9999.0);
             let packet_loss = self
                 .proxy_manager
                 .get_packet_loss(&name)

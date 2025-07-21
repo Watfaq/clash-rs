@@ -9,8 +9,11 @@ pub struct TimedFuture<Fut: Future + Unpin> {
 }
 
 impl<Fut: Future + Unpin> TimedFuture<Fut> {
-    pub fn new(fut: Fut, started_at: Option<Instant>) -> Self {
-        Self { fut, started_at }
+    pub fn new(fut: Fut) -> Self {
+        Self {
+            fut,
+            started_at: None,
+        }
     }
 }
 

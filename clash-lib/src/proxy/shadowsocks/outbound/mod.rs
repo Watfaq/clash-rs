@@ -47,7 +47,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl_default_connector!(Handler);
@@ -64,7 +64,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
-            connector: tokio::sync::Mutex::new(None),
+            connector: tokio::sync::RwLock::new(None),
         }
     }
 
@@ -74,10 +74,6 @@ impl Handler {
         sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<AnyStream> {
-        debug!(
-            "Proxying stream for session: {:?}, server: {}, port: {}",
-            sess, self.opts.server, self.opts.port
-        );
         let stream: AnyStream = match &self.opts.plugin {
             Some(plugin) => plugin.proxy_stream(s).await?,
             None => s,
@@ -125,7 +121,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);
@@ -147,7 +143,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);

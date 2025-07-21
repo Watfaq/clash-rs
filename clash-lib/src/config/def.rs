@@ -451,8 +451,10 @@ pub struct Config {
     pub interface: Option<String>,
     /// fwmark on Linux only
     /// # Note
-    /// - not implemented yet
-    pub routing_mask: Option<u32>,
+    /// - traffics originated from clash will be marked with this value
+    /// - so you can use this value to match the traffic in iptables to avoid
+    ///   traffic loops
+    pub routing_mark: Option<u32>,
     #[serde(rename = "proxy-providers")]
     /// proxy provider settings
     pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,

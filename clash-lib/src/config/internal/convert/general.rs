@@ -27,7 +27,7 @@ pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {
                 Interface::Name(iface.to_string())
             }
         }),
-        routing_mask: c.routing_mask,
+        routing_mask: c.routing_mark,
         mmdb: c.mmdb.to_owned(),
         mmdb_download_url: c.mmdb_download_url.to_owned(),
         asn_mmdb: c.asn_mmdb.to_owned(),

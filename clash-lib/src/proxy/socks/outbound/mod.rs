@@ -42,7 +42,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl_default_connector!(Handler);
@@ -59,7 +59,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
-            connector: tokio::sync::Mutex::new(None),
+            connector: tokio::sync::RwLock::new(None),
         }
     }
 
@@ -163,7 +163,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);
@@ -187,7 +187,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);

@@ -3,6 +3,7 @@
 #![feature(sync_unsafe_cell)]
 #![feature(let_chains)]
 #![feature(lazy_get)]
+#![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 
 #[macro_use]
