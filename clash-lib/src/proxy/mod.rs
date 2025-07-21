@@ -30,6 +30,9 @@ pub mod mixed;
 #[cfg(all(target_os = "linux", feature = "tproxy"))]
 pub mod tproxy;
 
+#[cfg(all(target_os = "linux", feature = "redir"))]
+pub mod redir;
+
 pub(crate) mod datagram;
 
 pub mod converters;

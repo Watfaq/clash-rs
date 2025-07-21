@@ -23,6 +23,7 @@ pub(super) fn convert(
     let mixed_port = c.mixed_port;
     #[cfg(feature = "tproxy")]
     let tproxy_port = c.tproxy_port;
+    #[cfg(feature = "redir")]
     let redir_port = c.redir_port;
     let bind_address = c.bind_address;
 
@@ -83,6 +84,7 @@ pub(super) fn convert(
     {
         warn!("Duplicate MIXED inbound listener found: {}", mixed_port);
     }
+    #[cfg(feature = "redir")]
     if let Some(Port(redir_port)) = redir_port
         && !all_inbounds.insert(InboundOpts::Redir {
             common_opts: CommonInboundOpts {

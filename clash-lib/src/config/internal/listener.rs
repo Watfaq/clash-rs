@@ -31,6 +31,7 @@ pub enum InboundOpts {
         common_opts: CommonInboundOpts,
         udp: bool,
     },
+    #[cfg(feature = "redir")]
     #[serde(alias = "redir")]
     Redir {
         #[serde(flatten)]
@@ -64,6 +65,7 @@ impl InboundOpts {
             #[cfg(feature = "tproxy")]
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
+            #[cfg(feature = "redir")]
             InboundOpts::Redir { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
@@ -78,6 +80,7 @@ impl InboundOpts {
             #[cfg(feature = "tproxy")]
             InboundOpts::TProxy { common_opts, .. } => common_opts,
             InboundOpts::Tunnel { common_opts, .. } => common_opts,
+            #[cfg(feature = "redir")]
             InboundOpts::Redir { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
