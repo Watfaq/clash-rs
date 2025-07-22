@@ -128,7 +128,6 @@ impl Handler {
     }
 }
 
-#[async_trait]
 impl DialWithConnector for Handler {}
 
 #[async_trait]

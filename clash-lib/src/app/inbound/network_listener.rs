@@ -1,6 +1,10 @@
+#[cfg(all(target_os = "linux", feature = "redir"))]
+use crate::proxy::redir::RedirInbound;
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
 #[cfg(target_os = "linux")]
+use crate::proxy::tproxy::TproxyInbound;
+#[cfg(all(target_os = "linux", feature = "tproxy"))]
 use crate::proxy::tproxy::TproxyInbound;
 #[cfg(all(target_os = "linux", feature = "tproxy"))]
 use crate::proxy::tproxy::TproxyInbound;
@@ -184,9 +188,26 @@ fn build_handler(
                 None
             }
         }
-        InboundOpts::Redir { .. } => {
-            warn!("redir is not implemented yet");
-            None
+        #[cfg(feature = "redir")]
+        InboundOpts::Redir {
+            #[cfg(target_os = "linux")]
+            common_opts,
+            ..
+        } => {
+            #[cfg(target_os = "linux")]
+            {
+                Some(Arc::new(RedirInbound::new(
+                    (common_opts.listen.0, common_opts.port).into(),
+                    common_opts.allow_lan,
+                    dispatcher,
+                    fw_mark,
+                )))
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                warn!("redir is not supported on this platform");
+                None
+            }
         }
         InboundOpts::Tunnel {
             common_opts,

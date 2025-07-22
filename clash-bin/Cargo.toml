@@ -8,7 +8,7 @@ authors = { workspace = true }
 
 [features]
 default = ["standard", "aws-lc-rs"]
-standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "wireguard", "clash-lib/zero_copy", "tproxy", "tun"]
+standard = ["shadowsocks", "tuic", "ssh", "shadowquic", "wireguard", "clash-lib/zero_copy", "tproxy", "tun", "redir"]
 
 plus = ["standard", "onion"]
 perf = ["plus", "jemallocator"]
@@ -23,11 +23,12 @@ onion = ["clash-lib/onion"]
 shadowquic = ["clash-lib/shadowquic"]
 wireguard = ["clash-lib/wireguard"]
 tproxy = ["clash-lib/tproxy"]
+redir = ["clash-lib/redir"]
 tun = ["clash-lib/tun"]
 
 bench = ["clash-lib/bench"]
 dhat-heap = ["dep:dhat"]
-tokio-console = ["clash-lib/tokio-console"]
+tracing = ["clash-lib/tracing"]
 jemallocator = ["dep:tikv-jemallocator"]
 
 aws-lc-rs = ["clash-lib/aws-lc-rs"]

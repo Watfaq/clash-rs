@@ -81,6 +81,16 @@ pub fn default_bool_true() -> bool {
     true
 }
 
+pub fn serialize_duration<S>(
+    duration: &std::time::Duration,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_u128(duration.as_millis())
+}
+
 #[async_recursion]
 pub async fn download<P>(
     url: &str,

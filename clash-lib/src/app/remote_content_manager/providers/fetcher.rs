@@ -8,7 +8,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;
 use tokio::sync::RwLock;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 use crate::common::utils;
 
@@ -199,13 +199,14 @@ where
         let fire_immediately = immediately_update;
 
         let thread_handle = Some(tokio::spawn(async move {
-            debug!("fetcher {} started", &name);
             loop {
                 let inner = inner.clone();
                 let vehicle = vehicle.clone();
                 let parser = parser.clone();
                 let name = name.clone();
                 let on_update = on_update.clone();
+                trace!("fetcher {} tick", &name);
+
                 let update = || async move {
                     let (elm, same) =
                         match Fetcher::<U, P>::update_inner(inner, vehicle, parser)

@@ -1,8 +1,10 @@
-use std::{io, sync::Arc};
+use std::{
+    io,
+    sync::{Arc, atomic::AtomicU16},
+};
 
 use async_trait::async_trait;
-use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
+use tracing::warn;
 
 use crate::{
     Error,
@@ -22,16 +24,12 @@ use crate::{
 
 #[async_trait]
 pub trait SelectorControl {
-    async fn select(&mut self, name: &str) -> Result<(), Error>;
+    async fn select(&self, name: &str) -> Result<(), Error>;
     #[cfg(test)]
     async fn current(&self) -> String;
 }
 
-pub type ThreadSafeSelectorControl = Arc<Mutex<dyn SelectorControl + Send + Sync>>;
-
-struct HandlerInner {
-    current: String,
-}
+pub type ThreadSafeSelectorControl = Arc<dyn SelectorControl + Send + Sync>;
 
 #[derive(Default, Clone)]
 pub struct HandlerOptions {
@@ -44,7 +42,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
     providers: Vec<ThreadSafeProxyProvider>,
-    inner: Arc<RwLock<HandlerInner>>,
+    current_selected_index: Arc<AtomicU16>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -63,27 +61,34 @@ impl Handler {
     ) -> Self {
         let provider = providers.first().unwrap();
         let proxies = provider.read().await.proxies().await;
-        let current = proxies.first().unwrap().name().to_owned();
 
         Self {
             opts,
             providers,
-            inner: Arc::new(RwLock::new(HandlerInner {
-                current: selected.unwrap_or(current),
-            })),
+            current_selected_index: AtomicU16::new(
+                selected
+                    .and_then(|s| proxies.iter().position(|p| p.name() == s))
+                    .unwrap_or(0) as u16,
+            )
+            .into(),
         }
     }
 
     async fn selected_proxy(&self, touch: bool) -> AnyOutboundHandler {
         let proxies = get_proxies_from_providers(&self.providers, touch).await;
-        let current = &self.inner.read().await.current;
-        for proxy in proxies.iter() {
-            if proxy.name() == current {
-                debug!("`{}` selected `{}`", self.name(), proxy.name());
+        let current_fastest_index = self
+            .current_selected_index
+            .load(std::sync::atomic::Ordering::Relaxed);
+        for (idx, proxy) in proxies.iter().enumerate() {
+            if idx == current_fastest_index as usize {
                 return proxy.clone();
             }
         }
-        debug!("selected proxy `{}` not found", current);
+        let proxy_name = proxies
+            .get(current_fastest_index as usize)
+            .map(|p| p.name())
+            .unwrap_or("<unknown>");
+        warn!("selected proxy `{}` not found", proxy_name);
         // in the case the selected proxy is not found(stale cache), return the
         // first one
         proxies.first().unwrap().clone()
@@ -92,10 +97,13 @@ impl Handler {
 
 #[async_trait]
 impl SelectorControl for Handler {
-    async fn select(&mut self, name: &str) -> Result<(), Error> {
+    async fn select(&self, name: &str) -> Result<(), Error> {
         let proxies = get_proxies_from_providers(&self.providers, false).await;
         if proxies.iter().any(|x| x.name() == name) {
-            name.clone_into(&mut self.inner.write().await.current);
+            self.current_selected_index.store(
+                proxies.iter().position(|p| p.name() == name).unwrap() as u16,
+                std::sync::atomic::Ordering::Relaxed,
+            );
             Ok(())
         } else {
             Err(Error::Operation(format!("proxy {name} not found")))
@@ -104,7 +112,18 @@ impl SelectorControl for Handler {
 
     #[cfg(test)]
     async fn current(&self) -> String {
-        self.inner.read().await.current.to_owned()
+        use std::panic;
+
+        let proxies = get_proxies_from_providers(&self.providers, false).await;
+
+        proxies
+            .get(
+                self.current_selected_index
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    as usize,
+            )
+            .map(|p| p.name().to_owned())
+            .unwrap_or_else(|| panic!("no proxy found for {}", self.name()))
     }
 }
 
@@ -210,7 +229,7 @@ impl GroupProxyAPIResponse for Handler {
 mod tests {
     use std::sync::Arc;
 
-    use tokio::sync::{Mutex, RwLock};
+    use tokio::sync::RwLock;
 
     use crate::proxy::{
         group::selector::ThreadSafeSelectorControl,
@@ -244,35 +263,24 @@ mod tests {
         .await;
 
         let selector_control =
-            Arc::new(Mutex::new(handler.clone())) as ThreadSafeSelectorControl;
+            Arc::new(handler.clone()) as ThreadSafeSelectorControl;
         let outbound_handler = Arc::new(handler);
 
-        assert_eq!(
-            selector_control.lock().await.current().await,
-            "provider1".to_owned()
-        );
+        assert_eq!(selector_control.current().await, "provider1".to_owned());
         assert_eq!(
             outbound_handler.selected_proxy(false).await.name(),
             "provider1".to_owned()
         );
 
-        selector_control
-            .lock()
-            .await
-            .select("provider2")
-            .await
-            .unwrap();
+        selector_control.select("provider2").await.unwrap();
 
-        assert_eq!(
-            selector_control.lock().await.current().await,
-            "provider2".to_owned()
-        );
+        assert_eq!(selector_control.current().await, "provider2".to_owned());
         assert_eq!(
             outbound_handler.selected_proxy(false).await.name(),
             "provider2".to_owned()
         );
 
-        let fail = selector_control.lock().await.select("provider3").await;
+        let fail = selector_control.select("provider3").await;
         assert!(fail.is_err());
     }
 }

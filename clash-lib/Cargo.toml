@@ -35,10 +35,10 @@ tun = [
     "dep:netstack-smoltcp",
     "dep:smoltcp",
 ]
-
+redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tokio-console = ["tokio/tracing"]
+tracing = ["tokio/tracing"]
 
 [dependencies]
 # Async
@@ -74,6 +74,12 @@ anyhow = "1"
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = "0.2"
+tracing-chrome = { version = "0.7" }
+opentelemetry = { version = "0.30" }
+opentelemetry-otlp = { version = "0.30" }
+opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
+tracing-opentelemetry = { version = "0.31" }
+opentelemetry-semantic-conventions = { version = "0.30", features = ["semconv_experimental"] }
 
 # Data structures
 url = "2"
@@ -173,7 +179,7 @@ dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic
-shadowquic = { version = "=0.2.0", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+shadowquic = { version = "^0.2", optional = true, git = "https://github.com/spongebob888/shadowquic" }
 
 # experimental
 downcast-rs = "2.0"
@@ -197,7 +203,7 @@ httpmock = "0.7.0"
 prost-build = "0.14"
 
 [target.'cfg(target_os="linux")'.dependencies]
-unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18" }
+unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "847c80b519f0fd8cff5c887ae708429897d08671" }
 
 [target.'cfg(macos)'.dependencies]
 security-framework = "3.2.0"

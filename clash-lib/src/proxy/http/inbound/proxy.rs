@@ -3,21 +3,21 @@ use std::{
     sync::Arc,
 };
 
+use bytes::Bytes;
 use futures::{TryFutureExt, future::BoxFuture};
 
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
 use hyper::{Method, Request, Response, Uri, body::Incoming, server::conn::http1};
 
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use hyper_util::{
+    client::legacy::Client,
+    rt::{TokioExecutor, TokioIo},
+};
 use tracing::{instrument, warn};
 
 use crate::{
     app::dispatcher::Dispatcher,
-    common::{
-        auth::ThreadSafeAuthenticator,
-        errors::map_io_error,
-        http::{HyperResponseBody, hyper::TokioIo},
-    },
+    common::{auth::ThreadSafeAuthenticator, errors::map_io_error},
     proxy::{AnyStream, ProxyError},
     session::{Network, Session, SocksAddr, Type},
 };
@@ -48,7 +48,7 @@ async fn proxy(
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
-) -> Result<Response<HyperResponseBody>, ProxyError> {
+) -> Result<Response<BoxBody<Bytes, std::io::Error>>, ProxyError> {
     if authenticator.enabled()
         && let Some(res) = authenticate_req(&req, authenticator)
     {
@@ -127,7 +127,7 @@ struct ProxyService {
 impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
     type Error = ProxyError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-    type Response = Response<HyperResponseBody>;
+    type Response = Response<BoxBody<Bytes, std::io::Error>>;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
         Box::pin(proxy(

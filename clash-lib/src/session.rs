@@ -401,6 +401,8 @@ pub enum Type {
     Tun,
     #[cfg(all(target_os = "linux", feature = "tproxy"))]
     Tproxy,
+    #[cfg(all(target_os = "linux", feature = "redir"))]
+    Redir,
     Tunnel,
     Shadowsocks,
     Ignore,

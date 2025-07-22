@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use std::{
-    net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     str::FromStr,
 };
 
@@ -102,8 +102,12 @@ pub struct TunConfig {
 #[serde(transparent)]
 pub struct BindAddress(pub IpAddr);
 impl BindAddress {
-    pub fn all() -> Self {
+    pub fn all_v4() -> Self {
         Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
+    }
+
+    pub fn dual_stack() -> Self {
+        Self(IpAddr::V6(Ipv6Addr::UNSPECIFIED))
     }
 
     pub fn local() -> Self {
@@ -119,7 +123,7 @@ impl BindAddress {
 }
 impl Default for BindAddress {
     fn default() -> Self {
-        Self::local()
+        Self::all_v4()
     }
 }
 
@@ -132,6 +136,7 @@ impl<'de> Deserialize<'de> for BindAddress {
         match str.as_str() {
             "*" => Ok(Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))),
             "localhost" => Ok(Self(IpAddr::from([127, 0, 0, 1]))),
+            "[::]" | "::" => Ok(Self(IpAddr::V6(Ipv6Addr::UNSPECIFIED))),
             _ => {
                 if let Ok(ip) = str.parse::<IpAddr>() {
                     Ok(Self(ip))
@@ -152,6 +157,7 @@ impl FromStr for BindAddress {
         match str {
             "*" => Ok(Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))),
             "localhost" => Ok(Self(IpAddr::from([127, 0, 0, 1]))),
+            "[::]" | "::" => Ok(Self(IpAddr::V6(Ipv6Addr::UNSPECIFIED))),
             _ => {
                 if let Ok(ip) = str.parse::<IpAddr>() {
                     Ok(Self(ip))

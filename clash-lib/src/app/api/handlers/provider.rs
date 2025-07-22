@@ -184,11 +184,11 @@ async fn get_proxy_delay(
         .url_test(&vec![proxy], &q.url, timeout)
         .await;
     match result.first().unwrap() {
-        Ok((delay, mean_delay)) => {
+        Ok((actual, overall)) => {
             let mut r = HashMap::new();
-            r.insert("delay".to_owned(), delay);
-            r.insert("meanDelay".to_owned(), mean_delay);
-            axum::response::Json(delay).into_response()
+            r.insert("delay".to_owned(), actual);
+            r.insert("overall".to_owned(), overall);
+            axum::response::Json(r).into_response()
         }
         Err(err) => (
             StatusCode::BAD_REQUEST,
