@@ -6,6 +6,7 @@ use tracing::warn;
 use crate::{
     Error,
     config::{
+        config::BindAddress,
         def::{self, Port},
         listener::{CommonInboundOpts, InboundOpts},
         proxy::map_serde_error,
@@ -25,7 +26,11 @@ pub(super) fn convert(
     let tproxy_port = c.tproxy_port;
     #[cfg(feature = "redir")]
     let redir_port = c.redir_port;
-    let bind_address = c.bind_address;
+    let bind_address = if c.bind_address == BindAddress::default() && c.ipv6 {
+        BindAddress::dual_stack()
+    } else {
+        c.bind_address
+    };
 
     let inbounds = raw
         .unwrap_or_default()

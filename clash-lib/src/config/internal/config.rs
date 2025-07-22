@@ -102,7 +102,7 @@ pub struct TunConfig {
 #[serde(transparent)]
 pub struct BindAddress(pub IpAddr);
 impl BindAddress {
-    pub fn all() -> Self {
+    pub fn all_v4() -> Self {
         Self(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
     }
 
@@ -123,7 +123,7 @@ impl BindAddress {
 }
 impl Default for BindAddress {
     fn default() -> Self {
-        Self::local()
+        Self::all_v4()
     }
 }
 
