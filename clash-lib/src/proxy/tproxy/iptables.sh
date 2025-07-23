@@ -57,7 +57,7 @@ done
 
 # TCP: conntrack
 iptables -t mangle -A clash-rs-tproxy-mark -p tcp -m conntrack --ctdir REPLY -j RETURN
-# Bypass calsh local's outbound data
+# Bypass clash local's outbound data
 iptables -t mangle -A clash-rs-tproxy-mark -m mark --mark 0xff/0xff -j RETURN
 iptables -t mangle -A clash-rs-tproxy-mark -m owner --uid-owner root -j RETURN
 # UDP: Set MARK and reroute
