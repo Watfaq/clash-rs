@@ -226,7 +226,7 @@ async fn handle_inbound_datagram(
                     //     warn!("Connection from {} is not allowed", meta.addr);
                     //     continue;
                     // }
-                    for chunk in buf.chunks(meta.stride) {
+                    for chunk in buf[0..meta.len].chunks(meta.stride) {
                         let pkt = UdpPacket {
                             data: chunk.to_vec(),
                             src_addr: meta.addr.to_canonical().into(),
