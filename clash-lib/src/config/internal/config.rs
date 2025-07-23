@@ -68,12 +68,12 @@ pub struct General {
     pub ipv6: bool,
     pub interface: Option<Interface>,
     pub routing_mask: Option<u32>,
-    pub mmdb: String,
+    pub mmdb: Option<String>,
     pub mmdb_download_url: Option<String>,
-    pub asn_mmdb: String,
+    pub asn_mmdb: Option<String>,
     pub asn_mmdb_download_url: Option<String>,
 
-    pub geosite: String,
+    pub geosite: Option<String>,
     pub geosite_download_url: Option<String>,
 }
 

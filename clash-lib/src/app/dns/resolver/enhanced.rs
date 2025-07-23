@@ -83,7 +83,7 @@ impl EnhancedResolver {
     pub async fn new(
         cfg: Config,
         store: ThreadSafeCacheFile,
-        mmdb: MmdbLookup,
+        mmdb: Option<MmdbLookup>,
     ) -> Self {
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),

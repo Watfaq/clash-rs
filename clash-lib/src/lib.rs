@@ -14,6 +14,10 @@ use crate::{
         dispatcher::Dispatcher, dns, inbound::manager::InboundManager,
         outbound::manager::OutboundManager, router::Router,
     },
+    common::{
+        geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoDataLookup},
+        mmdb::{DEFAULT_ASN_MMDB_DOWNLOAD_URL, DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL},
+    },
     config::{
         def,
         internal::{InternalConfig, proxy::OutboundProxy},
@@ -408,24 +412,41 @@ async fn create_components(
     let client = new_http_client(system_resolver.clone())
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
-    debug!("initializing mmdb");
-    let country_mmdb = Arc::new(
-        mmdb::Mmdb::new(
-            cwd.join(&config.general.mmdb),
-            config.general.mmdb_download_url,
-            client.clone(),
-        )
-        .await?,
-    ) as MmdbLookup;
+    let country_mmdb = if let Some(country_mmdb_file) = config.general.mmdb {
+        debug!("initializing mmdb");
+        Some(Arc::new(
+            mmdb::Mmdb::new(
+                cwd.join(&country_mmdb_file),
+                config
+                    .general
+                    .mmdb_download_url
+                    .unwrap_or(DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
+        ) as MmdbLookup)
+    } else {
+        debug!("country mmdb not set, skipping");
+        None
+    };
 
-    let geodata = Arc::new(
-        geodata::GeoData::new(
-            cwd.join(&config.general.geosite),
-            config.general.geosite_download_url,
-            client.clone(),
-        )
-        .await?,
-    );
+    let geodata = if let Some(geosite_file) = config.general.geosite {
+        debug!("initializing geosite");
+        Some(Arc::new(
+            geodata::GeoData::new(
+                cwd.join(&geosite_file),
+                config
+                    .general
+                    .geosite_download_url
+                    .unwrap_or(DEFAULT_GEOSITE_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
+        ) as GeoDataLookup)
+    } else {
+        debug!("geosite not set, skipping");
+        None
+    };
 
     debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
@@ -438,7 +459,7 @@ async fn create_components(
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
-        Some(country_mmdb.clone()),
+        country_mmdb.clone(),
     )
     .await;
 
@@ -470,14 +491,21 @@ async fn create_components(
         .await?,
     );
 
-    debug!("initializing country asn mmdb");
-    let p = cwd.join(&config.general.asn_mmdb);
-    let asn_mmdb = if p.exists() || config.general.asn_mmdb_download_url.is_some() {
+    let asn_mmdb = if let Some(asn_mmdb_name) = config.general.asn_mmdb {
+        debug!("initializing country asn mmdb");
         Some(Arc::new(
-            mmdb::Mmdb::new(p, config.general.asn_mmdb_download_url, client.clone())
-                .await?,
+            mmdb::Mmdb::new(
+                cwd.join(&asn_mmdb_name),
+                config
+                    .general
+                    .asn_mmdb_download_url
+                    .unwrap_or(DEFAULT_ASN_MMDB_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
         ) as MmdbLookup)
     } else {
+        debug!("ASN mmdb not found and not configured for download, skipping");
         None
     };
 

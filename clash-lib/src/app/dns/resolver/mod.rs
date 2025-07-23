@@ -24,11 +24,9 @@ pub async fn new(
     mmdb: Option<MmdbLookup>,
 ) -> ThreadSafeDNSResolver {
     if cfg.enable {
-        match (store, mmdb) {
-            (Some(store), Some(mmdb)) => {
-                Arc::new(EnhancedResolver::new(cfg, store, mmdb).await)
-            }
-            _ => print_and_exit!("enhanced resolver requires cache store and mmdb"),
+        match store {
+            Some(store) => Arc::new(EnhancedResolver::new(cfg, store, mmdb).await),
+            _ => print_and_exit!("enhanced resolver requires cache store"),
         }
     } else {
         Arc::new(
