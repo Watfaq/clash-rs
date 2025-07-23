@@ -1,4 +1,4 @@
-use tracing::debug;
+use tracing::warn;
 
 use super::RuleMatcher;
 use crate::{common::mmdb::MmdbLookup, session::Session};
@@ -8,7 +8,7 @@ pub struct GeoIP {
     pub target: String,
     pub country_code: String,
     pub no_resolve: bool,
-    pub mmdb: MmdbLookup,
+    pub mmdb: Option<MmdbLookup>,
 }
 
 impl std::fmt::Display for GeoIP {
@@ -22,12 +22,16 @@ impl RuleMatcher for GeoIP {
         let ip = sess.resolved_ip.or(sess.destination.ip());
 
         if let Some(ip) = ip {
-            match self.mmdb.lookup_country(ip) {
-                Ok(country) => country.country_code == self.country_code,
-                Err(e) => {
-                    debug!("GeoIP lookup failed: {}", e);
-                    false
-                }
+            if let Some(mmdb) = &self.mmdb {
+                // Check if the IP matches the country code
+                mmdb.lookup_country(ip)
+                    .is_ok_and(|country| country.country_code == self.country_code)
+            } else {
+                warn!(
+                    "GeoIP lookup failed: MMDB not available. Maybe config.mmdb is \
+                     not set?"
+                );
+                false
             }
         } else {
             false

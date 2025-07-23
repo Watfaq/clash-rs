@@ -408,22 +408,16 @@ pub struct Config {
     /// Hosts
     pub hosts: HashMap<String, String>,
     /// Country database path relative to the $CWD
-    #[educe(Default = "Country.mmdb")]
-    pub mmdb: String,
+    pub mmdb: Option<String>,
     /// Country database download url
-    // TODO not compatible with clash-meta
-    #[educe(Default = Some("https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb".into()))]
     pub mmdb_download_url: Option<String>,
     /// Optional ASN database path relative to the working dir
-    #[educe(Default = "Country-asn.mmdb")]
-    pub asn_mmdb: String,
+    pub asn_mmdb: Option<String>,
     /// Optional ASN database download url
     pub asn_mmdb_download_url: Option<String>,
     /// Geosite database path relative to the $CWD
-    #[educe(Default = "geosite.dat")]
-    pub geosite: String,
+    pub geosite: Option<String>,
     /// Geosite database download url
-    #[educe(Default = Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".into()))]
     pub geosite_download_url: Option<String>,
 
     // these options has default vals,
