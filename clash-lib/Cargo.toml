@@ -38,7 +38,7 @@ tun = [
 redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tracing = ["tokio/tracing"]
+tracing = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 
 [dependencies]
 # Async
@@ -73,13 +73,14 @@ anyhow = "1"
 # logging
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
-tracing-appender = "0.2"
-tracing-chrome = { version = "0.7" }
-opentelemetry = { version = "0.30" }
-opentelemetry-otlp = { version = "0.30" }
-opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
-tracing-opentelemetry = { version = "0.31" }
-opentelemetry-semantic-conventions = { version = "0.30", features = ["semconv_experimental"] }
+tracing-appender = { version = "0.2"}
+
+tracing-chrome = { version = "0.7", optional = true }
+opentelemetry = { version = "0.30", optional = true }
+opentelemetry-otlp = { version = "0.30", optional = true }
+opentelemetry_sdk = { version = "0.30", optional = true, features = ["rt-tokio"] }
+tracing-opentelemetry = { version = "0.31", optional = true }
+opentelemetry-semantic-conventions = { version = "0.30", optional = true, features = ["semconv_experimental"] }
 
 # Data structures
 url = "2"
