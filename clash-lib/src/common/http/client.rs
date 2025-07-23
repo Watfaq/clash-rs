@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -17,17 +18,38 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 use tower::Service;
+use tracing::{debug, error};
 
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
-    print_and_exit,
-    proxy::{AnyStream, utils::new_tcp_stream},
+    proxy::{AnyOutboundHandler, AnyStream, utils::new_tcp_stream},
+    session::Session,
 };
 
 #[derive(Clone)]
 /// A LocalConnector that is generalised to connect to any url
-pub struct LocalConnector(pub ThreadSafeDNSResolver);
+pub struct LocalConnector {
+    pub dns_resolver: ThreadSafeDNSResolver,
+    pub outbounds: Option<HashMap<String, AnyOutboundHandler>>,
+}
+impl LocalConnector {
+    pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
+        Self {
+            dns_resolver,
+            outbounds: None,
+        }
+    }
+
+    pub fn with_outbounds(mut self, outbounds: Vec<AnyOutboundHandler>) -> Self {
+        let mut obs = HashMap::new();
+        for handler in outbounds {
+            obs.insert(handler.name().to_owned(), handler);
+        }
+        self.outbounds = Some(obs);
+        self
+    }
+}
 
 impl Service<Uri> for LocalConnector {
     type Error = std::io::Error;
@@ -40,12 +62,19 @@ impl Service<Uri> for LocalConnector {
     }
 
     fn call(&mut self, remote: Uri) -> Self::Future {
-        let host = remote
-            .host()
-            .unwrap_or_else(|| print_and_exit!("invalid url: {}", remote))
-            .to_owned();
+        let host = if let Some(host) = remote.host() {
+            host.to_owned()
+        } else {
+            return Box::pin(async move {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("uri must have a host: {remote}"),
+                ))
+            });
+        };
 
-        let dns = self.0.clone();
+        let dns = self.dns_resolver.clone();
+        let outbounds = self.outbounds.clone();
 
         Box::pin(async move {
             let remote_ip = dns
@@ -59,9 +88,59 @@ impl Service<Uri> for LocalConnector {
                     Some(s) => match s {
                         "http" => 80,
                         "https" => 443,
-                        _ => print_and_exit!("invalid url: {}", remote),
+                        _ => {
+                            return Err(std::io::Error::other(format!(
+                                "unsupported scheme: {s}"
+                            )));
+                        }
                     },
                 });
+
+            error!(
+                url = ?remote.authority(),
+                fragments = remote.to_string().rsplit_once('#')
+                    .map(|(x, _)| x)
+                    .unwrap_or(""),
+                "connecting to remote"
+            );
+            if let Some(fragments) =
+                remote.to_string().rsplit_once('#').map(|(_, x)| x)
+            {
+                let pairs = fragments.split('&').filter_map(|x| {
+                    let mut kv = x.splitn(2, '=');
+                    if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                        Some((k, v))
+                    } else {
+                        None
+                    }
+                });
+                let mut params = HashMap::new();
+                for (k, v) in pairs {
+                    params.insert(k.to_owned(), v.to_owned());
+                }
+                if let Some(selected_outbound) = params.get("_clash_outbound") {
+                    if let Some(outbounds) = outbounds {
+                        debug!("using selected outbound: {selected_outbound}");
+                        if let Some(handler) =
+                            outbounds.get(selected_outbound.as_str())
+                        {
+                            let sess = Session {
+                                network: crate::session::Network::Tcp,
+                                typ: crate::session::Type::Ignore,
+                                destination: crate::session::SocksAddr::Ip(
+                                    (remote_ip, remote_port).into(),
+                                ),
+                                ..Default::default()
+                            };
+                            return handler
+                                .connect_stream(&sess, dns)
+                                .await
+                                .map(|x| x as _);
+                        }
+                    }
+                }
+            }
+
             new_tcp_stream(
                 (remote_ip, remote_port).into(),
                 None,
@@ -128,15 +207,21 @@ impl hyper::rt::Write for AnyStream {
 pub type HttpClient =
     Client<hyper_rustls::HttpsConnector<LocalConnector>, Empty<Bytes>>;
 
+/// Creates a new HTTP client with the given DNS resolver and optional bootstrap
+/// outbounds, that is used by clash to send outgoing HTTP requests.
 pub fn new_http_client(
     dns_resolver: ThreadSafeDNSResolver,
+    bootstrap_outbounds: Option<Vec<AnyOutboundHandler>>,
 ) -> std::io::Result<HttpClient> {
     let mut tls_config = rustls::ClientConfig::builder()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
     tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    let connector = LocalConnector(dns_resolver);
+    let mut connector = LocalConnector::new(dns_resolver);
+    if let Some(outbounds) = bootstrap_outbounds {
+        connector = connector.with_outbounds(outbounds);
+    }
 
     let connector: hyper_rustls::HttpsConnector<LocalConnector> =
         hyper_rustls::HttpsConnectorBuilder::new()

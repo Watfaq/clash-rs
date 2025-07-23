@@ -142,7 +142,7 @@ mod tests {
                 .map_err(|x| Error::DNSError(x.to_string()))
                 .unwrap(),
         );
-        let client = new_http_client(system_resolver)
+        let client = new_http_client(system_resolver, None)
             .map_err(|x| Error::DNSError(x.to_string()))
             .unwrap();
         let out = tempfile::Builder::new().append(true).tempfile()?;

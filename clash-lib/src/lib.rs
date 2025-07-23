@@ -401,12 +401,33 @@ async fn create_components(
         debug!("tun enabled, initializing default outbound interface");
         init_net_config(config.tun.so_mark).await;
     }
+
+    debug!("initializing cache store");
+    let cache_store = profile::ThreadSafeCacheFile::new(
+        cwd.join("cache.db").as_path().to_str().unwrap(),
+        config.profile.store_selected,
+    );
+
     let system_resolver = Arc::new(
         SystemResolver::new(config.dns.ipv6)
             .map_err(|x| Error::DNSError(x.to_string()))?,
     );
-    let client = new_http_client(system_resolver.clone())
-        .map_err(|x| Error::DNSError(x.to_string()))?;
+
+    debug!("initializing bootstrap outbounds");
+    let plain_outbounds = OutboundManager::load_plain_outbounds(
+        config
+            .proxies
+            .into_values()
+            .filter_map(|x| match x {
+                OutboundProxy::ProxyServer(s) => Some(s),
+                _ => None,
+            })
+            .collect(),
+    );
+
+    let client =
+        new_http_client(system_resolver.clone(), Some(plain_outbounds.clone()))
+            .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
     let country_mmdb = Arc::new(
@@ -417,21 +438,6 @@ async fn create_components(
         )
         .await?,
     ) as MmdbLookup;
-
-    let geodata = Arc::new(
-        geodata::GeoData::new(
-            cwd.join(&config.general.geosite),
-            config.general.geosite_download_url,
-            client.clone(),
-        )
-        .await?,
-    );
-
-    debug!("initializing cache store");
-    let cache_store = profile::ThreadSafeCacheFile::new(
-        cwd.join("cache.db").as_path().to_str().unwrap(),
-        config.profile.store_selected,
-    );
 
     let dns_listen = config.dns.listen.clone();
     debug!("initializing dns resolver");
@@ -445,14 +451,7 @@ async fn create_components(
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
         OutboundManager::new(
-            config
-                .proxies
-                .into_values()
-                .filter_map(|x| match x {
-                    OutboundProxy::ProxyServer(s) => Some(s),
-                    _ => None,
-                })
-                .collect(),
+            plain_outbounds,
             config
                 .proxy_groups
                 .into_values()
@@ -466,6 +465,15 @@ async fn create_components(
             dns_resolver.clone(),
             cache_store.clone(),
             cwd.to_string_lossy().to_string(),
+        )
+        .await?,
+    );
+
+    let geodata = Arc::new(
+        geodata::GeoData::new(
+            cwd.join(&config.general.geosite),
+            config.general.geosite_download_url,
+            client.clone(),
         )
         .await?,
     );

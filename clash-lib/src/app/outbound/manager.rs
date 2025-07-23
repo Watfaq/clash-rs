@@ -64,9 +64,24 @@ static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
 
 pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
+/// Init process:
+/// 1. Load all outbounds and groups from config using the unbounded function
+///    `load_plain_outbounds`, so that any bootstrap proxy can be used to
+///    download datasets
+/// 2. Load all proxy providers from config, this should happen before loading
+///    groups as groups my reference providers with `use_provider`
+/// 3. Finally load all groups, and create `PlainProvider` for each explicit
+///    referenced proxies in each group and register them in the
+///    `proxy_providers` map.
+/// 4. Create a `PlainProvider` for the global proxy set, which is the GLOBAL
+///    selector, which should contain all plain outbound + provider proxies +
+///    groups
+/// Note that the `PlainProvider` is a special provider that contains plain
+/// proxies for API compatibility with actual remote providers.
+/// TODO: refactor this giant class
 impl OutboundManager {
     pub async fn new(
-        outbounds: Vec<OutboundProxyProtocol>,
+        outbounds: Vec<AnyOutboundHandler>,
         outbound_groups: Vec<OutboundGroupProtocol>,
         proxy_providers: HashMap<String, OutboundProxyProviderDef>,
         proxy_names: Vec<String>,
@@ -215,23 +230,10 @@ impl OutboundManager {
         Ok(())
     }
 
-    /// Load handlers from the provided outbound protocols and groups.
-    /// handlers in proxy_providers are not loaded here as they are stored in
-    /// the provider separately.
-    async fn load_handlers(
-        &mut self,
+    pub fn load_plain_outbounds(
         outbounds: Vec<OutboundProxyProtocol>,
-        outbound_groups: Vec<OutboundGroupProtocol>,
-        proxy_names: Vec<String>,
-        cache_store: ThreadSafeCacheFile,
-    ) -> Result<(), Error> {
-        let proxy_manager = &self.proxy_manager;
-        let provider_registry = &mut self.proxy_providers;
-        let handlers = &mut self.handlers;
-        let selector_control = &mut self.selector_control;
-
-        // load handlers and collect failed outbounds
-        let loaded_outbounds: Vec<_> = outbounds
+    ) -> Vec<AnyOutboundHandler> {
+        outbounds
             .into_iter()
             .filter_map(|outbound| match outbound {
                 OutboundProxyProtocol::Direct => {
@@ -356,16 +358,104 @@ impl OutboundManager {
                         .ok()
                 }
             })
-            .collect();
+            .collect()
+    }
+}
 
-        handlers.extend(loaded_outbounds.into_iter().map(|h| {
+impl OutboundManager {
+    /// Load handlers from the provided outbound protocols and groups.
+    /// handlers in proxy_providers are not loaded here as they are stored in
+    /// the provider separately.
+    async fn load_handlers(
+        &mut self,
+        outbounds: Vec<AnyOutboundHandler>,
+        outbound_groups: Vec<OutboundGroupProtocol>,
+        proxy_names: Vec<String>,
+        cache_store: ThreadSafeCacheFile,
+    ) -> Result<(), Error> {
+        self.handlers.extend(outbounds.into_iter().map(|h| {
             let name = h.name().to_owned();
             (name, h)
         }));
 
+        self.load_group_outbounds(outbound_groups, cache_store.clone())
+            .await?;
+
+        // insert GLOBAL
+        let mut g = vec![];
+        let mut keys = self.handlers.keys().collect::<Vec<_>>();
+        keys.sort_by(|a, b| {
+            proxy_names
+                .iter()
+                .position(|x| &x == a)
+                .cmp(&proxy_names.iter().position(|x| &x == b))
+        });
+        for name in keys {
+            g.push(self.handlers.get(name).unwrap().clone());
+        }
+        let hc = HealthCheck::new(
+            g.clone(),
+            DEFAULT_LATENCY_TEST_URL.to_owned(),
+            0, // this is a manual HC
+            true,
+            self.proxy_manager.clone(),
+        );
+
+        let pd = Arc::new(RwLock::new(PlainProvider::new(
+            PROXY_GLOBAL.to_owned(),
+            g,
+            hc,
+        )?));
+
+        let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
+        let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
+        for p in self.proxy_providers.values() {
+            let vehicle_type = p.read().await.vehicle_type();
+            if matches!(
+                vehicle_type,
+                ProviderVehicleType::Http | ProviderVehicleType::File
+            ) {
+                providers.push(p.clone());
+            }
+        }
+
+        let h = selector::Handler::new(
+            selector::HandlerOptions {
+                name: PROXY_GLOBAL.to_owned(),
+                udp: true,
+                common_opts: crate::proxy::HandlerCommonOptions {
+                    icon: None,
+                    ..Default::default()
+                },
+            },
+            providers,
+            stored_selection,
+        )
+        .await;
+
+        self.proxy_providers
+            .insert(RESERVED_PROVIDER_NAME.to_owned(), pd);
+        self.handlers
+            .insert(PROXY_GLOBAL.to_owned(), Arc::new(h.clone()));
+        self.selector_control
+            .insert(PROXY_GLOBAL.to_owned(), Arc::new(h));
+
+        Ok(())
+    }
+
+    async fn load_group_outbounds(
+        &mut self,
+        outbound_groups: Vec<OutboundGroupProtocol>,
+        cache_store: ThreadSafeCacheFile,
+    ) -> Result<(), Error> {
         // Sort outbound groups to ensure dependencies are resolved
         let mut outbound_groups = outbound_groups;
         proxy_groups_dag_sort(&mut outbound_groups)?;
+
+        let handlers = &mut self.handlers;
+        let proxy_manager = &self.proxy_manager;
+        let provider_registry = &mut self.proxy_providers;
+        let selector_control = &mut self.selector_control;
 
         #[allow(clippy::too_many_arguments)]
         fn make_provider_from_proxies(
@@ -715,62 +805,6 @@ impl OutboundManager {
                 }
             }
         }
-
-        // insert GLOBAL
-        let mut g = vec![];
-        let mut keys = handlers.keys().collect::<Vec<_>>();
-        keys.sort_by(|a, b| {
-            proxy_names
-                .iter()
-                .position(|x| &x == a)
-                .cmp(&proxy_names.iter().position(|x| &x == b))
-        });
-        for name in keys {
-            g.push(handlers.get(name).unwrap().clone());
-        }
-        let hc = HealthCheck::new(
-            g.clone(),
-            DEFAULT_LATENCY_TEST_URL.to_owned(),
-            0, // this is a manual HC
-            true,
-            proxy_manager.clone(),
-        );
-
-        let pd = Arc::new(RwLock::new(PlainProvider::new(
-            PROXY_GLOBAL.to_owned(),
-            g,
-            hc,
-        )?));
-
-        let stored_selection = cache_store.get_selected(PROXY_GLOBAL).await;
-        let mut providers: Vec<ThreadSafeProxyProvider> = vec![pd.clone()];
-        for p in provider_registry.values() {
-            let vehicle_type = p.read().await.vehicle_type();
-            if matches!(
-                vehicle_type,
-                ProviderVehicleType::Http | ProviderVehicleType::File
-            ) {
-                providers.push(p.clone());
-            }
-        }
-
-        let h = selector::Handler::new(
-            selector::HandlerOptions {
-                name: PROXY_GLOBAL.to_owned(),
-                udp: true,
-                common_opts: crate::proxy::HandlerCommonOptions {
-                    icon: None,
-                    ..Default::default()
-                },
-            },
-            providers,
-            stored_selection,
-        )
-        .await;
-
-        provider_registry.insert(RESERVED_PROVIDER_NAME.to_owned(), pd);
-        handlers.insert(PROXY_GLOBAL.to_owned(), Arc::new(h.clone()));
-        selector_control.insert(PROXY_GLOBAL.to_owned(), Arc::new(h));
 
         Ok(())
     }

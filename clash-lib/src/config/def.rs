@@ -503,7 +503,7 @@ impl FromStr for Config {
         })?;
 
         serde_yaml::from_value(val).map_err(|e| {
-            Error::InvalidConfig(format!("could not parse config content {s}: {e}"))
+            Error::InvalidConfig(format!("could not parse config content: {e}"))
         })
     }
 }

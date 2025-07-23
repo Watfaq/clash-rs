@@ -86,7 +86,11 @@ impl Mmdb {
     ) -> Result<maxminddb::Reader<Vec<u8>>, Error> {
         let mmdb_file = path.as_ref().to_path_buf();
 
-        if !mmdb_file.exists() {
+        if !mmdb_file.exists()
+            || download_url
+                .as_ref()
+                .is_some_and(|x| x.contains("force=true"))
+        {
             if let Some(url) = download_url.as_ref() {
                 info!("downloading mmdb from {}", url);
                 download(url, &mmdb_file, http_client).await.map_err(|x| {

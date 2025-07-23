@@ -31,8 +31,9 @@ impl Vehicle {
         cwd: Option<P>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
-        let client =
-            new_http_client(dns_resolver).expect("failed to create http client");
+        // TODO(dev0): support remote content manager via proxy
+        let client = new_http_client(dns_resolver, None)
+            .expect("failed to create http client");
         Self {
             url: url.into(),
             path: match cwd {

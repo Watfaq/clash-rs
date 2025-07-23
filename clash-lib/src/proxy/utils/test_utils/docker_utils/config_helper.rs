@@ -37,7 +37,7 @@ pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     let system_resolver = Arc::new(
         SystemResolver::new(false).map_err(|x| Error::DNSError(x.to_string()))?,
     );
-    let client = new_http_client(system_resolver)
+    let client = new_http_client(system_resolver, None)
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
     let mmdb = Arc::new(
