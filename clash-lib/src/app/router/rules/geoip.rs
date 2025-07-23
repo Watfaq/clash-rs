@@ -24,9 +24,8 @@ impl RuleMatcher for GeoIP {
         if let Some(ip) = ip {
             if let Some(mmdb) = &self.mmdb {
                 // Check if the IP matches the country code
-                mmdb.lookup_country(ip).map_or(false, |country| {
-                    country.country_code == self.country_code
-                })
+                mmdb.lookup_country(ip)
+                    .is_ok_and(|country| country.country_code == self.country_code)
             } else {
                 warn!(
                     "GeoIP lookup failed: MMDB not available. Maybe config.mmdb is \

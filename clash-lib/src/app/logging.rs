@@ -133,7 +133,7 @@ fn setup_logging_inner(
         let log_path = if path_buf.is_absolute() {
             log_file
         } else {
-            format!("{}/{}", cwd, log_file)
+            format!("{cwd}/{log_file}")
         };
         let writer = std::fs::File::options().append(true).open(log_path)?;
         let (non_blocking, guard) =
