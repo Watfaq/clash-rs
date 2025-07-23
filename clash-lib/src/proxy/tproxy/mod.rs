@@ -226,17 +226,19 @@ async fn handle_inbound_datagram(
                     //     warn!("Connection from {} is not allowed", meta.addr);
                     //     continue;
                     // }
-                    let pkt = UdpPacket {
-                        data: buf[..meta.len].to_vec(),
-                        src_addr: meta.addr.to_canonical().into(),
-                        dst_addr: orig_dst.to_canonical().into(),
-                    };
-                    trace!("tproxy -> dispatcher: {:?}", pkt);
-                    match d_tx.send(pkt).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            warn!("failed to send udp packet to proxy: {}", e);
-                            continue;
+                    for chunk in buf.chunks(meta.stride) {
+                        let pkt = UdpPacket {
+                            data: chunk.to_vec(),
+                            src_addr: meta.addr.to_canonical().into(),
+                            dst_addr: orig_dst.to_canonical().into(),
+                        };
+                        trace!("tproxy -> dispatcher: {:?}", pkt);
+                        match d_tx.send(pkt).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!("failed to send udp packet to proxy: {}", e);
+                                continue;
+                            }
                         }
                     }
                 }
