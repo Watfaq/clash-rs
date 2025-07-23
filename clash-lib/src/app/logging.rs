@@ -1,8 +1,11 @@
 use crate::def::LogLevel;
 use std::{io::IsTerminal, sync::Once};
 
+#[cfg(feature = "tracing")]
 use opentelemetry::trace::TracerProvider;
+#[cfg(feature = "tracing")]
 use opentelemetry_otlp::{Protocol, WithExportConfig};
+#[cfg(feature = "tracing")]
 use opentelemetry_semantic_conventions::{
     SCHEMA_URL,
     attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION},
@@ -10,6 +13,7 @@ use opentelemetry_semantic_conventions::{
 use serde::Serialize;
 use tokio::sync::broadcast::Sender;
 use tracing::level_filters::LevelFilter;
+#[cfg(feature = "tracing")]
 use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
@@ -78,9 +82,11 @@ where
 }
 
 struct LoggingGuard {
-    file_appender: Option<tracing_appender::non_blocking::WorkerGuard>,
-    tracing_chrome: Option<tracing_chrome::FlushGuard>,
-    tracer_provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
+    _file_appender: Option<tracing_appender::non_blocking::WorkerGuard>,
+    #[cfg(feature = "tracing")]
+    _tracing_chrome: Option<tracing_chrome::FlushGuard>,
+    #[cfg(feature = "tracing")]
+    _tracer_provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
 }
 
 static SETUP_LOGGING: Once = Once::new();
@@ -129,6 +135,8 @@ fn setup_logging_inner(
     } else {
         (None, None)
     };
+
+    #[cfg(feature = "tracing")]
     let (tracing_chrome, tracing_chrome_g) = if cfg!(feature = "tracing") {
         let builder = tracing_chrome::ChromeLayerBuilder::new();
         let (layer, guard) = builder.build();
@@ -137,12 +145,14 @@ fn setup_logging_inner(
         (None, None)
     };
 
+    #[cfg(feature = "tracing")]
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
         .with_protocol(Protocol::HttpBinary)
         .build()
         .unwrap();
 
+    #[cfg(feature = "tracing")]
     let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         // Customize sampling strategy
         .with_sampler(opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(
@@ -169,6 +179,7 @@ fn setup_logging_inner(
         .build())
         .with_batch_exporter(exporter)
         .build();
+    #[cfg(feature = "tracing")]
     let tracer = tracer_provider.tracer("tracing-otel-subscriber");
 
     let subscriber = tracing_subscriber::registry();
@@ -190,36 +201,49 @@ fn setup_logging_inner(
         "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]:[subsecond]"
     ));
 
-    let subscriber = subscriber
+    let log_to_file_layer = appender.map(|x| {
+        tracing_subscriber::fmt::Layer::new()
+            .with_span_events(FmtSpan::CLOSE)
+            .with_timer(timer.clone())
+            .with_ansi(false)
+            .compact()
+            .with_file(true)
+            .with_line_number(true)
+            .with_level(true)
+            .with_writer(x)
+            .with_filter(exclude.clone())
+    });
+    let log_stdout_layer = tracing_subscriber::fmt::Layer::new()
+        .with_timer(timer)
+        .with_ansi(std::io::stdout().is_terminal())
+        .compact()
+        .with_target(cfg!(debug_assertions))
+        .with_file(true)
+        .with_line_number(true)
+        .with_level(true)
+        .with_thread_ids(cfg!(debug_assertions))
+        .with_writer(std::io::stdout)
+        .with_filter(exclude.clone());
+
+    let subscriber = {
+        #[cfg(feature = "tracing")]
+        {
+            subscriber
         .with(filter) // Global filter
         .with(tracing_chrome)
         .with(OpenTelemetryLayer::new(tracer))
-        .with(collector.with_filter(exclude.clone())) // Log collector for API controller
-        .with(appender.map(|x| { // Log to file
-            tracing_subscriber::fmt::Layer::new()
-                .with_span_events(FmtSpan::CLOSE)
-                .with_timer(timer.clone())
-                .with_ansi(false)
-                .compact()
-                .with_file(true)
-                .with_line_number(true)
-                .with_level(true)
-                .with_writer(x)
-                .with_filter(exclude.clone())
-        }))
-        .with(// Log to stdout
-            tracing_subscriber::fmt::Layer::new()
-                .with_timer(timer)
-                .with_ansi(std::io::stdout().is_terminal())
-                .compact()
-                .with_target(cfg!(debug_assertions))
-                .with_file(true)
-                .with_line_number(true)
-                .with_level(true)
-                .with_thread_ids(cfg!(debug_assertions))
-                .with_writer(std::io::stdout)
-                .with_filter(exclude),
-        );
+        .with(collector.with_filter(exclude.clone()))
+        .with(log_to_file_layer)
+        .with(log_stdout_layer)
+        }
+        #[cfg(not(feature = "tracing"))]
+        {
+            subscriber.with(filter) // Global filter
+        .with(collector.with_filter(exclude.clone()))
+        .with(log_to_file_layer)
+        .with(log_stdout_layer)
+        }
+    };
 
     #[cfg(target_os = "ios")]
     let subscriber =
@@ -229,9 +253,11 @@ fn setup_logging_inner(
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
 
     Ok(Some(LoggingGuard {
-        file_appender: guard,
-        tracing_chrome: tracing_chrome_g,
-        tracer_provider: Some(tracer_provider),
+        _file_appender: guard,
+        #[cfg(feature = "tracing")]
+        _tracing_chrome: tracing_chrome_g,
+        #[cfg(feature = "tracing")]
+        _tracer_provider: Some(tracer_provider),
     }))
 }
 
