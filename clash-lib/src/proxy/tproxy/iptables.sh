@@ -1,52 +1,74 @@
-#!/bin/sh
+#!/bin/bash
 
-# ip to bypass tproxy
-readonly LOCAL_BY_PASS="\
-127/8 \
+### IPv4 RULES
+
+TPROXY_IP=127.0.0.1
+TPROXY_PORT=8900
+
+readonly IPV4_RESERVED_IPADDRS="\
+0/8 \
 10/8 \
-192/8
+100.64/10 \
+127/8 \
+169.254/16 \
+172.16/12 \
+192/24 \
+192.0.2.0/24 \
+192.88.99/24 \
+192.168/16 \
+198.18/15 \
+198.51.100/24 \
+203.0.113/24 \
+224/4 \
+240/4 \
+255.255.255.255/32 \
 "
 
-# declare ip as local for tproxy
-ip rule del fwmark 0x3333 lookup 3333
-ip rule add fwmark 0x3333 lookup 3333
-ip route del local 0.0.0.0/0 dev lo table 3333
-ip route add local 0.0.0.0/0 dev lo table 3333
+## TCP+UDP
+# Strategy Route
+ip -4 rule del fwmark 0x1 table 803
+ip -4 rule add fwmark 0x1 table 803
+ip -4 route del local 0.0.0.0/0 dev lo table 803
+ip -4 route add local 0.0.0.0/0 dev lo table 803
 
-# where all traffic enter tproxy and get marked
-iptables -t mangle -N CLASH-TPROXY-INPUT
-# fill in the chain
-for i in $LOCAL_BY_PASS; do
-    iptables -t mangle -A CLASH-TPROXY-INPUT -d $i -j RETURN
+# TPROXY for LAN
+iptables -t mangle -N clash-rs-tproxy
+# Skip LoopBack, Reserved
+for addr in ${IPV4_RESERVED_IPADDRS}; do
+   iptables -t mangle -A clash-rs-tproxy -d "${addr}" -j RETURN
 done
-iptables -t mangle -A CLASH-TPROXY-INPUT -p tcp -j TPROXY \
-  --tproxy-mark 0x3333/0x3333 --on-port 8900 --on-ip 127.0.0.1
-iptables -t mangle -A CLASH-TPROXY-INPUT -p udp -j TPROXY \
-  --tproxy-mark 0x3333/0x3333 --on-port 8900 --on-ip 127.0.0.1
 
-# for local traffic
-iptables -t mangle -N CLASH-TPROXY-LOCAL
-for i in $LOCAL_BY_PASS; do
-    iptables -t mangle -A CLASH-TPROXY-LOCAL -d $i -j RETURN
+# Bypass LAN data
+iptables -t mangle -A clash-rs-tproxy -m addrtype --dst-type LOCAL -j RETURN
+# Bypass sslocal's outbound data
+iptables -t mangle -A clash-rs-tproxy -m mark --mark 0xff/0xff -j RETURN
+# UDP: TPROXY UDP to 60080
+iptables -t mangle -A clash-rs-tproxy -p udp -j TPROXY --on-ip ${TPROXY_IP} --on-port ${TPROXY_PORT} --tproxy-mark 0x01/0x01
+# TCP: TPROXY TCP to 60080
+iptables -t mangle -A clash-rs-tproxy -p tcp -j TPROXY --on-ip ${TPROXY_IP} --on-port ${TPROXY_PORT} --tproxy-mark 0x01/0x01
+
+
+# TPROXY for Local
+iptables -t mangle -N clash-rs-tproxy-mark
+# Skip LoopBack, Reserved
+for addr in ${IPV4_RESERVED_IPADDRS}; do
+   iptables -t mangle -A clash-rs-tproxy-mark -d "${addr}" -j RETURN
 done
-iptables -t mangle -A CLASH-TPROXY-LOCAL -p tcp -m conntrack --ctdir REPLY -j RETURN
-iptables -t mangle -A CLASH-TPROXY-LOCAL -p udp -m conntrack --ctdir REPLY -j RETURN
 
-iptables -t mangle -A CLASH-TPROXY-LOCAL -m owner --uid-owner root -j RETURN
-# https://github.com/shadowsocks/shadowsocks-rust/blob/6e6e6948d7fc426c99cc03ef91abae989b6482b4/configs/iptables_tproxy.sh#L187
-iptables -t mangle -A CLASH-TPROXY-LOCAL -p tcp -j MARK --set-xmark 0x3333/0xffffffff # needs to match the ip rule fwmark
-iptables -t mangle -A CLASH-TPROXY-LOCAL -p udp -j MARK --set-xmark 0x3333/0xffffffff
+# TCP: conntrack
+iptables -t mangle -A clash-rs-tproxy-mark -p tcp -m conntrack --ctdir REPLY -j RETURN
+# Bypass clash local's outbound data
+iptables -t mangle -A clash-rs-tproxy-mark -m mark --mark 0xff/0xff -j RETURN
+iptables -t mangle -A clash-rs-tproxy-mark -m owner --uid-owner root -j RETURN
+# UDP: Set MARK and reroute
+iptables -t mangle -A clash-rs-tproxy-mark -p udp -j MARK --set-xmark 0x01/0xffffffff
+# TCP: Set MARK and reroute
+iptables -t mangle -A clash-rs-tproxy-mark -p tcp -j MARK --set-xmark 0x01/0xffffffff
 
-iptables -t mangle -A OUTPUT -p tcp -d 104.21.58.154 -j CLASH-TPROXY-LOCAL
-iptables -t mangle -A OUTPUT -p tcp -d 172.67.161.121 -j CLASH-TPROXY-LOCAL
-iptables -t mangle -A OUTPUT -p udp -d 1.1.1.1 -j CLASH-TPROXY-LOCAL
-iptables -t mangle -A OUTPUT -p udp -d 8.8.8.8 -j CLASH-TPROXY-LOCAL
-
-# for routed traffic
-iptables -t mangle -A PREROUTING -p tcp -j CLASH-TPROXY-INPUT
-iptables -t mangle -A PREROUTING -p udp -j CLASH-TPROXY-INPUT
-
-
-
-# ipv6
-# TODO
+# Apply TPROXY to LAN
+iptables -t mangle -A PREROUTING -p udp -j clash-rs-tproxy
+iptables -t mangle -A PREROUTING -p tcp -j clash-rs-tproxy
+#iptables -t mangle -A PREROUTING -p udp -m addrtype ! --src-type LOCAL ! --dst-type LOCAL -j clash-rs-tproxy
+# Apply TPROXY for Local
+iptables -t mangle -A OUTPUT -p udp -j clash-rs-tproxy-mark
+iptables -t mangle -A OUTPUT -p tcp -j clash-rs-tproxy-mark
