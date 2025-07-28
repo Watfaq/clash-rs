@@ -4,17 +4,15 @@ mod proxy;
 
 use crate::{
     Dispatcher,
-    common::auth::ThreadSafeAuthenticator,
+    common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
     proxy::{
         inbound::InboundHandlerTrait,
         utils::{ToCanonical, apply_tcp_options, try_create_dualstack_tcplistener},
     },
 };
-
-pub use proxy::handle as handle_http;
-
-use crate::common::errors::new_io_error;
 use async_trait::async_trait;
+use hyper_util::rt::TokioIo;
+pub use proxy::handle as handle_http;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
@@ -82,7 +80,7 @@ impl InboundHandlerTrait for HttpInbound {
             let fw_mark = self.fw_mark;
             tokio::spawn(async move {
                 proxy::handle(
-                    Box::new(socket),
+                    TokioIo::new(Box::new(socket)),
                     src_addr,
                     dispatcher,
                     author,

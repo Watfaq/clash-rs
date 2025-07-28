@@ -1,77 +1,18 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
-    proxy::{self, AnyOutboundHandler, AnyStream},
+    proxy::{self, AnyOutboundHandler},
     session::Session,
 };
 use futures::FutureExt;
-use hyper_util::{
-    client::legacy::connect::{Connected, Connection},
-    rt::TokioIo,
-};
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use hyper_util::rt::TokioIo;
+use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, trace, warn};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClashHTTPClientExt {
     pub(crate) outbound: Option<String>,
     pub(crate) force: bool,
-}
-
-impl Connection for AnyStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
-    }
-}
-
-impl hyper::rt::Read for AnyStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: hyper::rt::ReadBufCursor<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        let n = unsafe {
-            let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
-            match tokio::io::AsyncRead::poll_read(self, cx, &mut tbuf) {
-                Poll::Ready(Ok(())) => tbuf.filled().len(),
-                other => return other,
-            }
-        };
-
-        unsafe {
-            buf.advance(n);
-        }
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl hyper::rt::Write for AnyStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        tokio::io::AsyncWrite::poll_write(self, cx, buf)
-    }
-
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        tokio::io::AsyncWrite::poll_flush(self, cx)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        tokio::io::AsyncWrite::poll_shutdown(self, cx)
-    }
 }
 
 /// A simple HTTP client that can be used to make HTTP requests.
