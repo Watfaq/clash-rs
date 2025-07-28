@@ -113,10 +113,9 @@ impl HttpClient {
         let resp = match uri.scheme() {
             Some(scheme) if scheme == &http::uri::Scheme::HTTP => {
                 let io = TokioIo::new(stream);
-                let (mut sender, conn) =
-                    hyper::client::conn::http1::handshake(io).await.map_err(
-                        |e| std::io::Error::new(std::io::ErrorKind::Other, e),
-                    )?;
+                let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+                    .await
+                    .map_err(std::io::Error::other)?;
 
                 tokio::task::spawn(async move {
                     if let Err(err) = conn.await {
@@ -150,10 +149,9 @@ impl HttpClient {
 
                 let io = TokioIo::new(stream);
 
-                let (mut sender, conn) =
-                    hyper::client::conn::http1::handshake(io).await.map_err(
-                        |e| std::io::Error::new(std::io::ErrorKind::Other, e),
-                    )?;
+                let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+                    .await
+                    .map_err(std::io::Error::other)?;
 
                 tokio::task::spawn(async move {
                     if let Err(err) = conn.await {
@@ -171,12 +169,8 @@ impl HttpClient {
             }
         };
 
-        resp.await.map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("HTTP request failed: {}", e),
-            )
-        })
+        resp.await
+            .map_err(|e| std::io::Error::other(format!("HTTP request failed: {e}")))
     }
 }
 

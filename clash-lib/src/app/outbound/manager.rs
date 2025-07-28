@@ -76,6 +76,7 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 /// 4. Create a `PlainProvider` for the global proxy set, which is the GLOBAL
 ///    selector, which should contain all plain outbound + provider proxies +
 ///    groups
+///
 /// Note that the `PlainProvider` is a special provider that contains plain
 /// proxies for API compatibility with actual remote providers.
 /// TODO: refactor this giant class

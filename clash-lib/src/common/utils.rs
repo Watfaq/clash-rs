@@ -117,7 +117,7 @@ where
         let params: HashMap<String, String> = pairs.collect();
         ClashHTTPClientExt {
             outbound: params.get("_clash_outbound").cloned(),
-            force: params.get("force").map_or(false, |x| x == "true"),
+            force: params.get("force").is_some_and(|x| x == "true"),
         }
     };
 
