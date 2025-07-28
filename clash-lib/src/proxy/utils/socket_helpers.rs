@@ -59,11 +59,7 @@ pub async fn new_tcp_stream(
             socket2::Domain::IPV6,
         ),
     };
-    debug!(
-        socket = ?socket,
-        family = ?family,
-        "created tcp socket"
-    );
+    debug!("created tcp socket");
 
     #[cfg(not(target_os = "android"))]
     if let Some(iface) = iface {

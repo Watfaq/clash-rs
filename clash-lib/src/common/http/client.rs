@@ -7,12 +7,11 @@ use crate::{
 use futures::FutureExt;
 use hyper_util::rt::TokioIo;
 use std::{collections::HashMap, sync::Arc};
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClashHTTPClientExt {
     pub(crate) outbound: Option<String>,
-    pub(crate) force: bool,
 }
 
 /// A simple HTTP client that can be used to make HTTP requests.
@@ -126,17 +125,8 @@ impl HttpClient {
                 sender.send_request(req).boxed()
             }
             Some(scheme) if scheme == &http::uri::Scheme::HTTPS => {
-                let mut tls_config = rustls::ClientConfig::builder()
-                    .with_root_certificates(GLOBAL_ROOT_STORE.clone())
-                    .with_no_client_auth();
-
-                if std::env::var("SSLKEYLOGFILE").is_ok() {
-                    debug!("Enabling TLS key logging");
-                    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
-                }
-
                 let connector =
-                    tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+                    tokio_rustls::TlsConnector::from(self.tls_config.clone());
 
                 let stream = tokio::time::timeout(
                     self.timeout,

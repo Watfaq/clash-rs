@@ -1,6 +1,18 @@
+use crate::{
+    Error,
+    common::{
+        errors::new_io_error,
+        http::{ClashHTTPClientExt, HttpClient},
+    },
+};
 use async_recursion::async_recursion;
 use futures::StreamExt;
 use http_body_util::{BodyDataStream, Empty};
+use rand::{
+    Fill, Rng,
+    distr::uniform::{SampleRange, SampleUniform},
+};
+use sha2::Digest;
 use std::{
     collections::HashMap,
     fmt::Write,
@@ -8,16 +20,6 @@ use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
-
-use crate::{
-    Error,
-    common::{errors::new_io_error, http::ClashHTTPClientExt},
-};
-use rand::{
-    Fill, Rng,
-    distr::uniform::{SampleRange, SampleUniform},
-};
-use sha2::Digest;
 use tracing::debug;
 
 pub fn rand_range<T, R>(range: R) -> T
@@ -117,7 +119,6 @@ where
         let params: HashMap<String, String> = pairs.collect();
         ClashHTTPClientExt {
             outbound: params.get("_clash_outbound").cloned(),
-            force: params.get("force").is_some_and(|x| x == "true"),
         }
     };
 
@@ -176,5 +177,3 @@ where
 
     Ok(())
 }
-
-use super::http::HttpClient;
