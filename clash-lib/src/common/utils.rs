@@ -122,7 +122,7 @@ where
         }
     };
 
-    download_with_ext(url, path, http_client, ext).await
+    download_with_ext(url, path, http_client, ext, 10).await
 }
 
 #[async_recursion]
@@ -131,6 +131,7 @@ async fn download_with_ext<P>(
     path: P,
     http_client: &HttpClient,
     req_ext: ClashHTTPClientExt,
+    max_redirects: usize,
 ) -> anyhow::Result<()>
 where
     P: AsRef<Path> + std::marker::Send,
@@ -146,18 +147,22 @@ where
     let res = http_client.request(req).await?;
 
     if res.status().is_redirection() {
-        return download_with_ext(
-            res.headers()
-                .get("Location")
-                .ok_or(new_io_error(
-                    format!("failed to download from {url}").as_str(),
-                ))?
-                .to_str()?,
-            path,
-            http_client,
-            req_ext,
-        )
-        .await;
+        let redirected = res
+            .headers()
+            .get("Location")
+            .ok_or(new_io_error(
+                format!("failed to download from {url}").as_str(),
+            ))?
+            .to_str()?;
+        debug!("redirected to {redirected}");
+        if max_redirects == 0 {
+            return Err(Error::InvalidConfig(
+                "too many redirects, max redirects reached".to_string(),
+            )
+            .into());
+        }
+        return download_with_ext(redirected, path, http_client, req_ext, 10 - 1)
+            .await;
     }
 
     if !res.status().is_success() {
