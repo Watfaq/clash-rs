@@ -53,14 +53,15 @@ impl HttpClient {
 
     pub async fn request<T>(
         &self,
-        req: http::Request<T>,
+        mut req: http::Request<T>,
     ) -> Result<http::Response<hyper::body::Incoming>, std::io::Error>
     where
         T: hyper::body::Body + Send + 'static,
         <T as hyper::body::Body>::Data: Send,
         <T as hyper::body::Body>::Error: std::error::Error + Send + Sync,
     {
-        let uri = req.uri();
+        let uri = req.uri().clone();
+
         let host = uri
             .host()
             .ok_or(std::io::Error::new(
@@ -81,6 +82,19 @@ impl HttpClient {
                 }
             },
         });
+
+        if req.headers_mut().get(http::header::HOST).is_none() {
+            req.headers_mut().insert(
+                http::header::HOST,
+                uri.host()
+                    .ok_or(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "uri must have a host",
+                    ))?
+                    .parse()
+                    .expect("must parse host header"),
+            );
+        }
 
         let req_ext = req.extensions().get::<ClashHTTPClientExt>();
         let outbound = req_ext

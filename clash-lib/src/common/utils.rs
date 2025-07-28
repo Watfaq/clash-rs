@@ -141,10 +141,6 @@ where
     let url = url.parse::<hyper::Uri>()?;
     let mut req = http::Request::builder()
         .header(http::header::USER_AGENT, DEFAULT_USER_AGENT)
-        .header(
-            http::header::HOST,
-            url.authority().expect("must have authority").as_str(),
-        )
         .uri(&url)
         .method(http::Method::GET)
         .body(Empty::<bytes::Bytes>::new())?;
