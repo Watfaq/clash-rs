@@ -65,7 +65,7 @@ static DEFAULT_LATENCY_TEST_URL: &str = "http://www.gstatic.com/generate_204";
 pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 
 /// Init process:
-/// 1. Load all outbounds and groups from config using the unbounded function
+/// 1. Load all plaint outbounds from config using the unbounded function
 ///    `load_plain_outbounds`, so that any bootstrap proxy can be used to
 ///    download datasets
 /// 2. Load all proxy providers from config, this should happen before loading
