@@ -129,8 +129,19 @@ fn setup_logging_inner(
         .unwrap_or(EnvFilter::new(default_log_level));
 
     let (appender, guard) = if let Some(log_file) = log_file {
-        let file_appender = tracing_appender::rolling::daily(cwd, log_file);
-        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+        let path_buf = std::path::PathBuf::from(&log_file);
+        let log_path = if path_buf.is_absolute() {
+            log_file
+        } else {
+            format!("{cwd}/{log_file}")
+        };
+        let writer = std::fs::File::options().append(true).open(log_path)?;
+        let (non_blocking, guard) =
+            tracing_appender::non_blocking::NonBlockingBuilder::default()
+                .buffered_lines_limit(16_000)
+                .lossy(true)
+                .thread_name("clash-logger-appender")
+                .finish(writer);
         (Some(non_blocking), Some(guard))
     } else {
         (None, None)

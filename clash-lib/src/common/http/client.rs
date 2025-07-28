@@ -216,7 +216,9 @@ pub fn new_http_client(
     let mut tls_config = rustls::ClientConfig::builder()
         .with_root_certificates(GLOBAL_ROOT_STORE.clone())
         .with_no_client_auth();
-    tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+    if std::env::var("SSLKEYLOGFILE").is_ok() {
+        tls_config.key_log = Arc::new(rustls::KeyLogFile::new());
+    }
 
     let mut connector = LocalConnector::new(dns_resolver);
     if let Some(outbounds) = bootstrap_outbounds {

@@ -15,6 +15,7 @@ use std::{
     net::SocketAddr,
     os::fd::AsRawFd,
     sync::Arc,
+    time::Duration,
 };
 use tokio::{net::TcpListener, time::Instant};
 use tracing::{trace, warn};
@@ -225,17 +226,19 @@ async fn handle_inbound_datagram(
                     //     warn!("Connection from {} is not allowed", meta.addr);
                     //     continue;
                     // }
-                    let pkt = UdpPacket {
-                        data: buf[..meta.len].to_vec(),
-                        src_addr: meta.addr.to_canonical().into(),
-                        dst_addr: orig_dst.to_canonical().into(),
-                    };
-                    trace!("tproxy -> dispatcher: {:?}", pkt);
-                    match d_tx.send(pkt).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            warn!("failed to send udp packet to proxy: {}", e);
-                            continue;
+                    for chunk in buf[0..meta.len].chunks(meta.stride) {
+                        let pkt = UdpPacket {
+                            data: chunk.to_vec(),
+                            src_addr: meta.addr.to_canonical().into(),
+                            dst_addr: orig_dst.to_canonical().into(),
+                        };
+                        trace!("tproxy -> dispatcher: {:?}", pkt);
+                        match d_tx.send(pkt).await {
+                            Ok(_) => {}
+                            Err(e) => {
+                                warn!("failed to send udp packet to proxy: {}", e);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -277,46 +280,59 @@ async fn handle_packet_from_dispatcher(
     mut l_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
 ) {
     let mut responder_map = HashMap::<SocketAddr, (Arc<UdpSocket>, Instant)>::new();
-    while let Some(pkt) = l_rx.recv().await {
-        trace!("tproxy <- dispatcher: {:?}", pkt);
+    let mut sleep = Box::pin(tokio::time::sleep(Duration::from_secs(60)));
+    loop {
+        tokio::select! {
+                 Some(pkt) = l_rx.recv() =>  {
+                trace!("tproxy <- dispatcher: {:?}", pkt);
 
-        // We must modify set the src address for the outgoing packet by binding
-        // address to src_addr
-        // To avoid repeated creating sockets, sockets need be cached here
-        // We can't use tproxy listen socket, because the bound address is localhost
-        // remote -> local
-        let now = Instant::now();
-        let src_addr = pkt.src_addr.must_into_socket_addr();
-        let responder = match responder_map.entry(src_addr) {
-            hash_map::Entry::Occupied(mut occupied_entry) => {
-                occupied_entry.get_mut().1 = now;
-                occupied_entry.get().0.clone()
-            }
-            hash_map::Entry::Vacant(vacant_entry) => {
-                let socket = match bind_nonlocal_socket(src_addr) {
-                    Ok(x) => Arc::new(x),
-                    Err(e) => {
-                        tracing::error!(
-                            "failed to bind nonlocal socket for tproxy:{}",
-                            e
-                        );
-                        continue;
+                // We must modify set the src address for the outgoing packet by binding
+                // address to src_addr
+                // To avoid repeated creating sockets, sockets need be cached here
+                // We can't use tproxy listen socket, because the bound address is localhost
+                // remote -> local
+                let now = Instant::now();
+                let src_addr = pkt.src_addr.must_into_socket_addr();
+                let responder = match responder_map.entry(src_addr) {
+                    hash_map::Entry::Occupied(mut occupied_entry) => {
+                        occupied_entry.get_mut().1 = now;
+                        occupied_entry.get().0.clone()
+                    }
+                    hash_map::Entry::Vacant(vacant_entry) => {
+                        let socket = match bind_nonlocal_socket(src_addr) {
+                            Ok(x) => Arc::new(x),
+                            Err(e) => {
+                                tracing::error!(
+                                    "failed to bind nonlocal socket for tproxy:{}",
+                                    e
+                                );
+                                continue;
+                            }
+                        };
+                        vacant_entry.insert((socket.clone(), now));
+                        socket
                     }
                 };
-                vacant_entry.insert((socket.clone(), now));
-                socket
+                match responder
+                    .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
+                    .await
+                {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!("failed to send udp packet to proxy: {}", e);
+                    }
+                }
+
+            },
+            _ = &mut sleep => {
+                sleep = Box::pin(tokio::time::sleep(Duration::from_secs(60)));
+                let now = Instant::now();
+                responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
+            },
+            else => {
+                tracing::error!("dispatcher channel to tproxy is closed");
             }
         };
-        match responder
-            .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
-            .await
-        {
-            Ok(_) => {}
-            Err(e) => {
-                warn!("failed to send udp packet to proxy: {}", e);
-            }
-        }
-        responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
     }
 }
 

@@ -107,8 +107,8 @@ pub struct RuleProviderImpl {
     format: RuleSetFormat,
     inline_rules: Option<Vec<String>>,
 
-    mmdb: MmdbLookup,
-    geodata: GeoDataLookup,
+    mmdb: Option<MmdbLookup>,
+    geodata: Option<GeoDataLookup>,
 }
 
 impl RuleProviderImpl {
@@ -120,8 +120,8 @@ impl RuleProviderImpl {
         // InlineRuleProvider doesn't have an interval and vehicle
         interval: Option<Duration>,
         vehicle: Option<ThreadSafeProviderVehicle>,
-        mmdb: MmdbLookup,
-        geodata: GeoDataLookup,
+        mmdb: Option<MmdbLookup>,
+        geodata: Option<GeoDataLookup>,
         inline_rules: Option<Vec<String>>,
     ) -> Self {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
@@ -392,8 +392,8 @@ impl Provider for RuleProviderImpl {
 fn make_rules(
     behavior: RuleSetBehavior,
     rules: Vec<String>, // Input is Vec<String> for Yaml/Text
-    mmdb: MmdbLookup,
-    geodata: GeoDataLookup,
+    mmdb: Option<MmdbLookup>,
+    geodata: Option<GeoDataLookup>,
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
@@ -427,8 +427,8 @@ fn make_ip_cidr_rules(rules: Vec<String>) -> Result<CidrTrie, Error> {
 
 fn make_classical_rules(
     rules: Vec<String>,
-    mmdb: MmdbLookup,
-    geodata: GeoDataLookup,
+    mmdb: Option<MmdbLookup>,
+    geodata: Option<GeoDataLookup>,
 ) -> Result<Vec<Box<dyn RuleMatcher>>, Error> {
     let mut rv = vec![];
     for rule in rules {
@@ -479,8 +479,8 @@ mod tests {
             RuleSetFormat::Text,
             None,
             None,
-            Arc::new(mock_mmdb),
-            Arc::new(mock_geodata),
+            Some(Arc::new(mock_mmdb)),
+            Some(Arc::new(mock_geodata)),
             Some(vec!["DOMAIN-SUFFIX, google.com".to_owned()]),
         );
 
@@ -524,8 +524,8 @@ mod tests {
             RuleSetFormat::Text,
             Some(Duration::from_secs(5)),
             Some(Arc::new(mock_vehicle)),
-            Arc::new(mock_mmdb),
-            Arc::new(mock_geodata),
+            Some(Arc::new(mock_mmdb)),
+            Some(Arc::new(mock_geodata)),
             Some(vec!["+.google.com".to_owned()]),
         );
 
