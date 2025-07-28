@@ -19,7 +19,7 @@ tun:
 ipv6: true
 
 mmdb: Country.mmdb
-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=wg&force=true"
+mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=direct&force=true"
 asn-mmdb: Country-asn.mmdb
 asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country-asn.mmdb#_clash_outbound=non-exist&force=true"
 geosite: geosite.dat

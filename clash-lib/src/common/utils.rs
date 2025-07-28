@@ -2,7 +2,7 @@ use crate::{
     Error,
     common::{
         errors::new_io_error,
-        http::{ClashHTTPClientExt, HttpClient},
+        http::{ClashHTTPClientExt, DEFAULT_USER_AGENT, HttpClient},
     },
 };
 use async_recursion::async_recursion;
@@ -137,9 +137,15 @@ where
     P: AsRef<Path> + std::marker::Send,
 {
     use std::io::Write;
-
+    debug!("downloading data from {url}");
+    let url = url.parse::<hyper::Uri>()?;
     let mut req = http::Request::builder()
-        .uri(url)
+        .header(http::header::USER_AGENT, DEFAULT_USER_AGENT)
+        .header(
+            http::header::HOST,
+            url.authority().expect("must have authority").as_str(),
+        )
+        .uri(&url)
         .method(http::Method::GET)
         .body(Empty::<bytes::Bytes>::new())?;
     req.extensions_mut().insert(req_ext.clone());
@@ -161,8 +167,14 @@ where
             )
             .into());
         }
-        return download_with_ext(redirected, path, http_client, req_ext, 10 - 1)
-            .await;
+        return download_with_ext(
+            redirected,
+            path,
+            http_client,
+            req_ext,
+            max_redirects - 1,
+        )
+        .await;
     }
 
     if !res.status().is_success() {
