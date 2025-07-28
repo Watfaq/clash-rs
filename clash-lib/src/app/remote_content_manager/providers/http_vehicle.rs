@@ -53,6 +53,7 @@ impl ProviderVehicle for Vehicle {
             http::header::USER_AGENT,
             DEFAULT_USER_AGENT.parse().expect("must parse user agent"),
         );
+        *req.body_mut() = http_body_util::Empty::<bytes::Bytes>::new();
         *req.uri_mut() = self.url.clone();
         self.http_client
             .request(req)

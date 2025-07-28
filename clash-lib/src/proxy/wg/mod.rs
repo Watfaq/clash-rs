@@ -1,9 +1,8 @@
-use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    sync::Arc,
+use self::{keys::KeyBytes, wireguard::Config};
+use super::{
+    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    OutboundType, utils::RemoteConnector,
 };
-
 use crate::{
     Error,
     app::{
@@ -17,21 +16,16 @@ use crate::{
     impl_default_connector,
     session::Session,
 };
-
-use self::{keys::KeyBytes, wireguard::Config};
-
-use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, utils::RemoteConnector,
-};
-
 use async_trait::async_trait;
 use futures::TryFutureExt;
-
 use ipnet::IpNet;
 use rand::seq::IndexedRandom;
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+};
 use tokio::sync::OnceCell;
-use tracing::debug;
 
 mod device;
 mod events;
@@ -258,10 +252,6 @@ impl OutboundHandler for Handler {
             && sess.destination.is_domain()
             && self.opts.dns.as_ref().is_some_and(|x| !x.is_empty())
         {
-            debug!(
-                "use remote dns to resolve domain: {}",
-                sess.destination.host()
-            );
             let server = self
                 .opts
                 .dns

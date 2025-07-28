@@ -19,11 +19,11 @@ tun:
 ipv6: true
 
 mmdb: Country.mmdb
-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=plain-vmess&force=true"
+mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=wg&force=true"
 asn-mmdb: Country-asn.mmdb
-asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country-asn.mmdb#_clash_outbound=plain-vmess&force=true"
+asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country-asn.mmdb#_clash_outbound=non-exist&force=true"
 geosite: geosite.dat
-geosite-download-url: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat#_clash_outbound=plain-vmess&force=true"
+geosite-download-url: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat#force=true"
 
 dns:
   enable: true

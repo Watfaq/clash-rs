@@ -452,6 +452,9 @@ async fn create_components(
     };
 
     debug!("initializing dns resolver");
+    // Clone the dns.listen for the DNS Server later before we consume the config
+    // TODO: we should separate the DNS resolver and DNS server config here
+    let dns_listen = config.dns.listen.clone();
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
@@ -558,7 +561,6 @@ async fn create_components(
         get_tun_runner(config.tun, dispatcher.clone(), dns_resolver.clone())?;
 
     debug!("initializing dns listener");
-    let dns_listen = config.dns.listen.clone();
     let dns_listener =
         dns::get_dns_listener(dns_listen, dns_resolver.clone(), &cwd).await;
 
