@@ -1,11 +1,10 @@
-use std::{io::ErrorKind, str::FromStr};
-
+use crate::session::SocksAddr;
+use anyhow::anyhow;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use quinn_proto::{VarInt, coding::Codec};
 use rand::distr::Alphanumeric;
+use std::{io::ErrorKind, str::FromStr};
 use tokio_util::codec::{Decoder, Encoder};
-
-use crate::session::SocksAddr;
 
 pub struct Hy2TcpCodec;
 

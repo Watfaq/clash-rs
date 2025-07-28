@@ -862,7 +862,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
  "log",
@@ -1416,7 +1416,6 @@ dependencies = [
  "memory-stats",
  "mockall",
  "murmur3",
- "netstack-smoltcp",
  "network-interface",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -1471,6 +1470,7 @@ dependencies = [
  "url",
  "uuid",
  "watfaq-dns",
+ "watfaq-netstack",
  "watfaq-rustls",
  "webpki-roots 1.0.2",
  "windows 0.61.3",
@@ -2017,7 +2017,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357422a457ccb850dc8f1c1680e0670079560feaad6c2e247e3f345c4fab8a3f"
 dependencies = [
  "heck",
- "indexmap 1.9.3",
+ "indexmap 2.10.0",
  "itertools 0.14.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -2035,7 +2035,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47cf90c375e516cf601a57727744bdf7a547680a470a2e8a6580a12288cf0630"
 dependencies = [
  "heck",
- "indexmap 1.9.3",
+ "indexmap 2.10.0",
  "itertools 0.14.0",
  "proc-macro-crate",
  "proc-macro2",
@@ -3393,7 +3393,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3517,7 +3517,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -4364,21 +4364,6 @@ dependencies = [
  "bytes",
  "libc",
  "log",
-]
-
-[[package]]
-name = "netstack-smoltcp"
-version = "0.1.4"
-source = "git+https://github.com/automesh-network/netstack-smoltcp?rev=ab06bc3de566fc6485a238dd4c746bb3e4f79484#ab06bc3de566fc6485a238dd4c746bb3e4f79484"
-dependencies = [
- "etherparse",
- "futures",
- "rand 0.8.5",
- "smoltcp",
- "spin 0.9.8",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -6829,6 +6814,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2-ext"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c337b1f71f22991ea8e9a8f7e4e5973fc7f155828baaa49c5e181bbbf7c0cea6"
+dependencies = [
+ "ipconfig",
+ "libc",
+ "socket2 0.5.10",
+ "tracing",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9090,6 +9087,25 @@ dependencies = [
  "tokio",
  "tracing",
  "webpki-roots 1.0.2",
+]
+
+[[package]]
+name = "watfaq-netstack"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "env_logger",
+ "etherparse",
+ "futures",
+ "ipnet",
+ "log",
+ "rand 0.9.2",
+ "smoltcp",
+ "socket2 0.5.10",
+ "socket2-ext",
+ "thiserror 1.0.69",
+ "tokio",
+ "tun-rs",
 ]
 
 [[package]]

@@ -4,33 +4,16 @@ mod datagram;
 mod salamander;
 mod udp_hop;
 
-use bytes::{Bytes, BytesMut};
-use codec::Fragments;
-use futures::{SinkExt, StreamExt};
-use h3::client::SendRequest;
-use h3_quinn::OpenStreams;
-use quinn::{
-    ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
+use self::{
+    codec::Hy2TcpCodec,
+    congestion::{Burtal, DynController},
+    datagram::{HysteriaDatagramOutbound, UdpSession},
 };
-use quinn_proto::TransportConfig;
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Formatter},
-    net::SocketAddr,
-    num::ParseIntError,
-    path::PathBuf,
-    pin::Pin,
-    str::FromStr,
-    sync::{Arc, RwLock, atomic::AtomicU32},
-    task::{Context, Poll},
+use super::{
+    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+    converters::hysteria2::PortGenerator, datagram::UdpPacket,
+    utils::new_udp_socket,
 };
-
-use rustls::ClientConfig as RustlsClientConfig;
-use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
-    sync::Mutex,
-};
-
 use crate::{
     app::{
         dispatcher::{
@@ -42,19 +25,33 @@ use crate::{
     common::tls::DefaultTlsVerifier,
     session::{Session, SocksAddr},
 };
+use anyhow::anyhow;
+use bytes::{Bytes, BytesMut};
+use codec::Fragments;
+use futures::{SinkExt, StreamExt};
+use h3::client::SendRequest;
+use h3_quinn::OpenStreams;
+use quinn::{
+    ClientConfig, Connection, TokioRuntime, crypto::rustls::QuicClientConfig,
+};
+use quinn_proto::TransportConfig;
+use rustls::ClientConfig as RustlsClientConfig;
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    net::SocketAddr,
+    num::ParseIntError,
+    path::PathBuf,
+    pin::Pin,
+    str::FromStr,
+    sync::{Arc, RwLock, atomic::AtomicU32},
+    task::{Context, Poll},
+};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    sync::Mutex,
+};
 use tracing::{debug, trace, warn};
-
-use super::{
-    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    converters::hysteria2::PortGenerator, datagram::UdpPacket,
-    utils::new_udp_socket,
-};
-
-use self::{
-    codec::Hy2TcpCodec,
-    congestion::{Burtal, DynController},
-    datagram::{HysteriaDatagramOutbound, UdpSession},
-};
 
 #[derive(Clone)]
 pub struct SalamanderObfs {

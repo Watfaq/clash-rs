@@ -1,3 +1,8 @@
+use crate::app::net::OutboundInterface;
+use anyhow::anyhow;
+use bytes::{Buf, BufMut};
+use erased_serde::Serialize as ESerialize;
+use serde::Serialize;
 use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
@@ -5,14 +10,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     str::FromStr,
 };
-
-use bytes::{Buf, BufMut};
-use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
-
-use erased_serde::Serialize as ESerialize;
-
-use crate::app::net::OutboundInterface;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {

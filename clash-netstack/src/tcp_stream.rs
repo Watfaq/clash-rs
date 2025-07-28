@@ -1,0 +1,84 @@
+use std::net::SocketAddr;
+
+use crate::tcp_listener::TcpStreamHandle;
+
+pub struct TcpStream {
+    pub(crate) local_addr: SocketAddr,
+    pub(crate) remote_addr: SocketAddr,
+
+    pub(crate) handle: TcpStreamHandle,
+}
+
+impl TcpStream {
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
+}
+
+impl std::fmt::Debug for TcpStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TcpStream")
+            .field("local_addr", &self.local_addr)
+            .field("remote_addr", &self.remote_addr)
+            .finish()
+    }
+}
+
+impl tokio::io::AsyncRead for TcpStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let read_buf = &self.handle.recv_buffer;
+        if read_buf.is_empty() {
+            return std::task::Poll::Pending;
+        }
+        read_buf.with_lock(|buf_lock| {
+            let recv_buf = unsafe {
+                std::mem::transmute::<&mut [std::mem::MaybeUninit<u8>], &mut [u8]>(
+                    buf.unfilled_mut(),
+                )
+            };
+            let n = buf_lock.dequeue_slice(recv_buf);
+            buf.advance(n);
+        });
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+impl tokio::io::AsyncWrite for TcpStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let send_buf = &self.handle.send_buffer;
+        if send_buf.is_full() {
+            return std::task::Poll::Pending;
+        }
+        let n = send_buf.with_lock(|buf_lock| {
+            let n = buf_lock.enqueue_slice(buf);
+            n
+        });
+        std::task::Poll::Ready(Ok(n))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        // No-op for our TcpStream, as we don't have a real underlying stream
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}

@@ -15,23 +15,21 @@ use crate::{
     session::{Network, Session, Type},
 };
 use futures::{SinkExt, StreamExt};
-use netstack_smoltcp::StackBuilder;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 async fn handle_inbound_stream(
-    stream: netstack_smoltcp::TcpStream,
-    local_addr: SocketAddr,
-    remote_addr: SocketAddr,
+    stream: watfaq_netstack::TcpStream,
+
     dispatcher: Arc<Dispatcher>,
     so_mark: u32,
 ) {
     let sess = Session {
         network: Network::Tcp,
         typ: Type::Tun,
-        source: local_addr,
-        destination: remote_addr.into(),
+        source: stream.local_addr,
+        destination: stream.remote_addr.into(),
         iface: DEFAULT_OUTBOUND_INTERFACE
             .read()
             .await
@@ -51,7 +49,7 @@ async fn handle_inbound_stream(
 }
 
 async fn handle_inbound_datagram(
-    socket: netstack_smoltcp::UdpSocket,
+    socket: watfaq_netstack::UdpSocket,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
     so_mark: u32,
@@ -60,13 +58,16 @@ async fn handle_inbound_datagram(
     // tun i/o
     // lr: app packets went into tun will be accessed from lr
     // ls: packet written into ls will go back to app from tun
-    let (mut lr, mut ls) = socket.split();
+    let (mut ls, mut lr) = socket.split();
     // ideally we clone the WriteHalf ls, but it's not Clone, and it's a Sink so the
     // send method is mut
     let (dup_ls, mut dup_lr) = tokio::sync::mpsc::channel(32);
     tokio::spawn(async move {
         while let Some((data, local, remote)) = dup_lr.recv().await {
-            if let Err(e) = ls.send((data, local, remote)).await {
+            if let Err(e) = ls
+                .send(watfaq_netstack::UdpPacket::new(data, remote, local))
+                .await
+            {
                 warn!("failed to send udp packet to netstack: {}", e);
             }
         }
@@ -122,14 +123,19 @@ async fn handle_inbound_datagram(
 
     // tun -> dispatcher
     let fut2 = tokio::spawn(async move {
-        'read_packet: while let Some((data, src_addr, dst_addr)) = lr.next().await {
-            if dst_addr.ip().is_multicast() {
+        'read_packet: while let Some(watfaq_netstack::UdpPacket {
+            data,
+            local_addr,
+            remote_addr,
+        }) = lr.next().await
+        {
+            if remote_addr.ip().is_multicast() {
                 continue;
             }
             let pkt = UdpPacket {
-                data,
-                src_addr: src_addr.into(),
-                dst_addr: dst_addr.into(),
+                data: data.data.into(),
+                src_addr: local_addr.into(),
+                dst_addr: remote_addr.into(),
             };
 
             trace!("tun -> dispatcher: {:?}", pkt);
@@ -346,21 +352,7 @@ pub fn get_runner(
         }
     };
 
-    let mut builder = StackBuilder::default()
-        .enable_tcp(true)
-        .enable_udp(true)
-        .enable_icmp(true);
-    let device_broadcast = cfg.gateway.broadcast();
-    builder = builder
-            // .add_ip_filter(Box::new(move |src, dst| *src != device_broadcast && *dst != device_broadcast));
-            .add_ip_filter_fn(move |src, dst| *src != device_broadcast && *dst != device_broadcast);
-
-    let (stack, runner, udp_socket, tcp_listener) = builder.build()?;
-    let udp_socket = udp_socket.unwrap(); // udp enabled
-    let mut tcp_listener = tcp_listener.unwrap(); // tcp enabled or icmp enabled
-    if let Some(runner) = runner {
-        tokio::spawn(runner);
-    }
+    let (stack, mut tcp_listener, udp_socket) = watfaq_netstack::NetStack::new();
 
     Ok(Some(Box::pin(async move {
         defer! {
@@ -391,7 +383,7 @@ pub fn get_runner(
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(pkt.into()).await {
+                        if let Err(e) = tun_sink.send(pkt.data()).await {
                             error!("failed to send pkt to tun: {}", e);
                             break;
                         }
@@ -411,7 +403,9 @@ pub fn get_runner(
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = stack_sink.send(pkt.into()).await {
+                        if let Err(e) =
+                            stack_sink.send(watfaq_netstack::Packet::new(pkt)).await
+                        {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -428,18 +422,13 @@ pub fn get_runner(
 
         let dsp = dispatcher.clone();
         futs.push(Box::pin(async move {
-            while let Some((stream, local_addr, remote_addr)) =
-                tcp_listener.next().await
-            {
-                debug!("new tun TCP connection: {} -> {}", local_addr, remote_addr);
+            while let Some(stream) = tcp_listener.next().await {
+                debug!(
+                    "new tun TCP connection: {} -> {}",
+                    stream.local_addr, stream.remote_addr
+                );
 
-                tokio::spawn(handle_inbound_stream(
-                    stream,
-                    local_addr,
-                    remote_addr,
-                    dsp.clone(),
-                    so_mark,
-                ));
+                tokio::spawn(handle_inbound_stream(stream, dsp.clone(), so_mark));
             }
 
             Err(Error::Operation("tun stopped unexpectedly 2".to_string()))

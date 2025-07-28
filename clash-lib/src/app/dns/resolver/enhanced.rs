@@ -1,19 +1,3 @@
-use async_trait::async_trait;
-use futures::{FutureExt, TryFutureExt};
-use rand::seq::IndexedRandom;
-use std::{
-    net,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering::Relaxed},
-    },
-    time::{Duration, Instant},
-};
-use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, trace, warn};
-
-use hickory_proto::{op, rr};
-
 use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
@@ -29,6 +13,21 @@ use crate::{
         helper::make_clients,
     },
 };
+use anyhow::anyhow;
+use async_trait::async_trait;
+use futures::{FutureExt, TryFutureExt};
+use hickory_proto::{op, rr};
+use rand::seq::IndexedRandom;
+use std::{
+    net,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
+    time::{Duration, Instant},
+};
+use tokio::sync::RwLock;
+use tracing::{debug, error, instrument, trace, warn};
 
 pub struct EnhancedResolver {
     ipv6: AtomicBool,
