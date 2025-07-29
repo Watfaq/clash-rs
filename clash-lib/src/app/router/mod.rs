@@ -392,7 +392,7 @@ mod tests {
 
         let real_resolver = Arc::new(SystemResolver::new(false).unwrap());
 
-        let client = new_http_client(real_resolver.clone()).unwrap();
+        let client = new_http_client(real_resolver.clone(), None).unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
 
@@ -404,7 +404,7 @@ mod tests {
         .await
         .unwrap();
 
-        let client = new_http_client(real_resolver.clone()).unwrap();
+        let client = new_http_client(real_resolver.clone(), None).unwrap();
 
         let geodata = GeoData::new(
             temp_dir.path().join("geodata.geodata"),

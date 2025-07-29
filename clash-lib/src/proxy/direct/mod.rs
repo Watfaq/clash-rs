@@ -23,9 +23,10 @@ use super::{
 };
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use serde::Serialize;
 
-#[derive(Serialize)]
+pub static DIRECT_OUTBOUND_HANDLER: Handler = Handler::new();
+
+#[derive(Clone)]
 pub struct Handler;
 
 impl Debug for Handler {
@@ -35,7 +36,7 @@ impl Debug for Handler {
 }
 
 impl Handler {
-    pub fn new() -> Self {
+    const fn new() -> Self {
         Self
     }
 }

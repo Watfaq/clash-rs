@@ -1,19 +1,25 @@
+use crate::{
+    Error,
+    common::{
+        errors::new_io_error,
+        http::{ClashHTTPClientExt, DEFAULT_USER_AGENT, HttpClient},
+    },
+};
 use async_recursion::async_recursion;
 use futures::StreamExt;
-use http_body_util::BodyDataStream;
-use std::{
-    fmt::Write,
-    num::ParseIntError,
-    path::Path,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-use crate::{Error, common::errors::new_io_error};
+use http_body_util::{BodyDataStream, Empty};
 use rand::{
     Fill, Rng,
     distr::uniform::{SampleRange, SampleUniform},
 };
 use sha2::Digest;
+use std::{
+    collections::HashMap,
+    fmt::Write,
+    num::ParseIntError,
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tracing::debug;
 
 pub fn rand_range<T, R>(range: R) -> T
@@ -91,7 +97,6 @@ where
     serializer.serialize_u128(duration.as_millis())
 }
 
-#[async_recursion]
 pub async fn download<P>(
     url: &str,
     path: P,
@@ -100,23 +105,70 @@ pub async fn download<P>(
 where
     P: AsRef<Path> + std::marker::Send,
 {
+    let ext = {
+        let fragments = url.rsplit_once('#').map(|x| x.1).unwrap_or_default();
+        let pairs = fragments.split('&').filter_map(|x| {
+            let mut kv = x.splitn(2, '=');
+            if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                Some((k.to_owned(), v.to_owned()))
+            } else {
+                None
+            }
+        });
+
+        let params: HashMap<String, String> = pairs.collect();
+        ClashHTTPClientExt {
+            outbound: params.get("_clash_outbound").cloned(),
+        }
+    };
+
+    download_with_ext(url, path, http_client, ext, 10).await
+}
+
+#[async_recursion]
+async fn download_with_ext<P>(
+    url: &str,
+    path: P,
+    http_client: &HttpClient,
+    req_ext: ClashHTTPClientExt,
+    max_redirects: usize,
+) -> anyhow::Result<()>
+where
+    P: AsRef<Path> + std::marker::Send,
+{
     use std::io::Write;
+    debug!("downloading data from {url}");
+    let url = url.parse::<hyper::Uri>()?;
+    let mut req = http::Request::builder()
+        .header(http::header::USER_AGENT, DEFAULT_USER_AGENT)
+        .uri(&url)
+        .method(http::Method::GET)
+        .body(Empty::<bytes::Bytes>::new())?;
+    req.extensions_mut().insert(req_ext.clone());
 
-    let uri = url.parse::<hyper::Uri>()?;
-    let mut out = std::fs::File::create(&path)?;
-
-    let res = http_client.get(uri).await?;
+    let res = http_client.request(req).await?;
 
     if res.status().is_redirection() {
-        return download(
-            res.headers()
-                .get("Location")
-                .ok_or(new_io_error(
-                    format!("failed to download from {url}").as_str(),
-                ))?
-                .to_str()?,
+        let redirected = res
+            .headers()
+            .get("Location")
+            .ok_or(new_io_error(
+                format!("failed to download from {url}").as_str(),
+            ))?
+            .to_str()?;
+        debug!("redirected to {redirected}");
+        if max_redirects == 0 {
+            return Err(Error::InvalidConfig(
+                "too many redirects, max redirects reached".to_string(),
+            )
+            .into());
+        }
+        return download_with_ext(
+            redirected,
             path,
             http_client,
+            req_ext,
+            max_redirects - 1,
         )
         .await;
     }
@@ -130,7 +182,7 @@ where
     }
 
     debug!("downloading data to {}", path.as_ref().to_string_lossy());
-
+    let mut out = std::fs::File::create(&path)?;
     let mut stream = BodyDataStream::new(res.into_body());
     while let Some(chunk) = stream.next().await {
         out.write_all(&chunk?)?;
@@ -138,5 +190,3 @@ where
 
     Ok(())
 }
-
-use super::http::HttpClient;
