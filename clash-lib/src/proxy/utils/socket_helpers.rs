@@ -61,11 +61,11 @@ pub async fn new_tcp_stream(
     };
     debug!("created tcp socket");
 
-    if !cfg!(target_os = "android") {
-        if let Some(iface) = iface {
-            must_bind_socket_on_interface(&socket, iface, family)?;
-            trace!("tcp socket bound to interface: {socket:?}");
-        }
+    if !cfg!(target_os = "android")
+        && let Some(iface) = iface
+    {
+        must_bind_socket_on_interface(&socket, iface, family)?;
+        trace!("tcp socket bound to interface: {socket:?}");
     }
 
     #[cfg(not(target_os = "android"))]

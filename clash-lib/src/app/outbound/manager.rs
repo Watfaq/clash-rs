@@ -33,10 +33,12 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        AnyOutboundHandler, direct, fallback,
+        AnyOutboundHandler,
+        direct::DIRECT_OUTBOUND_HANDLER,
+        fallback,
         group::smart,
-        hysteria2, loadbalance, reject, relay, selector,
-        selector::ThreadSafeSelectorControl,
+        hysteria2, loadbalance, reject, relay,
+        selector::{self, ThreadSafeSelectorControl},
         socks, trojan, urltest,
         utils::{DirectConnector, ProxyConnector},
         vmess,
@@ -238,7 +240,7 @@ impl OutboundManager {
             .into_iter()
             .filter_map(|outbound| match outbound {
                 OutboundProxyProtocol::Direct => {
-                    Some(Arc::new(direct::Handler::new()) as _)
+                    Some(Arc::new(DIRECT_OUTBOUND_HANDLER.clone()) as _)
                 }
                 OutboundProxyProtocol::Reject => {
                     Some(Arc::new(reject::Handler::new()) as _)
