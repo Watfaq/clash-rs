@@ -1,4 +1,4 @@
-use crate::Packet;
+use crate::{Packet, stack::IfaceEvent};
 use smoltcp::{
     phy::{
         ChecksumCapabilities, Device, DeviceCapabilities, Medium, RxToken, TxToken,
@@ -13,14 +13,26 @@ pub struct NetstackDevice {
 
     tx_sender: mpsc::UnboundedSender<Packet>,
     capabilities: DeviceCapabilities,
+
+    iface_notifier: mpsc::UnboundedSender<IfaceEvent<'static>>,
 }
 
 impl NetstackDevice {
-    pub fn new(tx_sender: mpsc::UnboundedSender<Packet>) -> Self {
+    pub fn new(
+        tx_sender: mpsc::UnboundedSender<Packet>,
+        iface_notifier: mpsc::UnboundedSender<IfaceEvent<'static>>,
+    ) -> Self {
         let mut capabilities = DeviceCapabilities::default();
         capabilities.max_transmission_unit = 1500;
         capabilities.medium = Medium::Ip;
-        capabilities.checksum = ChecksumCapabilities::ignored();
+
+        // let mut checksumes = ChecksumCapabilities::default();
+        // checksumes.ipv4 = smoltcp::phy::Checksum::Tx;
+        // checksumes.udp = smoltcp::phy::Checksum::Tx;
+        // checksumes.tcp = smoltcp::phy::Checksum::Tx;
+        // checksumes.icmpv4 = smoltcp::phy::Checksum::Tx;
+        // checksumes.icmpv6 = smoltcp::phy::Checksum::Tx;
+        // capabilities.checksum = checksumes;
 
         let (rx_sender, rx_queue) = mpsc::unbounded_channel::<Packet>();
 
@@ -29,6 +41,7 @@ impl NetstackDevice {
             rx_queue,
             tx_sender,
             capabilities,
+            iface_notifier,
         }
     }
 
@@ -56,6 +69,9 @@ impl Device for NetstackDevice {
             let tx_token = TxTokenImpl {
                 tx_sender: self.tx_sender.clone(),
             };
+            self.iface_notifier
+                .send(IfaceEvent::DeviceReady)
+                .expect("Failed to notify iface event");
             return Some((rx_token, tx_token));
         }
 

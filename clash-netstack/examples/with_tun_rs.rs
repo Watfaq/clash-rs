@@ -14,7 +14,7 @@
 //! This example demonstrates how to use the `watfaq_netstack` library with a
 //! TUN device created using `tun_rs`. It sets up a basic network stack that can
 //! handle TCP and UDP traffic through the TUN interface.
-use std::{net::SocketAddr, sync::Arc};
+use std::{ffi::CString, net::SocketAddr, sync::Arc};
 
 use futures::{SinkExt, StreamExt};
 use log::{debug, error, warn};
@@ -25,14 +25,22 @@ type Runner = futures::future::BoxFuture<'static, std::io::Result<()>>;
 
 static OUTBOUND_INTERFACE: &str = "en0"; // Change this to your actual outbound interface name
 
+fn get_interface_index(iface: &str) -> u32 {
+    unsafe {
+        let c_string = CString::new(iface).expect("Failed to create CString");
+        libc::if_nametoindex(c_string.as_ptr())
+    }
+}
+
 async fn new_tcp_stream<'a>(
     addr: SocketAddr,
     iface: &str,
 ) -> std::io::Result<TcpStream> {
-    use socket2_ext::{AddressBinding, BindDeviceOption};
     let socket =
         socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None)?;
-    socket.bind_to_device(BindDeviceOption::v4(iface))?;
+    let iface_index = get_interface_index(iface);
+    assert_ne!(iface_index, 0, "interface index must not be zero");
+    socket.bind_device_by_index_v4(iface_index.try_into().ok())?;
     socket.set_keepalive(true)?;
     socket.set_nodelay(true)?;
     socket.set_nonblocking(true)?;
@@ -45,21 +53,17 @@ async fn new_tcp_stream<'a>(
 }
 
 async fn new_udp_packet(iface: &str) -> std::io::Result<tokio::net::UdpSocket> {
-    use socket2_ext::{AddressBinding, BindDeviceOption};
     let socket =
         socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?;
-    socket.bind_to_device(BindDeviceOption::v4(iface))?;
+    let iface_index = get_interface_index(iface);
+    assert_ne!(iface_index, 0, "interface index must not be zero");
+    socket.bind_device_by_index_v4(iface_index.try_into().ok())?;
     socket.set_nonblocking(true)?;
 
     tokio::net::UdpSocket::from_std(socket.into())
 }
 
 async fn handle_inbound_stream(mut stream: watfaq_netstack::TcpStream) {
-    debug!(
-        "new tun TCP connection: {} -> {}",
-        stream.local_addr(),
-        stream.remote_addr()
-    );
     match new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE).await {
         Ok(mut remote_stream) => {
             // pipe between two tcp stream
@@ -81,21 +85,31 @@ async fn handle_inbound_stream(mut stream: watfaq_netstack::TcpStream) {
 async fn handle_inbound_datagram(socket: watfaq_netstack::UdpSocket) {
     let (mut r, w) = socket.split();
     while let Some(packet) = r.recv().await {
-        debug!("received UDP packet {packet:?}");
+        debug!("received UDP packet from tun inbound {packet:?}");
 
         let u = Arc::new(new_udp_packet(OUTBOUND_INTERFACE).await.unwrap());
         let uc = u.clone();
+        let mut w = w.clone();
         tokio::spawn(async move {
-            let mut buf = Vec::with_capacity(1024);
+            let mut buf = vec![0u8; 1500];
             while let Ok((n, peer)) = uc.recv_from(&mut buf).await {
-                debug!("received UDP packet: {} from {}", n, peer);
+                debug!(
+                    "received UDP packet from remote reply {n} bytes from {peer}"
+                );
+                w.send(watfaq_netstack::UdpPacket {
+                    data: watfaq_netstack::Packet::new(buf[..n].to_vec()),
+                    local_addr: peer,
+                    remote_addr: packet.local_addr,
+                })
+                .await
+                .expect("Failed to send UDP packet");
             }
         });
 
         if let Err(e) = u.send_to(packet.data(), packet.remote_addr).await {
             error!("failed to send UDP packet: {}", e);
         } else {
-            debug!("sent UDP packet to {}", packet.remote_addr);
+            debug!("forwarding UDP packet to remote {}", packet.remote_addr);
         }
     }
 }
@@ -138,7 +152,7 @@ async fn main() {
 
     add_test_routes(tun_name);
 
-    let (stack, mut tcp_listener, udp_socket, _) = watfaq_netstack::NetStack::new();
+    let (stack, mut tcp_listener, udp_socket) = watfaq_netstack::NetStack::new();
 
     let framed = tun_rs::async_framed::DeviceFramed::new(
         dev,

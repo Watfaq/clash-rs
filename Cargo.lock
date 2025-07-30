@@ -6814,18 +6814,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "socket2-ext"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c337b1f71f22991ea8e9a8f7e4e5973fc7f155828baaa49c5e181bbbf7c0cea6"
-dependencies = [
- "ipconfig",
- "libc",
- "socket2 0.5.10",
- "tracing",
-]
-
-[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9098,11 +9086,11 @@ dependencies = [
  "etherparse",
  "futures",
  "ipnet",
+ "libc",
  "log",
  "rand 0.9.2",
  "smoltcp",
  "socket2 0.5.10",
- "socket2-ext",
  "thiserror 1.0.69",
  "tokio",
  "tun-rs",

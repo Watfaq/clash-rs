@@ -5,9 +5,18 @@ use smoltcp::wire::IpProtocol;
 use tokio::sync::mpsc;
 
 use crate::{
-    UdpSocket, debug::trace_ip_packet, packet::IpPacket, tcp_listener::TcpListener,
+    UdpSocket,
+    debug::trace_ip_packet,
+    packet::IpPacket,
+    tcp_listener::{TcpListener, TcpStreamHandle},
 };
 
+pub(crate) enum IfaceEvent<'a> {
+    Icmp, // ICMP packet received
+    TcpStream((smoltcp::socket::tcp::Socket<'a>, TcpStreamHandle)), /* new TCP stream created */
+    TcpSocketReady, // at least one TCP socket is ready to read/write
+    DeviceReady,    // Device generated some packets
+}
 /// IO of the stack:
 /// Sink to the stack with any IP packets
 /// it will be demultiplexed to the correct protocol handler and each handler
@@ -43,18 +52,10 @@ impl Packet {
 
 impl NetStack {
     /// Returns the NetStack instance, a TcpListener and a UdpSocket
-    /// The TcpListener and UdpSocket are used to handle TCP and UDP connections
-    /// respectively.
-    /// The NetStack instance is used to send and receive packets from the
-    /// stack. The JoinHandle is the handle to the background task that runs
-    /// the stack, that was spawned internally. Note: dropping the Handle
-    /// won't stop the stack, it will continue to run in the background, unless
-    /// you abort it manually.
     pub fn new() -> (
         Self,
         crate::tcp_listener::TcpListener,
         crate::udp_socket::UdpSocket,
-        tokio::task::JoinHandle<()>,
     ) {
         let (packet_sender, packet_receiver) = mpsc::unbounded_channel::<Packet>();
 
@@ -75,9 +76,7 @@ impl NetStack {
             packet_outbound: packet_receiver,
         };
 
-        let handle = tokio::spawn(async move {});
-
-        (stack, tcp_listener, udp_socket, handle)
+        (stack, tcp_listener, udp_socket)
     }
 
     pub fn split(self) -> (StackSplitSink, StackSplitStream) {
@@ -204,7 +203,7 @@ impl futures::Stream for StackSplitStream {
     ) -> std::task::Poll<Option<Self::Item>> {
         match self.packet_outbound.poll_recv(cx) {
             std::task::Poll::Ready(Some(packet)) => {
-                trace_ip_packet("tun outbound packet", packet.data());
+                trace_ip_packet("tun reply packet", packet.data());
                 std::task::Poll::Ready(Some(Ok(packet)))
             }
             std::task::Poll::Ready(None) => {

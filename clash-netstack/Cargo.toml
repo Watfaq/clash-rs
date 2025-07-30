@@ -32,4 +32,4 @@ tun-rs = { version = "2", features = ["async", "async_framed"] }
 ipnet = "2"
 env_logger = "0.11"
 socket2 = "0.5.6"
-socket2-ext = { version = "0.1" }
+libc = "0.2"

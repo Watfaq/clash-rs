@@ -6,7 +6,9 @@ use tokio::sync::mpsc;
 
 pub struct UdpPacket {
     pub data: Packet,
+    /// src of the packet
     pub local_addr: SocketAddr,
+    /// dst of the packet
     pub remote_addr: SocketAddr,
 }
 impl std::fmt::Debug for UdpPacket {
@@ -44,16 +46,6 @@ impl UdpSocket {
             send: self.outbound,
         };
         (read, write)
-    }
-
-    pub async fn send(&mut self, packet: Packet) -> Result<(), std::io::Error> {
-        self.outbound.send(packet).map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "send error")
-        })
-    }
-
-    pub async fn recv(&mut self) -> Option<Packet> {
-        self.inbound.recv().await
     }
 }
 

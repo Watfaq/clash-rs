@@ -1,12 +1,14 @@
 use std::net::SocketAddr;
 
-use crate::tcp_listener::TcpStreamHandle;
+use crate::{stack::IfaceEvent, tcp_listener::TcpStreamHandle};
 
 pub struct TcpStream {
     pub(crate) local_addr: SocketAddr,
     pub(crate) remote_addr: SocketAddr,
 
     pub(crate) handle: TcpStreamHandle,
+    pub(crate) stack_notifier:
+        tokio::sync::mpsc::UnboundedSender<IfaceEvent<'static>>,
 }
 
 impl TcpStream {
@@ -64,6 +66,9 @@ impl tokio::io::AsyncWrite for TcpStream {
             let n = buf_lock.enqueue_slice(buf);
             n
         });
+        self.stack_notifier
+            .send(IfaceEvent::TcpSocketReady)
+            .expect("Failed to notify TCP socket ready");
         std::task::Poll::Ready(Ok(n))
     }
 

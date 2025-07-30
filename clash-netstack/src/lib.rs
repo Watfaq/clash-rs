@@ -9,4 +9,4 @@ mod udp_socket;
 
 pub use stack::{NetStack, Packet, StackSplitSink, StackSplitStream};
 pub use tcp_stream::TcpStream;
-pub use udp_socket::UdpSocket;
+pub use udp_socket::{UdpPacket, UdpSocket};
