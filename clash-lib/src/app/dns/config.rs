@@ -372,7 +372,7 @@ impl From<crate::config::def::FallbackFilter> for FallbackFilter {
         let ipcidr = Config::parse_fallback_ip_cidr(&c.ip_cidr);
         Self {
             geo_ip: c.geo_ip,
-            geo_ip_code: c.geo_ip_code,
+            geo_ip_code: c.geo_ip_code.to_lowercase(),
             ip_cidr: ipcidr.ok(),
             domain: c.domain,
         }
