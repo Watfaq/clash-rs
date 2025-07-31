@@ -140,7 +140,7 @@ impl SplitWrite {
             Vec::with_capacity(builder.size(packet.data.data().len()));
         builder
             .write(&mut ip_packet_writer, packet.data.data())
-            .map_err(|err| std::io::Error::other(err))?;
+            .map_err(std::io::Error::other)?;
 
         match self.send.send(Packet::new(ip_packet_writer)) {
             Ok(()) => Ok(()),

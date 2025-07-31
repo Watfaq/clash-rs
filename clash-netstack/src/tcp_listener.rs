@@ -200,7 +200,7 @@ impl TcpListener {
                         std::io::Error::other("Failed to send TCP stream")
                     })?;
                 iface_notifier
-                    .send(IfaceEvent::TcpStream((socket, handle)))
+                    .send(IfaceEvent::TcpStream(Box::new((socket, handle))))
                     .map_err(|e| {
                         error!("Failed to send TCP stream event: {e}");
                         std::io::Error::other("Failed to send TCP stream event")
@@ -238,7 +238,8 @@ impl TcpListener {
                             trace!("Received ICMP event");
                             next_poll = None;
                         }
-                        IfaceEvent::TcpStream((socket, handle)) => {
+                        IfaceEvent::TcpStream(boxed) => {
+                            let (socket, handle) = *boxed;
                             trace!("New TCP stream created");
                             let socket_handle = sockets.add(socket);
                             socket_maps.insert(socket_handle, handle);

@@ -13,7 +13,7 @@ use crate::{
 
 pub(crate) enum IfaceEvent<'a> {
     Icmp, // ICMP packet received
-    TcpStream((smoltcp::socket::tcp::Socket<'a>, TcpStreamHandle)), /* new TCP stream created */
+    TcpStream(Box<(smoltcp::socket::tcp::Socket<'a>, TcpStreamHandle)>), /* new TCP stream created */
     TcpSocketReady, // at least one TCP socket is ready to read/write
     DeviceReady,    // Device generated some packets
 }
