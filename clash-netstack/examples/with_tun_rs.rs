@@ -1,3 +1,4 @@
+#![cfg(target_os = "macos")]
 //! To test this example, you can run the following commands:
 //! ```bash
 //! cargo run --example with_tun_rs
