@@ -142,7 +142,7 @@ impl hyper::service::Service<Request<hyper::body::Incoming>> for ProxyService {
 
 #[instrument(skip(stream, dispatcher, authenticator))]
 pub async fn handle(
-    stream: AnyStream,
+    stream: TokioIo<AnyStream>,
     src: SocketAddr,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,

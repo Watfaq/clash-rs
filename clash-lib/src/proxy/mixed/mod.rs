@@ -8,6 +8,7 @@ use crate::{
 use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
 use crate::common::errors::new_io_error;
 use async_trait::async_trait;
+use hyper_util::rt::TokioIo;
 use std::{net::SocketAddr, sync::Arc};
 use tracing::warn;
 
@@ -125,7 +126,7 @@ impl InboundHandlerTrait for MixedInbound {
                     let authenticator = authenticator.clone();
                     tokio::spawn(async move {
                         http::handle_http(
-                            Box::new(socket),
+                            TokioIo::new(Box::new(socket) as _),
                             src,
                             dispatcher,
                             authenticator,

@@ -59,18 +59,16 @@ pub async fn new_tcp_stream(
             socket2::Domain::IPV6,
         ),
     };
-    debug!(
-        socket = ?socket,
-        family = ?family,
-        "created tcp socket"
-    );
+    debug!("created tcp socket");
 
-    #[cfg(not(target_os = "android"))]
-    if let Some(iface) = iface {
+    if !cfg!(target_os = "android")
+        && let Some(iface) = iface
+    {
         must_bind_socket_on_interface(&socket, iface, family)?;
         trace!("tcp socket bound to interface: {socket:?}");
     }
 
+    #[cfg(not(target_os = "android"))]
     #[cfg(target_os = "linux")]
     if let Some(so_mark) = so_mark {
         socket.set_mark(so_mark)?;
@@ -124,7 +122,7 @@ pub async fn new_udp_socket(
             socket2::Domain::IPV4,
         ),
     };
-    debug!("created udp socket: {socket:?}");
+    debug!("created udp socket");
 
     if !cfg!(target_os = "android") {
         match (src, iface) {

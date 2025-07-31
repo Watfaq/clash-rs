@@ -41,7 +41,7 @@ impl GeoData {
 
         let geosite_file = path.as_ref().to_path_buf();
 
-        if !geosite_file.exists() {
+        if !geosite_file.exists() || download_url.contains("force=true") {
             info!("downloading geodata from {}", download_url);
             download(&download_url, &geosite_file, &http_client)
                 .await

@@ -31,8 +31,9 @@ impl Vehicle {
         cwd: Option<P>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
-        let client =
-            new_http_client(dns_resolver).expect("failed to create http client");
+        // TODO(dev0): support remote content manager via proxy
+        let client = new_http_client(dns_resolver, None)
+            .expect("failed to create http client");
         Self {
             url: url.into(),
             path: match cwd {
@@ -52,6 +53,7 @@ impl ProviderVehicle for Vehicle {
             http::header::USER_AGENT,
             DEFAULT_USER_AGENT.parse().expect("must parse user agent"),
         );
+        *req.body_mut() = http_body_util::Empty::<bytes::Bytes>::new();
         *req.uri_mut() = self.url.clone();
         self.http_client
             .request(req)

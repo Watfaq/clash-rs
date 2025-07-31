@@ -10,7 +10,9 @@ use tokio::{
 use tracing::debug;
 
 use crate::{
-    app::router::RuleMatcher, proxy::datagram::UdpPacket, session::Session,
+    app::router::RuleMatcher,
+    proxy::{ProxyStream, datagram::UdpPacket},
+    session::Session,
 };
 
 use super::statistics_manager::{Manager, ProxyChain, TrackerInfo};
@@ -28,9 +30,7 @@ impl Tracked {
 }
 
 #[async_trait]
-pub trait ChainedStream:
-    Downcast + AsyncRead + AsyncWrite + Unpin + Send + Sync
-{
+pub trait ChainedStream: ProxyStream + Downcast {
     fn chain(&self) -> &ProxyChain;
     async fn append_to_chain(&self, name: &str);
 }
