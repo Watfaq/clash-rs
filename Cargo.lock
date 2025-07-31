@@ -1346,21 +1346,21 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "clash-doc"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-ffi"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-lib"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "aead",
  "aes",
@@ -1479,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "clash-rs"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "clap",
  "clash-lib",
@@ -9084,7 +9084,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-dns"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "async-trait",
  "env_logger",
