@@ -36,6 +36,7 @@ pub struct NetStack {
 pub struct Packet {
     data: Bytes,
 }
+
 impl Packet {
     pub fn new(data: impl Into<Bytes>) -> Self {
         Packet { data: data.into() }
