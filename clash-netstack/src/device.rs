@@ -1,8 +1,6 @@
 use crate::{Packet, stack::IfaceEvent};
 use smoltcp::{
-    phy::{
-        ChecksumCapabilities, Device, DeviceCapabilities, Medium, RxToken, TxToken,
-    },
+    phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
     time::Instant,
 };
 use tokio::sync::mpsc;
@@ -25,14 +23,6 @@ impl NetstackDevice {
         let mut capabilities = DeviceCapabilities::default();
         capabilities.max_transmission_unit = 1500;
         capabilities.medium = Medium::Ip;
-
-        // let mut checksumes = ChecksumCapabilities::default();
-        // checksumes.ipv4 = smoltcp::phy::Checksum::Tx;
-        // checksumes.udp = smoltcp::phy::Checksum::Tx;
-        // checksumes.tcp = smoltcp::phy::Checksum::Tx;
-        // checksumes.icmpv4 = smoltcp::phy::Checksum::Tx;
-        // checksumes.icmpv6 = smoltcp::phy::Checksum::Tx;
-        // capabilities.checksum = checksumes;
 
         let (rx_sender, rx_queue) = mpsc::unbounded_channel::<Packet>();
 

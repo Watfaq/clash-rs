@@ -202,15 +202,6 @@ impl TcpListener {
                             "Failed to send TCP stream",
                         )
                     })?;
-
-                device_injector.send(frame).map_err(|e| {
-                    error!("Failed to send packet to device: {}", e);
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Failed to inject packet to device",
-                    )
-                })?;
-
                 iface_notifier
                     .send(IfaceEvent::TcpStream((socket, handle)))
                     .map_err(|e| {
@@ -221,6 +212,14 @@ impl TcpListener {
                         )
                     })?;
             }
+
+            device_injector.send(frame).map_err(|e| {
+                error!("Failed to send packet to device: {}", e);
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to inject packet to device",
+                )
+            })?;
         }
         Ok(())
     }
@@ -260,7 +259,7 @@ impl TcpListener {
                             next_poll = None;
                         }
                         IfaceEvent::DeviceReady => {
-                            error!("Device is ready");
+                            trace!("Device is ready");
                             next_poll = None;
                         }
                     }
