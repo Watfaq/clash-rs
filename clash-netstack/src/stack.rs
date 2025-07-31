@@ -51,6 +51,15 @@ impl Packet {
     }
 }
 
+impl<T> From<T> for Packet
+where
+    T: Into<Bytes>,
+{
+    fn from(data: T) -> Self {
+        Packet::new(data)
+    }
+}
+
 impl NetStack {
     /// Returns the NetStack instance, a TcpListener and a UdpSocket
     pub fn new() -> (

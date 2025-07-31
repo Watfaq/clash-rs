@@ -28,8 +28,8 @@ async fn handle_inbound_stream(
     let sess = Session {
         network: Network::Tcp,
         typ: Type::Tun,
-        source: stream.local_addr,
-        destination: stream.remote_addr.into(),
+        source: stream.local_addr(),
+        destination: stream.remote_addr().into(),
         iface: DEFAULT_OUTBOUND_INTERFACE
             .read()
             .await
@@ -58,22 +58,8 @@ async fn handle_inbound_datagram(
     // tun i/o
     // lr: app packets went into tun will be accessed from lr
     // ls: packet written into ls will go back to app from tun
-    let (mut ls, mut lr) = socket.split();
-    // ideally we clone the WriteHalf ls, but it's not Clone, and it's a Sink so the
-    // send method is mut
-    let (dup_ls, mut dup_lr) = tokio::sync::mpsc::channel(32);
-    tokio::spawn(async move {
-        while let Some((data, local, remote)) = dup_lr.recv().await {
-            if let Err(e) = ls
-                .send(watfaq_netstack::UdpPacket::new(data, remote, local))
-                .await
-            {
-                warn!("failed to send udp packet to netstack: {}", e);
-            }
-        }
-    });
-    let ls = dup_ls.clone();
-    let ls_dns = dup_ls.clone(); // for dns hijack
+    let (mut lr, mut ls) = socket.split();
+    let mut ls_dns = ls.clone(); // for dns hijack
     let resolver_dns = resolver.clone(); // for dns hijack
 
     // dispatcher <-> tun communications
@@ -109,11 +95,14 @@ async fn handle_inbound_datagram(
         while let Some(pkt) = l_rx.recv().await {
             trace!("tun <- dispatcher: {:?}", pkt);
             if let Err(e) = ls
-                .send((
-                    pkt.data,
-                    pkt.src_addr.must_into_socket_addr(),
-                    pkt.dst_addr.must_into_socket_addr(),
-                ))
+                .send(
+                    (
+                        pkt.data,
+                        pkt.src_addr.must_into_socket_addr(),
+                        pkt.dst_addr.must_into_socket_addr(),
+                    )
+                        .into(),
+                )
                 .await
             {
                 warn!("failed to send udp packet to netstack: {}", e);
@@ -127,13 +116,13 @@ async fn handle_inbound_datagram(
             data,
             local_addr,
             remote_addr,
-        }) = lr.next().await
+        }) = lr.recv().await
         {
             if remote_addr.ip().is_multicast() {
                 continue;
             }
             let pkt = UdpPacket {
-                data: data.data.into(),
+                data: data.data().into(),
                 src_addr: local_addr.into(),
                 dst_addr: remote_addr.into(),
             };
@@ -145,21 +134,24 @@ async fn handle_inbound_datagram(
 
                 match hickory_proto::op::Message::from_vec(&pkt.data) {
                     Ok(msg) => {
-                        let send_response =
+                        let mut send_response =
                             async |msg: hickory_proto::op::Message,
                                    pkt: &UdpPacket| {
                                 match msg.to_vec() {
                                     Ok(data) => {
                                         if let Err(e) = ls_dns
-                                            .send((
-                                                data,
-                                                pkt.dst_addr
-                                                    .clone()
-                                                    .must_into_socket_addr(),
-                                                pkt.src_addr
-                                                    .clone()
-                                                    .must_into_socket_addr(),
-                                            ))
+                                            .send(
+                                                (
+                                                    data,
+                                                    pkt.dst_addr
+                                                        .clone()
+                                                        .must_into_socket_addr(),
+                                                    pkt.src_addr
+                                                        .clone()
+                                                        .must_into_socket_addr(),
+                                                )
+                                                    .into(),
+                                            )
                                             .await
                                         {
                                             warn!(
@@ -383,7 +375,7 @@ pub fn get_runner(
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(pkt.data()).await {
+                        if let Err(e) = tun_sink.send(pkt.into_bytes()).await {
                             error!("failed to send pkt to tun: {}", e);
                             break;
                         }
@@ -425,7 +417,8 @@ pub fn get_runner(
             while let Some(stream) = tcp_listener.next().await {
                 debug!(
                     "new tun TCP connection: {} -> {}",
-                    stream.local_addr, stream.remote_addr
+                    stream.local_addr(),
+                    stream.remote_addr()
                 );
 
                 tokio::spawn(handle_inbound_stream(stream, dsp.clone(), so_mark));

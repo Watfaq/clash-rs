@@ -313,7 +313,13 @@ impl EnhancedResolver {
                 }
             }
             trace!(q = q.to_string(), "querying resolver");
-            let res = self.exchange_no_cache(message).await;
+            let res = self.exchange_no_cache(message).await.map(|mut r| {
+                if let Some(edns) = r.extensions_mut() {
+                    // Remove only padding options, keep everything else
+                    edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
+                }
+                r
+            });
             trace!(q = q.to_string(), "query completed");
             res
         } else {

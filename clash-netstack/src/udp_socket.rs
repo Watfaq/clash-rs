@@ -21,6 +21,19 @@ impl std::fmt::Debug for UdpPacket {
     }
 }
 
+impl<T> From<(T, SocketAddr, SocketAddr)> for UdpPacket
+where
+    T: Into<Packet>,
+{
+    fn from((data, local_addr, remote_addr): (T, SocketAddr, SocketAddr)) -> Self {
+        UdpPacket {
+            data: data.into(),
+            local_addr,
+            remote_addr,
+        }
+    }
+}
+
 impl UdpPacket {
     pub fn data(&self) -> &[u8] {
         self.data.data()
