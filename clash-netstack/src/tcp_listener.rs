@@ -89,7 +89,7 @@ impl TcpListener {
                 rv = Self::poll_sockets(&mut iface, &mut device, iface_notifier_rx) => rv,
             };
             if let Err(e) = rv {
-                error!("Error in TCP listener: {}", e);
+                error!("Error in TCP listener: {e}");
             }
         });
 
@@ -172,11 +172,11 @@ impl TcpListener {
                 socket.set_ack_delay(None);
 
                 if let Err(err) = socket.listen(dst_addr) {
-                    error!("listen error: {:?}", err);
+                    error!("listen error: {err:?}");
                     continue;
                 }
 
-                trace!("created TCP connection for {} <-> {}", src_addr, dst_addr);
+                trace!("created TCP connection for {src_addr} <-> {dst_addr}");
 
                 let handle = TcpStreamHandle {
                     recv_buffer: Arc::new(Protected::new(RingBuffer::new(
@@ -196,29 +196,20 @@ impl TcpListener {
                         stack_notifier: iface_notifier.clone(),
                     })
                     .map_err(|e| {
-                        error!("Failed to send TCP stream: {}", e);
-                        std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Failed to send TCP stream",
-                        )
+                        error!("Failed to send TCP stream: {e}");
+                        std::io::Error::other("Failed to send TCP stream")
                     })?;
                 iface_notifier
                     .send(IfaceEvent::TcpStream((socket, handle)))
                     .map_err(|e| {
-                        error!("Failed to send TCP stream event: {}", e);
-                        std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Failed to send TCP stream event",
-                        )
+                        error!("Failed to send TCP stream event: {e}");
+                        std::io::Error::other("Failed to send TCP stream event")
                     })?;
             }
 
             device_injector.send(frame).map_err(|e| {
-                error!("Failed to send packet to device: {}", e);
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to inject packet to device",
-                )
+                error!("Failed to send packet to device: {e}");
+                std::io::Error::other("Failed to inject packet to device")
             })?;
         }
         Ok(())
@@ -326,7 +317,7 @@ impl TcpListener {
                     next_poll = match iface.poll_delay(now, &sockets) {
                         Some(smoltcp::time::Duration::ZERO) => None,
                         Some(delay) => {
-                            trace!("device poll delay: {:?}", delay);
+                            trace!("device poll delay: {delay:?}");
                             Some(delay.into())
                         }
                         None => None,

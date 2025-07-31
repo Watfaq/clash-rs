@@ -72,7 +72,7 @@ impl SplitRead {
             let packet = match IpPacket::new_checked(data.data()) {
                 Ok(p) => p,
                 Err(err) => {
-                    error!("invalid IP packet: {}", err);
+                    error!("invalid IP packet: {err}");
                     return None;
                 }
             };
@@ -97,7 +97,7 @@ impl SplitRead {
             let src_addr = SocketAddr::new(src_ip, src_port);
             let dst_addr = SocketAddr::new(dst_ip, dst_port);
 
-            trace!("created UDP socket for {} <-> {}", src_addr, dst_addr);
+            trace!("created UDP socket for {src_addr} <-> {dst_addr}");
 
             Some(UdpPacket {
                 data: Packet::new(packet.payload().to_vec()),
@@ -139,15 +139,12 @@ impl SplitWrite {
         let mut ip_packet_writer =
             Vec::with_capacity(builder.size(packet.data.data().len()));
         builder
-            .write(&mut ip_packet_writer, &packet.data.data())
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+            .write(&mut ip_packet_writer, packet.data.data())
+            .map_err(|err| std::io::Error::other(err))?;
 
         match self.send.send(Packet::new(ip_packet_writer)) {
             Ok(()) => Ok(()),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("send error: {err}"),
-            )),
+            Err(err) => Err(std::io::Error::other(format!("send error: {err}"))),
         }
     }
 }

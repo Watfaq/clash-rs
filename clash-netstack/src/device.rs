@@ -54,7 +54,7 @@ impl Device for NetstackDevice {
         &mut self,
         _timestamp: Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        if let Some(packet) = self.rx_queue.try_recv().ok() {
+        if let Ok(packet) = self.rx_queue.try_recv() {
             let rx_token = RxTokenImpl { packet };
             let tx_token = TxTokenImpl {
                 tx_sender: self.tx_sender.clone(),

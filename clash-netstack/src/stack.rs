@@ -152,7 +152,7 @@ impl futures::Sink<Packet> for StackSplitSink {
         ) {
             self.packet_container.replace((item, protocol));
         } else {
-            debug!("tun IP packet ignored (protocol: {:?})", protocol);
+            debug!("tun IP packet ignored (protocol: {protocol:?})");
         }
 
         Ok(())
@@ -171,18 +171,18 @@ impl futures::Sink<Packet> for StackSplitSink {
             IpProtocol::Udp => match self.udp_inbound.send(item) {
                 Ok(()) => {}
                 Err(e) => {
-                    debug!("Failed to send UDP packet: {}", e);
+                    debug!("Failed to send UDP packet: {e}");
                     self.packet_container = Some((e.0, proto));
                 }
             },
             IpProtocol::Tcp | IpProtocol::Icmp | IpProtocol::Icmpv6 => {
                 self.tcp_inbound.send(item).map_err(|e| {
-                    debug!("Failed to send TCP packet: {}", e);
+                    debug!("Failed to send TCP packet: {e}");
                     std::io::Error::new(std::io::ErrorKind::BrokenPipe, e)
                 })?;
             }
             _ => {
-                debug!("Unsupported protocol for packet: {:?}", proto);
+                debug!("Unsupported protocol for packet: {proto:?}");
             }
         }
         std::task::Poll::Ready(Ok(()))

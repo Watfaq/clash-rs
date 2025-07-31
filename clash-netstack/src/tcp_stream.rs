@@ -62,10 +62,7 @@ impl tokio::io::AsyncWrite for TcpStream {
         if send_buf.is_full() {
             return std::task::Poll::Pending;
         }
-        let n = send_buf.with_lock(|buf_lock| {
-            let n = buf_lock.enqueue_slice(buf);
-            n
-        });
+        let n = send_buf.with_lock(|buf_lock| buf_lock.enqueue_slice(buf));
         self.stack_notifier
             .send(IfaceEvent::TcpSocketReady)
             .expect("Failed to notify TCP socket ready");
