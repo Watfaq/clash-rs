@@ -1,13 +1,10 @@
-use std::{sync::Arc, time::Duration};
-
+use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
+use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use quinn::ZeroRttAccepted;
-
-use anyhow::Result;
+use std::{sync::Arc, time::Duration};
 use tuic::Address;
 use tuic_quinn::{Connect, Packet};
-
-use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
 
 use super::types::{TuicConnection, UdpRelayMode};
 

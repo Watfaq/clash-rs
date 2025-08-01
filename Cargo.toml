@@ -1,12 +1,13 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [
     "clash-bin",
     "clash-lib",
     "clash-doc",
     "clash-ffi",
-    "clash-dns"
+    "clash-dns",
+    "clash-netstack"
 ]
 
 

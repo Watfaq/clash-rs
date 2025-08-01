@@ -32,7 +32,7 @@ wireguard = ["dep:boringtun", "dep:smoltcp"]
 tproxy = ["tun"]
 tun = [
     "dep:tun-rs",
-    "dep:netstack-smoltcp",
+    "dep:watfaq-netstack",
     "dep:smoltcp",
 ]
 redir = []
@@ -121,7 +121,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
-netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp", rev = "ab06bc3de566fc6485a238dd4c746bb3e4f79484", optional = true }
+watfaq-netstack = { path = "../clash-netstack", optional = true }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true }
 
 # WireGuard

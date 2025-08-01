@@ -5,6 +5,7 @@ use crate::{
         dns_client::{DNSNetMode, DnsClient, Opts},
     },
 };
+use hickory_proto::rr::rdata::opt::EdnsCode;
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -74,6 +75,11 @@ pub fn build_dns_response_message(
     res.set_checking_disabled(req.checking_disabled());
     if let Some(edns) = req.extensions().clone() {
         res.set_edns(edns);
+    }
+
+    if let Some(edns) = res.extensions_mut() {
+        // Remove only padding options, keep everything else
+        edns.options_mut().remove(EdnsCode::Padding);
     }
 
     res

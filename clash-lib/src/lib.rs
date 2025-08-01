@@ -6,9 +6,6 @@
 #![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 
-#[macro_use]
-extern crate anyhow;
-
 use crate::{
     app::{
         dispatcher::Dispatcher, dns, inbound::manager::InboundManager,

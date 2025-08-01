@@ -1,8 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
+use self::docker_runner::RunAndCleanup;
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, ChainedStream},
@@ -11,14 +7,17 @@ use crate::{
     proxy::{OutboundHandler, datagram::UdpPacket},
     session::{Session, SocksAddr},
 };
+use anyhow::{anyhow, bail};
 use futures::{SinkExt, StreamExt, future::select_all};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split},
     net::{TcpListener, UdpSocket},
 };
 use tracing::info;
-
-use self::docker_runner::RunAndCleanup;
 
 pub mod config_helper;
 pub mod consts;

@@ -1,24 +1,4 @@
-use std::{
-    fmt::{Debug, Display, Formatter},
-    net,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
-
-use async_trait::async_trait;
-
-use futures::{TryFutureExt, future::BoxFuture};
-use hickory_client::client;
-use hickory_proto::{
-    ProtoError, runtime::iocompat::AsyncIoTokioAsStd,
-    rustls::tls_client_stream::tls_client_connect_with_future, tcp::TcpClientStream,
-    udp::UdpClientStream,
-};
-use rustls::ClientConfig;
-use tokio::{sync::RwLock, task::JoinHandle};
-use tracing::{info, instrument, trace, warn};
-
+use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
 use crate::{
     Error,
     app::net::{OutboundInterface, TUN_SOMARK},
@@ -26,15 +6,30 @@ use crate::{
     dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
     proxy::utils::new_tcp_stream,
 };
+use anyhow::anyhow;
+use async_trait::async_trait;
+use futures::{TryFutureExt, future::BoxFuture};
+use hickory_client::client;
 use hickory_proto::{
-    DnsHandle,
+    DnsHandle, ProtoError,
     h2::HttpsClientStreamBuilder,
     op::Message,
+    runtime::iocompat::AsyncIoTokioAsStd,
+    rustls::tls_client_stream::tls_client_connect_with_future,
+    tcp::TcpClientStream,
+    udp::UdpClientStream,
     xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
 };
-use tokio::net::TcpStream as TokioTcpStream;
-
-use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
+use rustls::ClientConfig;
+use std::{
+    fmt::{Debug, Display, Formatter},
+    net,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
+use tokio::{net::TcpStream as TokioTcpStream, sync::RwLock, task::JoinHandle};
+use tracing::{info, instrument, trace, warn};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {

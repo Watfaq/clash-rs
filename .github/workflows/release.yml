@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version_type:
-        description: 'Version bump type'
+        description: "Version bump type"
         required: true
-        default: 'minor'
+        default: "minor"
         type: choice
         options:
           - patch
@@ -48,7 +48,7 @@ jobs:
 
       - name: Commit version bump
         run: |
-          git add Cargo.toml clash/Cargo.toml clash_lib/Cargo.toml clash_doc/Cargo.toml clash_ffi/Cargo.toml Cargo.lock
+          git add Cargo.toml clash-bin/Cargo.toml clash-dns/Cargo.toml clash-doc/Cargo.toml clash-ffi/Cargo.toml clash-lib/Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
 
       - name: Create tag
