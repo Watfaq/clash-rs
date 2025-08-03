@@ -289,8 +289,12 @@ impl TcpListener {
                         let socket = sockets.get_mut::<tcp::Socket>(*socket_handle);
                         trace!("Polling TCP socket: {:?}, can_recv: {}, can_send: {}", socket_handle, socket.can_recv(), socket.can_send());
 
-                        if socket.can_recv() && !socket_control.recv_buffer.is_full() {
+                        if socket.can_recv() {
                             socket_control.recv_buffer.with_lock(|data| {
+                                if data.is_full() {
+                                    trace!("TCP socket recv buffer is full, skipping recv");
+                                    return;
+                                }
                                 if socket
                                     .recv(|buffer| {
                                         let n = data.enqueue_slice(buffer);
@@ -302,8 +306,12 @@ impl TcpListener {
                                 }
                             });
                         }
-                        if socket.can_send() && !socket_control.send_buffer.is_empty() {
+                        if socket.can_send() {
                             socket_control.send_buffer.with_lock(|data| {
+                                if data.is_empty() {
+                                    trace!("TCP socket send buffer is empty, skipping send");
+                                    return;
+                                }
                                 if socket
                                     .send(|buffer| {
                                         let n = data.dequeue_slice(buffer);

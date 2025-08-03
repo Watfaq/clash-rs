@@ -53,17 +53,22 @@ impl tokio::io::AsyncRead for TcpStream {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
         let read_buf = &self.handle.recv_buffer;
-        if read_buf.is_empty() {
-            return std::task::Poll::Pending;
-        }
+
         read_buf.with_lock(|buf_lock| {
-            let unfilled = buf.unfilled_mut();
-            let n = buf_lock.dequeue_slice(&mut unfilled[..unfilled.len()]);
-            // Safety: `dequeue_slice` writes valid data into the buffer, initializing it.
-            unsafe { buf.assume_init(n) };
+            if buf_lock.is_empty() {
+                return std::task::Poll::Pending;
+            }
+
+            let recv_buf = unsafe {
+                std::mem::transmute::<&mut [std::mem::MaybeUninit<u8>], &mut [u8]>(
+                    buf.unfilled_mut(),
+                )
+            };
+            let n = buf_lock.dequeue_slice(recv_buf);
             buf.advance(n);
-        });
-        std::task::Poll::Ready(Ok(()))
+
+            std::task::Poll::Ready(Ok(()))
+        })
     }
 }
 impl tokio::io::AsyncWrite for TcpStream {
@@ -73,14 +78,20 @@ impl tokio::io::AsyncWrite for TcpStream {
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
         let send_buf = &self.handle.send_buffer;
-        if send_buf.is_full() {
-            return std::task::Poll::Pending;
-        }
-        let n = send_buf.with_lock(|buf_lock| buf_lock.enqueue_slice(buf));
+
+        let n = send_buf.with_lock(|buf_lock| {
+            if buf_lock.is_full() {
+                return std::task::Poll::Pending;
+            }
+            let n = buf_lock.enqueue_slice(buf);
+            std::task::Poll::Ready(Ok(n))
+        });
+
         self.stack_notifier
             .send(IfaceEvent::TcpSocketReady)
             .expect("Failed to notify TCP socket ready");
-        std::task::Poll::Ready(Ok(n))
+
+        n
     }
 
     fn poll_flush(

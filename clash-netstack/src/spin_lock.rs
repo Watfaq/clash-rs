@@ -1,6 +1,5 @@
 use std::{
     cell::UnsafeCell,
-    ops::Deref,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -52,4 +51,3 @@ impl<T> Protected<T> {
         result
     }
 }
-

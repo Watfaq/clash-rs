@@ -114,7 +114,7 @@ pub struct SplitWrite {
 }
 
 impl SplitWrite {
-    pub async fn send(&mut self, packet: &UdpPacket) -> Result<(), std::io::Error> {
+    pub async fn send(&mut self, packet: UdpPacket) -> Result<(), std::io::Error> {
         if packet.data.data().is_empty() {
             return Ok(());
         }
