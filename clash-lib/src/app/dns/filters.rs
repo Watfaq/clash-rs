@@ -16,7 +16,7 @@ impl GeoIPFilter {
 
 impl FallbackIPFilter for GeoIPFilter {
     fn apply(&self, ip: &net::IpAddr) -> bool {
-        self.1.as_ref().is_some_and(|mmdb| {
+        !self.1.as_ref().is_some_and(|mmdb| {
             mmdb.lookup_country(*ip)
                 .map(|x| x.country_code)
                 .is_ok_and(|x| x == self.0)
