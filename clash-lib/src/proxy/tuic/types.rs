@@ -1,10 +1,9 @@
 use crate::{
-    app::dns::ThreadSafeDNSResolver, proxy::utils::new_udp_socket,
+    app::{dns::ThreadSafeDNSResolver, net::DEFAULT_OUTBOUND_INTERFACE},
+    proxy::{datagram::UdpPacket, utils::new_udp_socket},
     session::SocksAddr as ClashSocksAddr,
 };
-
-use crate::{app::net::DEFAULT_OUTBOUND_INTERFACE, proxy::datagram::UdpPacket};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use quinn::{
     Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
 };

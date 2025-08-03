@@ -1416,7 +1416,6 @@ dependencies = [
  "memory-stats",
  "mockall",
  "murmur3",
- "netstack-smoltcp",
  "network-interface",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -1471,6 +1470,7 @@ dependencies = [
  "url",
  "uuid",
  "watfaq-dns",
+ "watfaq-netstack",
  "watfaq-rustls",
  "webpki-roots 1.0.2",
  "windows 0.61.3",
@@ -4374,21 +4374,6 @@ dependencies = [
  "bytes",
  "libc",
  "log",
-]
-
-[[package]]
-name = "netstack-smoltcp"
-version = "0.1.4"
-source = "git+https://github.com/automesh-network/netstack-smoltcp?rev=ab06bc3de566fc6485a238dd4c746bb3e4f79484#ab06bc3de566fc6485a238dd4c746bb3e4f79484"
-dependencies = [
- "etherparse",
- "futures",
- "rand 0.8.5",
- "smoltcp",
- "spin 0.9.8",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -9100,6 +9085,24 @@ dependencies = [
  "tokio",
  "tracing",
  "webpki-roots 1.0.2",
+]
+
+[[package]]
+name = "watfaq-netstack"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "env_logger",
+ "etherparse",
+ "futures",
+ "ipnet",
+ "libc",
+ "log",
+ "rand 0.9.2",
+ "smoltcp",
+ "socket2 0.5.10",
+ "tokio",
+ "tun-rs",
 ]
 
 [[package]]

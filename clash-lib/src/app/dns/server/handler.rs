@@ -1,12 +1,10 @@
+use super::DEFAULT_DNS_SERVER_TTL;
+use crate::app::dns::{ThreadSafeDNSResolver, helper::build_dns_response_message};
 use hickory_proto::{
     op::{Message, ResponseCode},
     rr::{RData, Record, rdata::A},
 };
 use tracing::debug;
-
-use crate::app::dns::{ThreadSafeDNSResolver, helper::build_dns_response_message};
-
-use super::DEFAULT_DNS_SERVER_TTL;
 
 pub async fn exchange_with_resolver<'a>(
     resolver: &'a ThreadSafeDNSResolver,

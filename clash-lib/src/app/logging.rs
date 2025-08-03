@@ -1,6 +1,5 @@
 use crate::def::LogLevel;
-use std::{io::IsTerminal, sync::Once};
-
+use anyhow::anyhow;
 #[cfg(feature = "tracing")]
 use opentelemetry::trace::TracerProvider;
 #[cfg(feature = "tracing")]
@@ -11,6 +10,7 @@ use opentelemetry_semantic_conventions::{
     attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION},
 };
 use serde::Serialize;
+use std::{io::IsTerminal, sync::Once};
 use tokio::sync::broadcast::Sender;
 use tracing::level_filters::LevelFilter;
 #[cfg(feature = "tracing")]
