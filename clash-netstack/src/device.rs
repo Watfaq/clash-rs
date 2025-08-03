@@ -35,6 +35,7 @@ impl NetstackDevice {
         }
     }
 
+    #[allow(unused)]
     pub fn inject_packet(&self, packet: Packet) {
         if let Err(err) = self.rx_sender.send(packet) {
             log::warn!("Failed to inject packet: {err}");
