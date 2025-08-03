@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bytes::Bytes;
 
 use log::debug;
@@ -13,9 +15,11 @@ use crate::{
 
 pub(crate) enum IfaceEvent<'a> {
     Icmp, // ICMP packet received
-    TcpStream(Box<(smoltcp::socket::tcp::Socket<'a>, TcpStreamHandle)>), /* new TCP stream created */
+    TcpStream(Box<(smoltcp::socket::tcp::Socket<'a>, Arc<TcpStreamHandle>)>), /* new TCP stream created */
     TcpSocketReady, // at least one TCP socket is ready to read/write
-    DeviceReady,    // Device generated some packets
+    TcpSocketClosed, /* TCP socket closed by the application, e.g. the TcpStream
+                     * is dropped */
+    DeviceReady, // Device generated some packets
 }
 /// IO of the stack:
 /// Sink to the stack with any IP packets

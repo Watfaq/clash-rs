@@ -1,14 +1,30 @@
-use std::net::SocketAddr;
-
 use crate::{stack::IfaceEvent, tcp_listener::TcpStreamHandle};
+use log::{error, trace};
+use std::{net::SocketAddr, sync::Arc};
 
 pub struct TcpStream {
     pub(crate) local_addr: SocketAddr,
     pub(crate) remote_addr: SocketAddr,
 
-    pub(crate) handle: TcpStreamHandle,
+    pub(crate) handle: Arc<TcpStreamHandle>,
     pub(crate) stack_notifier:
         tokio::sync::mpsc::UnboundedSender<IfaceEvent<'static>>,
+}
+
+impl Drop for TcpStream {
+    fn drop(&mut self) {
+        trace!(
+            "TcpStream dropped: {} <-> {}",
+            self.local_addr, self.remote_addr
+        );
+
+        self.handle
+            .socket_dropped
+            .store(true, std::sync::atomic::Ordering::Release);
+        if let Err(e) = self.stack_notifier.send(IfaceEvent::TcpSocketClosed) {
+            error!("Failed to notify TCP socket closed: {e}");
+        }
+    }
 }
 
 impl TcpStream {
@@ -81,6 +97,7 @@ impl tokio::io::AsyncWrite for TcpStream {
         self: std::pin::Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
+        trace!("TcpStream::poll_shutdown called, client side closing");
         std::task::Poll::Ready(Ok(()))
     }
 }

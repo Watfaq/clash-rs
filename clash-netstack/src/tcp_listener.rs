@@ -9,17 +9,22 @@ use smoltcp::{
     storage::RingBuffer,
     wire::{IpProtocol, TcpPacket},
 };
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+};
 use tokio::sync::mpsc;
 
 // NOTE: Default buffer could contain 20 AEAD packets
 const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 0x3FFF * 20;
 const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 0x3FFF * 20;
 
-#[derive(Clone)]
 pub(crate) struct TcpStreamHandle {
-    pub(crate) recv_buffer: Arc<Protected<RingBuffer<'static, u8>>>,
-    pub(crate) send_buffer: Arc<Protected<RingBuffer<'static, u8>>>,
+    pub(crate) recv_buffer: Protected<RingBuffer<'static, u8>>,
+    pub(crate) send_buffer: Protected<RingBuffer<'static, u8>>,
+
+    pub(crate) socket_dropped: AtomicBool,
 }
 impl Drop for TcpStreamHandle {
     fn drop(&mut self) {
@@ -167,7 +172,9 @@ impl TcpListener {
                 );
                 socket.set_keep_alive(Some(smoltcp::time::Duration::from_secs(28)));
                 // FIXME: It should follow system's setting. 7200 is Linux's default.
-                socket.set_timeout(Some(smoltcp::time::Duration::from_secs(7200)));
+                socket.set_timeout(Some(smoltcp::time::Duration::from_secs(
+                    if cfg!(target_os = "linux") { 7200 } else { 60 },
+                )));
                 // NO ACK delay
                 socket.set_ack_delay(None);
 
@@ -178,14 +185,16 @@ impl TcpListener {
 
                 trace!("created TCP connection for {src_addr} <-> {dst_addr}");
 
-                let handle = TcpStreamHandle {
-                    recv_buffer: Arc::new(Protected::new(RingBuffer::new(
-                        vec![0u8; DEFAULT_TCP_RECV_BUFFER_SIZE as usize],
-                    ))),
-                    send_buffer: Arc::new(Protected::new(RingBuffer::new(
-                        vec![0u8; DEFAULT_TCP_SEND_BUFFER_SIZE as usize],
-                    ))),
-                };
+                let handle =
+                    Arc::new(TcpStreamHandle {
+                        recv_buffer: Protected::new(RingBuffer::new(
+                            vec![0u8; DEFAULT_TCP_RECV_BUFFER_SIZE as usize],
+                        )),
+                        send_buffer: Protected::new(RingBuffer::new(
+                            vec![0u8; DEFAULT_TCP_SEND_BUFFER_SIZE as usize],
+                        )),
+                        socket_dropped: AtomicBool::new(false),
+                    });
 
                 tcp_stream_emitter
                     .send(TcpStream {
@@ -210,6 +219,11 @@ impl TcpListener {
             device_injector.send(frame).map_err(|e| {
                 error!("Failed to send packet to device: {e}");
                 std::io::Error::other("Failed to inject packet to device")
+            })?;
+            // trigger another poll to drive the socket state machine
+            iface_notifier.send(IfaceEvent::DeviceReady).map_err(|e| {
+                error!("Failed to send device ready event: {e}");
+                std::io::Error::other("Failed to send device ready event")
             })?;
         }
         Ok(())
@@ -240,18 +254,16 @@ impl TcpListener {
                         }
                         IfaceEvent::TcpStream(boxed) => {
                             let (socket, handle) = *boxed;
-                            trace!("New TCP stream created");
                             let socket_handle = sockets.add(socket);
                             socket_maps.insert(socket_handle, handle);
                             next_poll = None;
                         }
-                        IfaceEvent::TcpSocketReady => {
-                            // Notify that a TCP socket is ready
-                            trace!("TCP socket is ready for sending data");
+                        IfaceEvent::TcpSocketReady | IfaceEvent::TcpSocketClosed => {
+                            trace!("TCP socket ready or closed event");
                             next_poll = None;
                         }
                         IfaceEvent::DeviceReady => {
-                            trace!("Device is ready");
+                            trace!("Device is ready, has some packets to process");
                             next_poll = None;
                         }
                     }
@@ -304,7 +316,12 @@ impl TcpListener {
                         }
                     }
 
-                    socket_maps.retain(|handle, _| {
+                    socket_maps.retain(|handle, socket_control| {
+                        if socket_control.socket_dropped.load(std::sync::atomic::Ordering::Acquire) {
+                            trace!("Removing dropped TCP socket");
+                            return false;
+                        }
+
                         let socket = sockets.get_mut::<tcp::Socket>(*handle);
                         if socket.is_active() {
                             true
