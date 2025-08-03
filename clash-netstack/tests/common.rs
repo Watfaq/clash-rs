@@ -55,16 +55,16 @@ pub fn build_tcp_syn_packet() -> Bytes {
     let mut buf = BytesMut::with_capacity(40);
     // IPv4 header (20 bytes)
     buf.put_slice(&[
-        0x45, 0x00, 0x00, 40, // Version, IHL, Total Length
+        IPV4_VERSION_IHL, 0x00, 0x00, 40, // Version, IHL, Total Length
         0x00, 0x00, 0x40, 0x00, // ID, Flags/Frag
-        0x40, 0x06, 0x00, 0x00, // TTL, Protocol (TCP), Checksum (to fill)
+        IPV4_TTL, TCP_PROTOCOL, 0x00, 0x00, // TTL, Protocol (TCP), Checksum (to fill)
         src_ip[0], src_ip[1], src_ip[2], src_ip[3], dst_ip[0], dst_ip[1], dst_ip[2],
         dst_ip[3],
     ]);
     // TCP header (20 bytes)
     let mut tcp = [
-        0x04, 0x00, // Src port 1024
-        0x00, 0x50, // Dst port 80
+        (TCP_SRC_PORT >> 8) as u8, (TCP_SRC_PORT & 0xFF) as u8, // Src port 1024
+        (TCP_DST_PORT >> 8) as u8, (TCP_DST_PORT & 0xFF) as u8, // Dst port 80
         0x00, 0x00, 0x00, 0x00, // Seq
         0x00, 0x00, 0x00, 0x00, // Ack
         0x50, 0x02, 0x72, 0x10, // Data offset, SYN, window

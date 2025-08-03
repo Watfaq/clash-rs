@@ -17,8 +17,9 @@ use std::{
 use tokio::sync::mpsc;
 
 // NOTE: Default buffer could contain 20 AEAD packets
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 0x3FFF * 20;
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 0x3FFF * 20;
+const AEAD_PACKET_SIZE: u32 = 0x3FFF; // Base size of an AEAD packet (16,383 bytes)
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: Protected<RingBuffer<'static, u8>>,

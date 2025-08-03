@@ -53,10 +53,3 @@ impl<T> Protected<T> {
     }
 }
 
-impl<T> Deref for Protected<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data.get() }
-    }
-}

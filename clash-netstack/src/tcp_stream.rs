@@ -57,12 +57,10 @@ impl tokio::io::AsyncRead for TcpStream {
             return std::task::Poll::Pending;
         }
         read_buf.with_lock(|buf_lock| {
-            let recv_buf = unsafe {
-                std::mem::transmute::<&mut [std::mem::MaybeUninit<u8>], &mut [u8]>(
-                    buf.unfilled_mut(),
-                )
-            };
-            let n = buf_lock.dequeue_slice(recv_buf);
+            let unfilled = buf.unfilled_mut();
+            let n = buf_lock.dequeue_slice(&mut unfilled[..unfilled.len()]);
+            // Safety: `dequeue_slice` writes valid data into the buffer, initializing it.
+            unsafe { buf.assume_init(n) };
             buf.advance(n);
         });
         std::task::Poll::Ready(Ok(()))
