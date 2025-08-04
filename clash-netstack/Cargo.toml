@@ -23,11 +23,11 @@ smoltcp = { version = "0.12", default-features = false, features = [
     "async"
 ]}
 bytes = "1.0"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 futures = "0.3"
 log = "0.4"
 rand = "0.9"
-etherparse = "0.16"
+etherparse = "0.19"
 
 
 [dev-dependencies]
