@@ -317,7 +317,7 @@ impl TcpListener {
                                     })
 
                                 {
-                                    trace!("Received {} bytes from TCP socket", n);
+                                    trace!("Received {n} bytes from TCP socket");
                                     socket_control.recv_waker.wake();
                                 }
                             });
@@ -335,7 +335,7 @@ impl TcpListener {
                                     })
 
                                 {
-                                    trace!("Sent {} bytes to TCP socket", n);
+                                    trace!("Sent {n} bytes to TCP socket");
                                 }
                             });
                         }
