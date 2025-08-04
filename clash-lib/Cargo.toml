@@ -74,6 +74,7 @@ anyhow = "1"
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = { version = "0.2"}
+tracing-log = "0.2"
 
 tracing-chrome = { version = "0.7", optional = true }
 opentelemetry = { version = "0.30", optional = true }

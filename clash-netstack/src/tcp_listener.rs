@@ -2,6 +2,7 @@ use crate::{
     Packet, device::NetstackDevice, packet::IpPacket, spin_lock::Protected,
     stack::IfaceEvent, tcp_stream::TcpStream,
 };
+use futures::task::AtomicWaker;
 use log::{error, trace, warn};
 use smoltcp::{
     iface::Interface,
@@ -23,10 +24,33 @@ const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 2
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: Protected<RingBuffer<'static, u8>>,
+    pub(crate) recv_waker: AtomicWaker,
     pub(crate) send_buffer: Protected<RingBuffer<'static, u8>>,
+    pub(crate) send_waker: AtomicWaker,
 
     pub(crate) socket_dropped: AtomicBool,
 }
+
+impl TcpStreamHandle {
+    pub fn new() -> Self {
+        Self {
+            recv_buffer: Protected::new(RingBuffer::new(vec![
+                0u8;
+                DEFAULT_TCP_RECV_BUFFER_SIZE
+                    as usize
+            ])),
+            recv_waker: AtomicWaker::new(),
+            send_buffer: Protected::new(RingBuffer::new(vec![
+                0u8;
+                DEFAULT_TCP_SEND_BUFFER_SIZE
+                    as usize
+            ])),
+            send_waker: AtomicWaker::new(),
+            socket_dropped: AtomicBool::new(false),
+        }
+    }
+}
+
 impl Drop for TcpStreamHandle {
     fn drop(&mut self) {
         trace!("TcpStreamHandle dropped");
@@ -186,16 +210,7 @@ impl TcpListener {
 
                 trace!("created TCP connection for {src_addr} <-> {dst_addr}");
 
-                let handle =
-                    Arc::new(TcpStreamHandle {
-                        recv_buffer: Protected::new(RingBuffer::new(
-                            vec![0u8; DEFAULT_TCP_RECV_BUFFER_SIZE as usize],
-                        )),
-                        send_buffer: Protected::new(RingBuffer::new(
-                            vec![0u8; DEFAULT_TCP_SEND_BUFFER_SIZE as usize],
-                        )),
-                        socket_dropped: AtomicBool::new(false),
-                    });
+                let handle = Arc::new(TcpStreamHandle::new());
 
                 tcp_stream_emitter
                     .send(TcpStream {
@@ -295,14 +310,15 @@ impl TcpListener {
                                     trace!("TCP socket recv buffer is full, skipping recv");
                                     return;
                                 }
-                                if socket
+                                if let Ok(n) = socket
                                     .recv(|buffer| {
                                         let n = data.enqueue_slice(buffer);
-                                        (n, ())
+                                        (n, n)
                                     })
-                                    .is_ok()
+
                                 {
-                                    next_poll = None;
+                                    trace!("Received {n} bytes from TCP socket");
+                                    socket_control.recv_waker.wake();
                                 }
                             });
                         }
@@ -312,14 +328,15 @@ impl TcpListener {
                                     trace!("TCP socket send buffer is empty, skipping send");
                                     return;
                                 }
-                                if socket
+                                if let Ok(n) = socket
                                     .send(|buffer| {
                                         let n = data.dequeue_slice(buffer);
-                                        (n, ())
+                                        (n, n)
                                     })
-                                    .is_ok()
+
                                 {
-                                    next_poll = None;
+                                    trace!("Sent {n} bytes to TCP socket");
+                                    socket_control.send_waker.wake();
                                 }
                             });
                         }

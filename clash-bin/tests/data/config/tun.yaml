@@ -1,7 +1,7 @@
 ---
 port: 8888
 
-log-level: warn
+log-level: trace
 
 ipv6: true
 
