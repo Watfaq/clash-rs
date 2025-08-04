@@ -336,6 +336,7 @@ impl TcpListener {
 
                                 {
                                     trace!("Sent {n} bytes to TCP socket");
+                                    socket_control.send_waker.wake();
                                 }
                             });
                         }

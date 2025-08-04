@@ -101,7 +101,12 @@ pub fn setup_logging(
 ) {
     unsafe {
         SETUP_LOGGING.call_once(|| {
-            LogTracer::init().expect("must init tracing-log");
+            LogTracer::init().unwrap_or_else(|e| {
+                eprintln!(
+                    "Failed to init tracing-log: {e}, another env_logger might \
+                     have been initialized"
+                );
+            });
             LOGGING_GUARD = setup_logging_inner(level, collector, cwd, log_file)
                 .unwrap_or_else(|e| {
                     eprintln!("Failed to setup logging: {e}");
