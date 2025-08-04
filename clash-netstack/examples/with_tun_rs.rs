@@ -57,7 +57,7 @@ mod macos {
             socket.bind_device_by_index_v6(iface_index.try_into().ok())?;
         }
         socket.set_keepalive(true)?;
-        socket.set_nodelay(true)?;
+        socket.set_tcp_nodelay(true)?;
         socket.set_nonblocking(true)?;
 
         let stream = TcpSocket::from_std_stream(socket.into())

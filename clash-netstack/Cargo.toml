@@ -33,6 +33,6 @@ etherparse = "0.16"
 [dev-dependencies]
 tun-rs = { version = "2", features = ["async", "async_framed"] }
 ipnet = "2"
-socket2 = "0.5.6"
+socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 env_logger = "0.11"

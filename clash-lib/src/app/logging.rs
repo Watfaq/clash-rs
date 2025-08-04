@@ -13,6 +13,7 @@ use serde::Serialize;
 use std::{io::IsTerminal, sync::Once};
 use tokio::sync::broadcast::Sender;
 use tracing::level_filters::LevelFilter;
+use tracing_log::LogTracer;
 #[cfg(feature = "tracing")]
 use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(target_os = "ios")]
@@ -100,6 +101,7 @@ pub fn setup_logging(
 ) {
     unsafe {
         SETUP_LOGGING.call_once(|| {
+            LogTracer::init().expect("must init tracing-log");
             LOGGING_GUARD = setup_logging_inner(level, collector, cwd, log_file)
                 .unwrap_or_else(|e| {
                     eprintln!("Failed to setup logging: {e}");
