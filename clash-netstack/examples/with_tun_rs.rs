@@ -20,13 +20,16 @@ mod macos {
     use std::{ffi::CString, net::SocketAddr, sync::Arc};
 
     use futures::{SinkExt, StreamExt};
-    use log::{debug, error, info, warn};
-    use tokio::net::{TcpSocket, TcpStream};
+    use log::{debug, error, trace, warn};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpSocket, TcpStream},
+    };
     use tun_rs::DeviceBuilder;
 
     type Runner = futures::future::BoxFuture<'static, std::io::Result<()>>;
 
-    static OUTBOUND_INTERFACE: &str = "enp6s18"; // Change this to your actual outbound interface name
+    static OUTBOUND_INTERFACE: &str = "en0"; // Change this to your actual outbound interface name
 
     fn get_interface_index(iface: &str) -> u32 {
         unsafe {
@@ -78,30 +81,65 @@ mod macos {
         tokio::net::UdpSocket::from_std(socket.into())
     }
 
-    async fn handle_inbound_stream(mut stream: watfaq_netstack::TcpStream) {
-        match new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE).await {
-            Ok(mut remote_stream) => {
-                // pipe between two tcp stream
-                match tokio::io::copy_bidirectional(&mut stream, &mut remote_stream)
-                    .await
-                {
-                    Ok(_) => {}
+    async fn handle_inbound_stream(stream: watfaq_netstack::TcpStream) {
+        let start = std::time::Instant::now();
+        let remote_stream =
+            new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE)
+                .await
+                .expect("Failed to connect to remote stream");
+
+        trace!(
+            "Connected to remote {} in {} ms",
+            stream.remote_addr(),
+            start.elapsed().as_millis()
+        );
+        // pipe between two tcp stream
+        let (mut r, mut w) = stream.split();
+        let (mut remote_r, mut remote_w) = remote_stream.into_split();
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 8192];
+            loop {
+                match remote_r.read(&mut buf).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        trace!(
+                            "Read {} bytes from remote stream, sending to local",
+                            n
+                        );
+                        if let Err(e) = w.write_all(&buf[..n]).await {
+                            error!("Failed to write to local stream: {}", e);
+                            break;
+                        }
+                    }
                     Err(e) => {
-                        warn!("error while copying data between streams: {}", e)
+                        error!("Error reading from remote stream: {}", e);
+                        break;
                     }
                 }
-                info!(
-                    "TCP stream closed: {} <-> {}",
-                    stream.local_addr(),
-                    stream.remote_addr()
-                );
             }
-            Err(e) => warn!(
-                "failed to connect to remote {}: {}",
-                stream.remote_addr(),
-                e
-            ),
-        }
+        });
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 8192];
+            loop {
+                match r.read(&mut buf).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        trace!(
+                            "Read {} bytes from local stream, sending to remote",
+                            n
+                        );
+                        if let Err(e) = remote_w.write_all(&buf[..n]).await {
+                            error!("Failed to write to remote stream: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading from local stream: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     async fn handle_inbound_datagram(socket: watfaq_netstack::UdpSocket) {
@@ -147,7 +185,7 @@ mod macos {
             let output = std::process::Command::new("route")
                 .arg("add")
                 .arg("-host")
-                .arg("1.1.1.1")
+                .arg("10.0.0.11")
                 .arg("-interface")
                 .arg(tun_name)
                 .output()

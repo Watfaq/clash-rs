@@ -265,6 +265,7 @@ impl TcpListener {
             tokio::select! {
                 biased;
                 Some(event) = notifier_rx.recv() => {
+                    trace!("Received iface event: {:?}", event);
                     match event {
                         IfaceEvent::Icmp => {
                             trace!("Received ICMP event");
@@ -288,15 +289,19 @@ impl TcpListener {
                 },
                 _ = match (next_poll, socket_maps.len()) {
                     (None, 0) => {
+                        trace!("No sockets to poll, waiting indefinitely");
                         tokio::time::sleep(std::time::Duration::MAX)
                     },
                     (None, _) => {
+                        trace!("Polling sockets with no delay");
                         tokio::time::sleep(std::time::Duration::ZERO)
                     },
                     (Some(dur), _) => {
+                        trace!("Polling sockets with delay: {:?}", dur);
                         tokio::time::sleep(dur)
                     }
                 } => {
+                    trace!("Woke up to poll sockets");
                     let now = smoltcp::time::Instant::now();
                     // Poll the interface for events
                     iface.poll(now, device, &mut sockets);
@@ -309,38 +314,38 @@ impl TcpListener {
                         if socket.can_recv() {
                             let mut data = socket_control.recv_buffer.lock().await;
 
-                            if data.is_full() {
-                                trace!("TCP socket recv buffer is full, skipping recv");
-                                continue;
-                            }
-                            if let Ok(n) = socket
-                                .recv(|buffer| {
-                                    let n = data.enqueue_slice(buffer);
-                                    (n, n)
-                                })
+                            if !data.is_full() {
+                                if let Ok(n) = socket
+                                    .recv(|buffer| {
+                                        let n = data.enqueue_slice(buffer);
+                                        (n, n)
+                                    })
 
-                            {
-                                trace!("Received {n} bytes from TCP socket");
+                                {
+                                    trace!("Received {n} bytes from TCP socket");
+                                }
+                            } else {
+                                trace!("TCP socket recv buffer is full, skipping recv");
                             }
 
                             socket_control.recv_waker.wake();
-
                         }
+
                         if socket.can_send() {
                             let mut data = socket_control.send_buffer.lock().await;
 
-                            if data.is_empty() {
-                                trace!("TCP socket send buffer is empty, skipping send");
-                                continue;
-                            }
-                            if let Ok(n) = socket
-                                .send(|buffer| {
-                                    let n = data.dequeue_slice(buffer);
-                                    (n, n)
-                                })
+                            if !data.is_empty() {
+                                if let Ok(n) = socket
+                                    .send(|buffer| {
+                                        let n = data.dequeue_slice(buffer);
+                                        (n, n)
+                                    })
 
-                            {
-                                trace!("Sent {n} bytes to TCP socket");
+                                {
+                                    trace!("Sent {n} bytes to TCP socket");
+                                }
+                            } else {
+                                trace!("TCP socket send buffer is empty, skipping send");
                             }
                             socket_control.send_waker.wake();
 

@@ -35,6 +35,11 @@ impl TcpStream {
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
+
+    pub fn split(self) -> (tokio::io::ReadHalf<Self>, tokio::io::WriteHalf<Self>) {
+        let (r, w) = tokio::io::split(self);
+        (r, w)
+    }
 }
 
 impl std::fmt::Debug for TcpStream {
@@ -52,6 +57,10 @@ impl tokio::io::AsyncRead for TcpStream {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
+        trace!(
+            "TcpStream::poll_read called: {} <-> {}",
+            self.local_addr, self.remote_addr
+        );
         let mut read_buf = match self.handle.recv_buffer.try_lock() {
             Ok(buf) => buf,
             Err(_) => {
