@@ -270,12 +270,6 @@ mod macos {
     }
 
     pub(super) async fn main() {
-        env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("trace"),
-        )
-        .format_source_path(true)
-        .format_timestamp_micros()
-        .init();
         let gateway_v4: ipnet::Ipv4Net = "198.19.0.1/24".parse().unwrap();
         let gateway_v6: ipnet::Ipv6Net = "fc00:fac::1/64".parse().unwrap();
         let tun_name = "utun1989";
@@ -392,6 +386,13 @@ mod macos {
 
 #[tokio::main]
 async fn main() {
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn"),
+    )
+    .format_source_path(true)
+    .format_timestamp_micros()
+    .init();
+
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     macos::main().await;
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]

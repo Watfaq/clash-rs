@@ -1,13 +1,12 @@
 use crate::{
-    Packet, device::NetstackDevice, packet::IpPacket, stack::IfaceEvent,
-    tcp_stream::TcpStream,
+    Packet, device::NetstackDevice, packet::IpPacket,
+    ring_buffer::LockFreeRingBuffer, stack::IfaceEvent, tcp_stream::TcpStream,
 };
 use futures::task::AtomicWaker;
 use log::{error, trace, warn};
 use smoltcp::{
     iface::Interface,
     socket::tcp,
-    storage::RingBuffer,
     wire::{IpProtocol, TcpPacket},
 };
 use std::{
@@ -22,36 +21,32 @@ const AEAD_PACKET_SIZE: u32 = 0x3FFF; // Base size of an AEAD packet (16,383 byt
 const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
 const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
 
-pub(crate) struct TcpStreamHandle<'a> {
-    pub(crate) recv_buffer: tokio::sync::Mutex<RingBuffer<'a, u8>>,
+pub(crate) struct TcpStreamHandle {
+    pub(crate) recv_buffer: LockFreeRingBuffer,
     pub(crate) recv_waker: AtomicWaker,
-    pub(crate) send_buffer: tokio::sync::Mutex<RingBuffer<'a, u8>>,
+    pub(crate) send_buffer: LockFreeRingBuffer,
     pub(crate) send_waker: AtomicWaker,
 
     pub(crate) socket_dropped: AtomicBool,
 }
 
-impl<'a> TcpStreamHandle<'a> {
+impl TcpStreamHandle {
     pub fn new() -> Self {
         Self {
-            recv_buffer: tokio::sync::Mutex::new(RingBuffer::new(vec![
-                0u8;
-                DEFAULT_TCP_RECV_BUFFER_SIZE
-                    as usize
-            ])),
+            recv_buffer: LockFreeRingBuffer::new(
+                DEFAULT_TCP_RECV_BUFFER_SIZE as usize,
+            ),
             recv_waker: AtomicWaker::new(),
-            send_buffer: tokio::sync::Mutex::new(RingBuffer::new(vec![
-                0u8;
-                DEFAULT_TCP_SEND_BUFFER_SIZE
-                    as usize
-            ])),
+            send_buffer: LockFreeRingBuffer::new(
+                DEFAULT_TCP_SEND_BUFFER_SIZE as usize,
+            ),
             send_waker: AtomicWaker::new(),
             socket_dropped: AtomicBool::new(false),
         }
     }
 }
 
-impl<'a> Drop for TcpStreamHandle<'a> {
+impl Drop for TcpStreamHandle {
     fn drop(&mut self) {
         trace!("TcpStreamHandle dropped");
     }
@@ -312,12 +307,12 @@ impl TcpListener {
                         trace!("Polling TCP socket: {:?}, can_recv: {}, can_send: {}", socket_handle, socket.can_recv(), socket.can_send());
 
                         if socket.can_recv() {
-                            let mut data = socket_control.recv_buffer.lock().await;
+                            let buf = &socket_control.recv_buffer;
 
-                            if !data.is_full() {
+                            if !buf.is_full() {
                                 if let Ok(n) = socket
                                     .recv(|buffer| {
-                                        let n = data.enqueue_slice(buffer);
+                                        let n = buf.enqueue_slice(buffer);
                                         (n, n)
                                     })
 
@@ -332,12 +327,12 @@ impl TcpListener {
                         }
 
                         if socket.can_send() {
-                            let mut data = socket_control.send_buffer.lock().await;
+                            let buf = &socket_control.send_buffer;
 
-                            if !data.is_empty() {
+                            if !buf.is_empty() {
                                 if let Ok(n) = socket
                                     .send(|buffer| {
-                                        let n = data.dequeue_slice(buffer);
+                                        let n = buf.dequeue_slice(buffer);
                                         (n, n)
                                     })
 

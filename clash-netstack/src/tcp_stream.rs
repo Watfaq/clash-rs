@@ -6,7 +6,7 @@ pub struct TcpStream {
     pub(crate) local_addr: SocketAddr,
     pub(crate) remote_addr: SocketAddr,
 
-    pub(crate) handle: Arc<TcpStreamHandle<'static>>,
+    pub(crate) handle: Arc<TcpStreamHandle>,
     pub(crate) stack_notifier:
         tokio::sync::mpsc::UnboundedSender<IfaceEvent<'static>>,
 }
@@ -61,17 +61,7 @@ impl tokio::io::AsyncRead for TcpStream {
             "TcpStream::poll_read called: {} <-> {}",
             self.local_addr, self.remote_addr
         );
-        let mut read_buf = match self.handle.recv_buffer.try_lock() {
-            Ok(buf) => buf,
-            Err(_) => {
-                trace!(
-                    "TcpStream::poll_read: recv buffer is locked, waiting for data"
-                );
-                // Register the waker to be notified when data is available
-                self.handle.recv_waker.register(cx.waker());
-                return std::task::Poll::Pending;
-            }
-        };
+        let read_buf = &self.handle.recv_buffer;
 
         if read_buf.is_empty() {
             trace!("TcpStream::poll_read: recv buffer is empty, waiting for data");
@@ -105,18 +95,7 @@ impl tokio::io::AsyncWrite for TcpStream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        let mut send_buf = match self.handle.send_buffer.try_lock() {
-            Ok(buf) => buf,
-            Err(_) => {
-                trace!(
-                    "TcpStream::poll_write: send buffer is locked, waiting for \
-                     space"
-                );
-                // Register the waker to be notified when space is available
-                self.handle.send_waker.register(cx.waker());
-                return std::task::Poll::Pending;
-            }
-        };
+        let send_buf = &self.handle.send_buffer;
 
         if send_buf.is_full() {
             trace!("TcpStream::poll_write: send buffer is full, waiting for space");
