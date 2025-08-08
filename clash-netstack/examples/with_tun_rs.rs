@@ -1,9 +1,8 @@
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod macos {
     //! To test this example, you can run the following commands:
     //! ```bash
     //! cargo run --example with_tun_rs
-    //! sudo route add -host 1.1.1.1 -interface utun1989
     //! ```
     //! TCP with curl:
     //! ```bash
@@ -27,7 +26,7 @@ mod macos {
 
     type Runner = futures::future::BoxFuture<'static, std::io::Result<()>>;
 
-    static OUTBOUND_INTERFACE: &str = "en0"; // Change this to your actual outbound interface name
+    static OUTBOUND_INTERFACE: &str = "enp6s18"; // Change this to your actual outbound interface name
 
     fn get_interface_index(iface: &str) -> u32 {
         unsafe {
@@ -139,26 +138,97 @@ mod macos {
     }
 
     fn add_test_routes(tun_name: &str) {
-        // This function is used to add test routes for the TUN device.
-        // The actual implementation will depend on your system and requirements.
-        // For example, you might use `route` command on Unix-like systems.
-        // Here we assume the route is already added in the example description.
-        let _ = std::process::Command::new("route")
-            .arg("add")
-            .arg("-host")
-            .arg("1.1.1.1")
-            .arg("-interface")
-            .arg(tun_name)
-            .output();
+        #[cfg(target_os = "macos")]
+        {
+            // This function is used to add test routes for the TUN device.
+            // The actual implementation will depend on your system and requirements.
+            // For example, you might use `route` command on Unix-like systems.
+            // Here we assume the route is already added in the example description.
+            let output = std::process::Command::new("route")
+                .arg("add")
+                .arg("-host")
+                .arg("1.1.1.1")
+                .arg("-interface")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
 
-        let _ = std::process::Command::new("route")
-            .arg("add")
-            .arg("-inet6")
-            .arg("-host")
-            .arg("2606:4700:4700::1111")
-            .arg("-interface")
-            .arg(tun_name)
-            .output();
+            let output = std::process::Command::new("route")
+                .arg("add")
+                .arg("-inet6")
+                .arg("-host")
+                .arg("2606:4700:4700::1111")
+                .arg("-interface")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add IPv6 route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of IPv6 route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // For Linux, you might use `ip` command to add routes.
+            let output = std::process::Command::new("ip")
+                .arg("route")
+                .arg("add")
+                .arg("10.0.0.11/32")
+                .arg("dev")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+
+            let output = std::process::Command::new("ip")
+                .arg("route")
+                .arg("add")
+                .arg("2606:4700:4700::1111/128")
+                .arg("dev")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add IPv6 route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of IPv6 route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
     }
 
     pub(super) async fn main() {
@@ -176,9 +246,11 @@ mod macos {
             .mtu(
                 1500, // Default MTU for TUN devices
             )
-            .associate_route(false)
             .ipv4(gateway_v4.addr(), gateway_v4.netmask(), None)
             .ipv6(gateway_v6.addr(), gateway_v6.netmask());
+
+        #[cfg(target_os = "macos")]
+        let tun_builder = tun_builder.associate_route(false);
 
         let dev = tun_builder.build_async().expect("must create tun device");
 
@@ -282,12 +354,13 @@ mod macos {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     macos::main().await;
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         panic!(
-            "This example is only for macOS with tun_rs. Please run it on macOS."
+            "This example is only for macOS and Linux with tun_rs. Please run it \
+             on macOS or Linux."
         );
     }
 }
