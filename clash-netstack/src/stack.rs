@@ -15,7 +15,7 @@ use crate::{
 
 pub(crate) enum IfaceEvent<'a> {
     Icmp, // ICMP packet received
-    TcpStream(Box<(smoltcp::socket::tcp::Socket<'a>, Arc<TcpStreamHandle>)>), /* new TCP stream created */
+    TcpStream(Box<(smoltcp::socket::tcp::Socket<'a>, Arc<TcpStreamHandle<'a>>)>), /* new TCP stream created */
     TcpSocketReady, // at least one TCP socket is ready to read/write
     TcpSocketClosed, /* TCP socket closed by the application, e.g. the TcpStream
                      * is dropped */
