@@ -260,7 +260,7 @@ impl TcpListener {
             tokio::select! {
                 biased;
                 Some(event) = notifier_rx.recv() => {
-                    trace!("Received iface event: {:?}", event);
+                    trace!("Received iface event: {event:?}");
                     match event {
                         IfaceEvent::Icmp => {
                             trace!("Received ICMP event");
@@ -292,7 +292,7 @@ impl TcpListener {
                         tokio::time::sleep(std::time::Duration::ZERO)
                     },
                     (Some(dur), _) => {
-                        trace!("Polling sockets with delay: {:?}", dur);
+                        trace!("Polling sockets with delay: {dur:?}");
                         tokio::time::sleep(dur)
                     }
                 } => {
