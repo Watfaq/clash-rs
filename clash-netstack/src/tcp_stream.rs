@@ -35,6 +35,11 @@ impl TcpStream {
     pub fn remote_addr(&self) -> SocketAddr {
         self.remote_addr
     }
+
+    pub fn split(self) -> (tokio::io::ReadHalf<Self>, tokio::io::WriteHalf<Self>) {
+        let (r, w) = tokio::io::split(self);
+        (r, w)
+    }
 }
 
 impl std::fmt::Debug for TcpStream {
@@ -52,32 +57,35 @@ impl tokio::io::AsyncRead for TcpStream {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
+        trace!(
+            "TcpStream::poll_read called: {} <-> {}",
+            self.local_addr, self.remote_addr
+        );
         let read_buf = &self.handle.recv_buffer;
 
-        read_buf.with_lock(|buf_lock| {
-            if buf_lock.is_empty() {
-                trace!(
-                    "TcpStream::poll_read: recv buffer is empty, waiting for data"
-                );
-                // Register the waker to be notified when data is available
-                self.handle.recv_waker.register(cx.waker());
+        if read_buf.is_empty() {
+            trace!("TcpStream::poll_read: recv buffer is empty, waiting for data");
+            // Register the waker to be notified when data is available
+            self.handle.recv_waker.register(cx.waker());
 
-                // double check
-                if buf_lock.is_empty() {
-                    return std::task::Poll::Pending;
-                }
-            }
+            return std::task::Poll::Pending;
+        }
 
-            let recv_buf = unsafe {
-                std::mem::transmute::<&mut [std::mem::MaybeUninit<u8>], &mut [u8]>(
-                    buf.unfilled_mut(),
-                )
-            };
-            let n = buf_lock.dequeue_slice(recv_buf);
-            buf.advance(n);
+        buf.initialize_unfilled();
+        let recv_buf = unsafe {
+            std::mem::transmute::<&mut [std::mem::MaybeUninit<u8>], &mut [u8]>(
+                buf.unfilled_mut(),
+            )
+        };
+        let n = read_buf.dequeue_slice(recv_buf);
+        buf.advance(n);
 
-            std::task::Poll::Ready(Ok(()))
-        })
+        self.stack_notifier
+            .send(IfaceEvent::TcpSocketReady)
+            .expect("Failed to notify TCP socket ready");
+        trace!("TcpStream::poll_read: (proxy)read {n} bytes from recv buffer");
+
+        std::task::Poll::Ready(Ok(()))
     }
 }
 
@@ -89,23 +97,22 @@ impl tokio::io::AsyncWrite for TcpStream {
     ) -> std::task::Poll<std::io::Result<usize>> {
         let send_buf = &self.handle.send_buffer;
 
-        send_buf.with_lock(|buf_lock| {
-            if buf_lock.is_full() {
-                trace!(
-                    "TcpStream::poll_write: send buffer is full, waiting for space"
-                );
-                // Register the waker to be notified when space is available
-                self.handle.send_waker.register(cx.waker());
+        if send_buf.is_full() {
+            trace!("TcpStream::poll_write: send buffer is full, waiting for space");
+            // Register the waker to be notified when space is available
+            self.handle.send_waker.register(cx.waker());
 
-                // double check
-                if buf_lock.is_full() {
-                    return std::task::Poll::Pending;
-                }
-            }
+            return std::task::Poll::Pending;
+        }
 
-            let n = buf_lock.enqueue_slice(buf);
-            std::task::Poll::Ready(Ok(n))
-        })
+        let n = send_buf.enqueue_slice(buf);
+
+        self.stack_notifier
+            .send(IfaceEvent::TcpSocketReady)
+            .expect("Failed to notify TCP socket ready");
+        trace!("TcpStream::poll_write: (proxy)write {n} bytes to send buffer");
+
+        std::task::Poll::Ready(Ok(n))
     }
 
     fn poll_flush(

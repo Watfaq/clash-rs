@@ -1,9 +1,8 @@
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod macos {
     //! To test this example, you can run the following commands:
     //! ```bash
     //! cargo run --example with_tun_rs
-    //! sudo route add -host 1.1.1.1 -interface utun1989
     //! ```
     //! TCP with curl:
     //! ```bash
@@ -21,8 +20,11 @@ mod macos {
     use std::{ffi::CString, net::SocketAddr, sync::Arc};
 
     use futures::{SinkExt, StreamExt};
-    use log::{debug, error, info, warn};
-    use tokio::net::{TcpSocket, TcpStream};
+    use log::{debug, error, trace, warn};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpSocket, TcpStream},
+    };
     use tun_rs::DeviceBuilder;
 
     type Runner = futures::future::BoxFuture<'static, std::io::Result<()>>;
@@ -79,30 +81,65 @@ mod macos {
         tokio::net::UdpSocket::from_std(socket.into())
     }
 
-    async fn handle_inbound_stream(mut stream: watfaq_netstack::TcpStream) {
-        match new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE).await {
-            Ok(mut remote_stream) => {
-                // pipe between two tcp stream
-                match tokio::io::copy_bidirectional(&mut stream, &mut remote_stream)
-                    .await
-                {
-                    Ok(_) => {}
+    async fn handle_inbound_stream(stream: watfaq_netstack::TcpStream) {
+        let start = std::time::Instant::now();
+        let remote_stream =
+            new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE)
+                .await
+                .expect("Failed to connect to remote stream");
+
+        trace!(
+            "Connected to remote {} in {} ms",
+            stream.remote_addr(),
+            start.elapsed().as_millis()
+        );
+        // pipe between two tcp stream
+        let (mut r, mut w) = stream.split();
+        let (mut remote_r, mut remote_w) = remote_stream.into_split();
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 8192];
+            loop {
+                match remote_r.read(&mut buf).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        trace!(
+                            "Read {} bytes from remote stream, sending to local",
+                            n
+                        );
+                        if let Err(e) = w.write_all(&buf[..n]).await {
+                            error!("Failed to write to local stream: {}", e);
+                            break;
+                        }
+                    }
                     Err(e) => {
-                        warn!("error while copying data between streams: {}", e)
+                        error!("Error reading from remote stream: {}", e);
+                        break;
                     }
                 }
-                info!(
-                    "TCP stream closed: {} <-> {}",
-                    stream.local_addr(),
-                    stream.remote_addr()
-                );
             }
-            Err(e) => warn!(
-                "failed to connect to remote {}: {}",
-                stream.remote_addr(),
-                e
-            ),
-        }
+        });
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; 8192];
+            loop {
+                match r.read(&mut buf).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        trace!(
+                            "Read {} bytes from local stream, sending to remote",
+                            n
+                        );
+                        if let Err(e) = remote_w.write_all(&buf[..n]).await {
+                            error!("Failed to write to remote stream: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error reading from local stream: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     async fn handle_inbound_datagram(socket: watfaq_netstack::UdpSocket) {
@@ -139,35 +176,100 @@ mod macos {
     }
 
     fn add_test_routes(tun_name: &str) {
-        // This function is used to add test routes for the TUN device.
-        // The actual implementation will depend on your system and requirements.
-        // For example, you might use `route` command on Unix-like systems.
-        // Here we assume the route is already added in the example description.
-        let _ = std::process::Command::new("route")
-            .arg("add")
-            .arg("-host")
-            .arg("1.1.1.1")
-            .arg("-interface")
-            .arg(tun_name)
-            .output();
+        #[cfg(target_os = "macos")]
+        {
+            // This function is used to add test routes for the TUN device.
+            // The actual implementation will depend on your system and requirements.
+            // For example, you might use `route` command on Unix-like systems.
+            // Here we assume the route is already added in the example description.
+            let output = std::process::Command::new("route")
+                .arg("add")
+                .arg("-host")
+                .arg("10.0.0.11")
+                .arg("-interface")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
 
-        let _ = std::process::Command::new("route")
-            .arg("add")
-            .arg("-inet6")
-            .arg("-host")
-            .arg("2606:4700:4700::1111")
-            .arg("-interface")
-            .arg(tun_name)
-            .output();
+            let output = std::process::Command::new("route")
+                .arg("add")
+                .arg("-inet6")
+                .arg("-host")
+                .arg("2606:4700:4700::1111")
+                .arg("-interface")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add IPv6 route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of IPv6 route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // For Linux, you might use `ip` command to add routes.
+            let output = std::process::Command::new("ip")
+                .arg("route")
+                .arg("add")
+                .arg("10.0.0.11/32")
+                .arg("dev")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+
+            let output = std::process::Command::new("ip")
+                .arg("route")
+                .arg("add")
+                .arg("2606:4700:4700::1111/128")
+                .arg("dev")
+                .arg(tun_name)
+                .output()
+                .expect("must add route for");
+            if !output.status.success() {
+                error!(
+                    "Failed to add IPv6 route for {}: {}",
+                    tun_name,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            warn!(
+                "output of IPv6 route add: {}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
     }
 
     pub(super) async fn main() {
-        env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("trace"),
-        )
-        .format_source_path(true)
-        .format_timestamp_micros()
-        .init();
         let gateway_v4: ipnet::Ipv4Net = "198.19.0.1/24".parse().unwrap();
         let gateway_v6: ipnet::Ipv6Net = "fc00:fac::1/64".parse().unwrap();
         let tun_name = "utun1989";
@@ -176,9 +278,11 @@ mod macos {
             .mtu(
                 1500, // Default MTU for TUN devices
             )
-            .associate_route(false)
             .ipv4(gateway_v4.addr(), gateway_v4.netmask(), None)
             .ipv6(gateway_v6.addr(), gateway_v6.netmask());
+
+        #[cfg(target_os = "macos")]
+        let tun_builder = tun_builder.associate_route(false);
 
         let dev = tun_builder.build_async().expect("must create tun device");
 
@@ -282,12 +386,20 @@ mod macos {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(target_os = "macos")]
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("warn"),
+    )
+    .format_source_path(true)
+    .format_timestamp_micros()
+    .init();
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     macos::main().await;
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         panic!(
-            "This example is only for macOS with tun_rs. Please run it on macOS."
+            "This example is only for macOS and Linux with tun_rs. Please run it \
+             on macOS or Linux."
         );
     }
 }

@@ -21,6 +21,17 @@ pub(crate) enum IfaceEvent<'a> {
                      * is dropped */
     DeviceReady, // Device generated some packets
 }
+impl std::fmt::Debug for IfaceEvent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IfaceEvent::Icmp => write!(f, "IfaceEvent::Icmp"),
+            IfaceEvent::TcpStream(_) => write!(f, "IfaceEvent::TcpStream"),
+            IfaceEvent::TcpSocketReady => write!(f, "IfaceEvent::TcpSocketReady"),
+            IfaceEvent::TcpSocketClosed => write!(f, "IfaceEvent::TcpSocketClosed"),
+            IfaceEvent::DeviceReady => write!(f, "IfaceEvent::DeviceReady"),
+        }
+    }
+}
 /// IO of the stack:
 /// Sink to the stack with any IP packets
 /// it will be demultiplexed to the correct protocol handler and each handler

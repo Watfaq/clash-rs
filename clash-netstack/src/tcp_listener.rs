@@ -1,13 +1,12 @@
 use crate::{
-    Packet, device::NetstackDevice, packet::IpPacket, spin_lock::Protected,
-    stack::IfaceEvent, tcp_stream::TcpStream,
+    Packet, device::NetstackDevice, packet::IpPacket,
+    ring_buffer::LockFreeRingBuffer, stack::IfaceEvent, tcp_stream::TcpStream,
 };
 use futures::task::AtomicWaker;
 use log::{error, trace, warn};
 use smoltcp::{
     iface::Interface,
     socket::tcp,
-    storage::RingBuffer,
     wire::{IpProtocol, TcpPacket},
 };
 use std::{
@@ -23,9 +22,9 @@ const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 2
 const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
 
 pub(crate) struct TcpStreamHandle {
-    pub(crate) recv_buffer: Protected<RingBuffer<'static, u8>>,
+    pub(crate) recv_buffer: LockFreeRingBuffer,
     pub(crate) recv_waker: AtomicWaker,
-    pub(crate) send_buffer: Protected<RingBuffer<'static, u8>>,
+    pub(crate) send_buffer: LockFreeRingBuffer,
     pub(crate) send_waker: AtomicWaker,
 
     pub(crate) socket_dropped: AtomicBool,
@@ -34,17 +33,13 @@ pub(crate) struct TcpStreamHandle {
 impl TcpStreamHandle {
     pub fn new() -> Self {
         Self {
-            recv_buffer: Protected::new(RingBuffer::new(vec![
-                0u8;
-                DEFAULT_TCP_RECV_BUFFER_SIZE
-                    as usize
-            ])),
+            recv_buffer: LockFreeRingBuffer::new(
+                DEFAULT_TCP_RECV_BUFFER_SIZE as usize,
+            ),
             recv_waker: AtomicWaker::new(),
-            send_buffer: Protected::new(RingBuffer::new(vec![
-                0u8;
-                DEFAULT_TCP_SEND_BUFFER_SIZE
-                    as usize
-            ])),
+            send_buffer: LockFreeRingBuffer::new(
+                DEFAULT_TCP_SEND_BUFFER_SIZE as usize,
+            ),
             send_waker: AtomicWaker::new(),
             socket_dropped: AtomicBool::new(false),
         }
@@ -115,6 +110,7 @@ impl TcpListener {
 
         let task_handle = tokio::spawn(async move {
             let rv = tokio::select! {
+                biased;
                 rv = Self::poll_packets(inbound, device.create_injector(), iface_notifier, socket_stream_emitter) => rv,
                 rv = Self::poll_sockets(&mut iface, &mut device, iface_notifier_rx) => rv,
             };
@@ -262,7 +258,9 @@ impl TcpListener {
                 socket_maps.len()
             );
             tokio::select! {
+                biased;
                 Some(event) = notifier_rx.recv() => {
+                    trace!("Received iface event: {event:?}");
                     match event {
                         IfaceEvent::Icmp => {
                             trace!("Received ICMP event");
@@ -286,15 +284,19 @@ impl TcpListener {
                 },
                 _ = match (next_poll, socket_maps.len()) {
                     (None, 0) => {
+                        trace!("No sockets to poll, waiting indefinitely");
                         tokio::time::sleep(std::time::Duration::MAX)
                     },
                     (None, _) => {
+                        trace!("Polling sockets with no delay");
                         tokio::time::sleep(std::time::Duration::ZERO)
                     },
                     (Some(dur), _) => {
+                        trace!("Polling sockets with delay: {dur:?}");
                         tokio::time::sleep(dur)
                     }
                 } => {
+                    trace!("Woke up to poll sockets");
                     let now = smoltcp::time::Instant::now();
                     // Poll the interface for events
                     iface.poll(now, device, &mut sockets);
@@ -305,40 +307,43 @@ impl TcpListener {
                         trace!("Polling TCP socket: {:?}, can_recv: {}, can_send: {}", socket_handle, socket.can_recv(), socket.can_send());
 
                         if socket.can_recv() {
-                            socket_control.recv_buffer.with_lock(|data| {
-                                if data.is_full() {
-                                    trace!("TCP socket recv buffer is full, skipping recv");
-                                    return;
-                                }
+                            let buf = &socket_control.recv_buffer;
+
+                            if !buf.is_full() {
                                 if let Ok(n) = socket
                                     .recv(|buffer| {
-                                        let n = data.enqueue_slice(buffer);
+                                        let n = buf.enqueue_slice(buffer);
                                         (n, n)
                                     })
 
                                 {
                                     trace!("Received {n} bytes from TCP socket");
-                                    socket_control.recv_waker.wake();
                                 }
-                            });
+                            } else {
+                                trace!("TCP socket recv buffer is full, skipping recv");
+                            }
+
+                            socket_control.recv_waker.wake();
                         }
+
                         if socket.can_send() {
-                            socket_control.send_buffer.with_lock(|data| {
-                                if data.is_empty() {
-                                    trace!("TCP socket send buffer is empty, skipping send");
-                                    return;
-                                }
+                            let buf = &socket_control.send_buffer;
+
+                            if !buf.is_empty() {
                                 if let Ok(n) = socket
                                     .send(|buffer| {
-                                        let n = data.dequeue_slice(buffer);
+                                        let n = buf.dequeue_slice(buffer);
                                         (n, n)
                                     })
 
                                 {
                                     trace!("Sent {n} bytes to TCP socket");
-                                    socket_control.send_waker.wake();
                                 }
-                            });
+                            } else {
+                                trace!("TCP socket send buffer is empty, skipping send");
+                            }
+                            socket_control.send_waker.wake();
+
                         }
                     }
 
