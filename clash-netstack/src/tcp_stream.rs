@@ -101,7 +101,9 @@ impl tokio::io::AsyncWrite for TcpStream {
             trace!("TcpStream::poll_write: send buffer is full, waiting for space");
             // Register the waker to be notified when space is available
             self.handle.send_waker.register(cx.waker());
-
+            self.stack_notifier
+                .send(IfaceEvent::TcpSocketReady)
+                .expect("Failed to notify TCP socket ready");
             return std::task::Poll::Pending;
         }
 
