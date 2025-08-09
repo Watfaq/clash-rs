@@ -297,6 +297,17 @@ impl Dispatcher {
                         mgr.get_outbound(PROXY_DIRECT).unwrap()
                     });
 
+                let outbound_name =
+                    if let Some(group) = handler.try_as_group_handler() {
+                        group
+                            .get_active_proxy()
+                            .await
+                            .map(|x| x.name().to_owned())
+                            .unwrap_or(outbound_name)
+                    } else {
+                        outbound_name
+                    };
+
                 match outbound_handle_guard
                     .get_outbound_sender_mut(
                         &outbound_name,
