@@ -17,10 +17,10 @@ mod macos {
     //! This example demonstrates how to use the `watfaq_netstack` library with
     //! a TUN device created using `tun_rs`. It sets up a basic network
     //! stack that can handle TCP and UDP traffic through the TUN interface.
-    use std::{ffi::CString, net::SocketAddr, sync::Arc};
+    use std::{ffi::CString, net::SocketAddr, pin::Pin};
 
     use futures::{SinkExt, StreamExt};
-    use log::{debug, error, trace, warn};
+    use log::{error, trace, warn};
     use tokio::net::{TcpSocket, TcpStream};
     use tun_rs::DeviceBuilder;
 
@@ -78,10 +78,10 @@ mod macos {
         tokio::net::UdpSocket::from_std(socket.into())
     }
 
-    async fn handle_inbound_stream(mut stream: watfaq_netstack::TcpStream) {
+    async fn handle_inbound_stream(mut stream: Pin<Box<netstack_lwip::TcpStream>>) {
         let start = std::time::Instant::now();
         let mut remote_stream =
-            new_tcp_stream(stream.remote_addr(), &OUTBOUND_INTERFACE)
+            new_tcp_stream(*stream.remote_addr(), &OUTBOUND_INTERFACE)
                 .await
                 .expect("Failed to connect to remote stream");
 
@@ -93,40 +93,7 @@ mod macos {
         match tokio::io::copy_bidirectional(&mut stream, &mut remote_stream).await {
             Ok(_) => {}
             Err(e) => {
-                error!("Error in bidirectional copy: {}", e);
-            }
-        }
-    }
-
-    async fn handle_inbound_datagram(socket: watfaq_netstack::UdpSocket) {
-        let (mut r, w) = socket.split();
-        while let Some(packet) = r.recv().await {
-            debug!("received UDP packet from tun inbound {packet:?}");
-
-            let u = Arc::new(new_udp_packet(OUTBOUND_INTERFACE).await.unwrap());
-            let uc = u.clone();
-            let mut w = w.clone();
-            tokio::spawn(async move {
-                let mut buf = vec![0u8; 1500];
-                while let Ok((n, peer)) = uc.recv_from(&mut buf).await {
-                    debug!(
-                        "received UDP packet from remote reply {n} bytes from \
-                         {peer}"
-                    );
-                    w.send(watfaq_netstack::UdpPacket {
-                        data: watfaq_netstack::Packet::new(buf[..n].to_vec()),
-                        local_addr: peer,
-                        remote_addr: packet.local_addr,
-                    })
-                    .await
-                    .expect("Failed to send UDP packet");
-                }
-            });
-
-            if let Err(e) = u.send_to(packet.data(), packet.remote_addr).await {
-                error!("failed to send UDP packet: {}", e);
-            } else {
-                debug!("forwarding UDP packet to remote {}", packet.remote_addr);
+                error!("Failed to copy bidirectional stream: {}", e);
             }
         }
     }
@@ -244,7 +211,8 @@ mod macos {
 
         add_test_routes(tun_name);
 
-        let (stack, mut tcp_listener, udp_socket) = watfaq_netstack::NetStack::new();
+        let (stack, mut tcp_listener, _udp_socket) =
+            netstack_lwip::NetStack::new().unwrap();
 
         let framed = tun_rs::async_framed::DeviceFramed::new(
             dev,
@@ -261,7 +229,7 @@ mod macos {
             while let Some(pkt) = stack_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) = tun_sink.send(pkt.into_bytes()).await {
+                        if let Err(e) = tun_sink.send(pkt.into()).await {
                             error!("failed to send pkt to tun: {}", e);
                             break;
                         }
@@ -284,9 +252,7 @@ mod macos {
             while let Some(pkt) = tun_stream.next().await {
                 match pkt {
                     Ok(pkt) => {
-                        if let Err(e) =
-                            stack_sink.send(watfaq_netstack::Packet::new(pkt)).await
-                        {
+                        if let Err(e) = stack_sink.send(pkt.into()).await {
                             error!("failed to send pkt to stack: {}", e);
                             break;
                         }
@@ -305,27 +271,14 @@ mod macos {
         }));
 
         futs.push(Box::pin(async move {
-            while let Some(stream) = tcp_listener.next().await {
-                warn!(
-                    "new tun TCP connection: {} -> {}",
-                    stream.local_addr(),
-                    stream.remote_addr()
-                );
-
+            while let Some((stream, src, dst)) = tcp_listener.next().await {
+                warn!("New TCP stream: {} <-> {}", src, dst);
                 tokio::spawn(handle_inbound_stream(stream));
             }
 
             Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "tun TCP listener stopped unexpectedly",
-            ))
-        }));
-
-        futs.push(Box::pin(async move {
-            handle_inbound_datagram(udp_socket).await;
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "tun UDP listener stopped unexpectedly",
             ))
         }));
 

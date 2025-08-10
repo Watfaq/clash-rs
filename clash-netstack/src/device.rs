@@ -9,7 +9,7 @@ pub struct NetstackDevice {
     rx_sender: mpsc::UnboundedSender<Packet>,
     rx_queue: mpsc::UnboundedReceiver<Packet>,
 
-    tx_sender: mpsc::UnboundedSender<Packet>,
+    tx_sender: mpsc::Sender<Packet>,
     capabilities: DeviceCapabilities,
 
     iface_notifier: mpsc::UnboundedSender<IfaceEvent<'static>>,
@@ -17,7 +17,7 @@ pub struct NetstackDevice {
 
 impl NetstackDevice {
     pub fn new(
-        tx_sender: mpsc::UnboundedSender<Packet>,
+        tx_sender: mpsc::Sender<Packet>,
         iface_notifier: mpsc::UnboundedSender<IfaceEvent<'static>>,
     ) -> Self {
         let mut capabilities = DeviceCapabilities::default();
@@ -35,13 +35,6 @@ impl NetstackDevice {
         }
     }
 
-    #[allow(unused)]
-    pub fn inject_packet(&self, packet: Packet) {
-        if let Err(err) = self.rx_sender.send(packet) {
-            log::warn!("Failed to inject packet: {err}");
-        }
-    }
-
     pub fn create_injector(&self) -> mpsc::UnboundedSender<Packet> {
         self.rx_sender.clone()
     }
@@ -49,17 +42,17 @@ impl NetstackDevice {
 
 impl Device for NetstackDevice {
     type RxToken<'a> = RxTokenImpl;
-    type TxToken<'a> = TxTokenImpl;
+    type TxToken<'a> = TxTokenImpl<'a>;
 
     fn receive(
         &mut self,
         _timestamp: Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        if let Ok(packet) = self.rx_queue.try_recv() {
+        if let (Ok(packet), Ok(permit)) =
+            (self.rx_queue.try_recv(), self.tx_sender.try_reserve())
+        {
             let rx_token = RxTokenImpl { packet };
-            let tx_token = TxTokenImpl {
-                tx_sender: self.tx_sender.clone(),
-            };
+            let tx_token = TxTokenImpl { tx_sender: permit };
             self.iface_notifier
                 .send(IfaceEvent::DeviceReady)
                 .expect("Failed to notify iface event");
@@ -70,9 +63,10 @@ impl Device for NetstackDevice {
     }
 
     fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
-        Some(TxTokenImpl {
-            tx_sender: self.tx_sender.clone(),
-        })
+        self.tx_sender
+            .try_reserve()
+            .map(|permit| TxTokenImpl { tx_sender: permit })
+            .ok()
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -93,11 +87,11 @@ impl RxToken for RxTokenImpl {
     }
 }
 
-pub struct TxTokenImpl {
-    tx_sender: mpsc::UnboundedSender<Packet>,
+pub struct TxTokenImpl<'a> {
+    tx_sender: mpsc::Permit<'a, Packet>,
 }
 
-impl TxToken for TxTokenImpl {
+impl<'a> TxToken for TxTokenImpl<'a> {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
@@ -106,7 +100,7 @@ impl TxToken for TxTokenImpl {
         let result = f(&mut buffer);
 
         let packet = Packet::new(buffer);
-        let _ = self.tx_sender.send(packet);
+        self.tx_sender.send(packet);
 
         result
     }

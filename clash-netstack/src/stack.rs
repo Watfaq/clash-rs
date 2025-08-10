@@ -45,7 +45,7 @@ pub struct NetStack {
     tcp_inbound: mpsc::UnboundedSender<Packet>,
 
     // outside poll this to receive packets from the stack
-    packet_outbound: mpsc::UnboundedReceiver<Packet>,
+    packet_outbound: mpsc::Receiver<Packet>,
 }
 
 pub struct Packet {
@@ -82,7 +82,7 @@ impl NetStack {
         crate::tcp_listener::TcpListener,
         crate::udp_socket::UdpSocket,
     ) {
-        let (packet_sender, packet_receiver) = mpsc::unbounded_channel::<Packet>();
+        let (packet_sender, packet_receiver) = mpsc::channel::<Packet>(1024);
 
         let (udp_inbound_app, udp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();
@@ -212,10 +212,10 @@ impl futures::Sink<Packet> for StackSplitSink {
 }
 
 pub struct StackSplitStream {
-    packet_outbound: mpsc::UnboundedReceiver<Packet>,
+    packet_outbound: mpsc::Receiver<Packet>,
 }
 impl StackSplitStream {
-    pub fn new(packet_outbound: mpsc::UnboundedReceiver<Packet>) -> Self {
+    pub fn new(packet_outbound: mpsc::Receiver<Packet>) -> Self {
         Self { packet_outbound }
     }
 }

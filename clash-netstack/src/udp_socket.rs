@@ -42,13 +42,13 @@ impl UdpPacket {
 
 pub struct UdpSocket {
     inbound: mpsc::UnboundedReceiver<Packet>,
-    outbound: mpsc::UnboundedSender<Packet>,
+    outbound: mpsc::Sender<Packet>,
 }
 
 impl UdpSocket {
     pub fn new(
         inbound: mpsc::UnboundedReceiver<Packet>,
-        outbound: mpsc::UnboundedSender<Packet>,
+        outbound: mpsc::Sender<Packet>,
     ) -> Self {
         Self { inbound, outbound }
     }
@@ -110,7 +110,7 @@ impl SplitRead {
 
 #[derive(Clone)]
 pub struct SplitWrite {
-    send: mpsc::UnboundedSender<Packet>,
+    send: mpsc::Sender<Packet>,
 }
 
 impl SplitWrite {
@@ -142,7 +142,7 @@ impl SplitWrite {
             .write(&mut ip_packet_writer, packet.data.data())
             .map_err(std::io::Error::other)?;
 
-        match self.send.send(Packet::new(ip_packet_writer)) {
+        match self.send.send(Packet::new(ip_packet_writer)).await {
             Ok(()) => Ok(()),
             Err(err) => Err(std::io::Error::other(format!("send error: {err}"))),
         }

@@ -20,7 +20,8 @@ smoltcp = { version = "0.12", default-features = false, features = [
     "socket-tcp",
     "socket-udp",
     "socket-icmp",
-    "async"
+    "async",
+    "socket-tcp-cubic",
 ]}
 bytes = "1.0"
 tokio = { version = "1.47", features = ["full"] }
@@ -36,3 +37,4 @@ ipnet = "2"
 socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 env_logger = "0.11"
+netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "f434fef" }
