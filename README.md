@@ -30,7 +30,7 @@ A custom protocol, rule based network proxy software.
 - macOS
 - Windows
   - You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to the same directory as your executable and run you program as administrator.
-- iOS - [TestFlight](https://testflight.apple.com/join/cLy4Ub5C) 
+- iOS - [TestFlight](https://testflight.apple.com/join/cLy4Ub5C)
 
 ## 📦 Install
 
@@ -54,7 +54,13 @@ Dependencies
 * libclang([LLVM](https://github.com/llvm/llvm-project/releases/tag/llvmorg-16.0.4))
 * [nasm](https://www.nasm.us/pub/nasm/releasebuilds/2.16/win64/) (Windows)
 * protoc(for geodata proto generation)
+* pre-commit
+  * [pre-commit](https://pre-commit.com/) for managing git hooks
+
 ```
+$ pipx install pre-commit
+$ pre-commit install
+
 $ cargo build
 ```
 

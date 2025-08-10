@@ -37,3 +37,4 @@ ipnet = "2"
 socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 env_logger = "0.11"
+netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "f434fef" }
