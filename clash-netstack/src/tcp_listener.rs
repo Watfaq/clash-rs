@@ -53,7 +53,7 @@ impl Drop for TcpStreamHandle {
 
 pub struct TcpListener {
     socket_stream: mpsc::UnboundedReceiver<TcpStream>,
-    socket_stream_waker: AtomicWaker,
+    socket_stream_waker: Arc<AtomicWaker>,
 
     task_handle: tokio::task::JoinHandle<()>,
 }
@@ -108,12 +108,13 @@ impl TcpListener {
         let (socket_stream_emitter, socket_stream) =
             mpsc::unbounded_channel::<TcpStream>();
 
-        let socket_stream_waker = AtomicWaker::new();
+        let socket_stream_waker = Arc::new(AtomicWaker::new());
 
+        let waker = socket_stream_waker.clone();
         let task_handle = tokio::spawn(async move {
             let rv = tokio::select! {
                 biased;
-                rv = Self::poll_packets(inbound, device.create_injector(), iface_notifier, socket_stream_emitter, socket_stream_waker) => rv,
+                rv = Self::poll_packets(inbound, device.create_injector(), iface_notifier, socket_stream_emitter, waker) => rv,
                 rv = Self::poll_sockets(&mut iface, &mut device, iface_notifier_rx) => rv,
             };
             if let Err(e) = rv {
@@ -124,7 +125,7 @@ impl TcpListener {
         TcpListener {
             socket_stream,
             task_handle,
-            socket_stream_waker: AtomicWaker::new(),
+            socket_stream_waker,
         }
     }
 
@@ -133,7 +134,7 @@ impl TcpListener {
         device_injector: mpsc::UnboundedSender<Packet>,
         iface_notifier: mpsc::UnboundedSender<IfaceEvent<'static>>,
         tcp_stream_emitter: mpsc::UnboundedSender<TcpStream>,
-        tcp_stream_waker: AtomicWaker,
+        tcp_stream_waker: Arc<AtomicWaker>,
     ) -> std::io::Result<()> {
         let mut packet_buf = Vec::with_capacity(32);
         while let n = inbound.recv_many(&mut packet_buf, 32).await
