@@ -1,4 +1,4 @@
-## Performace
+## Performance
 
 Being the weaker implementation compared to netstack-lwip, there could be a few optimisation opportunities:
 
