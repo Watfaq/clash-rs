@@ -29,7 +29,7 @@ mod macos {
 
     type Runner = futures::future::BoxFuture<'static, std::io::Result<()>>;
 
-    static OUTBOUND_INTERFACE: &str = "en0"; // Change this to your actual outbound interface name
+    static OUTBOUND_INTERFACE: &str = "enp6s18"; // Change this to your actual outbound interface name
 
     fn get_interface_index(iface: &str) -> u32 {
         unsafe {
@@ -350,7 +350,7 @@ mod macos {
 
         futs.push(Box::pin(async move {
             while let Some(stream) = tcp_listener.next().await {
-                debug!(
+                warn!(
                     "new tun TCP connection: {} -> {}",
                     stream.local_addr(),
                     stream.remote_addr()

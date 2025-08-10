@@ -13,13 +13,12 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},
+    time::Duration,
 };
 use tokio::sync::mpsc;
 
-// NOTE: Default buffer could contain 20 AEAD packets
-const AEAD_PACKET_SIZE: u32 = 0x3FFF; // Base size of an AEAD packet (16,383 bytes)
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = AEAD_PACKET_SIZE * 20; // Buffer for 20 AEAD packets
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 512 * 1024;
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 512 * 1024;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -68,7 +67,7 @@ impl Drop for TcpListener {
 impl TcpListener {
     pub fn new(
         inbound: mpsc::UnboundedReceiver<Packet>,
-        outbound: mpsc::UnboundedSender<Packet>,
+        outbound: mpsc::Sender<Packet>,
     ) -> Self {
         // the global bus that drives the iface polling
         let (iface_notifier, iface_notifier_rx) = mpsc::unbounded_channel();
@@ -196,8 +195,10 @@ impl TcpListener {
                 socket.set_timeout(Some(smoltcp::time::Duration::from_secs(
                     if cfg!(target_os = "linux") { 7200 } else { 60 },
                 )));
-                // NO ACK delay
-                socket.set_ack_delay(None);
+                // Default
+                socket.set_ack_delay(Some(Duration::from_millis(10).into()));
+                socket.set_nagle_enabled(false);
+                socket.set_congestion_control(tcp::CongestionControl::Cubic);
 
                 if let Err(err) = socket.listen(dst_addr) {
                     error!("listen error: {err:?}");
@@ -251,6 +252,8 @@ impl TcpListener {
         let mut socket_maps = HashMap::new();
         let mut next_poll = None;
 
+        let mut event_buf = Vec::with_capacity(10);
+
         loop {
             trace!(
                 "Polling TCP sockets, next_poll: {:?}, num of sockets: {}",
@@ -259,26 +262,28 @@ impl TcpListener {
             );
             tokio::select! {
                 biased;
-                Some(event) = notifier_rx.recv() => {
-                    trace!("Received iface event: {event:?}");
-                    match event {
-                        IfaceEvent::Icmp => {
-                            trace!("Received ICMP event");
-                            next_poll = None;
-                        }
-                        IfaceEvent::TcpStream(boxed) => {
-                            let (socket, handle) = *boxed;
-                            let socket_handle = sockets.add(socket);
-                            socket_maps.insert(socket_handle, handle);
-                            next_poll = None;
-                        }
-                        IfaceEvent::TcpSocketReady | IfaceEvent::TcpSocketClosed => {
-                            trace!("TCP socket ready or closed event");
-                            next_poll = None;
-                        }
-                        IfaceEvent::DeviceReady => {
-                            trace!("Device is ready, has some packets to process");
-                            next_poll = None;
+                _ = notifier_rx.recv_many(&mut event_buf, 10) => {
+                    for event in event_buf.drain(..) {
+                        trace!("Received iface event: {event:?}");
+                        match event {
+                            IfaceEvent::Icmp => {
+                                trace!("Received ICMP event");
+                                next_poll = None;
+                            }
+                            IfaceEvent::TcpStream(boxed) => {
+                                let (socket, handle) = *boxed;
+                                let socket_handle = sockets.add(socket);
+                                socket_maps.insert(socket_handle, handle);
+                                next_poll = None;
+                            }
+                            IfaceEvent::TcpSocketReady | IfaceEvent::TcpSocketClosed => {
+                                trace!("TCP socket ready or closed event");
+                                next_poll = None;
+                            }
+                            IfaceEvent::DeviceReady => {
+                                trace!("Device is ready, has some packets to process");
+                                next_poll = None;
+                            }
                         }
                     }
                 },
@@ -350,6 +355,7 @@ impl TcpListener {
                     socket_maps.retain(|handle, socket_control| {
                         if socket_control.socket_dropped.load(std::sync::atomic::Ordering::Acquire) {
                             trace!("Removing dropped TCP socket");
+                            sockets.remove(*handle);
                             return false;
                         }
 
