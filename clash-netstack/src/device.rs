@@ -100,7 +100,7 @@ impl<'a> TxToken for TxTokenImpl<'a> {
         let result = f(&mut buffer);
 
         let packet = Packet::new(buffer);
-        let _ = self.tx_sender.send(packet);
+        self.tx_sender.send(packet);
 
         result
     }
