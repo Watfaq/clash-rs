@@ -38,3 +38,6 @@ socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 env_logger = "0.11"
 netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "f434fef" }
+netstack-smoltcp = { path = "../../netstack-smoltcp" }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = "0.3.18"
