@@ -17,8 +17,8 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 512 * 1024; // 512 KB
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 512 * 1024; // 512 KB
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -267,10 +267,11 @@ impl TcpListener {
     ) -> std::io::Result<()> {
         // Create a socket set for TCP sockets
         let mut sockets = smoltcp::iface::SocketSet::new(vec![]);
-        let mut socket_maps = HashMap::new();
+        let mut socket_maps: HashMap<
+            smoltcp::iface::SocketHandle,
+            Arc<TcpStreamHandle>,
+        > = HashMap::new();
         let mut next_poll = None;
-
-        let mut event_buf = Vec::with_capacity(100);
 
         loop {
             trace!(
@@ -278,120 +279,127 @@ impl TcpListener {
                 next_poll,
                 socket_maps.len()
             );
-            tokio::select! {
-                biased;
-                n = notifier_rx.recv_many(&mut event_buf, 100) => {
-                    for event in event_buf.drain(..) {
-                        trace!("Received iface events({n}): {event:?}");
+
+            let should_poll_now = match (next_poll, socket_maps.len()) {
+                (None, 0) => {
+                    trace!("No sockets to poll, waiting indefinitely");
+                    false
+                }
+                (None, _) => {
+                    trace!("Polling sockets with no delay");
+                    true
+                }
+                (Some(dur), _) => {
+                    trace!("Polling sockets with delay: {dur:?}");
+                    false
+                }
+            };
+            let now = smoltcp::time::Instant::now();
+
+            if should_poll_now {
+                trace!("Woke up to poll sockets");
+
+                iface.poll(now, device, &mut sockets);
+
+                // Poll the sockets for new connections or data
+                for (socket_handle, socket_control) in socket_maps.iter() {
+                    let socket = sockets.get_mut::<tcp::Socket>(*socket_handle);
+                    trace!(
+                        "Polling TCP socket: {:?}, can_recv: {}, can_send: {}",
+                        socket_handle,
+                        socket.can_recv(),
+                        socket.can_send()
+                    );
+
+                    let buf = &socket_control.recv_buffer;
+                    let mut notify_read = false;
+                    while socket.can_recv() && !buf.is_full() {
+                        if let Ok(n) = socket.recv(|buffer| {
+                            let n = buf.enqueue_slice(buffer);
+                            (n, n)
+                        }) {
+                            trace!("Received {n} bytes from TCP socket");
+                        }
+                        notify_read = true;
+                    }
+                    if notify_read {
+                        socket_control.recv_waker.wake();
+                    }
+
+                    let buf = &socket_control.send_buffer;
+                    let mut notify_write = false;
+                    while socket.can_send() && !buf.is_empty() {
+                        if let Ok(n) = socket.send(|buffer| {
+                            let n = buf.dequeue_slice(buffer);
+                            (n, n)
+                        }) {
+                            trace!("Sent {n} bytes to TCP socket");
+                        }
+                        notify_write = true;
+                    }
+
+                    if notify_write {
+                        socket_control.send_waker.wake();
+                    }
+                }
+
+                socket_maps.retain(|handle, socket_control| {
+                    if socket_control
+                        .socket_dropped
+                        .load(std::sync::atomic::Ordering::Acquire)
+                    {
+                        trace!("Removing dropped TCP socket");
+                        sockets.remove(*handle);
+                        return false;
+                    }
+
+                    let socket = sockets.get_mut::<tcp::Socket>(*handle);
+                    if socket.is_active() {
+                        true
+                    } else {
+                        trace!("Removing inactive TCP socket");
+                        sockets.remove(*handle);
+                        false
+                    }
+                });
+
+                next_poll = match iface.poll_delay(now, &sockets) {
+                    Some(smoltcp::time::Duration::ZERO) => None,
+                    Some(delay) => {
+                        trace!("device poll delay: {delay:?}");
+                        Some(delay.into())
+                    }
+                    None => None,
+                };
+            } else {
+                tokio::select! {
+                    Some(event) = notifier_rx.recv() => {
+                        trace!("Received iface event, will poll sockets");
+                        next_poll = None; // reset the next poll time
                         match event {
-                            IfaceEvent::Icmp => {
-                                trace!("Received ICMP event");
-                                next_poll = None;
+                            IfaceEvent::TcpStream(stream) => {
+                                let socket_handle = sockets.add(stream.0);
+                                socket_maps.insert(socket_handle, stream.1);
+                                trace!("Added new TCP socket: {socket_handle:?}");
                             }
-                            IfaceEvent::TcpStream(boxed) => {
-                                let (socket, handle) = *boxed;
-                                let socket_handle = sockets.add(socket);
-                                socket_maps.insert(socket_handle, handle);
-                                next_poll = None;
+                            IfaceEvent::TcpSocketReady => {
+                                trace!("TCP socket is ready to read/write");
                             }
-                            IfaceEvent::TcpSocketReady | IfaceEvent::TcpSocketClosed => {
-                                trace!("TCP socket ready or closed event");
-                                next_poll = None;
+                            IfaceEvent::TcpSocketClosed => {
+                                trace!("TCP socket closed by application");
                             }
                             IfaceEvent::DeviceReady => {
-                                trace!("Device is ready, has some packets to process");
-                                next_poll = None;
+                                trace!("Device generated some packets, will poll sockets");
+                            }
+                            IfaceEvent::Icmp => {
+                                trace!("ICMP packet received, will poll sockets");
                             }
                         }
                     }
-                },
-                _ = match (next_poll, socket_maps.len()) {
-                    (None, 0) => {
-                        trace!("No sockets to poll, waiting indefinitely");
-                        tokio::time::sleep(std::time::Duration::MAX)
-                    },
-                    (None, _) => {
-                        trace!("Polling sockets with no delay");
-                        tokio::time::sleep(std::time::Duration::ZERO)
-                    },
-                    (Some(dur), _) => {
-                        trace!("Polling sockets with delay: {dur:?}");
-                        tokio::time::sleep(dur)
+                    _ = tokio::time::sleep(next_poll.unwrap_or(Duration::MAX)) => {
+                        trace!("Woke up to poll sockets after delay");
+                        next_poll = None; // reset the next poll time
                     }
-                } => {
-                    trace!("Woke up to poll sockets");
-                    let now = smoltcp::time::Instant::now();
-
-                    iface.poll(now, device, &mut sockets);
-
-                    // Poll the sockets for new connections or data
-                    for (socket_handle, socket_control) in socket_maps.iter() {
-                        let socket = sockets.get_mut::<tcp::Socket>(*socket_handle);
-                        trace!("Polling TCP socket: {:?}, can_recv: {}, can_send: {}", socket_handle, socket.can_recv(), socket.can_send());
-
-                        let buf = &socket_control.recv_buffer;
-                        let mut notify_read = false;
-                        while socket.can_recv() && !buf.is_full() {
-                            if let Ok(n) = socket
-                                .recv(|buffer| {
-                                    let n = buf.enqueue_slice(buffer);
-                                    (n, n)
-                                })
-
-                            {
-                                trace!("Received {n} bytes from TCP socket");
-                            }
-                            notify_read = true;
-                        }
-                        if notify_read {
-                            socket_control.recv_waker.wake();
-                        }
-
-                        let buf = &socket_control.send_buffer;
-                        let mut notify_write = false;
-                        while socket.can_send() && !buf.is_empty() {
-                            if let Ok(n) = socket
-                                .send(|buffer| {
-                                    let n = buf.dequeue_slice(buffer);
-                                    (n, n)
-                                })
-
-                            {
-                                trace!("Sent {n} bytes to TCP socket");
-                            }
-                            notify_write = true;
-                        }
-
-                        if notify_write {
-                            socket_control.send_waker.wake();
-                        }
-                    }
-
-                    socket_maps.retain(|handle, socket_control| {
-                        if socket_control.socket_dropped.load(std::sync::atomic::Ordering::Acquire) {
-                            trace!("Removing dropped TCP socket");
-                            sockets.remove(*handle);
-                            return false;
-                        }
-
-                        let socket = sockets.get_mut::<tcp::Socket>(*handle);
-                        if socket.is_active() {
-                            true
-                        } else {
-                            trace!("Removing inactive TCP socket");
-                            sockets.remove(*handle);
-                            false
-                        }
-                    });
-
-                    next_poll = match iface.poll_delay(now, &sockets) {
-                        Some(smoltcp::time::Duration::ZERO) => None,
-                        Some(delay) => {
-                            trace!("device poll delay: {delay:?}");
-                            Some(delay.into())
-                        }
-                        None => None,
-                    };
                 }
             }
         }

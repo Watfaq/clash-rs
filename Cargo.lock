@@ -2509,6 +2509,15 @@ dependencies = [
 
 [[package]]
 name = "etherparse"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8d8a704b617484e9d867a0423cd45f7577f008c4068e2e33378f8d3860a6d73"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
+name = "etherparse"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b119b9796ff800751a220394b8b3613f26dd30c48f254f6837e64c464872d1c7"
@@ -4410,6 +4419,22 @@ dependencies = [
  "log",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "netstack-smoltcp"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8f117b74ca7e5c5201a6ba5ff7882fe605bb4c32a0f2a086354260f4136c356"
+dependencies = [
+ "etherparse 0.16.0",
+ "futures",
+ "rand 0.8.5",
+ "smoltcp",
+ "spin 0.9.8",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -9176,16 +9201,19 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",
- "etherparse",
+ "etherparse 0.19.0",
  "futures",
  "ipnet",
  "libc",
  "log",
  "netstack-lwip",
+ "netstack-smoltcp",
  "rand 0.9.2",
  "smoltcp",
  "socket2 0.6.0",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "tun-rs",
 ]
 
