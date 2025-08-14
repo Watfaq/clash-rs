@@ -380,7 +380,7 @@ impl TcpListener {
                             IfaceEvent::TcpStream(stream) => {
                                 let socket_handle = sockets.add(stream.0);
                                 socket_maps.insert(socket_handle, stream.1);
-                                trace!("Added new TCP socket: {:?}", socket_handle);
+                                trace!("Added new TCP socket: {socket_handle:?}");
                             }
                             IfaceEvent::TcpSocketReady => {
                                 trace!("TCP socket is ready to read/write");
