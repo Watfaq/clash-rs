@@ -49,7 +49,7 @@ use erased_serde::Serialize;
 use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info};
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -192,7 +192,6 @@ impl OutboundManager {
     }
 
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
-    #[instrument(skip(self))]
     pub async fn url_test(
         &self,
         outbounds: &Vec<AnyOutboundHandler>,

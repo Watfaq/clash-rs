@@ -272,7 +272,7 @@ impl Client for DnsClient {
         format!("{}#{}:{}", &self.net, &self.host, &self.port)
     }
 
-    #[instrument(skip(msg))]
+    #[instrument(skip(msg), level = "trace")]
     async fn exchange(&self, msg: &Message) -> anyhow::Result<Message> {
         let need_initialize = {
             let inner = self.inner.read().await;

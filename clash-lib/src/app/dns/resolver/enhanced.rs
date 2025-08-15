@@ -222,7 +222,7 @@ impl EnhancedResolver {
         }
     }
 
-    #[instrument(skip(message))]
+    #[instrument(skip(message), level = "trace")]
     pub async fn batch_exchange(
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
@@ -284,7 +284,7 @@ impl EnhancedResolver {
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
             trace!(q = q.to_string(), "start");
@@ -372,7 +372,7 @@ impl EnhancedResolver {
         None
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip_all, level = "trace")]
     async fn ip_exchange(
         &self,
         message: &op::Message,
@@ -472,7 +472,7 @@ impl EnhancedResolver {
 
 #[async_trait]
 impl ClashResolver for EnhancedResolver {
-    #[instrument(skip(self))]
+    #[instrument(skip(self), level = "trace")]
     async fn resolve(
         &self,
         host: &str,
@@ -502,7 +502,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), level = "trace")]
     async fn resolve_v4(
         &self,
         host: &str,
@@ -543,7 +543,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), level = "trace")]
     async fn resolve_v6(
         &self,
         host: &str,
@@ -589,7 +589,7 @@ impl ClashResolver for EnhancedResolver {
         None
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message

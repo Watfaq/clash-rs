@@ -110,9 +110,10 @@ impl AsyncRead for TLSObfs {
         let this = self.get_mut();
         let mut inner = Pin::new(&mut this.inner);
         if this.remain > 0 {
-            let length = this.remain.min(buf.remaining());
+            let before = buf.filled().len();
             ready!(inner.as_mut().poll_read(cx, buf))?;
-            this.remain -= length;
+            let actually_read = buf.filled().len() - before;
+            this.remain -= actually_read;
             return Poll::Ready(Ok(()));
         }
         if this.first_response {
@@ -130,19 +131,21 @@ impl AsyncRead for TLSObfs {
     }
 }
 
+/// Maybe write one chunk, the return value doesn't really matter as it's not
+/// necessarily related to the original data buffer length
 fn writing(
     this: std::pin::Pin<&mut TLSObfs>,
     b: &[u8],
     cx: &mut Context<'_>,
-) -> Poll<Result<usize, std::io::Error>> {
+) -> Poll<Result<(), std::io::Error>> {
     let this = this.get_mut();
     let inner = Pin::new(&mut this.inner);
     if this.first_request {
         let hello_msg = make_client_hello_msg(b, &this.server);
         match ready!(inner.poll_write(cx, &hello_msg)) {
-            Ok(n) => {
+            Ok(_) => {
                 this.first_request = false;
-                return Poll::Ready(Ok(n));
+                return Poll::Ready(Ok(()));
             }
             Err(e) => return Poll::Ready(Err(e)),
         }
@@ -151,7 +154,7 @@ fn writing(
     buf.put_slice(&[0x17, 0x03, 0x03]);
     buf.write_u16::<BigEndian>(b.len() as u16).unwrap();
     buf.put_slice(b);
-    inner.poll_write(cx, &buf)
+    inner.poll_write(cx, &buf).map(|_| Ok(()))
 }
 
 fn reading(

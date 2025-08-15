@@ -221,7 +221,6 @@ fn setup_logging_inner(
 
     let log_to_file_layer = appender.map(|x| {
         tracing_subscriber::fmt::Layer::new()
-            .with_span_events(FmtSpan::CLOSE)
             .with_timer(timer.clone())
             .with_ansi(false)
             .compact()
