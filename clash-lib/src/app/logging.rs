@@ -19,10 +19,7 @@ use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    EnvFilter, Layer,
-    filter::filter_fn,
-    fmt::{format::FmtSpan, time::LocalTime},
-    prelude::*,
+    EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
 };
 
 impl From<LogLevel> for LevelFilter {
@@ -221,7 +218,6 @@ fn setup_logging_inner(
 
     let log_to_file_layer = appender.map(|x| {
         tracing_subscriber::fmt::Layer::new()
-            .with_span_events(FmtSpan::CLOSE)
             .with_timer(timer.clone())
             .with_ansi(false)
             .compact()
