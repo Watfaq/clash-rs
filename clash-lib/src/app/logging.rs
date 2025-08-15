@@ -19,10 +19,7 @@ use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
 use tracing_subscriber::{
-    EnvFilter, Layer,
-    filter::filter_fn,
-    fmt::{format::FmtSpan, time::LocalTime},
-    prelude::*,
+    EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
 };
 
 impl From<LogLevel> for LevelFilter {
