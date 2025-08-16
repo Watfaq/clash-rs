@@ -249,7 +249,7 @@ mod tests {
         let _enter = span.enter();
         let ws_client = WsClient::new(
             "".to_owned(),
-            10002,
+            8443,
             "/websocket".to_owned(),
             [("Host".to_owned(), "example.org".to_owned())]
                 .into_iter()
@@ -263,7 +263,7 @@ mod tests {
             name: "test-vless-ws".into(),
             common_opts: Default::default(),
             server: LOCAL_ADDR.into(),
-            port: 10002,
+            port: 8443,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             udp: true,
             tls: tls_client(None),
