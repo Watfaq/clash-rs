@@ -1,4 +1,4 @@
-use std::{fmt::Debug, pin::Pin, task::Poll, time::SystemTime};
+use std::{fmt::Debug, net::SocketAddr, pin::Pin, task::Poll, time::SystemTime};
 
 use aes_gcm::Aes128Gcm;
 use bytes::{BufMut, BytesMut};
@@ -572,4 +572,29 @@ fn hash_timestamp(timestamp: u64) -> [u8; 16] {
     hasher.update(timestamp.to_be_bytes());
     hasher.update(timestamp.to_be_bytes());
     hasher.finalize().into()
+}
+
+impl SocksAddr {
+    fn write_to_buf_vmess<B: BufMut>(&self, buf: &mut B) {
+        match self {
+            Self::Ip(SocketAddr::V4(addr)) => {
+                buf.put_u16(addr.port());
+                buf.put_u8(0x01);
+                buf.put_slice(&addr.ip().octets());
+            }
+            Self::Ip(SocketAddr::V6(addr)) => {
+                buf.put_u16(addr.port());
+                buf.put_u8(0x03);
+                for seg in &addr.ip().segments() {
+                    buf.put_u16(*seg);
+                }
+            }
+            Self::Domain(domain_name, port) => {
+                buf.put_u16(*port);
+                buf.put_u8(0x02);
+                buf.put_u8(domain_name.len() as u8);
+                buf.put_slice(domain_name.as_bytes());
+            }
+        }
+    }
 }

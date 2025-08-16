@@ -62,6 +62,8 @@ pub enum OutboundProxyProtocol {
     Trojan(OutboundTrojan),
     #[serde(rename = "vmess")]
     Vmess(OutboundVmess),
+    #[serde(rename = "vless")]
+    Vless(OutboundVless),
     #[cfg(feature = "wireguard")]
     #[serde(rename = "wireguard")]
     Wireguard(OutboundWireguard),
@@ -91,6 +93,7 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.common_opts.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.common_opts.name,
+            OutboundProxyProtocol::Vless(vless) => &vless.common_opts.name,
             #[cfg(feature = "wireguard")]
             OutboundProxyProtocol::Wireguard(wireguard) => {
                 &wireguard.common_opts.name
@@ -134,6 +137,7 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Reject => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
+            OutboundProxyProtocol::Vless(_) => write!(f, "Vless"),
             #[cfg(feature = "wireguard")]
             OutboundProxyProtocol::Wireguard(_) => write!(f, "Wireguard"),
             #[cfg(feature = "onion")]
@@ -237,6 +241,23 @@ pub struct OutboundVmess {
     #[serde(alias = "alterId")]
     pub alter_id: u16,
     pub cipher: Option<String>,
+    pub udp: Option<bool>,
+    pub tls: Option<bool>,
+    pub skip_cert_verify: Option<bool>,
+    #[serde(alias = "servername")]
+    pub server_name: Option<String>,
+    pub network: Option<String>,
+    pub ws_opts: Option<WsOpt>,
+    pub h2_opts: Option<H2Opt>,
+    pub grpc_opts: Option<GrpcOpt>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundVless {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub uuid: String,
     pub udp: Option<bool>,
     pub tls: Option<bool>,
     pub skip_cert_verify: Option<bool>,
