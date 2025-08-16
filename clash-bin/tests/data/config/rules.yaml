@@ -289,6 +289,16 @@ proxies:
       - 1.1.1.1
     udp: true
 
+  - name: "vless-ws-tls"
+    type: vless
+    server: 127.0.0.1
+    port: 8443
+    tls: true
+    network: ws
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    ws-opts:
+      path: /websocket
+
 proxy-providers:
   file-provider:
     type: file
@@ -323,6 +333,7 @@ rule-providers:
 rules:
   - IP-CIDR,1.1.1.1/32,ss-simple
   - IP-CIDR,8.8.8.8/32,ss-simple
+  - DOMAIN-KEYWORD,google,vless-ws-tls
   - DOMAIN-REGEX,^www.google.com$,DIRECT
   - DOMAIN,google.com,ss-simple
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
@@ -330,7 +341,6 @@ rules:
   - RULE-SET,file-provider2,DIRECT
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
-  - DOMAIN-KEYWORD,google,grpc-vmess
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT

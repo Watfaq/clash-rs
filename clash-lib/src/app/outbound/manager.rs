@@ -41,7 +41,7 @@ use crate::{
         selector::{self, ThreadSafeSelectorControl},
         socks, trojan, urltest,
         utils::{DirectConnector, ProxyConnector},
-        vmess,
+        vless, vmess,
     },
 };
 use anyhow::Result;
@@ -276,6 +276,15 @@ impl OutboundManager {
                         .map(|x: vmess::Handler| Arc::new(x) as AnyOutboundHandler)
                         .inspect_err(|e| {
                             error!("failed to load vmess outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Vless(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: vless::Handler| Arc::new(x) as AnyOutboundHandler)
+                        .inspect_err(|e| {
+                            error!("failed to load vless outbound {}: {}", name, e);
                         })
                         .ok()
                 }
