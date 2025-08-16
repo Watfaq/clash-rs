@@ -14,8 +14,6 @@ const VLESS_VERSION: u8 = 0;
 const VLESS_COMMAND_TCP: u8 = 1;
 const VLESS_COMMAND_UDP: u8 = 2;
 
-const MAX_ADDITIONAL_INFO_LEN: u8 = 255;
-
 pub struct VlessStream {
     inner: AnyStream,
     handshake_done: bool,
@@ -124,13 +122,6 @@ impl VlessStream {
         }
 
         let additional_info_len = response[1];
-        if additional_info_len > MAX_ADDITIONAL_INFO_LEN {
-            error!("VLESS additional info too long: {}", additional_info_len);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "VLESS additional info too long",
-            ));
-        }
 
         if additional_info_len > 0 {
             let mut additional_info = vec![0u8; additional_info_len as usize];
