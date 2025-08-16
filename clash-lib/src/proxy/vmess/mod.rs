@@ -1,10 +1,9 @@
-use std::{io, sync::Arc};
-
-use async_trait::async_trait;
-use tracing::debug;
-
-mod vmess_impl;
-
+use super::{
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
+    transport::Transport,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+};
 use crate::{
     app::{
         dispatcher::{
@@ -16,15 +15,12 @@ use crate::{
     impl_default_connector,
     session::Session,
 };
+use async_trait::async_trait;
+use std::{io, sync::Arc};
+use tracing::debug;
+use vmess_impl::OutboundDatagramVmess;
 
-use self::vmess_impl::OutboundDatagramVmess;
-
-use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
-    transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
-};
+mod vmess_impl;
 
 pub struct HandlerOptions {
     pub name: String,

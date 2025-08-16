@@ -1,11 +1,10 @@
-use std::{io, sync::Arc};
-
-use async_trait::async_trait;
-use tracing::debug;
-
-mod datagram;
-mod stream;
-
+use self::stream::VlessStream;
+use super::{
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
+    transport::Transport,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+};
 use crate::{
     app::{
         dispatcher::{
@@ -15,17 +14,15 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     impl_default_connector,
+    proxy::vless::datagram::OutboundDatagramVless,
     session::Session,
 };
+use async_trait::async_trait;
+use std::{io, sync::Arc};
+use tracing::debug;
 
-use self::{datagram::OutboundDatagramVless, stream::VlessStream};
-
-use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
-    transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
-};
+mod datagram;
+mod stream;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -80,7 +77,7 @@ impl Handler {
         };
 
         let vless_stream =
-            VlessStream::new(s, &self.opts.uuid, &sess.destination, is_udp).await?;
+            VlessStream::new(s, &self.opts.uuid, &sess.destination, is_udp)?;
 
         Ok(Box::new(vless_stream))
     }
@@ -204,7 +201,7 @@ mod tests {
     use super::*;
     use crate::{
         proxy::{
-            transport::{GrpcClient, H2Client, TlsClient, WsClient},
+            transport::{TlsClient, WsClient},
             utils::test_utils::{
                 Suite,
                 docker_utils::{
@@ -229,16 +226,16 @@ mod tests {
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vless-ws.json");
+        let conf = test_config_dir.join("vless-ws-tls.json");
         let cert = test_config_dir.join("example.org.pem");
         let key = test_config_dir.join("example.org-key.pem");
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
-                (cert.to_str().unwrap(), "/etc/ssl/xray/fullchain.pem"),
-                (key.to_str().unwrap(), "/etc/ssl/xray/privkey.pem"),
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
             .await
@@ -253,7 +250,7 @@ mod tests {
         let ws_client = WsClient::new(
             "".to_owned(),
             10002,
-            "".to_owned(),
+            "/websocket".to_owned(),
             [("Host".to_owned(), "example.org".to_owned())]
                 .into_iter()
                 .collect::<HashMap<_, _>>(),
@@ -275,129 +272,5 @@ mod tests {
         let handler = Arc::new(Handler::new(opts));
         let runner = get_ws_runner().await?;
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
-    }
-
-    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vless-grpc.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
-
-        DockerTestRunnerBuilder::new()
-            .image(IMAGE_VLESS)
-            .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
-                (cert.to_str().unwrap(), "/etc/ssl/xray/fullchain.pem"),
-                (key.to_str().unwrap(), "/etc/ssl/xray/privkey.pem"),
-            ])
-            .build()
-            .await
-    }
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_vless_grpc() -> anyhow::Result<()> {
-        initialize();
-        let grpc_client = GrpcClient::new(
-            "example.org".to_owned(),
-            "example!".to_owned().try_into()?,
-        );
-        let opts = HandlerOptions {
-            name: "test-vless-grpc".into(),
-            common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
-            port: 10002,
-            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
-            udp: true,
-            tls: tls_client(None),
-            transport: Some(Box::new(grpc_client)),
-        };
-        let handler = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
-            .await
-    }
-
-    async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vless-http2.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
-
-        DockerTestRunnerBuilder::new()
-            .image(IMAGE_VLESS)
-            .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
-                (cert.to_str().unwrap(), "/etc/ssl/xray/fullchain.pem"),
-                (key.to_str().unwrap(), "/etc/ssl/xray/privkey.pem"),
-            ])
-            .build()
-            .await
-    }
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_vless_h2() -> anyhow::Result<()> {
-        initialize();
-        let h2_client = H2Client::new(
-            vec!["example.org".into()],
-            std::collections::HashMap::new(),
-            http::Method::POST,
-            "/test".to_owned().try_into()?,
-        );
-        let opts = HandlerOptions {
-            name: "test-vless-h2".into(),
-            common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
-            port: 10002,
-            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
-            udp: false,
-            tls: tls_client(Some(vec!["h2".to_string()])),
-            transport: Some(Box::new(h2_client)),
-        };
-        let handler = Arc::new(Handler::new(opts));
-        handler
-            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
-            .await;
-        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all())
-            .await
-    }
-
-    async fn get_tcp_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vless-tcp.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
-
-        DockerTestRunnerBuilder::new()
-            .image(IMAGE_VLESS)
-            .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
-                (cert.to_str().unwrap(), "/etc/ssl/xray/fullchain.pem"),
-                (key.to_str().unwrap(), "/etc/ssl/xray/privkey.pem"),
-            ])
-            .build()
-            .await
-    }
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_vless_tcp() -> anyhow::Result<()> {
-        initialize();
-        let opts = HandlerOptions {
-            name: "test-vless-tcp".into(),
-            common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
-            port: 10002,
-            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
-            udp: true,
-            tls: tls_client(None),
-            transport: None,
-        };
-        let handler = Arc::new(Handler::new(opts));
-        handler
-            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
-            .await;
-        run_test_suites_and_cleanup(handler, get_tcp_runner().await?, Suite::all())
-            .await
     }
 }

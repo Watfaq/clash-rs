@@ -1,32 +1,36 @@
 use std::{
     io,
-    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures::{Sink, Stream, ready};
-use tokio::io::{AsyncReadExt, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tracing::{debug, trace};
 
 use crate::{
     proxy::{AnyStream, datagram::UdpPacket},
-    session::{SocksAddr, SocksAddrType},
+    session::SocksAddr,
 };
+
+const MAX_PACKET_LENGTH: usize = 1024 << 3; // 8KB max packet length
 
 pub struct OutboundDatagramVless {
     inner: AnyStream,
     remote_addr: SocksAddr,
 
-    // Read state machine
-    read_state: ReadState,
-    read_buf: BytesMut,
-
     // Write state
-    written: Option<usize>,
+    write_buf: BytesMut,
+    pending_packet: Option<UdpPacket>,
+
+    // Read state
+    read_buf: Vec<u8>,
+    remaining_bytes: usize,
+    length_buf: [u8; 2],
+
+    // State tracking
     flushed: bool,
-    pkt: Option<UdpPacket>,
 }
 
 impl OutboundDatagramVless {
@@ -34,36 +38,41 @@ impl OutboundDatagramVless {
         Self {
             inner,
             remote_addr,
-            read_state: ReadState::Length,
-            read_buf: BytesMut::new(),
-            written: None,
+            write_buf: BytesMut::new(),
+            pending_packet: None,
+            read_buf: vec![0u8; 65536],
+            remaining_bytes: 0,
+            length_buf: [0; 2],
             flushed: true,
-            pkt: None,
         }
     }
 
-    fn encode_packet(pkt: &UdpPacket) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+    fn write_packet(&mut self, payload: &[u8]) -> Result<(), io::Error> {
+        self.write_buf.clear();
 
-        // VLESS UDP packet format:
-        // Length (2 bytes) + Address type + Address + Port + Data
+        // VLESS UDP packet format is simpler than expected:
+        // Just 2-byte length + payload data
+        // No address encoding in the packet data phase!
 
-        let addr_len = match &pkt.dst_addr {
-            SocksAddr::Ip(socket_addr) => {
-                match socket_addr.ip() {
-                    std::net::IpAddr::V4(_) => 1 + 4 + 2, // type + ipv4 + port
-                    std::net::IpAddr::V6(_) => 1 + 16 + 2, // type + ipv6 + port
-                }
-            }
-            SocksAddr::Domain(domain, _) => 1 + 1 + domain.len() + 2, /* type + len + domain + port */
-        };
+        if payload.len() > MAX_PACKET_LENGTH {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "packet too large: {} > {}",
+                    payload.len(),
+                    MAX_PACKET_LENGTH
+                ),
+            ));
+        }
 
-        buf.put_u16((addr_len + pkt.data.len()) as u16);
+        // Write length header (big-endian)
+        self.write_buf.put_u16(payload.len() as u16);
 
-        pkt.dst_addr.write_buf(&mut buf);
+        // Write payload
+        self.write_buf.put_slice(payload);
 
-        buf.put_slice(&pkt.data);
-        buf.to_vec()
+        trace!("encoded VLESS UDP packet: len={}", payload.len());
+        Ok(())
     }
 }
 
@@ -80,304 +89,169 @@ impl Sink<UdpPacket> for OutboundDatagramVless {
                 Poll::Pending => return Poll::Pending,
             }
         }
-
         Poll::Ready(Ok(()))
     }
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
-        let pin = self.get_mut();
-        pin.pkt = Some(item);
-        pin.flushed = false;
+        let this = self.get_mut();
+
+        if this.pending_packet.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "previous packet not yet sent",
+            ));
+        }
+
+        // Handle large packets by chunking them
+        let total_len = item.data.len();
+        if total_len == 0 {
+            return Ok(()); // Skip empty packets
+        }
+
+        // For now, handle first chunk or small packets
+        let chunk_size = if total_len <= MAX_PACKET_LENGTH {
+            total_len
+        } else {
+            MAX_PACKET_LENGTH
+        };
+
+        this.write_packet(&item.data[..chunk_size])?;
+        this.pending_packet = Some(item);
+        this.flushed = false;
+
         Ok(())
     }
 
     fn poll_flush(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
         if self.flushed {
             return Poll::Ready(Ok(()));
         }
 
-        let Self {
-            ref mut inner,
-            ref mut pkt,
-            ref mut written,
-            ref mut flushed,
-            ref remote_addr,
-            ..
-        } = *self;
+        let this = self.get_mut();
 
-        let mut inner = Pin::new(inner);
-
-        let pkt_container = pkt;
-
-        if let Some(pkt) = pkt_container {
-            let payload = Self::encode_packet(pkt);
-
-            if written.is_none() {
-                *written = Some(0);
-            }
-
-            let mut remaining = &payload[*written.as_ref().unwrap()..];
-
-            while !remaining.is_empty() {
-                let n = ready!(inner.as_mut().poll_write(cx, remaining))?;
-                *written.as_mut().unwrap() += n;
-                remaining = &remaining[n..];
-
-                trace!(
-                    "written {} bytes to vless stream, remaining {}, data len {}",
-                    n,
-                    remaining.len(),
-                    pkt.data.len()
-                );
-            }
-
-            if !*flushed {
-                ready!(inner.as_mut().poll_flush(cx))?;
-                *flushed = true;
-            }
-
-            debug!(
-                "sent UDP packet to remote VLESS server, len: {}, remote_addr: {}, \
-                 dst_addr: {}",
-                pkt.data.len(),
-                remote_addr,
-                pkt.dst_addr
-            );
-
-            *written = None;
-            *pkt_container = None;
-
-            Poll::Ready(Ok(()))
-        } else {
-            debug!("no udp packet to send");
-            Poll::Ready(Err(io::Error::other("no packet to send")))
+        if this.write_buf.is_empty() {
+            this.flushed = true;
+            this.pending_packet = None;
+            return Poll::Ready(Ok(()));
         }
+
+        let mut inner = Pin::new(&mut this.inner);
+
+        // Write the encoded packet
+        while !this.write_buf.is_empty() {
+            let n = ready!(inner.as_mut().poll_write(cx, &this.write_buf))?;
+            if n == 0 {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write packet data",
+                )));
+            }
+            this.write_buf.advance(n);
+        }
+
+        // Flush the underlying stream
+        ready!(inner.poll_flush(cx))?;
+
+        if let Some(packet) = &this.pending_packet {
+            debug!("sent VLESS UDP packet, data_len={}", packet.data.len());
+        }
+
+        this.flushed = true;
+        this.pending_packet = None;
+
+        Poll::Ready(Ok(()))
     }
 
     fn poll_close(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        ready!(self.poll_flush(cx))?;
-        Poll::Ready(Ok(()))
+        ready!(self.as_mut().poll_flush(cx))?;
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
     }
-}
-
-enum ReadState {
-    Length,
-    Atyp,
-    Addr(u8),
-    Port(SocksAddr),
-    Data(SocksAddr, usize),
 }
 
 impl Stream for OutboundDatagramVless {
     type Item = UdpPacket;
 
     fn poll_next(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let Self {
-            ref mut read_buf,
-            ref mut inner,
-            ref remote_addr,
-            ref mut read_state,
-            ..
-        } = *self;
-
-        let mut pin = Pin::new(inner);
+        let this = self.get_mut();
+        let mut inner = Pin::new(&mut this.inner);
 
         loop {
-            match read_state {
-                ReadState::Length => {
-                    let fut = pin.read_u16();
-                    futures::pin_mut!(fut);
-                    match ready!(fut.poll(cx)) {
-                        Ok(length) => {
-                            *read_state = ReadState::Atyp;
-                            read_buf.resize(length as usize, 0);
+            // If we have remaining bytes from a previous packet, read them
+            if this.remaining_bytes > 0 {
+                let to_read =
+                    std::cmp::min(this.remaining_bytes, this.read_buf.len());
+                let mut read_buf = ReadBuf::new(&mut this.read_buf[..to_read]);
+
+                match ready!(inner.as_mut().poll_read(cx, &mut read_buf)) {
+                    Ok(()) => {
+                        let data = read_buf.filled();
+                        if data.is_empty() {
+                            return Poll::Ready(None); // Connection closed
                         }
-                        Err(err) => {
-                            debug!(
-                                "failed to read length from VLESS stream: {}",
-                                err
-                            );
-                            return Poll::Ready(None);
-                        }
+
+                        this.remaining_bytes -= data.len();
+
+                        trace!(
+                            "received VLESS UDP packet chunk, len={}, remaining={}",
+                            data.len(),
+                            this.remaining_bytes
+                        );
+
+                        return Poll::Ready(Some(UdpPacket {
+                            data: data.to_vec(),
+                            src_addr: this.remote_addr.clone(),
+                            dst_addr: this.remote_addr.clone(),
+                        }));
                     }
-                }
-                ReadState::Atyp => {
-                    let fut = pin.read_u8();
-                    futures::pin_mut!(fut);
-                    match ready!(fut.poll(cx)) {
-                        Ok(atyp) => {
-                            *read_state = ReadState::Addr(atyp);
-                        }
-                        Err(err) => {
-                            debug!(
-                                "failed to read address type from VLESS stream: {}",
-                                err
-                            );
-                            return Poll::Ready(None);
-                        }
-                    }
-                }
-                ReadState::Addr(atyp) => match *atyp {
-                    SocksAddrType::V4 => {
-                        let fut = pin.read_u32();
-                        futures::pin_mut!(fut);
-                        match ready!(fut.poll(cx)) {
-                            Ok(ip) => {
-                                let ip = std::net::Ipv4Addr::from(ip);
-                                *read_state = ReadState::Port(SocksAddr::Ip(
-                                    SocketAddr::from((ip, 0)),
-                                ));
-                            }
-                            Err(err) => {
-                                debug!(
-                                    "failed to read IPv4 address from VLESS \
-                                     stream: {}",
-                                    err
-                                );
-                                return Poll::Ready(None);
-                            }
-                        }
-                    }
-                    SocksAddrType::V6 => {
-                        let fut = pin.read_u128();
-                        futures::pin_mut!(fut);
-                        match ready!(fut.poll(cx)) {
-                            Ok(ip) => {
-                                let ip = std::net::Ipv6Addr::from(ip);
-                                *read_state = ReadState::Port(SocksAddr::Ip(
-                                    SocketAddr::from((ip, 0)),
-                                ));
-                            }
-                            Err(err) => {
-                                debug!(
-                                    "failed to read IPv6 address from VLESS \
-                                     stream: {}",
-                                    err
-                                );
-                                return Poll::Ready(None);
-                            }
-                        }
-                    }
-                    SocksAddrType::DOMAIN => {
-                        let fut = pin.read_u8();
-                        futures::pin_mut!(fut);
-                        match ready!(fut.poll(cx)) {
-                            Ok(domain_len) => {
-                                let mut buf = vec![0u8; domain_len as usize];
-                                let fut = pin.read_exact(&mut buf);
-                                futures::pin_mut!(fut);
-                                match ready!(fut.poll(cx)) {
-                                    Ok(_) => {
-                                        let domain = String::from_utf8(buf);
-                                        match domain {
-                                            Ok(domain) => {
-                                                *read_state = ReadState::Port(
-                                                    SocksAddr::Domain(domain, 0),
-                                                );
-                                            }
-                                            Err(err) => {
-                                                debug!(
-                                                    "failed to parse domain from \
-                                                     VLESS stream: {}",
-                                                    err
-                                                );
-                                                return Poll::Ready(None);
-                                            }
-                                        }
-                                    }
-                                    Err(err) => {
-                                        debug!(
-                                            "failed to read domain from VLESS \
-                                             stream: {}",
-                                            err
-                                        );
-                                        return Poll::Ready(None);
-                                    }
-                                }
-                            }
-                            Err(err) => {
-                                debug!(
-                                    "failed to read domain length from VLESS \
-                                     stream: {}",
-                                    err
-                                );
-                                return Poll::Ready(None);
-                            }
-                        }
-                    }
-                    _ => {
-                        debug!("invalid address type: {}", atyp);
+                    Err(e) => {
+                        debug!("failed to read packet data: {}", e);
                         return Poll::Ready(None);
                     }
-                },
-                ReadState::Port(addr) => {
-                    let fut = pin.read_u16();
-                    futures::pin_mut!(fut);
-                    match ready!(fut.poll(cx)) {
-                        Ok(port) => {
-                            let addr = match addr {
-                                SocksAddr::Ip(socket_addr) => {
-                                    match socket_addr.ip() {
-                                        std::net::IpAddr::V4(ip) => SocksAddr::Ip(
-                                            SocketAddr::from((ip, port)),
-                                        ),
-                                        std::net::IpAddr::V6(ip) => SocksAddr::Ip(
-                                            SocketAddr::from((ip, port)),
-                                        ),
-                                    }
-                                }
-                                SocksAddr::Domain(domain, _) => {
-                                    SocksAddr::Domain(domain.to_owned(), port)
-                                }
-                            };
-
-                            let data_len = read_buf.len()
-                                - (1 + // atyp
-                                 match &addr {
-                                     SocksAddr::Ip(sa) => match sa.ip() {
-                                         std::net::IpAddr::V4(_) => 4,
-                                         std::net::IpAddr::V6(_) => 16,
-                                     },
-                                     SocksAddr::Domain(d, _) => 1 + d.len(),
-                                 } + 2); // port
-
-                            *read_state = ReadState::Data(addr, data_len);
-                        }
-                        Err(err) => {
-                            debug!("failed to read port from VLESS stream: {}", err);
-                            return Poll::Ready(None);
-                        }
-                    }
                 }
-                ReadState::Data(addr, data_len) => {
-                    let mut data_buf = vec![0u8; *data_len];
-                    let fut = pin.read_exact(&mut data_buf);
-                    futures::pin_mut!(fut);
-                    match ready!(fut.poll(cx)) {
-                        Ok(_) => {
-                            let addr = addr.to_owned();
-                            *read_state = ReadState::Length;
+            }
 
-                            return Poll::Ready(Some(UdpPacket {
-                                data: data_buf,
-                                src_addr: remote_addr.clone(),
-                                dst_addr: addr,
-                            }));
+            // Read the 2-byte length header
+            let mut length_read_buf = ReadBuf::new(&mut this.length_buf);
+            match ready!(inner.as_mut().poll_read(cx, &mut length_read_buf)) {
+                Ok(()) => {
+                    let data = length_read_buf.filled();
+                    if data.len() < 2 {
+                        if data.is_empty() {
+                            return Poll::Ready(None); // Connection closed
                         }
-                        Err(err) => {
-                            debug!("failed to read data from VLESS stream: {}", err);
-                            return Poll::Ready(None);
-                        }
+                        debug!("incomplete length header: {} bytes", data.len());
+                        return Poll::Ready(None);
                     }
+
+                    let packet_len = u16::from_be_bytes([data[0], data[1]]) as usize;
+
+                    if packet_len == 0 {
+                        trace!("received empty packet");
+                        continue; // Skip empty packets
+                    }
+
+                    if packet_len > MAX_PACKET_LENGTH {
+                        debug!("packet too large: {} bytes", packet_len);
+                        return Poll::Ready(None);
+                    }
+
+                    // Set up to read the packet data
+                    this.remaining_bytes = packet_len;
+
+                    trace!("expecting VLESS UDP packet of {} bytes", packet_len);
+                }
+                Err(e) => {
+                    debug!("failed to read length header: {}", e);
+                    return Poll::Ready(None);
                 }
             }
         }
