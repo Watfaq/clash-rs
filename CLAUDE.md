@@ -8,11 +8,13 @@ ClashRS is a custom protocol, rule-based network proxy software written in Rust.
 
 ## Workspace Structure
 
-This is a Rust workspace with four main crates:
-- `clash/` - Main binary executable
-- `clash_lib/` - Core library containing all proxy logic
-- `clash_doc/` - Documentation generation
-- `clash_ffi/` - FFI bindings for mobile platforms
+This is a Rust workspace with six main crates:
+- `clash-bin/` - Main binary executable
+- `clash-lib/` - Core library containing all proxy logic
+- `clash-doc/` - Documentation generation
+- `clash-ffi/` - FFI bindings for mobile platforms
+- `clash-dns/` - DNS resolution components
+- `clash-netstack/` - Network stack implementation
 
 ## Common Commands
 
@@ -41,6 +43,20 @@ cargo doc -p clash_doc --no-deps  # Generate config docs only
 ./target/debug/clash-rs -c config.yaml  # Run with config file
 ./target/debug/clash-rs -t               # Test configuration
 ./target/debug/clash-rs -h               # Show help
+./target/debug/clash-rs -l logfile.log   # Additionally log to file
+```
+
+### Development Setup
+```bash
+# Install pre-commit hooks for code quality
+pipx install pre-commit
+pre-commit install
+
+# Install required dependencies
+# - cmake (3.29 or newer)
+# - libclang (LLVM)
+# - nasm (Windows only)
+# - protoc (for geodata proto generation)
 ```
 
 ## Architecture
@@ -70,6 +86,8 @@ cargo doc -p clash_doc --no-deps  # Generate config docs only
 - **Error handling**: Comprehensive error types with `thiserror`
 - **Feature flags**: Conditional compilation for different protocols
 - **Zero-copy**: Optimized data paths where possible
+- **Workspace structure**: Uses Rust 2024 edition with resolver = "3"
+- **Release optimization**: Configured for size optimization with LTO and strip
 
 ## Testing
 
