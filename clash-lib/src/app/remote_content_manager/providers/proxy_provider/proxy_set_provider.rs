@@ -22,7 +22,7 @@ use crate::{
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{
         AnyOutboundHandler, direct::DIRECT_OUTBOUND_HANDLER, hysteria2, reject,
-        socks, trojan, vmess,
+        socks, trojan, vless, vmess,
     },
 };
 use async_trait::async_trait;
@@ -142,6 +142,10 @@ impl ProxySetProvider {
                                 }
                                 OutboundProxyProtocol::Vmess(vm) => {
                                     let h: vmess::Handler = vm.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Vless(vl) => {
+                                    let h: vless::Handler = vl.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Hysteria2(h) => {

@@ -12,6 +12,7 @@ pub mod trojan;
 #[cfg(feature = "tuic")]
 pub mod tuic;
 mod utils;
+pub mod vless;
 pub mod vmess;
 #[cfg(feature = "wireguard")]
 pub mod wireguard;

@@ -91,7 +91,6 @@ impl SocksAddr {
         ))
     }
 
-    // TODO move to vmess
     pub fn write_buf<T: BufMut>(&self, buf: &mut T) {
         match self {
             Self::Ip(addr) => match addr {
@@ -111,29 +110,6 @@ impl SocksAddr {
                 buf.put_u8(domain.len() as u8);
                 buf.put_slice(domain.as_bytes());
                 buf.put_u16(*port);
-            }
-        }
-    }
-
-    pub fn write_to_buf_vmess<B: BufMut>(&self, buf: &mut B) {
-        match self {
-            Self::Ip(SocketAddr::V4(addr)) => {
-                buf.put_u16(addr.port());
-                buf.put_u8(0x01);
-                buf.put_slice(&addr.ip().octets());
-            }
-            Self::Ip(SocketAddr::V6(addr)) => {
-                buf.put_u16(addr.port());
-                buf.put_u8(0x03);
-                for seg in &addr.ip().segments() {
-                    buf.put_u16(*seg);
-                }
-            }
-            Self::Domain(domain_name, port) => {
-                buf.put_u16(*port);
-                buf.put_u8(0x02);
-                buf.put_u8(domain_name.len() as u8);
-                buf.put_slice(domain_name.as_bytes());
             }
         }
     }
