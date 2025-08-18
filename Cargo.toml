@@ -12,7 +12,7 @@ members = [
 
 
 [workspace.package]
-version = "0.8.2"
+version = "0.9.0"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
