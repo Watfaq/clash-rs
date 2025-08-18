@@ -121,9 +121,9 @@ tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # TUN
-tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
+tun-rs = { version = "=2.5.7", features = ["async", "async_framed"], optional = true }
 watfaq-netstack = { path = "../clash-netstack", optional = true }
-smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true }
+smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
 
 # WireGuard
 boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "1f57e8830ea2aea09c3b2f2d990bf3097ceb1bf5", package = "boring-noise", optional = true }
