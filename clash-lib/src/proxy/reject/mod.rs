@@ -14,17 +14,21 @@ use std::io;
 use super::{ConnectorType, DialWithConnector, OutboundType};
 
 #[derive(Serialize)]
-pub struct Handler;
+pub struct Handler {
+    pub name: String,
+}
 
 impl std::fmt::Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Reject").finish()
+        f.debug_struct("Reject").field("name", &self.name).finish()
     }
 }
 
 impl Handler {
-    pub fn new() -> Self {
-        Self
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+        }
     }
 }
 

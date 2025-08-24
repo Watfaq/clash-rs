@@ -13,6 +13,7 @@ use crate::{
             proxy::{OutboundProxy, PROXY_DIRECT, PROXY_REJECT},
             rule::RuleType,
         },
+        proxy::{OutboundDirect, OutboundReject},
     },
 };
 
@@ -84,11 +85,19 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             HashMap::from([
                 (
                     String::from(PROXY_DIRECT),
-                    OutboundProxy::ProxyServer(OutboundProxyProtocol::Direct),
+                    OutboundProxy::ProxyServer(OutboundProxyProtocol::Direct(
+                        OutboundDirect {
+                            name: PROXY_DIRECT.to_string(),
+                        },
+                    )),
                 ),
                 (
                     String::from(PROXY_REJECT),
-                    OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject),
+                    OutboundProxy::ProxyServer(OutboundProxyProtocol::Reject(
+                        OutboundReject {
+                            name: PROXY_REJECT.to_string(),
+                        },
+                    )),
                 ),
             ]),
             |mut rv, x| {

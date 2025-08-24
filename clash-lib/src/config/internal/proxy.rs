@@ -49,10 +49,10 @@ pub fn map_serde_error(
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum OutboundProxyProtocol {
-    #[serde(skip)]
-    Direct,
-    #[serde(skip)]
-    Reject,
+    #[serde(rename = "direct")]
+    Direct(OutboundDirect),
+    #[serde(rename = "reject")]
+    Reject(OutboundReject),
     #[cfg(feature = "shadowsocks")]
     #[serde(rename = "ss")]
     Ss(OutboundShadowsocks),
@@ -86,8 +86,8 @@ pub enum OutboundProxyProtocol {
 impl OutboundProxyProtocol {
     fn name(&self) -> &str {
         match &self {
-            OutboundProxyProtocol::Direct => PROXY_DIRECT,
-            OutboundProxyProtocol::Reject => PROXY_REJECT,
+            OutboundProxyProtocol::Direct(direct) => &direct.name,
+            OutboundProxyProtocol::Reject(reject) => &reject.name,
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.common_opts.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
@@ -133,8 +133,8 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
-            OutboundProxyProtocol::Direct => write!(f, "{PROXY_DIRECT}"),
-            OutboundProxyProtocol::Reject => write!(f, "{PROXY_REJECT}"),
+            OutboundProxyProtocol::Direct(_) => write!(f, "{PROXY_DIRECT}"),
+            OutboundProxyProtocol::Reject(_) => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
             OutboundProxyProtocol::Vmess(_) => write!(f, "Vmess"),
             OutboundProxyProtocol::Vless(_) => write!(f, "Vless"),
@@ -165,6 +165,18 @@ pub struct CommonConfigOptions {
     /// nothing
     #[serde(alias = "dialer-proxy")]
     pub connect_via: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundDirect {
+    pub name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundReject {
+    pub name: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]

@@ -34,7 +34,7 @@ use crate::{
     print_and_exit,
     proxy::{
         AnyOutboundHandler,
-        direct::DIRECT_OUTBOUND_HANDLER,
+        direct::{self},
         fallback,
         group::smart,
         hysteria2, loadbalance, reject, relay,
@@ -238,11 +238,11 @@ impl OutboundManager {
         outbounds
             .into_iter()
             .filter_map(|outbound| match outbound {
-                OutboundProxyProtocol::Direct => {
-                    Some(Arc::new(DIRECT_OUTBOUND_HANDLER.clone()) as _)
+                OutboundProxyProtocol::Direct(d) => {
+                    Some(Arc::new(direct::Handler::new(&d.name)) as _)
                 }
-                OutboundProxyProtocol::Reject => {
-                    Some(Arc::new(reject::Handler::new()) as _)
+                OutboundProxyProtocol::Reject(r) => {
+                    Some(Arc::new(reject::Handler::new(&r.name)) as _)
                 }
                 #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => {

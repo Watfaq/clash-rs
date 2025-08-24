@@ -24,20 +24,22 @@ use super::{
 use async_trait::async_trait;
 use futures::TryFutureExt;
 
-pub static DIRECT_OUTBOUND_HANDLER: Handler = Handler::new();
-
 #[derive(Clone)]
-pub struct Handler;
+pub struct Handler {
+    pub name: String,
+}
 
 impl Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Direct").finish()
+        f.debug_struct("Direct").field("name", &self.name).finish()
     }
 }
 
 impl Handler {
-    const fn new() -> Self {
-        Self
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+        }
     }
 }
 

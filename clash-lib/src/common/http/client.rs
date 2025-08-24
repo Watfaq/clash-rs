@@ -1,7 +1,8 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
-    proxy::{AnyOutboundHandler, direct::DIRECT_OUTBOUND_HANDLER},
+    config::proxy::PROXY_DIRECT,
+    proxy::{AnyOutboundHandler, direct},
     session::Session,
 };
 use futures::FutureExt;
@@ -105,7 +106,7 @@ impl HttpClient {
                     .as_ref()
                     .and_then(|outbounds| outbounds.get(x).cloned())
             })
-            .unwrap_or(Arc::new(DIRECT_OUTBOUND_HANDLER.clone()) as _);
+            .unwrap_or(Arc::new(direct::Handler::new(PROXY_DIRECT)) as _);
 
         trace!(outbound = %outbound.name(), "using outbound");
         let sess = Session {
