@@ -596,6 +596,9 @@ mod tests {
         socks-port: 7891
         bind-address: 127.0.0.1
         mmdb: "tests/data/Country.mmdb"
+        proxies:
+          - {name: DIRECT_alias, type: direct}
+          - {name: REJECT_alias, type: reject}
         "#;
 
         let handle = thread::spawn(|| {

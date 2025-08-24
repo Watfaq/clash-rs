@@ -988,7 +988,7 @@ mod tests {
             remote_content_manager,
         },
         config::internal::proxy::PROXY_DIRECT,
-        proxy::{direct::DIRECT_OUTBOUND_HANDLER, mocks::MockDummyOutboundHandler},
+        proxy::{direct, mocks::MockDummyOutboundHandler},
         tests::initialize,
     };
     use futures::TryFutureExt;
@@ -1006,7 +1006,7 @@ mod tests {
         let manager =
             remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
 
-        let mock_handler = Arc::new(DIRECT_OUTBOUND_HANDLER.clone());
+        let mock_handler = Arc::new(direct::Handler::new(PROXY_DIRECT));
 
         manager
             .url_test(
