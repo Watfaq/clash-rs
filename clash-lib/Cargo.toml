@@ -190,7 +190,7 @@ downcast-rs = "2.0"
 aws-lc-rs = { version = "1.13", default-features = false, optional = true, features = ["bindgen"] }
 
 [dev-dependencies]
-tempfile = "3.20"
+tempfile = "3.21"
 mockall = "0.13.1"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
