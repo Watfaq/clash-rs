@@ -40,4 +40,4 @@ env_logger = "0.11"
 netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "f434fef" }
 netstack-smoltcp = "0.2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
-tracing-subscriber = "0.3.18"
+tracing-subscriber = "0.3.20"
