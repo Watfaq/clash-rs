@@ -8,12 +8,13 @@ edition = { workspace = true }
 default = ["zero_copy", "aws-lc-rs"]
 
 aws-lc-rs = [
+    "dep:aws-lc-rs",
     "rustls/aws-lc-rs",
     "watfaq-rustls/aws-lc-rs",
     "quinn-proto/rustls-aws-lc-rs",
-    "dep:aws-lc-rs",
     "watfaq-dns/aws-lc-rs",
     "russh/aws-lc-rs",
+    "boringtun/aws-lc-rs"
 ]
 ring = [
     "rustls/ring",
@@ -21,6 +22,7 @@ ring = [
     "quinn-proto/ring",
     "watfaq-dns/ring",
     "russh/ring",
+    "boringtun/ring"
 ]
 
 internal = []
@@ -129,7 +131,7 @@ watfaq-netstack = { path = "../clash-netstack", optional = true }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
 
 # WireGuard
-boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e8a17ec", package = "boring-noise", optional = true }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e8a17ec", package = "boring-noise", optional = true, default-features = false }
 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

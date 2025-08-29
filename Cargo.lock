@@ -909,7 +909,7 @@ dependencies = [
  "arrayvec",
  "cc",
  "cfg-if",
- "constant_time_eq",
+ "constant_time_eq 0.3.1",
 ]
 
 [[package]]
@@ -1018,11 +1018,13 @@ dependencies = [
  "aws-lc-rs",
  "blake2",
  "chacha20poly1305",
+ "constant_time_eq 0.4.2",
  "hmac",
  "nix 0.30.1",
  "parking_lot",
  "portable-atomic",
  "rand_core 0.6.4",
+ "ring",
  "tracing",
  "x25519-dalek",
 ]
@@ -1555,6 +1557,12 @@ name = "constant_time_eq"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "convert_case"
@@ -8477,7 +8485,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f124352108f58ef88299e909f6e9470f1cdc8d2a1397963901b4a6366206bf72"
 dependencies = [
  "base32",
- "constant_time_eq",
+ "constant_time_eq 0.3.1",
  "hmac",
  "serde",
  "sha1",
