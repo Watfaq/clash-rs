@@ -13,12 +13,14 @@ aws-lc-rs = [
     "quinn-proto/rustls-aws-lc-rs",
     "dep:aws-lc-rs",
     "watfaq-dns/aws-lc-rs",
+    "russh/aws-lc-rs",
 ]
 ring = [
     "rustls/ring",
     "watfaq-rustls/ring",
     "quinn-proto/ring",
     "watfaq-dns/ring",
+    "russh/ring",
 ]
 
 internal = []
@@ -94,6 +96,7 @@ uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serd
 network-interface = { version = "2" }
 base64 = "0.22"
 zstd = "0.13.3"
+portable-atomic = { version = "1", features = ["serde"] }
 
 h2 = "0.4"
 prost = "0.14"
@@ -126,7 +129,7 @@ watfaq-netstack = { path = "../clash-netstack", optional = true }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
 
 # WireGuard
-boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "1f57e8830ea2aea09c3b2f2d990bf3097ceb1bf5", package = "boring-noise", optional = true }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e8a17ec", package = "boring-noise", optional = true }
 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -171,12 +174,12 @@ quinn-proto = { version = "0.11.12", default-features = false }
 blake2 = "0.10.6"
 digest = "0.10.7"
 
-console-subscriber = { version = "0.4" }
+console-subscriber = { git = "https://github.com/tokio-rs/console.git" }
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
 # ssh
-russh = { version = "0.54", features = ["async-trait"], optional = true }
+russh = { version = "0.54", default-features = false, features = ["async-trait"], optional = true }
 dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
@@ -187,7 +190,7 @@ shadowquic = { version = "^0.2", optional = true, git = "https://github.com/spon
 downcast-rs = "2.0"
 
 # workaround for https://github.com/cross-rs/cross/issues/16
-aws-lc-rs = { version = "1.13", default-features = false, optional = true, features = ["bindgen"] }
+aws-lc-rs = { version = "1", default-features = false, optional = true, features = ["bindgen"] }
 
 [dev-dependencies]
 tempfile = "3.21"
@@ -199,7 +202,7 @@ serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
-httpmock = "0.7.0"
+httpmock = "0.7.0" # TODO replace with wiremock
 
 [build-dependencies]
 prost-build = "0.14"

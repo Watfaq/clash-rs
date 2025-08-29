@@ -2,12 +2,15 @@ use super::dns::ThreadSafeDNSResolver;
 use crate::{
     app::net::DEFAULT_OUTBOUND_INTERFACE,
     common::{
-        errors::new_io_error, timed_future::TimedFuture, tls::GLOBAL_ROOT_STORE,
+        errors::{IntoIoResultExt as _, new_io_error},
+        timed_future::TimedFuture,
+        tls::GLOBAL_ROOT_STORE,
         utils::serialize_duration,
     },
     proxy::AnyOutboundHandler,
     session::Session,
 };
+use anyhow::Context;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -724,7 +727,9 @@ impl ProxyManager {
                 timeout,
                 TimedFuture::new(outbound.connect_stream(&sess, dns_resolver)),
             )
-            .await?;
+            .await
+            .context("URL test timeout")
+            .into_io()?;
             let stream = stream?;
 
             let req = Request::get(url)

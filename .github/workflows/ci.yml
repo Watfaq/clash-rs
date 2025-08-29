@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 env:
   PACKAGE: "clash"
   REGISTRY: "ghcr.io"
@@ -65,12 +69,6 @@ jobs:
             release-name: x86_64-unknown-linux-gnu-static-crt
             extra-args: -F "plus"
             rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
-          - os: ubuntu-latest
-            target: i686-unknown-linux-gnu
-            release-name: i686-unknown-linux-gnu-static-crt
-            tool: cross
-            extra-args: -F "plus"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
           # Linux arm gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
@@ -95,24 +93,22 @@ jobs:
             target: armv7-unknown-linux-musleabihf
             tool: cross
             extra-args: -F "plus"
-          # Linux arm gnu static-crt
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            release-name: aarch64-unknown-linux-gnu-static-crt
-            tool: cross
-            extra-args: -F "plus"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
-          - os: ubuntu-latest
-            target: armv7-unknown-linux-gnueabi
-            release-name: armv7-unknown-linux-gnueabi-static-crt
-            tool: cross
-            extra-args: -F "plus"
-            rustflags: "-Ctarget-feature=+crt-static --cfg tokio_unstable"
-          # Linux RISC-V gnu
+          # Linux RISC-V
           - os: ubuntu-latest
             target: riscv64gc-unknown-linux-gnu
             tool: cross
-            extra-args: -F "shadowsocks, tuic"
+            extra-args: -F "standard"
+          # Linux MIPS
+          - target: mips-unknown-linux-musl
+            tool: cross
+            extra-args: --no-default-features -F "standard,ring" -Z build-std=std,panic_abort
+            build-std: true
+            no-test: true
+          - target: mipsel-unknown-linux-musl
+            tool: cross
+            extra-args: --no-default-features -F "standard,ring" -Z build-std=std,panic_abort
+            build-std: true
+            no-test: true
           # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -141,18 +137,6 @@ jobs:
             extra-args: -F "plus"
             rustflags: >-
               -Ctarget-feature=+crt-static
-              -Clink-args=/NODEFAULTLIB:libvcruntimed.lib
-              -Clink-args=/NODEFAULTLIB:vcruntime.lib
-              -Clink-args=/NODEFAULTLIB:vcruntimed.lib
-              -Clink-args=/NODEFAULTLIB:libcmtd.lib
-              -Clink-args=/NODEFAULTLIB:msvcrt.lib
-              -Clink-args=/NODEFAULTLIB:msvcrtd.lib
-              -Clink-args=/NODEFAULTLIB:libucrt.lib
-              -Clink-args=/NODEFAULTLIB:libucrtd.lib
-
-              -Clink-args=/DEFAULTLIB:libcmt.lib
-              -Clink-args=/DEFAULTLIB:libvcruntime.lib
-              -Clink-args=/DEFAULTLIB:ucrt.lib
               --cfg tokio_unstable
           - os: windows-latest
             target: aarch64-pc-windows-msvc
@@ -198,7 +182,6 @@ jobs:
             extra-args: --no-default-features -F "android"
             no-release: true
             no-test: true
-          # Linux mips: tier-3, pity
           # Windows gnu: tokio dont work
 
     steps:
@@ -225,38 +208,25 @@ jobs:
         with:
           key: ${{ matrix.os }}
           read-only: ${{ matrix.target != 'x86_64-unknown-linux-gnu' }}
+
       - uses: ilammy/setup-nasm@v1
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain || env.RUST_TOOLCHAIN || 'nightly' }}
-          targets: ${{ matrix.target }}
-          components: ${{ matrix.components || 'rustfmt, clippy' }}
-
-      - name: Install rust targets & cross
-        if: matrix.tool == 'cross'
-        run: |
-          rustup target add ${TARGET}
-          rm -f ~/.cargo/bin/cross*
-          cargo install cross --git https://github.com/cross-rs/cross
-        env:
-          TARGET: ${{ matrix.target }}
+          targets: ${{ matrix.build-std && 'x86_64-unknown-linux-gnu' || matrix.target }}
+          components: ${{ matrix.components || matrix.build-std && 'rustfmt,clippy,rust-src' || 'rustfmt,clippy' }}
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set environment variables (non Windows)
-        if: matrix.os != 'windows-latest'
+
+      - name: Set environment variables
         run: |
           echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
-
-      - name: Set environment variables (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          echo "CLASH_GIT_REF=$env:GITHUB_REF" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "CLASH_GIT_SHA=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Cargo fmt
         uses: clechasseur/rs-cargo@v3
