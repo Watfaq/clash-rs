@@ -1,13 +1,11 @@
 use std::{
     collections::HashMap,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, atomic::Ordering},
 };
 
 use chrono::Utc;
 use memory_stats::memory_stats;
+use portable_atomic::AtomicU64;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock, oneshot::Sender};
 

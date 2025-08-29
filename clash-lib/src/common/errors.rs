@@ -21,3 +21,15 @@ macro_rules! print_and_exit {
         std::process::exit(1);
     }};
 }
+
+pub trait IntoIoResultExt<T> {
+    fn into_io(self) -> std::io::Result<T>;
+}
+impl<T: Send + Sync> IntoIoResultExt<T> for anyhow::Result<T> {
+    fn into_io(self) -> std::io::Result<T> {
+        match self {
+            Ok(v) => Ok(v),
+            Err(v) => Err(std::io::Error::other(v)),
+        }
+    }
+}

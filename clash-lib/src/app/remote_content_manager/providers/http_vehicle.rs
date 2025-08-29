@@ -82,20 +82,27 @@ mod tests {
         app::dns::{EnhancedResolver, ThreadSafeDNSResolver},
         tests::initialize,
     };
+    use httpmock::{Method::GET, MockServer};
     use hyper::Uri;
     use std::{str, sync::Arc};
 
     #[tokio::test]
     async fn test_http_vehicle() {
         initialize();
-        let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
-            .parse::<Uri>()
-            .unwrap();
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET).path("/test_http_vehicle");
+            then.status(200)
+                .header("content-type", "text/html; charset=UTF-8")
+                .body("HTTPBIN is awesome");
+        });
+        let u = server.url("/test_http_vehicle").parse::<Uri>().unwrap();
         let p = std::env::temp_dir().join("test_http_vehicle");
         let r = Arc::new(EnhancedResolver::new_default().await);
         let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
 
         let data = v.read().await.unwrap();
+        mock.assert();
         assert_eq!(str::from_utf8(&data).unwrap(), "HTTPBIN is awesome");
     }
 }
