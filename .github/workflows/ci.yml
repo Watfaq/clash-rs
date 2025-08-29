@@ -217,6 +217,12 @@ jobs:
           targets: ${{ matrix.build-std && 'x86_64-unknown-linux-gnu' || matrix.target }}
           components: ${{ matrix.components || matrix.build-std && 'rustfmt,clippy,rust-src' || 'rustfmt,clippy' }}
 
+      - name: Install cross-rs/cross
+        if: matrix.tool == 'cross'
+        run: |
+          rm -f ~/.cargo/bin/cross*
+          cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
