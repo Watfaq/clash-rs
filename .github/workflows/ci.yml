@@ -235,7 +235,7 @@ jobs:
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
 
       - name: Cargo fmt
-        uses: clechasseur/rs-cargo@v3
+        uses: clechasseur/rs-cargo@v4
         with:
           command: fmt
           args: --all -- --check
@@ -243,7 +243,7 @@ jobs:
           CLASH_DOCKER_TEST: "true"
 
       - name: Cargo clippy
-        uses: clechasseur/rs-cargo@v3
+        uses: clechasseur/rs-cargo@v4
         with:
           tool: ${{ matrix.tool }}
           command: clippy
@@ -252,7 +252,7 @@ jobs:
           CLASH_DOCKER_TEST: "true"
 
       - name: Cargo test
-        uses: clechasseur/rs-cargo@v3
+        uses: clechasseur/rs-cargo@v4
         if: ${{ !matrix.no-test }}
         with:
           tool: ${{ matrix.tool }}
@@ -264,7 +264,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
 
       - name: Cargo build
-        uses: clechasseur/rs-cargo@v3
+        uses: clechasseur/rs-cargo@v4
         with:
           tool: ${{ matrix.tool }}
           command: build

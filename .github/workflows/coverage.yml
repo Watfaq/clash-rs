@@ -43,7 +43,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cargo test and coverage
-        uses: clechasseur/rs-cargo@v3
+        uses: clechasseur/rs-cargo@v4
         with:
           tool: cross
           command: 'llvm-cov'
