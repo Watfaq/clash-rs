@@ -159,8 +159,8 @@ maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.33", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.33", optional = true, default-features = false }
+arti-client = { version = "0.34", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.34", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.4.6", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
@@ -172,7 +172,7 @@ quinn = { version = "0.11", default-features = false, features = ["futures-io", 
 # hysteria2
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
-quinn-proto = { version = "0.11.12", default-features = false }
+quinn-proto = { version = "0.11.13", default-features = false }
 blake2 = "0.10.6"
 digest = "0.10.7"
 
