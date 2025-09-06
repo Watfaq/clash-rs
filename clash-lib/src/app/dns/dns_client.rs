@@ -1,26 +1,4 @@
 use super::{ClashResolver, Client, runtime::DnsRuntimeProvider};
-use crate::{
-    Error,
-    app::net::{OutboundInterface, TUN_SOMARK},
-    common::tls::{self, GLOBAL_ROOT_STORE},
-    dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
-    proxy::utils::new_tcp_stream,
-};
-use anyhow::anyhow;
-use async_trait::async_trait;
-use futures::{TryFutureExt, future::BoxFuture};
-use hickory_client::client;
-use hickory_proto::{
-    DnsHandle, ProtoError,
-    h2::HttpsClientStreamBuilder,
-    op::Message,
-    runtime::iocompat::AsyncIoTokioAsStd,
-    rustls::tls_client_stream::tls_client_connect_with_future,
-    tcp::TcpClientStream,
-    udp::UdpClientStream,
-    xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
-};
-use rustls::ClientConfig;
 use std::{
     fmt::{Debug, Display, Formatter},
     net,
@@ -28,8 +6,35 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{net::TcpStream as TokioTcpStream, sync::RwLock, task::JoinHandle};
+
+use async_trait::async_trait;
+
+use hickory_client::client;
+use hickory_proto::{
+    ProtoError, rustls::tls_client_connect, tcp::TcpClientStream,
+    udp::UdpClientStream,
+};
+use rustls::ClientConfig;
+use tokio::{sync::RwLock, task::JoinHandle};
 use tracing::{info, instrument, trace, warn};
+
+use crate::{
+    Error,
+    app::{
+        dns::{self},
+        net::{OutboundInterface, TUN_SOMARK},
+    },
+    common::tls::{self, GLOBAL_ROOT_STORE},
+    dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
+    proxy::OutboundHandler,
+};
+use anyhow::anyhow;
+use hickory_proto::{
+    DnsHandle,
+    h2::HttpsClientStreamBuilder,
+    op::Message,
+    xfer::{DnsRequest, DnsRequestOptions, FirstAnswer},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DNSNetMode {
@@ -74,45 +79,68 @@ pub struct Opts {
     pub port: u16,
     pub net: DNSNetMode,
     pub iface: Option<OutboundInterface>,
+    pub proxy: Arc<dyn OutboundHandler>,
 }
 
 enum DnsConfig {
-    Udp(net::SocketAddr, Option<OutboundInterface>),
-    Tcp(net::SocketAddr, Option<OutboundInterface>),
-    Tls(net::SocketAddr, String, Option<OutboundInterface>),
-    Https(net::SocketAddr, String, Option<OutboundInterface>),
+    Udp(
+        net::SocketAddr,
+        Option<OutboundInterface>,
+        Arc<dyn OutboundHandler>,
+    ),
+    Tcp(
+        net::SocketAddr,
+        Option<OutboundInterface>,
+        Arc<dyn OutboundHandler>,
+    ),
+    Tls(
+        net::SocketAddr,
+        String,
+        Option<OutboundInterface>,
+        Arc<dyn OutboundHandler>,
+    ),
+    Https(
+        net::SocketAddr,
+        String,
+        Option<OutboundInterface>,
+        Arc<dyn OutboundHandler>,
+    ),
 }
 
 impl Display for DnsConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
-            DnsConfig::Udp(addr, iface) => {
+            DnsConfig::Udp(addr, iface, proxy) => {
                 write!(f, "UDP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
                 }
+                write!(f, "via proxy: {}", proxy.name())?;
                 Ok(())
             }
-            DnsConfig::Tcp(addr, iface) => {
+            DnsConfig::Tcp(addr, iface, proxy) => {
                 write!(f, "TCP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
                 }
+                write!(f, "via proxy: {}", proxy.name())?;
                 Ok(())
             }
-            DnsConfig::Tls(addr, host, iface) => {
+            DnsConfig::Tls(addr, host, iface, proxy) => {
                 write!(f, "TLS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
                 }
-                write!(f, "host: {host}")
+                write!(f, "host: {host}")?;
+                write!(f, "via proxy: {}", proxy.name())
             }
-            DnsConfig::Https(addr, host, iface) => {
+            DnsConfig::Https(addr, host, iface, proxy) => {
                 write!(f, "HTTPS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
                 }
-                write!(f, "host: {host}")
+                write!(f, "host: {host}")?;
+                write!(f, "via proxy: {}", proxy.name())
             }
         }
     }
@@ -128,6 +156,7 @@ pub struct DnsClient {
     inner: Arc<RwLock<Inner>>,
 
     cfg: DnsConfig,
+    proxy: Arc<dyn OutboundHandler>,
 
     // debug purpose
     host: String,
@@ -171,6 +200,7 @@ impl DnsClient {
                         let cfg = DnsConfig::Udp(
                             net::SocketAddr::new(ip, opts.port),
                             opts.iface.clone(),
+                            opts.proxy.clone(),
                         );
 
                         Ok(Arc::new(Self {
@@ -180,6 +210,7 @@ impl DnsClient {
                             })),
 
                             cfg,
+                            proxy: opts.proxy,
 
                             host: opts.host,
                             port: opts.port,
@@ -191,6 +222,7 @@ impl DnsClient {
                         let cfg = DnsConfig::Tcp(
                             net::SocketAddr::new(ip, opts.port),
                             opts.iface.clone(),
+                            opts.proxy.clone(),
                         );
 
                         Ok(Arc::new(Self {
@@ -200,7 +232,7 @@ impl DnsClient {
                             })),
 
                             cfg,
-
+                            proxy: opts.proxy,
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
@@ -212,6 +244,7 @@ impl DnsClient {
                             net::SocketAddr::new(ip, opts.port),
                             opts.host.clone(),
                             opts.iface.clone(),
+                            opts.proxy.clone(),
                         );
 
                         Ok(Arc::new(Self {
@@ -221,7 +254,7 @@ impl DnsClient {
                             })),
 
                             cfg,
-
+                            proxy: opts.proxy,
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
@@ -233,6 +266,7 @@ impl DnsClient {
                             net::SocketAddr::new(ip, opts.port),
                             opts.host.clone(),
                             opts.iface.clone(),
+                            opts.proxy.clone(),
                         );
 
                         Ok(Arc::new(Self {
@@ -242,6 +276,7 @@ impl DnsClient {
                             })),
 
                             cfg,
+                            proxy: opts.proxy,
                             host: opts.host,
                             port: opts.port,
                             net: opts.net,
@@ -262,6 +297,7 @@ impl Debug for DnsClient {
             .field("port", &self.port)
             .field("net", &self.net)
             .field("iface", &self.iface)
+            .field("proxy", &self.proxy.name())
             .finish()
     }
 }
@@ -330,11 +366,17 @@ impl Client for DnsClient {
 async fn dns_stream_builder(
     cfg: &DnsConfig,
 ) -> Result<(client::Client, JoinHandle<Result<(), ProtoError>>), Error> {
+    let dns_resolver = Arc::new(dns::SystemResolver::new(false)?);
     match cfg {
-        DnsConfig::Udp(addr, iface) => {
+        DnsConfig::Udp(addr, iface, proxy) => {
             let stream = UdpClientStream::builder(
                 *addr,
-                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+                DnsRuntimeProvider::new(
+                    proxy.clone(),
+                    dns_resolver,
+                    iface.clone(),
+                    *TUN_SOMARK.read().await,
+                ),
             )
             .with_timeout(Some(Duration::from_secs(5)))
             .build();
@@ -344,12 +386,17 @@ async fn dns_stream_builder(
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Tcp(addr, iface) => {
+        DnsConfig::Tcp(addr, iface, proxy) => {
             let (stream, sender) = TcpClientStream::new(
                 *addr,
                 None,
                 Some(Duration::from_secs(5)),
-                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+                DnsRuntimeProvider::new(
+                    proxy.clone(),
+                    dns_resolver,
+                    iface.clone(),
+                    *TUN_SOMARK.read().await,
+                ),
             );
 
             client::Client::new(stream, sender, None)
@@ -357,7 +404,7 @@ async fn dns_stream_builder(
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Tls(addr, host, iface) => {
+        DnsConfig::Tls(addr, host, iface, proxy) => {
             let mut tls_config = ClientConfig::builder()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
@@ -366,25 +413,17 @@ async fn dns_stream_builder(
             let addr = *addr;
             let host = host.clone();
             let iface = iface.clone();
-            let fut = async move {
-                new_tcp_stream(
-                    addr,
-                    iface.as_ref(),
-                    #[cfg(target_os = "linux")]
+            let (stream, sender) = tls_client_connect(
+                addr,
+                host,
+                Arc::new(tls_config),
+                DnsRuntimeProvider::new(
+                    proxy.clone(),
+                    dns_resolver,
+                    iface.clone(),
                     *TUN_SOMARK.read().await,
-                )
-                .map_ok(AsyncIoTokioAsStd)
-                .await
-            };
-
-            let (stream, sender) =
-                tls_client_connect_with_future::<
-                    AsyncIoTokioAsStd<TokioTcpStream>,
-                    BoxFuture<
-                        'static,
-                        std::io::Result<AsyncIoTokioAsStd<TokioTcpStream>>,
-                    >,
-                >(Box::pin(fut), addr, host, Arc::new(tls_config));
+                ),
+            );
 
             client::Client::with_timeout(
                 stream,
@@ -396,7 +435,7 @@ async fn dns_stream_builder(
             .map(|(x, y)| (x, tokio::spawn(y)))
             .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Https(addr, host, iface) => {
+        DnsConfig::Https(addr, host, iface, proxy) => {
             let mut tls_config = ClientConfig::builder()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
@@ -410,7 +449,12 @@ async fn dns_stream_builder(
 
             let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),
-                DnsRuntimeProvider::new(iface.clone(), *TUN_SOMARK.read().await),
+                DnsRuntimeProvider::new(
+                    proxy.clone(),
+                    dns_resolver,
+                    iface.clone(),
+                    *TUN_SOMARK.read().await,
+                ),
             )
             .build(*addr, host.to_owned(), "/dns-query".to_string());
 

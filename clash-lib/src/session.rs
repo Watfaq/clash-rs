@@ -129,9 +129,15 @@ impl SocksAddr {
     }
 
     pub fn must_into_socket_addr(self) -> SocketAddr {
+        let self_clone = self.clone();
+        self.try_into_socket_addr()
+            .unwrap_or_else(|| panic!("not a socket address: {self_clone:?}"))
+    }
+
+    pub fn try_into_socket_addr(self) -> Option<SocketAddr> {
         match self {
-            SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(..) => panic!("not a socket address {self:?}"),
+            SocksAddr::Ip(addr) => Some(addr),
+            SocksAddr::Domain(..) => None,
         }
     }
 

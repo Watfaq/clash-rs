@@ -19,6 +19,7 @@ use futures::{FutureExt, TryFutureExt};
 use hickory_proto::{op, rr};
 use rand::seq::IndexedRandom;
 use std::{
+    collections::HashMap,
     net,
     sync::{
         Arc,
@@ -63,8 +64,10 @@ impl EnhancedResolver {
                     net: DNSNetMode::Udp,
                     address: "8.8.8.8:53".to_string(),
                     interface: None,
+                    proxy: None,
                 }],
                 None,
+                HashMap::new(),
             )
             .await,
             fallback: None,
@@ -83,11 +86,17 @@ impl EnhancedResolver {
         cfg: Config,
         store: ThreadSafeCacheFile,
         mmdb: Option<MmdbLookup>,
+        outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
     ) -> Self {
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
-            main: make_clients(cfg.default_nameserver.clone(), None).await,
+            main: make_clients(
+                cfg.default_nameserver.clone(),
+                None,
+                outbounds.clone(),
+            )
+            .await,
             fallback: None,
             fallback_domain_filters: None,
             fallback_ip_filters: None,
@@ -104,6 +113,7 @@ impl EnhancedResolver {
             main: make_clients(
                 cfg.nameserver.clone(),
                 Some(default_resolver.clone()),
+                outbounds.clone(),
             )
             .await,
             hosts: cfg.hosts,
@@ -112,6 +122,7 @@ impl EnhancedResolver {
                     make_clients(
                         cfg.fallback.clone(),
                         Some(default_resolver.clone()),
+                        outbounds.clone(),
                     )
                     .await,
                 )
@@ -170,6 +181,7 @@ impl EnhancedResolver {
                             make_clients(
                                 vec![ns.to_owned()],
                                 Some(default_resolver.clone()),
+                                outbounds.clone(),
                             )
                             .await,
                         ),
@@ -655,11 +667,14 @@ mod tests {
     };
     use std::sync::Arc;
 
-    use crate::app::dns::{
-        ThreadSafeDNSClient,
-        dns_client::{DNSNetMode, DnsClient, Opts},
-        resolver::enhanced::EnhancedResolver,
-        runtime::DnsRuntimeProvider,
+    use crate::{
+        app::dns::{
+            ThreadSafeDNSClient,
+            dns_client::{DNSNetMode, DnsClient, Opts},
+            resolver::enhanced::EnhancedResolver,
+            runtime::DnsRuntimeProvider,
+        },
+        proxy,
     };
 
     #[tokio::test]
@@ -680,7 +695,7 @@ mod tests {
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
-            DnsRuntimeProvider::new(None, None),
+            DnsRuntimeProvider::new_direct(None, None),
         )
         .build();
         let (client, bg) = client::Client::connect(stream).await.unwrap();
@@ -702,6 +717,7 @@ mod tests {
             port: 53,
             net: DNSNetMode::Udp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -718,6 +734,7 @@ mod tests {
             port: 53,
             net: DNSNetMode::Tcp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -734,6 +751,7 @@ mod tests {
             port: 853,
             net: DNSNetMode::DoT,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -752,6 +770,7 @@ mod tests {
             port: 443,
             net: DNSNetMode::DoH,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -768,6 +787,7 @@ mod tests {
             port: 0,
             net: DNSNetMode::Dhcp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -807,5 +827,8 @@ mod tests {
         assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());
         assert!(ips[0].is_ipv6());
+    }
+    fn get_default_outbound() -> Arc<dyn crate::proxy::OutboundHandler> {
+        Arc::new(proxy::direct::Handler::new("default_direct"))
     }
 }

@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use std::{
+    collections::HashMap,
     env,
     fmt::{Debug, Formatter},
     io,
@@ -97,9 +98,11 @@ impl DhcpClient {
                         net: DNSNetMode::Udp,
                         address: format!("{s}:53"),
                         interface: None,
+                        proxy: None,
                     })
                     .collect(),
                 None,
+                HashMap::new(),
             )
             .await;
         }
