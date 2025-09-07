@@ -1,5 +1,5 @@
 use crate::{Error, common::mmdb::DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL};
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tracing::debug;
 
 use crate::{
@@ -59,7 +59,13 @@ pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     );
 
     let dns_resolver = Arc::new(
-        dns::EnhancedResolver::new(config.dns, cache_store, Some(mmdb)).await,
+        dns::EnhancedResolver::new(
+            config.dns,
+            cache_store,
+            Some(mmdb),
+            HashMap::new(),
+        )
+        .await,
     );
 
     Ok(dns_resolver)

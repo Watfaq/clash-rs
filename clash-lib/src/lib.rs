@@ -19,6 +19,7 @@ use crate::{
         def,
         internal::{InternalConfig, proxy::OutboundProxy},
     },
+    proxy::OutboundHandler,
 };
 use app::{
     dispatcher::StatisticsManager,
@@ -452,10 +453,16 @@ async fn create_components(
     // Clone the dns.listen for the DNS Server later before we consume the config
     // TODO: we should separate the DNS resolver and DNS server config here
     let dns_listen = config.dns.listen.clone();
+    let plain_outbounds_map = HashMap::<String, Arc<dyn OutboundHandler>>::from_iter(
+        plain_outbounds
+            .iter()
+            .map(|x| (x.name().to_string(), x.clone())),
+    );
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
         country_mmdb.clone(),
+        plain_outbounds_map,
     )
     .await;
 
