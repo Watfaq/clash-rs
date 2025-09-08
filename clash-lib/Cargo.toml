@@ -213,13 +213,13 @@ prost-build = "0.14"
 unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "847c80b519f0fd8cff5c887ae708429897d08671" }
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "3.3.0"
+security-framework = "3.4.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
 tracing-oslog = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",
