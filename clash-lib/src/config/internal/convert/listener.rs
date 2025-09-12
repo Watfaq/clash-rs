@@ -6,12 +6,15 @@ use tracing::warn;
 use crate::{
     Error,
     config::{
+        config::BindAddress,
         def::{self, Port},
         listener::{CommonInboundOpts, InboundOpts},
         proxy::map_serde_error,
     },
 };
 
+/// combines the top-level config and config.listeners to a set of inbound
+/// options.
 pub(super) fn convert(
     raw: Option<Vec<HashMap<String, Value>>>,
     c: &def::Config,
@@ -21,8 +24,13 @@ pub(super) fn convert(
     let mixed_port = c.mixed_port;
     #[cfg(feature = "tproxy")]
     let tproxy_port = c.tproxy_port;
+    #[cfg(feature = "redir")]
     let redir_port = c.redir_port;
-    let bind_address = c.bind_address;
+    let bind_address = if c.bind_address == BindAddress::default() && c.ipv6 {
+        BindAddress::dual_stack()
+    } else {
+        c.bind_address
+    };
 
     let inbounds = raw
         .unwrap_or_default()
@@ -47,7 +55,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: http_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
         })
     {
@@ -60,7 +68,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: socks_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })
@@ -74,13 +82,14 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: mixed_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })
     {
         warn!("Duplicate MIXED inbound listener found: {}", mixed_port);
     }
+    #[cfg(feature = "redir")]
     if let Some(Port(redir_port)) = redir_port
         && !all_inbounds.insert(InboundOpts::Redir {
             common_opts: CommonInboundOpts {
@@ -88,7 +97,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: redir_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
         })
     {
@@ -102,7 +111,7 @@ pub(super) fn convert(
                 listen: bind_address,
                 port: tproxy_port,
                 allow_lan: c.allow_lan.unwrap_or_default(),
-                fw_mark: c.routing_mask,
+                fw_mark: c.routing_mark,
             },
             udp: true,
         })

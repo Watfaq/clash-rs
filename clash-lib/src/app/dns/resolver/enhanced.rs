@@ -1,19 +1,3 @@
-use async_trait::async_trait;
-use futures::{FutureExt, TryFutureExt};
-use rand::seq::IndexedRandom;
-use std::{
-    net,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering::Relaxed},
-    },
-    time::{Duration, Instant},
-};
-use tokio::sync::RwLock;
-use tracing::{debug, error, instrument, trace, warn};
-
-use hickory_proto::{op, rr};
-
 use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
@@ -29,6 +13,22 @@ use crate::{
         helper::make_clients,
     },
 };
+use anyhow::anyhow;
+use async_trait::async_trait;
+use futures::{FutureExt, TryFutureExt};
+use hickory_proto::{op, rr};
+use rand::seq::IndexedRandom;
+use std::{
+    collections::HashMap,
+    net,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering::Relaxed},
+    },
+    time::{Duration, Instant},
+};
+use tokio::sync::RwLock;
+use tracing::{debug, error, instrument, trace, warn};
 
 pub struct EnhancedResolver {
     ipv6: AtomicBool,
@@ -64,8 +64,10 @@ impl EnhancedResolver {
                     net: DNSNetMode::Udp,
                     address: "8.8.8.8:53".to_string(),
                     interface: None,
+                    proxy: None,
                 }],
                 None,
+                HashMap::new(),
             )
             .await,
             fallback: None,
@@ -83,12 +85,18 @@ impl EnhancedResolver {
     pub async fn new(
         cfg: Config,
         store: ThreadSafeCacheFile,
-        mmdb: MmdbLookup,
+        mmdb: Option<MmdbLookup>,
+        outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
     ) -> Self {
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
-            main: make_clients(cfg.default_nameserver.clone(), None).await,
+            main: make_clients(
+                cfg.default_nameserver.clone(),
+                None,
+                outbounds.clone(),
+            )
+            .await,
             fallback: None,
             fallback_domain_filters: None,
             fallback_ip_filters: None,
@@ -105,6 +113,7 @@ impl EnhancedResolver {
             main: make_clients(
                 cfg.nameserver.clone(),
                 Some(default_resolver.clone()),
+                outbounds.clone(),
             )
             .await,
             hosts: cfg.hosts,
@@ -113,6 +122,7 @@ impl EnhancedResolver {
                     make_clients(
                         cfg.fallback.clone(),
                         Some(default_resolver.clone()),
+                        outbounds.clone(),
                     )
                     .await,
                 )
@@ -171,6 +181,7 @@ impl EnhancedResolver {
                             make_clients(
                                 vec![ns.to_owned()],
                                 Some(default_resolver.clone()),
+                                outbounds.clone(),
                             )
                             .await,
                         ),
@@ -223,6 +234,7 @@ impl EnhancedResolver {
         }
     }
 
+    #[instrument(skip(message), level = "trace")]
     pub async fn batch_exchange(
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
@@ -233,7 +245,10 @@ impl EnhancedResolver {
                 async move {
                     c.exchange(message)
                         .inspect_err(|x| {
-                            error!("DNS client {} resolve error: {:?}", c.id(), x)
+                            error!(
+                                client = c.id(),
+                                err = ?x,
+                                "resolve error");
                         })
                         .await
                 }
@@ -281,16 +296,22 @@ impl EnhancedResolver {
         }
     }
 
+    #[instrument(skip_all, level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         if let Some(q) = message.query() {
+            trace!(q = q.to_string(), "start");
             if let Some(lru) = &self.lru_cache
                 && let Some(cached) = lru.read().await.get(q, Instant::now())
             {
                 if !message.recursion_desired() {
-                    trace!("cache hit for DNS query {}", q.to_string());
+                    trace!(q = q.to_string(), "cache hit, RA not desired");
                     if let Ok(cached) = cached.inspect_err(|x| {
                         warn!("failed to get cached message: {}", x);
                     }) {
+                        trace!(
+                            q = q.to_string(),
+                            "cache hit for DNS query, returning cached response",
+                        );
                         let mut reply =
                             build_dns_response_message(message, true, false);
                         reply.add_answers(cached.records().iter().cloned());
@@ -298,12 +319,21 @@ impl EnhancedResolver {
                     }
                 } else {
                     trace!(
-                        "cache hit for DNS query {} but RA desired, bypassing cache",
-                        q.to_string()
+                        q = q.to_string(),
+                        "cache hit, RA desired, bypassing cache",
                     );
                 }
             }
-            self.exchange_no_cache(message).await
+            trace!(q = q.to_string(), "querying resolver");
+            let res = self.exchange_no_cache(message).await.map(|mut r| {
+                if let Some(edns) = r.extensions_mut() {
+                    // Remove only padding options, keep everything else
+                    edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
+                }
+                r
+            });
+            trace!(q = q.to_string(), "query completed");
+            res
         } else {
             Err(anyhow!("invalid query"))
         }
@@ -354,6 +384,7 @@ impl EnhancedResolver {
         None
     }
 
+    #[instrument(skip_all, level = "trace")]
     async fn ip_exchange(
         &self,
         message: &op::Message,
@@ -363,7 +394,6 @@ impl EnhancedResolver {
         }
 
         if self.should_only_query_fallback(message) {
-            // self.fallback guaranteed in the above check
             return EnhancedResolver::batch_exchange(
                 self.fallback.as_ref().unwrap(),
                 message,
@@ -384,11 +414,8 @@ impl EnhancedResolver {
 
         if let Ok(main_result) = main_query.await {
             let ip_list = EnhancedResolver::ip_list_of_message(&main_result);
-            if !ip_list.is_empty() {
-                // TODO: only check 1st?
-                if !self.should_ip_fallback(&ip_list[0]) {
-                    return Ok(main_result);
-                }
+            if !ip_list.is_empty() && !self.should_ip_fallback(&ip_list[0]) {
+                return Ok(main_result);
             }
         }
 
@@ -457,7 +484,7 @@ impl EnhancedResolver {
 
 #[async_trait]
 impl ClashResolver for EnhancedResolver {
-    #[instrument(skip(self))]
+    #[instrument(skip(self), level = "trace")]
     async fn resolve(
         &self,
         host: &str,
@@ -487,6 +514,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self), level = "trace")]
     async fn resolve_v4(
         &self,
         host: &str,
@@ -527,6 +555,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self), level = "trace")]
     async fn resolve_v6(
         &self,
         host: &str,
@@ -560,6 +589,7 @@ impl ClashResolver for EnhancedResolver {
         }
     }
 
+    #[instrument(skip(self))]
     async fn cached_for(&self, ip: net::IpAddr) -> Option<String> {
         if let Some(lru) = &self.reverse_lookup_cache
             && let Some(cached) = lru.read().await.peek(&ip)
@@ -571,6 +601,7 @@ impl ClashResolver for EnhancedResolver {
         None
     }
 
+    #[instrument(skip(self), level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
         let rv = self.exchange(message).await?;
         let hostname = message
@@ -636,11 +667,14 @@ mod tests {
     };
     use std::sync::Arc;
 
-    use crate::app::dns::{
-        ThreadSafeDNSClient,
-        dns_client::{DNSNetMode, DnsClient, Opts},
-        resolver::enhanced::EnhancedResolver,
-        runtime::DnsRuntimeProvider,
+    use crate::{
+        app::dns::{
+            ThreadSafeDNSClient,
+            dns_client::{DNSNetMode, DnsClient, Opts},
+            resolver::enhanced::EnhancedResolver,
+            runtime::DnsRuntimeProvider,
+        },
+        proxy,
     };
 
     #[tokio::test]
@@ -661,7 +695,7 @@ mod tests {
 
         let stream = UdpClientStream::builder(
             "1.1.1.1:53".parse().unwrap(),
-            DnsRuntimeProvider::new(None, None),
+            DnsRuntimeProvider::new_direct(None, None),
         )
         .build();
         let (client, bg) = client::Client::connect(stream).await.unwrap();
@@ -683,6 +717,7 @@ mod tests {
             port: 53,
             net: DNSNetMode::Udp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -699,6 +734,7 @@ mod tests {
             port: 53,
             net: DNSNetMode::Tcp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -715,6 +751,7 @@ mod tests {
             port: 853,
             net: DNSNetMode::DoT,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -733,6 +770,7 @@ mod tests {
             port: 443,
             net: DNSNetMode::DoH,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -749,6 +787,7 @@ mod tests {
             port: 0,
             net: DNSNetMode::Dhcp,
             iface: None,
+            proxy: get_default_outbound(),
         })
         .await
         .expect("build client");
@@ -788,5 +827,8 @@ mod tests {
         assert!(!ips.is_empty());
         assert!(!ips[0].is_unspecified());
         assert!(ips[0].is_ipv6());
+    }
+    fn get_default_outbound() -> Arc<dyn crate::proxy::OutboundHandler> {
+        Arc::new(proxy::direct::Handler::new("default_direct"))
     }
 }

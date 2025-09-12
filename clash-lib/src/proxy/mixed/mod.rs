@@ -1,14 +1,15 @@
 use crate::{
     Dispatcher,
     common::auth::ThreadSafeAuthenticator,
+    proxy::utils::{ToCanonical, try_create_dualstack_tcplistener},
     session::{Network, Session},
 };
 
 use super::{http, inbound::InboundHandlerTrait, socks, utils::apply_tcp_options};
 use crate::common::errors::new_io_error;
 use async_trait::async_trait;
+use hyper_util::rt::TokioIo;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tracing::warn;
 
 pub struct MixedInbound {
@@ -54,7 +55,7 @@ impl InboundHandlerTrait for MixedInbound {
     }
 
     async fn listen_tcp(&self) -> std::io::Result<()> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let listener = try_create_dualstack_tcplistener(self.addr)?;
 
         loop {
             let (socket, _) = match listener.accept().await {
@@ -65,13 +66,15 @@ impl InboundHandlerTrait for MixedInbound {
                 }
             };
             let src_addr = match socket.peer_addr() {
-                Ok(a) => a,
+                Ok(a) => a.to_canonical(),
                 Err(e) => {
                     warn!("failed to get peer address: {:?}", e);
                     continue;
                 }
             };
-            if !self.allow_lan && src_addr.ip() != socket.local_addr()?.ip() {
+            if !self.allow_lan
+                && src_addr.ip() != socket.local_addr()?.ip().to_canonical()
+            {
                 warn!("Connection from {} is not allowed", src_addr);
                 continue;
             }
@@ -101,7 +104,7 @@ impl InboundHandlerTrait for MixedInbound {
                 socks::SOCKS5_VERSION => {
                     let mut sess = Session {
                         network: Network::Tcp,
-                        source: socket.peer_addr()?,
+                        source: socket.peer_addr()?.to_canonical(),
                         so_mark: fw_mark,
                         ..Default::default()
                     };
@@ -118,12 +121,12 @@ impl InboundHandlerTrait for MixedInbound {
                 }
 
                 _ => {
-                    let src = socket.peer_addr()?;
+                    let src = socket.peer_addr()?.to_canonical();
                     let dispatcher = dispatcher.clone();
                     let authenticator = authenticator.clone();
                     tokio::spawn(async move {
                         http::handle_http(
-                            Box::new(socket),
+                            TokioIo::new(Box::new(socket) as _),
                             src,
                             dispatcher,
                             authenticator,

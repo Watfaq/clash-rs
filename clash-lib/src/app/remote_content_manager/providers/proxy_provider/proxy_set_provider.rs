@@ -1,12 +1,3 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
-use async_trait::async_trait;
-use erased_serde::Serialize as ESerialize;
-use futures::future::BoxFuture;
-use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
-use tracing::debug;
-
 use super::ProxyProvider;
 #[cfg(feature = "shadowsocks")]
 use crate::proxy::shadowsocks;
@@ -29,8 +20,19 @@ use crate::{
     },
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
-    proxy::{AnyOutboundHandler, direct, hysteria2, reject, socks, trojan, vmess},
+    proxy::{
+        AnyOutboundHandler,
+        direct::{self},
+        hysteria2, reject, socks, trojan, vless, vmess,
+    },
 };
+use async_trait::async_trait;
+use erased_serde::Serialize as ESerialize;
+use futures::future::BoxFuture;
+use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tracing::debug;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ProviderScheme {
@@ -117,11 +119,11 @@ impl ProxySetProvider {
                             .into_iter()
                             .filter_map(|x| OutboundProxyProtocol::try_from(x).ok())
                             .map(|x| match x {
-                                OutboundProxyProtocol::Direct => {
-                                    Ok(Arc::new(direct::Handler::new()) as _)
+                                OutboundProxyProtocol::Direct(d) => {
+                                    Ok(Arc::new(direct::Handler::new(&d.name)) as _)
                                 }
-                                OutboundProxyProtocol::Reject => {
-                                    Ok(Arc::new(reject::Handler::new()) as _)
+                                OutboundProxyProtocol::Reject(r) => {
+                                    Ok(Arc::new(reject::Handler::new(&r.name)) as _)
                                 }
                                 #[cfg(feature = "shadowsocks")]
                                 OutboundProxyProtocol::Ss(s) => {
@@ -140,6 +142,10 @@ impl ProxySetProvider {
                                 }
                                 OutboundProxyProtocol::Vmess(vm) => {
                                     let h: vmess::Handler = vm.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Vless(vl) => {
+                                    let h: vless::Handler = vl.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Hysteria2(h) => {

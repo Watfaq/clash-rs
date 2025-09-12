@@ -22,6 +22,7 @@ pub struct NameServer {
     pub net: DNSNetMode,
     pub address: String,
     pub interface: Option<OutboundInterface>,
+    pub proxy: Option<String>,
 }
 impl Display for NameServer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,7 +75,8 @@ impl Config {
 
             let host = url.host_str().expect("dns host must be valid");
 
-            let iface = url.fragment();
+            let iface = Self::parse_outbound_interface(&url);
+            let proxy = Self::parse_outbound_proxy(&url);
             let addr: String;
             let net: &str;
 
@@ -113,7 +115,7 @@ impl Config {
                 address: addr,
                 net,
                 interface: iface
-                    .map(|x| match x {
+                    .map(|x| match x.as_str() {
                         "auto" => {
                             get_outbound_interface().ok_or(Error::InvalidConfig(
                                 "DNS nameserver [auto] no outbound interface found"
@@ -127,6 +129,7 @@ impl Config {
                         ),
                     })
                     .transpose()?,
+                proxy,
             });
         }
 
@@ -193,6 +196,34 @@ impl Config {
         } else {
             Ok(format!("{host}:{port}"))
         }
+    }
+
+    pub fn parse_outbound_proxy(url: &Url) -> Option<String> {
+        let frag = url.fragment()?;
+        let pairs = frag.split("&");
+        for pair in pairs {
+            if pair.starts_with("proxy=") {
+                let outbound = pair.trim_start_matches("proxy=");
+                return Some(outbound.into());
+            } else if !pair.contains("=") {
+                return Some(pair.into());
+            }
+        }
+
+        None
+    }
+
+    pub fn parse_outbound_interface(url: &Url) -> Option<String> {
+        let frag = url.fragment()?;
+        let pairs = frag.split("&");
+        for first in pairs {
+            if first.starts_with("interface=") {
+                let iface = first.trim_start_matches("interface=");
+                return Some(iface.into());
+            }
+        }
+
+        None
     }
 }
 
@@ -372,7 +403,7 @@ impl From<crate::config::def::FallbackFilter> for FallbackFilter {
         let ipcidr = Config::parse_fallback_ip_cidr(&c.ip_cidr);
         Self {
             geo_ip: c.geo_ip,
-            geo_ip_code: c.geo_ip_code,
+            geo_ip_code: c.geo_ip_code.to_uppercase(),
             ip_cidr: ipcidr.ok(),
             domain: c.domain,
         }

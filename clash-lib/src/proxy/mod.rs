@@ -30,6 +30,9 @@ pub mod mixed;
 #[cfg(all(target_os = "linux", feature = "tproxy"))]
 pub mod tproxy;
 
+#[cfg(all(target_os = "linux", feature = "redir"))]
+pub mod redir;
+
 pub(crate) mod datagram;
 
 pub mod converters;
@@ -49,6 +52,7 @@ pub mod tuic;
 #[cfg(feature = "tun")]
 pub mod tun;
 pub mod utils;
+pub mod vless;
 pub mod vmess;
 #[cfg(feature = "wireguard")]
 pub mod wg;
@@ -117,6 +121,7 @@ pub type AnyOutboundDatagram =
 pub enum OutboundType {
     Shadowsocks,
     Vmess,
+    Vless,
     Trojan,
     WireGuard,
     Tor,
@@ -143,6 +148,7 @@ impl Display for OutboundType {
         match self {
             OutboundType::Shadowsocks => write!(f, "Shadowsocks"),
             OutboundType::Vmess => write!(f, "Vmess"),
+            OutboundType::Vless => write!(f, "Vless"),
             OutboundType::Trojan => write!(f, "Trojan"),
             OutboundType::WireGuard => write!(f, "WireGuard"),
             OutboundType::Tor => write!(f, "Tor"),

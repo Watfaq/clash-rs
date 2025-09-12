@@ -12,4 +12,5 @@ extend-exclude = [
     "clash-bin/tests/data/config/public",
     "clash-bin/tests/data/config/*.cert",
     "clash-dns/src/resources",
+    "clash-netstack/examples/flamegraph.svg",
 ]

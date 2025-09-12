@@ -1,3 +1,8 @@
+use crate::app::net::OutboundInterface;
+use anyhow::anyhow;
+use bytes::{Buf, BufMut};
+use erased_serde::Serialize as ESerialize;
+use serde::Serialize;
 use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
@@ -5,14 +10,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     str::FromStr,
 };
-
-use bytes::{Buf, BufMut};
-use serde::Serialize;
 use tokio::io::{AsyncRead, AsyncReadExt};
-
-use erased_serde::Serialize as ESerialize;
-
-use crate::app::net::OutboundInterface;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum SocksAddr {
@@ -93,7 +91,6 @@ impl SocksAddr {
         ))
     }
 
-    // TODO move to vmess
     pub fn write_buf<T: BufMut>(&self, buf: &mut T) {
         match self {
             Self::Ip(addr) => match addr {
@@ -117,29 +114,6 @@ impl SocksAddr {
         }
     }
 
-    pub fn write_to_buf_vmess<B: BufMut>(&self, buf: &mut B) {
-        match self {
-            Self::Ip(SocketAddr::V4(addr)) => {
-                buf.put_u16(addr.port());
-                buf.put_u8(0x01);
-                buf.put_slice(&addr.ip().octets());
-            }
-            Self::Ip(SocketAddr::V6(addr)) => {
-                buf.put_u16(addr.port());
-                buf.put_u8(0x03);
-                for seg in &addr.ip().segments() {
-                    buf.put_u16(*seg);
-                }
-            }
-            Self::Domain(domain_name, port) => {
-                buf.put_u16(*port);
-                buf.put_u8(0x02);
-                buf.put_u8(domain_name.len() as u8);
-                buf.put_slice(domain_name.as_bytes());
-            }
-        }
-    }
-
     pub fn is_domain(&self) -> bool {
         match self {
             SocksAddr::Ip(_) => false,
@@ -155,9 +129,15 @@ impl SocksAddr {
     }
 
     pub fn must_into_socket_addr(self) -> SocketAddr {
+        let self_clone = self.clone();
+        self.try_into_socket_addr()
+            .unwrap_or_else(|| panic!("not a socket address: {self_clone:?}"))
+    }
+
+    pub fn try_into_socket_addr(self) -> Option<SocketAddr> {
         match self {
-            SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(..) => panic!("not a socket address {self:?}"),
+            SocksAddr::Ip(addr) => Some(addr),
+            SocksAddr::Domain(..) => None,
         }
     }
 
@@ -401,6 +381,8 @@ pub enum Type {
     Tun,
     #[cfg(all(target_os = "linux", feature = "tproxy"))]
     Tproxy,
+    #[cfg(all(target_os = "linux", feature = "redir"))]
+    Redir,
     Tunnel,
     Shadowsocks,
     Ignore,

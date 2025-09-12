@@ -1,8 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
+use self::docker_runner::RunAndCleanup;
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, ChainedStream},
@@ -11,14 +7,17 @@ use crate::{
     proxy::{OutboundHandler, datagram::UdpPacket},
     session::{Session, SocksAddr},
 };
+use anyhow::{anyhow, bail};
 use futures::{SinkExt, StreamExt, future::select_all};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split},
     net::{TcpListener, UdpSocket},
 };
 use tracing::info;
-
-use self::docker_runner::RunAndCleanup;
 
 pub mod config_helper;
 pub mod consts;
@@ -241,13 +240,30 @@ pub async fn ping_pong_udp_test(
 // latency test of the proxy, will reuse the `url_test` ability
 pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
-) -> anyhow::Result<(u16, u16)> {
+) -> anyhow::Result<(Duration, Duration)> {
     let resolver = config_helper::build_dns_resolver().await?;
     let proxy_manager = ProxyManager::new(resolver.clone());
-    proxy_manager
-        .url_test(handler, "https://google.com", Some(Duration::from_secs(10)))
-        .await
-        .map_err(Into::into)
+    let mut retries = 3;
+    let latency = loop {
+        match proxy_manager
+            .url_test(
+                handler.clone(),
+                "https://google.com",
+                Some(Duration::from_secs(10)),
+            )
+            .await
+        {
+            Ok(v) => break v,
+            Err(e) => {
+                retries -= 1;
+                if retries == 0 {
+                    return Err(e.into());
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    };
+    Ok(latency)
 }
 
 pub async fn dns_test(handler: Arc<dyn OutboundHandler>) -> anyhow::Result<()> {

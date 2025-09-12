@@ -51,15 +51,21 @@ impl GeoSiteMatcher {
     pub fn new(
         country_code: String,
         target: String,
-        loader: &GeoDataLookup,
+        loader: Option<&GeoDataLookup>,
     ) -> anyhow::Result<Self> {
         let (not, code, attr_matcher) =
             parse(&country_code).ok_or(Error::InvalidConfig(
                 "invalid geosite matcher, country code is empty".to_owned(),
             ))?;
-        let list = loader.get(&code).ok_or(Error::InvalidConfig(format!(
-            "geosite matcher, country code {code} not found"
-        )))?;
+        let list = loader
+            .ok_or(Error::InvalidConfig(
+                "GeoDataLookup is not available. Maybe config.geosite is not set?"
+                    .to_owned(),
+            ))?
+            .get(&code)
+            .ok_or(Error::InvalidConfig(format!(
+                "geosite matcher, country code {code} not found"
+            )))?;
         let domains = list
             .domain
             .into_iter()
@@ -119,15 +125,12 @@ mod tests {
             },
         },
         common::{
-            geodata::{GeoData, GeoDataLookupTrait},
+            geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoData, GeoDataLookupTrait},
             http::new_http_client,
             utils::download,
         },
         tests::initialize,
     };
-
-    const GEOSITE_URL: &str =
-        "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat";
 
     struct TestSuite<'a> {
         country_code: &'a str,
@@ -142,11 +145,11 @@ mod tests {
                 .map_err(|x| Error::DNSError(x.to_string()))
                 .unwrap(),
         );
-        let client = new_http_client(system_resolver)
+        let client = new_http_client(system_resolver, None)
             .map_err(|x| Error::DNSError(x.to_string()))
             .unwrap();
         let out = tempfile::Builder::new().append(true).tempfile()?;
-        download(GEOSITE_URL, out.as_ref(), &client).await?;
+        download(DEFAULT_GEOSITE_DOWNLOAD_URL, out.as_ref(), &client).await?;
         let path = out.path().to_str().unwrap().to_owned();
 
         let loader = GeoData::from_file(path).await?;

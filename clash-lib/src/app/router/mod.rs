@@ -43,9 +43,9 @@ impl Router {
         rules: Vec<RuleType>,
         rule_providers: HashMap<String, RuleProviderDef>,
         dns_resolver: ThreadSafeDNSResolver,
-        country_mmdb: MmdbLookup,
+        country_mmdb: Option<MmdbLookup>,
         asn_mmdb: Option<MmdbLookup>,
-        geodata: GeoDataLookup,
+        geodata: Option<GeoDataLookup>,
         cwd: String,
     ) -> Self {
         let mut rule_provider_registry = HashMap::new();
@@ -137,8 +137,8 @@ impl Router {
         rule_providers: HashMap<String, RuleProviderDef>,
         rule_provider_registry: &mut HashMap<String, ThreadSafeRuleProvider>,
         resolver: ThreadSafeDNSResolver,
-        mmdb: MmdbLookup,
-        geodata: GeoDataLookup,
+        mmdb: Option<MmdbLookup>,
+        geodata: Option<GeoDataLookup>,
         cwd: String,
     ) -> Result<(), Error> {
         for (name, provider) in rule_providers.into_iter() {
@@ -239,8 +239,8 @@ impl Router {
 
 pub fn map_rule_type(
     rule_type: RuleType,
-    mmdb: MmdbLookup,
-    geodata: GeoDataLookup,
+    mmdb: Option<MmdbLookup>,
+    geodata: Option<GeoDataLookup>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
 ) -> Box<dyn RuleMatcher> {
     match rule_type {
@@ -299,9 +299,12 @@ pub fn map_rule_type(
             target,
             country_code,
         } => {
-            let res =
-                rules::geodata::GeoSiteMatcher::new(country_code, target, &geodata)
-                    .unwrap();
+            let res = rules::geodata::GeoSiteMatcher::new(
+                country_code,
+                target,
+                geodata.as_ref(),
+            )
+            .unwrap();
             Box::new(res) as _
         }
         RuleType::SRCPort { target, port } => Box::new(rules::port::Port {
@@ -359,14 +362,15 @@ mod tests {
 
     use crate::{
         app::dns::{MockClashResolver, SystemResolver},
-        common::{geodata::GeoData, http::new_http_client, mmdb::Mmdb},
+        common::{
+            geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoData},
+            http::new_http_client,
+            mmdb::{DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL, Mmdb},
+        },
         config::internal::rule::RuleType,
         session::Session,
         tests::initialize,
     };
-
-    const GEO_DATA_DOWNLOAD_URL:&str = "https://github.com/Watfaq/v2ray-rules-dat/releases/download/test/geosite.dat";
-    const MMDB_DOWNLOAD_URL:&str = "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb";
 
     #[tokio::test]
     async fn test_route_match() {
@@ -388,23 +392,23 @@ mod tests {
 
         let real_resolver = Arc::new(SystemResolver::new(false).unwrap());
 
-        let client = new_http_client(real_resolver.clone()).unwrap();
+        let client = new_http_client(real_resolver.clone(), None).unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
 
         let mmdb = Mmdb::new(
             temp_dir.path().join("mmdb.mmdb"),
-            Some(MMDB_DOWNLOAD_URL.to_string()),
+            DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string(),
             client,
         )
         .await
         .unwrap();
 
-        let client = new_http_client(real_resolver.clone()).unwrap();
+        let client = new_http_client(real_resolver.clone(), None).unwrap();
 
         let geodata = GeoData::new(
             temp_dir.path().join("geodata.geodata"),
-            Some(GEO_DATA_DOWNLOAD_URL.to_string()),
+            DEFAULT_GEOSITE_DOWNLOAD_URL.to_string(),
             client,
         )
         .await
@@ -437,9 +441,9 @@ mod tests {
             ],
             Default::default(),
             mock_resolver,
-            Arc::new(mmdb),
+            Some(Arc::new(mmdb)),
             None,
-            Arc::new(geodata),
+            Some(Arc::new(geodata)),
             temp_dir.path().to_str().unwrap().to_string(),
         )
         .await;

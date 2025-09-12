@@ -4,8 +4,8 @@ use crate::{
     session::{Network, Session, Type},
 };
 use futures::FutureExt;
-
 use hyper::Uri;
+use hyper_util::rt::TokioIo;
 use std::{
     future::Future,
     net::SocketAddr,
@@ -38,11 +38,18 @@ impl Connector {
     }
 }
 
+impl hyper_util::client::legacy::connect::Connection for AnyStream {
+    fn connected(&self) -> hyper_util::client::legacy::connect::Connected {
+        hyper_util::client::legacy::connect::Connected::new()
+    }
+}
+
 impl tower::Service<Uri> for Connector {
     type Error = ProxyError;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<AnyStream, Self::Error>> + Send>>;
-    type Response = AnyStream;
+    type Future = Pin<
+        Box<dyn Future<Output = Result<TokioIo<AnyStream>, Self::Error>> + Send>,
+    >;
+    type Response = TokioIo<AnyStream>;
 
     fn poll_ready(
         &mut self,
@@ -74,7 +81,7 @@ impl tower::Service<Uri> for Connector {
                 dispatcher.dispatch_stream(sess, Box::new(right)).await;
             });
 
-            Ok(Box::new(left) as _)
+            Ok(TokioIo::new(Box::new(left) as _))
         }
         .boxed()
     }

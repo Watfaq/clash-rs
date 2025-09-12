@@ -1,5 +1,5 @@
-use crate::Error;
-use std::{path::PathBuf, sync::Arc};
+use crate::{Error, common::mmdb::DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tracing::debug;
 
 use crate::{
@@ -37,12 +37,19 @@ pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     let system_resolver = Arc::new(
         SystemResolver::new(false).map_err(|x| Error::DNSError(x.to_string()))?,
     );
-    let client = new_http_client(system_resolver)
+    let client = new_http_client(system_resolver, None)
         .map_err(|x| Error::DNSError(x.to_string()))?;
 
     let mmdb = Arc::new(
-        mmdb::Mmdb::new(mmdb_path, config.general.mmdb_download_url.clone(), client)
-            .await?,
+        mmdb::Mmdb::new(
+            mmdb_path,
+            config
+                .general
+                .mmdb_download_url
+                .unwrap_or(DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string()),
+            client,
+        )
+        .await?,
     );
 
     debug!("initializing cache store");
@@ -52,8 +59,13 @@ pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
     );
 
     let dns_resolver = Arc::new(
-        dns::EnhancedResolver::new(config.dns, cache_store.clone(), mmdb.clone())
-            .await,
+        dns::EnhancedResolver::new(
+            config.dns,
+            cache_store,
+            Some(mmdb),
+            HashMap::new(),
+        )
+        .await,
     );
 
     Ok(dns_resolver)

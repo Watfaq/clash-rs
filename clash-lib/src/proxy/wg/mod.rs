@@ -1,9 +1,8 @@
-use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    sync::Arc,
+use self::{keys::KeyBytes, wireguard::Config};
+use super::{
+    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
+    OutboundType, utils::RemoteConnector,
 };
-
 use crate::{
     Error,
     app::{
@@ -17,21 +16,16 @@ use crate::{
     impl_default_connector,
     session::Session,
 };
-
-use self::{keys::KeyBytes, wireguard::Config};
-
-use super::{
-    ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, utils::RemoteConnector,
-};
-
 use async_trait::async_trait;
 use futures::TryFutureExt;
-
 use ipnet::IpNet;
 use rand::seq::IndexedRandom;
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::Arc,
+};
 use tokio::sync::OnceCell;
-use tracing::debug;
 
 mod device;
 mod events;
@@ -70,7 +64,7 @@ pub struct Handler {
     opts: HandlerOptions,
     inner: OnceCell<Inner>,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -89,7 +83,7 @@ impl Handler {
             opts,
             inner: OnceCell::new(),
 
-            connector: tokio::sync::Mutex::new(None),
+            connector: Default::default(),
         }
     }
 
@@ -171,7 +165,7 @@ impl Handler {
                     recv_pair.0,
                     send_pair.1,
                     resolver.clone(),
-                    self.connector.lock().await.as_ref().cloned(),
+                    self.connector.read().await.as_ref().cloned(),
                     sess,
                 )
                 .await
@@ -258,10 +252,6 @@ impl OutboundHandler for Handler {
             && sess.destination.is_domain()
             && self.opts.dns.as_ref().is_some_and(|x| !x.is_empty())
         {
-            debug!(
-                "use remote dns to resolve domain: {}",
-                sess.destination.host()
-            );
             let server = self
                 .opts
                 .dns

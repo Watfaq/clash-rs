@@ -2,21 +2,24 @@
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
 #![feature(lazy_get)]
+#![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 #![cfg_attr(not(version("1.88.0")), feature(let_chains))]
-
-#[macro_use]
-extern crate anyhow;
 
 use crate::{
     app::{
         dispatcher::Dispatcher, dns, inbound::manager::InboundManager,
         outbound::manager::OutboundManager, router::Router,
     },
+    common::{
+        geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoDataLookup},
+        mmdb::{DEFAULT_ASN_MMDB_DOWNLOAD_URL, DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL},
+    },
     config::{
         def,
         internal::{InternalConfig, proxy::OutboundProxy},
     },
+    proxy::OutboundHandler,
 };
 use app::{
     dispatcher::StatisticsManager,
@@ -400,31 +403,6 @@ async fn create_components(
         debug!("tun enabled, initializing default outbound interface");
         init_net_config(config.tun.so_mark).await;
     }
-    let system_resolver = Arc::new(
-        SystemResolver::new(config.dns.ipv6)
-            .map_err(|x| Error::DNSError(x.to_string()))?,
-    );
-    let client = new_http_client(system_resolver.clone())
-        .map_err(|x| Error::DNSError(x.to_string()))?;
-
-    debug!("initializing mmdb");
-    let country_mmdb = Arc::new(
-        mmdb::Mmdb::new(
-            cwd.join(&config.general.mmdb),
-            config.general.mmdb_download_url,
-            client.clone(),
-        )
-        .await?,
-    ) as MmdbLookup;
-
-    let geodata = Arc::new(
-        geodata::GeoData::new(
-            cwd.join(&config.general.geosite),
-            config.general.geosite_download_url,
-            client.clone(),
-        )
-        .await?,
-    );
 
     debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
@@ -432,26 +410,66 @@ async fn create_components(
         config.profile.store_selected,
     );
 
-    let dns_listen = config.dns.listen.clone();
+    let system_resolver = Arc::new(
+        SystemResolver::new(config.dns.ipv6)
+            .map_err(|x| Error::DNSError(x.to_string()))?,
+    );
+
+    debug!("initializing bootstrap outbounds");
+    let plain_outbounds = OutboundManager::load_plain_outbounds(
+        config
+            .proxies
+            .into_values()
+            .filter_map(|x| match x {
+                OutboundProxy::ProxyServer(s) => Some(s),
+                _ => None,
+            })
+            .collect(),
+    );
+
+    let client =
+        new_http_client(system_resolver.clone(), Some(plain_outbounds.clone()))
+            .map_err(|x| Error::DNSError(x.to_string()))?;
+
+    debug!("initializing mmdb");
+    let country_mmdb = if let Some(country_mmdb_file) = config.general.mmdb {
+        Some(Arc::new(
+            mmdb::Mmdb::new(
+                cwd.join(&country_mmdb_file),
+                config
+                    .general
+                    .mmdb_download_url
+                    .unwrap_or(DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
+        ) as MmdbLookup)
+    } else {
+        debug!("country mmdb not set, skipping");
+        None
+    };
+
     debug!("initializing dns resolver");
+    // Clone the dns.listen for the DNS Server later before we consume the config
+    // TODO: we should separate the DNS resolver and DNS server config here
+    let dns_listen = config.dns.listen.clone();
+    let plain_outbounds_map = HashMap::<String, Arc<dyn OutboundHandler>>::from_iter(
+        plain_outbounds
+            .iter()
+            .map(|x| (x.name().to_string(), x.clone())),
+    );
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
-        Some(country_mmdb.clone()),
+        country_mmdb.clone(),
+        plain_outbounds_map,
     )
     .await;
 
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
         OutboundManager::new(
-            config
-                .proxies
-                .into_values()
-                .filter_map(|x| match x {
-                    OutboundProxy::ProxyServer(s) => Some(s),
-                    _ => None,
-                })
-                .collect(),
+            plain_outbounds,
             config
                 .proxy_groups
                 .into_values()
@@ -469,14 +487,39 @@ async fn create_components(
         .await?,
     );
 
-    debug!("initializing country asn mmdb");
-    let p = cwd.join(&config.general.asn_mmdb);
-    let asn_mmdb = if p.exists() || config.general.asn_mmdb_download_url.is_some() {
+    debug!("initializing geosite");
+    let geodata = if let Some(geosite_file) = config.general.geosite {
         Some(Arc::new(
-            mmdb::Mmdb::new(p, config.general.asn_mmdb_download_url, client.clone())
-                .await?,
+            geodata::GeoData::new(
+                cwd.join(&geosite_file),
+                config
+                    .general
+                    .geosite_download_url
+                    .unwrap_or(DEFAULT_GEOSITE_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
+        ) as GeoDataLookup)
+    } else {
+        debug!("geosite not set, skipping");
+        None
+    };
+
+    debug!("initializing country asn mmdb");
+    let asn_mmdb = if let Some(asn_mmdb_name) = config.general.asn_mmdb {
+        Some(Arc::new(
+            mmdb::Mmdb::new(
+                cwd.join(&asn_mmdb_name),
+                config
+                    .general
+                    .asn_mmdb_download_url
+                    .unwrap_or(DEFAULT_ASN_MMDB_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
         ) as MmdbLookup)
     } else {
+        debug!("ASN mmdb not found and not configured for download, skipping");
         None
     };
 
@@ -560,6 +603,9 @@ mod tests {
         socks-port: 7891
         bind-address: 127.0.0.1
         mmdb: "tests/data/Country.mmdb"
+        proxies:
+          - {name: DIRECT_alias, type: direct}
+          - {name: REJECT_alias, type: reject}
         "#;
 
         let handle = thread::spawn(|| {

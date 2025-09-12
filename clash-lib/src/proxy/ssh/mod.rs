@@ -109,7 +109,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl_default_connector!(Handler);
@@ -118,7 +118,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
-            connector: tokio::sync::Mutex::new(None),
+            connector: tokio::sync::RwLock::new(None),
         }
     }
 }

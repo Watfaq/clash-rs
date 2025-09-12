@@ -88,12 +88,17 @@ impl Handler {
                     }
                     SocksAddr::Ip(socket_addr) => socket_addr,
                 };
+                let bind_addr = if addr.is_ipv4() {
+                    "0.0.0.0:0".parse().unwrap()
+                } else {
+                    "[::]:0".parse().unwrap()
+                };
                 let socket = new_udp_socket(
-                    None,
+                    Some(bind_addr),
                     sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
-                    Some(addr),
+                    None,
                 )
                 .await?;
 
@@ -128,7 +133,6 @@ impl Handler {
     }
 }
 
-#[async_trait]
 impl DialWithConnector for Handler {}
 
 #[async_trait]

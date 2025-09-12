@@ -18,6 +18,13 @@ tun:
 
 ipv6: true
 
+mmdb: Country.mmdb
+mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=direct&force=true"
+asn-mmdb: Country-asn.mmdb
+asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country-asn.mmdb#_clash_outbound=non-exist&force=true"
+geosite: geosite.dat
+geosite-download-url: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat#force=true"
+
 dns:
   enable: true
   ipv6: true
@@ -74,8 +81,6 @@ external-ui: "public"
 secret: "clash-rs"
 experimental:
   ignore-resolve-fail: true
-
-asn-mmdb: Country-asn.mmdb
 
 profile:
   store-selected: true
@@ -278,11 +283,21 @@ proxies:
     ip: 172.16.0.2/32
     ipv6: 2606:4700:110:8e5e:fa1:3f30:c077:e17c/128
     public-key: bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
-    allowed-ips: [ "0.0.0.0/0", "::/0" ]
+    allowed-ips: ["0.0.0.0/0", "::/0"]
     remote-dns-resolve: true
     dns:
       - 1.1.1.1
     udp: true
+
+  - name: "vless-ws-tls"
+    type: vless
+    server: 127.0.0.1
+    port: 8443
+    tls: true
+    network: ws
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    ws-opts:
+      path: /websocket
 
 proxy-providers:
   file-provider:
@@ -318,6 +333,7 @@ rule-providers:
 rules:
   - IP-CIDR,1.1.1.1/32,ss-simple
   - IP-CIDR,8.8.8.8/32,ss-simple
+  - DOMAIN-KEYWORD,google,vless-ws-tls
   - DOMAIN-REGEX,^www.google.com$,DIRECT
   - DOMAIN,google.com,ss-simple
   - DOMAIN-KEYWORD,httpbin,trojan-grpc
@@ -325,7 +341,6 @@ rules:
   - RULE-SET,file-provider2,DIRECT
   - GEOIP,CN,relay
   - DOMAIN-SUFFIX,facebook.com,REJECT
-  - DOMAIN-KEYWORD,google,grpc-vmess
   - DOMAIN,google.com,select
   - SRC-IP-CIDR,192.168.1.1/24,DIRECT
   - GEOIP,CN,DIRECT

@@ -1,9 +1,10 @@
+use super::http::HttpClient;
 use crate::{Error, common::utils::download};
 use prost::Message;
 use std::path::Path;
 use tracing::{debug, info};
 
-use super::http::HttpClient;
+pub static DEFAULT_GEOSITE_DOWNLOAD_URL: &str = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat";
 
 pub(crate) mod geodata_proto {
     include!(concat!(env!("OUT_DIR"), "/geodata.rs"));
@@ -33,27 +34,20 @@ impl GeoDataLookupTrait for GeoData {
 impl GeoData {
     pub async fn new<P: AsRef<Path>>(
         path: P,
-        download_url: Option<String>,
+        download_url: String,
         http_client: HttpClient,
     ) -> Result<Self, Error> {
         debug!("geosite path: {}", path.as_ref().to_string_lossy());
 
         let geosite_file = path.as_ref().to_path_buf();
 
-        if !geosite_file.exists() {
-            if let Some(url) = download_url.as_ref() {
-                info!("downloading geodata from {}", url);
-                download(url, &geosite_file, &http_client)
-                    .await
-                    .map_err(|x| {
-                        Error::InvalidConfig(format!("geosite download failed: {x}"))
-                    })?;
-            } else {
-                return Err(Error::InvalidConfig(format!(
-                    "geosite `{}` not found and geosite_download_url is not set",
-                    path.as_ref().to_string_lossy()
-                )));
-            }
+        if !geosite_file.exists() || download_url.contains("force=true") {
+            info!("downloading geodata from {}", download_url);
+            download(&download_url, &geosite_file, &http_client)
+                .await
+                .map_err(|x| {
+                    Error::InvalidConfig(format!("geosite download failed: {x}"))
+                })?;
         }
         let bytes = tokio::fs::read(path).await?;
         let cache =

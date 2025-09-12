@@ -1,12 +1,11 @@
 use base64::Engine;
 
-use http_body_util::{BodyExt, Full};
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::{Request, Response};
 use tracing::warn;
 
-use crate::common::{
-    auth::ThreadSafeAuthenticator, errors::map_io_error, http::HyperResponseBody,
-};
+use crate::common::{auth::ThreadSafeAuthenticator, errors::map_io_error};
 
 fn parse_basic_proxy_authorization(
     req: &Request<hyper::body::Incoming>,
@@ -33,7 +32,7 @@ fn decode_basic_proxy_authorization(cred: &str) -> Option<(String, String)> {
 pub fn authenticate_req(
     req: &Request<hyper::body::Incoming>,
     authenticator: ThreadSafeAuthenticator,
-) -> Option<Response<HyperResponseBody>> {
+) -> Option<Response<BoxBody<Bytes, std::io::Error>>> {
     let auth_resp = Response::builder()
         .status(hyper::StatusCode::PROXY_AUTHENTICATION_REQUIRED)
         .header(hyper::header::PROXY_AUTHENTICATE, "Basic")
@@ -48,16 +47,19 @@ pub fn authenticate_req(
         return Some(auth_resp);
     }
     let cred = decode_basic_proxy_authorization(cred.unwrap());
-    if cred.is_none() {
-        return Some(auth_resp);
-    }
 
-    let (user, pass) = cred.unwrap();
-
-    if authenticator.authenticate(&user, &pass) {
-        None
-    } else {
-        warn!("proxy authentication failed");
-        Some(auth_resp)
+    match cred {
+        None => {
+            warn!("failed to decode proxy authorization header");
+            Some(auth_resp)
+        }
+        Some((user, pass)) => {
+            if authenticator.authenticate(&user, &pass) {
+                None // Authenticated successfully
+            } else {
+                warn!("proxy authentication failed for user: {}", user);
+                Some(auth_resp)
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 use hickory_proto::op::Message;
 
-use tracing::error;
+use tracing::{error, instrument};
 use watfaq_dns::DNSListenAddr;
 
 use crate::Runner;
@@ -21,6 +21,7 @@ impl watfaq_dns::DnsMessageExchanger for DnsMessageExchanger {
         self.resolver.ipv6()
     }
 
+    #[instrument(skip(self))]
     async fn exchange(
         &self,
         message: &Message,

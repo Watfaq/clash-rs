@@ -6,20 +6,21 @@ pub trait FallbackIPFilter: Sync + Send {
     fn apply(&self, ip: &net::IpAddr) -> bool;
 }
 
-pub struct GeoIPFilter(String, MmdbLookup);
+pub struct GeoIPFilter(String, Option<MmdbLookup>);
 
 impl GeoIPFilter {
-    pub fn new(code: &str, mmdb: MmdbLookup) -> Self {
+    pub fn new(code: &str, mmdb: Option<MmdbLookup>) -> Self {
         Self(code.to_owned(), mmdb)
     }
 }
 
 impl FallbackIPFilter for GeoIPFilter {
     fn apply(&self, ip: &net::IpAddr) -> bool {
-        self.1
-            .lookup_country(*ip)
-            .map(|x| x.country_code)
-            .is_ok_and(|x| x == self.0)
+        !self.1.as_ref().is_some_and(|mmdb| {
+            mmdb.lookup_country(*ip)
+                .map(|x| x.country_code)
+                .is_ok_and(|x| x == self.0)
+        })
     }
 }
 

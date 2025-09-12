@@ -408,22 +408,16 @@ pub struct Config {
     /// Hosts
     pub hosts: HashMap<String, String>,
     /// Country database path relative to the $CWD
-    #[educe(Default = "Country.mmdb")]
-    pub mmdb: String,
+    pub mmdb: Option<String>,
     /// Country database download url
-    // TODO not compatible with clash-meta
-    #[educe(Default = Some("https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb".into()))]
     pub mmdb_download_url: Option<String>,
     /// Optional ASN database path relative to the working dir
-    #[educe(Default = "Country-asn.mmdb")]
-    pub asn_mmdb: String,
+    pub asn_mmdb: Option<String>,
     /// Optional ASN database download url
     pub asn_mmdb_download_url: Option<String>,
     /// Geosite database path relative to the $CWD
-    #[educe(Default = "geosite.dat")]
-    pub geosite: String,
+    pub geosite: Option<String>,
     /// Geosite database download url
-    #[educe(Default = Some("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat".into()))]
     pub geosite_download_url: Option<String>,
 
     // these options has default vals,
@@ -455,8 +449,10 @@ pub struct Config {
     pub interface: Option<String>,
     /// fwmark on Linux only
     /// # Note
-    /// - not implemented yet
-    pub routing_mask: Option<u32>,
+    /// - traffics originated from clash will be marked with this value
+    /// - so you can use this value to match the traffic in iptables to avoid
+    ///   traffic loops
+    pub routing_mark: Option<u32>,
     #[serde(rename = "proxy-providers")]
     /// proxy provider settings
     pub proxy_provider: Option<HashMap<String, HashMap<String, Value>>>,
@@ -505,7 +501,7 @@ impl FromStr for Config {
         })?;
 
         serde_yaml::from_value(val).map_err(|e| {
-            Error::InvalidConfig(format!("could not parse config content {s}: {e}"))
+            Error::InvalidConfig(format!("could not parse config content: {e}"))
         })
     }
 }

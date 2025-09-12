@@ -1,13 +1,14 @@
-use maxminddb::geoip2;
-use std::{fs, net::IpAddr, path::Path, sync::Arc};
-use tracing::{debug, info, warn};
-
+use super::http::HttpClient;
 use crate::{
     Error,
     common::{errors::map_io_error, utils::download},
 };
+use maxminddb::geoip2;
+use std::{fs, net::IpAddr, path::Path, sync::Arc};
+use tracing::{debug, info, warn};
 
-use super::http::HttpClient;
+pub static DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL: &str = "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb";
+pub static DEFAULT_ASN_MMDB_DOWNLOAD_URL: &str = "https://git.io/GeoLite2-ASN.mmdb";
 
 pub struct Mmdb {
     reader: maxminddb::Reader<Vec<u8>>,
@@ -71,7 +72,7 @@ impl MmdbLookupTrait for Mmdb {
 impl Mmdb {
     pub async fn new<P: AsRef<Path>>(
         path: P,
-        download_url: Option<String>,
+        download_url: String,
         http_client: HttpClient,
     ) -> Result<Mmdb, Error> {
         debug!("mmdb path: {}", path.as_ref().to_string_lossy());
@@ -81,23 +82,18 @@ impl Mmdb {
 
     async fn load_mmdb<P: AsRef<Path>>(
         path: P,
-        download_url: Option<String>,
+        download_url: String,
         http_client: &HttpClient,
     ) -> Result<maxminddb::Reader<Vec<u8>>, Error> {
         let mmdb_file = path.as_ref().to_path_buf();
 
-        if !mmdb_file.exists() {
-            if let Some(url) = download_url.as_ref() {
-                info!("downloading mmdb from {}", url);
-                download(url, &mmdb_file, http_client).await.map_err(|x| {
+        if !mmdb_file.exists() || download_url.contains("force=true") {
+            info!("downloading mmdb from {}", download_url);
+            download(&download_url, &mmdb_file, http_client)
+                .await
+                .map_err(|x| {
                     Error::InvalidConfig(format!("mmdb download failed: {x}"))
                 })?;
-            } else {
-                return Err(Error::InvalidConfig(format!(
-                    "mmdb `{}` not found and mmdb_download_url is not set",
-                    path.as_ref().to_string_lossy()
-                )));
-            }
         }
 
         match maxminddb::Reader::open_readfile(&path) {
@@ -113,28 +109,25 @@ impl Mmdb {
 
                     // try to download again
                     fs::remove_file(&mmdb_file)?;
-                    if let Some(url) = download_url.as_ref() {
-                        info!("downloading mmdb from {}", url);
-                        download(url, &mmdb_file, http_client).await.map_err(
-                            |x| {
-                                Error::InvalidConfig(format!(
-                                    "mmdb download failed: {x}"
-                                ))
-                            },
-                        )?;
-                        Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
+
+                    info!(
+                        "mmdb {:?} corrupt, re-downloading mmdb from {download_url}",
+                        mmdb_file.file_name()
+                    );
+                    download(&download_url, &mmdb_file, http_client)
+                        .await
+                        .map_err(|x| {
                             Error::InvalidConfig(format!(
-                                "cant open mmdb `{}`: {}",
-                                path.as_ref().to_string_lossy(),
-                                x
+                                "mmdb download failed: {x}"
                             ))
-                        })?)
-                    } else {
-                        Err(Error::InvalidConfig(format!(
-                            "mmdb `{}` not found and mmdb_download_url is not set",
-                            path.as_ref().to_string_lossy()
-                        )))
-                    }
+                        })?;
+                    Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
+                        Error::InvalidConfig(format!(
+                            "cant open mmdb `{}`: {}",
+                            path.as_ref().to_string_lossy(),
+                            x
+                        ))
+                    })?)
                 }
                 _ => Err(Error::InvalidConfig(format!(
                     "cant open mmdb `{}`: {}",

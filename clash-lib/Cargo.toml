@@ -8,17 +8,21 @@ edition = { workspace = true }
 default = ["zero_copy", "aws-lc-rs"]
 
 aws-lc-rs = [
+    "dep:aws-lc-rs",
     "rustls/aws-lc-rs",
     "watfaq-rustls/aws-lc-rs",
     "quinn-proto/rustls-aws-lc-rs",
-    "dep:aws-lc-rs",
     "watfaq-dns/aws-lc-rs",
+    "russh/aws-lc-rs",
+    "boringtun/aws-lc-rs"
 ]
 ring = [
     "rustls/ring",
     "watfaq-rustls/ring",
     "quinn-proto/ring",
     "watfaq-dns/ring",
+    "russh/ring",
+    "boringtun/ring"
 ]
 
 internal = []
@@ -32,13 +36,13 @@ wireguard = ["dep:boringtun", "dep:smoltcp"]
 tproxy = ["tun"]
 tun = [
     "dep:tun-rs",
-    "dep:netstack-smoltcp",
+    "dep:watfaq-netstack",
     "dep:smoltcp",
 ]
-
+redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tokio-console = ["tokio/tracing"]
+tracing = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 
 [dependencies]
 # Async
@@ -73,7 +77,15 @@ anyhow = "1"
 # logging
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
-tracing-appender = "0.2"
+tracing-appender = { version = "0.2"}
+tracing-log = "0.2"
+
+tracing-chrome = { version = "0.7", optional = true }
+opentelemetry = { version = "0.30", optional = true }
+opentelemetry-otlp = { version = "0.30", optional = true }
+opentelemetry_sdk = { version = "0.30", optional = true, features = ["rt-tokio"] }
+tracing-opentelemetry = { version = "0.31", optional = true }
+opentelemetry-semantic-conventions = { version = "0.30", optional = true, features = ["semconv_experimental"] }
 
 # Data structures
 url = "2"
@@ -86,6 +98,7 @@ uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serd
 network-interface = { version = "2" }
 base64 = "0.22"
 zstd = "0.13.3"
+portable-atomic = { version = "1", features = ["serde"] }
 
 h2 = "0.4"
 prost = "0.14"
@@ -114,11 +127,11 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
-netstack-smoltcp = { git = "https://github.com/automesh-network/netstack-smoltcp", rev = "ab06bc3de566fc6485a238dd4c746bb3e4f79484", optional = true }
-smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true }
+watfaq-netstack = { path = "../clash-netstack", optional = true }
+smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
 
 # WireGuard
-boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "1f57e8830ea2aea09c3b2f2d990bf3097ceb1bf5", package = "boring-noise", optional = true }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e8a17ec", package = "boring-noise", optional = true, default-features = false }
 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -146,8 +159,8 @@ maxminddb = "0.26"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.32", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.32", optional = true, default-features = false }
+arti-client = { version = "0.34", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.34", optional = true, default-features = false }
 
 # tuic
 tuic = { tag = "v1.4.6", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
@@ -159,30 +172,30 @@ quinn = { version = "0.11", default-features = false, features = ["futures-io", 
 # hysteria2
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
-quinn-proto = { version = "0.11.12", default-features = false }
+quinn-proto = { version = "0.11.13", default-features = false }
 blake2 = "0.10.6"
 digest = "0.10.7"
 
-console-subscriber = { version = "0.4" }
-criterion = { version = "0.6", features = ["html_reports", "async_tokio"], optional = true }
+console-subscriber = { git = "https://github.com/tokio-rs/console.git" }
+criterion = { version = "0.7", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
 # ssh
-russh = { version = "0.53", features = ["async-trait"], optional = true }
+russh = { version = "0.54", default-features = false, features = ["async-trait"], optional = true }
 dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic
-shadowquic = { version = "=0.2.0", optional = true, git = "https://github.com/spongebob888/shadowquic" }
+shadowquic = { version = "^0.2", optional = true, git = "https://github.com/spongebob888/shadowquic" }
 
 # experimental
 downcast-rs = "2.0"
 
 # workaround for https://github.com/cross-rs/cross/issues/16
-aws-lc-rs = { version = "1.13", default-features = false, optional = true, features = ["bindgen"] }
+aws-lc-rs = { version = "1", default-features = false, optional = true, features = ["bindgen"] }
 
 [dev-dependencies]
-tempfile = "3.20"
+tempfile = "3.21"
 mockall = "0.13.1"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
@@ -191,22 +204,22 @@ serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
-httpmock = "0.7.0"
+httpmock = "0.7.0" # TODO replace with wiremock
 
 [build-dependencies]
 prost-build = "0.14"
 
 [target.'cfg(target_os="linux")'.dependencies]
-unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "cd3e4eca43e6f3be82a2703c3d711b7e18fbfd18" }
+unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "847c80b519f0fd8cff5c887ae708429897d08671" }
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "3.2.0"
+security-framework = "3.4.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
 tracing-oslog = "0.3"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",

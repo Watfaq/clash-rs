@@ -1,10 +1,9 @@
-use std::{io, sync::Arc};
-
-use async_trait::async_trait;
-use tracing::debug;
-
-mod vmess_impl;
-
+use super::{
+    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
+    OutboundHandler, OutboundType,
+    transport::Transport,
+    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
+};
 use crate::{
     app::{
         dispatcher::{
@@ -16,15 +15,12 @@ use crate::{
     impl_default_connector,
     session::Session,
 };
+use async_trait::async_trait;
+use std::{io, sync::Arc};
+use tracing::debug;
+use vmess_impl::OutboundDatagramVmess;
 
-use self::vmess_impl::OutboundDatagramVmess;
-
-use super::{
-    AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
-    transport::Transport,
-    utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
-};
+mod vmess_impl;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -43,7 +39,7 @@ pub struct HandlerOptions {
 pub struct Handler {
     opts: HandlerOptions,
 
-    connector: tokio::sync::Mutex<Option<Arc<dyn RemoteConnector>>>,
+    connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
 impl std::fmt::Debug for Handler {
@@ -60,7 +56,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
-            connector: tokio::sync::Mutex::new(None),
+            connector: Default::default(),
         }
     }
 
@@ -115,7 +111,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);
@@ -137,7 +133,7 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        let dialer = self.connector.lock().await;
+        let dialer = self.connector.read().await;
 
         if let Some(dialer) = dialer.as_ref() {
             debug!("{:?} is connecting via {:?}", self, dialer);

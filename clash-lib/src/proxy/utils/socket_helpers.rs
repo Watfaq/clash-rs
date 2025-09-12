@@ -4,13 +4,14 @@ use crate::{
     session::Session,
 };
 
+use futures::io;
 use socket2::TcpKeepalive;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
-    net::{TcpSocket, TcpStream, UdpSocket},
+    net::{TcpListener, TcpSocket, TcpStream, UdpSocket},
     time::timeout,
 };
-use tracing::{debug, error};
+use tracing::{debug, error, instrument, trace};
 
 pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     #[cfg(not(target_os = "windows"))]
@@ -34,7 +35,7 @@ pub fn apply_tcp_options(s: &TcpStream) -> std::io::Result<()> {
     }
 }
 
-#[allow(unused_variables)]
+#[instrument(skip(so_mark))]
 pub async fn new_tcp_stream(
     endpoint: SocketAddr,
     iface: Option<&OutboundInterface>,
@@ -58,13 +59,16 @@ pub async fn new_tcp_stream(
             socket2::Domain::IPV6,
         ),
     };
+    debug!("created tcp socket");
 
-    #[cfg(not(target_os = "android"))]
-    if let Some(iface) = iface {
-        debug!("binding tcp socket to interface: {iface:?}, family: {family:?}");
+    if !cfg!(target_os = "android")
+        && let Some(iface) = iface
+    {
         must_bind_socket_on_interface(&socket, iface, family)?;
+        trace!("tcp socket bound to interface: {socket:?}");
     }
 
+    #[cfg(not(target_os = "android"))]
     #[cfg(target_os = "linux")]
     if let Some(so_mark) = so_mark {
         socket.set_mark(so_mark)?;
@@ -81,6 +85,7 @@ pub async fn new_tcp_stream(
     .await?
 }
 
+#[instrument(skip(so_mark))]
 pub async fn new_udp_socket(
     src: Option<SocketAddr>,
     iface: Option<&OutboundInterface>,
@@ -98,72 +103,43 @@ pub async fn new_udp_socket(
     // - Otherwise, default to IPv4.
     let (socket, family) = match (family_hint, src, iface) {
         (Some(family_hint), ..) => {
-            debug!("using provided family hint: {family_hint:?}");
             let domain = socket2::Domain::for_address(family_hint);
             (
                 socket2::Socket::new(domain, socket2::Type::DGRAM, None)?,
                 domain,
             )
         }
-        (None, Some(src), _) if src.is_ipv6() => {
-            debug!("resolved v6 socket for v6 src {src:?}");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV6,
-            )
-        }
-        (None, _, Some(iface)) if iface.addr_v6.is_some() => {
-            debug!("resolved v6 socket for v6 iface {iface:?}");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV6,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV6,
-            )
-        }
-        _ => {
-            debug!("defaulting to v4 socket");
-            (
-                socket2::Socket::new(
-                    socket2::Domain::IPV4,
-                    socket2::Type::DGRAM,
-                    None,
-                )?,
-                socket2::Domain::IPV4,
-            )
-        }
+        (None, Some(src), _) if src.is_ipv6() => (
+            try_create_dualstack_socket(src, socket2::Type::DGRAM)?.0,
+            socket2::Domain::IPV6,
+        ),
+        (None, _, Some(iface)) if iface.addr_v6.is_some() => (
+            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV6,
+        ),
+        _ => (
+            socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None)?,
+            socket2::Domain::IPV4,
+        ),
     };
+    debug!("created udp socket");
 
     if !cfg!(target_os = "android") {
         match (src, iface) {
-            (Some(_), Some(iface)) => {
-                debug!("both src and iface are set, iface will be used: {iface:?}");
+            (_, Some(iface)) => {
                 must_bind_socket_on_interface(&socket, iface, family).inspect_err(
                     |x| {
                         error!("failed to bind socket to interface: {}", x);
                     },
                 )?;
+                trace!(iface = ?iface, "udp socket bound: {socket:?}");
             }
             (Some(src), None) => {
-                debug!("binding socket to: {:?}", src);
                 socket.bind(&src.into())?;
-            }
-            (None, Some(iface)) => {
-                debug!("binding udp socket to interface: {:?}", iface);
-                must_bind_socket_on_interface(&socket, iface, family).inspect_err(
-                    |x| {
-                        error!("failed to bind socket to interface: {}", x);
-                    },
-                )?;
+                trace!(src = ?src, "udp socket bound: {socket:?}");
             }
             (None, None) => {
-                debug!("not binding socket to any address or interface");
+                trace!("udp socket not bound to any specific address: {socket:?}");
             }
         }
     }
@@ -197,4 +173,59 @@ pub async fn family_hint_for_session(
             })
             .ok()?
     }
+}
+
+/// Convert ipv6 mapped ipv4 address back to ipv4. Other address remain
+/// unchanged. e.g. ::ffff:127.0.0.1 -> 127.0.0.1
+pub trait ToCanonical {
+    fn to_canonical(self) -> SocketAddr;
+}
+
+impl ToCanonical for SocketAddr {
+    fn to_canonical(mut self) -> SocketAddr {
+        self.set_ip(self.ip().to_canonical());
+        self
+    }
+}
+
+/// Create dualstack socket if it can
+/// If failed, fallback to single stack silently
+pub fn try_create_dualstack_socket(
+    addr: SocketAddr,
+    tcp_or_udp: socket2::Type,
+) -> std::io::Result<(socket2::Socket, bool)> {
+    let domain = if addr.is_ipv4() {
+        socket2::Domain::IPV4
+    } else {
+        socket2::Domain::IPV6
+    };
+    let mut dualstack = false;
+    let socket = socket2::Socket::new(domain, tcp_or_udp, None)?;
+    if addr.is_ipv6() && addr.ip().is_unspecified() {
+        if let Err(e) = socket.set_only_v6(false) {
+            // If setting dualstack fails, fallback to single stack
+            tracing::warn!(
+                "dualstack not supported, falling back to ipv6 only: {e}"
+            );
+        } else {
+            dualstack = true;
+        }
+    };
+    Ok((socket, dualstack))
+}
+
+pub fn try_create_dualstack_tcplistener(
+    addr: SocketAddr,
+) -> io::Result<TcpListener> {
+    let (socket, _dualstack) =
+        try_create_dualstack_socket(addr, socket2::Type::STREAM)?;
+
+    socket.set_nonblocking(true)?;
+    // For fast restart avoid Address In Use Error
+    socket.set_reuse_address(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+
+    let listener = TcpListener::from_std(socket.into())?;
+    Ok(listener)
 }

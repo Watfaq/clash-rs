@@ -1,11 +1,14 @@
 use crate::{
     app::net::DEFAULT_OUTBOUND_INTERFACE,
+    config::proxy::PROXY_DIRECT,
     dns::{
         ClashResolver, ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
     },
+    proxy,
 };
-use std::sync::Arc;
+use hickory_proto::rr::rdata::opt::EdnsCode;
+use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, warn};
 
 use super::config::NameServer;
@@ -14,11 +17,17 @@ use crate::print_and_exit;
 pub async fn make_clients(
     servers: Vec<NameServer>,
     resolver: Option<Arc<dyn ClashResolver>>,
+    outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
 ) -> Vec<ThreadSafeDNSClient> {
     let mut rv = Vec::new();
 
     for s in servers {
         debug!("building nameserver: {}", s);
+
+        let proxy = outbounds
+            .get(&s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string()))
+            .cloned()
+            .unwrap_or(Arc::new(proxy::direct::Handler::new(PROXY_DIRECT)));
 
         let (host, port) = if s.net == DNSNetMode::Dhcp {
             (s.address.as_str(), "0")
@@ -46,6 +55,7 @@ pub async fn make_clients(
                 .or(DEFAULT_OUTBOUND_INTERFACE.read().await.as_ref())
                 .inspect(|x| debug!("DNS client interface: {:?}", x))
                 .cloned(),
+            proxy,
         })
         .await
         {
@@ -74,6 +84,11 @@ pub fn build_dns_response_message(
     res.set_checking_disabled(req.checking_disabled());
     if let Some(edns) = req.extensions().clone() {
         res.set_edns(edns);
+    }
+
+    if let Some(edns) = res.extensions_mut() {
+        // Remove only padding options, keep everything else
+        edns.options_mut().remove(EdnsCode::Padding);
     }
 
     res

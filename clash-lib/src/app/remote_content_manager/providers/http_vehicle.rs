@@ -14,6 +14,8 @@ use hyper::Uri;
 
 use std::io;
 
+use crate::common::http::DEFAULT_USER_AGENT;
+use http::Request;
 use std::path::{Path, PathBuf};
 
 pub struct Vehicle {
@@ -29,8 +31,9 @@ impl Vehicle {
         cwd: Option<P>,
         dns_resolver: ThreadSafeDNSResolver,
     ) -> Self {
-        let client =
-            new_http_client(dns_resolver).expect("failed to create http client");
+        // TODO(dev0): support remote content manager via proxy
+        let client = new_http_client(dns_resolver, None)
+            .expect("failed to create http client");
         Self {
             url: url.into(),
             path: match cwd {
@@ -45,8 +48,15 @@ impl Vehicle {
 #[async_trait]
 impl ProviderVehicle for Vehicle {
     async fn read(&self) -> std::io::Result<Vec<u8>> {
+        let mut req = Request::default();
+        req.headers_mut().insert(
+            http::header::USER_AGENT,
+            DEFAULT_USER_AGENT.parse().expect("must parse user agent"),
+        );
+        *req.body_mut() = http_body_util::Empty::<bytes::Bytes>::new();
+        *req.uri_mut() = self.url.clone();
         self.http_client
-            .get(self.url.clone())
+            .request(req)
             .await
             .map_err(|x| io::Error::other(x.to_string()))?
             .into_body()
@@ -72,20 +82,27 @@ mod tests {
         app::dns::{EnhancedResolver, ThreadSafeDNSResolver},
         tests::initialize,
     };
+    use httpmock::{Method::GET, MockServer};
     use hyper::Uri;
     use std::{str, sync::Arc};
 
     #[tokio::test]
     async fn test_http_vehicle() {
         initialize();
-        let u = "https://httpbin.yba.dev/base64/SFRUUEJJTiBpcyBhd2Vzb21l"
-            .parse::<Uri>()
-            .unwrap();
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(GET).path("/test_http_vehicle");
+            then.status(200)
+                .header("content-type", "text/html; charset=UTF-8")
+                .body("HTTPBIN is awesome");
+        });
+        let u = server.url("/test_http_vehicle").parse::<Uri>().unwrap();
         let p = std::env::temp_dir().join("test_http_vehicle");
         let r = Arc::new(EnhancedResolver::new_default().await);
         let v = super::Vehicle::new(u, p, None, r.clone() as ThreadSafeDNSResolver);
 
         let data = v.read().await.unwrap();
+        mock.assert();
         assert_eq!(str::from_utf8(&data).unwrap(), "HTTPBIN is awesome");
     }
 }

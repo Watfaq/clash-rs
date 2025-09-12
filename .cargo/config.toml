@@ -3,5 +3,4 @@ target-dir = "target"
 rustflags = ["--cfg", "tokio_unstable", "-A", "dead_code"]
 
 [env]
-RUST_LOG = { value = "clash=trace" }
 SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }
