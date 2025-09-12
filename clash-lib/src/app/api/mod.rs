@@ -103,19 +103,26 @@ pub fn get_api_runner(
                 ),
             )
             .nest("/rules", handlers::rule::routes(router))
+            .nest("/group", handlers::group::routes(outbound_manager.clone()))
             .nest(
                 "/proxies",
                 handlers::proxy::routes(outbound_manager.clone(), cache_store),
             )
             .nest(
-                "/connections",
-                handlers::connection::routes(statistics_manager),
-            )
-            .nest(
                 "/providers/proxies",
                 handlers::provider::routes(outbound_manager),
             )
+            .nest(
+                "/connections",
+                handlers::connection::routes(statistics_manager),
+            )
             .nest("/dns", handlers::dns::routes(dns_resolver))
+            .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
+                controller_cfg.secret.clone().unwrap_or_default(),
+            ))
+            .layer(middleware::from_fn(
+                middlewares::fix_json_content_type::fix_content_type,
+            ))
             .route_layer(cors)
             .with_state(app_state)
             .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
@@ -138,11 +145,7 @@ pub fn get_api_runner(
             } else {
                 bind_addr
             };
-            let app_clone = app.clone().route_layer(
-                middlewares::auth::AuthMiddlewareLayer::new(
-                    controller_cfg.secret.clone().unwrap_or_default(),
-                ),
-            );
+            let app_clone = app.clone();
             Some(async move {
                 info!("Starting API server on TCP address {bind_addr}");
                 let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
@@ -187,30 +190,6 @@ pub fn get_api_runner(
                     listener,
                     app_clone.into_make_service_with_connect_info::<SocketAddr>(),
                 )
-                .nest("/rules", handlers::rule::routes(router))
-                .nest(
-                    "/proxies",
-                    handlers::proxy::routes(outbound_manager.clone(), cache_store),
-                )
-                .nest("/group", handlers::group::routes(outbound_manager.clone()))
-                .nest(
-                    "/connections",
-                    handlers::connection::routes(statistics_manager),
-                )
-                .nest(
-                    "/providers/proxies",
-                    handlers::provider::routes(outbound_manager),
-                )
-                .nest("/dns", handlers::dns::routes(dns_resolver))
-                .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
-                    controller_cfg.secret.clone().unwrap_or_default(),
-                ))
-                .layer(middleware::from_fn(
-                    middlewares::fix_json_content_type::fix_content_type,
-                ))
-                .route_layer(cors)
-                .with_state(app_state)
-                .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
                 .await
                 .map_err(|x| {
                     error!("TCP API server error: {}", x);
