@@ -7,7 +7,7 @@ use maxminddb::geoip2;
 use std::{fs, net::IpAddr, path::Path, sync::Arc};
 use tracing::{debug, info, warn};
 
-pub static DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL: &str = "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb";
+pub static DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL: &str = "https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb";
 pub static DEFAULT_ASN_MMDB_DOWNLOAD_URL: &str = "https://git.io/GeoLite2-ASN.mmdb";
 
 pub struct Mmdb {
