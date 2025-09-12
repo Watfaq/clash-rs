@@ -20,11 +20,9 @@ pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
             .await
             .map_err(|e| crate::Error::Operation(format!("NamedPipe error: {e}")))?;
         let connected_client = server;
-        server = named_pipe::ServerOptions::new()
-            .create(path)
-            .map_err(|e| {
-                crate::Error::Operation(format!("Cannot create NamedPipe: {e}"))
-            })?;
+        server = named_pipe::ServerOptions::new().create(path).map_err(|e| {
+            crate::Error::Operation(format!("Cannot create NamedPipe: {e}"))
+        })?;
         let router = router.clone();
         tokio::spawn(async move {
             let io = TokioIo::new(connected_client);

@@ -201,7 +201,8 @@ pub fn get_api_runner(
             None
         };
         // Handle IPC listening
-        let ipc_fut = ipc_addr.map(|ipc_path| async move { ipc::serve_ipc(router, &ipc_path).await });
+        let ipc_fut = ipc_addr
+            .map(|ipc_path| async move { ipc::serve_ipc(router, &ipc_path).await });
         match (tcp_fut, ipc_fut) {
             (Some(tcp), Some(ipc)) => {
                 tokio::select! {
