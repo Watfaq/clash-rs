@@ -1443,7 +1443,6 @@ dependencies = [
  "unix-udp-sock",
  "url",
  "uuid",
- "uzers",
  "watfaq-dns",
  "watfaq-netstack",
  "watfaq-rustls",
@@ -8974,16 +8973,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "uzers"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4df81ff504e7d82ad53e95ed1ad5b72103c11253f39238bcc0235b90768a97dd"
-dependencies = [
- "libc",
- "log",
 ]
 
 [[package]]

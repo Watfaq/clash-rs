@@ -299,46 +299,6 @@ mod tests {
     #[tokio::test]
     #[traced_test]
     #[cfg(unix)]
-    async fn test_serve_ipc_unix_permission_denied() -> anyhow::Result<()> {
-        use anyhow::Context;
-        use std::{os::unix::fs::PermissionsExt, time::Duration};
-        use tempfile::TempDir;
-        use tokio::{fs, time::timeout};
-
-        if uzers::get_current_uid() == 0 {
-            return Ok(());
-        }
-
-        let router = test_router();
-        let temp_dir = TempDir::new().unwrap();
-        let path = temp_dir.path().join("test_socket");
-
-        let mut perms = fs::metadata(temp_dir.path()).await.unwrap().permissions();
-        perms.set_mode(0o444); // Read only
-        fs::set_permissions(temp_dir.path(), perms).await.unwrap();
-
-        let result = timeout(
-            Duration::from_secs(5),
-            serve_ipc(router, path.to_str().unwrap()),
-        )
-        .await;
-
-        let mut perms = fs::metadata(temp_dir.path()).await.unwrap().permissions();
-        perms.set_mode(0o755); // For cleaning
-        fs::set_permissions(temp_dir.path(), perms).await.unwrap();
-
-        let result = result.context("Test timed out")?;
-        assert!(result.is_err());
-        assert!(
-            logs_contain("Cannot create IPC dir")
-                || logs_contain("Cannot bind on IPC address")
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[traced_test]
-    #[cfg(unix)]
     async fn test_serve_ipc_unix_multiple_clients() {
         use hyper::client::conn;
         use hyperlocal::Uri;

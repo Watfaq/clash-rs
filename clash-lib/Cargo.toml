@@ -207,7 +207,6 @@ rand_chacha = "=0.3"
 httpmock = "0.7.0" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
-uzers = "0.12"
 
 [build-dependencies]
 prost-build = "0.14"
