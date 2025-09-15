@@ -205,9 +205,15 @@ env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
 httpmock = "0.7.0" # TODO replace with wiremock
+tracing-test = "0.2"
+http-body-util = "0.1"
+uzers = "0.12"
 
 [build-dependencies]
 prost-build = "0.14"
+
+[target.'cfg(unix)'.dependencies]
+hyperlocal = { version = "0.9", features = ["client"] }
 
 [target.'cfg(target_os="linux")'.dependencies]
 unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "847c80b519f0fd8cff5c887ae708429897d08671" }
