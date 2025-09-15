@@ -249,10 +249,11 @@ impl From<&str> for UdpRelayMode {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum CongestionControl {
     Cubic,
     NewReno,
+    #[default]
     Bbr,
 }
 impl From<&str> for CongestionControl {
@@ -271,12 +272,6 @@ impl From<&str> for CongestionControl {
             );
             Self::default()
         }
-    }
-}
-
-impl Default for CongestionControl {
-    fn default() -> Self {
-        Self::Cubic
     }
 }
 

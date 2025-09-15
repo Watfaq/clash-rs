@@ -428,6 +428,10 @@ pub struct Config {
     pub ipv6: bool,
     /// external controller address
     pub external_controller: Option<String>,
+
+    #[cfg_attr(not(unix), serde(alias = "external-controller-pipe"))]
+    #[cfg_attr(unix, serde(alias = "external-controller-unix"))]
+    pub external_controller_ipc: Option<String>,
     /// dashboard folder path relative to the $CWD
     pub external_ui: Option<String>,
     /// external controller secret
