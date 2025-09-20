@@ -257,12 +257,13 @@ impl TryFrom<&crate::config::def::Config> for Config {
             )));
         }
 
-        for ns in &dc.default_nameserver {
-            let _ = ns.parse::<IpAddr>().map_err(|_| {
+        let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
+
+        for ns in &default_nameserver {
+            let _ = ns.address.parse::<SocketAddr>().map_err(|_| {
                 Error::InvalidConfig(String::from("default dns must be ip address"))
             })?;
         }
-        let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
 
         Ok(Self {
             enable: dc.enable,
