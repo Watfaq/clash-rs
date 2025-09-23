@@ -102,4 +102,3 @@ pub struct CommonInboundOpts {
     /// Linux routing mark
     pub fw_mark: Option<u32>,
 }
-
