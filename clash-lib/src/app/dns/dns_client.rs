@@ -175,7 +175,7 @@ impl DnsClient {
                 let ip = match opts.r {
                     Some(r) => {
                         match r.resolve(&opts.host, false).await.map_err(|x| {
-                            anyhow!("resolve hostname failure: {}", x.to_string())
+                            anyhow!("resolve hostname failure: {}", x)
                         })? {
                             Some(ip) => ip,
                             _ => {
