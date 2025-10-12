@@ -105,7 +105,7 @@ pub fn get_runner(
             let tun_name =
                 tun_init_config.tun_name.expect("tun name must be provided");
             let tun_exist = network_interface::NetworkInterface::show()
-                .and_then(|ifs| Ok(ifs.into_iter().any(|x| x.name == tun_name)))
+                .map(|ifs| ifs.into_iter().any(|x| x.name == tun_name))
                 .unwrap_or_default();
 
             if tun_exist {
@@ -128,12 +128,12 @@ pub fn get_runner(
                 );
             }
 
-            if let Some(gateway_v6) = cfg.gateway_v6
-                && !tun_exist
-            {
-                debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
-                tun_builder =
-                    tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
+            if !tun_exist {
+                if let Some(gateway_v6) = cfg.gateway_v6 {
+                    debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
+                    tun_builder =
+                        tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
+                }
             }
 
             #[cfg(target_os = "windows")]
