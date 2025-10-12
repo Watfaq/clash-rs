@@ -128,12 +128,10 @@ pub fn get_runner(
                 );
             }
 
-            if !tun_exist {
-                if let Some(gateway_v6) = cfg.gateway_v6 {
-                    debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
-                    tun_builder =
-                        tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
-                }
+            if !tun_exist && let Some(gateway_v6) = cfg.gateway_v6 {
+                debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
+                tun_builder =
+                    tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
             }
 
             #[cfg(target_os = "windows")]
