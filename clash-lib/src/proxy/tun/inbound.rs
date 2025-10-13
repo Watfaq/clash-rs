@@ -119,23 +119,24 @@ pub fn get_runner(
                     .unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }),
             );
 
-            if !tun_exist {
-                debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
-                tun_builder = tun_builder.ipv4(
-                    cfg.gateway.addr(),
-                    cfg.gateway.netmask(),
-                    None,
-                );
-            }
-
-            if !tun_exist && let Some(gateway_v6) = cfg.gateway_v6 {
-                debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
-                tun_builder =
-                    tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
-            }
-
             #[cfg(target_os = "windows")]
             {
+                // only on Windows we need an IP address
+                if !tun_exist {
+                    debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
+                    tun_builder = tun_builder.ipv4(
+                        cfg.gateway.addr(),
+                        cfg.gateway.netmask(),
+                        None,
+                    );
+                }
+
+                if !tun_exist && let Some(gateway_v6) = cfg.gateway_v6 {
+                    debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
+                    tun_builder =
+                        tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
+                }
+
                 if let Some(guid) = tun_init_config.guid {
                     tun_builder = tun_builder.device_guid(guid);
                 }
