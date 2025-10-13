@@ -114,7 +114,8 @@ pub fn get_runner(
                 info!("tun device {} does not exist, creating.", &tun_name);
             }
 
-            let mut tun_builder = DeviceBuilder::new().name(&tun_name).mtu(
+            let mut tun_builder = DeviceBuilder::new();
+            tun_builder = tun_builder.name(&tun_name).mtu(
                 cfg.mtu
                     .unwrap_or(if cfg!(windows) { 65535u16 } else { 1500u16 }),
             );
