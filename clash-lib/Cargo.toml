@@ -163,8 +163,8 @@ arti-client = { version = "0.34", optional = true, default-features = false, fea
 tor-rtcompat = { version = "0.34", optional = true, default-features = false }
 
 # tuic
-tuic = { tag = "v1.5.0", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
-tuic-quinn = { tag = "v1.5.0", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic = { tag = "v1.5.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
+tuic-quinn = { tag = "v1.5.2", optional = true, git = "https://github.com/Itsusinn/tuic.git" }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -204,7 +204,7 @@ serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
-httpmock = "0.8.0" # TODO replace with wiremock
+httpmock = "0.8.1" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
 
