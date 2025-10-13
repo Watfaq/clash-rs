@@ -65,7 +65,7 @@ async fn smoke_test() {
         "Curl command failed with output: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(mock.hits(), 1, "Mock server was not hit exactly once");
+    assert_eq!(mock.calls(), 1, "Mock server was not hit exactly once");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "Mock response for testing",
@@ -91,7 +91,7 @@ async fn smoke_test() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert_eq!(mock.hits(), 2, "Mock server was not hit exactly twice");
+    assert_eq!(mock.calls(), 2, "Mock server was not hit exactly twice");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "Mock response for testing",
