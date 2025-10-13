@@ -143,7 +143,12 @@ pub fn get_runner(
 
             let dev = tun_builder.build_async()?;
 
-            maybe_add_routes(&cfg, &tun_name)?;
+            if !tun_exist {
+                info!("setting up routes for tun {}", &tun_name);
+                maybe_add_routes(&cfg, &tun_name)?;
+            } else {
+                info!("skipping route setup for existing tun {}", &tun_name);
+            }
 
             dev
         }
