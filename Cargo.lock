@@ -247,7 +247,7 @@ dependencies = [
  "tor-config",
  "tor-config-path",
  "tor-dirmgr",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-guardmgr",
  "tor-hsclient",
  "tor-hscrypto",
@@ -260,7 +260,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tracing",
  "void",
 ]
@@ -1058,7 +1058,7 @@ dependencies = [
  "num-traits",
  "serde",
  "wasm-bindgen",
- "windows-link 0.2.0",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -1261,7 +1261,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tokio-watfaq-rustls",
- "tor-rtcompat",
+ "tor-rtcompat 0.35.0",
  "totp-rs",
  "tower",
  "tower-http",
@@ -1283,7 +1283,7 @@ dependencies = [
  "watfaq-netstack",
  "watfaq-rustls",
  "webpki-roots",
- "windows 0.62.1",
+ "windows 0.62.2",
  "zstd",
 ]
 
@@ -3095,9 +3095,9 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "httpmock"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cccf7d3f1b6ee94515933ed2d24615bc8aa2a68c3858e318422f10f538888f2"
+checksum = "e13ea3a316b6847082f6b00f4c49af2f8ec241666d917bdac7b33f8ca398f48d"
 dependencies = [
  "assert-json-diff",
  "async-object-pool",
@@ -3278,7 +3278,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.1",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -3680,9 +3680,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.176"
+version = "0.2.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58f929b4d672ea937a23a1ab494143d968337a5f47e56d0815df1e0890ddf174"
+checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
 name = "libloading"
@@ -5351,9 +5351,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.11.3"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b5288124840bee7b386bc413c487869b360b2b4ec421ea56425128692f2a82c"
+checksum = "4a52d8d02cacdb176ef4678de6c052efb4b3da14b78e4db683a4252762be5433"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -5363,9 +5363,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833eb9ce86d40ef33cb1306d8accf7bc8ec2bfea4355cbdebb3df68b40925cad"
+checksum = "722166aa0d7438abbaa4d5cc2c649dac844e8c56d82fb3d33e9c34b5cd268fc6"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -5435,6 +5435,12 @@ name = "retry-error"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81327a490be5c40de5e870e354b8f545f2999f7cf7b26af25442dc5b2e2c72e5"
+
+[[package]]
+name = "retry-error"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b295404fa4a9e1e63537ccbd4e4b6309d9688bd70608ddc16d3b8af0389a673a"
 
 [[package]]
 name = "rfc6979"
@@ -5531,9 +5537,9 @@ dependencies = [
 
 [[package]]
 name = "russh"
-version = "0.54.4"
+version = "0.54.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b1296a0e9d970321e59d77367b8d1511311445f3dd5d42f24e7d9a1706cf51"
+checksum = "ca3ee9363fcf66d434d8015d9ae7d879681206981534c21bfdff8a7e34f52cca"
 dependencies = [
  "aes",
  "async-trait",
@@ -5931,9 +5937,9 @@ dependencies = [
 
 [[package]]
 name = "sentry"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc02afbba55340d6394968cb621384dbb9a0ad72d1b45e3e403099702a8bcf61"
+checksum = "48b85e25e8a1fc13928885e8bf13abe8a09e15c46993aed05d6405f7755d6e20"
 dependencies = [
  "httpdate",
  "reqwest",
@@ -5949,9 +5955,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-backtrace"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f288792b92dfb3e8887554d2d11418863d5fabcd1cfad6756a8f88a5b963b76"
+checksum = "f3253a495ab536f6de1746a58d5d7824b77d75e08e1a4b8ca6fb356839077ae0"
 dependencies = [
  "backtrace",
  "regex",
@@ -5960,9 +5966,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-contexts"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b28e6208b0f6e28a3d08a6e46b1127fefe75185decb969b8e1e0bf8cce6e06d"
+checksum = "027f81a728836e66b88c07666a10f5ed5a35e2695b04eb7aa0fcbed93f814900"
 dependencies = [
  "hostname",
  "libc",
@@ -5974,9 +5980,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-core"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67600a47b5aa005cb701454d56a289135a80654eebf1c1d9f076c3817a249bb8"
+checksum = "d3b6729c8e71ac968edbe9bf2dd4109c162e552b52bacd2b07e24ede1aba84a5"
 dependencies = [
  "rand 0.9.2",
  "sentry-types",
@@ -5987,9 +5993,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-panic"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce0bae293ecf6afaaa00dc63de3cc89b49ef774f06b9cf18dfd9c652009d3461"
+checksum = "1ac0471f04f8f97af0c17eeca2c516e23faa1c0271a55bc64371d9ce488c2d40"
 dependencies = [
  "sentry-backtrace",
  "sentry-core",
@@ -5997,9 +6003,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-tracing"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c044617771f460a3c2ca7cf8f516c3341ba886ca38d53cb550997d8bf636a3c"
+checksum = "428f780866a613142dcc81b7f8551ae4d1c056f4df22b6d7ddd9154a9974eb03"
 dependencies = [
  "bitflags 2.9.4",
  "sentry-backtrace",
@@ -6010,9 +6016,9 @@ dependencies = [
 
 [[package]]
 name = "sentry-types"
-version = "0.43.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa369b6dc823ba5bddd69d16620f19229eb5df865b9483cf4dabb608891bb9c2"
+checksum = "2c19d1d1967b55659c358886d0f1aa3076488d445f84c7d727d384c675adaec1"
 dependencies = [
  "debugid",
  "hex",
@@ -7171,7 +7177,7 @@ dependencies = [
  "getrandom 0.3.3",
  "safelog",
  "thiserror 2.0.17",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-llcrypto",
  "zeroize",
 ]
@@ -7197,7 +7203,7 @@ dependencies = [
  "tor-basic-utils",
  "tor-bytes",
  "tor-cert",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-linkspec",
  "tor-llcrypto",
@@ -7245,14 +7251,14 @@ dependencies = [
  "tor-basic-utils",
  "tor-cell",
  "tor-config",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-keymgr",
  "tor-linkspec",
  "tor-llcrypto",
  "tor-memquota",
  "tor-netdir",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tor-socksproto",
  "tor-units",
  "tracing",
@@ -7294,7 +7300,7 @@ dependencies = [
  "oneshot-fused-workaround",
  "pin-project",
  "rand 0.9.2",
- "retry-error",
+ "retry-error 0.7.0",
  "safelog",
  "serde",
  "static_assertions",
@@ -7304,7 +7310,7 @@ dependencies = [
  "tor-cell",
  "tor-chanmgr",
  "tor-config",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-guardmgr",
  "tor-linkspec",
  "tor-memquota",
@@ -7314,7 +7320,7 @@ dependencies = [
  "tor-proto",
  "tor-protover",
  "tor-relay-selection",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tor-units",
  "tracing",
  "void",
@@ -7348,8 +7354,8 @@ dependencies = [
  "thiserror 2.0.17",
  "toml 0.9.5",
  "tor-basic-utils",
- "tor-error",
- "tor-rtcompat",
+ "tor-error 0.34.0",
+ "tor-rtcompat 0.34.0",
  "tracing",
  "void",
 ]
@@ -7364,8 +7370,8 @@ dependencies = [
  "serde",
  "shellexpand",
  "thiserror 2.0.17",
- "tor-error",
- "tor-general-addr",
+ "tor-error 0.34.0",
+ "tor-general-addr 0.34.0",
 ]
 
 [[package]]
@@ -7398,13 +7404,13 @@ dependencies = [
  "memchr",
  "thiserror 2.0.17",
  "tor-circmgr",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-linkspec",
  "tor-llcrypto",
  "tor-netdoc",
  "tor-proto",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tracing",
 ]
 
@@ -7450,7 +7456,7 @@ dependencies = [
  "tor-config",
  "tor-consdiff",
  "tor-dirclient",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-guardmgr",
  "tor-llcrypto",
  "tor-netdir",
@@ -7458,7 +7464,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tracing",
 ]
 
@@ -7471,7 +7477,7 @@ dependencies = [
  "derive_more",
  "futures",
  "paste",
- "retry-error",
+ "retry-error 0.7.0",
  "static_assertions",
  "strum",
  "thiserror 2.0.17",
@@ -7480,10 +7486,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "tor-error"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63d766a5d11ddad7946cf8357ce7a1e948abdc3ad3ef06ed23f35af522dc089c"
+dependencies = [
+ "derive_more",
+ "futures",
+ "paste",
+ "retry-error 0.8.0",
+ "strum",
+ "thiserror 2.0.17",
+ "void",
+]
+
+[[package]]
 name = "tor-general-addr"
 version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e174609d988464e6c61b5d08bcf8f4d682db3d58ca8482de4821566bb011f8b"
+dependencies = [
+ "derive_more",
+ "thiserror 2.0.17",
+ "void",
+]
+
+[[package]]
+name = "tor-general-addr"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c42cb5b5aec0584db2fba4a88c4e08fb09535ef61e4ef5674315a89e69ec31a2"
 dependencies = [
  "derive_more",
  "thiserror 2.0.17",
@@ -7519,7 +7551,7 @@ dependencies = [
  "tor-async-utils",
  "tor-basic-utils",
  "tor-config",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-linkspec",
  "tor-llcrypto",
  "tor-netdir",
@@ -7527,7 +7559,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-relay-selection",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tor-units",
  "tracing",
 ]
@@ -7548,7 +7580,7 @@ dependencies = [
  "oneshot-fused-workaround",
  "postage",
  "rand 0.9.2",
- "retry-error",
+ "retry-error 0.7.0",
  "safelog",
  "slotmap-careful",
  "strum",
@@ -7561,7 +7593,7 @@ dependencies = [
  "tor-circmgr",
  "tor-config",
  "tor-dirclient",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-keymgr",
  "tor-linkspec",
@@ -7572,7 +7604,7 @@ dependencies = [
  "tor-persist",
  "tor-proto",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tracing",
 ]
 
@@ -7598,7 +7630,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tor-basic-utils",
  "tor-bytes",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-key-forge",
  "tor-llcrypto",
  "tor-memquota",
@@ -7623,7 +7655,7 @@ dependencies = [
  "tor-bytes",
  "tor-cert",
  "tor-checkable",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-llcrypto",
 ]
 
@@ -7656,7 +7688,7 @@ dependencies = [
  "tor-bytes",
  "tor-config",
  "tor-config-path",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-key-forge",
  "tor-llcrypto",
@@ -7742,8 +7774,8 @@ dependencies = [
  "futures",
  "humantime",
  "thiserror 2.0.17",
- "tor-error",
- "tor-rtcompat",
+ "tor-error 0.34.0",
+ "tor-rtcompat 0.34.0",
  "tracing",
  "weak-table",
 ]
@@ -7771,9 +7803,9 @@ dependencies = [
  "tor-async-utils",
  "tor-basic-utils",
  "tor-config",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-log-ratelim",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tracing",
  "void",
 ]
@@ -7800,7 +7832,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "tor-basic-utils",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-linkspec",
  "tor-llcrypto",
@@ -7847,7 +7879,7 @@ dependencies = [
  "tor-cell",
  "tor-cert",
  "tor-checkable",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-linkspec",
  "tor-llcrypto",
@@ -7880,7 +7912,7 @@ dependencies = [
  "time",
  "tor-async-utils",
  "tor-basic-utils",
- "tor-error",
+ "tor-error 0.34.0",
  "tracing",
  "void",
 ]
@@ -7931,14 +7963,14 @@ dependencies = [
  "tor-cert",
  "tor-checkable",
  "tor-config",
- "tor-error",
+ "tor-error 0.34.0",
  "tor-hscrypto",
  "tor-linkspec",
  "tor-llcrypto",
  "tor-log-ratelim",
  "tor-memquota",
  "tor-protover",
- "tor-rtcompat",
+ "tor-rtcompat 0.34.0",
  "tor-rtmock",
  "tor-units",
  "tracing",
@@ -7999,8 +8031,33 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
- "tor-error",
- "tor-general-addr",
+ "tor-error 0.34.0",
+ "tor-general-addr 0.34.0",
+ "tracing",
+ "void",
+]
+
+[[package]]
+name = "tor-rtcompat"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "591b0b0695e86c2958b8ab9c431f6fea17b544ef3ed3931bbfe96239fd5c9193"
+dependencies = [
+ "async-trait",
+ "async_executors",
+ "asynchronous-codec",
+ "coarsetime",
+ "derive_more",
+ "dyn-clone",
+ "educe 0.4.23",
+ "futures",
+ "hex",
+ "libc",
+ "paste",
+ "pin-project",
+ "thiserror 2.0.17",
+ "tor-error 0.35.0",
+ "tor-general-addr 0.35.0",
  "tracing",
  "void",
 ]
@@ -8026,9 +8083,9 @@ dependencies = [
  "slotmap-careful",
  "strum",
  "thiserror 2.0.17",
- "tor-error",
- "tor-general-addr",
- "tor-rtcompat",
+ "tor-error 0.34.0",
+ "tor-general-addr 0.34.0",
+ "tor-rtcompat 0.34.0",
  "tracing",
  "tracing-test",
  "void",
@@ -8048,7 +8105,7 @@ dependencies = [
  "subtle",
  "thiserror 2.0.17",
  "tor-bytes",
- "tor-error",
+ "tor-error 0.34.0",
 ]
 
 [[package]]
@@ -8294,8 +8351,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tuic"
-version = "1.5.0"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.0#33cd093e0871e395151b722ad895392ef2cf3267"
+version = "1.5.2"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.2#ce1482c48315f45672eec483d55e2732db4a17ea"
 dependencies = [
  "bytes",
  "futures-util",
@@ -8307,8 +8364,8 @@ dependencies = [
 
 [[package]]
 name = "tuic-quinn"
-version = "1.5.0"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.0#33cd093e0871e395151b722ad895392ef2cf3267"
+version = "1.5.2"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.2#ce1482c48315f45672eec483d55e2732db4a17ea"
 dependencies = [
  "bytes",
  "eyre",
@@ -8815,9 +8872,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e8983c3ab33d6fb807cfcdad2491c4ea8cbc8ed839181c7dfd9c67c83e261b2"
+checksum = "32b130c0d2d49f8b6889abc456e795e82525204f27c42cf767cf0d7734e089b8"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -8896,14 +8953,14 @@ dependencies = [
 
 [[package]]
 name = "windows"
-version = "0.62.1"
+version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e6c4a1f363c8210c6f77ba24f645c61c6fb941eccf013da691f7e09515b8ac"
+checksum = "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580"
 dependencies = [
- "windows-collections 0.3.1",
- "windows-core 0.62.1",
- "windows-future 0.3.1",
- "windows-numerics 0.3.0",
+ "windows-collections 0.3.2",
+ "windows-core 0.62.2",
+ "windows-future 0.3.2",
+ "windows-numerics 0.3.1",
 ]
 
 [[package]]
@@ -8917,11 +8974,11 @@ dependencies = [
 
 [[package]]
 name = "windows-collections"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "123e712f464a8a60ce1a13f4c446d2d43ab06464cb5842ff68f5c71b6fb7852e"
+checksum = "23b2d95af1a8a14a3c7367e1ed4fc9c20e0a26e79551b1454d72583c97cc6610"
 dependencies = [
- "windows-core 0.62.1",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -8943,7 +9000,7 @@ version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0fdd3ddb90610c7638aa2b3a3ab2904fb9e5cdbecc643ddb3647212781c4ae3"
 dependencies = [
- "windows-implement 0.60.1",
+ "windows-implement 0.60.2",
  "windows-interface",
  "windows-link 0.1.3",
  "windows-result 0.3.4",
@@ -8952,15 +9009,15 @@ dependencies = [
 
 [[package]]
 name = "windows-core"
-version = "0.62.1"
+version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6844ee5416b285084d3d3fffd743b925a6c9385455f64f6d4fa3031c4c2749a9"
+checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
 dependencies = [
- "windows-implement 0.60.1",
+ "windows-implement 0.60.2",
  "windows-interface",
- "windows-link 0.2.0",
- "windows-result 0.4.0",
- "windows-strings 0.5.0",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
 ]
 
 [[package]]
@@ -8976,13 +9033,13 @@ dependencies = [
 
 [[package]]
 name = "windows-future"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f3db6b24b120200d649cd4811b4947188ed3a8d2626f7075146c5d178a9a4a"
+checksum = "e1d6f90251fe18a279739e78025bd6ddc52a7e22f921070ccdc67dde84c605cb"
 dependencies = [
- "windows-core 0.62.1",
- "windows-link 0.2.0",
- "windows-threading 0.2.0",
+ "windows-core 0.62.2",
+ "windows-link 0.2.1",
+ "windows-threading 0.2.1",
 ]
 
 [[package]]
@@ -8998,9 +9055,9 @@ dependencies = [
 
 [[package]]
 name = "windows-implement"
-version = "0.60.1"
+version = "0.60.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edb307e42a74fb6de9bf3a02d9712678b22399c87e6fa869d6dfcd8c1b7754e0"
+checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9009,9 +9066,9 @@ dependencies = [
 
 [[package]]
 name = "windows-interface"
-version = "0.59.2"
+version = "0.59.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0abd1ddbc6964ac14db11c7213d6532ef34bd9aa042c2e5935f59d7908b46a5"
+checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9026,9 +9083,9 @@ checksum = "5e6ad25900d524eaabdbbb96d20b4311e1e7ae1699af4fb28c17ae66c80d798a"
 
 [[package]]
 name = "windows-link"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45e46c0661abb7180e7b9c281db115305d49ca1709ab8242adf09666d2173c65"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
 [[package]]
 name = "windows-numerics"
@@ -9042,12 +9099,12 @@ dependencies = [
 
 [[package]]
 name = "windows-numerics"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ce3498fe0aba81e62e477408383196b4b0363db5e0c27646f932676283b43d8"
+checksum = "6e2e40844ac143cdb44aead537bbf727de9b044e107a0f1220392177d15b0f26"
 dependencies = [
- "windows-core 0.62.1",
- "windows-link 0.2.0",
+ "windows-core 0.62.2",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -9061,11 +9118,11 @@ dependencies = [
 
 [[package]]
 name = "windows-result"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7084dcc306f89883455a206237404d3eaf961e5bd7e0f312f7c91f57eb44167f"
+checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
 dependencies = [
- "windows-link 0.2.0",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -9088,11 +9145,11 @@ dependencies = [
 
 [[package]]
 name = "windows-strings"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7218c655a553b0bed4426cf54b20d7ba363ef543b52d515b3e48d7fd55318dda"
+checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
 dependencies = [
- "windows-link 0.2.0",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -9137,7 +9194,7 @@ version = "0.61.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e201184e40b2ede64bc2ea34968b28e33622acdbbf37104f0e4a33f7abe657aa"
 dependencies = [
- "windows-link 0.2.0",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -9199,11 +9256,11 @@ dependencies = [
 
 [[package]]
 name = "windows-threading"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab47f085ad6932defa48855254c758cdd0e2f2d48e62a34118a268d8f345e118"
+checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
 dependencies = [
- "windows-link 0.2.0",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
