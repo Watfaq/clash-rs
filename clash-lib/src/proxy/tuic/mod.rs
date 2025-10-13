@@ -382,7 +382,7 @@ mod tests {
     use super::*;
     async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("tuic.json");
+        let conf = test_config_dir.join("tuic.toml");
         let cert = test_config_dir.join("example.org.pem");
         let key = test_config_dir.join("example.org-key.pem");
 
@@ -393,6 +393,7 @@ mod tests {
                 (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
                 (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
             ])
+            .env(&["TUIC_FORCE_TOML=1"])
             .build()
             .await
     }
