@@ -1,0 +1,22 @@
+server = "0.0.0.0:10002"
+
+data_dir = ""
+
+zero_rtt_handshake = false
+dual_stack = false
+
+acl = '''
+direct localhost
+'''
+
+[users]
+00000000-0000-0000-0000-000000000001 = "passwd"
+
+[tls]
+certificate = "/opt/tuic/fullchain.pem"
+private_key = "/opt/tuic/privkey.pem"
+alpn = ["h3"]
+
+[outbound.default]
+type = "direct"
+ip_mode = "auto"
