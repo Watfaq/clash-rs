@@ -1,54 +1,37 @@
-use std::io;
+use std::sync::Arc;
 
-pub struct StreamWrapper(netstack_lwip::TcpStream);
+use tracing::debug;
 
-impl StreamWrapper {
-    pub fn new(stream: netstack_lwip::TcpStream) -> Self {
-        Self(stream)
-    }
-}
-impl tokio::io::AsyncRead for StreamWrapper {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<io::Result<()>> {
-        std::pin::Pin::new(&mut self.get_mut().0).poll_read(cx, buf)
-    }
-}
+use crate::{
+    app::{dispatcher::Dispatcher, net::DEFAULT_OUTBOUND_INTERFACE},
+    session::{Network, Session, Type},
+};
 
-impl tokio::io::AsyncWrite for StreamWrapper {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, io::Error>> {
-        std::pin::Pin::new(&mut self.get_mut().0).poll_write(cx, buf)
-    }
+pub(crate) async fn handle_inbound_stream(
+    stream: watfaq_netstack::TcpStream,
 
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), io::Error>> {
-        std::pin::Pin::new(&mut self.get_mut().0).poll_flush(cx)
-    }
+    dispatcher: Arc<Dispatcher>,
+    so_mark: u32,
+) {
+    let sess = Session {
+        network: Network::Tcp,
+        typ: Type::Tun,
+        source: stream.local_addr(),
+        destination: stream.remote_addr().into(),
+        iface: DEFAULT_OUTBOUND_INTERFACE
+            .read()
+            .await
+            .clone()
+            .inspect(|x| {
+                debug!(
+                    "selecting outbound interface: {:?} for tun TCP connection",
+                    x
+                );
+            }),
+        so_mark: Some(so_mark),
+        ..Default::default()
+    };
 
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), io::Error>> {
-        std::pin::Pin::new(&mut self.get_mut().0).poll_shutdown(cx)
-    }
-}
-
-impl From<netstack_lwip::TcpStream> for StreamWrapper {
-    fn from(stream: netstack_lwip::TcpStream) -> Self {
-        Self::new(stream)
-    }
-}
-
-impl std::fmt::Debug for StreamWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("netstack_lwip_stream").finish()
-    }
+    debug!("new tun TCP session assigned: {}", sess);
+    dispatcher.dispatch_stream(sess, Box::new(stream)).await;
 }
