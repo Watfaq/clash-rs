@@ -237,6 +237,7 @@ jobs:
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
 
       - name: Cargo fmt
+        if: ${{ github.event_name == 'pull_request' }}
         uses: clechasseur/rs-cargo@v4
         with:
           command: fmt
@@ -245,6 +246,7 @@ jobs:
           CLASH_DOCKER_TEST: "true"
 
       - name: Cargo clippy
+        if: ${{ github.event_name == 'pull_request' }}
         uses: clechasseur/rs-cargo@v4
         with:
           tool: ${{ matrix.tool }}
@@ -255,7 +257,7 @@ jobs:
 
       - name: Cargo test
         uses: clechasseur/rs-cargo@v4
-        if: ${{ !matrix.no-test }}
+        if: ${{ !matrix.no-test &&  github.event_name == 'pull_request' }}
         with:
           tool: ${{ matrix.tool }}
           command: "test"
