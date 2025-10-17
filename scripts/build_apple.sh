@@ -8,7 +8,7 @@ IOS_ARCHS=("aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim")
 MACOS_ARCHS=("aarch64-apple-darwin" "x86_64-apple-darwin")
 
 # Variables
-CRATE_NAME="clash_ffi"
+CRATE_NAME="clash-ffi"
 LIB_NAME="clashrs"
 OUTPUT_DIR="build"
 
