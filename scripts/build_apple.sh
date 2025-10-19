@@ -13,8 +13,8 @@ LIB_NAME="clashrs"
 OUTPUT_DIR="build"
 
 HEADERS_DIR="${OUTPUT_DIR}/Headers"
-HEADER_FILE="${HEADERS_DIR}/${LIB_NAME}.h"
-MODULEMAP_FILE="${HEADERS_DIR}/module.modulemap"
+HEADER_FILE="${HEADERS_DIR}/${LIB_NAME}/${LIB_NAME}.h"
+MODULEMAP_FILE="${HEADERS_DIR}/${LIB_NAME}/module.modulemap"
 XCFRAMEWORK_DIR="${OUTPUT_DIR}/${LIB_NAME}.xcframework"
 
 # Ensure the toolchain from rust-toolchain.toml is installed and switched
