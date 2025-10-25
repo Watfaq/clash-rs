@@ -18,7 +18,7 @@ pub mod resolver;
 mod runtime;
 mod server;
 
-pub use config::Config;
+pub use config::{Config, EdnsClientSubnet};
 
 pub use resolver::{EnhancedResolver, SystemResolver, new as new_resolver};
 
