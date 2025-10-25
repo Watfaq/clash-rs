@@ -103,6 +103,7 @@ impl DhcpClient {
                     .collect(),
                 None,
                 HashMap::new(),
+                None,
             )
             .await;
         }

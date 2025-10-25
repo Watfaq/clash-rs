@@ -532,6 +532,9 @@ pub enum DNSListen {
 ///       addr: 127.0.0.1:53555
 ///       ca-cert: dns.crt
 ///       ca-key: dns.key
+///   # edns-client-subnet:
+///   #   ipv4: 1.2.3.0/24
+///   #   ipv6: 2001:db8::/56
 /// ```
 
 #[derive(Serialize, Deserialize, Educe)]
@@ -570,6 +573,8 @@ pub struct DNS {
     pub default_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
+    /// Configure EDNS Client Subnet information to send with upstream queries
+    pub edns_client_subnet: Option<EdnsClientSubnet>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -596,6 +601,15 @@ pub struct FallbackFilter {
     #[serde(rename = "ipcidr")]
     pub ip_cidr: Vec<String>,
     pub domain: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct EdnsClientSubnet {
+    /// IPv4 subnet expressed in CIDR notation, e.g. `1.2.3.0/24`
+    pub ipv4: Option<String>,
+    /// IPv6 subnet expressed in CIDR notation, e.g. `2001:db8::/56`
+    pub ipv6: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

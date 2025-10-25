@@ -68,6 +68,7 @@ impl EnhancedResolver {
                 }],
                 None,
                 HashMap::new(),
+                None,
             )
             .await,
             fallback: None,
@@ -88,6 +89,7 @@ impl EnhancedResolver {
         mmdb: Option<MmdbLookup>,
         outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
     ) -> Self {
+        let edns_client_subnet = cfg.edns_client_subnet.clone();
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
@@ -95,6 +97,7 @@ impl EnhancedResolver {
                 cfg.default_nameserver.clone(),
                 None,
                 outbounds.clone(),
+                edns_client_subnet.clone(),
             )
             .await,
             fallback: None,
@@ -114,6 +117,7 @@ impl EnhancedResolver {
                 cfg.nameserver.clone(),
                 Some(default_resolver.clone()),
                 outbounds.clone(),
+                edns_client_subnet.clone(),
             )
             .await,
             hosts: cfg.hosts,
@@ -123,6 +127,7 @@ impl EnhancedResolver {
                         cfg.fallback.clone(),
                         Some(default_resolver.clone()),
                         outbounds.clone(),
+                        edns_client_subnet.clone(),
                     )
                     .await,
                 )
@@ -182,6 +187,7 @@ impl EnhancedResolver {
                                 vec![ns.to_owned()],
                                 Some(default_resolver.clone()),
                                 outbounds.clone(),
+                                edns_client_subnet.clone(),
                             )
                             .await,
                         ),
@@ -718,6 +724,7 @@ mod tests {
             net: DNSNetMode::Udp,
             iface: None,
             proxy: get_default_outbound(),
+            ecs: None,
         })
         .await
         .expect("build client");
@@ -735,6 +742,7 @@ mod tests {
             net: DNSNetMode::Tcp,
             iface: None,
             proxy: get_default_outbound(),
+            ecs: None,
         })
         .await
         .expect("build client");
@@ -752,6 +760,7 @@ mod tests {
             net: DNSNetMode::DoT,
             iface: None,
             proxy: get_default_outbound(),
+            ecs: None,
         })
         .await
         .expect("build client");
@@ -771,6 +780,7 @@ mod tests {
             net: DNSNetMode::DoH,
             iface: None,
             proxy: get_default_outbound(),
+            ecs: None,
         })
         .await
         .expect("build client");
@@ -788,6 +798,7 @@ mod tests {
             net: DNSNetMode::Dhcp,
             iface: None,
             proxy: get_default_outbound(),
+            ecs: None,
         })
         .await
         .expect("build client");
