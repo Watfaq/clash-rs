@@ -440,7 +440,7 @@ impl DnsClient {
         if message
             .extensions()
             .as_ref()
-            .map_or(false, |edns| edns.option(EdnsCode::Subnet).is_some())
+            .is_some_and(|edns| edns.option(EdnsCode::Subnet).is_some())
         {
             return;
         }
