@@ -8,3 +8,6 @@ pub use tracked::{
     BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
     ChainedDatagramWrapper, ChainedStream, ChainedStreamWrapper, TrackedStream,
 };
+
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+pub use tracked::TrackCopy;

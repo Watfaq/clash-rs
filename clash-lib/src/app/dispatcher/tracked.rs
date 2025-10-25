@@ -167,6 +167,85 @@ impl TrackedStream {
     pub fn inner_mut(&mut self) -> &mut BoxedChainedStream {
         &mut self.inner
     }
+
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
+    pub fn trackers(
+        &self,
+    ) -> (
+        Arc<dyn TrackCopy + Send + Sync>,
+        Arc<dyn TrackCopy + Send + Sync>,
+    ) {
+        let r =
+            Arc::new(ReadTracker::new(self.tracker.clone(), self.manager.clone()));
+        let w = Arc::new(WriteTracker::new(
+            self.tracker.clone(),
+            self.manager.clone(),
+        ));
+        (r, w)
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+pub trait TrackCopy {
+    fn track(&self, total: usize);
+}
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+impl TrackCopy for ReadTracker {
+    fn track(&self, total: usize) {
+        self.push_downloaded(total);
+    }
+}
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+impl TrackCopy for WriteTracker {
+    fn track(&self, total: usize) {
+        self.push_uploaded(total);
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+pub struct ReadTracker {
+    tracker: Arc<TrackerInfo>,
+    manager: Arc<Manager>,
+}
+
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+impl ReadTracker {
+    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
+        Self { tracker, manager }
+    }
+
+    fn push_downloaded(&self, download: usize) {
+        self.manager.push_downloaded(download);
+        self.tracker
+            .download_total
+            .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+pub struct WriteTracker {
+    tracker: Arc<TrackerInfo>,
+    manager: Arc<Manager>,
+}
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+impl WriteTracker {
+    fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
+        Self { tracker, manager }
+    }
+
+    fn push_uploaded(&self, upload: usize) {
+        self.manager.push_uploaded(upload);
+        self.tracker
+            .upload_total
+            .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
+    }
+}
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+impl Drop for TrackedStream {
+    fn drop(&mut self) {
+        debug!("untrack connection: {}", self.id());
+        self.manager.untrack(self.id());
+    }
 }
 
 impl AsyncRead for TrackedStream {
