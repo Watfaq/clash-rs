@@ -299,6 +299,7 @@ pub struct OutboundWireguard {
     pub reserved_bits: Option<Vec<u8>>,
 }
 
+#[cfg(feature = "onion")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTor {
