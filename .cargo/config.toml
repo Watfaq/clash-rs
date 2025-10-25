@@ -1,6 +1,6 @@
 [build]
 target-dir = "target"
-rustflags = ["--cfg", "tokio_unstable", "-A", "dead_code"]
+rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
 SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }

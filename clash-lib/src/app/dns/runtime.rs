@@ -51,6 +51,7 @@ impl DnsRuntimeProvider {
         }
     }
 
+    #[cfg(test)]
     pub fn new_direct(
         iface: Option<OutboundInterface>,
         so_mark: Option<u32>,
