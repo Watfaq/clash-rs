@@ -3,9 +3,9 @@ use crate::{
     Error,
     app::net::{OutboundInterface, get_interface_by_name, get_outbound_interface},
     common::trie,
-    config::def::{DNSListen, DNSMode},
+    config::def::{DNSListen, DNSMode, EdnsClientSubnet as DefEdnsClientSubnet},
 };
-use ipnet::AddrParseError;
+use ipnet::{AddrParseError, Ipv4Net, Ipv6Net};
 use regex::Regex;
 use serde::Deserialize;
 use std::{
@@ -38,6 +38,12 @@ pub struct FallbackFilter {
     pub domain: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EdnsClientSubnet {
+    pub ipv4: Option<Ipv4Net>,
+    pub ipv6: Option<Ipv6Net>,
+}
+
 #[derive(Default)]
 pub struct Config {
     pub enable: bool,
@@ -54,6 +60,7 @@ pub struct Config {
     pub store_smart_stats: bool,
     pub hosts: Option<trie::StringTrie<IpAddr>>,
     pub nameserver_policy: HashMap<String, NameServer>,
+    pub edns_client_subnet: Option<EdnsClientSubnet>,
 }
 
 impl Config {
@@ -265,6 +272,12 @@ impl TryFrom<&crate::config::def::Config> for Config {
             })?;
         }
 
+        let edns_client_subnet = dc
+            .edns_client_subnet
+            .as_ref()
+            .map(parse_edns_client_subnet)
+            .transpose()?;
+
         Ok(Self {
             enable: dc.enable,
             ipv6: c.ipv6 && dc.ipv6,
@@ -395,8 +408,45 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 Some(tree)
             },
             nameserver_policy,
+            edns_client_subnet,
         })
     }
+}
+
+fn parse_edns_client_subnet(
+    ecs: &DefEdnsClientSubnet,
+) -> Result<EdnsClientSubnet, Error> {
+    let ipv4 = ecs
+        .ipv4
+        .as_ref()
+        .map(|value| {
+            value.parse::<Ipv4Net>().map_err(|_| {
+                Error::InvalidConfig(format!(
+                    "invalid edns-client-subnet ipv4 network: {value}"
+                ))
+            })
+        })
+        .transpose()?;
+
+    let ipv6 = ecs
+        .ipv6
+        .as_ref()
+        .map(|value| {
+            value.parse::<Ipv6Net>().map_err(|_| {
+                Error::InvalidConfig(format!(
+                    "invalid edns-client-subnet ipv6 network: {value}"
+                ))
+            })
+        })
+        .transpose()?;
+
+    if ipv4.is_none() && ipv6.is_none() {
+        return Err(Error::InvalidConfig(
+            "edns-client-subnet requires at least one of ipv4/ipv6".into(),
+        ));
+    }
+
+    Ok(EdnsClientSubnet { ipv4, ipv6 })
 }
 
 impl From<crate::config::def::FallbackFilter> for FallbackFilter {
