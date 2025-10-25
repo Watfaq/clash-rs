@@ -1,7 +1,6 @@
 use std::{
     io,
     net::SocketAddr,
-    sync::Arc,
     task::{Context, Poll, ready},
     time::Duration,
 };
@@ -9,12 +8,11 @@ use std::{
 use crate::{
     app::{
         dispatcher::{BoxedChainedDatagram, BoxedChainedStream},
-        dns::{self, ThreadSafeDNSResolver},
+        dns::ThreadSafeDNSResolver,
         net::OutboundInterface,
     },
     common::errors::new_io_error,
-    config::proxy::PROXY_DIRECT,
-    proxy::{AnyOutboundHandler, datagram::UdpPacket, direct},
+    proxy::{AnyOutboundHandler, datagram::UdpPacket},
     session::{Network, Session, Type},
 };
 use futures::{SinkExt, StreamExt};
@@ -56,6 +54,9 @@ impl DnsRuntimeProvider {
         iface: Option<OutboundInterface>,
         so_mark: Option<u32>,
     ) -> Self {
+        use crate::{app::dns, config::proxy::PROXY_DIRECT, proxy::direct};
+        use std::sync::Arc;
+
         let proxy = Arc::new(direct::Handler::new(PROXY_DIRECT));
         // SystemResolver::new us trivial,it always return Ok
         let dns_resolver = Arc::new(dns::SystemResolver::new(false).unwrap());
