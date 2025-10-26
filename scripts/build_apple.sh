@@ -7,6 +7,10 @@ set -o pipefail  # Fail pipeline if any command fails
 IOS_ARCHS=("aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim")
 MACOS_ARCHS=("aarch64-apple-darwin" "x86_64-apple-darwin")
 
+# Min deploy version
+MIN_IOS_VERSION="17.0"
+MIN_MACOS_VERSION="14.0"
+
 # Variables
 CRATE_NAME="clash-ffi"
 LIB_NAME="clashrs"
@@ -61,7 +65,7 @@ mkdir -p "$HEADERS_DIR"
 # Build for all targets
 echo "Building library for iOS and macOS targets..."
 for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
-    cargo +$TOOLCHAIN build --target "$target" --release
+    MACOSX_DEPLOYMENT_TARGET=$MIN_MACOS_VERSION IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo +$TOOLCHAIN build --target "$target" --release
     mkdir -p "$OUTPUT_DIR/$target"
     cp "target/$target/release/lib${LIB_NAME}.a" "$OUTPUT_DIR/$target/"
 done
