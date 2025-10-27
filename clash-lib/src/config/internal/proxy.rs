@@ -281,6 +281,7 @@ pub struct OutboundVless {
     pub grpc_opts: Option<GrpcOpt>,
 }
 
+#[cfg(feature = "wireguard")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundWireguard {
@@ -299,6 +300,7 @@ pub struct OutboundWireguard {
     pub reserved_bits: Option<Vec<u8>>,
 }
 
+#[cfg(feature = "onion")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTor {

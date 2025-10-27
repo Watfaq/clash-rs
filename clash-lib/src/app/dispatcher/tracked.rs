@@ -168,6 +168,7 @@ impl TrackedStream {
         &mut self.inner
     }
 
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     pub fn trackers(
         &self,
     ) -> (
@@ -184,29 +185,30 @@ impl TrackedStream {
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub trait TrackCopy {
     fn track(&self, total: usize);
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl TrackCopy for ReadTracker {
     fn track(&self, total: usize) {
         self.push_downloaded(total);
     }
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl TrackCopy for WriteTracker {
     fn track(&self, total: usize) {
         self.push_uploaded(total);
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub struct ReadTracker {
     tracker: Arc<TrackerInfo>,
     manager: Arc<Manager>,
 }
 
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl ReadTracker {
     fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
         Self { tracker, manager }
@@ -220,12 +222,12 @@ impl ReadTracker {
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub struct WriteTracker {
     tracker: Arc<TrackerInfo>,
     manager: Arc<Manager>,
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl WriteTracker {
     fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
         Self { tracker, manager }
@@ -238,7 +240,7 @@ impl WriteTracker {
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
     }
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl Drop for TrackedStream {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
