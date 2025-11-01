@@ -2,10 +2,10 @@ name: Coverage
 
 on:
   push:
-    tags: [ "v*" ]
-    branches: [ "master" ]
+    tags: ["v*"]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -17,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ 'macos-14',  'windows-latest', 'ubuntu-latest' ]
+        os: ["macos-14", "windows-latest", "ubuntu-latest"]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -46,8 +46,8 @@ jobs:
         uses: clechasseur/rs-cargo@v4
         with:
           tool: cross
-          command: 'llvm-cov'
-          args: --workspace --exclude clash_ffi -F "plus" --codecov --output-path codecov.json
+          command: "llvm-cov"
+          args: --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov.json
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ startsWith(matrix.os, 'ubuntu') && 'true' || 'false' }}
