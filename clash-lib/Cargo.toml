@@ -77,7 +77,7 @@ anyhow = "1"
 # logging
 time = { version = "=0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
-tracing-appender = { version = "0.2"}
+tracing-appender = { version = "0.2" }
 tracing-log = "0.2"
 
 tracing-chrome = { version = "0.7", optional = true }
@@ -150,6 +150,7 @@ hickory-proto = { version = "0.25", default-features = false }
 
 dhcproto = "0.13"
 ring-compat = { version = "0.8", features = ["aead"] }
+sock2proc = { git = "https://github.com/Watfaq/sock2proc.git", rev = "1097e6b" }
 
 rand = "0.9"
 tracing = "0.1"
