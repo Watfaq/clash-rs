@@ -1,5 +1,4 @@
 use super::RuleMatcher;
-use crate::session::Network;
 
 pub struct Process {
     pub name: String,
@@ -18,6 +17,7 @@ impl RuleMatcher for Process {
     fn apply(&self, sess: &crate::session::Session) -> bool {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
+            use crate::session::Network;
             use tracing::debug;
 
             sock2proc::find_process_name(
@@ -41,7 +41,7 @@ impl RuleMatcher for Process {
         {
             use tracing::info;
 
-            info!("PROCESS-NAME not supported on Windows yet");
+            info!("PROCESS-NAME not supported on Windows yet", sess = &sess);
             false
         }
     }
