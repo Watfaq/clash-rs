@@ -148,7 +148,7 @@ hickory-client = { version = "0.25", default-features = false }
 hickory-resolver = { version = "0.25", default-features = false }
 hickory-proto = { version = "0.25", default-features = false }
 
-dhcproto = "0.13"
+dhcproto = "0.14"
 ring-compat = { version = "0.8", features = ["aead"] }
 
 rand = "0.9"
@@ -204,7 +204,7 @@ serial_test = "3.2"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
-httpmock = "0.8.1" # TODO replace with wiremock
+httpmock = "0.8.2" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
 
