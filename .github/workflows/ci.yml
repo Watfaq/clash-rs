@@ -281,7 +281,7 @@ jobs:
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: ${{ !matrix.no-release }}
         with:
           name: ${{ matrix.release-name || matrix.target }}
@@ -308,14 +308,14 @@ jobs:
           fetch-tags: true
 
       - name: Merge binaries
-        uses: actions/upload-artifact/merge@v4
+        uses: actions/upload-artifact/merge@v5
         with:
           name: binaries
           pattern: "*"
           retention-days: 1
 
       - name: Download binaries
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: binaries
           path: ./packages
@@ -403,13 +403,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Download binaries amd64
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: x86_64-unknown-linux-musl
           path: ./clash-rs
 
       - name: Download binaries arm64
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: aarch64-unknown-linux-musl
           path: ./clash-rs
