@@ -41,7 +41,7 @@ impl RuleMatcher for Process {
         {
             use tracing::info;
 
-            info!("PROCESS-NAME not supported on Windows yet", sess = &sess);
+            info!(sess = &sess, "PROCESS-NAME not supported on Windows yet");
             false
         }
     }
