@@ -16,7 +16,7 @@ impl std::fmt::Display for Process {
 
 impl RuleMatcher for Process {
     fn apply(&self, sess: &crate::session::Session) -> bool {
-        #[cfg(not(windows))]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             use tracing::debug;
 
@@ -37,7 +37,7 @@ impl RuleMatcher for Process {
                 }
             })
         }
-        #[cfg(windows)]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             use tracing::info;
 
