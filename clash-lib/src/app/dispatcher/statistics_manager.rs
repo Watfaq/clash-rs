@@ -54,7 +54,7 @@ pub struct Snapshot {
     download_total: u64,
     upload_total: u64,
     connections: Vec<TrackerInfo>,
-    memory: usize,
+    // memory: usize,
 }
 
 type ConnectionMap = HashMap<uuid::Uuid, (Tracked, Sender<()>)>;
@@ -175,7 +175,7 @@ impl Manager {
                 .upload_total
                 .load(std::sync::atomic::Ordering::Relaxed),
             connections,
-            memory: self.memory_usage(),
+            // memory: self.memory_usage(),
         }
     }
 
