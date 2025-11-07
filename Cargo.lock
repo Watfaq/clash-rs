@@ -6648,7 +6648,7 @@ dependencies = [
 [[package]]
 name = "sock2proc"
 version = "0.1.0"
-source = "git+https://github.com/Watfaq/sock2proc.git?rev=1097e6b#1097e6ba692025f80567446e0035af1222f5231f"
+source = "git+https://github.com/Watfaq/sock2proc.git?rev=9f9e630#9f9e6304d62285115b2e4fa632527ae563bf0fcc"
 dependencies = [
  "byteorder",
  "libc",
@@ -6658,6 +6658,7 @@ dependencies = [
  "rtnetlink",
  "sysctl",
  "tracing",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8952,7 +8953,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",

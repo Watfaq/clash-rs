@@ -211,8 +211,8 @@ http-body-util = "0.1"
 [build-dependencies]
 prost-build = "0.14"
 
-[target.'cfg(any(target_os="linux", target_os="macos"))'.dependencies]
-sock2proc = { git = "https://github.com/Watfaq/sock2proc.git", rev = "1097e6b" }
+[target.'cfg(any(target_os="linux", target_os="macos", target_os="windows"))'.dependencies]
+sock2proc = { git = "https://github.com/Watfaq/sock2proc.git", rev = "9f9e630" }
 [target.'cfg(unix)'.dependencies]
 hyperlocal = { version = "0.9", features = ["client"] }
 
