@@ -4,7 +4,8 @@ set -e  # Exit on errors
 set -o pipefail  # Fail pipeline if any command fails
 
 # Targets
-IOS_ARCHS=("aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim")
+# IOS_ARCHS=("aarch64-apple-ios" "x86_64-apple-ios" "aarch64-apple-ios-sim")
+IOS_ARCHS=("aarch64-apple-ios")
 MACOS_ARCHS=("aarch64-apple-darwin" "x86_64-apple-darwin")
 
 # Min deploy version
@@ -78,10 +79,10 @@ mkdir -p "$OUTPUT_DIR/macos-universal"
 echo "Creating universal binaries using lipo..."
 
 # iOS lipo: x86_64-apple-ios + aarch64-apple-ios-sim
-lipo -create \
-    "$OUTPUT_DIR/x86_64-apple-ios/lib${LIB_NAME}.a" \
-    "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" \
-    -output "$OUTPUT_DIR/ios-simulator-universal/lib${LIB_NAME}.a"
+# lipo -create \
+#     "$OUTPUT_DIR/x86_64-apple-ios/lib${LIB_NAME}.a" \
+#     "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" \
+#     -output "$OUTPUT_DIR/ios-simulator-universal/lib${LIB_NAME}.a"
 
 # macOS lipo: aarch64-apple-darwin + x86_64-apple-darwin
 lipo -create \
@@ -94,9 +95,11 @@ echo "Creating XCFramework..."
 rm -rf "$XCFRAMEWORK_DIR"
 xcodebuild -create-xcframework \
     -library "$OUTPUT_DIR/aarch64-apple-ios/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
-    -library "$OUTPUT_DIR/ios-simulator-universal/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
     -library "$OUTPUT_DIR/macos-universal/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
     -output "$XCFRAMEWORK_DIR"
+# -library "$OUTPUT_DIR/ios-simulator-universal/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" 
+
+    # -output "$XCFRAMEWORK_DIR"
 
 echo "XCFramework created at $XCFRAMEWORK_DIR"
 
