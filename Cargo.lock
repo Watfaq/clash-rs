@@ -1162,6 +1162,9 @@ name = "clash-ffi"
 version = "0.9.1"
 dependencies = [
  "clash-lib",
+ "tracing",
+ "tracing-oslog",
+ "tracing-subscriber",
 ]
 
 [[package]]

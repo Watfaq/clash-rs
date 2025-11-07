@@ -23,5 +23,5 @@ opt-level = "s"
 codegen-units = 1
 lto = "thin"
 strip = true
-debug = 2
+debug = 0
 panic = "abort"
