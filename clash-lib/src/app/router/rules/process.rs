@@ -37,7 +37,11 @@ impl RuleMatcher for Process {
                 }
             })
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "windows"
+        )))]
         {
             use tracing::info;
 
