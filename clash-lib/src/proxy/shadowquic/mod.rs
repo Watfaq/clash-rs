@@ -98,7 +98,7 @@ impl Handler {
                     sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
-                    None,
+                    Some(bind_addr),
                 )
                 .await?;
 

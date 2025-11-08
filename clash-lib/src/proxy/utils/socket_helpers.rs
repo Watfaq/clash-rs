@@ -132,6 +132,14 @@ pub async fn new_udp_socket(
                         error!("failed to bind socket to interface: {}", x);
                     },
                 )?;
+                // binding is not necessary for linux but is required on windows
+                // Without binding local_addr can't be obtained by system call
+                // which is required on quinn.
+                #[cfg(target_os = "windows")]
+                if let Some(addr) = src {
+                    socket.bind(&socket2::SockAddr::from(addr))?;
+                }
+
                 trace!(iface = ?iface, "udp socket bound: {socket:?}");
             }
             (Some(src), None) => {
