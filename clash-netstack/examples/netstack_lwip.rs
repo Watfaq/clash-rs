@@ -66,6 +66,7 @@ mod macos {
         Ok(stream)
     }
 
+    #[allow(unused)]
     async fn new_udp_packet(iface: &str) -> std::io::Result<tokio::net::UdpSocket> {
         let socket =
             socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?;
