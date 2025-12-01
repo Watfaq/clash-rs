@@ -30,7 +30,13 @@ A custom protocol, rule based network proxy software.
 - macOS
 - Windows
   - You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to the same directory as your executable and run you program as administrator.
-- iOS - [TestFlight](https://testflight.apple.com/join/cLy4Ub5C)
+- iOS
+  - [![ChocLite App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-example-preferred_2x.png)](https://apps.apple.com/by/app/choclite/id6467517938)
+  - TestFlight Access: [TestFlight](https://testflight.apple.com/join/cLy4Ub5C)
+ 
+## 💰 Sponsors
+- [Fast Access Cloud](https://fast-access.cloud/)
+
 
 ## 📦 Install
 
