@@ -23,7 +23,7 @@ smoltcp = { version = "0.12", default-features = false, features = [
     "async",
     "socket-tcp-cubic",
 ]}
-bytes = "1.0"
+bytes = "1.11"
 tokio = { version = "1.48", features = ["full"] }
 futures = "0.3"
 log = "0.4"
@@ -40,4 +40,4 @@ env_logger = "0.11"
 netstack-lwip = { git = "https://github.com/eycorsican/netstack-lwip", rev = "f434fef" }
 netstack-smoltcp = "0.2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
-tracing-subscriber = "0.3.20"
+tracing-subscriber = "0.3.22"

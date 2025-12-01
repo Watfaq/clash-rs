@@ -155,7 +155,7 @@ rand = "0.9"
 tracing = "0.1"
 
 shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
-maxminddb = "0.26"
+maxminddb = "0.27"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
@@ -177,7 +177,7 @@ blake2 = "0.10.6"
 digest = "0.10.7"
 
 console-subscriber = { git = "https://github.com/tokio-rs/console.git" }
-criterion = { version = "0.7", features = ["html_reports", "async_tokio"], optional = true }
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
 # ssh
@@ -196,7 +196,7 @@ aws-lc-rs = { version = "1", default-features = false, optional = true, features
 
 [dev-dependencies]
 tempfile = "3.23"
-mockall = "0.13.1"
+mockall = "0.14.0"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
 bollard = "0.19"
