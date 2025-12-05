@@ -330,9 +330,6 @@ fn range_to_cidrs_v4(start: Ipv4Addr, end: Ipv4Addr) -> Result<Vec<IpNet>> {
     let end_u32 = u32::from(end);
 
     while current <= end_u32 {
-        // Find the maximum prefix length for a CIDR starting at current
-        // that fits within the range
-
         // 1. Find the number of trailing zeros in current (alignment)
         let max_size_by_alignment = if current == 0 {
             32
@@ -341,22 +338,32 @@ fn range_to_cidrs_v4(start: Ipv4Addr, end: Ipv4Addr) -> Result<Vec<IpNet>> {
         };
 
         // 2. Find the maximum block size that fits in the remaining range
-        let remaining = end_u32 - current + 1;
-        let max_size_by_range = 32 - remaining.leading_zeros();
+        // Use u64 to avoid overflow when current==0 and end==u32::MAX
+        let remaining = (end_u32 as u64 - current as u64 + 1).min(u32::MAX as u64);
+        let max_size_by_range = if remaining == 0 {
+            0
+        } else {
+            32 - (remaining - 1).leading_zeros() // Use remaining-1 to get the correct bit count
+        };
 
         // 3. Take the minimum of the two
-        let prefix_len = 32 - max_size_by_alignment.min(max_size_by_range - 1);
+        let prefix_len = if max_size_by_range == 0 {
+            32 // Single IP
+        } else {
+            32 - max_size_by_alignment.min(max_size_by_range)
+        };
 
         let cidr =
             IpNet::new(IpAddr::V4(Ipv4Addr::from(current)), prefix_len as u8)?;
         result.push(cidr);
 
         // Move to next block
-        let block_size = 1u32 << (32 - prefix_len);
-        if current > u32::MAX - block_size {
-            break; // Would overflow
+        let block_size = 1u64 << (32 - prefix_len);
+        let next = current as u64 + block_size;
+        if next > end_u32 as u64 || next > u32::MAX as u64 {
+            break;
         }
-        current += block_size;
+        current = next as u32;
     }
 
     Ok(result)
@@ -368,9 +375,6 @@ fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
     let end_u128 = u128::from(end);
 
     while current <= end_u128 {
-        // Find the maximum prefix length for a CIDR starting at current
-        // that fits within the range
-
         // 1. Find the number of trailing zeros in current (alignment)
         let max_size_by_alignment = if current == 0 {
             128
@@ -379,23 +383,216 @@ fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
         };
 
         // 2. Find the maximum block size that fits in the remaining range
-        let remaining = end_u128 - current + 1;
-        let max_size_by_range = 128 - remaining.leading_zeros();
+        let remaining = end_u128.saturating_sub(current).saturating_add(1);
+        let max_size_by_range = if remaining == 0 {
+            0
+        } else {
+            128 - (remaining - 1).leading_zeros()
+        };
 
         // 3. Take the minimum of the two
-        let prefix_len = 128 - max_size_by_alignment.min(max_size_by_range - 1);
+        let prefix_len = if max_size_by_range == 0 {
+            128
+        } else {
+            128 - max_size_by_alignment.min(max_size_by_range)
+        };
 
         let cidr =
             IpNet::new(IpAddr::V6(Ipv6Addr::from(current)), prefix_len as u8)?;
         result.push(cidr);
 
         // Move to next block
-        let block_size = 1u128 << (128 - prefix_len);
-        if current > u128::MAX - block_size {
-            break; // Would overflow
+        let block_size = if prefix_len >= 128 {
+            1
+        } else {
+            1u128 << (128 - prefix_len)
+        };
+
+        match current.checked_add(block_size) {
+            Some(next) if next <= end_u128 => current = next,
+            _ => break,
         }
-        current += block_size;
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn test_range_to_cidrs_single_ip_v4() {
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "192.168.1.1/32");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_aligned_block_v4() {
+        // 192.168.1.0 - 192.168.1.255 is a perfect /24
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 0));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 255));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "192.168.1.0/24");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_unaligned_v4() {
+        // 192.168.1.1 - 192.168.1.5 should split into multiple CIDRs
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 5));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        // Expected: 192.168.1.1/32, 192.168.1.2/31, 192.168.1.4/31
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].to_string(), "192.168.1.1/32");
+        assert_eq!(result[1].to_string(), "192.168.1.2/31");
+        assert_eq!(result[2].to_string(), "192.168.1.4/31");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_large_range_v4() {
+        // 10.0.0.0 - 10.255.255.255 is a perfect /8
+        let start = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 0));
+        let end = IpAddr::V4(Ipv4Addr::new(10, 255, 255, 255));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "10.0.0.0/8");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_cross_boundary_v4() {
+        // 192.168.0.255 - 192.168.2.1
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 0, 255));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        // Should produce multiple CIDRs
+        assert!(!result.is_empty());
+
+        // Verify all IPs in range are covered
+        let mut covered_ips = vec![];
+        for cidr in &result {
+            for addr in cidr.hosts() {
+                covered_ips.push(addr);
+            }
+        }
+
+        // Check first and last are covered
+        assert!(covered_ips.contains(&start));
+        assert!(covered_ips.contains(&end));
+    }
+
+    #[test]
+    fn test_range_to_cidrs_empty_range() {
+        // end < start should return empty
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 5));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_range_to_cidrs_ipv4_mapped_ipv6() {
+        // IPv4-mapped IPv6 addresses should be normalized to IPv4
+        let start = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x0100));
+        let end = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc0a8, 0x01ff));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        // Should be normalized to 192.168.1.0/24
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "192.168.1.0/24");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_single_ip_v6() {
+        let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
+        let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "2001:db8::1/128");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_aligned_block_v6() {
+        // 2001:db8::/32 block
+        let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0));
+        let end = IpAddr::V6(Ipv6Addr::new(
+            0x2001, 0xdb8, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
+        ));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "2001:db8::/32");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_small_range_v6() {
+        let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
+        let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 5));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        // Should produce multiple CIDRs
+        assert!(result.len() >= 3);
+
+        // Verify first CIDR
+        assert_eq!(result[0].to_string(), "2001:db8::1/128");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_mixed_family_error() {
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1));
+        let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
+        let result = range_to_cidrs(start, end);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_range_to_cidrs_max_ip_v4() {
+        // Test range ending at maximum IPv4 address
+        let start = IpAddr::V4(Ipv4Addr::new(255, 255, 255, 254));
+        let end = IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "255.255.255.254/31");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_power_of_two_v4() {
+        // Range of exactly 256 IPs starting at aligned address
+        let start = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 0));
+        let end = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255));
+        let result = range_to_cidrs(start, end).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "10.0.0.0/24");
+    }
+
+    #[test]
+    fn test_range_to_cidrs_coverage_v4() {
+        // Comprehensive test: verify all IPs in range are covered exactly once
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 200));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        let mut covered_ips = std::collections::HashSet::new();
+        for cidr in &result {
+            for addr in cidr.hosts() {
+                assert!(covered_ips.insert(addr), "IP {} covered twice", addr);
+            }
+        }
+
+        // Check all IPs in range are covered
+        let start_u32 = u32::from(Ipv4Addr::new(192, 168, 1, 100));
+        let end_u32 = u32::from(Ipv4Addr::new(192, 168, 1, 200));
+        for i in start_u32..=end_u32 {
+            let ip = IpAddr::V4(Ipv4Addr::from(i));
+            assert!(covered_ips.contains(&ip), "IP {} not covered", ip);
+        }
+
+        assert_eq!(covered_ips.len(), 101); // 100 to 200 inclusive
+    }
 }
