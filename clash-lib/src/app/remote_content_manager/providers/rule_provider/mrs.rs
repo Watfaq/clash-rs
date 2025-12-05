@@ -361,7 +361,10 @@ fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
         result.push(cidr);
 
         // Move to next block
-        debug_assert!(block_size_bits < 128, "block_size_bits should always be less than 128");
+        debug_assert!(
+            block_size_bits < 128,
+            "block_size_bits should always be less than 128"
+        );
         let block_size = 1u128 << block_size_bits;
 
         match current.checked_add(block_size) {
@@ -499,8 +502,11 @@ mod tests {
         assert_eq!(result[2].to_string(), "2001:db8::4/127");
 
         // Verify the total number of IPs covered matches the range
-        let total_ips: u64 = result.iter().map(|cidr| 1u64 << (128 - cidr.prefix_len())).sum();
-        assert_eq!(total_ips, 5); // IPs 1-5 inclusive
+        let total_ips: u128 = result
+            .iter()
+            .map(|cidr| 1u128 << (128 - cidr.prefix_len()))
+            .sum();
+        assert_eq!(total_ips, 5u128); // IPs 1-5 inclusive
     }
 
     #[test]
@@ -509,6 +515,113 @@ mod tests {
         let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
         let result = range_to_cidrs(start, end);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_range_to_cidrs_single_remaining_ip_v4() {
+        // Test the edge case mentioned in Copilot comment: remaining_ips = 1
+        // When we have exactly 1 IP left, leading_zeros() = 31
+        // max_block_size_bits should be 31 - 31 = 0, giving block_size = 2^0 = 1 IP
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100)); // Same IP
+        let result = range_to_cidrs(start, end).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "192.168.1.100/32"); // Single IP
+
+        // Verify exactly 1 IP is covered
+        let total_ips: u64 = result
+            .iter()
+            .map(|cidr| 1u64 << (32 - cidr.prefix_len()))
+            .sum();
+        assert_eq!(total_ips, 1);
+    }
+
+    #[test]
+    fn test_range_to_cidrs_single_remaining_ip_v6() {
+        // Test the edge case for IPv6: remaining_ips = 1
+        // When we have exactly 1 IP left, leading_zeros() = 127
+        // max_block_size_bits should be 127 - 127 = 0, giving block_size = 2^0 = 1
+        // IP
+        let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 100));
+        let end = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 100)); // Same IP
+        let result = range_to_cidrs(start, end).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "2001:db8::64/128"); // Single IP
+
+        // Verify exactly 1 IP is covered
+        let total_ips: u128 = result
+            .iter()
+            .map(|cidr| 1u128 << (128 - cidr.prefix_len()))
+            .sum();
+        assert_eq!(total_ips, 1u128);
+    }
+
+    #[test]
+    fn test_range_to_cidrs_two_remaining_ips_v4() {
+        // Test remaining_ips = 2: leading_zeros() = 30
+        // max_block_size_bits should be 31 - 30 = 1, giving block_size = 2^1 = 2 IPs
+        let start = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
+        let end = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 101)); // 2 IPs
+        let result = range_to_cidrs(start, end).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "192.168.1.100/31"); // 2 IPs
+
+        // Verify exactly 2 IPs are covered
+        let total_ips: u64 = result
+            .iter()
+            .map(|cidr| 1u64 << (32 - cidr.prefix_len()))
+            .sum();
+        assert_eq!(total_ips, 2);
+    }
+
+    #[test]
+    fn test_range_to_cidrs_small_ipv6_prefix_shift_overflow() {
+        // Test the potential shift overflow issue mentioned in Copilot comments
+        // Create a large IPv6 range that would cause overflow with u64 shifts
+        let start = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0));
+        let end = IpAddr::V6(Ipv6Addr::new(
+            0x2001, 0xdb8, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff,
+        ));
+        let result = range_to_cidrs(start, end).unwrap();
+
+        // This should produce a /32 CIDR covering 2^96 IPs
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].to_string(), "2001:db8::/32");
+
+        // This would overflow with u64, so we need u128
+        let total_ips: u128 = result
+            .iter()
+            .map(|cidr| 1u128 << (128 - cidr.prefix_len()))
+            .sum();
+        assert_eq!(total_ips, 1u128 << 96); // 2^96 IPs
+
+        // Demonstrate that u64 would overflow for this case
+        // (This is just a comment to show why we need u128)
+        // let would_overflow: u64 = 1u64 << (128 - 32); // This would panic!
+    }
+
+    #[test]
+    fn test_bit_calculation_edge_cases() {
+        // Test various remaining_ips values to verify bit calculations
+        let test_cases = vec![
+            (1u32, 0u32),  // remaining=1, leading_zeros=31, expected_bits=0
+            (2u32, 1u32),  // remaining=2, leading_zeros=30, expected_bits=1
+            (4u32, 2u32),  // remaining=4, leading_zeros=29, expected_bits=2
+            (8u32, 3u32),  // remaining=8, leading_zeros=28, expected_bits=3
+            (16u32, 4u32), // remaining=16, leading_zeros=27, expected_bits=4
+        ];
+
+        for (remaining_ips, expected_bits) in test_cases {
+            let calculated_bits = 31 - (remaining_ips.leading_zeros() as u32);
+            assert_eq!(
+                calculated_bits, expected_bits,
+                "For remaining_ips={}, expected {} bits but got {}",
+                remaining_ips, expected_bits, calculated_bits
+            );
+        }
     }
 
     #[test]
@@ -542,7 +655,10 @@ mod tests {
         assert!(!result.is_empty());
 
         // Verify the total number of IPs covered matches the range
-        let total_ips: u64 = result.iter().map(|cidr| 1u64 << (32 - cidr.prefix_len())).sum();
+        let total_ips: u64 = result
+            .iter()
+            .map(|cidr| 1u64 << (32 - cidr.prefix_len()))
+            .sum();
         assert_eq!(total_ips, 101); // 100 to 200 inclusive
     }
 }
