@@ -308,7 +308,7 @@ fn range_to_cidrs_v4(start: Ipv4Addr, end: Ipv4Addr) -> Result<Vec<IpNet>> {
 
         // Find the largest power of 2 that is <= remaining_ips
         // Note: remaining_ips is always >= 1 due to loop condition
-        let max_block_size_bits = 31 - (remaining_ips.leading_zeros() as u32);
+        let max_block_size_bits = 31 - remaining_ips.leading_zeros();
 
         // Take the minimum: we can't use more bits than alignment allows
         let block_size_bits = trailing_zeros.min(max_block_size_bits);
@@ -350,7 +350,7 @@ fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
 
         // Find the largest power of 2 that is <= remaining_ips
         // Note: remaining_ips is always >= 1 due to loop condition
-        let max_block_size_bits = 127 - (remaining_ips.leading_zeros() as u32);
+        let max_block_size_bits = 127 - remaining_ips.leading_zeros();
 
         // Take the minimum: we can't use more bits than alignment allows
         let block_size_bits = trailing_zeros.min(max_block_size_bits);
