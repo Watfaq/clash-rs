@@ -19,11 +19,13 @@ impl CidrTrie {
         if let Ok(cidr) = cidr.parse::<ipnet::IpNet>() {
             match cidr {
                 ipnet::IpNet::V4(v4) => {
-                    self.v4.insert(v4.addr(), v4.prefix_len() as _, true);
+                    self.v4
+                        .insert(v4.trunc().addr(), v4.prefix_len() as _, true);
                     true
                 }
                 ipnet::IpNet::V6(v6) => {
-                    self.v6.insert(v6.addr(), v6.prefix_len() as _, true);
+                    self.v6
+                        .insert(v6.trunc().addr(), v6.prefix_len() as _, true);
                     true
                 }
             }

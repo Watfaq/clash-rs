@@ -285,96 +285,116 @@ fn ip_addr_succ(ip: IpAddr) -> Option<IpAddr> {
 }
 
 /// Converts an inclusive IP address range [start, end] into a minimal list of
-/// CIDR prefixes.
+/// CIDR prefixes using an optimized algorithm.
 fn range_to_cidrs(start: IpAddr, end: IpAddr) -> Result<Vec<IpNet>> {
     if start > end {
         return Ok(Vec::new()); // Empty range
     }
+
+    // Normalize IPv4-mapped IPv6 addresses
+    let normalize = |ip: IpAddr| -> IpAddr {
+        match ip {
+            IpAddr::V6(v6) => {
+                if let Some(v4) = v6.to_ipv4_mapped() {
+                    IpAddr::V4(v4)
+                } else {
+                    IpAddr::V6(v6)
+                }
+            }
+            v4 => v4,
+        }
+    };
+
+    let start = normalize(start);
+    let end = normalize(end);
 
     // Ensure start and end are the same address family
     if start.is_ipv4() != end.is_ipv4() {
         bail!("Start and end IP addresses must be of the same family");
     }
 
-    let mut current = start;
+    match (start, end) {
+        (IpAddr::V4(start_v4), IpAddr::V4(end_v4)) => {
+            range_to_cidrs_v4(start_v4, end_v4)
+        }
+        (IpAddr::V6(start_v6), IpAddr::V6(end_v6)) => {
+            range_to_cidrs_v6(start_v6, end_v6)
+        }
+        _ => unreachable!("Already checked address family"),
+    }
+}
+
+fn range_to_cidrs_v4(start: Ipv4Addr, end: Ipv4Addr) -> Result<Vec<IpNet>> {
     let mut result = Vec::new();
+    let mut current = u32::from(start);
+    let end_u32 = u32::from(end);
 
-    while current <= end {
-        let max_len = max_prefix_len(current);
-        let mut best_cidr: Option<IpNet> = None;
+    while current <= end_u32 {
+        // Find the maximum prefix length for a CIDR starting at current
+        // that fits within the range
 
-        // Iterate prefix lengths downwards (largest block /0 to smallest block
-        // /max_len)
-        for prefix_len in (0..=max_len).rev() {
-            // Iterate downwards for efficiency
-            // Attempt to create a network block starting at `current`
-            match IpNet::new(current, prefix_len) {
-                Ok(candidate_cidr) => {
-                    // Check 1: Is `current` the actual start of this block?
-                    // Check 2: Does the block end within the desired range `end`?
-                    if candidate_cidr.network() == current {
-                        let broadcast = candidate_cidr.broadcast(); // No Option needed per ipnet docs
-                        if broadcast <= end {
-                            // This is the largest valid block starting at `current`
-                            // that fits within the range.
-                            best_cidr = Some(candidate_cidr);
-                            break; // Found the best (largest) block for `current`
-                        }
-                        // else: This block extends beyond `end`. Continue to
-                        // try smaller blocks (larger prefix_len).
-                    } else {
-                        // `current` is not the start of this network block for this
-                        // prefix_len. Since we iterate
-                        // downwards, smaller blocks starting at `current` might
-                        // still fit. Continue to the next
-                        // smaller block size.
-                        continue;
-                    }
-                }
-                Err(_) => {
-                    // Error creating CIDR (e.g., invalid prefix for address type,
-                    // though unlikely here) Continue to the next
-                    // smaller block size.
-                    continue;
-                }
-            }
+        // 1. Find the number of trailing zeros in current (alignment)
+        let max_size_by_alignment = if current == 0 {
+            32
+        } else {
+            current.trailing_zeros()
+        };
+
+        // 2. Find the maximum block size that fits in the remaining range
+        let remaining = end_u32 - current + 1;
+        let max_size_by_range = 32 - remaining.leading_zeros();
+
+        // 3. Take the minimum of the two
+        let prefix_len = 32 - max_size_by_alignment.min(max_size_by_range - 1);
+
+        let cidr =
+            IpNet::new(IpAddr::V4(Ipv4Addr::from(current)), prefix_len as u8)?;
+        result.push(cidr);
+
+        // Move to next block
+        let block_size = 1u32 << (32 - prefix_len);
+        if current > u32::MAX - block_size {
+            break; // Would overflow
         }
+        current += block_size;
+    }
 
-        match best_cidr {
-            Some(cidr_to_add) => {
-                result.push(cidr_to_add);
-                let current_broadcast = cidr_to_add.broadcast();
+    Ok(result)
+}
 
-                // Check if we've covered the end of the range or the max possible IP
-                let is_max_ip = match current_broadcast {
-                    IpAddr::V4(v4) => v4 == IPV4_MAX,
-                    IpAddr::V6(v6) => v6 == IPV6_MAX,
-                };
+fn range_to_cidrs_v6(start: Ipv6Addr, end: Ipv6Addr) -> Result<Vec<IpNet>> {
+    let mut result = Vec::new();
+    let mut current = u128::from(start);
+    let end_u128 = u128::from(end);
 
-                if current_broadcast == end || is_max_ip {
-                    break; // Finished
-                }
+    while current <= end_u128 {
+        // Find the maximum prefix length for a CIDR starting at current
+        // that fits within the range
 
-                // Move to the next address after the current block's broadcast
-                match ip_addr_succ(current_broadcast) {
-                    // Use the new successor function
-                    Some(next_ip) => {
-                        // Ensure next_ip is still the same family (should be
-                        // guaranteed by ip_addr_succ)
-                        current = next_ip;
-                    }
-                    None => break, // Reached absolute maximum IP address
-                }
-            }
-            None => {
-                // Should be impossible if start <= end, as /32 or /128 always
-                // exists.
-                return Err(anyhow!(
-                    "Failed to find any suitable CIDR block for IP {}",
-                    current
-                ));
-            }
+        // 1. Find the number of trailing zeros in current (alignment)
+        let max_size_by_alignment = if current == 0 {
+            128
+        } else {
+            current.trailing_zeros()
+        };
+
+        // 2. Find the maximum block size that fits in the remaining range
+        let remaining = end_u128 - current + 1;
+        let max_size_by_range = 128 - remaining.leading_zeros();
+
+        // 3. Take the minimum of the two
+        let prefix_len = 128 - max_size_by_alignment.min(max_size_by_range - 1);
+
+        let cidr =
+            IpNet::new(IpAddr::V6(Ipv6Addr::from(current)), prefix_len as u8)?;
+        result.push(cidr);
+
+        // Move to next block
+        let block_size = 1u128 << (128 - prefix_len);
+        if current > u128::MAX - block_size {
+            break; // Would overflow
         }
+        current += block_size;
     }
 
     Ok(result)
