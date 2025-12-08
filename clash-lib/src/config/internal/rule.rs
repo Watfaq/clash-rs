@@ -198,9 +198,9 @@ impl RuleType {
                 target: target.to_string(),
             }),
             "NETWORK" => {
-                let network = match payload.to_uppercase().as_str() {
-                    "TCP" => crate::session::Network::Tcp,
-                    "UDP" => crate::session::Network::Udp,
+                let network = match payload {
+                    "TCP" | "tcp" => crate::session::Network::Tcp,
+                    "UDP" | "udp" => crate::session::Network::Udp,
                     _ => {
                         return Err(Error::InvalidConfig(format!(
                             "invalid network type: {}, expected TCP or UDP",
