@@ -351,6 +351,10 @@ pub fn map_rule_type(
             }
         },
         RuleType::Match { target } => Box::new(Final { target }),
+        RuleType::Network { network, target } => Box::new(rules::network::NetworkRule {
+            network,
+            target,
+        }),
     }
 }
 
@@ -483,5 +487,66 @@ mod tests {
                 desc
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_network_rule() {
+        initialize();
+
+        let mut mock_resolver = MockClashResolver::new();
+        mock_resolver
+            .expect_resolve()
+            .returning(|_, _| Ok(None));
+        let mock_resolver = Arc::new(mock_resolver);
+
+        let router = super::Router::new(
+            vec![
+                RuleType::Network {
+                    network: crate::session::Network::Tcp,
+                    target: "TCP-PROXY".to_string(),
+                },
+                RuleType::Network {
+                    network: crate::session::Network::Udp,
+                    target: "UDP-PROXY".to_string(),
+                },
+            ],
+            Default::default(),
+            mock_resolver,
+            None,
+            None,
+            None,
+            std::env::temp_dir().to_str().unwrap().to_string(),
+        )
+        .await;
+
+        // Test TCP network rule
+        let mut tcp_session = Session {
+            network: crate::session::Network::Tcp,
+            destination: crate::session::SocksAddr::Domain(
+                "example.com".to_string(),
+                443,
+            ),
+            ..Default::default()
+        };
+        assert_eq!(
+            router.match_route(&mut tcp_session).await.0,
+            "TCP-PROXY",
+            "should match TCP network rule"
+        );
+
+        // Test UDP network rule
+        let mut udp_session = Session {
+            network: crate::session::Network::Udp,
+            destination: crate::session::SocksAddr::Domain(
+                "example.com".to_string(),
+                53,
+            ),
+            ..Default::default()
+        };
+        assert_eq!(
+            router.match_route(&mut udp_session).await.0,
+            "UDP-PROXY",
+            "should match UDP network rule"
+        );
     }
 }
