@@ -351,10 +351,9 @@ pub fn map_rule_type(
             }
         },
         RuleType::Match { target } => Box::new(Final { target }),
-        RuleType::Network { network, target } => Box::new(rules::network::NetworkRule {
-            network,
-            target,
-        }),
+        RuleType::Network { network, target } => {
+            Box::new(rules::network::NetworkRule { network, target })
+        }
     }
 }
 
@@ -494,9 +493,7 @@ mod tests {
         initialize();
 
         let mut mock_resolver = MockClashResolver::new();
-        mock_resolver
-            .expect_resolve()
-            .returning(|_, _| Ok(None));
+        mock_resolver.expect_resolve().returning(|_, _| Ok(None));
         let mock_resolver = Arc::new(mock_resolver);
 
         let router = super::Router::new(

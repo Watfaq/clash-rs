@@ -1,4 +1,7 @@
-use crate::{app::router::rules::RuleMatcher, session::{Network, Session}};
+use crate::{
+    app::router::rules::RuleMatcher,
+    session::{Network, Session},
+};
 
 #[derive(Clone)]
 pub struct NetworkRule {
