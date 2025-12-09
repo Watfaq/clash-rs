@@ -88,38 +88,37 @@ impl TryFrom<&OutboundVmess> for Handler {
                     ))),
                 })
                 .transpose()?,
-            tls: match s.tls.unwrap_or_default() {
-                true => {
-                    let client = TlsClient::new(
-                        s.skip_cert_verify.unwrap_or_default(),
-                        s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
-                            s.ws_opts
-                                .as_ref()
-                                .and_then(|x| {
-                                    x.headers.clone().and_then(|x| {
-                                        let h = x.get("Host");
-                                        h.cloned()
-                                    })
-                                })
-                                .unwrap_or(s.common_opts.server.to_owned())
-                                .to_owned(),
-                        ),
-                        s.network
+            tls: if s.tls.unwrap_or_default() {
+                let client = TlsClient::new(
+                    s.skip_cert_verify.unwrap_or_default(),
+                    s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
+                        s.ws_opts
                             .as_ref()
-                            .map(|x| match x.as_str() {
-                                "ws" => Ok(vec!["http/1.1".to_owned()]),
-                                "http" => Ok(vec![]),
-                                "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
-                                _ => Err(Error::InvalidConfig(format!(
-                                    "unsupported network: {x}"
-                                ))),
+                            .and_then(|x| {
+                                x.headers.clone().and_then(|x| {
+                                    let h = x.get("Host");
+                                    h.cloned()
+                                })
                             })
-                            .transpose()?,
-                        None,
-                    );
-                    Some(Box::new(client))
-                }
-                false => None,
+                            .unwrap_or(s.common_opts.server.to_owned())
+                            .to_owned(),
+                    ),
+                    s.network
+                        .as_ref()
+                        .map(|x| match x.as_str() {
+                            "ws" => Ok(vec!["http/1.1".to_owned()]),
+                            "http" => Ok(vec![]),
+                            "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
+                            _ => Err(Error::InvalidConfig(format!(
+                                "unsupported network: {x}"
+                            ))),
+                        })
+                        .transpose()?,
+                    None,
+                );
+                Some(Box::new(client))
+            } else {
+                None
             },
         });
         Ok(h)
