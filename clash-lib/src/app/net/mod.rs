@@ -143,41 +143,54 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         })
         .collect::<Vec<_>>();
 
+    // Interface name priority (wired > wireless > cellular > vpn)
+    // Lower index = higher priority
     let priority = [
-        "eth",
-        "en",
-        "pdp_ip",
-        "WLAN",
-        "wlp",
-        "Ethernet",
-        "vEthernet",
-        "Wi-Fi",
-        "Tailscale",
+        "eth",       // 0 - Linux/Android wired (eth0, eth1)
+        "Ethernet",  // 1 - Windows wired
+        "en",        // 2 - macOS/iOS network interface (en0, en1)
+        "WLAN",      // 3 - Windows/Android wireless (wlan0)
+        "Wi-Fi",     // 4 - Windows/macOS wireless
+        "wlp",       // 5 - Linux wireless (wlp2s0)
+        "pdp_ip",    // 6 - iOS cellular (expensive, prefer WiFi)
+        "rmnet",     // 7 - Android cellular Qualcomm (rmnet_data0, rmnet0)
+        "ccmni",     // 8 - Android cellular MTK (ccmni0)
+        "vEthernet", // 9 - Windows virtual (Hyper-V)
+        "Tailscale", // 10 - VPN (lowest priority to avoid routing loops)
     ];
 
     all_outbounds.sort_by(|left, right| {
-        match (left.addr_v6, right.addr_v6) {
-            (Some(_), None) => return std::cmp::Ordering::Less,
-            (None, Some(_)) => return std::cmp::Ordering::Greater,
-            (Some(left), Some(right)) => {
-                if left.is_unicast_global() && !right.is_unicast_global() {
-                    return std::cmp::Ordering::Less;
-                } else if !left.is_unicast_global() && right.is_unicast_global() {
-                    return std::cmp::Ordering::Greater;
-                }
-            }
-            _ => {}
-        }
-        let left = priority
+        // Priority 1: Interface name priority (highest priority)
+        let left_pri = priority
             .iter()
             .position(|x| left.name.contains(x))
             .unwrap_or(usize::MAX);
-        let right = priority
+        let right_pri = priority
             .iter()
             .position(|x| right.name.contains(x))
             .unwrap_or(usize::MAX);
 
-        left.cmp(&right)
+        match left_pri.cmp(&right_pri) {
+            std::cmp::Ordering::Equal => {
+                // Priority 2: IPv6 existence (when interface priority is same)
+                match (left.addr_v6, right.addr_v6) {
+                    (Some(_), None) => return std::cmp::Ordering::Less,
+                    (None, Some(_)) => return std::cmp::Ordering::Greater,
+                    (Some(left_v6), Some(right_v6)) => {
+                        // Priority 3: IPv6 global unicast priority
+                        if left_v6.is_unicast_global() && !right_v6.is_unicast_global() {
+                            return std::cmp::Ordering::Less;
+                        } else if !left_v6.is_unicast_global() && right_v6.is_unicast_global() {
+                            return std::cmp::Ordering::Greater;
+                        }
+                    }
+                    _ => {}
+                }
+                // Priority 4: Alphabetical order
+                left.name.cmp(&right.name)
+            }
+            other => other,
+        }
     });
 
     trace!(
