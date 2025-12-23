@@ -89,8 +89,13 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let family_hint = family_hint_for_session(sess, &resolver).await;
+        let bind_addr = if sess.source.is_ipv4() {
+            "0.0.0.0:0"
+        } else {
+            "[::]:0"
+        };
         let d = new_udp_socket(
-            Some(sess.source),
+            Some(bind_addr.parse().unwrap()),
             sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
