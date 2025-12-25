@@ -1004,7 +1004,7 @@ mod tests {
         initialize();
         let mut mock_resolver = MockClashResolver::new();
         mock_resolver.expect_resolve().returning(|_, _| {
-            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(172, 217, 167, 67))))
+            Ok(Some(std::net::IpAddr::V4(Ipv4Addr::new(142, 250, 66, 227))))
         });
         mock_resolver.expect_ipv6().return_const(false);
 
