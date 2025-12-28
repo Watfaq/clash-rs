@@ -28,7 +28,7 @@ use crate::{
     Error,
     app::{
         dns::{self},
-        net::{OutboundInterface, TUN_SOMARK},
+        net::OutboundInterface,
     },
     common::tls::{self, GLOBAL_ROOT_STORE},
     dns::{ThreadSafeDNSClient, dhcp::DhcpClient},
@@ -81,7 +81,7 @@ mod tests {
                 c: None,
                 bg_handle: None,
             })),
-            cfg: DnsConfig::Udp(addr, None, proxy.clone()),
+            cfg: DnsConfig::Udp(addr, None, proxy.clone(), None),
             proxy,
             host: "example.org".to_string(),
             port: 53,
@@ -214,37 +214,44 @@ pub struct Opts {
     pub iface: Option<OutboundInterface>,
     pub proxy: Arc<dyn OutboundHandler>,
     pub ecs: Option<EdnsClientSubnet>,
+    pub fw_mark: Option<u32>,
 }
+
+type FwMark = Option<u32>;
 
 enum DnsConfig {
     Udp(
         net::SocketAddr,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
+        FwMark,
     ),
     Tcp(
         net::SocketAddr,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
+        FwMark,
     ),
     Tls(
         net::SocketAddr,
         String,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
+        FwMark,
     ),
     Https(
         net::SocketAddr,
         String,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
+        FwMark,
     ),
 }
 
 impl Display for DnsConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
-            DnsConfig::Udp(addr, iface, proxy) => {
+            DnsConfig::Udp(addr, iface, proxy, _) => {
                 write!(f, "UDP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
@@ -252,7 +259,7 @@ impl Display for DnsConfig {
                 write!(f, "via proxy: {}", proxy.name())?;
                 Ok(())
             }
-            DnsConfig::Tcp(addr, iface, proxy) => {
+            DnsConfig::Tcp(addr, iface, proxy, _) => {
                 write!(f, "TCP: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
@@ -260,7 +267,7 @@ impl Display for DnsConfig {
                 write!(f, "via proxy: {}", proxy.name())?;
                 Ok(())
             }
-            DnsConfig::Tls(addr, host, iface, proxy) => {
+            DnsConfig::Tls(addr, host, iface, proxy, _) => {
                 write!(f, "TLS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
@@ -268,7 +275,7 @@ impl Display for DnsConfig {
                 write!(f, "host: {host}")?;
                 write!(f, "via proxy: {}", proxy.name())
             }
-            DnsConfig::Https(addr, host, iface, proxy) => {
+            DnsConfig::Https(addr, host, iface, proxy, _) => {
                 write!(f, "HTTPS: {}:{} ", addr.ip(), addr.port())?;
                 if let Some(iface) = iface {
                     write!(f, "bind: {iface} ")?;
@@ -304,7 +311,9 @@ impl DnsClient {
     pub async fn new_client(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
         match &opts.net {
-            DNSNetMode::Dhcp => Ok(Arc::new(DhcpClient::new(&opts.host).await)),
+            DNSNetMode::Dhcp => {
+                Ok(Arc::new(DhcpClient::new(&opts.host, opts.fw_mark).await))
+            }
 
             other => {
                 let ip = match opts.r {
@@ -336,6 +345,7 @@ impl DnsClient {
                             net::SocketAddr::new(ip, opts.port),
                             opts.iface.clone(),
                             opts.proxy.clone(),
+                            opts.fw_mark,
                         );
 
                         Ok(Arc::new(Self {
@@ -359,6 +369,7 @@ impl DnsClient {
                             net::SocketAddr::new(ip, opts.port),
                             opts.iface.clone(),
                             opts.proxy.clone(),
+                            opts.fw_mark,
                         );
 
                         Ok(Arc::new(Self {
@@ -382,6 +393,7 @@ impl DnsClient {
                             opts.host.clone(),
                             opts.iface.clone(),
                             opts.proxy.clone(),
+                            opts.fw_mark,
                         );
 
                         Ok(Arc::new(Self {
@@ -405,6 +417,7 @@ impl DnsClient {
                             opts.host.clone(),
                             opts.iface.clone(),
                             opts.proxy.clone(),
+                            opts.fw_mark,
                         );
 
                         Ok(Arc::new(Self {
@@ -563,14 +576,14 @@ async fn dns_stream_builder(
 ) -> Result<(client::Client, JoinHandle<Result<(), ProtoError>>), Error> {
     let dns_resolver = Arc::new(dns::SystemResolver::new(false)?);
     match cfg {
-        DnsConfig::Udp(addr, iface, proxy) => {
+        DnsConfig::Udp(addr, iface, proxy, fw_mark) => {
             let stream = UdpClientStream::builder(
                 *addr,
                 DnsRuntimeProvider::new(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
-                    *TUN_SOMARK.read().await,
+                    *fw_mark,
                 ),
             )
             .with_timeout(Some(Duration::from_secs(5)))
@@ -581,7 +594,7 @@ async fn dns_stream_builder(
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Tcp(addr, iface, proxy) => {
+        DnsConfig::Tcp(addr, iface, proxy, fw_mark) => {
             let (stream, sender) = TcpClientStream::new(
                 *addr,
                 None,
@@ -590,7 +603,7 @@ async fn dns_stream_builder(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
-                    *TUN_SOMARK.read().await,
+                    *fw_mark,
                 ),
             );
 
@@ -599,7 +612,7 @@ async fn dns_stream_builder(
                 .map(|(x, y)| (x, tokio::spawn(y)))
                 .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Tls(addr, host, iface, proxy) => {
+        DnsConfig::Tls(addr, host, iface, proxy, fw_mark) => {
             let mut tls_config = ClientConfig::builder()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
@@ -616,7 +629,7 @@ async fn dns_stream_builder(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
-                    *TUN_SOMARK.read().await,
+                    *fw_mark,
                 ),
             );
 
@@ -630,7 +643,7 @@ async fn dns_stream_builder(
             .map(|(x, y)| (x, tokio::spawn(y)))
             .map_err(|x| Error::DNSError(x.to_string()))
         }
-        DnsConfig::Https(addr, host, iface, proxy) => {
+        DnsConfig::Https(addr, host, iface, proxy, fw_mark) => {
             let mut tls_config = ClientConfig::builder()
                 .with_root_certificates(GLOBAL_ROOT_STORE.clone())
                 .with_no_client_auth();
@@ -648,7 +661,7 @@ async fn dns_stream_builder(
                     proxy.clone(),
                     dns_resolver,
                     iface.clone(),
-                    *TUN_SOMARK.read().await,
+                    *fw_mark,
                 ),
             )
             .build(*addr, host.to_owned(), "/dns-query".to_string());
