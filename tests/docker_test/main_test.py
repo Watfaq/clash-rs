@@ -9,9 +9,11 @@ sys.path.append(os.path.join(current_dir, "test_suites"))
 
 try:
     import direct_test as subtest
+    import tun_test
 except ImportError:
     # Fallback if tests/test_suites/__init__.py doesn't exist or other issues
     from test_suites import direct_test as subtest
+    from test_suites import tun_test
 
 def build_clash():
     print("Building clash-rs...")
@@ -52,6 +54,9 @@ def main():
     
     print("\n--- Running Direct Outbound Subtest ---")
     results["direct_test"] = subtest.main(clash_bin=clash_bin)
+    
+    print("\n--- Running TUN & DNS Hijack Subtest ---")
+    results["tun_test"] = tun_test.main(clash_bin=clash_bin)
     
     print("\n--- Test Suite Summary ---")
     all_passed = True

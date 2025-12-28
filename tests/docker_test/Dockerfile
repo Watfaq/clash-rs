@@ -1,6 +1,6 @@
 FROM debian:latest
 
-RUN apt-get update && apt-get install -y rustup cmake libclang-dev curl protobuf-compiler
+RUN apt-get update && apt-get install -y rustup cmake libclang-dev curl protobuf-compiler dnsutils iproute2
 # install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
