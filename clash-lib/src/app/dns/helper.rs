@@ -19,6 +19,7 @@ pub async fn make_clients(
     resolver: Option<Arc<dyn ClashResolver>>,
     outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
     edns_client_subnet: Option<EdnsClientSubnet>,
+    fw_mark: Option<u32>,
 ) -> Vec<ThreadSafeDNSClient> {
     let mut rv = Vec::new();
 
@@ -58,6 +59,7 @@ pub async fn make_clients(
                 .cloned(),
             proxy,
             ecs: edns_client_subnet.clone(),
+            fw_mark,
         })
         .await
         {

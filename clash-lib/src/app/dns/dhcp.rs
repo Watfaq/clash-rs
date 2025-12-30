@@ -38,6 +38,7 @@ struct Inner {
 
 pub struct DhcpClient {
     iface: OutboundInterface,
+    fw_mark: Option<u32>,
 
     inner: Mutex<Inner>,
 }
@@ -72,7 +73,7 @@ impl Client for DhcpClient {
 }
 
 impl DhcpClient {
-    pub async fn new(iface: &str) -> Self {
+    pub async fn new(iface: &str, fw_mark: Option<u32>) -> Self {
         let iface = get_interface_by_name(iface)
             .unwrap_or_else(|| panic!("can not find interface: {iface}"));
         Self {
@@ -83,6 +84,7 @@ impl DhcpClient {
                 dns_expires_at: Instant::now(),
                 iface_addr: ipnet::IpNet::default(),
             }),
+            fw_mark,
         }
     }
 
@@ -104,6 +106,7 @@ impl DhcpClient {
                 None,
                 HashMap::new(),
                 None,
+                self.fw_mark,
             )
             .await;
         }
