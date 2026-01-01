@@ -154,7 +154,7 @@ ring-compat = { version = "0.8", features = ["aead"] }
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version = "1.23", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
+shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
 maxminddb = "0.27"
 public-suffix = "0.1"
 murmur3 = "0.5"
@@ -181,7 +181,7 @@ criterion = { version = "0.8", features = ["html_reports", "async_tokio"], optio
 memory-stats = "1.0.0"
 
 # ssh
-russh = { version = "0.55", default-features = false, features = ["async-trait"], optional = true }
+russh = { version = "0.56", default-features = false, features = ["async-trait"], optional = true }
 dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
@@ -195,7 +195,7 @@ downcast-rs = "2.0"
 aws-lc-rs = { version = "1", default-features = false, optional = true, features = ["bindgen"] }
 
 [dev-dependencies]
-tempfile = "3.23"
+tempfile = "3.24"
 mockall = "0.14.0"
 tokio-test = "0.4.4"
 axum-macros = "0.5.0"
