@@ -15,9 +15,58 @@ except ImportError:
     from test_suites import direct_test as subtest
     from test_suites import tun_test
 
+project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+
+def setup_coverage_env():
+    print("Setting up coverage environment...")
+    try:
+        # Clean previous coverage
+        subprocess.run(["cargo", "llvm-cov", "clean", "--workspace"], cwd=project_root, check=True)
+        
+        # Get environment variables
+        res = subprocess.run(["cargo", "llvm-cov", "show-env", "--export-prefix"], 
+                             cwd=project_root, capture_output=True, text=True, check=True)
+        
+        print("Exporting coverage environment variables:")
+        for line in res.stdout.splitlines():
+            if not line.startswith("export"): continue
+            # Parse export KEY="VALUE"
+            parts = line.replace("export ", "").split("=", 1)
+            if len(parts) == 2:
+                key = parts[0]
+                value = parts[1].strip("'\"")
+                # print(f"  {key}={value}")
+                os.environ[key] = value
+        
+    except FileNotFoundError:
+        print("cargo-llvm-cov not found, aborting coverage setup")
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to setup coverage: {e}")
+        print(f"STDERR: {e.stderr}")
+        sys.exit(1)
+
+def generate_coverage_report():
+    print("Generating coverage report...")
+    sys.stdout.flush()
+    try:
+        subprocess.run(
+            ["cargo", "llvm-cov", "report", "--codecov", "--output-path", "codecov_docker_test.json"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(f"Coverage report generated at {os.path.join(project_root, 'codecov_docker_test.json')}")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to generate coverage report: {e}")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
+    sys.stdout.flush()
+
 def build_clash():
     print("Building clash-rs...")
-    project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    # project_root defined globally now
     try:
         result = subprocess.run(
             ["cargo", "build", "-p", "clash-rs", "--message-format=json", "-q"],
@@ -48,6 +97,7 @@ def build_clash():
 def main():
     print("Starting Main Test Suite...")
     
+    setup_coverage_env()
     clash_bin = build_clash()
     
     results = {}
@@ -68,6 +118,7 @@ def main():
             
     if all_passed:
         print("\nALL SUBTESTS PASSED")
+        generate_coverage_report()
         sys.exit(0)
     else:
         print("\nSOME SUBTESTS FAILED")

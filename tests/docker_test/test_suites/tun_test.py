@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import sys
+import signal
 
 # Configuration
 CLASH_PORT = 7891
@@ -120,11 +121,13 @@ rules:
     clash_log_file = open(clash_log_path, "w")
     if clash_bin:
         print(f"Starting clash-rs using pre-built binary: {clash_bin}")
+        print(f"DEBUG: tun_test LLVM_PROFILE_FILE={os.environ.get('LLVM_PROFILE_FILE')}")
         clash_proc = subprocess.Popen(
             [clash_bin, "-d", run_dir],
             cwd=project_root,
             stdout=clash_log_file,
             stderr=subprocess.STDOUT,
+            env=os.environ.copy()
         )
     else:
         print("Building and starting clash-rs using cargo run...")
@@ -156,11 +159,14 @@ rules:
             print("Timeout waiting for clash-rs.")
     finally:
         print("Cleaning up...")
-        clash_proc.terminate()
-        try:
-            clash_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            clash_proc.kill()
+        if clash_proc.poll() is None:
+            clash_proc.send_signal(signal.SIGINT)
+            try:
+                clash_proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                print("clash-rs did not exit gracefully, killing...")
+                clash_proc.kill()
+
         
         shutil.rmtree(run_dir)
     return success
