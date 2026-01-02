@@ -11,7 +11,7 @@ pub(crate) async fn handle_inbound_stream(
     stream: watfaq_netstack::TcpStream,
 
     dispatcher: Arc<Dispatcher>,
-    so_mark: u32,
+    so_mark: Option<u32>,
 ) {
     let sess = Session {
         network: Network::Tcp,
@@ -28,7 +28,7 @@ pub(crate) async fn handle_inbound_stream(
                     x
                 );
             }),
-        so_mark: Some(so_mark),
+        so_mark,
         ..Default::default()
     };
 

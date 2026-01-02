@@ -483,6 +483,7 @@ async fn create_components(
             dns_resolver.clone(),
             cache_store.clone(),
             cwd.to_string_lossy().to_string(),
+            config.general.routing_mask,
         )
         .await?,
     );

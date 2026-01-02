@@ -49,7 +49,11 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
              will not allow any connections from the local network."
         );
     }
-
+    if let Some(tun) = &mut c.tun
+        && tun.so_mark.is_none()
+    {
+        tun.so_mark = c.routing_mark;
+    }
     config::Config {
         general: general::convert(&c)?,
         dns: (&c).try_into()?,

@@ -828,7 +828,7 @@ mod tests {
         })?;
         let thread_safe_resolver = Arc::new(resolver);
 
-        let proxy_manager = ProxyManager::new(thread_safe_resolver.clone());
+        let proxy_manager = ProxyManager::new(thread_safe_resolver.clone(), None);
 
         let smart_handler_instance = super::Handler::new_with_cache(
             smart_opts,

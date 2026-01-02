@@ -242,7 +242,7 @@ pub async fn latency_test(
     handler: Arc<dyn OutboundHandler>,
 ) -> anyhow::Result<(Duration, Duration)> {
     let resolver = config_helper::build_dns_resolver().await?;
-    let proxy_manager = ProxyManager::new(resolver.clone());
+    let proxy_manager = ProxyManager::new(resolver.clone(), None);
     let mut retries = 3;
     let latency = loop {
         match proxy_manager

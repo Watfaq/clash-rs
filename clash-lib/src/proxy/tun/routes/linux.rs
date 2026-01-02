@@ -82,7 +82,6 @@ pub fn setup_policy_routing(
 ) -> std::io::Result<()> {
     let table = tun_cfg.route_table.to_string();
     let dev = via.name.as_str();
-    let so_mark = tun_cfg.so_mark.to_string();
     let enable_v6 = tun_cfg.gateway_v6.is_some();
 
     run_ip_cmd(
@@ -90,10 +89,20 @@ pub fn setup_policy_routing(
         enable_v6,
     )?;
 
-    run_ip_cmd(
-        &["rule", "add", "not", "fwmark", &so_mark, "table", &table],
-        enable_v6,
-    )?;
+    if let Some(so_mark) = tun_cfg.so_mark {
+        run_ip_cmd(
+            &[
+                "rule",
+                "add",
+                "not",
+                "fwmark",
+                &so_mark.to_string(),
+                "table",
+                &table,
+            ],
+            enable_v6,
+        )?;
+    }
 
     run_ip_cmd(
         &["rule", "add", "table", "main", "suppress_prefixlength", "0"],
@@ -119,13 +128,22 @@ pub fn maybe_routes_clean_up(tun_cfg: &TunConfig) -> std::io::Result<()> {
     }
 
     let table = tun_cfg.route_table.to_string();
-    let so_mark = tun_cfg.so_mark.to_string();
     let enable_v6 = tun_cfg.gateway_v6.is_some();
 
-    run_ip_cmd(
-        &["rule", "del", "not", "fwmark", &so_mark, "table", &table],
-        enable_v6,
-    )?;
+    if let Some(so_mark) = tun_cfg.so_mark {
+        run_ip_cmd(
+            &[
+                "rule",
+                "del",
+                "not",
+                "fwmark",
+                &so_mark.to_string(),
+                "table",
+                &table,
+            ],
+            enable_v6,
+        )?;
+    }
     run_ip_cmd(
         &["rule", "del", "table", "main", "suppress_prefixlength", "0"],
         enable_v6,
