@@ -58,7 +58,7 @@ pub struct WireguardTunnel {
     // receive side packet coming into the tunnel
     packet_reader: Arc<Mutex<Receiver<Bytes>>>,
 
-    //
+    // rate limiter for the tunnel
     rate_limiter: Arc<RateLimiter>,
 }
 
