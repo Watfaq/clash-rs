@@ -93,10 +93,8 @@ impl WireguardTunnel {
         sess: &Session,
     ) -> Result<Self, Error> {
         let static_public = PublicKey::from(&config.private_key);
-        let rate_limiter = Arc::new(RateLimiter::new(
-            &static_public,
-            HANDSHAKE_RATE_LIMIT,
-        ));
+        let rate_limiter =
+            Arc::new(RateLimiter::new(&static_public, HANDSHAKE_RATE_LIMIT));
 
         let peer = Tunn::new(
             config.private_key,
