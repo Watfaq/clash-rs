@@ -4,7 +4,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
 use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
-const DEFAULT_SO_MARK: u32 = 3389;
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 use super::config::BindAddress;
@@ -15,9 +14,6 @@ fn default_tun_device_id() -> String {
 
 fn default_tun_address() -> String {
     "198.18.0.1/24".to_string()
-}
-fn default_tun_so_mark() -> u32 {
-    DEFAULT_SO_MARK
 }
 
 fn default_route_table() -> u32 {
@@ -66,8 +62,7 @@ pub struct TunConfig {
     pub route_all: bool,
     pub mtu: Option<u16>,
     /// fwmark on Linux only
-    #[serde(default = "default_tun_so_mark")]
-    pub so_mark: u32,
+    pub so_mark: Option<u32>,
     /// policy routing table on Linux only
     #[serde(default = "default_route_table")]
     pub route_table: u32,

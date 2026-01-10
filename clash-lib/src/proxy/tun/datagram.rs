@@ -16,7 +16,7 @@ pub(crate) async fn handle_inbound_datagram(
     socket: watfaq_netstack::UdpSocket,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
-    so_mark: u32,
+    so_mark: Option<u32>,
     dns_hijack: bool,
 ) {
     // tun i/o
@@ -46,7 +46,7 @@ pub(crate) async fn handle_inbound_datagram(
         iface: default_outbound.clone().inspect(|x| {
             debug!("selecting outbound interface: {:?} for tun UDP traffic", x);
         }),
-        so_mark: Some(so_mark),
+        so_mark,
         ..Default::default()
     };
 
