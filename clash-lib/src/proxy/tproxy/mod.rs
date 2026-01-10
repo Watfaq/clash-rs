@@ -1,6 +1,7 @@
 use super::{inbound::InboundHandlerTrait, tun::TunDatagram};
 use crate::{
     app::dispatcher::Dispatcher,
+    common::errors::new_io_error,
     proxy::{
         datagram::UdpPacket,
         utils::{ToCanonical, apply_tcp_options, try_create_dualstack_socket},
@@ -9,17 +10,11 @@ use crate::{
 };
 
 use async_trait::async_trait;
-use std::{
-    collections::{HashMap, hash_map},
-    io,
-    net::SocketAddr,
-    os::fd::AsRawFd,
-    sync::Arc,
-    time::Duration,
-};
-use tokio::{net::TcpListener, time::Instant};
+use etherparse::PacketBuilder;
+use futures::future;
+use std::{io, net::SocketAddr, os::fd::AsRawFd, sync::Arc, task::Poll};
+use tokio::net::TcpListener;
 use tracing::{trace, warn};
-use unix_udp_sock::UdpSocket;
 
 pub struct TproxyInbound {
     addr: SocketAddr,
@@ -149,25 +144,91 @@ impl InboundHandlerTrait for TproxyInbound {
         .await
     }
 }
-fn bind_nonlocal_socket(src_addr: SocketAddr) -> io::Result<UdpSocket> {
-    let domain = if src_addr.is_ipv4() {
-        socket2::Domain::IPV4
-    } else {
-        socket2::Domain::IPV6
-    };
-    let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
-    // This is required to allow binding to nonlocal address
-    if src_addr.is_ipv4() {
-        socket.set_ip_transparent_v4(true)?;
-    } else {
-        set_ip_transparent_v6(&socket)?;
-    }
-    socket.set_nonblocking(true)?;
-    socket.set_reuse_address(true)?;
-    socket.bind(&src_addr.into())?;
 
-    let socket = UdpSocket::from_std(socket.into())?;
+fn new_unbound_socket(
+    family_hint: SocketAddr,
+    fw_mark: Option<u32>,
+) -> io::Result<socket2::Socket> {
+    let socket = if family_hint.is_ipv4() {
+        socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::RAW,
+            Some(libc::IPPROTO_RAW.into()),
+        )?
+    } else {
+        socket2::Socket::new(
+            socket2::Domain::IPV6,
+            socket2::Type::RAW,
+            Some(libc::IPPROTO_RAW.into()),
+        )?
+    };
+    socket.set_nonblocking(true)?;
+    // socket.set_reuse_address(true)?;
+    if let Some(so_mark) = fw_mark {
+        socket.set_mark(so_mark)?;
+    }
     Ok(socket)
+}
+async fn sendto_with_src(
+    socket: &socket2::Socket,
+    buf: &[u8],
+    dst: SocketAddr,
+    src: SocketAddr,
+) -> io::Result<()> {
+    let mut packet: Vec<u8>;
+    let builder;
+    match (src, dst) {
+        (SocketAddr::V4(src), SocketAddr::V4(dst)) => {
+            builder = PacketBuilder::ipv4(src.ip().octets(), dst.ip().octets(), 64)
+                .udp(src.port(), dst.port());
+            packet = Vec::<u8>::with_capacity(builder.size(buf.len()));
+        }
+        (SocketAddr::V6(src), SocketAddr::V6(dst)) => {
+            builder = PacketBuilder::ipv6(src.ip().octets(), dst.ip().octets(), 64)
+                .udp(src.port(), dst.port());
+            packet = Vec::<u8>::with_capacity(builder.size(buf.len()));
+        }
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "source and destination address families do not match",
+            ));
+        }
+    }
+    builder
+        .write(&mut packet, buf)
+        .map_err(|x| new_io_error(format!("failed to build udp packet:{}", x)))?;
+    let afd = tokio::io::unix::AsyncFd::new(socket.as_raw_fd())?;
+    future::poll_fn(|cx: &mut futures::task::Context<'_>| {
+        let _guard = futures::ready!(afd.poll_write_ready(cx))?;
+        let addr = if dst.is_ipv6() {
+            // Must set port to 0 for ipv6 raw socket to avoid EINVAL error
+            // see https://stackoverflow.com/questions/31419727/how-to-send-modified-ipv6-packet-through-raw-socket
+            // and https://nick-black.com/dankwiki/index.php/Packet_sockets
+            let dst = SocketAddr::new(dst.ip(), 0);
+            socket2::SockAddr::from(dst)
+        } else {
+            socket2::SockAddr::from(dst)
+        };
+
+        let errno = unsafe {
+            libc::sendto(
+                afd.as_raw_fd(),
+                packet.as_ptr() as *const _,
+                packet.len(),
+                0,
+                &addr as *const _ as *const _,
+                addr.len(),
+            )
+        };
+        if errno < 0 {
+            return Poll::Ready(Err(io::Error::last_os_error()));
+        }
+        Poll::Ready(Ok(())) as Poll<io::Result<()>>
+    })
+    .await?;
+
+    Ok(())
 }
 
 async fn handle_inbound_datagram(
@@ -282,8 +343,9 @@ fn set_ip_recv_orig_dstaddr(
 async fn handle_packet_from_dispatcher(
     mut l_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
 ) {
-    let mut responder_map = HashMap::<SocketAddr, (Arc<UdpSocket>, Instant)>::new();
-    let mut sleep = Box::pin(tokio::time::sleep(Duration::from_secs(60)));
+    let socket_v4 = new_unbound_socket(SocketAddr::from(([0, 0, 0, 0], 0)), None);
+    let socket_v6 =
+        new_unbound_socket(SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 0)), None);
     loop {
         tokio::select! {
                  Some(pkt) = l_rx.recv() =>  {
@@ -291,46 +353,29 @@ async fn handle_packet_from_dispatcher(
 
                 // We must modify set the src address for the outgoing packet by binding
                 // address to src_addr
-                // To avoid repeated creating sockets, sockets need be cached here
-                // We can't use tproxy listen socket, because the bound address is localhost
+                // use raw socket to send packet with custom src address
+                // This requires CAP_NET_RAW capability
                 // remote -> local
-                let now = Instant::now();
-                let src_addr = pkt.src_addr.must_into_socket_addr();
-                let responder = match responder_map.entry(src_addr) {
-                    hash_map::Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().1 = now;
-                        occupied_entry.get().0.clone()
+                let src_addr = pkt.src_addr.try_into_socket_addr().unwrap();
+                let dst_addr = pkt.dst_addr.try_into_socket_addr().unwrap();
+                match (src_addr, &socket_v4, &socket_v6) {
+                    (SocketAddr::V4(_), Ok(socket), _) => {
+                        let _ = sendto_with_src(socket, &pkt.data, dst_addr, src_addr).await
+                        .map_err(|e|tracing::error!("failed to send v4 packet to local through tproxy:{}",e));
+
                     }
-                    hash_map::Entry::Vacant(vacant_entry) => {
-                        let socket = match bind_nonlocal_socket(src_addr) {
-                            Ok(x) => Arc::new(x),
-                            Err(e) => {
-                                tracing::error!(
-                                    "failed to bind nonlocal socket for tproxy:{}",
-                                    e
-                                );
-                                continue;
-                            }
-                        };
-                        vacant_entry.insert((socket.clone(), now));
-                        socket
+                    (SocketAddr::V6(_), _, Ok(socket)) => {
+                        let _ = sendto_with_src(socket, &pkt.data, dst_addr, src_addr).await
+                        .map_err(|e|tracing::error!("failed to send v6 packet to local through tproxy:{}",e));
+
                     }
-                };
-                match responder
-                    .send_to(&pkt.data[..], pkt.dst_addr.must_into_socket_addr())
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        warn!("failed to send udp packet to proxy: {}", e);
+                    (SocketAddr::V4(_),Err(e),_) => {
+                        tracing::error!("No v4 socket available for sending tproxy udp packet to local:{}",e);
+                    }
+                    (SocketAddr::V6(_),_,Err(e)) => {
+                        tracing::error!("No v6 socket available for sending tproxy udp packet to local:{}",e);
                     }
                 }
-
-            },
-            _ = &mut sleep => {
-                sleep = Box::pin(tokio::time::sleep(Duration::from_secs(60)));
-                let now = Instant::now();
-                responder_map.retain(|_k, v| now.duration_since(v.1).as_secs() < 60);
             },
             else => {
                 tracing::error!("dispatcher channel to tproxy is closed");

@@ -33,7 +33,9 @@ ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
-tproxy = ["tun"]
+tproxy = [
+    "dep:etherparse",
+]
 tun = [
     "dep:tun-rs",
     "dep:watfaq-netstack",
@@ -194,6 +196,8 @@ downcast-rs = "2.0"
 # workaround for https://github.com/cross-rs/cross/issues/16
 aws-lc-rs = { version = "1", default-features = false, optional = true, features = ["bindgen"] }
 
+# tproxy
+etherparse = {version = "0.12", optional = true }
 [dev-dependencies]
 tempfile = "3.23"
 mockall = "0.14.0"
