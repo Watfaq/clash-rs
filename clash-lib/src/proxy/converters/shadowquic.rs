@@ -45,6 +45,8 @@ impl TryFrom<&OutboundShadowQuic> for Handler {
                 keep_alive_interval: s
                     .keep_alive_interval
                     .unwrap_or(default_keep_alive_interval()),
+                #[cfg(target_os = "android")]
+                protect_path: None,
             },
         ))
     }
