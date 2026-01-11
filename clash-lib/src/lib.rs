@@ -1,10 +1,10 @@
 #![feature(cfg_version)]
 #![feature(ip)]
 #![feature(sync_unsafe_cell)]
-#![feature(lazy_get)]
 #![feature(duration_millis_float)]
 #![cfg_attr(not(version("1.87.0")), feature(unbounded_shifts))]
 #![cfg_attr(not(version("1.88.0")), feature(let_chains))]
+#![cfg_attr(not(version("1.94.0")), feature(lazy_get))]
 
 use crate::{
     app::{
