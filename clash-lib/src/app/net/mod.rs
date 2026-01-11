@@ -20,9 +20,9 @@ pub static TUN_SOMARK: LazyLock<tokio::sync::RwLock<Option<u32>>> =
 /// globally manage default outbound interface
 /// This function should be called as early as possible
 /// so that other config initialization can use the default outbound interface
-pub async fn init_net_config(tun_somark: u32) {
+pub async fn init_net_config(tun_somark: Option<u32>) {
     *DEFAULT_OUTBOUND_INTERFACE.write().await = get_outbound_interface();
-    *TUN_SOMARK.write().await = Some(tun_somark);
+    *TUN_SOMARK.write().await = tun_somark;
 
     trace!(
         "default outbound interface: {:?}, tun somark: {:?}",

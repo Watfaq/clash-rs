@@ -100,6 +100,8 @@ struct ProxyState {
 pub struct ProxyManager {
     proxy_state: Arc<RwLock<HashMap<String, ProxyState>>>,
     dns_resolver: ThreadSafeDNSResolver,
+    /// Firewall Mark for url test
+    fw_mark: Option<u32>,
 }
 
 #[derive(Clone, Default)]
@@ -111,10 +113,11 @@ pub struct SiteTuning {
 }
 
 impl ProxyManager {
-    pub fn new(dns_resolver: ThreadSafeDNSResolver) -> Self {
+    pub fn new(dns_resolver: ThreadSafeDNSResolver, fw_mark: Option<u32>) -> Self {
         Self {
             dns_resolver,
             proxy_state: Default::default(),
+            fw_mark,
         }
     }
 
@@ -720,6 +723,7 @@ impl ProxyManager {
                     .try_into()
                     .expect("must be valid destination"),
                 iface: DEFAULT_OUTBOUND_INTERFACE.read().await.clone(),
+                so_mark: self.fw_mark,
                 ..Default::default()
             };
 
@@ -1009,7 +1013,7 @@ mod tests {
         mock_resolver.expect_ipv6().return_const(false);
 
         let manager =
-            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
+            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver), None);
 
         let mock_handler = Arc::new(direct::Handler::new(PROXY_DIRECT));
 
@@ -1065,7 +1069,7 @@ mod tests {
         });
 
         let manager =
-            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver));
+            remote_content_manager::ProxyManager::new(Arc::new(mock_resolver), None);
 
         let mut mock_handler = MockDummyOutboundHandler::new();
         mock_handler

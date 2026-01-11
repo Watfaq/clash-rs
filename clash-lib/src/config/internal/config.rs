@@ -91,7 +91,7 @@ pub struct TunConfig {
     pub gateway: Ipv4Net,
     pub gateway_v6: Option<Ipv6Net>,
     pub mtu: Option<u16>,
-    pub so_mark: u32,
+    pub so_mark: Option<u32>,
     pub route_table: u32,
     pub dns_hijack: bool,
 }

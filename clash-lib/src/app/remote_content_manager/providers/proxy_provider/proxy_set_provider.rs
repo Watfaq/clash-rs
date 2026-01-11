@@ -313,7 +313,7 @@ proxies:
 
         let mock_resolver = MockClashResolver::new();
 
-        let latency_manager = ProxyManager::new(Arc::new(mock_resolver));
+        let latency_manager = ProxyManager::new(Arc::new(mock_resolver), None);
         let hc = HealthCheck::new(
             vec![],
             "http://www.google.com".to_owned(),

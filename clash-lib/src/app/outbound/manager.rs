@@ -82,6 +82,7 @@ pub type ThreadSafeOutboundManager = Arc<OutboundManager>;
 /// Note that the `PlainProvider` is a special provider that contains plain
 /// proxies for API compatibility with actual remote providers.
 /// TODO: refactor this giant class
+#[allow(clippy::too_many_arguments)]
 impl OutboundManager {
     pub async fn new(
         outbounds: Vec<AnyOutboundHandler>,
@@ -91,11 +92,12 @@ impl OutboundManager {
         dns_resolver: ThreadSafeDNSResolver,
         cache_store: ThreadSafeCacheFile,
         cwd: String,
+        fw_mark: Option<u32>,
     ) -> Result<Self, Error> {
         let handlers = HashMap::new();
         let provider_registry = HashMap::new();
         let selector_control = HashMap::new();
-        let proxy_manager = ProxyManager::new(dns_resolver.clone());
+        let proxy_manager = ProxyManager::new(dns_resolver.clone(), fw_mark);
 
         let mut m = Self {
             handlers,
