@@ -204,11 +204,11 @@ jobs:
           restore-keys: |
             ${{ matrix.release-name || matrix.target }}
 
-      - name: Cache Docker images for cross
-        if: matrix.tool == 'cross'
-        uses: AndreKurait/docker-cache@0.6.0
-        with:
-          key: docker-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cross.toml') }}
+      # - name: Cache Docker images for cross
+      #   if: matrix.tool == 'cross'
+      #   uses: AndreKurait/docker-cache@0.6.0
+      #   with:
+      #     key: docker-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cross.toml') }}
 
       - uses: ilammy/setup-nasm@v1
 
