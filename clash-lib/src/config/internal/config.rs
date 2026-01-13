@@ -60,7 +60,7 @@ impl Config {
 pub struct General {
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
-    pub(crate) controller: Controller,
+    pub controller: Controller,
     pub mode: RunMode,
     pub log_level: LogLevel,
     pub ipv6: bool,
