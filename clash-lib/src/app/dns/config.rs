@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 use url::Url;
-use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
+pub use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
 #[derive(Clone, Debug)]
 pub struct NameServer {

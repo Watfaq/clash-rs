@@ -25,7 +25,6 @@ ring = [
     "boringtun/ring"
 ]
 
-internal = []
 # Protos
 shadowsocks = ["dep:shadowsocks"]
 tuic = ["dep:tuic", "dep:tuic-quinn", "dep:register-count"]

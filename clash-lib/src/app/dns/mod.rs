@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[cfg(test)]
 use mockall::automock;
 
-mod config;
+pub mod config;
 mod dhcp;
 mod dns_client;
 mod fakeip;
