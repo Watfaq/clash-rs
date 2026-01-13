@@ -66,7 +66,7 @@ impl TryFrom<&OutboundWireguard> for Handler {
                 .transpose()?,
             private_key: s.private_key.to_owned(),
             public_key: s.public_key.to_owned(),
-            preshared_key: s.preshared_key.as_ref().map(|x| x.to_owned()),
+            pre_shared_key: s.pre_shared_key.as_ref().map(|x| x.to_owned()),
             remote_dns_resolve: s.remote_dns_resolve.unwrap_or_default(),
             dns: s.dns.as_ref().map(|x| x.to_owned()),
             mtu: s.mtu,

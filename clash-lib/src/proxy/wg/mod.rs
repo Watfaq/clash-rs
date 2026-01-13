@@ -43,7 +43,7 @@ pub struct HandlerOptions {
     pub ipv6: Option<Ipv6Addr>,
     pub private_key: String,
     pub public_key: String,
-    pub preshared_key: Option<String>,
+    pub pre_shared_key: Option<String>,
     pub remote_dns_resolve: bool,
     pub dns: Option<Vec<String>>,
     pub mtu: Option<u16>,
@@ -141,9 +141,9 @@ impl Handler {
                             .unwrap()
                             .0
                             .into(),
-                        preshared_key: self
+                        pre_shared_key: self
                             .opts
-                            .preshared_key
+                            .pre_shared_key
                             .as_ref()
                             .map(|s| s.parse::<KeyBytes>().unwrap().0.into()),
                         remote_endpoint: (server_ip, self.opts.port).into(),
@@ -365,7 +365,7 @@ mod tests {
             ipv6: None,
             private_key: "KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=".to_owned(),
             public_key: "INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=".to_owned(),
-            preshared_key: Some(
+            pre_shared_key: Some(
                 "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=".to_owned(),
             ),
             remote_dns_resolve: false,
