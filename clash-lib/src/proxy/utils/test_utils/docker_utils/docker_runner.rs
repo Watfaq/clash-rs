@@ -283,11 +283,6 @@ impl DockerTestRunnerBuilder {
 
     pub async fn build(self) -> anyhow::Result<DockerTestRunner> {
         tracing::trace!("building docker test runner: {:?}", &self);
-        let exposed = self
-            .exposed_ports
-            .into_iter()
-            .map(|x| (x, Default::default()))
-            .collect::<HashMap<_, _>>();
 
         DockerTestRunner::try_new(
             Some(
@@ -301,7 +296,7 @@ impl DockerTestRunnerBuilder {
                 entrypoint: self.entrypoint,
                 cmd: self.cmd,
                 env: self.env,
-                exposed_ports: Some(exposed),
+                exposed_ports: Some(self.exposed_ports),
                 host_config: Some(self.host_config),
                 ..Default::default()
             },
