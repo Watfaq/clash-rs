@@ -679,11 +679,14 @@ mod tests {
             pre-shared-key: +JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=
             ip: 10.0.0.2/32
         "#;
-        
+
         let config: OutboundWireguard = serde_yaml::from_str(yaml_new)
             .expect("should parse with pre-shared-key");
         assert!(config.pre_shared_key.is_some());
-        assert_eq!(config.pre_shared_key.unwrap(), "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=");
+        assert_eq!(
+            config.pre_shared_key.unwrap(),
+            "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc="
+        );
     }
 
     #[test]
@@ -699,11 +702,14 @@ mod tests {
             preshared-key: +JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=
             ip: 10.0.0.2/32
         "#;
-        
+
         let config: OutboundWireguard = serde_yaml::from_str(yaml_legacy)
             .expect("should parse with preshared-key (legacy)");
         assert!(config.pre_shared_key.is_some());
-        assert_eq!(config.pre_shared_key.unwrap(), "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=");
+        assert_eq!(
+            config.pre_shared_key.unwrap(),
+            "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc="
+        );
     }
 
     #[test]
@@ -718,10 +724,9 @@ mod tests {
             public-key: INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=
             ip: 10.0.0.2/32
         "#;
-        
+
         let config: OutboundWireguard = serde_yaml::from_str(yaml_no_psk)
             .expect("should parse without pre-shared-key");
         assert!(config.pre_shared_key.is_none());
     }
 }
-
