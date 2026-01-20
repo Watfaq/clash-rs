@@ -1148,21 +1148,21 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "clash-doc"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-ffi"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-lib"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "aead",
  "aes",
@@ -1194,6 +1194,7 @@ dependencies = [
  "educe 0.6.0",
  "env_logger",
  "erased-serde",
+ "etherparse 0.12.0",
  "filetime",
  "futures",
  "h2",
@@ -1286,7 +1287,7 @@ dependencies = [
 
 [[package]]
 name = "clash-rs"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "clap",
  "clash-lib",
@@ -1307,9 +1308,9 @@ dependencies = [
 
 [[package]]
 name = "cmov"
-version = "0.4.3"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c11ed919bd3bae4af5ab56372b627dfc32622aba6cec36906e8ab46746037c9d"
+checksum = "b1339d398d44e506d9b72c1af2f6f51a41c9c64f9a0738eb9aedede47ed1f683"
 
 [[package]]
 name = "coarsetime"
@@ -2403,6 +2404,15 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.0",
+]
+
+[[package]]
+name = "etherparse"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcb08c4aab4e2985045305551e67126b43f1b6b136bc4e1cd87fb0327877a611"
+dependencies = [
+ "arrayvec",
 ]
 
 [[package]]
@@ -9345,7 +9355,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-dns"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "anyhow",
  "async-trait",
