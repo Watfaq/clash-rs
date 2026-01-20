@@ -240,7 +240,7 @@ impl WriteTracker {
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
     }
 }
-#[cfg(all(target_os = "linux", feature = "zero_copy"))]
+
 impl Drop for TrackedStream {
     fn drop(&mut self) {
         debug!("untrack connection: {}", self.id());
