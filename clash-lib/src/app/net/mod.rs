@@ -143,40 +143,20 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         })
         .collect::<Vec<_>>();
 
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "android")] {
-            let priority = [
-                "wlan", // Android Wi-Fi interface
-                "rmnet", // Android mobile data interface
-            ];
-        } else if #[cfg(target_os = "windows")] {
-            let priority = [
-                "Ethernet",
-                "Wi-Fi",
-                "Tailscale",
-            ];
-        }
-        else if #[cfg(target_os = "linux")] {
-            let priority = [
-                "eth",
-                "wlp",
-                "en",
-                "Tailscale",
-            ];
-        } else if #[cfg(target_os = "macos")] {
-            let priority = [
-                "en",
-                "pdp_ip",
-                "Tailscale",
-            ];
-        } else {
-            let priority = [
-                "eth",
-                "en",
-                "wlp",
-            ];
-        }
-    }
+    let priority: &[&str] = if cfg!(target_os = "android") {
+        &[
+            "wlan",  // Android Wi-Fi interface
+            "rmnet", // Android mobile data interface
+        ]
+    } else if cfg!(target_os = "windows") {
+        &["Ethernet", "Wi-Fi", "Tailscale"]
+    } else if cfg!(target_os = "linux") {
+        &["eth", "wlp", "en", "Tailscale"]
+    } else if cfg!(target_os = "macos") {
+        &["en", "pdp_ip", "Tailscale"]
+    } else {
+        &["eth", "en", "wlp"]
+    };
 
     all_outbounds.sort_by(|left, right| {
         match (left.addr_v6, right.addr_v6) {
