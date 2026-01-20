@@ -1181,6 +1181,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "cfb-mode",
+ "cfg-if",
  "chacha20poly1305",
  "chrono",
  "console-subscriber",
@@ -9376,7 +9377,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",
