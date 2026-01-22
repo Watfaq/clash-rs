@@ -87,7 +87,6 @@ pub struct HandlerOptions {
     pub max_udp_relay_packet_size: u64,
     #[allow(dead_code)]
     pub ip: Option<String>,
-    #[allow(dead_code)]
     pub sni: Option<String>,
 }
 
@@ -234,7 +233,12 @@ impl Handler {
         endpoint.set_default_client_config(quinn_config);
         let endpoint = TuicEndpoint {
             ep: endpoint,
-            server: ServerAddr::new(opts.server.clone(), opts.port, None),
+            server: ServerAddr::new_with_sni(
+                opts.server.clone(),
+                opts.port,
+                None,
+                opts.sni.clone(),
+            ),
             uuid: opts.uuid,
             password: Arc::from(
                 opts.password.clone().into_bytes().into_boxed_slice(),

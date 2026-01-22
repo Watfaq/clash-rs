@@ -205,14 +205,24 @@ pub struct ServerAddr {
     domain: String,
     port: u16,
     ip: Option<IpAddr>,
+    sni: Option<String>,
 }
 impl ServerAddr {
     pub fn new(domain: String, port: u16, ip: Option<IpAddr>) -> Self {
-        Self { domain, port, ip }
+        Self { domain, port, ip, sni: None }
+    }
+
+    pub fn new_with_sni(
+        domain: String,
+        port: u16,
+        ip: Option<IpAddr>,
+        sni: Option<String>,
+    ) -> Self {
+        Self { domain, port, ip, sni }
     }
 
     pub fn server_name(&self) -> &str {
-        &self.domain
+        self.sni.as_ref().unwrap_or(&self.domain)
     }
 
     pub async fn resolve(
