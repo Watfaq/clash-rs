@@ -3,8 +3,10 @@ use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use quinn::ZeroRttAccepted;
 use std::{sync::Arc, time::Duration};
-use tuic::Address;
-use tuic_quinn::{Connect, Packet};
+use tuic_core::{
+    Address,
+    quinn::{Connect, Packet},
+};
 
 use super::types::{TuicConnection, UdpRelayMode};
 
