@@ -87,7 +87,6 @@ pub struct HandlerOptions {
     pub max_udp_relay_packet_size: u64,
     #[allow(dead_code)]
     pub ip: Option<String>,
-    #[allow(dead_code)]
     pub sni: Option<String>,
 }
 
@@ -234,11 +233,9 @@ impl Handler {
         endpoint.set_default_client_config(quinn_config);
         let endpoint = TuicEndpoint {
             ep: endpoint,
-            server: ServerAddr::new(opts.server.clone(), opts.port, None),
+            server: ServerAddr::new(opts.server, opts.port, None, opts.sni),
             uuid: opts.uuid,
-            password: Arc::from(
-                opts.password.clone().into_bytes().into_boxed_slice(),
-            ),
+            password: Arc::from(opts.password.into_bytes().into_boxed_slice()),
             udp_relay_mode: opts.udp_relay_mode,
             zero_rtt_handshake: opts.reduce_rtt,
             heartbeat: opts.heartbeat_interval,
@@ -263,18 +260,23 @@ impl Handler {
 
         let fut = async {
             let mut guard = self.conn.lock().await;
-            if guard.is_none() {
-                // init
-                *guard = Some(endpoint.connect(resolver, false).await?);
-            }
-            let conn = guard.take().unwrap();
-            let conn = if conn.check_open().is_err() {
-                // reconnect
-                endpoint.connect(resolver, true).await?
-            } else {
-                conn
+
+            let conn = match guard.as_ref() {
+                None => {
+                    // init
+                    let new_conn = endpoint.connect(resolver, false).await?;
+                    *guard = Some(new_conn.clone());
+                    new_conn
+                }
+                Some(existing) if existing.check_open().is_err() => {
+                    // reconnect
+                    let new_conn = endpoint.connect(resolver, true).await?;
+                    *guard = Some(new_conn.clone());
+                    new_conn
+                }
+                Some(existing) => existing.clone(),
             };
-            *guard = Some(conn.clone());
+
             Ok(conn)
         };
 

@@ -1271,8 +1271,7 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-test",
- "tuic",
- "tuic-quinn",
+ "tuic-core",
  "tun-rs",
  "unix-udp-sock",
  "url",
@@ -8916,30 +8915,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "tuic"
-version = "1.5.2"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.2#ce1482c48315f45672eec483d55e2732db4a17ea"
-dependencies = [
- "bytes",
- "futures-util",
- "parking_lot",
- "register-count",
- "thiserror 2.0.17",
- "uuid",
-]
-
-[[package]]
-name = "tuic-quinn"
-version = "1.5.2"
-source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.5.2#ce1482c48315f45672eec483d55e2732db4a17ea"
+name = "tuic-core"
+version = "1.6.7"
+source = "git+https://github.com/Itsusinn/tuic.git?tag=v1.6.7#4843d04b1584f49b503e344e2a96041e16fe8938"
 dependencies = [
  "bytes",
  "eyre",
+ "futures-util",
+ "parking_lot",
  "quinn 0.11.9",
+ "register-count",
+ "serde",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "tuic",
  "uuid",
 ]
 

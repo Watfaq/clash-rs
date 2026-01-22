@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::debug;
-use tuic_quinn::Connection as InnerConnection;
+use tuic_core::quinn::Connection as InnerConnection;
 use uuid::Uuid;
 
 pub struct TuicEndpoint {
@@ -81,29 +81,27 @@ impl TuicEndpoint {
                 (conn.await?, None)
             };
 
-            Ok((conn, zero_rtt_accepted))
+            anyhow::Ok((conn, zero_rtt_accepted))
         };
 
-        match connect_to.await {
-            Ok((conn, zero_rtt_accepted)) => Ok(TuicConnection::new(
-                conn,
-                zero_rtt_accepted,
-                self.udp_relay_mode,
-                self.uuid,
-                self.password.clone(),
-                self.heartbeat,
-                self.gc_interval,
-                self.gc_lifetime,
-            )),
-            Err(err) => Err(err),
-        }
+        let (conn, zero_rtt_accepted) = connect_to.await?;
+        Ok(TuicConnection::new(
+            conn,
+            zero_rtt_accepted,
+            self.udp_relay_mode,
+            self.uuid,
+            self.password.clone(),
+            self.heartbeat,
+            self.gc_interval,
+            self.gc_lifetime,
+        ))
     }
 }
 
 #[derive(Clone)]
 pub struct TuicConnection {
     pub conn: QuinnConnection,
-    pub inner: InnerConnection<tuic_quinn::side::Client>,
+    pub inner: InnerConnection<tuic_core::quinn::side::Client>,
     pub uuid: Uuid,
     pub password: Arc<[u8]>,
     pub remote_uni_stream_cnt: Counter,
@@ -121,10 +119,9 @@ pub struct UdpSession {
 
 impl TuicConnection {
     pub fn check_open(&self) -> Result<()> {
-        match self.conn.close_reason() {
-            Some(err) => Err(err)?,
-            None => Ok(()),
-        }
+        self.conn
+            .close_reason()
+            .map_or(Ok(()), |err| Err(err.into()))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -140,7 +137,7 @@ impl TuicConnection {
     ) -> Arc<Self> {
         let conn = Self {
             conn: conn.clone(),
-            inner: InnerConnection::<tuic_quinn::side::Client>::new(conn),
+            inner: InnerConnection::<tuic_core::quinn::side::Client>::new(conn),
             uuid,
             password,
             udp_relay_mode,
@@ -148,8 +145,8 @@ impl TuicConnection {
             remote_bi_stream_cnt: Counter::new(),
             // TODO: seems tuic dynamically adjust the size of max concurrent
             // streams, is it necessary to configure the stream size?
-            max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
-            max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
+            max_concurrent_uni_streams: Arc::new(AtomicU32::new(512)),
+            max_concurrent_bi_streams: Arc::new(AtomicU32::new(512)),
             udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
         let conn = Arc::new(conn);
@@ -205,14 +202,26 @@ pub struct ServerAddr {
     domain: String,
     port: u16,
     ip: Option<IpAddr>,
+    sni: Option<String>,
 }
 impl ServerAddr {
-    pub fn new(domain: String, port: u16, ip: Option<IpAddr>) -> Self {
-        Self { domain, port, ip }
+    pub fn new(
+        domain: String,
+        port: u16,
+        ip: Option<IpAddr>,
+        sni: Option<String>,
+    ) -> Self {
+        Self {
+            domain,
+            port,
+            ip,
+            sni,
+        }
     }
 
+    #[inline]
     pub fn server_name(&self) -> &str {
-        &self.domain
+        self.sni.as_ref().unwrap_or(&self.domain)
     }
 
     pub async fn resolve(
@@ -237,6 +246,7 @@ pub enum UdpRelayMode {
     Quic,
 }
 impl From<&str> for UdpRelayMode {
+    #[inline]
     fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("native") {
             Self::Native
@@ -257,6 +267,7 @@ pub enum CongestionControl {
     Bbr,
 }
 impl From<&str> for CongestionControl {
+    #[inline]
     fn from(s: &str) -> Self {
         if s.eq_ignore_ascii_case("cubic") {
             Self::Cubic
@@ -276,15 +287,16 @@ impl From<&str> for CongestionControl {
 }
 
 pub trait SocketAdderTrans {
-    fn into_tuic(self) -> tuic::Address;
+    fn into_tuic(self) -> tuic_core::Address;
 }
 impl SocketAdderTrans for crate::session::SocksAddr {
-    fn into_tuic(self) -> tuic::Address {
+    #[inline]
+    fn into_tuic(self) -> tuic_core::Address {
         use crate::session::SocksAddr;
         match self {
-            SocksAddr::Ip(addr) => tuic::Address::SocketAddress(addr),
+            SocksAddr::Ip(addr) => tuic_core::Address::SocketAddress(addr),
             SocksAddr::Domain(domain, port) => {
-                tuic::Address::DomainAddress(domain, port)
+                tuic_core::Address::DomainAddress(domain, port)
             }
         }
     }

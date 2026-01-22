@@ -5,7 +5,7 @@ use bytes::Bytes;
 use quinn::{RecvStream, SendStream, VarInt};
 use register_count::Register;
 use std::sync::{Arc, atomic::Ordering};
-use tuic_quinn::Task;
+use tuic_core::quinn::Task;
 
 impl TuicConnection {
     pub async fn accept_uni_stream(&self) -> anyhow::Result<(RecvStream, Register)> {
