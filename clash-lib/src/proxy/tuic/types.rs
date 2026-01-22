@@ -145,8 +145,8 @@ impl TuicConnection {
             remote_bi_stream_cnt: Counter::new(),
             // TODO: seems tuic dynamically adjust the size of max concurrent
             // streams, is it necessary to configure the stream size?
-            max_concurrent_uni_streams: Arc::new(AtomicU32::new(32)),
-            max_concurrent_bi_streams: Arc::new(AtomicU32::new(32)),
+            max_concurrent_uni_streams: Arc::new(AtomicU32::new(512)),
+            max_concurrent_bi_streams: Arc::new(AtomicU32::new(512)),
             udp_sessions: Arc::new(AsyncRwLock::new(HashMap::new())),
         };
         let conn = Arc::new(conn);
