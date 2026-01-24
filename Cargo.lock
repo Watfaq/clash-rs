@@ -11391,7 +11391,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "env_logger",

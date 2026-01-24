@@ -30,7 +30,7 @@ use crate::{
     config::{
         InternalConfig,
         def::{self, LogLevel},
-        internal::proxy::OutboundProxy,
+        internal::proxy::{OutboundProxy, OutboundProxyProtocol},
     },
     runner::Runner,
 };
@@ -381,6 +381,18 @@ async fn create_components(
     );
 
     debug!("initializing bootstrap outbounds");
+    
+    // Extract proxy server domains for proxy-nameserver resolution before consuming config.proxies
+    let proxy_protocols: Vec<&OutboundProxyProtocol> = config
+        .proxies
+        .values()
+        .filter_map(|x| match x {
+            OutboundProxy::ProxyServer(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    let proxy_server_domains = crate::app::outbound::manager::OutboundManager::extract_proxy_server_domains(&proxy_protocols);
+    
     let plain_outbounds = OutboundManager::load_plain_outbounds(
         config
             .proxies
@@ -447,6 +459,7 @@ async fn create_components(
         Some(cache_store.clone()),
         pending_country_mmdb.clone(),
         outbound_registry.clone(),
+        proxy_server_domains,
     )
     .await;
 
