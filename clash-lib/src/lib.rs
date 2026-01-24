@@ -381,8 +381,9 @@ async fn create_components(
     );
 
     debug!("initializing bootstrap outbounds");
-    
-    // Extract proxy server domains for proxy-nameserver resolution before consuming config.proxies
+
+    // Extract proxy server domains for proxy-nameserver resolution before consuming
+    // config.proxies
     let proxy_protocols: Vec<&OutboundProxyProtocol> = config
         .proxies
         .values()
@@ -391,8 +392,11 @@ async fn create_components(
             _ => None,
         })
         .collect();
-    let proxy_server_domains = crate::app::outbound::manager::OutboundManager::extract_proxy_server_domains(&proxy_protocols);
-    
+    let proxy_server_domains =
+        crate::app::outbound::manager::OutboundManager::extract_proxy_server_domains(
+            &proxy_protocols,
+        );
+
     let plain_outbounds = OutboundManager::load_plain_outbounds(
         config
             .proxies
@@ -453,6 +457,7 @@ async fn create_components(
     let pending_country_mmdb: Option<dns::PendingMmdb> = country_mmdb_file
         .as_ref()
         .map(|_| Arc::new(OnceLock::new()));
+
 
     let dns_resolver = dns::new_resolver(
         config.dns,
