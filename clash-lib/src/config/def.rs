@@ -566,6 +566,8 @@ pub struct DNS {
       String::from("8.8.8.8")]
     )]
     pub default_nameserver: Vec<String>,
+    /// Proxy nameservers, used to resolve proxy server hostnames
+    pub proxy_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
     /// Configure EDNS Client Subnet information to send with upstream queries

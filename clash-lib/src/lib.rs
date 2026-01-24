@@ -17,7 +17,7 @@ use crate::{
     },
     config::{
         def,
-        internal::{InternalConfig, proxy::OutboundProxy},
+        internal::{InternalConfig, proxy::{OutboundProxy, OutboundProxyProtocol}},
     },
     proxy::OutboundHandler,
 };
@@ -414,6 +414,18 @@ async fn create_components(
     );
 
     debug!("initializing bootstrap outbounds");
+    
+    // Extract proxy server domains for proxy-nameserver resolution before consuming config.proxies
+    let proxy_protocols: Vec<&OutboundProxyProtocol> = config
+        .proxies
+        .values()
+        .filter_map(|x| match x {
+            OutboundProxy::ProxyServer(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    let proxy_server_domains = crate::app::outbound::manager::OutboundManager::extract_proxy_server_domains(&proxy_protocols);
+    
     let plain_outbounds = OutboundManager::load_plain_outbounds(
         config
             .proxies
@@ -451,6 +463,7 @@ async fn create_components(
     // Clone the dns.listen for the DNS Server later before we consume the config
     // TODO: we should separate the DNS resolver and DNS server config here
     let dns_listen = config.dns.listen.clone();
+    
     let plain_outbounds_map = HashMap::<String, Arc<dyn OutboundHandler>>::from_iter(
         plain_outbounds
             .iter()
@@ -461,6 +474,7 @@ async fn create_components(
         Some(cache_store.clone()),
         country_mmdb.clone(),
         plain_outbounds_map,
+        proxy_server_domains,
     )
     .await;
 

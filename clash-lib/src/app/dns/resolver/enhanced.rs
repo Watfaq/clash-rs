@@ -42,6 +42,9 @@ pub struct EnhancedResolver {
     lru_cache: Option<Arc<RwLock<hickory_resolver::dns_lru::DnsLru>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
+    proxy_resolver: Option<Arc<EnhancedResolver>>,
+    proxy_server_domains: Option<trie::StringTrie<bool>>,
+
     fake_dns: Option<ThreadSafeFakeDns>,
 
     reverse_lookup_cache:
@@ -78,6 +81,9 @@ impl EnhancedResolver {
             lru_cache: None,
             policy: None,
 
+            proxy_resolver: None,
+            proxy_server_domains: None,
+
             fake_dns: None,
 
             reverse_lookup_cache: None,
@@ -89,8 +95,22 @@ impl EnhancedResolver {
         store: ThreadSafeCacheFile,
         mmdb: Option<MmdbLookup>,
         outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+        proxy_server_domains: Vec<String>,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
+        
+        // Build proxy server domains trie for proxy-nameserver resolution
+        let proxy_server_domains_trie = if !cfg.proxy_nameserver.is_empty() && !proxy_server_domains.is_empty() {
+            let mut domains = trie::StringTrie::new();
+            for server in proxy_server_domains {
+                domains.insert(server.as_str(), Arc::new(true));
+                debug!("added proxy server domain: {}", server);
+            }
+            Some(domains)
+        } else {
+            None
+        };
+        
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
@@ -108,10 +128,42 @@ impl EnhancedResolver {
             lru_cache: None,
             policy: None,
 
+            proxy_resolver: None,
+            proxy_server_domains: None,
+
             fake_dns: None,
 
             reverse_lookup_cache: None,
         });
+
+        let proxy_resolver = if !cfg.proxy_nameserver.is_empty() {
+            Some(Arc::new(EnhancedResolver {
+                ipv6: AtomicBool::new(false),
+                hosts: None,
+                main: make_clients(
+                    cfg.proxy_nameserver.clone(),
+                    None,
+                    HashMap::new(),
+                    edns_client_subnet.clone(),
+                    cfg.fw_mark,
+                )
+                .await,
+                fallback: None,
+                fallback_domain_filters: None,
+                fallback_ip_filters: None,
+                lru_cache: None,
+                policy: None,
+
+                proxy_resolver: None,
+                proxy_server_domains: None,
+
+                fake_dns: None,
+
+                reverse_lookup_cache: None,
+            }))
+        } else {
+            None
+        };
 
         Self {
             ipv6: AtomicBool::new(cfg.ipv6),
@@ -231,6 +283,9 @@ impl EnhancedResolver {
                 }
                 _ => None,
             },
+
+            proxy_resolver,
+            proxy_server_domains: proxy_server_domains_trie,
 
             reverse_lookup_cache: Some(Arc::new(RwLock::new(
                 lru_time_cache::LruCache::with_expiry_duration_and_capacity(
@@ -400,6 +455,16 @@ impl EnhancedResolver {
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
+        // Check if this is a proxy server domain, use proxy-nameserver if configured
+        if let (Some(proxy_resolver), Some(proxy_domains)) = 
+            (&self.proxy_resolver, &self.proxy_server_domains)
+            && let Some(domain) = EnhancedResolver::domain_name_of_message(message)
+            && proxy_domains.search(&domain).is_some()
+        {
+            debug!("using proxy-nameserver for proxy server domain: {}", domain);
+            return EnhancedResolver::batch_exchange(&proxy_resolver.main, message).await;
+        }
+
         if let Some(matched) = self.match_policy(message) {
             return EnhancedResolver::batch_exchange(matched, message).await;
         }

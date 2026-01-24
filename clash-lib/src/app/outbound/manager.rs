@@ -234,6 +234,36 @@ impl OutboundManager {
         Ok(())
     }
 
+    pub fn extract_proxy_server_domains(
+        outbounds: &[&OutboundProxyProtocol],
+    ) -> Vec<String> {
+        outbounds
+            .iter()
+            .filter_map(|outbound| match outbound {
+                OutboundProxyProtocol::Direct(_) => None,
+                OutboundProxyProtocol::Reject(_) => None,
+                #[cfg(feature = "shadowsocks")]
+                OutboundProxyProtocol::Ss(s) => Some(s.common_opts.server.clone()),
+                OutboundProxyProtocol::Socks5(s) => Some(s.common_opts.server.clone()),
+                OutboundProxyProtocol::Vmess(v) => Some(v.common_opts.server.clone()),
+                OutboundProxyProtocol::Vless(v) => Some(v.common_opts.server.clone()),
+                OutboundProxyProtocol::Trojan(t) => Some(t.common_opts.server.clone()),
+                OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
+                #[cfg(feature = "wireguard")]
+                OutboundProxyProtocol::Wireguard(wg) => Some(wg.common_opts.server.clone()),
+                #[cfg(feature = "ssh")]
+                OutboundProxyProtocol::Ssh(ssh) => Some(ssh.common_opts.server.clone()),
+                #[cfg(feature = "onion")]
+                OutboundProxyProtocol::Tor(_) => None,
+                #[cfg(feature = "tuic")]
+                OutboundProxyProtocol::Tuic(tuic) => Some(tuic.common_opts.server.clone()),
+                #[cfg(feature = "shadowquic")]
+                OutboundProxyProtocol::ShadowQuic(sq) => Some(sq.common_opts.server.clone()),
+            })
+            .filter(|s| s.parse::<std::net::IpAddr>().is_err())
+            .collect()
+    }
+
     pub fn load_plain_outbounds(
         outbounds: Vec<OutboundProxyProtocol>,
     ) -> Vec<AnyOutboundHandler> {
