@@ -42,8 +42,10 @@ impl TryFrom<&OutboundTuic> for Handler {
             alpn: s
                 .alpn
                 .clone()
-                .map(|v| v.into_iter().map(|alpn| alpn.into_bytes()).collect())
-                .unwrap_or_default(),
+                .unwrap_or_else(|| vec!["h3".to_string()])
+                .into_iter()
+                .map(|s| s.into_bytes())
+                .collect(),
             heartbeat_interval: Duration::from_millis(
                 s.heartbeat_interval.unwrap_or(3000),
             ),
