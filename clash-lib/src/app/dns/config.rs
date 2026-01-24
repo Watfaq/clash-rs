@@ -54,6 +54,7 @@ pub struct Config {
     pub listen: DNSListenAddr,
     pub enhance_mode: DNSMode,
     pub default_nameserver: Vec<NameServer>,
+    pub proxy_server_nameserver: Vec<NameServer>,
     pub fake_ip_range: ipnet::IpNet,
     pub fake_ip_filter: Vec<String>,
     pub store_fake_ip: bool,
@@ -273,6 +274,20 @@ impl TryFrom<&crate::config::def::Config> for Config {
             })?;
         }
 
+        let proxy_server_nameserver = if !dc.proxy_server_nameserver.is_empty() {
+            let ns = Config::parse_nameserver(&dc.proxy_server_nameserver)?;
+            for n in &ns {
+                let _ = n.address.parse::<SocketAddr>().map_err(|_| {
+                    Error::InvalidConfig(String::from(
+                        "proxy server nameserver must be ip address",
+                    ))
+                })?;
+            }
+            ns
+        } else {
+            default_nameserver.clone()
+        };
+
         let edns_client_subnet = dc
             .edns_client_subnet
             .as_ref()
@@ -393,6 +408,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .unwrap_or_default(),
             enhance_mode: dc.enhanced_mode.clone(),
             default_nameserver,
+            proxy_server_nameserver,
             fake_ip_range: dc.fake_ip_range.parse::<ipnet::IpNet>().map_err(
                 |_| Error::InvalidConfig(String::from("invalid fake ip range")),
             )?,
