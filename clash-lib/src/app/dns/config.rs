@@ -278,7 +278,9 @@ impl TryFrom<&crate::config::def::Config> for Config {
             let ns = Config::parse_nameserver(&dc.proxy_nameserver)?;
             for n in &ns {
                 let _ = n.address.parse::<SocketAddr>().map_err(|_| {
-                    Error::InvalidConfig(String::from("proxy nameserver must be ip address"))
+                    Error::InvalidConfig(String::from(
+                        "proxy nameserver must be ip address",
+                    ))
                 })?;
             }
             ns

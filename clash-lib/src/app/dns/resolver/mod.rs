@@ -28,9 +28,16 @@ pub async fn new(
 ) -> ThreadSafeDNSResolver {
     if cfg.enable {
         match store {
-            Some(store) => {
-                Arc::new(EnhancedResolver::new(cfg, store, mmdb, outbounds, proxy_server_domains).await)
-            }
+            Some(store) => Arc::new(
+                EnhancedResolver::new(
+                    cfg,
+                    store,
+                    mmdb,
+                    outbounds,
+                    proxy_server_domains,
+                )
+                .await,
+            ),
             _ => print_and_exit!("enhanced resolver requires cache store"),
         }
     } else {

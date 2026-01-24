@@ -244,21 +244,37 @@ impl OutboundManager {
                 OutboundProxyProtocol::Reject(_) => None,
                 #[cfg(feature = "shadowsocks")]
                 OutboundProxyProtocol::Ss(s) => Some(s.common_opts.server.clone()),
-                OutboundProxyProtocol::Socks5(s) => Some(s.common_opts.server.clone()),
-                OutboundProxyProtocol::Vmess(v) => Some(v.common_opts.server.clone()),
-                OutboundProxyProtocol::Vless(v) => Some(v.common_opts.server.clone()),
-                OutboundProxyProtocol::Trojan(t) => Some(t.common_opts.server.clone()),
+                OutboundProxyProtocol::Socks5(s) => {
+                    Some(s.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Vmess(v) => {
+                    Some(v.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Vless(v) => {
+                    Some(v.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Trojan(t) => {
+                    Some(t.common_opts.server.clone())
+                }
                 OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
                 #[cfg(feature = "wireguard")]
-                OutboundProxyProtocol::Wireguard(wg) => Some(wg.common_opts.server.clone()),
+                OutboundProxyProtocol::Wireguard(wg) => {
+                    Some(wg.common_opts.server.clone())
+                }
                 #[cfg(feature = "ssh")]
-                OutboundProxyProtocol::Ssh(ssh) => Some(ssh.common_opts.server.clone()),
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    Some(ssh.common_opts.server.clone())
+                }
                 #[cfg(feature = "onion")]
                 OutboundProxyProtocol::Tor(_) => None,
                 #[cfg(feature = "tuic")]
-                OutboundProxyProtocol::Tuic(tuic) => Some(tuic.common_opts.server.clone()),
+                OutboundProxyProtocol::Tuic(tuic) => {
+                    Some(tuic.common_opts.server.clone())
+                }
                 #[cfg(feature = "shadowquic")]
-                OutboundProxyProtocol::ShadowQuic(sq) => Some(sq.common_opts.server.clone()),
+                OutboundProxyProtocol::ShadowQuic(sq) => {
+                    Some(sq.common_opts.server.clone())
+                }
             })
             .filter(|s| s.parse::<std::net::IpAddr>().is_err())
             .collect()
@@ -938,5 +954,108 @@ impl OutboundManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::internal::proxy::{
+        CommonConfigOptions, OutboundSocks5, OutboundTrojan, OutboundVmess,
+    };
+
+    #[test]
+    fn test_extract_proxy_server_domains() {
+        let vmess = OutboundProxyProtocol::Vmess(OutboundVmess {
+            common_opts: CommonConfigOptions {
+                name: "vmess-proxy".to_string(),
+                server: "proxy.example.com".to_string(),
+                port: 443,
+                connect_via: None,
+            },
+            uuid: "test-uuid".to_string(),
+            alter_id: 0,
+            cipher: None,
+            udp: None,
+            tls: None,
+            skip_cert_verify: None,
+            server_name: None,
+            network: None,
+            ws_opts: None,
+            h2_opts: None,
+            grpc_opts: None,
+        });
+
+        let socks5 = OutboundProxyProtocol::Socks5(OutboundSocks5 {
+            common_opts: CommonConfigOptions {
+                name: "socks5-proxy".to_string(),
+                server: "socks.example.com".to_string(),
+                port: 1080,
+                connect_via: None,
+            },
+            username: None,
+            password: None,
+            tls: false,
+            sni: None,
+            skip_cert_verify: false,
+            udp: true,
+        });
+
+        let trojan_ip = OutboundProxyProtocol::Trojan(OutboundTrojan {
+            common_opts: CommonConfigOptions {
+                name: "trojan-ip".to_string(),
+                server: "1.2.3.4".to_string(), // IP address
+                port: 443,
+                connect_via: None,
+            },
+            password: "password".to_string(),
+            alpn: None,
+            sni: None,
+            skip_cert_verify: None,
+            udp: None,
+            network: None,
+            grpc_opts: None,
+            ws_opts: None,
+        });
+
+        let proxies = vec![&vmess, &socks5, &trojan_ip];
+        let domains = OutboundManager::extract_proxy_server_domains(&proxies);
+
+        // Should only contain domain names, not IP addresses
+        assert_eq!(domains.len(), 2);
+        assert!(domains.contains(&"proxy.example.com".to_string()));
+        assert!(domains.contains(&"socks.example.com".to_string()));
+        assert!(!domains.contains(&"1.2.3.4".to_string()));
+    }
+
+    #[test]
+    fn test_extract_proxy_server_domains_empty() {
+        let proxies: Vec<&OutboundProxyProtocol> = vec![];
+        let domains = OutboundManager::extract_proxy_server_domains(&proxies);
+        assert!(domains.is_empty());
+    }
+
+    #[test]
+    fn test_extract_proxy_server_domains_only_ips() {
+        let socks5_ip = OutboundProxyProtocol::Socks5(OutboundSocks5 {
+            common_opts: CommonConfigOptions {
+                name: "socks5-ip".to_string(),
+                server: "127.0.0.1".to_string(),
+                port: 1080,
+                connect_via: None,
+            },
+            username: None,
+            password: None,
+            tls: false,
+            sni: None,
+            skip_cert_verify: false,
+            udp: true,
+        });
+
+        let proxies = vec![&socks5_ip];
+        let domains = OutboundManager::extract_proxy_server_domains(&proxies);
+
+        // Should be empty since only IP addresses
+        assert!(domains.is_empty());
     }
 }
