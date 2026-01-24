@@ -308,6 +308,7 @@ impl OutboundManager {
                     Some(t.common_opts.server.clone())
                 }
                 OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
+                OutboundProxyProtocol::Anytls(a) => Some(a.common_opts.server.clone()),
                 #[cfg(feature = "wireguard")]
                 OutboundProxyProtocol::Wireguard(wg) => {
                     Some(wg.common_opts.server.clone())

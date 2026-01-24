@@ -382,8 +382,8 @@ async fn create_components(
 
     debug!("initializing bootstrap outbounds");
 
-    // Extract proxy server domains for proxy-nameserver resolution before consuming
-    // config.proxies
+    // Extract proxy server domains for proxy-server-nameserver resolution before
+    // consuming config.proxies
     let proxy_protocols: Vec<&OutboundProxyProtocol> = config
         .proxies
         .values()
