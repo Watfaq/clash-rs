@@ -99,8 +99,8 @@ impl EnhancedResolver {
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
 
-        // Build proxy server domains trie for proxy-nameserver resolution
-        let proxy_server_domains_trie = if !cfg.proxy_nameserver.is_empty()
+        // Build proxy server domains trie for proxy-server-nameserver resolution
+        let proxy_server_domains_trie = if !cfg.proxy_server_nameserver.is_empty()
             && !proxy_server_domains.is_empty()
         {
             let mut domains = trie::StringTrie::new();
@@ -138,12 +138,12 @@ impl EnhancedResolver {
             reverse_lookup_cache: None,
         });
 
-        let proxy_resolver = if !cfg.proxy_nameserver.is_empty() {
+        let proxy_resolver = if !cfg.proxy_server_nameserver.is_empty() {
             Some(Arc::new(EnhancedResolver {
                 ipv6: AtomicBool::new(false),
                 hosts: None,
                 main: make_clients(
-                    cfg.proxy_nameserver.clone(),
+                    cfg.proxy_server_nameserver.clone(),
                     None,
                     HashMap::new(),
                     edns_client_subnet.clone(),
@@ -457,13 +457,17 @@ impl EnhancedResolver {
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
-        // Check if this is a proxy server domain, use proxy-nameserver if configured
+        // Check if this is a proxy server domain, use proxy-server-nameserver if
+        // configured
         if let (Some(proxy_resolver), Some(proxy_domains)) =
             (&self.proxy_resolver, &self.proxy_server_domains)
             && let Some(domain) = EnhancedResolver::domain_name_of_message(message)
             && proxy_domains.search(&domain).is_some()
         {
-            debug!("using proxy-nameserver for proxy server domain: {}", domain);
+            debug!(
+                "using proxy-server-nameserver for proxy server domain: {}",
+                domain
+            );
             return EnhancedResolver::batch_exchange(&proxy_resolver.main, message)
                 .await;
         }
@@ -939,7 +943,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_proxy_nameserver_initialization() {
+    async fn test_proxy_server_nameserver_initialization() {
         use crate::app::{
             dns::{
                 config::{Config, NameServer},
@@ -960,8 +964,8 @@ mod tests {
         config.enable = true;
         config.ipv6 = false;
 
-        // Set up proxy nameserver
-        config.proxy_nameserver = vec![NameServer {
+        // Set up proxy server nameserver
+        config.proxy_server_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
             address: "8.8.8.8:53".to_string(),
             interface: None,
@@ -1007,7 +1011,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_proxy_nameserver_without_config() {
+    async fn test_proxy_server_nameserver_without_config() {
         use crate::app::{
             dns::{
                 config::{Config, NameServer},
@@ -1028,8 +1032,8 @@ mod tests {
         config.enable = true;
         config.ipv6 = false;
 
-        // No proxy nameserver configured
-        config.proxy_nameserver = vec![];
+        // No proxy server nameserver configured
+        config.proxy_server_nameserver = vec![];
 
         config.default_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
@@ -1056,7 +1060,7 @@ mod tests {
         )
         .await;
 
-        // Should not have proxy_resolver when proxy_nameserver is empty
+        // Should not have proxy_resolver when proxy_server_nameserver is empty
         assert!(resolver.proxy_resolver.is_none());
         assert!(resolver.proxy_server_domains.is_none());
     }
