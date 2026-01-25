@@ -134,16 +134,21 @@ async fn get_proxy_delay(
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
-    let n = proxy.name().to_owned();
+    let name = proxy.name().to_owned();
     let mut headers = HeaderMap::new();
     headers.insert(header::CONNECTION, "close".parse().unwrap());
 
     let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
         let latency_test_url = group.get_latency_test_url();
-        let proxies = group.get_proxies().await;
+        
+        let proxies = match group.get_active_proxy().await {
+            Some(v) => vec![v],
+            None => group.get_proxies().await,
+        };
+        
         let results = outbound_manager
             .url_test(
-                &[vec![proxy], proxies].concat(),
+                &proxies,
                 &latency_test_url.unwrap_or(q.url),
                 timeout,
             )
@@ -154,7 +159,7 @@ async fn get_proxy_delay(
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {n} failed with error: {err}"),
+                    format!("get delay for {name} failed with error: {err}"),
                 )
                     .into_response();
             }
@@ -169,7 +174,7 @@ async fn get_proxy_delay(
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {n} failed with error: {err}"),
+                    format!("get delay for {name} failed with error: {err}"),
                 )
                     .into_response();
             }
