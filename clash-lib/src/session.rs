@@ -469,14 +469,18 @@ impl Default for Session {
 
 impl Display for Session {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "[{}] {} -> {}[{}]",
-            self.network,
-            self.source,
-            self.destination,
-            self.resolved_ip.unwrap_or(IpAddr::V4(Ipv4Addr::from(0)))
-        )
+        match self.resolved_ip {
+            Some(ip) => write!(
+                f,
+                "[{}] {} -> {}[{}]",
+                self.network, self.source, self.destination, ip
+            ),
+            None => write!(
+                f,
+                "[{}] {} -> {}",
+                self.network, self.source, self.destination,
+            ),
+        }
     }
 }
 
