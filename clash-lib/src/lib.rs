@@ -8,28 +8,27 @@
 
 use crate::{
     app::{
-        dispatcher::Dispatcher, dns, inbound::manager::InboundManager,
-        outbound::manager::OutboundManager, router::Router,
+        dispatcher::{Dispatcher, StatisticsManager},
+        dns,
+        dns::{SystemResolver, ThreadSafeDNSResolver},
+        inbound::manager::InboundManager,
+        logging::LogEvent,
+        net::init_net_config,
+        outbound::manager::OutboundManager,
+        profile,
+        router::Router,
     },
     common::{
+        auth,
         geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoDataLookup},
+        http::new_http_client,
+        mmdb,
         mmdb::{DEFAULT_ASN_MMDB_DOWNLOAD_URL, DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL},
     },
-    config::{
-        def,
-        internal::{InternalConfig, proxy::OutboundProxy},
-    },
+    config::{InternalConfig, def, def::LogLevel, internal::proxy::OutboundProxy},
     proxy::OutboundHandler,
 };
-use app::{
-    dispatcher::StatisticsManager,
-    dns::{SystemResolver, ThreadSafeDNSResolver},
-    logging::LogEvent,
-    net::init_net_config,
-    profile,
-};
-use common::{auth, http::new_http_client, mmdb};
-use config::def::LogLevel;
+
 #[cfg(feature = "tun")]
 use proxy::tun::get_tun_runner;
 

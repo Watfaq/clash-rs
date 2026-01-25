@@ -315,7 +315,7 @@ pub struct OutboundTuic {
     pub common_opts: CommonConfigOptions,
     pub uuid: Uuid,
     pub password: String,
-    /// override field 'server' dns record, not used for now
+    /// override field 'server' dns record
     pub ip: Option<String>,
     pub heartbeat_interval: Option<u64>,
     /// h3
