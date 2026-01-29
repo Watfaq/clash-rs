@@ -4,6 +4,7 @@ use erased_serde::Serialize;
 
 use crate::session::Session;
 
+pub mod composite;
 pub mod domain;
 pub mod domain_keyword;
 pub mod domain_regex;

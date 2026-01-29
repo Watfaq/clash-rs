@@ -20,7 +20,7 @@ A custom protocol, rule based network proxy software.
 - 🌈 Flexible traffic routing rules based off source/destination IP/Domain/GeoIP etc.
 - 📦 Local anti spoofing DNS with support of UDP/TCP/DoH/DoT remote, and expose it as a local UDP/TCP/DoH/DoT server.
 - 🛡 Run as an HTTP/Socks5 proxy, or utun device as a home network gateway.
-- ⚙️ Shadowsocks/Trojan/Vmess/Wireguard(userspace)/Tor/Tuic/Socks5(TCP/UDP) outbound support with different underlying trasports(gRPC/TLS/H2/WebSocket/etc.).
+- ⚙️ Hysteria2/Shadowquic/Shadowsocks/Socks5(TCP/UDP)/SSH/tor(onion)/Trojan/Tuic/VLess/Vmess/Wireguard(userspace) outbound support with different underlying trasports(gRPC/TLS/H2/WebSocket/etc.).
 - 🌍 Dynamic remote rule/proxy loader.
 - 🎵 Tracing with Jaeger
 

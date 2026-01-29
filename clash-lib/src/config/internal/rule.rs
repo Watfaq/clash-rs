@@ -64,6 +64,11 @@ pub enum RuleType {
         network: crate::session::Network,
         target: String,
     },
+    Composite {
+        operator: String,
+        expression: String,
+        target: String,
+    },
 }
 
 impl RuleType {
@@ -84,6 +89,7 @@ impl RuleType {
             RuleType::RuleSet { target, .. } => target,
             RuleType::Match { target } => target,
             RuleType::Network { target, .. } => target,
+            RuleType::Composite { target, .. } => target,
         }
     }
 }
@@ -110,6 +116,7 @@ impl Display for RuleType {
             RuleType::RuleSet { .. } => write!(f, "RULE-SET"),
             RuleType::Match { .. } => write!(f, "MATCH"),
             RuleType::Network { .. } => write!(f, "NETWORK"),
+            RuleType::Composite { .. } => write!(f, "COMPOSITE"),
         }
     }
 }
@@ -213,6 +220,12 @@ impl RuleType {
                     target: target.to_string(),
                 })
             }
+            "AND" | "OR" | "NOT" => Ok(RuleType::Composite {
+                operator: proto.to_string(),
+                expression: payload.to_string(),
+                target: target.to_string(),
+            }),
+
             _ => Err(Error::InvalidConfig(format!(
                 "unsupported rule type: {proto}"
             ))),
@@ -224,6 +237,36 @@ impl TryFrom<String> for RuleType {
     type Error = crate::Error;
 
     fn try_from(line: String) -> Result<Self, Self::Error> {
+        // Check if this is a composite rule (contains parentheses)
+        if line.contains('(') {
+            // For composite rules: OPERATOR,((expression)),TARGET
+            // Split on first and last comma
+            let first_comma = line.find(',').ok_or_else(|| {
+                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
+            })?;
+
+            let last_comma = line.rfind(',').ok_or_else(|| {
+                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
+            })?;
+
+            if first_comma == last_comma {
+                return Err(Error::InvalidConfig(format!(
+                    "composite rule needs at least 2 commas: {line}"
+                )));
+            }
+
+            let operator = line[..first_comma].trim();
+            let expression = line[first_comma + 1..last_comma].trim();
+            let target = line[last_comma + 1..].trim();
+
+            return Ok(RuleType::Composite {
+                operator: operator.to_string(),
+                expression: expression.to_string(),
+                target: target.to_string(),
+            });
+        }
+
+        // For non-composite rules, use simple split
         let parts = line.split(',').map(str::trim).collect::<Vec<&str>>();
 
         match parts.as_slice() {
