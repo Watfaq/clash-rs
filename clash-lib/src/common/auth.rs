@@ -11,6 +11,12 @@ pub type ThreadSafeAuthenticator = Arc<dyn Authenticator + Send + Sync>;
 
 pub struct User(String, String);
 
+impl std::fmt::Debug for User {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("User").field(&self.0).finish()
+    }
+}
+
 impl User {
     pub fn new(username: String, password: String) -> Self {
         Self(username, password)

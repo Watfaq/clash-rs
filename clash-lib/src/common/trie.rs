@@ -48,8 +48,32 @@ impl<T> Node<T> {
         &self.children
     }
 }
+
 pub struct StringTrie<T> {
     root: Node<T>,
+}
+
+impl<T> std::fmt::Debug for Node<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StringTrieNode")
+            .field("children", &self.children)
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
+impl<T> std::fmt::Debug for StringTrie<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StringTrie")
+            .field("root", &self.root)
+            .finish()
+    }
 }
 
 impl<T> Default for StringTrie<T> {

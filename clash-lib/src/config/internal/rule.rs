@@ -1,6 +1,7 @@
 use crate::{Error, print_and_exit};
 use std::{fmt::Display, str::FromStr};
 
+#[derive(Debug)]
 pub enum RuleType {
     Domain {
         domain: String,

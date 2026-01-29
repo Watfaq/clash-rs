@@ -14,6 +14,7 @@ pub const PROXY_REJECT: &str = "REJECT";
 pub const PROXY_GLOBAL: &str = "GLOBAL";
 
 #[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
 pub enum OutboundProxy {
     ProxyServer(OutboundProxyProtocol),
     ProxyGroup(OutboundGroupProtocol),

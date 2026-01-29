@@ -72,7 +72,7 @@ pub struct TunConfig {
     pub dns_hijack: DnsHijack,
 }
 
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum RunMode {
     #[serde(alias = "Global")]
@@ -607,7 +607,7 @@ pub struct EdnsClientSubnet {
     pub ipv6: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy

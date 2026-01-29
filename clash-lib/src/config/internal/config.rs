@@ -24,6 +24,7 @@ use std::{
 
 use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
 
+#[derive(Debug)]
 pub struct Config {
     pub general: General,
     pub dns: dns::Config,
@@ -57,6 +58,7 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
 pub struct General {
     pub authentication: Vec<String>,
     pub bind_address: BindAddress,
@@ -75,6 +77,7 @@ pub struct General {
     pub geosite_download_url: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct Profile {
     pub store_selected: bool,
     pub store_smart_stats: bool,
@@ -82,7 +85,7 @@ pub struct Profile {
     // store_fake_ip: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct TunConfig {
     pub enable: bool,
     pub device_id: String,
@@ -167,7 +170,7 @@ impl FromStr for BindAddress {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct Controller {
     pub external_controller: Option<String>,
     pub external_controller_ipc: Option<String>,
@@ -176,7 +179,7 @@ pub struct Controller {
     pub cors_allow_origins: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum RuleProviderDef {
@@ -185,7 +188,7 @@ pub enum RuleProviderDef {
     Inline(InlineRuleProvider),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct HttpRuleProvider {
     pub url: String,
     pub interval: u64,
@@ -196,7 +199,7 @@ pub struct HttpRuleProvider {
     pub inline_rules: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileRuleProvider {
     pub path: String,
     pub interval: Option<u64>,
@@ -206,7 +209,7 @@ pub struct FileRuleProvider {
     pub inline_rules: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct InlineRuleProvider {
     pub path: String,
     pub behavior: RuleSetBehavior,
