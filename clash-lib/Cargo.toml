@@ -191,8 +191,7 @@ shadowquic = { tag= "v0.2.3", optional = true, git = "https://github.com/spongeb
 # experimental
 downcast-rs = "2.0"
 
-# workaround for https://github.com/cross-rs/cross/issues/16
-aws-lc-rs = { version = "1", default-features = false, optional = true, features = ["bindgen"] }
+aws-lc-rs = { version = "1", default-features = false, optional = true }
 
 # tproxy
 etherparse = {version = "0.12", optional = true }
