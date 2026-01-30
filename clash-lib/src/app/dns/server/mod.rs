@@ -1,9 +1,9 @@
 use hickory_proto::op::Message;
 
-use tracing::{error, instrument};
+use tracing::{error, info, instrument};
 use watfaq_dns::DNSListenAddr;
 
-use crate::Runner;
+use crate::runner::Runner;
 
 use super::ThreadSafeDNSResolver;
 
@@ -30,23 +30,74 @@ impl watfaq_dns::DnsMessageExchanger for DnsMessageExchanger {
     }
 }
 
-pub async fn get_dns_listener(
-    listen: DNSListenAddr,
+pub struct DnsRunner {
+    listener: DNSListenAddr,
     resolver: ThreadSafeDNSResolver,
-    cwd: &std::path::Path,
-) -> Option<Runner> {
-    let h = DnsMessageExchanger { resolver };
-    let r = watfaq_dns::get_dns_listener(listen, h, cwd).await;
-    match r {
-        Some(r) => Some(Box::pin(async move {
-            match r.await {
-                Ok(()) => Ok(()),
-                Err(err) => {
-                    error!("dns listener error: {}", err);
-                    Err(err.into())
+    cwd: std::path::PathBuf,
+
+    cancellation_token: tokio_util::sync::CancellationToken,
+}
+
+impl DnsRunner {
+    pub fn new(
+        listen: DNSListenAddr,
+        resolver: ThreadSafeDNSResolver,
+        cwd: &std::path::Path,
+        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> Self {
+        Self {
+            listener: listen,
+            resolver,
+            cwd: cwd.to_path_buf(),
+            cancellation_token: cancellation_token
+                .unwrap_or_else(|| tokio_util::sync::CancellationToken::new()),
+        }
+    }
+}
+
+impl Runner for DnsRunner {
+    fn run(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+        let resolver = self.resolver.clone();
+        let listen = self.listener.clone();
+        let cwd = self.cwd.clone();
+
+        Box::pin(async move {
+            let h = DnsMessageExchanger { resolver };
+            let r = watfaq_dns::get_dns_listener(listen, h, &cwd).await;
+            if let Some(r) = r {
+                tokio::select! {
+                    res = r => {
+                        match res {
+                            Ok(()) => Ok(()),
+                            Err(err) => {
+                                error!("dns listener error: {}", err);
+                                Err(err.into())
+                            }
+                        }
+                    },
+                    _ = self.cancellation_token.cancelled() => {
+                        info!("dns listener is closed");
+                        Ok(())
+                    },
                 }
+            } else {
+                Err(crate::Error::InvalidConfig(
+                    "failed to start dns listener: no valid listen address".into(),
+                ))
             }
-        })),
-        _ => None,
+        })
+    }
+
+    fn shutdown(
+        &mut self,
+    ) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+        Box::pin(async move {
+            self.cancellation_token.cancel();
+            Ok(())
+        })
+    }
+
+    fn join(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+        Box::pin(async move { Ok(()) })
     }
 }
