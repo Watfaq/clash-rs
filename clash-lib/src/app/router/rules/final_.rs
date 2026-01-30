@@ -1,6 +1,7 @@
 use crate::{app::router::rules::RuleMatcher, session::Session};
 
 #[derive(Clone)]
+/// A final rule that matches all sessions
 pub struct Final {
     pub target: String,
 }
