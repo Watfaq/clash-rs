@@ -316,7 +316,7 @@ mod tests {
         let ssh_public_key = ssh_private_key.public_key();
 
         let ssh_private_key_str = ssh_private_key
-            .to_openssh(ring_compat::pkcs8::LineEnding::LF)?
+            .to_openssh(ssh_key::LineEnding::LF)?
             .to_string();
         let ssh_public_key_str = ssh_public_key.to_openssh()?;
 

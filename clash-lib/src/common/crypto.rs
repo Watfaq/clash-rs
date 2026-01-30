@@ -62,7 +62,7 @@ pub fn aes_gcm_encrypt(
     buffer.append(&mut plaintext.to_vec());
     match key.len() {
         16 => {
-            let cipher = ring_compat::aead::Aes128Gcm::new_from_slice(key)?;
+            let cipher = aes_gcm::Aes128Gcm::new_from_slice(key)?;
             cipher.encrypt_in_place(
                 nonce.into(),
                 associated_data.unwrap_or_default(),
@@ -70,7 +70,7 @@ pub fn aes_gcm_encrypt(
             )?;
         }
         32 => {
-            let cipher = ring_compat::aead::Aes256Gcm::new_from_slice(key)?;
+            let cipher = aes_gcm::Aes256Gcm::new_from_slice(key)?;
             cipher.encrypt_in_place(
                 nonce.into(),
                 associated_data.unwrap_or_default(),
@@ -92,7 +92,7 @@ pub fn aes_gcm_decrypt(
     let mut buffer = ciphertext.to_vec();
     match key.len() {
         16 => {
-            let cipher = ring_compat::aead::Aes128Gcm::new_from_slice(key)?;
+            let cipher = aes_gcm::Aes128Gcm::new_from_slice(key)?;
             cipher.decrypt_in_place(
                 nonce.into(),
                 associated_data.unwrap_or_default(),
@@ -100,7 +100,7 @@ pub fn aes_gcm_decrypt(
             )?;
         }
         32 => {
-            let cipher = ring_compat::aead::Aes256Gcm::new_from_slice(key)?;
+            let cipher = aes_gcm::Aes256Gcm::new_from_slice(key)?;
             cipher.decrypt_in_place(
                 nonce.into(),
                 associated_data.unwrap_or_default(),
