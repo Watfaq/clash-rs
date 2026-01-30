@@ -44,3 +44,6 @@ tikv-jemallocator = { version = "0.6", optional = true }
 
 sentry = { version = "0.46", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 human-panic = "2.0"
+
+
+aws-lc-rs = { version = "1", default-features = false, features = ["bindgen"] }
