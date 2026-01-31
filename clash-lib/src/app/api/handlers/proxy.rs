@@ -140,18 +140,14 @@ async fn get_proxy_delay(
 
     let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
         let latency_test_url = group.get_latency_test_url();
-        
+
         let proxies = match group.get_active_proxy().await {
             Some(v) => vec![v],
             None => group.get_proxies().await,
         };
-        
+
         let results = outbound_manager
-            .url_test(
-                &proxies,
-                &latency_test_url.unwrap_or(q.url),
-                timeout,
-            )
+            .url_test(&proxies, &latency_test_url.unwrap_or(q.url), timeout)
             .await;
         match results.first().unwrap() {
             Ok(latency) => *latency,
