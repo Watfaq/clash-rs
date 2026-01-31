@@ -19,9 +19,9 @@ tun:
 ipv6: true
 
 mmdb: Country.mmdb
-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country.mmdb#_clash_outbound=direct&force=true"
+mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202601290026/Country.mmdb#_clash_outbound=direct&force=true"
 asn-mmdb: Country-asn.mmdb
-asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202307271745/Country-asn.mmdb#_clash_outbound=non-exist&force=true"
+asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/202601290026/Country-asn.mmdb#_clash_outbound=non-exist&force=true"
 geosite: geosite.dat
 geosite-download-url: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202406182210/geosite.dat#force=true"
 
@@ -347,4 +347,8 @@ rules:
   - IP-CIDR,10.0.0.11/32,DIRECT
   - DST-PORT,53,ws-vmess
   - SRC-PORT,7777,DIRECT
+  - AND,((DOMAIN,baidu.com),(NETWORK,UDP)),DIRECT
+  - OR,((NETWORK,UDP),(DOMAIN,baidu.com)),REJECT
+  - NOT,((DOMAIN,baidu.com)),trojan-grpc
+  - AND,((DOMAIN,example.com),(OR,((SRC-IP-CIDR,192.168.1.1/24),(SRC-IP-CIDR,10.0.0.100/32)))),DIRECT
   - MATCH, DIRECT
