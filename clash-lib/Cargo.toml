@@ -111,7 +111,7 @@ ip_network_table-deps-treebitmap = "0.5"
 # Algorithms
 crc32fast = "1"
 hmac = "0.12"
-sha1 = "0.11.0-rc.4"
+sha1 = "0.11.0-rc.3"
 sha2 = "0.10"
 md-5 = "0.10"
 chacha20poly1305 = "0.10"

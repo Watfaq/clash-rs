@@ -1219,7 +1219,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serial_test",
- "sha1 0.11.0-rc.4",
+ "sha1 0.11.0-rc.3",
  "sha2 0.10.9",
  "shadowquic",
  "shadowsocks",
@@ -2055,9 +2055,9 @@ dependencies = [
 
 [[package]]
 name = "digest"
-version = "0.11.0-rc.9"
+version = "0.11.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bff8de092798697546237a3a701e4174fe021579faec9b854379af9bf1e31962"
+checksum = "ebf9423bafb058e4142194330c52273c343f8a5beb7176d052f0e73b17dd35b9"
 dependencies = [
  "block-buffer 0.11.0",
  "const-oid 0.10.2",
@@ -3692,7 +3692,7 @@ checksum = "fe44f2bbd99fcb302e246e2d6bcf51aeda346d02a365f80296a07a8c711b6da6"
 dependencies = [
  "argon2",
  "bcrypt-pbkdf",
- "digest 0.11.0-rc.9",
+ "digest 0.11.0-rc.5",
  "ecdsa",
  "ed25519-dalek",
  "hex",
@@ -3704,7 +3704,7 @@ dependencies = [
  "rsa 0.10.0-rc.12",
  "sec1",
  "sha1 0.10.6",
- "sha1 0.11.0-rc.4",
+ "sha1 0.11.0-rc.3",
  "sha2 0.10.9",
  "signature 2.2.0",
  "signature 3.0.0-rc.6",
@@ -5901,7 +5901,7 @@ dependencies = [
  "const-oid 0.10.2",
  "crypto-bigint 0.7.0-rc.17",
  "crypto-primes",
- "digest 0.11.0-rc.9",
+ "digest 0.11.0-rc.5",
  "pkcs1 0.8.0-rc.4",
  "pkcs8 0.11.0-rc.8",
  "rand_core 0.10.0-rc-3",
@@ -6650,13 +6650,13 @@ dependencies = [
 
 [[package]]
 name = "sha1"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c777f0a122a53fddb0beb6e706771197000b8eb5c9f42b5b850f450ef48c788"
+checksum = "aa1ae819b9870cadc959a052363de870944a1646932d274a4e270f64bf79e5ef"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.9",
+ "digest 0.11.0-rc.5",
 ]
 
 [[package]]
@@ -6678,7 +6678,7 @@ checksum = "19d43dc0354d88b791216bb5c1bfbb60c0814460cc653ae0ebd71f286d0bd927"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.9",
+ "digest 0.11.0-rc.5",
 ]
 
 [[package]]
@@ -6840,7 +6840,7 @@ version = "3.0.0-rc.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "597a96996ccff7dfa16f052bd995b4cecc72af22c35138738dc029f0ead6608d"
 dependencies = [
- "digest 0.11.0-rc.9",
+ "digest 0.11.0-rc.5",
  "rand_core 0.10.0-rc-3",
 ]
 
