@@ -20,7 +20,8 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly-2025-09-15"
+  RUST_TOOLCHAIN: "stable"
+  RUSTC_BOOTSTRAP: "1"
   SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
   CROSS_CONTAINER_UID: 1001
   CROSS_CONTAINER_GID: 118
