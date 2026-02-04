@@ -55,7 +55,7 @@ jobs:
           - os: ubuntu-latest
             target: i686-unknown-linux-gnu
             tool: cross
-            extra-args: -F "plus"
+            extra-args: --no-default-features -F "standard,ring"
             zig: "2.17"
           # Linux x86 musl
           - os: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
             tool: cross
-            extra-args: -F "plus"
+            extra-args: --no-default-features -F "standard,ring"
           # Linux x86 gnu static-crt
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -81,11 +81,11 @@ jobs:
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabi
             tool: cross
-            extra-args: -F "plus"
+            extra-args: --no-default-features -F "standard,ring"
           - os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             tool: cross
-            extra-args: -F "plus"
+            extra-args: --no-default-features -F "standard,ring"
             zig: "2.17"
           # Linux arm musl
           - os: ubuntu-latest
@@ -95,12 +95,12 @@ jobs:
           - os: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             tool: cross
-            extra-args: -F "plus"
+            extra-args: --no-default-features -F "standard,ring"
           # Linux RISC-V
           - os: ubuntu-latest
             target: riscv64gc-unknown-linux-gnu
             tool: cross
-            extra-args: -F "standard"
+            extra-args: --no-default-features -F "standard,ring"
           # Linux MIPS
           - target: mips-unknown-linux-musl
             tool: cross
