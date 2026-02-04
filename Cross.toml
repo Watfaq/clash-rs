@@ -1,7 +1,7 @@
 [build]
 pre-build = [
-    "apt update",
-    "apt install -y protobuf-compiler libclang-dev clang build-essential",
+    "apt-get update --fix-missing",
+    "apt-get install -y protobuf-compiler libclang-dev clang build-essential",
 ]
 
 [build.env]
