@@ -1,4 +1,5 @@
 edition = "2024"
+unstable_features = true
 reorder_modules = true
 reorder_impl_items = true
 reorder_imports = true
