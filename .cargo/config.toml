@@ -4,3 +4,4 @@ rustflags = ["--cfg", "tokio_unstable"]
 
 [env]
 SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }
+RUSTC_BOOTSTRAP = { value = "1" }

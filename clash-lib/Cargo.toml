@@ -212,6 +212,7 @@ http-body-util = "0.1"
 
 [build-dependencies]
 prost-build = "0.14"
+protox = "0.9"
 
 [target.'cfg(any(target_os="linux", target_os="macos", target_os="windows"))'.dependencies]
 sock2proc = { git = "https://github.com/Watfaq/sock2proc.git", rev = "9f9e630" }
