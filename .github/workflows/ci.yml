@@ -40,6 +40,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
 
+      - name: Spell Check Repo
+        uses: crate-ci/typos@v1.41.0
+        env:
+          CLICOLOR: 1
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly

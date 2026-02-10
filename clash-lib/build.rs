@@ -9,14 +9,11 @@ fn main() -> std::io::Result<()> {
 
     // Use protox (pure Rust) instead of system protobuf-compiler
     let file_descriptors = protox::compile(
-        &["src/common/geodata/geodata.proto"],
-        &["src/common/geodata"],
+        ["src/common/geodata/geodata.proto"],
+        ["src/common/geodata"],
     )
     .map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("protox compilation failed: {}", e),
-        )
+        std::io::Error::other(format!("protox compilation failed: {}", e))
     })?;
 
     prost_build::compile_fds(file_descriptors)
