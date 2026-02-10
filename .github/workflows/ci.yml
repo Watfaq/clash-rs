@@ -31,10 +31,14 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref }}
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -42,11 +46,19 @@ jobs:
           components: rustfmt
 
       - name: Cargo fmt
+        run: |
+          cargo +nightly fmt --all
+
+      - name: Commit formatting changes
         if: ${{ github.event_name == 'pull_request' }}
-        uses: clechasseur/rs-cargo@v4
-        with:
-          command: fmt
-          args: --all -- --check
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: apply cargo fmt"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
 
   compile:
     name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
