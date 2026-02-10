@@ -371,6 +371,13 @@ pub struct OutboundShadowQuic {
     /// keep alive interval in milliseconds
     /// 0 means disable keep alive, should be smaller than 30_000(idle time)
     pub keep_alive_interval: Option<u32>,
+    /// Generalized Segmentation Offload for QUIC udp connection, default to
+    /// true.
+    pub gso: Option<bool>,
+    /// MTU discovery for QUIC connection, default to true. If false, will use
+    /// initial mtu as fixed mtu. This is useful for network with stable MTU
+    /// and high packet loss.
+    pub mtu_discovery: Option<bool>,
 }
 
 #[cfg(feature = "ssh")]

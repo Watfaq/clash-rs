@@ -5,10 +5,8 @@ use compat::UdpSessionWrapper;
 use shadowquic::{
     config,
     msgs::socks5::SocksAddr as SQAddr,
-    shadowquic::{
-        SQConn,
-        outbound::{self as SQ, ShadowQuicClient},
-    },
+    quic::QuicClient,
+    shadowquic::{EndClient, outbound::ShadowQuicClient},
 };
 use tokio::sync::{OnceCell, RwLock};
 use tokio_util::sync::PollSender;
@@ -32,6 +30,8 @@ use super::{
 use crate::app::dispatcher::ChainedStream;
 use std::fmt::Debug;
 
+// This is ugly, it may be exposed better by shadowquic in the future
+type SQConn = shadowquic::squic::SQConn<<EndClient as QuicClient>::C>;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
 
 pub struct Handler {
@@ -160,14 +160,14 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
         let conn = self.prepare_conn(sess, resolver).await?;
-        let conn =
-            SQ::connect_tcp(&conn, to_sq_socks_addr(sess.destination.clone()))
-                .await
-                .map_err(|x| {
-                    io::Error::other(format!(
-                        "can't open shadowquic stream due to:{x}"
-                    ))
-                })?;
+        let conn = shadowquic::squic::outbound::connect_tcp(
+            &conn,
+            to_sq_socks_addr(sess.destination.clone()),
+        )
+        .await
+        .map_err(|x| {
+            io::Error::other(format!("can't open shadowquic stream due to:{x}"))
+        })?;
         let s = ChainedStreamWrapper::new(conn);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
@@ -187,7 +187,7 @@ impl OutboundHandler for Handler {
         } else {
             "[::]:0"
         };
-        let socket = SQ::associate_udp(
+        let socket = shadowquic::squic::outbound::associate_udp(
             &conn,
             addr.parse::<SocketAddr>().unwrap().into(),
             self.opts.over_stream,
