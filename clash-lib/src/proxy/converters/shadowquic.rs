@@ -1,7 +1,7 @@
 use shadowquic::config::{
-    default_alpn, default_congestion_control, default_initial_mtu,
-    default_keep_alive_interval, default_min_mtu, default_over_stream,
-    default_zero_rtt,
+    default_alpn, default_congestion_control, default_gso, default_initial_mtu,
+    default_keep_alive_interval, default_min_mtu, default_mtu_discovery,
+    default_over_stream, default_zero_rtt,
 };
 
 use crate::{
@@ -45,8 +45,11 @@ impl TryFrom<&OutboundShadowQuic> for Handler {
                 keep_alive_interval: s
                     .keep_alive_interval
                     .unwrap_or(default_keep_alive_interval()),
+
                 #[cfg(target_os = "android")]
                 protect_path: None,
+                gso: s.gso.unwrap_or(default_gso()),
+                mtu_discovery: s.mtu_discovery.unwrap_or(default_mtu_discovery()),
             },
         ))
     }
