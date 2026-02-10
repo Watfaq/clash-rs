@@ -20,16 +20,55 @@ env:
   REGISTRY: "ghcr.io"
   IMAGE_NAME: "clash-rs"
   RUST_LOG: "clash=TRACE"
-  RUST_TOOLCHAIN: "nightly-2025-09-15"
+  RUST_TOOLCHAIN: "stable"
+  RUSTC_BOOTSTRAP: "1"
   SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
   CROSS_CONTAINER_UID: 1001
   CROSS_CONTAINER_GID: 118
 
 # Arm builder https://github.blog/changelog/2024-09-03-github-actions-arm64-linux-and-windows-runners-are-now-generally-available/
 jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref }}
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rustfmt
+
+      - name: Cargo fmt
+        run: |
+          cargo +nightly fmt --all
+
+      - name: Commit formatting changes
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: apply cargo fmt"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
+      - name: Spell Check Repo
+        uses: crate-ci/typos@v1.41.0
+        env:
+          CLICOLOR: 1
+
   compile:
     name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
     runs-on: ${{ matrix.os || 'ubuntu-latest' }}
+    needs: [prepare]
     strategy:
       fail-fast: false
       matrix:
@@ -224,25 +263,10 @@ jobs:
           rm -f ~/.cargo/bin/cross*
           cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          version: "23.x"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set environment variables
         run: |
           echo "CLASH_GIT_REF=${GITHUB_REF}" >> $GITHUB_ENV
           echo "CLASH_GIT_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
-
-      - name: Cargo fmt
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: clechasseur/rs-cargo@v4
-        with:
-          command: fmt
-          args: --all -- --check
-        env:
-          CLASH_DOCKER_TEST: "true"
 
       - name: Cargo clippy
         if: ${{ github.event_name == 'pull_request' }}
