@@ -40,11 +40,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.head_ref }}
 
-      - name: Spell Check Repo
-        uses: crate-ci/typos@v1.41.0
-        env:
-          CLICOLOR: 1
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly
@@ -64,6 +59,11 @@ jobs:
             git commit -m "chore: apply cargo fmt"
             git push origin HEAD:${{ github.head_ref }}
           fi
+
+      - name: Spell Check Repo
+        uses: crate-ci/typos@v1.41.0
+        env:
+          CLICOLOR: 1
 
   compile:
     name: ${{ matrix.release-name || matrix.target || 'Unknown' }}
