@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -99,10 +101,10 @@ pub(crate) async fn client_handshake(
     buf.put_u8(command);
     buf.put_u8(0x00);
     if command == socks_command::UDP_ASSOCIATE {
-        let addr = if addr.clone().must_into_socket_addr().is_ipv4() {
-            SocksAddr::any_ipv4()
-        } else {
-            SocksAddr::any_ipv6()
+        let addr = match addr.clone() {
+            SocksAddr::Domain(..) => SocksAddr::any_ipv6(),
+            SocksAddr::Ip(SocketAddr::V4(_)) => SocksAddr::any_ipv4(),
+            SocksAddr::Ip(SocketAddr::V6(_)) => SocksAddr::any_ipv6(),
         };
         addr.write_buf(&mut buf);
     } else {
