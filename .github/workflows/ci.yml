@@ -61,7 +61,7 @@ jobs:
           fi
 
       - name: Spell Check Repo
-        uses: crate-ci/typos@v1.41.0
+        uses: crate-ci/typos@v1.43.4
         env:
           CLICOLOR: 1
 
