@@ -216,7 +216,7 @@ async fn patch_configs(
     }
 
     if need_restart {
-        inbound_manager.restart().await;
+        let _ = inbound_manager.restart().await;
     }
 
     if let Some(mode) = payload.mode {
