@@ -11,7 +11,6 @@ pub trait Runner {
 
 pub type BoxedRunner = Box<dyn Runner + Send + Sync>;
 
-
 use std::future::Future;
 use tokio::task::{JoinHandle, spawn as tokio_spawn};
 use tokio_util::sync::CancellationToken;
@@ -46,16 +45,18 @@ where
     })
 }
 
-pub async fn how_to_use(){
+pub async fn how_to_use() {
     let token = CancellationToken::new();
     spawn(token.child_token(), long_time_polling);
 
     spawn(token.child_token(), async move |token| {
         _ = token; // Use the token if needed, or just ignore it if not
-    
+
         // Simulate some work in the background task
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
 
     // Simulate some work in the main task
     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -68,8 +69,8 @@ pub async fn long_time_polling(token: CancellationToken) {
     impl StateMaybeIO {
         async fn close(&mut self) {
             // Simulate some cleanup work here
-            // For TUIC we need send `FIN` to the peer before close the connection, so we can do that here
-            // Or close all UdpSesions
+            // For TUIC we need send `FIN` to the peer before close the connection,
+            // so we can do that here Or close all UdpSesions
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     }
@@ -89,4 +90,3 @@ pub async fn long_time_polling(token: CancellationToken) {
         }
     }
 }
-
