@@ -9,7 +9,9 @@ use crate::{
     Error,
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     config::config::TunConfig,
-    proxy::tun::{datagram::handle_inbound_datagram, stream::handle_inbound_stream},
+    proxy::tun::{
+        datagram::handle_inbound_datagram, routes, stream::handle_inbound_stream,
+    },
     runner::Runner,
 };
 
@@ -304,6 +306,12 @@ impl Runner for TunRunner {
     fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             info!("shutting down tun runner");
+            match routes::maybe_routes_clean_up(&self.cfg) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("failed to clean up routes: {}", e);
+                }
+            }
             self.cancellation_token.cancel();
             Ok(())
         })
