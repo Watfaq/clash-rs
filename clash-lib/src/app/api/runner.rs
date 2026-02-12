@@ -49,6 +49,7 @@ pub struct ApiRunner {
 }
 
 impl ApiRunner {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controller_cfg: Controller,
         log_source: Sender<LogEvent>,
@@ -75,8 +76,7 @@ impl ApiRunner {
             cache_store,
             router,
             cwd,
-            cancellation_token: cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
+            cancellation_token: cancellation_token.unwrap_or_default(),
         }
     }
 }

@@ -49,8 +49,7 @@ impl DnsRunner {
             listener: listen,
             resolver,
             cwd: cwd.to_path_buf(),
-            cancellation_token: cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
+            cancellation_token: cancellation_token.unwrap_or_default(),
         }
     }
 }

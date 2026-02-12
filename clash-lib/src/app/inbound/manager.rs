@@ -73,8 +73,7 @@ impl InboundManager {
             ),
             dispatcher,
             authenticator,
-            cancellation_token: cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
+            cancellation_token: cancellation_token.unwrap_or_default(),
         }
     }
 
@@ -112,6 +111,7 @@ impl InboundManager {
         }
     }
 
+    #[allow(dead_code)]
     async fn join_all_listeners(&self) -> Result<(), crate::Error> {
         let mut last_join_error = None;
         for (opt, l) in self.inbound_handlers.write().await.iter_mut() {

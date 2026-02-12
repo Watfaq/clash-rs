@@ -41,8 +41,7 @@ impl TunRunner {
             cfg,
             dispatcher,
             resolver,
-            cancellation_token: cancellation_token
-                .unwrap_or_else(CancellationToken::new),
+            cancellation_token: cancellation_token.unwrap_or_default(),
         })
     }
 
