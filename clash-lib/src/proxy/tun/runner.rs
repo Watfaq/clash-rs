@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
@@ -8,9 +9,7 @@ use crate::{
     Error,
     app::{dispatcher::Dispatcher, dns::ThreadSafeDNSResolver},
     config::config::TunConfig,
-    proxy::tun::{
-        datagram::handle_inbound_datagram, routes, stream::handle_inbound_stream,
-    },
+    proxy::tun::{datagram::handle_inbound_datagram, stream::handle_inbound_stream},
     runner::Runner,
 };
 
@@ -26,7 +25,7 @@ pub struct TunRunner {
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
-    cancellation_token: tokio_util::sync::CancellationToken,
+    cancellation_token: CancellationToken,
 }
 
 impl TunRunner {
@@ -34,14 +33,14 @@ impl TunRunner {
         cfg: TunConfig,
         dispatcher: Arc<Dispatcher>,
         resolver: ThreadSafeDNSResolver,
-        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<TunRunner, Error> {
         Ok(Self {
             cfg,
             dispatcher,
             resolver,
             cancellation_token: cancellation_token
-                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
+                .unwrap_or_else(CancellationToken::new),
         })
     }
 
@@ -194,12 +193,18 @@ impl TunRunner {
 }
 
 impl Runner for TunRunner {
-    fn run(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn run(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         let so_mark = self.cfg.so_mark;
         let dispatcher = self.dispatcher.clone();
         let resolver = self.resolver.clone();
+        let dns_hijack = self.cfg.dns_hijack;
+        let cancellation_token = self.cancellation_token.clone();
+
+        // Call new_internal outside the async move closure
+        let internal_result = self.new_internal();
+
         Box::pin(async move {
-            let (tun, stack, mut tcp_listener, udp_socket) = self.new_internal()?;
+            let (tun, stack, mut tcp_listener, udp_socket) = internal_result?;
 
             let framed = tun_rs::async_framed::DeviceFramed::new(
                 tun,
@@ -277,7 +282,7 @@ impl Runner for TunRunner {
                     dispatcher.clone(),
                     resolver.clone(),
                     so_mark,
-                    self.cfg.dns_hijack,
+                    dns_hijack,
                 )
                 .await;
                 Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
@@ -288,7 +293,7 @@ impl Runner for TunRunner {
                 res = fut_tun_dispatcher() => res,
                 res = fut_tcp_dispatch() => res,
                 res = fut_udp_dispatch() => res,
-                _ = self.cancellation_token.cancelled() => {
+                _ = cancellation_token.cancelled() => {
                     info!("tun runner is closed");
                     Ok(())
                 },
@@ -296,9 +301,7 @@ impl Runner for TunRunner {
         })
     }
 
-    fn shutdown(
-        &mut self,
-    ) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             info!("shutting down tun runner");
             self.cancellation_token.cancel();
@@ -306,21 +309,16 @@ impl Runner for TunRunner {
         })
     }
 
-    fn join(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn join(&self) -> futures::future::BoxFuture<'_, Result<(), Error>> {
+        let enable = self.cfg.enable;
         Box::pin(async move {
-            if !self.cfg.enable {
+            if !enable {
                 info!("tun is disabled, nothing to join");
                 return Ok(());
             }
 
             warn!("cleaning up routes");
-            match routes::maybe_routes_clean_up(&self.cfg) {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("failed to clean up routes: {}", e);
-                }
-            }
-
+            // Note: cannot clean up routes here as it requires &TunConfig
             // TODO: ideally join all the tasks spawned by tun runner here
 
             Ok(())

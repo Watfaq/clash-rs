@@ -42,21 +42,21 @@ pub struct InboundManager {
 }
 
 impl Runner for InboundManager {
-    fn run(&mut self) -> BoxFuture<'_, Result<(), crate::Error>> {
+    fn run(&self) -> BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move {
             self.start_all_listeners().await;
             Ok(())
         })
     }
 
-    fn shutdown(&mut self) -> BoxFuture<'_, Result<(), crate::Error>> {
+    fn shutdown(&self) -> BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move {
             self.cancellation_token.cancel();
             Ok(())
         })
     }
 
-    fn join(&mut self) -> BoxFuture<'_, Result<(), crate::Error>> {
+    fn join(&self) -> BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move { self.join_all_listeners().await })
     }
 }

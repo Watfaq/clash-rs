@@ -1,5 +1,4 @@
 use crate::{
-    Runner,
     common::auth::ThreadSafeAuthenticator,
     config::listener::InboundOpts,
     proxy::{

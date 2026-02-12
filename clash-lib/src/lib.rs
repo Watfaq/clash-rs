@@ -6,6 +6,8 @@
 #![cfg_attr(not(version("1.88.0")), feature(let_chains))]
 #![cfg_attr(not(version("1.94.0")), feature(lazy_get))]
 
+#[cfg(feature = "tun")]
+use crate::proxy::tun;
 use crate::{
     app::{
         dispatcher::{Dispatcher, StatisticsManager},
@@ -33,23 +35,15 @@ use crate::{
     proxy::OutboundHandler,
     runner::Runner,
 };
-#[cfg(feature = "tun")]
-use crate::{proxy::tun, runner::BoxedRunner};
-
-#[cfg(feature = "tun")]
-use proxy::tun::get_tun_runner;
 
 use std::{
     collections::HashMap,
     io,
     path::PathBuf,
-    sync::{Arc, LazyLock, OnceLock, atomic::AtomicUsize},
+    sync::{Arc, OnceLock},
 };
 use thiserror::Error;
-use tokio::{
-    sync::{Mutex, broadcast, mpsc, oneshot},
-    task::JoinHandle,
-};
+use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
 use tracing::{debug, error, info};
 
 pub mod app;
@@ -89,6 +83,8 @@ pub enum Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
+type ArcRunner = Arc<dyn Runner>;
+
 pub struct Options {
     pub config: Config,
     pub cwd: Option<String>,
@@ -125,9 +121,9 @@ impl Config {
 pub struct GlobalState {
     log_level: LogLevel,
     #[cfg(feature = "tun")]
-    tunnel_runner: BoxedRunner,
-    api_listener: BoxedRunner,
-    dns_listener: BoxedRunner,
+    tunnel_runner: ArcRunner,
+    api_listener: Option<ArcRunner>,
+    dns_listener: ArcRunner,
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
 }
@@ -198,37 +194,38 @@ pub async fn start(
 
     let components = create_components(cwd.clone(), config).await?;
 
-    // TODO: better design for this Runner + InboundManager split
-    let inbound_manager = components.inbound_manager as Arc<dyn Runner>;
-
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
 
     let global_state = Arc::new(Mutex::new(GlobalState {
         log_level,
         #[cfg(feature = "tun")]
-        tunnel_runner: components.tun_runner,
-        dns_listener: components.dns_listener,
+        tunnel_runner: components.tun_runner.clone(),
+        dns_listener: components.dns_listener.clone(),
         reload_tx,
-        api_listener,
+        api_listener: None,
         cwd: cwd.to_string_lossy().to_string(),
     }));
 
-    let api_listener = Box::new(app::api::ApiRunner::new(
-        controller_cfg,
+    let api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
+        controller_cfg.clone(),
         log_tx.clone(),
-        components.inbound_manager,
-        components.dispatcher,
+        components.inbound_manager.clone(),
+        components.dispatcher.clone(),
         global_state.clone(),
-        components.dns_resolver,
-        components.outbound_manager,
-        components.statistics_manager,
-        components.cache_store,
-        components.router,
+        components.dns_resolver.clone(),
+        components.outbound_manager.clone(),
+        components.statistics_manager.clone(),
+        components.cache_store.clone(),
+        components.router.clone(),
         cwd.to_string_lossy().to_string(),
+        None,
     ));
+
+    global_state.lock().await.api_listener = Some(api_listener.clone());
 
     components.start_all().await?;
 
+    let cwd_clone = cwd.clone();
     tokio::spawn(async move {
         while let Some((config, done)) = reload_rx.recv().await {
             info!("reloading config");
@@ -240,40 +237,43 @@ pub async fn start(
                 }
             };
 
-            let new_components = create_components(cwd.clone(), config).await?;
+            let controller_cfg = config.general.controller.clone();
+            let new_components =
+                create_components(cwd_clone.clone(), config).await?;
 
             done.send(()).unwrap();
 
             components.stop_all().await?;
             new_components.start_all().await?;
 
-            let controller_cfg = config.general.controller.clone();
-            let api_listener = Box::new(app::api::ApiRunner::new(
+            let api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
                 controller_cfg,
                 log_tx.clone(),
-                new_components.inbound_manager,
-                new_components.dispatcher,
+                new_components.inbound_manager.clone(),
+                new_components.dispatcher.clone(),
                 global_state.clone(),
-                new_components.dns_resolver,
-                new_components.outbound_manager,
-                new_components.statistics_manager,
-                new_components.cache_store,
-                new_components.router,
-                cwd.to_string_lossy().to_string(),
+                new_components.dns_resolver.clone(),
+                new_components.outbound_manager.clone(),
+                new_components.statistics_manager.clone(),
+                new_components.cache_store.clone(),
+                new_components.router.clone(),
+                cwd_clone.to_string_lossy().to_string(),
+                None,
             ));
             let mut g = global_state.lock().await;
 
             #[cfg(feature = "tun")]
             {
-                g.tunnel_runner = new_components.tun_runner;
+                g.tunnel_runner = new_components.tun_runner.clone();
             }
-            g.dns_listener = new_components.dns_listener;
-            g.api_listener = api_listener;
+            g.dns_listener = new_components.dns_listener.clone();
+            g.api_listener = Some(api_listener);
         }
-        Ok(())
+        Ok::<(), Error>(())
     });
 
-    tokio::signal::ctrl_c().await?
+    tokio::signal::ctrl_c().await.map_err(Error::Io)?;
+    Ok(())
 }
 
 struct RuntimeComponents {
@@ -285,8 +285,8 @@ struct RuntimeComponents {
     statistics_manager: Arc<StatisticsManager>,
 
     #[cfg(feature = "tun")]
-    tun_runner: BoxedRunner,
-    dns_listener: BoxedRunner,
+    tun_runner: ArcRunner,
+    dns_listener: ArcRunner,
     inbound_manager: Arc<InboundManager>,
 }
 
@@ -474,7 +474,7 @@ async fn create_components(
             dispatcher.clone(),
             authenticator,
             config.listeners,
-            cancellation_token.map(|t| t.child_token()),
+            Some(cancellation_token.child_token()),
         )
         .await,
     );
@@ -482,19 +482,19 @@ async fn create_components(
     #[cfg(feature = "tun")]
     debug!("initializing tun runner");
     #[cfg(feature = "tun")]
-    let tun_runner = Box::new(tun::TunRunner::new(
+    let tun_runner: ArcRunner = Arc::new(tun::TunRunner::new(
         config.tun,
         dispatcher.clone(),
         dns_resolver.clone(),
-        cancellation_token.map(|t| t.child_token()),
+        Some(cancellation_token.child_token()),
     )?);
 
     debug!("initializing dns listener");
-    let dns_listener = Box::new(dns::DnsRunner::new(
+    let dns_listener: ArcRunner = Arc::new(dns::DnsRunner::new(
         dns_listen,
         dns_resolver.clone(),
         &cwd,
-        cancellation_token.map(|t| t.child_token()),
+        Some(cancellation_token.child_token()),
     ));
 
     info!("all components initialized");

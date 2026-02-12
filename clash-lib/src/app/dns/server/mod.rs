@@ -56,10 +56,11 @@ impl DnsRunner {
 }
 
 impl Runner for DnsRunner {
-    fn run(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn run(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         let resolver = self.resolver.clone();
         let listen = self.listener.clone();
         let cwd = self.cwd.clone();
+        let cancellation_token = self.cancellation_token.clone();
 
         Box::pin(async move {
             let h = DnsMessageExchanger { resolver };
@@ -75,7 +76,7 @@ impl Runner for DnsRunner {
                             }
                         }
                     },
-                    _ = self.cancellation_token.cancelled() => {
+                    _ = cancellation_token.cancelled() => {
                         info!("dns listener is closed");
                         Ok(())
                     },
@@ -88,16 +89,14 @@ impl Runner for DnsRunner {
         })
     }
 
-    fn shutdown(
-        &mut self,
-    ) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move {
             self.cancellation_token.cancel();
             Ok(())
         })
     }
 
-    fn join(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move { Ok(()) })
     }
 }

@@ -2,8 +2,6 @@
 mod windows;
 #[cfg(windows)]
 use windows::add_route;
-#[cfg(windows)]
-pub use windows::maybe_routes_clean_up;
 
 #[cfg(target_os = "macos")]
 mod macos;

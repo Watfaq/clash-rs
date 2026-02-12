@@ -5,6 +5,7 @@ use axum::{
     response::Redirect,
     routing::{get, post},
 };
+
 use http::{Method, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::ServiceBuilder;
@@ -81,7 +82,7 @@ impl ApiRunner {
 }
 
 impl Runner for ApiRunner {
-    fn run(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn run(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         let inbound_manager = self.inbound_manager.clone();
         let dispatcher = self.dispatcher.clone();
         let global_state = self.global_state.clone();
@@ -123,6 +124,7 @@ impl Runner for ApiRunner {
             log_source_tx: self.log_source.clone(),
             statistics_manager: statistics_manager.clone(),
         });
+        let cancellation_token = self.cancellation_token.clone();
         Box::pin(async move {
             info!("Starting API server");
             let mut router = Router::new()
@@ -174,6 +176,11 @@ impl Runner for ApiRunner {
                         ServeDir::new(PathBuf::from(cwd).join(external_ui)),
                     );
             }
+
+            // Create display strings before moving values
+            let tcp_addr_display = tcp_addr.as_ref().map(|addr| addr.to_string());
+            let ipc_addr_display = ipc_addr.as_ref().map(|addr| addr.clone());
+
             // Handle TCP listening
             let tcp_fut = if let Some(bind_addr) = tcp_addr {
                 let bind_addr = if bind_addr.starts_with(':') {
@@ -241,20 +248,22 @@ impl Runner for ApiRunner {
                 None
             };
             // Handle IPC listening
-            let ipc_fut = ipc_addr.map(|ipc_path| async move {
-                ipc::serve_ipc(router, &ipc_path).await
+            let ipc_fut = ipc_addr.as_ref().map(|ipc_path| {
+                let ipc_path = ipc_path.clone();
+                async move { ipc::serve_ipc(router, &ipc_path).await }
             });
+
             match (tcp_fut, ipc_fut) {
                 (Some(tcp), Some(ipc)) => {
                     info!(
                         "API server is running on both TCP {} and IPC {}",
-                        tcp_addr.unwrap_or_default(),
-                        ipc_addr.unwrap_or_default()
+                        tcp_addr_display.unwrap_or_default(),
+                        ipc_addr_display.unwrap_or_default()
                     );
                     tokio::select! {
                         result = tcp => result,
                         result = ipc => result,
-                        _ = self.cancellation_token.cancelled() => {
+                        _ = cancellation_token.cancelled() => {
                             info!("API server is closed");
                             Ok(())
                         }
@@ -263,11 +272,11 @@ impl Runner for ApiRunner {
                 (Some(tcp), None) => {
                     info!(
                         "API server is running on TCP {}",
-                        tcp_addr.unwrap_or_default()
+                        tcp_addr_display.clone().unwrap_or_default()
                     );
                     tokio::select! {
                         result = tcp => result,
-                        _ = self.cancellation_token.cancelled() => {
+                        _ = cancellation_token.cancelled() => {
                             info!("API server is closed");
                             Ok(())
                         }
@@ -276,11 +285,11 @@ impl Runner for ApiRunner {
                 (None, Some(ipc)) => {
                     info!(
                         "API server is running on IPC {}",
-                        ipc_addr.unwrap_or_default()
+                        ipc_addr_display.unwrap_or_default()
                     );
                     tokio::select! {
                         result = ipc => result,
-                        _ = self.cancellation_token.cancelled() => {
+                        _ = cancellation_token.cancelled() => {
                             info!("API server is closed");
                             Ok(())
                         }
@@ -293,9 +302,7 @@ impl Runner for ApiRunner {
         })
     }
 
-    fn shutdown(
-        &mut self,
-    ) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move {
             info!("Shutting down API server");
             self.cancellation_token.cancel();
@@ -303,7 +310,7 @@ impl Runner for ApiRunner {
         })
     }
 
-    fn join(&mut self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
         Box::pin(async move { Ok(()) })
     }
 }
