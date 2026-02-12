@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use futures::{SinkExt, StreamExt};
+use futures::{FutureExt, SinkExt, StreamExt, future::BoxFuture};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use url::Url;
 
 use crate::{
@@ -303,8 +303,8 @@ impl Runner for TunRunner {
         })
     }
 
-    fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), Error>> {
-        Box::pin(async move {
+    fn shutdown(&self) -> BoxFuture<'_, Result<(), Error>> {
+        async {
             info!("shutting down tun runner");
             match routes::maybe_routes_clean_up(&self.cfg) {
                 Ok(_) => {}
@@ -314,22 +314,11 @@ impl Runner for TunRunner {
             }
             self.cancellation_token.cancel();
             Ok(())
-        })
+        }
+        .boxed()
     }
 
-    fn join(&self) -> futures::future::BoxFuture<'_, Result<(), Error>> {
-        let enable = self.cfg.enable;
-        Box::pin(async move {
-            if !enable {
-                info!("tun is disabled, nothing to join");
-                return Ok(());
-            }
-
-            warn!("cleaning up routes");
-            // Note: cannot clean up routes here as it requires &TunConfig
-            // TODO: ideally join all the tasks spawned by tun runner here
-
-            Ok(())
-        })
+    fn join(&self) -> BoxFuture<'_, Result<(), Error>> {
+        async move { Ok(()) }.boxed()
     }
 }
