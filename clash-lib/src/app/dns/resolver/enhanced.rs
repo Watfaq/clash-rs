@@ -42,6 +42,9 @@ pub struct EnhancedResolver {
     lru_cache: Option<Arc<RwLock<hickory_resolver::dns_lru::DnsLru>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
+    proxy_resolver: Option<Arc<EnhancedResolver>>,
+    proxy_server_domains: Option<trie::StringTrie<bool>>,
+
     fake_dns: Option<ThreadSafeFakeDns>,
 
     reverse_lookup_cache:
@@ -78,6 +81,9 @@ impl EnhancedResolver {
             lru_cache: None,
             policy: None,
 
+            proxy_resolver: None,
+            proxy_server_domains: None,
+
             fake_dns: None,
 
             reverse_lookup_cache: None,
@@ -89,8 +95,24 @@ impl EnhancedResolver {
         store: ThreadSafeCacheFile,
         mmdb: Option<MmdbLookup>,
         outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+        proxy_server_domains: Vec<String>,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
+
+        // Build proxy server domains trie for proxy-server-nameserver resolution
+        let proxy_server_domains_trie = if !cfg.proxy_server_nameserver.is_empty()
+            && !proxy_server_domains.is_empty()
+        {
+            let mut domains = trie::StringTrie::new();
+            for server in proxy_server_domains {
+                domains.insert(server.as_str(), Arc::new(true));
+                debug!("added proxy server domain: {}", server);
+            }
+            Some(domains)
+        } else {
+            None
+        };
+
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
@@ -108,10 +130,42 @@ impl EnhancedResolver {
             lru_cache: None,
             policy: None,
 
+            proxy_resolver: None,
+            proxy_server_domains: None,
+
             fake_dns: None,
 
             reverse_lookup_cache: None,
         });
+
+        let proxy_resolver = if !cfg.proxy_server_nameserver.is_empty() {
+            Some(Arc::new(EnhancedResolver {
+                ipv6: AtomicBool::new(false),
+                hosts: None,
+                main: make_clients(
+                    cfg.proxy_server_nameserver.clone(),
+                    None,
+                    HashMap::new(),
+                    edns_client_subnet.clone(),
+                    cfg.fw_mark,
+                )
+                .await,
+                fallback: None,
+                fallback_domain_filters: None,
+                fallback_ip_filters: None,
+                lru_cache: None,
+                policy: None,
+
+                proxy_resolver: None,
+                proxy_server_domains: None,
+
+                fake_dns: None,
+
+                reverse_lookup_cache: None,
+            }))
+        } else {
+            None
+        };
 
         Self {
             ipv6: AtomicBool::new(cfg.ipv6),
@@ -231,6 +285,9 @@ impl EnhancedResolver {
                 }
                 _ => None,
             },
+
+            proxy_resolver,
+            proxy_server_domains: proxy_server_domains_trie,
 
             reverse_lookup_cache: Some(Arc::new(RwLock::new(
                 lru_time_cache::LruCache::with_expiry_duration_and_capacity(
@@ -400,6 +457,21 @@ impl EnhancedResolver {
         &self,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
+        // Check if this is a proxy server domain, use proxy-server-nameserver if
+        // configured
+        if let (Some(proxy_resolver), Some(proxy_domains)) =
+            (&self.proxy_resolver, &self.proxy_server_domains)
+            && let Some(domain) = EnhancedResolver::domain_name_of_message(message)
+            && proxy_domains.search(&domain).is_some()
+        {
+            debug!(
+                "using proxy-server-nameserver for proxy server domain: {}",
+                domain
+            );
+            return EnhancedResolver::batch_exchange(&proxy_resolver.main, message)
+                .await;
+        }
+
         if let Some(matched) = self.match_policy(message) {
             return EnhancedResolver::batch_exchange(matched, message).await;
         }
@@ -851,5 +923,145 @@ mod tests {
     }
     fn get_default_outbound() -> Arc<dyn crate::proxy::OutboundHandler> {
         Arc::new(proxy::direct::Handler::new("default_direct"))
+    }
+
+    #[test]
+    fn test_proxy_server_domains_trie() {
+        use crate::common::trie::StringTrie;
+
+        let mut domains = StringTrie::new();
+        domains.insert("proxy.example.com", Arc::new(true));
+        domains.insert("vpn.example.net", Arc::new(true));
+
+        // Should match exact domains
+        assert!(domains.search("proxy.example.com").is_some());
+        assert!(domains.search("vpn.example.net").is_some());
+
+        // Should not match non-existent domains
+        assert!(domains.search("other.example.com").is_none());
+        assert!(domains.search("example.com").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_server_nameserver_initialization() {
+        use crate::app::{
+            dns::{
+                config::{Config, NameServer},
+                dns_client::DNSNetMode,
+            },
+            profile::ThreadSafeCacheFile,
+        };
+        use std::collections::HashMap;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let cache_store = ThreadSafeCacheFile::new(
+            temp_dir.path().join("cache.db").to_str().unwrap(),
+            false,
+        );
+
+        let mut config = Config::default();
+        config.enable = true;
+        config.ipv6 = false;
+
+        // Set up proxy server nameserver
+        config.proxy_server_nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            address: "8.8.8.8:53".to_string(),
+            interface: None,
+            proxy: None,
+        }];
+
+        config.default_nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            address: "114.114.114.114:53".to_string(),
+            interface: None,
+            proxy: None,
+        }];
+
+        config.nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            address: "223.5.5.5:53".to_string(),
+            interface: None,
+            proxy: None,
+        }];
+
+        let proxy_domains = vec![
+            "proxy.example.com".to_string(),
+            "vpn.example.net".to_string(),
+        ];
+
+        let resolver = EnhancedResolver::new(
+            config,
+            cache_store,
+            None,
+            HashMap::new(),
+            proxy_domains,
+        )
+        .await;
+
+        // Should have proxy_resolver initialized
+        assert!(resolver.proxy_resolver.is_some());
+        assert!(resolver.proxy_server_domains.is_some());
+
+        // Check proxy domains are registered
+        let domains = resolver.proxy_server_domains.as_ref().unwrap();
+        assert!(domains.search("proxy.example.com").is_some());
+        assert!(domains.search("vpn.example.net").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_server_nameserver_without_config() {
+        use crate::app::{
+            dns::{
+                config::{Config, NameServer},
+                dns_client::DNSNetMode,
+            },
+            profile::ThreadSafeCacheFile,
+        };
+        use std::collections::HashMap;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let cache_store = ThreadSafeCacheFile::new(
+            temp_dir.path().join("cache.db").to_str().unwrap(),
+            false,
+        );
+
+        let mut config = Config::default();
+        config.enable = true;
+        config.ipv6 = false;
+
+        // No proxy server nameserver configured
+        config.proxy_server_nameserver = vec![];
+
+        config.default_nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            address: "114.114.114.114:53".to_string(),
+            interface: None,
+            proxy: None,
+        }];
+
+        config.nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            address: "223.5.5.5:53".to_string(),
+            interface: None,
+            proxy: None,
+        }];
+
+        let proxy_domains = vec!["proxy.example.com".to_string()];
+
+        let resolver = EnhancedResolver::new(
+            config,
+            cache_store,
+            None,
+            HashMap::new(),
+            proxy_domains,
+        )
+        .await;
+
+        // Should not have proxy_resolver when proxy_server_nameserver is empty
+        assert!(resolver.proxy_resolver.is_none());
+        assert!(resolver.proxy_server_domains.is_none());
     }
 }

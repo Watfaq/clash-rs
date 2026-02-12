@@ -64,6 +64,7 @@ pub async fn build_dns_resolver() -> anyhow::Result<Arc<dyn ClashResolver>> {
             cache_store,
             Some(mmdb),
             HashMap::new(),
+            Vec::new(),
         )
         .await,
     );
