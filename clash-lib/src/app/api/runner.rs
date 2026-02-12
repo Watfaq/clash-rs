@@ -76,7 +76,7 @@ impl ApiRunner {
             router,
             cwd,
             cancellation_token: cancellation_token
-                .unwrap_or_else(|| tokio_util::sync::CancellationToken::new()),
+                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
         }
     }
 }
@@ -179,7 +179,7 @@ impl Runner for ApiRunner {
 
             // Create display strings before moving values
             let tcp_addr_display = tcp_addr.as_ref().map(|addr| addr.to_string());
-            let ipc_addr_display = ipc_addr.as_ref().map(|addr| addr.clone());
+            let ipc_addr_display = ipc_addr.clone();
 
             // Handle TCP listening
             let tcp_fut = if let Some(bind_addr) = tcp_addr {

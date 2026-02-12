@@ -74,7 +74,7 @@ impl InboundManager {
             dispatcher,
             authenticator,
             cancellation_token: cancellation_token
-                .unwrap_or_else(|| tokio_util::sync::CancellationToken::new()),
+                .unwrap_or_else(tokio_util::sync::CancellationToken::new),
         }
     }
 
@@ -128,7 +128,7 @@ impl InboundManager {
             }
         }
         last_join_error
-            .map(|e| Err(std::io::Error::new(std::io::ErrorKind::Other, e).into()))
+            .map(|e| Err(std::io::Error::other(e).into()))
             .unwrap_or(Ok(()))
     }
 
