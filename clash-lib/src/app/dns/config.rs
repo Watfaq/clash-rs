@@ -6,8 +6,8 @@ use crate::{
     config::def::{DNSListen, DNSMode, EdnsClientSubnet as DefEdnsClientSubnet},
 };
 use ipnet::{AddrParseError, Ipv4Net, Ipv6Net};
-use regex::Regex;
 use serde::Deserialize;
+use tracing::warn;
 use std::{
     collections::HashMap,
     fmt::Display,
@@ -71,6 +71,12 @@ impl Config {
         for (i, server) in servers.iter().enumerate() {
             let mut server = server.clone();
 
+            if server == "system" {
+                warn!("'system' is not supported as dns nameserver, skipping");
+                continue;
+            }
+
+            // If the server doesn't contain a scheme, assume it's a UDP address.
             if !server.contains("://") {
                 if server.contains(':') && !server.starts_with('[') {
                     server = format!("udp://[{}]", server);
@@ -78,6 +84,7 @@ impl Config {
                     server = "udp://".to_owned() + &server;
                 }
             }
+
             let url = Url::parse(&server).map_err(|_x| {
                 Error::InvalidConfig(format!(
                     "invalid dns server: {}",
@@ -85,11 +92,13 @@ impl Config {
                 ))
             })?;
 
-            let host_raw = url.host_str().expect("dns host must be valid");
-            // url::Host may include surrounding brackets for IPv6 in some cases,
-            // normalize by stripping them here. We'll re-add brackets when building
-            // SocketAddrs.
-            let host = host_raw.trim_start_matches('[').trim_end_matches(']');
+            let host = url.host().ok_or_else(|| {
+                Error::InvalidConfig(format!(
+                    "invalid dns server: no host found in {}",
+                    server.as_str()
+                ))
+            })?;
+            let port = url.port();
 
             let iface = Self::parse_outbound_interface(&url);
             let proxy = Self::parse_outbound_proxy(&url);
@@ -98,25 +107,28 @@ impl Config {
 
             match url.scheme() {
                 "udp" => {
-                    addr = Config::host_with_default_port(host, "53")?;
+                    addr = Config::host_with_default_port(&host, port.unwrap_or(53));
                     net = "UDP";
                 }
                 "tcp" => {
-                    addr = Config::host_with_default_port(host, "53")?;
+                    addr = Config::host_with_default_port(&host, port.unwrap_or(53));
                     net = "TCP";
                 }
                 "tls" => {
-                    addr = Config::host_with_default_port(host, "853")?;
+                    addr =
+                        Config::host_with_default_port(&host, port.unwrap_or(853));
                     net = "DoT";
                 }
                 "https" => {
-                    addr = Config::host_with_default_port(host, "443")?;
+                    addr =
+                        Config::host_with_default_port(&host, port.unwrap_or(443));
                     net = "DoH";
                 }
                 "dhcp" => {
                     addr = host.to_string();
                     net = "DHCP";
                 }
+
                 _ => {
                     return Err(Error::InvalidConfig(format!(
                         "DNS nameserver [{}] unsupported scheme: {}",
@@ -204,17 +216,11 @@ impl Config {
         Ok(tree)
     }
 
-    pub fn host_with_default_port(host: &str, port: &str) -> Result<String, Error> {
-        let has_port_suffix = Regex::new(r":\d+$").unwrap();
-
-        if has_port_suffix.is_match(host) {
-            Ok(host.into())
-        } else if host.starts_with('[') {
-            Ok(format!("{host}:{port}"))
-        } else if host.contains(':') {
-            Ok(format!("[{host}]:{port}"))
-        } else {
-            Ok(format!("{host}:{port}"))
+    pub fn host_with_default_port(host: &url::Host<&str>, port: u16) -> String {
+        match host {
+            url::Host::Domain(domain) => format!("{}:{}", domain, port),
+            url::Host::Ipv4(ipv4) => format!("{}:{}", ipv4, port),
+            url::Host::Ipv6(ipv6) => format!("[{}]:{}", ipv6, port),
         }
     }
 }
