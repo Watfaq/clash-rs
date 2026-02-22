@@ -52,6 +52,8 @@ impl EnhancedResolver {
     /// For testing purpose
     #[cfg(test)]
     pub async fn new_default() -> Self {
+        use std::net::Ipv4Addr;
+
         use crate::app::dns::dns_client::DNSNetMode;
 
         use crate::app::dns::config::NameServer;
@@ -62,7 +64,8 @@ impl EnhancedResolver {
             main: make_clients(
                 vec![NameServer {
                     net: DNSNetMode::Udp,
-                    address: "8.8.8.8:53".to_string(),
+                    host: url::Host::Ipv4(Ipv4Addr::from_octets([8, 8, 8, 8])),
+                    port: 53,
                     interface: None,
                     proxy: None,
                 }],
@@ -676,7 +679,7 @@ mod tests {
         udp::UdpClientStream,
         xfer::{DnsHandle, DnsRequest, DnsRequestOptions, FirstAnswer},
     };
-    use std::sync::Arc;
+    use std::{net::Ipv4Addr, sync::Arc};
 
     use crate::{
         app::dns::{
@@ -723,8 +726,8 @@ mod tests {
     #[ignore = "network unstable on CI"]
     async fn test_udp_resolve() {
         let c = DnsClient::new_client(Opts {
-            r: None,
-            host: "114.114.114.114".to_string(),
+            father: None,
+            host: url::Host::Ipv4(Ipv4Addr::from([114, 114, 114, 114])),
             port: 53,
             net: DNSNetMode::Udp,
             iface: None,
@@ -742,8 +745,8 @@ mod tests {
     #[ignore = "network unstable on CI"]
     async fn test_tcp_resolve() {
         let c = DnsClient::new_client(Opts {
-            r: None,
-            host: "1.1.1.1".to_string(),
+            father: None,
+            host: url::Host::Ipv4(Ipv4Addr::from([1, 1, 1, 1])),
             port: 53,
             net: DNSNetMode::Tcp,
             iface: None,
@@ -761,8 +764,8 @@ mod tests {
     #[ignore = "network unstable on CI"]
     async fn test_dot_resolve() {
         let c = DnsClient::new_client(Opts {
-            r: Some(Arc::new(EnhancedResolver::new_default().await)),
-            host: "dns.google".to_string(),
+            father: Some(Arc::new(EnhancedResolver::new_default().await)),
+            host: url::Host::Domain("dns.google".to_string()),
             port: 853,
             net: DNSNetMode::DoT,
             iface: None,
@@ -782,8 +785,8 @@ mod tests {
         let default_resolver = Arc::new(EnhancedResolver::new_default().await);
 
         let c = DnsClient::new_client(Opts {
-            r: Some(default_resolver.clone()),
-            host: "cloudflare-dns.com".to_string(),
+            father: Some(default_resolver.clone()),
+            host: url::Host::Domain("cloudflare-dns.com".to_string()),
             port: 443,
             net: DNSNetMode::DoH,
             iface: None,
@@ -801,8 +804,8 @@ mod tests {
     #[ignore = "network unstable on CI"]
     async fn test_dhcp_client() {
         let c = DnsClient::new_client(Opts {
-            r: None,
-            host: "en0".to_string(),
+            father: None,
+            host: url::Host::Domain("en0".to_string()),
             port: 0,
             net: DNSNetMode::Dhcp,
             iface: None,

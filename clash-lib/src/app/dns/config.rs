@@ -20,13 +20,18 @@ pub use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 #[derive(Clone, Debug)]
 pub struct NameServer {
     pub net: DNSNetMode,
-    pub address: String,
+    pub host: url::Host<String>,
+    pub port: u16,
     pub interface: Option<OutboundInterface>,
     pub proxy: Option<String>,
 }
 impl Display for NameServer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}://{}#{:?}", self.net, self.address, self.interface,)
+        write!(
+            f,
+            "{}://{}:{}#{:?}",
+            self.net, self.host, self.port, self.interface,
+        )
     }
 }
 
@@ -98,34 +103,31 @@ impl Config {
                     server.as_str()
                 ))
             })?;
-            let port = url.port();
 
             let iface = Self::parse_outbound_interface(&url);
             let proxy = Self::parse_outbound_proxy(&url);
-            let addr: String;
             let net: &str;
+            let port: u16;
 
             match url.scheme() {
                 "udp" => {
-                    addr = Config::host_with_default_port(&host, port.unwrap_or(53));
+                    port = url.port().unwrap_or(53);
                     net = "UDP";
                 }
                 "tcp" => {
-                    addr = Config::host_with_default_port(&host, port.unwrap_or(53));
+                    port = url.port().unwrap_or(53);
                     net = "TCP";
                 }
                 "tls" => {
-                    addr =
-                        Config::host_with_default_port(&host, port.unwrap_or(853));
+                    port = url.port().unwrap_or(853);
                     net = "DoT";
                 }
                 "https" => {
-                    addr =
-                        Config::host_with_default_port(&host, port.unwrap_or(443));
+                    port = url.port().unwrap_or(443);
                     net = "DoH";
                 }
                 "dhcp" => {
-                    addr = host.to_string();
+                    port = url.port().unwrap_or(0);
                     net = "DHCP";
                 }
 
@@ -140,7 +142,8 @@ impl Config {
 
             let net = net.parse()?;
             nameservers.push(NameServer {
-                address: addr,
+                host: host.to_owned(),
+                port,
                 net,
                 interface: iface
                     .map(|x| match x.as_str() {
@@ -214,14 +217,6 @@ impl Config {
         }
 
         Ok(tree)
-    }
-
-    pub fn host_with_default_port(host: &url::Host<&str>, port: u16) -> String {
-        match host {
-            url::Host::Domain(domain) => format!("{}:{}", domain, port),
-            url::Host::Ipv4(ipv4) => format!("{}:{}", ipv4, port),
-            url::Host::Ipv6(ipv6) => format!("[{}]:{}", ipv6, port),
-        }
     }
 }
 
@@ -300,9 +295,14 @@ impl TryFrom<&crate::config::def::Config> for Config {
         let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
 
         for ns in &default_nameserver {
-            let _ = ns.address.parse::<SocketAddr>().map_err(|_| {
-                Error::InvalidConfig(String::from("default dns must be ip address"))
-            })?;
+            match ns.host {
+                url::Host::Domain(_) => {
+                    return Err(Error::InvalidConfig(String::from(
+                        "default dns must be ip address",
+                    )));
+                }
+                _ => {}
+            }
         }
 
         let edns_client_subnet = dc
@@ -490,10 +490,10 @@ mod tests {
         let servers = vec!["2400:3200::1".to_string()];
         let ns = Config::parse_nameserver(&servers).expect("parse failed");
         assert_eq!(ns.len(), 1);
-        assert_eq!(ns[0].address, "[2400:3200::1]:53");
+        assert_eq!(ns[0].host.to_string(), "[2400:3200::1]");
+        assert_eq!(ns[0].port, 53);
         assert_eq!(ns[0].net, DNSNetMode::Udp);
-        let _sock: std::net::SocketAddr = ns[0]
-            .address
+        let _sock: std::net::SocketAddr = format!("{}:{}", ns[0].host, ns[0].port)
             .parse()
             .expect("address should parse to SocketAddr");
     }
@@ -503,10 +503,10 @@ mod tests {
         let servers = vec!["[2400:3200::1]:5353".to_string()];
         let ns = Config::parse_nameserver(&servers).expect("parse failed");
         assert_eq!(ns.len(), 1);
-        assert_eq!(ns[0].address, "[2400:3200::1]:5353");
+        assert_eq!(ns[0].host.to_string(), "[2400:3200::1]");
+        assert_eq!(ns[0].port, 5353);
         assert_eq!(ns[0].net, DNSNetMode::Udp);
-        let _sock: std::net::SocketAddr = ns[0]
-            .address
+        let _sock: std::net::SocketAddr = format!("{}:{}", ns[0].host, ns[0].port)
             .parse()
             .expect("address should parse to SocketAddr");
     }

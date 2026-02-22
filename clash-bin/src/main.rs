@@ -181,7 +181,6 @@ fn main() -> anyhow::Result<()> {
     if cli.compatibility {
         config.general.mmdb = Some("Country.mmdb".to_string());
         config.general.geosite = Some("geosite.dat".to_string());
-        // config.general.geoip
     }
 
     clash::start_scaffold(clash::Options {

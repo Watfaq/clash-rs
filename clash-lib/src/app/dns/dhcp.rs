@@ -98,7 +98,8 @@ impl DhcpClient {
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::Udp,
-                        address: format!("{s}:53"),
+                        host: url::Host::Ipv4(s),
+                        port: 53,
                         interface: None,
                         proxy: None,
                     })
