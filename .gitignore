@@ -10,6 +10,7 @@ target/
 /output/
 rust-project.json
 /build/
+docs
 
 # don't check in this real config
 ignore*.yaml
