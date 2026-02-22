@@ -4,7 +4,7 @@ verify:
 docs:
   rm -rf ./docs
   cargo doc -p clash-doc --no-deps
-  echo '<meta http-equiv="refresh" content="0; url=clash-doc">' > target/doc/index.html
+  echo '<meta http-equiv="refresh" content="0; url=clash_doc">' > target/doc/index.html
   cp -r target/doc ./docs
 
 test-no-docker:
