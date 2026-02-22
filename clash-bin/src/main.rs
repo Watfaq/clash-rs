@@ -66,6 +66,18 @@ struct Cli {
         help = "Enable crash report to help improve clash"
     )]
     help_improve: bool,
+    // #[clap(
+    //     short,
+    //     long,
+    //     visible_aliases = ["ext-ctl-pipe", "ext-ctl-unix"],
+    //     value_parser,
+    //     default_value = "false",
+    //     help = "Print clash-rs version and exit"
+    // )]
+    // e: Option<String>,
+
+    #[clap(allow_hyphen_values = true)]
+    raw_args: Vec<String>,
 }
 
 fn main() {
