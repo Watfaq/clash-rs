@@ -7,13 +7,13 @@ use crate::{
 };
 use ipnet::{AddrParseError, Ipv4Net, Ipv6Net};
 use serde::Deserialize;
-use tracing::warn;
 use std::{
     collections::HashMap,
     fmt::Display,
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
+use tracing::warn;
 use url::Url;
 pub use watfaq_dns::{DNSListenAddr, DoH3Config, DoHConfig, DoTConfig};
 
