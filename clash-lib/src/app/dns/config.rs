@@ -72,7 +72,11 @@ impl Config {
             let mut server = server.clone();
 
             if !server.contains("://") {
-                server = "udp://".to_owned() + &server;
+                if server.contains(':') && !server.starts_with('[') {
+                    server = format!("udp://[{}]", server);
+                } else {
+                    server = "udp://".to_owned() + &server;
+                }
             }
             let url = Url::parse(&server).map_err(|_x| {
                 Error::InvalidConfig(format!(
@@ -201,11 +205,29 @@ impl Config {
 
         if has_port_suffix.is_match(host) {
             Ok(host.into())
+        } else if host.starts_with('[') {
+            Ok(format!("{host}:{port}"))
+        } else if host.contains(':') {
+            Ok(format!("[{host}]:{port}"))
         } else {
             Ok(format!("{host}:{port}"))
         }
     }
+}
 
+fn parse_listen_addr(addr: &str) -> Result<SocketAddr, Error> {
+    if addr.starts_with(':') {
+        format!("0.0.0.0{addr}").parse().map_err(|_| {
+            Error::InvalidConfig(format!("invalid dns listen address: {addr}"))
+        })
+    } else {
+        addr.parse().map_err(|_| {
+            Error::InvalidConfig(format!("invalid dns listen address: {addr}"))
+        })
+    }
+}
+
+impl Config {
     pub fn parse_outbound_proxy(url: &Url) -> Option<String> {
         let frag = url.fragment()?;
         let pairs = frag.split("&");
@@ -291,11 +313,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .clone()
                 .map(|l| match l {
                     DNSListen::Udp(u) => {
-                        let addr = u.parse::<SocketAddr>().map_err(|_| {
-                            Error::InvalidConfig(format!(
-                                "invalid dns udp listen address: {u}"
-                            ))
-                        })?;
+                        let addr = parse_listen_addr(&u)?;
                         Ok(DNSListenAddr {
                             udp: Some(addr),
                             ..Default::default()
@@ -316,13 +334,8 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .ok_or(Error::InvalidConfig(format!(
                                             "invalid udp dns listen address - must \
                                              be string: {v:?}"
-                                        )))?
-                                        .parse::<SocketAddr>()
-                                        .map_err(|_| {
-                                            Error::InvalidConfig(format!(
-                                                "invalid dns listen address: {v:?}"
-                                            ))
-                                        })?;
+                                        )))
+                                        .and_then(parse_listen_addr)?;
                                     udp = Some(addr)
                                 }
                                 "tcp" => {
@@ -331,13 +344,8 @@ impl TryFrom<&crate::config::def::Config> for Config {
                                         .ok_or(Error::InvalidConfig(format!(
                                             "invalid tcp dns listen address - must \
                                              be string: {v:?}"
-                                        )))?
-                                        .parse::<SocketAddr>()
-                                        .map_err(|_| {
-                                            Error::InvalidConfig(format!(
-                                                "invalid dns listen address: {v:?}"
-                                            ))
-                                        })?;
+                                        )))
+                                        .and_then(parse_listen_addr)?;
                                     tcp = Some(addr)
                                 }
                                 "doh" => {
