@@ -85,7 +85,11 @@ impl Config {
                 ))
             })?;
 
-            let host = url.host_str().expect("dns host must be valid");
+            let host_raw = url.host_str().expect("dns host must be valid");
+            // url::Host may include surrounding brackets for IPv6 in some cases,
+            // normalize by stripping them here. We'll re-add brackets when building
+            // SocketAddrs.
+            let host = host_raw.trim_start_matches('[').trim_end_matches(']');
 
             let iface = Self::parse_outbound_interface(&url);
             let proxy = Self::parse_outbound_proxy(&url);
@@ -468,5 +472,36 @@ impl From<crate::config::def::FallbackFilter> for FallbackFilter {
             ip_cidr: ipcidr.ok(),
             domain: c.domain,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_nameserver_ipv6_without_scheme() {
+        let servers = vec!["2400:3200::1".to_string()];
+        let ns = Config::parse_nameserver(&servers).expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0].address, "[2400:3200::1]:53");
+        assert_eq!(ns[0].net, DNSNetMode::Udp);
+        let _sock: std::net::SocketAddr = ns[0]
+            .address
+            .parse()
+            .expect("address should parse to SocketAddr");
+    }
+
+    #[test]
+    fn parse_nameserver_ipv6_with_brackets_and_port() {
+        let servers = vec!["[2400:3200::1]:5353".to_string()];
+        let ns = Config::parse_nameserver(&servers).expect("parse failed");
+        assert_eq!(ns.len(), 1);
+        assert_eq!(ns[0].address, "[2400:3200::1]:5353");
+        assert_eq!(ns[0].net, DNSNetMode::Udp);
+        let _sock: std::net::SocketAddr = ns[0]
+            .address
+            .parse()
+            .expect("address should parse to SocketAddr");
     }
 }

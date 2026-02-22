@@ -1,6 +1,9 @@
 verify:
   cargo run -p clash-rs -- -t
 
+fmt:
+  cargo +nightly fmt
+
 docs:
   rm -rf ./docs
   cargo doc -p clash-doc --no-deps
