@@ -306,13 +306,10 @@ impl TryFrom<&crate::config::def::Config> for Config {
         let default_nameserver = Config::parse_nameserver(&dc.default_nameserver)?;
 
         for ns in &default_nameserver {
-            match ns.host {
-                url::Host::Domain(_) => {
-                    return Err(Error::InvalidConfig(String::from(
-                        "default dns must be ip address",
-                    )));
-                }
-                _ => {}
+            if let url::Host::Domain(_) = ns.host {
+                return Err(Error::InvalidConfig(String::from(
+                    "default dns must be ip address",
+                )));
             }
         }
 

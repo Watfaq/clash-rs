@@ -661,18 +661,18 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["h2".into()];
 
-            if let url::Host::Ipv4(ip) = host {
-                if ip == &addr.ip() {
-                    tls_config.dangerous().set_certificate_verifier(Arc::new(
-                        tls::NoHostnameTlsVerifier::new(),
-                    ));
-                }
-            } else if let url::Host::Ipv6(ip) = host {
-                if ip == &addr.ip() {
-                    tls_config.dangerous().set_certificate_verifier(Arc::new(
-                        tls::NoHostnameTlsVerifier::new(),
-                    ));
-                }
+            if let url::Host::Ipv4(ip) = host
+                && ip == &addr.ip()
+            {
+                tls_config.dangerous().set_certificate_verifier(Arc::new(
+                    tls::NoHostnameTlsVerifier::new(),
+                ));
+            } else if let url::Host::Ipv6(ip) = host
+                && ip == &addr.ip()
+            {
+                tls_config.dangerous().set_certificate_verifier(Arc::new(
+                    tls::NoHostnameTlsVerifier::new(),
+                ));
             }
             let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),
