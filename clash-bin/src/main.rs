@@ -66,25 +66,41 @@ struct Cli {
         help = "Enable crash report to help improve clash"
     )]
     help_improve: bool,
-    // #[clap(
-    //     short,
-    //     long,
-    //     visible_aliases = ["ext-ctl-pipe", "ext-ctl-unix"],
-    //     value_parser,
-    //     default_value = "false",
-    //     help = "Print clash-rs version and exit"
-    // )]
-    // e: Option<String>,
 
-    #[clap(allow_hyphen_values = true)]
-    raw_args: Vec<String>,
+    #[clap(
+        long,
+        visible_aliases = ["ext-ctl-pipe", "ext-ctl-unix"],
+        value_parser,
+        value_name = "IPC_PATH",
+        help = "Specify the IPC path for the controller"
+    )]
+    controller_ipc: Option<String>,
+
+    #[clap(
+        long,
+        value_parser,
+        default_value = "true",
+        help = "Enable compatibility mode, which make behaviors more consistent \
+                with mihomo but may cause some issues. It is recommended to enable \
+                this if you are using clash verge."
+    )]
+    compatibility: bool,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    let cli = Cli::parse();
+    // Those arguments are for compatibility with `mihomo`
+    // Technically, I do not think `mihomo` is a modern/standard POSIX Cli program
+    let args: Vec<String> = std::env::args()
+        .map(|arg| match arg.as_str() {
+            "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
+            "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
+            _ => arg,
+        })
+        .collect();
+    let cli = Cli::parse_from(args);
 
     if cli.version {
         println!(
@@ -158,16 +174,22 @@ fn main() {
         )));
     }
 
-    match clash::start_scaffold(clash::Options {
-        config: clash::Config::File(file),
+    let mut config = clash::Config::File(file).try_parse()?;
+
+    config.general.controller.external_controller_ipc = cli.controller_ipc;
+
+    if cli.compatibility {
+        config.general.mmdb = Some("Country.mmdb".to_string());
+        config.general.geosite = Some("geosite.dat".to_string());
+        // config.general.geoip
+    }
+
+    clash::start_scaffold(clash::Options {
+        config: clash::Config::Internal(config),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,
-    }) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Failed to start clash: {e}");
-            exit(1);
-        }
-    }
+    })
+    .inspect_err(|_| eprintln!("Failed to start clash"))?;
+    Ok(())
 }

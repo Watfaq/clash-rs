@@ -1280,6 +1280,7 @@ dependencies = [
 name = "clash-rs"
 version = "0.9.4"
 dependencies = [
+ "anyhow",
  "aws-lc-rs",
  "clap",
  "clash-lib",
