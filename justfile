@@ -1,6 +1,9 @@
 verify:
   cargo run -p clash-rs -- -t
 
+run:
+  cargo run -p clash-rs -- -c config.yaml
+
 fmt:
   cargo +nightly fmt
 

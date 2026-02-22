@@ -12,7 +12,6 @@ use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, warn};
 
 use super::config::NameServer;
-use crate::print_and_exit;
 
 pub async fn make_clients(
     servers: Vec<NameServer>,

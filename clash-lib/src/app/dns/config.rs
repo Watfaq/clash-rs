@@ -104,6 +104,17 @@ impl Config {
                 ))
             })?;
 
+            let host = match host {
+                url::Host::Domain(v) => {
+                    // Try to parse domain as IPv4 address because of WHATWG standard
+                    match v.parse::<std::net::Ipv4Addr>() {
+                        Ok(ipv4) => url::Host::Ipv4(ipv4),
+                        Err(_) => url::Host::Domain(v),
+                    }
+                }
+                v => v,
+            };
+
             let iface = Self::parse_outbound_interface(&url);
             let proxy = Self::parse_outbound_proxy(&url);
             let net: &str;
