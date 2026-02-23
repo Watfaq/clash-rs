@@ -189,6 +189,6 @@ fn main() -> anyhow::Result<()> {
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,
     })
-    .inspect_err(|_| eprintln!("Failed to start clash"))?;
+    .inspect_err(|err| eprintln!("Failed to start clash: {err}"))?;
     Ok(())
 }

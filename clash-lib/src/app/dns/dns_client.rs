@@ -312,9 +312,8 @@ impl DnsClient {
         // TODO: use proxy to connect?
 
         if matches!(opts.net, DNSNetMode::Dhcp) {
-            return Ok(Arc::new(
-                DhcpClient::new(&format!("{}", opts.host), opts.fw_mark).await,
-            ));
+            let host = opts.host.to_string();
+            return Ok(Arc::new(DhcpClient::new(&host, opts.fw_mark).await));
         }
 
         let mut ip: Option<IpAddr> = None;
@@ -662,13 +661,13 @@ async fn dns_stream_builder(
             tls_config.alpn_protocols = vec!["h2".into()];
 
             if let url::Host::Ipv4(ip) = host
-                && ip == &addr.ip()
+                && IpAddr::V4(ip) == addr.ip()
             {
                 tls_config.dangerous().set_certificate_verifier(Arc::new(
                     tls::NoHostnameTlsVerifier::new(),
                 ));
             } else if let url::Host::Ipv6(ip) = host
-                && ip == &addr.ip()
+                && IpAddr::V6(ip) == addr.ip()
             {
                 tls_config.dangerous().set_certificate_verifier(Arc::new(
                     tls::NoHostnameTlsVerifier::new(),
