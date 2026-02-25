@@ -79,7 +79,7 @@ struct Cli {
     #[clap(
         long,
         value_parser,
-        default_value = "true",
+        action = clap::ArgAction::SetTrue,
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."

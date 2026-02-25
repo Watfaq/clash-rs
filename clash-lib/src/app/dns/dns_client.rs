@@ -660,15 +660,12 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["h2".into()];
 
-            if let url::Host::Ipv4(ip) = host
-                && IpAddr::V4(*ip) == addr.ip()
-            {
-                tls_config.dangerous().set_certificate_verifier(Arc::new(
-                    tls::NoHostnameTlsVerifier::new(),
-                ));
-            } else if let url::Host::Ipv6(ip) = host
-                && IpAddr::V6(*ip) == addr.ip()
-            {
+            let host_ip = match host {
+                url::Host::Ipv4(ip) => Some(IpAddr::V4(*ip)),
+                url::Host::Ipv6(ip) => Some(IpAddr::V6(*ip)),
+                _ => None,
+            };
+            if host_ip == Some(addr.ip()) {
                 tls_config.dangerous().set_certificate_verifier(Arc::new(
                     tls::NoHostnameTlsVerifier::new(),
                 ));
