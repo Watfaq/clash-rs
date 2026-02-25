@@ -416,7 +416,7 @@ mod tests {
                     use bytes::Bytes;
                     use futures::StreamExt;
                     use http_body_util::{BodyExt, Empty};
-                    tokio::time::sleep(Duration::from_millis(1 * i)).await;
+                    tokio::time::sleep(Duration::from_millis(100 * i)).await;
                     let client = ClientOptions::new()
                         .open(path)
                         .context("Failed to connect to named pipe")?;
