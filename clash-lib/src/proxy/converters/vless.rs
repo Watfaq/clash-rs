@@ -43,6 +43,7 @@ impl TryFrom<&OutboundVless> for Handler {
                 .network
                 .clone()
                 .map(|x| match x.as_str() {
+                    "tcp" => Ok(None),
                     "ws" => s
                         .ws_opts
                         .as_ref()
@@ -50,7 +51,7 @@ impl TryFrom<&OutboundVless> for Handler {
                             let client: WsClient = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid ws options");
-                            Box::new(client) as _
+                            Some(Box::new(client) as _)
                         })
                         .ok_or(Error::InvalidConfig(
                             "ws_opts is required for ws".to_owned(),
@@ -62,7 +63,7 @@ impl TryFrom<&OutboundVless> for Handler {
                             let client: H2Client = (x, &s.common_opts)
                                 .try_into()
                                 .expect("invalid h2 options");
-                            Box::new(client) as _
+                            Some(Box::new(client) as _)
                         })
                         .ok_or(Error::InvalidConfig(
                             "h2_opts is required for h2".to_owned(),
@@ -75,7 +76,7 @@ impl TryFrom<&OutboundVless> for Handler {
                                 (s.server_name.clone(), x, &s.common_opts)
                                     .try_into()
                                     .expect("invalid grpc options");
-                            Box::new(client) as _
+                            Some(Box::new(client) as _)
                         })
                         .ok_or(Error::InvalidConfig(
                             "grpc_opts is required for grpc".to_owned(),
@@ -84,7 +85,8 @@ impl TryFrom<&OutboundVless> for Handler {
                         "unsupported network: {x}"
                     ))),
                 })
-                .transpose()?,
+                .transpose()?
+                .flatten(),
             tls: match s.tls.unwrap_or_default() {
                 true => {
                     let client = TlsClient::new(
@@ -104,6 +106,7 @@ impl TryFrom<&OutboundVless> for Handler {
                         s.network
                             .as_ref()
                             .map(|x| match x.as_str() {
+                                "tcp" => Ok(vec![]),
                                 "ws" => Ok(vec!["http/1.1".to_owned()]),
                                 "http" => Ok(vec![]),
                                 "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
