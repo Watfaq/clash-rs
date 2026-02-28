@@ -274,7 +274,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: clippy
-          args: -p clash-rs --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
+          args: -p clash-rs --locked --target ${{ matrix.target }} ${{ matrix.extra-args }} -- -D warnings
         env:
           CLASH_DOCKER_TEST: "true"
 
@@ -284,7 +284,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: "test"
-          args: --workspace --exclude clash-ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
+          args: --locked --workspace --exclude clash-ffi --target ${{ matrix.target }} ${{ matrix.extra-args }}
         env:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ (startsWith(matrix.os, 'ubuntu') && !matrix.no-docker-test) && 'true' || 'false' }}
@@ -295,7 +295,7 @@ jobs:
         with:
           tool: ${{ matrix.tool }}
           command: build
-          args: --release --target ${{ matrix.target }} ${{ matrix.extra-args }} --package clash-rs
+          args: --locked --release --target ${{ matrix.target }} ${{ matrix.extra-args }} --package clash-rs
         env:
           RUSTFLAGS: ${{ matrix.rustflags || '--cfg tokio_unstable' }}
           CROSS_BUILD_ZIG: ${{ matrix.zig }}

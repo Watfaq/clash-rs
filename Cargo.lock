@@ -841,7 +841,7 @@ dependencies = [
 [[package]]
 name = "boring-noise"
 version = "0.1.0"
-source = "git+https://github.com/Watfaq/boring-noise.git?rev=e8a17ec#e8a17ecb688ef2fed8d37beda0f87f5561fa45e6"
+source = "git+https://github.com/Watfaq/boring-noise.git?rev=9ddf1b5#9ddf1b54d0c9679e7bc50e9151f72d526190db1a"
 dependencies = [
  "aead",
  "aws-lc-rs",
@@ -4325,6 +4325,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "miette"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f98efec8807c63c752b5bd61f862c165c115b0a35685bdcfd9238c7aeb592b7"
+dependencies = [
+ "backtrace",
+ "backtrace-ext",
+ "cfg-if",
+ "miette-derive",
+ "owo-colors",
+ "supports-color",
+ "supports-hyperlinks",
+ "supports-unicode",
+ "terminal_size",
+ "textwrap",
+ "unicode-width 0.1.14",
+]
+
+[[package]]
 name = "miette-derive"
 version = "7.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5634,7 +5653,7 @@ dependencies = [
  "prost-reflect",
  "prost-types",
  "protox-parse",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -5646,7 +5665,7 @@ dependencies = [
  "logos",
  "miette",
  "prost-types",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
