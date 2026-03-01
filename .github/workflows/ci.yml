@@ -61,7 +61,7 @@ jobs:
           fi
 
       - name: Spell Check Repo
-        uses: crate-ci/typos@v1.43.4
+        uses: crate-ci/typos@v1.44.0
         env:
           CLICOLOR: 1
 
@@ -303,7 +303,7 @@ jobs:
         run: mv target/${{ matrix.target }}/release/clash-rs${{ matrix.postfix }} ${{ env.PACKAGE }}-${{ matrix.release-name || matrix.target }}${{ matrix.postfix }}
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !matrix.no-release }}
         with:
           name: ${{ matrix.release-name || matrix.target }}
@@ -330,14 +330,14 @@ jobs:
           fetch-tags: true
 
       - name: Merge binaries
-        uses: actions/upload-artifact/merge@v6
+        uses: actions/upload-artifact/merge@v7
         with:
           name: binaries
           pattern: "*"
           retention-days: 1
 
       - name: Download binaries
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: binaries
           path: ./packages
@@ -425,13 +425,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Download binaries amd64
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: x86_64-unknown-linux-musl
           path: ./clash-rs
 
       - name: Download binaries arm64
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: aarch64-unknown-linux-musl
           path: ./clash-rs
