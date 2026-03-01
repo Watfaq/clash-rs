@@ -2,27 +2,23 @@ use std::{sync::Arc, time::Duration};
 
 use axum::{
     Json,
-    extract::{
-        Query, State, WebSocketUpgrade,
-        ws::{Message, WebSocket},
-    },
+    extract::{Query, State, WebSocketUpgrade},
     response::IntoResponse,
 };
 
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
 
 use crate::app::api::CtrlState;
 
 #[derive(Deserialize)]
 pub struct GetMemoryQuery {
-    interval: Option<u64>,
+    pub interval: Option<u64>,
 }
 
 #[derive(Serialize)]
-struct GetMemoryResponse {
-    inuse: usize,
-    oslimit: usize,
+pub struct GetMemoryResponse {
+    pub inuse: usize,
+    pub oslimit: usize,
 }
 
 pub async fn handle(State(state): State<Arc<CtrlState>>) -> impl IntoResponse {
@@ -33,4 +29,3 @@ pub async fn handle(State(state): State<Arc<CtrlState>>) -> impl IntoResponse {
     };
     return Json(snapshot).into_response();
 }
-

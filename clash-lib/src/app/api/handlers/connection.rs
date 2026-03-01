@@ -1,28 +1,33 @@
 use std::{sync::Arc, time::Duration};
 
 use axum::{
-    Router, extract::{
+    Router,
+    extract::{
         Path, Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
-    }, response::IntoResponse, routing::get
+    },
+    response::IntoResponse,
+    routing::{delete, get},
 };
 
 use serde::Deserialize;
 use tracing::{debug, warn};
 
-use crate::app::{api::{CtrlResult, CtrlState}, dispatcher::StatisticsManager};
+use crate::app::{
+    api::{CtrlResult, CtrlState},
+    dispatcher::StatisticsManager,
+};
 
-
-pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState>> {
+pub fn routes(ctrl_state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
     Router::new()
         .route("/", get(get_connections).delete(close_all_connection))
         .route("/{id}", delete(close_connection))
-        .with_state(ConnectionState { statistics_manager })
+        .with_state(ctrl_state)
 }
 
 #[derive(Deserialize)]
 pub struct GetConnectionsQuery {
-    interval: Option<u64>,
+    pub interval: Option<u64>,
 }
 
 pub async fn get_connections(

@@ -23,7 +23,7 @@ use tracing::{Span, error, info, warn};
 use crate::{
     GlobalState, Runner,
     app::api::handlers::connection::{
-        close_all_connection, close_connection, get_connections, get_connections_ws,
+        self, close_all_connection, close_connection, get_connections,
     },
     config::internal::config::Controller,
 };
@@ -41,6 +41,7 @@ use super::{
 mod handlers;
 mod ipc;
 mod middlewares;
+mod websocket;
 
 pub struct CtrlState {
     log_source_tx: Sender<LogEvent>,
@@ -118,12 +119,10 @@ pub fn get_api_runner(
         info!("Starting API server");
         let mut router = Router::new()
             .route("/", get(handlers::hello::handle))
-            .route("/logs", get(handlers::log::handle))
-            .route("/ws/traffic", get(handlers::traffic::handle))
             .route("/version", get(handlers::version::handle))
-            .route("/ws/memory", get(handlers::memory::handle_ws))
             .route("/memory", any(handlers::memory::handle))
             .route("/restart", post(handlers::restart::handle))
+            .nest("/ws", websocket::routes(ctrl_state.clone()))
             .nest(
                 "/configs",
                 handlers::config::routes(
@@ -143,12 +142,7 @@ pub fn get_api_runner(
                 "/providers/proxies",
                 handlers::provider::routes(outbound_manager),
             )
-            .route(
-                "/connections",
-                get(get_connections).delete(close_all_connection),
-            )
-            .route("/ws/connections", get(get_connections_ws))
-            .route("/{id}", delete(close_connection))
+            .nest("/connections", connection::routes(ctrl_state.clone()))
             .nest("/dns", handlers::dns::routes(dns_resolver))
             .with_state(ctrl_state)
             .layer(middleware::from_fn(

@@ -124,7 +124,6 @@ pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
     use tower::{Layer, util::MapRequestLayer};
     use tracing::info;
 
-
     use crate::app::api::middlewares::websocket_uri_rewrite::rewrite_websocket_uri;
     info!("Starting API server on NamedPipe {path}");
 
