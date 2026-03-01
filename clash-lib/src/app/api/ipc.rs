@@ -164,27 +164,33 @@ impl axum::serve::Listener for NamedPipeListener {
     type Io = NamedPipeServer;
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        use tokio::time::{Duration, sleep};
         use tracing::{info, warn};
-        use tokio::time::{sleep, Duration};
-        
+
         let max_retries = 5;
         let mut retry_count = 0;
-        
+
         let server = loop {
             match create_named_pipe_with_security(&self.path, self.first_instance) {
                 Ok(server) => break server,
                 Err(e) => {
                     retry_count += 1;
                     if retry_count >= max_retries {
-                        panic!("Failed to create named pipe after {} retries: {}", max_retries, e);
+                        panic!(
+                            "Failed to create named pipe after {} retries: {}",
+                            max_retries, e
+                        );
                     }
-                    warn!("Failed to create named pipe (attempt {}/{}): {}. Retrying...", 
-                          retry_count, max_retries, e);
+                    warn!(
+                        "Failed to create named pipe (attempt {}/{}): {}. \
+                         Retrying...",
+                        retry_count, max_retries, e
+                    );
                     sleep(Duration::from_millis(200 * retry_count as u64)).await;
                 }
             }
         };
-        
+
         self.first_instance = false;
         server
             .connect()

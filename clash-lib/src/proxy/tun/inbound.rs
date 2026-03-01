@@ -109,35 +109,62 @@ pub fn get_runner(
                 .unwrap_or_default();
 
             if tun_exist {
-                info!("tun device {} already exists, removing it first.", &tun_name);
+                info!(
+                    "tun device {} already exists, removing it first.",
+                    &tun_name
+                );
                 #[cfg(target_os = "windows")]
                 {
                     // On Windows, we need to delete the existing adapter
                     use std::process::Command;
                     // Use netsh interface delete to remove the interface
                     let output = Command::new("netsh")
-                        .args(["interface", "set", "interface", &tun_name, "admin=disable"])
+                        .args([
+                            "interface",
+                            "set",
+                            "interface",
+                            &tun_name,
+                            "admin=disable",
+                        ])
                         .output();
                     if let Ok(output) = output {
                         if !output.status.success() {
-                            warn!("failed to disable tun device {}: {}", &tun_name, String::from_utf8_lossy(&output.stderr));
+                            warn!(
+                                "failed to disable tun device {}: {}",
+                                &tun_name,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
                         }
                     }
-                    
+
                     // Give it a moment to disable
                     std::thread::sleep(std::time::Duration::from_millis(200));
-                    
+
                     // Now try to delete
                     let output = Command::new("netsh")
-                        .args(["interface", "delete", "interface", &format!("name=\"{}\"", tun_name)])
+                        .args([
+                            "interface",
+                            "delete",
+                            "interface",
+                            &format!("name=\"{}\"", tun_name),
+                        ])
                         .output();
                     match output {
                         Ok(output) if output.status.success() => {
-                            info!("successfully removed existing tun device {}", &tun_name);
-                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            info!(
+                                "successfully removed existing tun device {}",
+                                &tun_name
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(
+                                500,
+                            ));
                         }
                         Ok(output) => {
-                            warn!("failed to remove tun device {}: {}", &tun_name, String::from_utf8_lossy(&output.stderr));
+                            warn!(
+                                "failed to remove tun device {}: {}",
+                                &tun_name,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
                             // Continue anyway, the build_async will handle it
                         }
                         Err(e) => {
@@ -153,10 +180,17 @@ pub fn get_runner(
                         .output();
                     match output {
                         Ok(output) if output.status.success() => {
-                            info!("successfully removed existing tun device {}", &tun_name);
+                            info!(
+                                "successfully removed existing tun device {}",
+                                &tun_name
+                            );
                         }
                         Ok(output) => {
-                            warn!("failed to remove tun device {}: {}", &tun_name, String::from_utf8_lossy(&output.stderr));
+                            warn!(
+                                "failed to remove tun device {}: {}",
+                                &tun_name,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
                         }
                         Err(e) => {
                             warn!("failed to execute ip command: {}", e);
@@ -171,10 +205,17 @@ pub fn get_runner(
                         .output();
                     match output {
                         Ok(output) if output.status.success() => {
-                            info!("successfully removed existing tun device {}", &tun_name);
+                            info!(
+                                "successfully removed existing tun device {}",
+                                &tun_name
+                            );
                         }
                         Ok(output) => {
-                            warn!("failed to remove tun device {}: {}", &tun_name, String::from_utf8_lossy(&output.stderr));
+                            warn!(
+                                "failed to remove tun device {}: {}",
+                                &tun_name,
+                                String::from_utf8_lossy(&output.stderr)
+                            );
                         }
                         Err(e) => {
                             warn!("failed to execute ifconfig command: {}", e);
@@ -192,18 +233,15 @@ pub fn get_runner(
             );
 
             debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
-            tun_builder = tun_builder.ipv4(
-                cfg.gateway.addr(),
-                cfg.gateway.netmask(),
-                None,
-            );
+            tun_builder =
+                tun_builder.ipv4(cfg.gateway.addr(), cfg.gateway.netmask(), None);
 
             if let Some(gateway_v6) = cfg.gateway_v6 {
                 debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
                 tun_builder =
                     tun_builder.ipv6(gateway_v6.addr(), gateway_v6.netmask());
             }
-            
+
             #[cfg(target_os = "windows")]
             if let Some(guid) = tun_init_config.guid {
                 tun_builder = tun_builder.device_guid(guid);

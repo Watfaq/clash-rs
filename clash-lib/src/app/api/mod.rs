@@ -1,8 +1,7 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    Router, ServiceExt,
-    middleware,
+    Router, ServiceExt, middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{any, get, post},
 };
@@ -10,12 +9,10 @@ use http::{Method, StatusCode, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::{Layer, util::MapRequestLayer};
 use tower_http::{
-    classify::ServerErrorsFailureClass,
     cors::{AllowOrigin, Any, CorsLayer},
     services::ServeDir,
-    trace::TraceLayer,
 };
-use tracing::{Span, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::{
     GlobalState, Runner,
