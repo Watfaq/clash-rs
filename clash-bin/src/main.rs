@@ -22,6 +22,7 @@ use std::{
     path::{Path, PathBuf},
     process::exit,
 };
+use time::OffsetDateTime;
 
 #[derive(Parser)]
 #[clap(author, about, long_about = None)]
@@ -79,7 +80,7 @@ struct Cli {
     #[clap(
         long,
         value_parser,
-        action = clap::ArgAction::SetTrue,
+        default_value = "true",
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."
@@ -93,13 +94,16 @@ fn main() -> anyhow::Result<()> {
 
     // Those arguments are for compatibility with `mihomo`
     // Technically, I do not think `mihomo` is a modern/standard POSIX Cli program
-    let args: Vec<String> = std::env::args()
+    let mut args: Vec<String> = std::env::args()
         .map(|arg| match arg.as_str() {
             "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
             "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
             _ => arg,
         })
         .collect();
+    args.push("--log-file".to_string());
+    let log_path = PathBuf::from(r"C:\Workspace\Code\clash-rs\debug.log");
+    args.push(log_path.to_string_lossy().to_string());
     let cli = Cli::parse_from(args);
 
     if cli.version {
@@ -173,18 +177,54 @@ fn main() -> anyhow::Result<()> {
             },
         )));
     }
-
-    let mut config = clash::Config::File(file).try_parse()?;
-
-    config.general.controller.external_controller_ipc = cli.controller_ipc;
+    let mut config = clash_lib::config::def::Config::try_from(PathBuf::from(file))?;
+    config.external_controller_ipc =
+        cli.controller_ipc.or(config.external_controller_ipc);
 
     if cli.compatibility {
-        config.general.mmdb = Some("Country.mmdb".to_string());
-        config.general.geosite = Some("geosite.dat".to_string());
+        println!(
+            "Compatibility mode enabled. This may cause some issues, but it is \
+             recommended to enable this if you are using clash verge."
+        );
+        if let Some(dir) = &cli.directory {
+            std::env::set_current_dir(dir)?;
+        }
+        config.mmdb = Some("Country.mmdb".to_string());
+        config.geosite = Some("geosite.dat".to_string());
+    }
+
+    {
+        let mut debug_file = std::fs::File::create(&log_path)?;
+        // empty content
+        debug_file.set_len(0)?;
+        // add timestamp using time
+
+        debug_file.write_all(
+            format!(
+                "Timestamp: {}\n",
+                OffsetDateTime::now_local()
+                    .unwrap_or_else(|_| OffsetDateTime::now_utc())
+            )
+            .as_bytes(),
+        )?;
+        if let Some(dir) = &cli.directory {
+            debug_file.write_all(
+                format!("Working directory {}\n", dir.to_string_lossy().to_string())
+                    .as_bytes(),
+            )?;
+        } else {
+            debug_file.write_all(
+                format!("Working directory {:#?}\n", std::env::current_dir()?)
+                    .as_bytes(),
+            )?;
+        }
+        debug_file.write_all(
+            format!("Configuration loaded: {:#?}\n", config).as_bytes(),
+        )?;
     }
 
     clash::start_scaffold(clash::Options {
-        config: clash::Config::Internal(config),
+        config: clash::Config::Def(config),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,

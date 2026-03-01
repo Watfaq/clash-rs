@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use crate::{
     GlobalState,
     app::{
-        api::AppState,
+        api::CtrlState,
         dispatcher,
         dns::ThreadSafeDNSResolver,
         inbound::manager::{InboundManager, Ports},
@@ -35,7 +35,7 @@ pub fn routes(
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
-) -> Router<Arc<AppState>> {
+) -> Router<Arc<CtrlState>> {
     Router::new()
         .route(
             "/",
@@ -86,28 +86,30 @@ struct UploadConfigQuery {
     force: Option<bool>,
 }
 
+#[allow(unused)]
 async fn update_configs(
     _q: Query<UploadConfigQuery>,
     State(state): State<ConfigState>,
     Json(req): Json<UpdateConfigRequest>,
 ) -> impl IntoResponse {
-    let (done, wait) = tokio::sync::oneshot::channel();
+    // let (done, wait) = tokio::sync::oneshot::channel();
     let g = state.global_state.lock().await;
     match (req.path, req.payload) {
         (_, Some(payload)) => {
             let msg = "config reloading from payload".to_string();
             let cfg = crate::Config::Str(payload);
-            match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    (StatusCode::NO_CONTENT, msg).into_response()
-                }
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "could not signal config reload",
-                )
-                    .into_response(),
-            }
+            // match g.reload_tx.send((cfg, done)).await {
+            //     Ok(_) => {
+            //         wait.await.unwrap();
+            //         (StatusCode::NO_CONTENT, msg).into_response()
+            //     }
+            //     Err(_) => (
+            //         StatusCode::INTERNAL_SERVER_ERROR,
+            //         "could not signal config reload",
+            //     )
+            //         .into_response(),
+            // }
+            (StatusCode::BAD_REQUEST, "Not supported yet").into_response()
         }
         (Some(mut path), None) => {
             if !PathBuf::from(&path).is_absolute() {
@@ -126,18 +128,19 @@ async fn update_configs(
 
             let msg = format!("config reloading from file {path}");
             let cfg: crate::Config = crate::Config::File(path);
-            match g.reload_tx.send((cfg, done)).await {
-                Ok(_) => {
-                    wait.await.unwrap();
-                    (StatusCode::NO_CONTENT, msg).into_response()
-                }
+            // match g.reload_tx.send((cfg, done)).await {
+            //     Ok(_) => {
+            //         wait.await.unwrap();
+            //         (StatusCode::NO_CONTENT, msg).into_response()
+            //     }
 
-                Err(_) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "could not signal config reload",
-                )
-                    .into_response(),
-            }
+            //     Err(_) => (
+            //         StatusCode::INTERNAL_SERVER_ERROR,
+            //         "could not signal config reload",
+            //     )
+            //         .into_response(),
+            // }
+            (StatusCode::BAD_REQUEST, "Not supported yet").into_response()
         }
         (None, None) => {
             (StatusCode::BAD_REQUEST, "no path or payload provided").into_response()

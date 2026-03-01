@@ -211,7 +211,7 @@ impl Handler {
             } else {
                 new_udp_socket(
                     Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    None,
+                    sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
                     None,

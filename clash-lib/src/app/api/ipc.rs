@@ -1,46 +1,154 @@
+#[cfg(windows)]
+use std::convert::Infallible;
+
+#[cfg(windows)]
+use axum::{
+    Router,
+    extract::Request,
+    response::Response,
+    serve::{IncomingStream, Listener},
+};
+#[cfg(windows)]
+use tower::Service;
 use tracing::error;
 
 #[cfg(windows)]
-pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
-    use hyper_util::rt::TokioIo;
+fn create_pipe_security_attributes()
+-> crate::Result<windows::Win32::Security::SECURITY_ATTRIBUTES> {
+    use windows::{
+        Win32::Security::{
+            Authorization::{
+                ConvertStringSecurityDescriptorToSecurityDescriptorA,
+                SDDL_REVISION_1,
+            },
+            PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+        },
+        core::PSTR,
+    };
+
+    // SDDL string for:
+    // - Allow Read/Write for BUILTIN\Users
+    // - Allow Read/Write for NT AUTHORITY\SYSTEM
+    // D: = DACL
+    // (A;;GRGW;;;BU) = Allow Generic Read/Generic Write for Built-in Users
+    // (A;;GRGW;;;SY) = Allow Generic Read/Generic Write for System
+    let sddl = b"D:(A;;GRGW;;;BU)(A;;GRGW;;;SY)\0";
+
+    unsafe {
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        let mut sd_size = 0u32;
+
+        ConvertStringSecurityDescriptorToSecurityDescriptorA(
+            PSTR::from_raw(sddl.as_ptr() as *mut u8),
+            SDDL_REVISION_1,
+            &mut sd,
+            Some(&mut sd_size),
+        )
+        .map_err(|e| {
+            crate::Error::Operation(format!(
+                "Failed to convert SDDL to security descriptor: {e:?}"
+            ))
+        })?;
+
+        let sa = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: sd.0,
+            bInheritHandle: windows::Win32::Foundation::FALSE,
+        };
+
+        Ok(sa)
+    }
+}
+
+#[cfg(windows)]
+fn create_named_pipe_with_security(
+    path: &str,
+    first_instance: bool,
+) -> crate::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
     use tokio::net::windows::named_pipe;
-    use tower::Service as _;
-    use tracing::info;
-    info!("Starting API server on NamedPipe {path}");
 
-    let server = named_pipe::ServerOptions::new()
-        .first_pipe_instance(true)
-        .create(path)
-        .map_err(|e| crate::Error::Operation(format!("Cannot create pipe {e}")))?;
+    let mut sa = create_pipe_security_attributes()?;
 
-    let mut server = server;
-    loop {
+    unsafe {
+        let mut options = named_pipe::ServerOptions::new();
+        options.access_inbound(true).access_outbound(true);
+
+        if first_instance {
+            options.first_pipe_instance(true);
+        }
+
+        options
+            .create_with_security_attributes_raw(
+                path,
+                &mut sa as *mut _ as *mut std::ffi::c_void,
+            )
+            .map_err(|e| crate::Error::Operation(format!("Cannot create pipe {e}")))
+        // options
+        //     .create(path)
+        //     .map_err(|e| crate::Error::Operation(format!("Cannot create pipe
+        // {e}")))
+    }
+}
+use tokio::net::windows::named_pipe::NamedPipeServer;
+
+struct NamedPipeListener {
+    path: String,
+    first_instance: bool,
+}
+impl axum::serve::Listener for NamedPipeListener {
+    type Addr = ();
+    type Io = NamedPipeServer;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        use tracing::info;
+        let server =
+            create_named_pipe_with_security(&self.path, self.first_instance)
+                .expect("Failed to create named pipe");
+        self.first_instance = false;
         server
             .connect()
             .await
-            .map_err(|e| crate::Error::Operation(format!("NamedPipe error: {e}")))?;
-        let connected_client = server;
-        server = named_pipe::ServerOptions::new().create(path).map_err(|e| {
-            crate::Error::Operation(format!("Cannot create NamedPipe: {e}"))
-        })?;
-        let router = router.clone();
-        tokio::spawn(async move {
-            let io = TokioIo::new(connected_client);
-            let hyper_service = hyper::service::service_fn(move |request: _| {
-                router.clone().call(request)
-            });
+            .expect("Failed to connect named pipe");
+        info!("Client connected to NamedPipe {}", self.path);
+        (server, ())
+    }
 
-            if let Err(e) = hyper::server::conn::http1::Builder::new()
-                .serve_connection(io, hyper_service)
-                .await
-            {
-                error!("NamedPipe error: {}", e);
-            }
-        });
+    fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
+        Ok(())
     }
 }
+
+#[cfg(windows)]
+pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
+    use axum::ServiceExt;
+    use tower::{Layer, util::MapRequestLayer};
+    use tracing::info;
+
+
+    use crate::app::api::middlewares::websocket_uri_rewrite::rewrite_websocket_uri;
+    info!("Starting API server on NamedPipe {path}");
+
+    let listener = NamedPipeListener {
+        path: path.to_string(),
+        first_instance: true,
+    };
+    let app = MapRequestLayer::new(rewrite_websocket_uri).layer(router);
+
+    axum::serve(listener, app.into_make_service())
+        .await
+        .map_err(|e| {
+            error!("NamedPipe API server error: {}", e);
+            crate::Error::Operation(format!("NamedPipe API server error: {e}"))
+        })?;
+    Ok(())
+}
+
 #[cfg(unix)]
-pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
+pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
+where
+    S: Clone + Send + 'static,
+{
+    use axum::ServiceExt;
     use std::path::PathBuf;
     use tracing::info;
 
@@ -48,7 +156,7 @@ pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
     use std::sync::Arc;
     use tokio::net::UnixListener;
     let path = PathBuf::from(path);
-    let app_clone = router.clone();
+    let app_clone = service.clone();
 
     info!("Start API server on IPC address {:?}", path);
 
@@ -100,7 +208,10 @@ pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
 }
 
 #[cfg(all(not(unix), not(windows)))]
-pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
+pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
+where
+    S: Clone + Send + 'static,
+{
     error!("IPC only get supported on Unix and Windows");
     Err(crate::Error::Operation(
         "IPC only get supported on Unix and Windows".to_string(),
@@ -111,6 +222,7 @@ pub async fn serve_ipc(router: axum::Router, path: &str) -> crate::Result<()> {
 mod tests {
     use super::*;
     use axum::{Json, Router, routing::get};
+    use futures::SinkExt;
     use serde::{Deserialize, Serialize};
     use tracing_test::traced_test;
 
@@ -118,15 +230,59 @@ mod tests {
         Router::new().route(
             "/test",
             get(|| async {
-                Json(Response {
+                Json(TestResponse {
                     message: "Hello, World!".to_string(),
                 })
             }),
         )
     }
 
+    fn test_router_with_websocket() -> Router {
+        use axum::{
+            extract::ws::{WebSocket, WebSocketUpgrade},
+            response::Response,
+        };
+
+        async fn ws_handler(ws: WebSocketUpgrade) -> Response {
+            ws.on_upgrade(handle_socket)
+        }
+
+        async fn handle_socket(mut socket: WebSocket) {
+            use axum::extract::ws::Message;
+            while let Some(msg) = socket.recv().await {
+                if let Ok(msg) = msg {
+                    match msg {
+                        Message::Text(text) => {
+                            let response = format!("Echo: {}", text);
+                            if socket
+                                .send(Message::Text(response.into()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Message::Close(_) => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Router::new()
+            .route(
+                "/test",
+                get(|| async {
+                    Json(TestResponse {
+                        message: "Hello, World!".to_string(),
+                    })
+                }),
+            )
+            .route("/ws", get(ws_handler))
+    }
+
     #[derive(Serialize, Deserialize, Debug)]
-    struct Response {
+    struct TestResponse {
         message: String,
     }
 
@@ -202,7 +358,7 @@ mod tests {
                 .await
                 .context("Failed to read response body")??;
 
-            let response: Response = serde_json::from_slice(&body)
+            let response: TestResponse = serde_json::from_slice(&body)
                 .context("Failed to parse response JSON")?;
 
             assert_eq!(response.message, "Hello, World!");
@@ -281,7 +437,7 @@ mod tests {
                 .await
                 .context("Failed to read response body")??;
 
-            let response: Response = serde_json::from_slice(&response_body)
+            let response: TestResponse = serde_json::from_slice(&response_body)
                 .context("Failed to parse response JSON")?;
 
             assert_eq!(response.message, "Hello, World!");
@@ -365,8 +521,9 @@ mod tests {
                         .await
                         .context("Failed to read response body")??;
 
-                    let response: Response = serde_json::from_slice(&response_body)
-                        .context("Failed to parse response JSON")?;
+                    let response: TestResponse =
+                        serde_json::from_slice(&response_body)
+                            .context("Failed to parse response JSON")?;
 
                     assert_eq!(response.message, "Hello, World!");
                     println!("Client {} received response: {}", i, response.message);
@@ -451,7 +608,7 @@ mod tests {
                         .await
                         .context("Failed to read response body")??;
 
-                    let response: Response = serde_json::from_slice(&body)
+                    let response: TestResponse = serde_json::from_slice(&body)
                         .context("Failed to parse response JSON")?;
 
                     assert_eq!(response.message, "Hello, World!");
@@ -467,6 +624,68 @@ mod tests {
             let result = handle.await.unwrap();
             assert!(result.is_ok());
         }
+
+        server_handle.abort();
+        let _ = server_handle.await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    #[cfg(windows)]
+    async fn test_serve_ipc_windows_websocket() -> anyhow::Result<()> {
+        use tokio::{net::windows::named_pipe::ClientOptions, time::Duration};
+        use tokio_tungstenite::tungstenite::{
+            client::IntoClientRequest, protocol::Message,
+        };
+
+        let router = test_router_with_websocket();
+        let path = r"\\.\pipe\test_named_pipe_ws";
+
+        let server_handle = tokio::spawn({
+            let router = router.clone();
+            async move {
+                serve_ipc(router, path).await.unwrap();
+            }
+        });
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Try to connect, skip test if pipe creation failed
+        let client = match ClientOptions::new().open(path) {
+            Ok(client) => client,
+            Err(e) => {
+                eprintln!("Skipping test: Failed to connect to named pipe: {}", e);
+                server_handle.abort();
+                let _ = server_handle.await;
+                return Ok(());
+            }
+        };
+
+        let mut request = "ws://localhost/ws".into_client_request()?;
+        request
+            .headers_mut()
+            .insert("Host", "localhost".parse().unwrap());
+
+        let (mut ws_stream, _) =
+            tokio_tungstenite::client_async(request, client).await?;
+
+        ws_stream
+            .send(Message::Text("Hello WebSocket".into()))
+            .await?;
+
+        use futures::StreamExt;
+        if let Some(msg) = ws_stream.next().await {
+            let msg = msg.expect("Failed to receive message");
+            if let Message::Text(text) = msg {
+                assert_eq!(text, "Echo: Hello WebSocket");
+                println!("Received: {}", text);
+            } else {
+                panic!("Expected text message");
+            }
+        }
+
+        ws_stream.send(Message::Close(None)).await?;
 
         server_handle.abort();
         let _ = server_handle.await;

@@ -43,7 +43,7 @@ tun = [
 redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tracing = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
+telemetry = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 
 [dependencies]
 # Async
@@ -213,6 +213,7 @@ http-body-util = "0.1"
 [build-dependencies]
 prost-build = "0.14"
 protox = "0.9"
+anyhow = "1"
 
 [target.'cfg(any(target_os="linux", target_os="macos", target_os="windows"))'.dependencies]
 sock2proc = { git = "https://github.com/Watfaq/sock2proc.git", rev = "9f9e630" }
@@ -234,5 +235,8 @@ windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_Rras",
     "Win32_NetworkManagement_IpHelper",
-    "Win32_NetworkManagement_Ndis"
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Memory"
 ] }

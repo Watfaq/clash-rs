@@ -10,7 +10,7 @@ use quinn::{
 use register_count::Counter;
 use std::{
     collections::HashMap,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{Arc, atomic::AtomicU32},
     time::Duration,
 };
@@ -42,19 +42,29 @@ impl TuicEndpoint {
             // then rebind local socket
             if rebind {
                 debug!("rebinding endpoint UDP socket");
+                // TODO: we should try to resolve the server address once?
 
                 let socket = {
                     let iface = DEFAULT_OUTBOUND_INTERFACE.read().await;
-                    new_udp_socket(
-                        None,
-                        iface.as_ref(),
-                        #[cfg(target_os = "linux")]
-                        None,
-                        self.server
-                            .ip
-                            .map(|ip| SocketAddr::new(ip, self.server.port)),
-                    )
-                    .await?
+                    if resolver.ipv6() {
+                        new_udp_socket(
+                            Some((Ipv6Addr::UNSPECIFIED, 0).into()),
+                            iface.as_ref(),
+                            #[cfg(target_os = "linux")]
+                            sess.so_mark,
+                            None,
+                        )
+                        .await?
+                    } else {
+                        new_udp_socket(
+                            Some((Ipv4Addr::UNSPECIFIED, 0).into()),
+                            iface.as_ref(),
+                            #[cfg(target_os = "linux")]
+                            sess.so_mark,
+                            None,
+                        )
+                        .await?
+                    }
                 };
 
                 debug!("rebound endpoint UDP socket to {}", socket.local_addr()?);

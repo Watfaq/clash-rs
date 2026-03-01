@@ -17,6 +17,10 @@ test-no-docker:
   CLASH_RS_CI=true cargo test --all --all-features
 
 verge:
-  cargo build -p clash-rs --release --features=standard
+  cargo build -p clash-rs --profile detailed-release --features=standard
   rm -f "C:\Program Files\Clash Verge\verge-mihomo-alpha.exe"
+  rm -rf "C:\Users\iHsin\AppData\Roaming\io.github.clash-verge-rev.clash-verge-rev\logs"
   cp target/release/clash-rs.exe "C:\Program Files\Clash Verge\verge-mihomo-alpha.exe"
+
+test-proxy:
+  curl -x socks5h://127.0.0.1:7890 https://www.google.com
