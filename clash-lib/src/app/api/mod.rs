@@ -1,18 +1,16 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum::{
-    Router, ServiceExt, middleware,
-    response::{IntoResponse, Redirect, Response},
-    routing::{any, get, post},
+    Router, ServiceExt, body::Body, extract::Request, middleware, response::{IntoResponse, Redirect, Response}, routing::{any, get, post}
 };
+use bytes::Bytes;
 use http::{Method, StatusCode, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::{Layer, util::MapRequestLayer};
 use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
-    services::ServeDir,
+    classify::ServerErrorsFailureClass, cors::{AllowOrigin, Any, CorsLayer}, services::ServeDir, trace::TraceLayer
 };
-use tracing::{error, info, warn};
+use tracing::{Span, error, info, warn};
 
 use crate::{
     GlobalState, Runner,
@@ -112,7 +110,7 @@ pub fn get_api_runner(
         let mut router = Router::new()
             .route("/", get(handlers::hello::handle))
             .route("/version", get(handlers::version::handle))
-            .route("/memory", any(handlers::memory::handle))
+            .route("/memory", get(handlers::memory::handle))
             .route("/restart", post(handlers::restart::handle))
             .nest("/ws", websocket::routes(ctrl_state.clone()))
             .nest(
@@ -139,7 +137,47 @@ pub fn get_api_runner(
             .with_state(ctrl_state)
             .layer(middleware::from_fn(
                 middlewares::fix_json_content_type::fix_content_type,
-            ));
+            ))
+            .layer(
+                TraceLayer::new_for_http()
+                    .on_request(|request: &Request<Body>, _span: &Span| {
+                        tracing::debug!(
+                            "started {} {} {:?}",
+                            request.method(),
+                            request.uri().path(),
+                            request.headers()
+                        );
+                    })
+                    .on_response(
+                        |response: &Response<Body>,
+                         _latency: std::time::Duration,
+                         _span: &Span| {
+                            tracing::debug!(
+                                "completed {} {:?}",
+                                response.status(),
+                                response.headers()
+                            );
+                        },
+                    )
+                    .on_failure(
+                        |error: ServerErrorsFailureClass,
+                         latency: Duration,
+                         _span: &Span| {
+                            tracing::debug!(
+                                "something went wrong {error} after {latency:?}"
+                            );
+                        },
+                    )
+                    .on_body_chunk(
+                        |chunk: &Bytes, latency: Duration, _span: &Span| {
+                            tracing::debug!(
+                                "sending {} bytes after {latency:?} content: {}",
+                                chunk.len(),
+                                String::from_utf8_lossy(chunk)
+                            );
+                        },
+                    ),
+            );
 
         if let Some(external_ui) = controller_cfg.external_ui {
             router = router
