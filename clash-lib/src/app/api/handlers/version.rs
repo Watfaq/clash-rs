@@ -7,5 +7,6 @@ pub async fn handle() -> impl IntoResponse {
     json!({
         "version": VERSION,
         "meta": false
-    }).to_string()
+    })
+    .to_string()
 }

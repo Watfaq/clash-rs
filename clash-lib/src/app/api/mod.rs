@@ -1,14 +1,22 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum::{
-    Router, ServiceExt, body::Body, extract::Request, middleware, response::{IntoResponse, Redirect, Response}, routing::{any, get, post}
+    Router, ServiceExt,
+    body::Body,
+    extract::Request,
+    middleware,
+    response::{IntoResponse, Redirect, Response},
+    routing::{any, get, post},
 };
 use bytes::Bytes;
 use http::{Method, StatusCode, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::{Layer, util::MapRequestLayer};
 use tower_http::{
-    classify::ServerErrorsFailureClass, cors::{AllowOrigin, Any, CorsLayer}, services::ServeDir, trace::TraceLayer
+    classify::ServerErrorsFailureClass,
+    cors::{AllowOrigin, Any, CorsLayer},
+    services::ServeDir,
+    trace::TraceLayer,
 };
 use tracing::{Span, error, info, warn};
 
