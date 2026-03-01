@@ -317,12 +317,13 @@ mod tests {
         },
     };
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner,
+    use super::{
+        super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner},
+        *,
     };
-    use crate::proxy::utils::test_utils::run_test_suites_and_cleanup;
-
-    use super::*;
+    use crate::{
+        proxy::utils::test_utils::run_test_suites_and_cleanup, tests::initialize,
+    };
 
     // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
     // we shouldn't run the wireguard server with host mode, or
@@ -356,6 +357,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_wg() -> anyhow::Result<()> {
+        initialize();
         let opts = HandlerOptions {
             name: "wg".to_owned(),
             common_opts: Default::default(),

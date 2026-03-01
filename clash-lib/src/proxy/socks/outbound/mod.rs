@@ -262,102 +262,91 @@ mod tests {
 
     use std::sync::Arc;
 
-    use crate::proxy::{
-        socks::outbound::{Handler, HandlerOptions},
-        utils::{
-            GLOBAL_DIRECT_CONNECTOR,
-            test_utils::{
-                Suite,
-                consts::{IMAGE_SOCKS5, LOCAL_ADDR},
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-                run_test_suites_and_cleanup,
+    use crate::{
+        proxy::{
+            socks::outbound::{Handler, HandlerOptions},
+            utils::{
+                GLOBAL_DIRECT_CONNECTOR,
+                test_utils::{
+                    Suite,
+                    consts::{IMAGE_SOCKS5, LOCAL_ADDR},
+                    docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                    run_test_suites_and_cleanup,
+                },
             },
         },
+        tests::initialize,
     };
+
+    use super::super::super::utils::test_utils::docker_utils::config_helper::test_config_base_dir;
 
     const USER: &str = "user";
     const PASSWORD: &str = "password";
 
-    async fn get_socks5_runner(
-        port: u16,
-        username: Option<String>,
-        password: Option<String>,
-    ) -> anyhow::Result<DockerTestRunner> {
-        let host = format!("0.0.0.0:{}", port);
-        let username = username.unwrap_or_default();
-        let password = password.unwrap_or_default();
-        let cmd = if !username.is_empty() && !password.is_empty() {
-            vec![
-                "-a",
-                &host,
-                "-u",
-                username.as_str(),
-                "-p",
-                password.as_str(),
-            ]
+    async fn get_socks5_runner(auth: bool) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = if auth {
+            test_config_dir.join("socks5-auth.json")
         } else {
-            vec!["-a", &host]
+            test_config_dir.join("socks5-noauth.json")
         };
+
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SOCKS5)
-            .cmd(&cmd)
+            .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
             .build()
             .await
+    }
+
+    fn server_addr(runner: &DockerTestRunner) -> String {
+        if cfg!(target_os = "macos") {
+            runner.container_ip().expect("container IP not found")
+        } else {
+            LOCAL_ADDR.to_owned()
+        }
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
+        initialize();
+        let port = 10002;
+        let runner = get_socks5_runner(false).await?;
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
-            port: 10002,
+            server: server_addr(&runner),
+            port,
             user: None,
             password: None,
             udp: true,
             ..Default::default()
         };
-        let port = opts.port;
         let handler = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(
-            handler,
-            get_socks5_runner(port, None, None).await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_socks5_auth() -> anyhow::Result<()> {
         use crate::proxy::DialWithConnector;
-
+        initialize();
+        let port = 10002;
+        let runner = get_socks5_runner(true).await?;
         let opts = HandlerOptions {
-            name: "test-socks5-no-auth".to_owned(),
+            name: "test-socks5-auth".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
-            port: 10002,
+            server: server_addr(&runner),
+            port,
             user: Some(USER.to_owned()),
             password: Some(PASSWORD.to_owned()),
             udp: true,
             ..Default::default()
         };
-        let port = opts.port;
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            get_socks5_runner(
-                port,
-                Some(USER.to_owned()),
-                Some(PASSWORD.to_owned()),
-            )
-            .await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

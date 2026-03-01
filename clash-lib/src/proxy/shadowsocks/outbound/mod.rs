@@ -265,6 +265,7 @@ mod tests {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
+            .port(port)
             .entrypoint(&["ssserver"])
             .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
             .build()
@@ -280,6 +281,7 @@ mod tests {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
+            .port(port)
             .entrypoint(&["ssserver"])
             .cmd(&[
                 "-s",
@@ -340,7 +342,9 @@ mod tests {
         ss_port: u16,
         stls_port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
-        let ss_server_env = format!("SERVER=127.0.0.1:{}", ss_port);
+        // Use host.docker.internal to access SS server running in another
+        // container via host port mapping
+        let ss_server_env = format!("SERVER=host.docker.internal:{}", ss_port);
         let listen_env = format!("LISTEN=0.0.0.0:{}", stls_port);
         let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
         DockerTestRunnerBuilder::new()
@@ -363,6 +367,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_shadowtls() -> anyhow::Result<()> {
+        initialize();
         // the real port that used for communication
         let shadow_tls_port = 10002;
         // not important, you can assign any port that is not conflict with
@@ -398,7 +403,7 @@ mod tests {
         obfs_port: u16,
         mode: SimpleOBFSMode,
     ) -> anyhow::Result<DockerTestRunner> {
-        let ss_server_env = format!("127.0.0.1:{}", ss_port);
+        let ss_server_env = format!("host.docker.internal:{}", ss_port);
         let port = format!("{}", obfs_port);
         let mode = match mode {
             SimpleOBFSMode::Http => "http",
@@ -453,6 +458,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
+        initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 

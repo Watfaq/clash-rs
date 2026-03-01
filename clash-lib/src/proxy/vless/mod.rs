@@ -232,6 +232,7 @@ mod tests {
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
+            .port(8443)
             .mounts(&[
                 (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
