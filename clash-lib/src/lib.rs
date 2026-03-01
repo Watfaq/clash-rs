@@ -29,8 +29,6 @@ use crate::{
     proxy::OutboundHandler,
 };
 
-use axum::response::{IntoResponse, Response};
-use http::StatusCode;
 
 #[cfg(feature = "tun")]
 use proxy::tun::get_tun_runner;

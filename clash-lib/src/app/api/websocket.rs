@@ -1,9 +1,9 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
     extract::{
-        ConnectInfo, Query, State, WebSocketUpgrade,
+        Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
     response::IntoResponse,
@@ -12,16 +12,13 @@ use axum::{
 use serde_json::json;
 use tracing::{debug, warn};
 
-use crate::{
-    app::api::{
+use crate::app::api::{
         CtrlState,
         handlers::{
             connection::GetConnectionsQuery,
             memory::{GetMemoryQuery, GetMemoryResponse},
         },
-    },
-    proxy::group::smart::state,
-};
+    };
 
 pub fn routes(state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
     Router::new()
@@ -127,11 +124,10 @@ pub async fn memory(
 
 pub async fn log(
     ws: WebSocketUpgrade,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<CtrlState>>,
 ) -> impl IntoResponse {
     ws.on_failed_upgrade(move |e| {
-        warn!("ws upgrade error: {} with {}", e, addr);
+        warn!("ws upgrade error: {}", e);
     })
     .on_upgrade(move |mut socket| async move {
         let mut rx = state.log_source_tx.subscribe();

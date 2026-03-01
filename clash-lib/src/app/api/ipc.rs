@@ -1,15 +1,6 @@
-#[cfg(windows)]
-use std::convert::Infallible;
 
 #[cfg(windows)]
-use axum::{
-    Router,
-    extract::Request,
-    response::Response,
-    serve::{IncomingStream, Listener},
-};
-#[cfg(windows)]
-use tower::Service;
+use axum::Router;
 use tracing::error;
 
 #[cfg(windows)]
@@ -151,7 +142,7 @@ where
     use std::path::PathBuf;
     use tracing::info;
 
-    use axum::{extract::connect_info::Connected, serve::IncomingStream};
+    use axum::serve::IncomingStream;
     use std::sync::Arc;
     use tokio::net::UnixListener;
     let path = PathBuf::from(path);
@@ -177,27 +168,9 @@ where
         crate::Error::Operation(format!("Cannot bind on IPC address: {e}"))
     })?;
 
-    #[derive(Clone, Debug)]
-    #[allow(dead_code)]
-    struct UdsConnectInfo {
-        peer_addr: Arc<tokio::net::unix::SocketAddr>,
-        peer_cred: tokio::net::unix::UCred,
-    }
-
-    impl Connected<IncomingStream<'_, UnixListener>> for UdsConnectInfo {
-        fn connect_info(stream: IncomingStream<'_, UnixListener>) -> Self {
-            let peer_addr = stream.io().peer_addr().unwrap();
-            let peer_cred = stream.io().peer_cred().unwrap();
-            Self {
-                peer_addr: Arc::new(peer_addr),
-                peer_cred,
-            }
-        }
-    }
-
     axum::serve(
         uds,
-        app_clone.into_make_service_with_connect_info::<UdsConnectInfo>(),
+        app_clone.into_make_service::<UdsConnectInfo>(),
     )
     .await
     .map_err(|e| {

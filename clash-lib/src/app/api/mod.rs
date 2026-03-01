@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum::{
     Router, ServiceExt,
@@ -6,7 +6,7 @@ use axum::{
     extract::Request,
     middleware,
     response::{IntoResponse, Redirect, Response},
-    routing::{any, delete, get, post},
+    routing::{any, get, post},
 };
 use bytes::Bytes;
 use http::{Method, StatusCode, header};
@@ -23,7 +23,7 @@ use tracing::{Span, error, info, warn};
 use crate::{
     GlobalState, Runner,
     app::api::handlers::connection::{
-        self, close_all_connection, close_connection, get_connections,
+        self,
     },
     config::internal::config::Controller,
 };
@@ -257,7 +257,7 @@ pub fn get_api_runner(
                     middlewares::websocket_uri_rewrite::rewrite_websocket_uri,
                 )
                 .layer(router_clone)
-                .into_make_service_with_connect_info::<SocketAddr>();
+                .into_make_service();
 
                 axum::serve(listener, service).await.map_err(|x| {
                     error!("TCP API server error: {}", x);

@@ -1,22 +1,17 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use axum::{
     Router,
     extract::{
-        Path, Query, State, WebSocketUpgrade,
-        ws::{Message, WebSocket},
+        Path, State,
     },
     response::IntoResponse,
     routing::{delete, get},
 };
 
 use serde::Deserialize;
-use tracing::{debug, warn};
 
-use crate::app::{
-    api::{CtrlResult, CtrlState},
-    dispatcher::StatisticsManager,
-};
+use crate::app::api::{CtrlResult, CtrlState};
 
 pub fn routes(ctrl_state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
     Router::new()
