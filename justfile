@@ -2,7 +2,7 @@ verify:
   cargo run -p clash-rs -- -t
 
 run:
-  cargo run -p clash-rs -- -c config.yaml
+  cargo run -p clash-rs --profile detailed-release --features=standard -- -c config.yaml
 
 fmt:
   cargo +nightly fmt

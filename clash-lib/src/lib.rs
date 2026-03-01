@@ -29,7 +29,6 @@ use crate::{
     proxy::OutboundHandler,
 };
 
-
 #[cfg(feature = "tun")]
 use proxy::tun::get_tun_runner;
 

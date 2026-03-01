@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{
-        Path, State,
-    },
+    extract::{Path, State},
     response::IntoResponse,
     routing::{delete, get},
 };

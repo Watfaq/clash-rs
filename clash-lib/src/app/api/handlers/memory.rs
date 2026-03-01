@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use axum::{
-    Json,
-    extract::State,
-    response::IntoResponse,
-};
+use axum::{Json, extract::State, response::IntoResponse};
 
 use serde::{Deserialize, Serialize};
 

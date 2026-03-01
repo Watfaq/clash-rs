@@ -2,13 +2,10 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use axum::{
     Router, ServiceExt,
-    body::Body,
-    extract::Request,
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{any, get, post},
 };
-use bytes::Bytes;
 use http::{Method, StatusCode, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::{Layer, util::MapRequestLayer};
@@ -22,9 +19,7 @@ use tracing::{Span, error, info, warn};
 
 use crate::{
     GlobalState, Runner,
-    app::api::handlers::connection::{
-        self,
-    },
+    app::api::handlers::connection::{self},
     config::internal::config::Controller,
 };
 
@@ -147,47 +142,7 @@ pub fn get_api_runner(
             .with_state(ctrl_state)
             .layer(middleware::from_fn(
                 middlewares::fix_json_content_type::fix_content_type,
-            ))
-            .layer(
-                TraceLayer::new_for_http()
-                    .on_request(|request: &Request<Body>, _span: &Span| {
-                        tracing::debug!(
-                            "started {} {} {:?}",
-                            request.method(),
-                            request.uri().path(),
-                            request.headers()
-                        );
-                    })
-                    .on_response(
-                        |response: &Response<Body>,
-                         _latency: std::time::Duration,
-                         _span: &Span| {
-                            tracing::debug!(
-                                "completed {} {:?}",
-                                response.status(),
-                                response.headers()
-                            );
-                        },
-                    )
-                    .on_failure(
-                        |error: ServerErrorsFailureClass,
-                         latency: Duration,
-                         _span: &Span| {
-                            tracing::debug!(
-                                "something went wrong {error} after {latency:?}"
-                            );
-                        },
-                    )
-                    .on_body_chunk(
-                        |chunk: &Bytes, latency: Duration, _span: &Span| {
-                            tracing::debug!(
-                                "sending {} bytes after {latency:?} content: {}",
-                                chunk.len(),
-                                String::from_utf8_lossy(chunk)
-                            );
-                        },
-                    ),
-            );
+            ));
 
         if let Some(external_ui) = controller_cfg.external_ui {
             router = router

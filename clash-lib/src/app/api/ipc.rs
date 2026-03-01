@@ -1,7 +1,80 @@
-
-#[cfg(windows)]
 use axum::Router;
 use tracing::error;
+
+#[cfg(windows)]
+pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
+    use axum::ServiceExt;
+    use tower::{Layer, util::MapRequestLayer};
+    use tracing::info;
+
+    use crate::app::api::middlewares::websocket_uri_rewrite::rewrite_websocket_uri;
+    info!("Starting API server on NamedPipe {path}");
+
+    let listener = NamedPipeListener {
+        path: path.to_string(),
+        first_instance: true,
+    };
+    let app = MapRequestLayer::new(rewrite_websocket_uri).layer(router);
+
+    axum::serve(listener, app.into_make_service())
+        .await
+        .map_err(|e| {
+            error!("NamedPipe API server error: {}", e);
+            crate::Error::Operation(format!("NamedPipe API server error: {e}"))
+        })?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
+    use axum::ServiceExt;
+    use std::path::PathBuf;
+    use tower::{Layer, util::MapRequestLayer};
+    use tracing::info;
+
+    use crate::app::api::middlewares::websocket_uri_rewrite::rewrite_websocket_uri;
+    let path = PathBuf::from(path);
+
+    info!("Start API server on IPC address {:?}", path);
+
+    if let Err(e) = tokio::fs::remove_file(&path).await
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(crate::Error::Operation(format!(
+            "Cannot remove existing IPC file: {e}",
+        )));
+    }
+
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            crate::Error::Operation(format!("Cannot create IPC dir: {e}"))
+        })?;
+    }
+
+    let uds = tokio::net::UnixListener::bind(&path).map_err(|e| {
+        crate::Error::Operation(format!("Cannot bind on IPC address: {e}"))
+    })?;
+
+    let app = MapRequestLayer::new(rewrite_websocket_uri).layer(router);
+
+    axum::serve(uds, app.into_make_service())
+        .await
+        .map_err(|e| {
+            error!("IPC API Server error: {}", e);
+            crate::Error::Operation(format!("IPC API Server error: {e}"))
+        })
+}
+
+#[cfg(all(not(unix), not(windows)))]
+pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
+where
+    S: Clone + Send + 'static,
+{
+    error!("IPC only get supported on Unix and Windows");
+    Err(crate::Error::Operation(
+        "IPC only get supported on Unix and Windows".to_string(),
+    ))
+}
 
 #[cfg(windows)]
 fn create_pipe_security_attributes()
@@ -91,10 +164,27 @@ impl axum::serve::Listener for NamedPipeListener {
     type Io = NamedPipeServer;
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
-        use tracing::info;
-        let server =
-            create_named_pipe_with_security(&self.path, self.first_instance)
-                .expect("Failed to create named pipe");
+        use tracing::{info, warn};
+        use tokio::time::{sleep, Duration};
+        
+        let max_retries = 5;
+        let mut retry_count = 0;
+        
+        let server = loop {
+            match create_named_pipe_with_security(&self.path, self.first_instance) {
+                Ok(server) => break server,
+                Err(e) => {
+                    retry_count += 1;
+                    if retry_count >= max_retries {
+                        panic!("Failed to create named pipe after {} retries: {}", max_retries, e);
+                    }
+                    warn!("Failed to create named pipe (attempt {}/{}): {}. Retrying...", 
+                          retry_count, max_retries, e);
+                    sleep(Duration::from_millis(200 * retry_count as u64)).await;
+                }
+            }
+        };
+        
         self.first_instance = false;
         server
             .connect()
@@ -107,87 +197,6 @@ impl axum::serve::Listener for NamedPipeListener {
     fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
         Ok(())
     }
-}
-
-#[cfg(windows)]
-pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
-    use axum::ServiceExt;
-    use tower::{Layer, util::MapRequestLayer};
-    use tracing::info;
-
-    use crate::app::api::middlewares::websocket_uri_rewrite::rewrite_websocket_uri;
-    info!("Starting API server on NamedPipe {path}");
-
-    let listener = NamedPipeListener {
-        path: path.to_string(),
-        first_instance: true,
-    };
-    let app = MapRequestLayer::new(rewrite_websocket_uri).layer(router);
-
-    axum::serve(listener, app.into_make_service())
-        .await
-        .map_err(|e| {
-            error!("NamedPipe API server error: {}", e);
-            crate::Error::Operation(format!("NamedPipe API server error: {e}"))
-        })?;
-    Ok(())
-}
-
-#[cfg(unix)]
-pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
-where
-    S: Clone + Send + 'static,
-{
-    use axum::ServiceExt;
-    use std::path::PathBuf;
-    use tracing::info;
-
-    use axum::serve::IncomingStream;
-    use std::sync::Arc;
-    use tokio::net::UnixListener;
-    let path = PathBuf::from(path);
-    let app_clone = service.clone();
-
-    info!("Start API server on IPC address {:?}", path);
-
-    if let Err(e) = tokio::fs::remove_file(&path).await
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        return Err(crate::Error::Operation(format!(
-            "Cannot remove existing IPC file: {e}",
-        )));
-    }
-
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await.map_err(|e| {
-            crate::Error::Operation(format!("Cannot create IPC dir: {e}"))
-        })?;
-    }
-
-    let uds = tokio::net::UnixListener::bind(&path).map_err(|e| {
-        crate::Error::Operation(format!("Cannot bind on IPC address: {e}"))
-    })?;
-
-    axum::serve(
-        uds,
-        app_clone.into_make_service::<UdsConnectInfo>(),
-    )
-    .await
-    .map_err(|e| {
-        error!("IPC API Server error: {}", e);
-        crate::Error::Operation(format!("IPC API Server error: {e}"))
-    })
-}
-
-#[cfg(all(not(unix), not(windows)))]
-pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
-where
-    S: Clone + Send + 'static,
-{
-    error!("IPC only get supported on Unix and Windows");
-    Err(crate::Error::Operation(
-        "IPC only get supported on Unix and Windows".to_string(),
-    ))
 }
 
 #[cfg(test)]

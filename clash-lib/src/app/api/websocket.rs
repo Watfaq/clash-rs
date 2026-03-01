@@ -13,12 +13,12 @@ use serde_json::json;
 use tracing::{debug, warn};
 
 use crate::app::api::{
-        CtrlState,
-        handlers::{
-            connection::GetConnectionsQuery,
-            memory::{GetMemoryQuery, GetMemoryResponse},
-        },
-    };
+    CtrlState,
+    handlers::{
+        connection::GetConnectionsQuery,
+        memory::{GetMemoryQuery, GetMemoryResponse},
+    },
+};
 
 pub fn routes(state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
     Router::new()
