@@ -17,7 +17,7 @@ use hickory_server::{
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::crypto::aws_lc_rs::sign::any_supported_type;
-#[cfg(feature = "ring")]
+#[cfg(all(not(feature = "aws-lc-rs"), feature = "ring"))]
 use rustls::crypto::ring::sign::any_supported_type;
 use rustls::{server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey};
 use std::{sync::Arc, time::Duration};
