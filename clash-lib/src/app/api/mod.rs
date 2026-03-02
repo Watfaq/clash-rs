@@ -51,11 +51,7 @@ pub fn get_api_runner(
     cwd: String,
 ) -> Option<Runner> {
     let ipc_addr = controller_cfg.external_controller_ipc;
-    let tcp_addr = controller_cfg.external_controller;
-
-    if tcp_addr.is_none() && ipc_addr.is_none() {
-        return None;
-    }
+    let tcp_addr = controller_cfg.external_controller.filter(|v| !v.is_empty());
 
     let app_state = Arc::new(AppState {
         log_source_tx: log_source,

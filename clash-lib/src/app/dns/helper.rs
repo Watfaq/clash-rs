@@ -12,7 +12,6 @@ use std::{collections::HashMap, sync::Arc};
 use tracing::{debug, warn};
 
 use super::config::NameServer;
-use crate::print_and_exit;
 
 pub async fn make_clients(
     servers: Vec<NameServer>,
@@ -31,25 +30,12 @@ pub async fn make_clients(
             .cloned()
             .unwrap_or(Arc::new(proxy::direct::Handler::new(PROXY_DIRECT)));
 
-        let (host, port) = if s.net == DNSNetMode::Dhcp {
-            (s.address.as_str(), "0")
-        } else {
-            let port = s.address.split(':').next_back().unwrap();
-            let host = s
-                .address
-                .strip_suffix(format!(":{port}").as_str())
-                .unwrap_or_else(|| {
-                    print_and_exit!("invalid address: {}", s.address);
-                });
-            (host, port)
-        };
+        let port = if s.net == DNSNetMode::Dhcp { 0 } else { s.port };
 
         match DnsClient::new_client(Opts {
-            r: resolver.as_ref().cloned(),
-            host: host.to_string(),
-            port: port.parse::<u16>().unwrap_or_else(|_| {
-                print_and_exit!("invalid port: {}", port);
-            }),
+            father: resolver.as_ref().cloned(),
+            host: s.host.clone(),
+            port,
             net: s.net.to_owned(),
             iface: s
                 .interface

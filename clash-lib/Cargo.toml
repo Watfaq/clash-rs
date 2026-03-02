@@ -98,7 +98,7 @@ lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 network-interface = { version = "2" }
 base64 = "0.22"
-zstd = "0.13.3"
+zstd = "0.13"
 portable-atomic = { version = "1", features = ["serde"] }
 
 h2 = "0.4"
