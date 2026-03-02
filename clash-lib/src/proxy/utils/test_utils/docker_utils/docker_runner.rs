@@ -72,15 +72,10 @@ impl DockerTestRunner {
         self.inspect
             .network_settings
             .as_ref()
-            .map(|i| {
-                i.networks
-                    .as_ref()
-                    .unwrap()
-                    .values()
-                    .next()
-                    .map(|j| j.ip_address.as_ref().unwrap().to_string())
-            })
-            .flatten()
+            .and_then(|i| i.networks.as_ref())
+            .and_then(|b| b.values().next())
+            .and_then(|j| j.ip_address.as_ref())
+            .map(|r| r.to_string())
     }
 
     #[allow(unused)]
@@ -88,15 +83,10 @@ impl DockerTestRunner {
         self.inspect
             .network_settings
             .as_ref()
-            .map(|i| {
-                i.networks
-                    .as_ref()
-                    .unwrap()
-                    .values()
-                    .next()
-                    .map(|j| j.gateway.as_ref().unwrap().to_string())
-            })
-            .flatten()
+            .and_then(|i| i.networks.as_ref())
+            .and_then(|b| b.values().next())
+            .and_then(|j| j.gateway.as_ref())
+            .map(|r| r.to_string())
     }
 
     // you can run the cleanup manually
