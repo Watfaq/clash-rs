@@ -1,6 +1,7 @@
 [build]
 target-dir = "target"
 rustflags = ["--cfg", "tokio_unstable"]
+rustc-wrapper = "sccache"
 
 [env]
 SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }

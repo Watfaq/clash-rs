@@ -1,11 +1,12 @@
-use std::collections::HashMap;
-
 use axum::response::IntoResponse;
+use serde_json::json;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CLASH_VERSION_OVERRIDE");
 
 pub async fn handle() -> impl IntoResponse {
-    let mut val = HashMap::new();
-    val.insert("version".to_owned(), VERSION.to_owned());
-    axum::response::Json(val)
+    json!({
+        "version": VERSION,
+        "meta": false
+    })
+    .to_string()
 }

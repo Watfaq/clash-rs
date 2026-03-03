@@ -12,6 +12,8 @@ rust-project.json
 /build/
 docs
 .history
+debug.log
+wintun.dll
 
 # don't check in this real config
 ignore*.yaml

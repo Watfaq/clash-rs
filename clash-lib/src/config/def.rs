@@ -20,7 +20,7 @@ fn default_route_table() -> u32 {
     DEFAULT_ROUTE_TABLE
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
 pub enum DnsHijack {
     Switch(bool),
@@ -33,7 +33,7 @@ impl Default for DnsHijack {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct TunConfig {
     pub enable: bool,
@@ -72,7 +72,7 @@ pub struct TunConfig {
     pub dns_hijack: DnsHijack,
 }
 
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum RunMode {
     #[serde(alias = "Global")]
@@ -349,7 +349,7 @@ impl Display for LogLevel {
 ///   - MATCH, DIRECT
 /// ...
 /// ```
-#[derive(Deserialize, Educe)]
+#[derive(Deserialize, Educe, Debug)]
 #[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct Config {
@@ -424,7 +424,7 @@ pub struct Config {
     /// external controller address
     pub external_controller: Option<String>,
 
-    #[cfg_attr(not(unix), serde(alias = "external-controller-pipe"))]
+    #[cfg_attr(windows, serde(alias = "external-controller-pipe"))]
     #[cfg_attr(unix, serde(alias = "external-controller-unix"))]
     pub external_controller_ipc: Option<String>,
     /// dashboard folder path relative to the $CWD
@@ -532,7 +532,7 @@ pub enum DNSListen {
 ///   #   ipv6: 2001:db8::/56
 /// ```
 
-#[derive(Serialize, Deserialize, Educe)]
+#[derive(Serialize, Deserialize, Educe, Clone, Debug)]
 #[serde(rename_all = "kebab-case", default)]
 #[educe(Default)]
 pub struct DNS {
@@ -581,7 +581,7 @@ pub enum DNSMode {
     RedirHost,
 }
 
-#[derive(Serialize, Deserialize, Clone, Educe)]
+#[derive(Serialize, Deserialize, Clone, Educe, Debug)]
 #[serde(default)]
 #[educe(Default)]
 pub struct FallbackFilter {
@@ -607,14 +607,14 @@ pub struct EdnsClientSubnet {
     pub ipv6: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub struct Experimental {
     /// buffer size for tcp stream bidirectional copy
     pub tcp_buffer_size: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 #[serde(rename_all = "kebab-case")]
 pub struct Profile {

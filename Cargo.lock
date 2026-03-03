@@ -1288,6 +1288,7 @@ dependencies = [
  "human-panic",
  "sentry",
  "tikv-jemallocator",
+ "time",
 ]
 
 [[package]]

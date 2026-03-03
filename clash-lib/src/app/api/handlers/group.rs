@@ -14,7 +14,7 @@ use serde::Deserialize;
 use tracing::instrument;
 
 use crate::{
-    app::{api::AppState, outbound::manager::ThreadSafeOutboundManager},
+    app::{api::CtrlState, outbound::manager::ThreadSafeOutboundManager},
     proxy::AnyOutboundHandler,
 };
 
@@ -23,7 +23,9 @@ pub struct GroupState {
     outbound_manager: ThreadSafeOutboundManager,
 }
 
-pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppState>> {
+pub fn routes(
+    outbound_manager: ThreadSafeOutboundManager,
+) -> Router<Arc<CtrlState>> {
     let state = GroupState { outbound_manager };
     Router::new()
         .nest(

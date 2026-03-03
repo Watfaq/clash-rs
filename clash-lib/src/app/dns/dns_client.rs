@@ -669,6 +669,12 @@ async fn dns_stream_builder(
                 tls_config.dangerous().set_certificate_verifier(Arc::new(
                     tls::NoHostnameTlsVerifier::new(),
                 ));
+            } else if let url::Host::Ipv6(ip) = host
+                && IpAddr::V6(*ip) == addr.ip()
+            {
+                tls_config.dangerous().set_certificate_verifier(Arc::new(
+                    tls::NoHostnameTlsVerifier::new(),
+                ));
             }
             let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),

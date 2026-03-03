@@ -1,10 +1,10 @@
 use crate::def::LogLevel;
 use anyhow::anyhow;
-#[cfg(feature = "tracing")]
+#[cfg(feature = "telemetry")]
 use opentelemetry::trace::TracerProvider;
-#[cfg(feature = "tracing")]
+#[cfg(feature = "telemetry")]
 use opentelemetry_otlp::{Protocol, WithExportConfig};
-#[cfg(feature = "tracing")]
+#[cfg(feature = "telemetry")]
 use opentelemetry_semantic_conventions::{
     SCHEMA_URL,
     attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION},
@@ -14,13 +14,11 @@ use std::{io::IsTerminal, sync::Once};
 use tokio::sync::broadcast::Sender;
 use tracing::level_filters::LevelFilter;
 use tracing_log::LogTracer;
-#[cfg(feature = "tracing")]
+#[cfg(feature = "telemetry")]
 use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(target_os = "ios")]
 use tracing_oslog::OsLogger;
-use tracing_subscriber::{
-    EnvFilter, Layer, filter::filter_fn, fmt::time::LocalTime, prelude::*,
-};
+use tracing_subscriber::{Layer, fmt::time::LocalTime, prelude::*};
 
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
@@ -35,6 +33,7 @@ impl From<LogLevel> for LevelFilter {
     }
 }
 
+/// Represents a log event that can be broadcast to listeners.
 #[derive(Clone, Serialize)]
 pub struct LogEvent {
     #[serde(rename = "type")]
@@ -43,9 +42,11 @@ pub struct LogEvent {
     pub msg: String,
 }
 
+/// A tracing layer that collects log events and broadcasts them to subscribers.
 pub struct EventCollector(Vec<Sender<LogEvent>>);
 
 impl EventCollector {
+    /// Creates a new event collector with the given broadcast senders.
     pub fn new(receivers: Vec<Sender<LogEvent>>) -> Self {
         Self(receivers)
     }
@@ -81,15 +82,26 @@ where
 
 struct LoggingGuard {
     _file_appender: Option<tracing_appender::non_blocking::WorkerGuard>,
-    #[cfg(feature = "tracing")]
-    _tracing_chrome: Option<tracing_chrome::FlushGuard>,
-    #[cfg(feature = "tracing")]
+    #[cfg(feature = "telemetry")]
+    _tracing_chrome_guard: Option<tracing_chrome::FlushGuard>,
+    #[cfg(feature = "telemetry")]
     _tracer_provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
 }
 
 static SETUP_LOGGING: Once = Once::new();
 static mut LOGGING_GUARD: Option<LoggingGuard> = None;
 
+/// Initialize the logging system with the specified configuration.
+///
+/// This function sets up various logging layers including file output, console
+/// output, and optional telemetry tracing. It can only be called once during
+/// the application lifetime.
+///
+/// # Arguments
+/// * `level` - The minimum log level to capture
+/// * `collector` - Event collector for broadcasting log events
+/// * `cwd` - Current working directory for resolving relative paths
+/// * `log_file` - Optional path to a log file
 pub fn setup_logging(
     level: LogLevel,
     collector: EventCollector,
@@ -113,26 +125,42 @@ pub fn setup_logging(
     }
 }
 
-fn setup_logging_inner(
+/// Create a filter configuration for different components.
+fn create_filter(
     level: LogLevel,
-    collector: EventCollector,
+    _exclude: bool,
+) -> tracing_subscriber::filter::Targets {
+    #[allow(unused_mut)]
+    let mut filter = tracing_subscriber::filter::Targets::new()
+        .with_targets(vec![
+            ("clash_lib", level),
+            ("clash_bin", level),
+            ("clash_dns", level),
+            ("clash_netstack", level),
+        ])
+        .with_default(LevelFilter::WARN);
+
+    #[cfg(feature = "telemetry")]
+    {
+        if !_exclude {
+            filter = filter
+                .with_target("tokio", LevelFilter::TRACE)
+                .with_target("runtime", LevelFilter::TRACE);
+        }
+    }
+
+    filter
+}
+
+/// Setup file appender for logging to a file.
+fn setup_file_appender(
     cwd: &str,
     log_file: Option<String>,
-) -> anyhow::Result<Option<LoggingGuard>> {
-    let default_log_level = format!("warn,clash={level}");
-    let filter = EnvFilter::try_from_default_env()
-        .inspect(|f| {
-            eprintln!("using env log level: {f}");
-        })
-        .inspect_err(|_| {
-            if let Ok(log_level) = std::env::var("RUST_LOG") {
-                eprintln!("Failed to parse log level from environment: {log_level}");
-                eprintln!("Using default log level: {default_log_level}");
-            }
-        })
-        .unwrap_or(EnvFilter::new(default_log_level));
-
-    let (appender, guard) = if let Some(log_file) = log_file {
+) -> anyhow::Result<(
+    Option<tracing_appender::non_blocking::NonBlocking>,
+    Option<tracing_appender::non_blocking::WorkerGuard>,
+)> {
+    if let Some(log_file) = log_file {
         let path_buf = std::path::PathBuf::from(&log_file);
         let log_path = if path_buf.is_absolute() {
             log_file
@@ -146,77 +174,110 @@ fn setup_logging_inner(
                 .lossy(true)
                 .thread_name("clash-logger-appender")
                 .finish(writer);
-        (Some(non_blocking), Some(guard))
+        Ok((Some(non_blocking), Some(guard)))
     } else {
-        (None, None)
-    };
+        Ok((None, None))
+    }
+}
 
-    #[cfg(feature = "tracing")]
-    let (tracing_chrome, tracing_chrome_g) = if cfg!(feature = "tracing") {
-        let builder = tracing_chrome::ChromeLayerBuilder::new();
-        let (layer, guard) = builder.build();
-        (Some(layer), Some(guard))
-    } else {
-        (None, None)
-    };
+/// Setup chrome tracing layer if the feature is enabled.
+#[cfg(feature = "telemetry")]
+fn setup_chrome_tracing<S>()
+-> (tracing_chrome::ChromeLayer<S>, tracing_chrome::FlushGuard)
+where
+    S: tracing::Subscriber
+        + for<'a> tracing_subscriber::registry::LookupSpan<'a>
+        + Send
+        + Sync,
+{
+    let builder = tracing_chrome::ChromeLayerBuilder::new();
+    builder.build()
+}
 
-    #[cfg(feature = "tracing")]
+/// Setup OpenTelemetry tracing with OTLP exporter.
+#[cfg(feature = "telemetry")]
+fn setup_opentelemetry_tracing()
+-> anyhow::Result<opentelemetry_sdk::trace::SdkTracerProvider> {
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
         .with_protocol(Protocol::HttpBinary)
-        .build()
-        .unwrap();
+        .build()?;
 
-    #[cfg(feature = "tracing")]
+    let sampling_rate = if cfg!(debug_assertions) {
+        1.0 // 100% sampling in development
+    } else {
+        0.1 // 10% sampling in production
+    };
+
+    let environment = if cfg!(debug_assertions) {
+        "development"
+    } else {
+        "production"
+    };
+
     let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
-        // Customize sampling strategy
-        .with_sampler(opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(
-            if cfg!(debug_assertions) {
-                1.0 // 100% sampling in development
-            } else {
-                0.1 // 10% sampling in production
-            },
-        ))))
+        .with_sampler(opentelemetry_sdk::trace::Sampler::ParentBased(Box::new(
+            opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(sampling_rate),
+        )))
         .with_id_generator(opentelemetry_sdk::trace::RandomIdGenerator::default())
-        .with_resource(opentelemetry_sdk::Resource::builder()
-            .with_service_name(env!("CARGO_PKG_NAME"))
-            .with_schema_url(
-                [
-                    opentelemetry::KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-                    opentelemetry::KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME,  if cfg!(debug_assertions) {
-                        "development"
-                    } else {
-                        "production"
-                    }),
-            ],
-            SCHEMA_URL,
+        .with_resource(
+            opentelemetry_sdk::Resource::builder()
+                .with_service_name(env!("CARGO_PKG_NAME"))
+                .with_schema_url(
+                    [
+                        opentelemetry::KeyValue::new(
+                            SERVICE_VERSION,
+                            env!("CARGO_PKG_VERSION"),
+                        ),
+                        opentelemetry::KeyValue::new(
+                            DEPLOYMENT_ENVIRONMENT_NAME,
+                            environment,
+                        ),
+                    ],
+                    SCHEMA_URL,
+                )
+                .build(),
         )
-        .build())
         .with_batch_exporter(exporter)
         .build();
-    #[cfg(feature = "tracing")]
+
+    Ok(tracer_provider)
+}
+
+/// Create a timer formatter for log timestamps.
+fn create_timer()
+-> LocalTime<&'static [time::format_description::FormatItem<'static>]> {
+    LocalTime::new(time::macros::format_description!(
+        "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]:[subsecond]"
+    ))
+}
+
+fn setup_logging_inner(
+    level: LogLevel,
+    collector: EventCollector,
+    cwd: &str,
+    log_file: Option<String>,
+) -> anyhow::Result<Option<LoggingGuard>> {
+    let filter = create_filter(level, false);
+    let (appender, file_guard) = setup_file_appender(cwd, log_file)?;
+    let timer = create_timer();
+
+    // Create output filter for file and stdout layers
+    // When telemetry is enabled, exclude tokio and runtime targets
+    let output_filter = create_filter(level, true);
+
+    // Setup optional tracing features
+    #[cfg(feature = "telemetry")]
+    let (chrome_layer, chrome_guard) = setup_chrome_tracing();
+
+    #[cfg(feature = "telemetry")]
+    let tracer_provider = setup_opentelemetry_tracing()?;
+
+    #[cfg(feature = "telemetry")]
     let tracer = tracer_provider.tracer("tracing-otel-subscriber");
 
-    let subscriber = tracing_subscriber::registry();
-
-    // Collect and expose data about the Tokio runtime (tasks, threads, resources,
-    // etc.)
-    #[cfg(feature = "tracing")]
-    let subscriber = subscriber.with(console_subscriber::spawn());
-    #[cfg(feature = "tracing")]
-    let filter = filter
-        .add_directive("tokio=trace".parse().unwrap())
-        .add_directive("runtime=trace".parse().unwrap());
-    let exclude = filter_fn(|metadata| {
-        !metadata.target().contains("tokio")
-            && !metadata.target().contains("runtime")
-    });
-
-    let timer = LocalTime::new(time::macros::format_description!(
-        "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]:[subsecond]"
-    ));
-
-    let log_to_file_layer = appender.map(|x| {
+    // Build file logging layer if appender is available
+    let file_layer = appender.map(|writer| {
         tracing_subscriber::fmt::Layer::new()
             .with_timer(timer.clone())
             .with_ansi(false)
@@ -224,10 +285,12 @@ fn setup_logging_inner(
             .with_file(true)
             .with_line_number(true)
             .with_level(true)
-            .with_writer(x)
-            .with_filter(exclude.clone())
+            .with_writer(writer)
+            .with_filter(output_filter.clone())
     });
-    let log_stdout_layer = tracing_subscriber::fmt::Layer::new()
+
+    // Build stdout logging layer
+    let stdout_layer = tracing_subscriber::fmt::Layer::new()
         .with_timer(timer)
         .with_ansi(std::io::stdout().is_terminal())
         .compact()
@@ -237,28 +300,24 @@ fn setup_logging_inner(
         .with_level(true)
         .with_thread_ids(cfg!(debug_assertions))
         .with_writer(std::io::stdout)
-        .with_filter(exclude.clone());
+        .with_filter(output_filter);
 
-    let subscriber = {
-        #[cfg(feature = "tracing")]
-        {
-            subscriber
-        .with(filter) // Global filter
-        .with(tracing_chrome)
-        .with(OpenTelemetryLayer::new(tracer))
-        .with(collector.with_filter(exclude.clone()))
-        .with(log_to_file_layer)
-        .with(log_stdout_layer)
-        }
-        #[cfg(not(feature = "tracing"))]
-        {
-            subscriber.with(filter) // Global filter
-        .with(collector.with_filter(exclude.clone()))
-        .with(log_to_file_layer)
-        .with(log_stdout_layer)
-        }
-    };
+    // Build the subscriber with different layers based on features
+    let subscriber = tracing_subscriber::registry();
 
+    #[cfg(feature = "telemetry")]
+    let subscriber = subscriber
+        .with(console_subscriber::spawn())
+        .with(chrome_layer)
+        .with(OpenTelemetryLayer::new(tracer));
+
+    let subscriber = subscriber
+        .with(collector.with_filter(filter.clone()))
+        .with(file_layer)
+        .with(stdout_layer)
+        .with(filter);
+
+    // Add iOS-specific logging if on iOS
     #[cfg(target_os = "ios")]
     let subscriber =
         subscriber.with(Some(OsLogger::new("com.watfaq.clash", "default")));
@@ -267,10 +326,10 @@ fn setup_logging_inner(
         .map_err(|x| anyhow!("setup logging error: {}", x))?;
 
     Ok(Some(LoggingGuard {
-        _file_appender: guard,
-        #[cfg(feature = "tracing")]
-        _tracing_chrome: tracing_chrome_g,
-        #[cfg(feature = "tracing")]
+        _file_appender: file_guard,
+        #[cfg(feature = "telemetry")]
+        _tracing_chrome_guard: Some(chrome_guard),
+        #[cfg(feature = "telemetry")]
         _tracer_provider: Some(tracer_provider),
     }))
 }
@@ -279,31 +338,31 @@ struct EventVisitor<'a>(&'a mut Vec<String>);
 
 impl tracing::field::Visit for EventVisitor<'_> {
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        println!("f64 {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        println!("i64 {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        println!("u64 {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
-        println!("i128 {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
-        println!("u128 {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        println!("bool {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        println!("str {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_error(
@@ -311,7 +370,7 @@ impl tracing::field::Visit for EventVisitor<'_> {
         field: &tracing::field::Field,
         value: &(dyn std::error::Error + 'static),
     ) {
-        println!("error {} = {}", field.name(), value);
+        self.record_value(field, &value);
     }
 
     fn record_debug(
@@ -321,8 +380,20 @@ impl tracing::field::Visit for EventVisitor<'_> {
     ) {
         if field.name() == "message" {
             self.0.push(format!("{value:?}"));
-        } else {
-            println!("debug {} = {:?}", field.name(), value);
+        } else if field.name() != "message" {
+            self.0.push(format!("{}: {:?}", field.name(), value));
+        }
+    }
+}
+
+impl EventVisitor<'_> {
+    fn record_value<T: std::fmt::Display>(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &T,
+    ) {
+        if field.name() != "message" {
+            self.0.push(format!("{}: {}", field.name(), value));
         }
     }
 }
