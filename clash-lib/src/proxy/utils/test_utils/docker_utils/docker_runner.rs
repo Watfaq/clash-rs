@@ -170,6 +170,8 @@ impl MultiDockerTestRunner {
 
 #[async_trait::async_trait]
 pub trait RunAndCleanup {
+    /// Get the docker gateway IP address.
+    fn docker_gateway_ip(&self) -> Option<String>;
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -178,6 +180,10 @@ pub trait RunAndCleanup {
 
 #[async_trait::async_trait]
 impl RunAndCleanup for DockerTestRunner {
+    fn docker_gateway_ip(&self) -> Option<String> {
+        self.gateway_ip()
+    }
+
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -203,6 +209,10 @@ impl RunAndCleanup for DockerTestRunner {
 
 #[async_trait::async_trait]
 impl RunAndCleanup for MultiDockerTestRunner {
+    fn docker_gateway_ip(&self) -> Option<String> {
+        self.runners.iter().find_map(|d| d.gateway_ip())
+    }
+
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,

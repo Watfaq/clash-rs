@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 
 use rand::seq::IndexedRandom;
