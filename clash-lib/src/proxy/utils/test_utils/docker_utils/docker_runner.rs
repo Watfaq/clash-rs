@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bollard::{
-    Docker,
+    API_DEFAULT_VERSION, Docker,
     config::ContainerInspectResponse,
     models::ContainerCreateBody,
     query_parameters::{
@@ -25,7 +25,20 @@ impl DockerTestRunner {
         image_conf: Option<CreateImageOptions>,
         container_conf: ContainerCreateBody,
     ) -> anyhow::Result<Self> {
-        let docker: Docker = Docker::connect_with_socket_defaults()?;
+        let docker: Docker = if let Some(url) = option_env!("DOCKER_HOST") {
+            if url.starts_with("http://")
+                || url.starts_with("https://")
+                || url.starts_with("tcp://")
+            {
+                Docker::connect_with_http(url, 60, API_DEFAULT_VERSION)?
+            } else if url.starts_with("unix://") || url.starts_with("npipe://") {
+                Docker::connect_with_socket(url, 60, API_DEFAULT_VERSION)?
+            } else {
+                anyhow::bail!("invalid DOCKER_HOST url: {}", url);
+            }
+        } else {
+            Docker::connect_with_socket_defaults()?
+        };
 
         docker
             .create_image(image_conf, None, None)
