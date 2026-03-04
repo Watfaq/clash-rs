@@ -1,0 +1,60 @@
+---
+port: 8888
+socks-port: 8889
+mixed-port: 8899
+
+dns:
+  enable: true
+  listen: 127.0.0.1:53533
+  default-nameserver:
+    - 114.114.114.114
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - 114.114.114.114
+    - 8.8.8.8
+
+allow-lan: true
+mode: rule
+log-level: debug
+external-controller: 127.0.0.1:6170
+experimental:
+  ignore-resolve-fail: true
+
+proxies:
+  - name: "vless-tcp-reality"
+    type: vless
+    server: example.com
+    port: 443
+    uuid: 5415d8e0-df92-3655-afa4-b79de66413f5
+    network: tcp
+    flow: xtls-rprx-vision
+    tls: true
+    servername: www.icloud.com
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: zsfkzg3Jjsl2YcQCho_J-pFcHuCL7OGv3mtkDyIx3iw
+      short-id: 9c1adf35ef1c6b
+    udp: true
+
+  - name: "vless-tcp-plain"
+    type: vless
+    server: 127.0.0.1
+    port: 8443
+    tls: true
+    servername: example.com
+    network: tcp
+    skip-cert-verify: true
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    udp: true
+
+proxy-groups:
+  - name: "tcp-group"
+    type: select
+    proxies:
+      - vless-tcp-reality
+      - vless-tcp-plain
+
+rules:
+  - MATCH, tcp-group
