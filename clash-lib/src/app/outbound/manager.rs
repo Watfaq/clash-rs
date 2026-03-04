@@ -502,7 +502,7 @@ impl OutboundManager {
                 DEFAULT_LATENCY_TEST_URL.to_owned(),
                 interval,
                 lazy,
-                proxy_manager.clone(),
+                proxy_manager,
             );
 
             let pd = Arc::new(RwLock::new(

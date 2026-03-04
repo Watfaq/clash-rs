@@ -236,3 +236,6 @@ windows = { version = "0.62", features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis"
 ] }
+
+[lints]
+workspace = true
