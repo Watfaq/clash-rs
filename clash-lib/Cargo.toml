@@ -202,6 +202,7 @@ mockall = "0.14.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.0"
 bollard = "0.20"
+tar = "0.4.44"
 serial_test = "3.3"
 env_logger = "0.11"
 # donnot change the version, russh is not compatible with the latest version of rand_core

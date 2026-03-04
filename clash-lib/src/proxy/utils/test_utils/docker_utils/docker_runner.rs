@@ -1,16 +1,20 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
+use anyhow;
 use bollard::{
-    API_DEFAULT_VERSION, Docker,
+    API_DEFAULT_VERSION, Docker, body_full, body_try_stream,
     config::ContainerInspectResponse,
     models::ContainerCreateBody,
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
         LogsOptions, RemoveContainerOptions, StartContainerOptions,
+        UploadToContainerOptions,
     },
     secret::{HostConfig, Mount, PortBinding},
 };
+use bytes::Bytes;
 use futures::{Future, TryStreamExt};
+use tar;
 
 const TIMEOUT_DURATION: u64 = 30;
 
@@ -23,7 +27,7 @@ pub struct DockerTestRunner {
 impl DockerTestRunner {
     pub async fn try_new(
         image_conf: Option<CreateImageOptions>,
-        container_conf: ContainerCreateBody,
+        mut container_conf: ContainerCreateBody,
     ) -> anyhow::Result<Self> {
         let docker: Docker = if let Some(url) = option_env!("DOCKER_HOST") {
             if url.starts_with("http://")
@@ -45,13 +49,91 @@ impl DockerTestRunner {
             .try_collect::<Vec<_>>()
             .await?;
 
-        let id = docker
+        // For remote Docker, we need to handle mounts differently
+        let mounts = container_conf
+            .host_config
+            .as_mut()
+            .and_then(|hc| hc.mounts.take());
+        let files_to_copy = if option_env!("DOCKER_HOST")
+            .map(|url| {
+                url.starts_with("http://")
+                    || url.starts_with("https://")
+                    || url.starts_with("tcp://")
+            })
+            .unwrap_or(false)
+        {
+            // Remote Docker - collect files to copy via API
+            mounts
+        } else {
+            // Local Docker - keep mounts in config
+            if let Some(mounts) = mounts {
+                container_conf.host_config.as_mut().unwrap().mounts = Some(mounts);
+            }
+            None
+        };
+
+        let container = docker
             .create_container(
                 Some(CreateContainerOptions::default()),
                 container_conf,
             )
-            .await?
-            .id;
+            .await?;
+        let id = container.id;
+
+        // Copy files to container if needed (for remote Docker)
+        if let Some(mounts) = files_to_copy {
+            for mount in mounts {
+                if let (Some(source), Some(target)) =
+                    (mount.source.as_deref(), mount.target.as_deref())
+                {
+                    // Create tar archive with full path structure
+                    let mut ar = tar::Builder::new(Vec::new());
+
+                    // Remove leading slash for tar path
+                    let tar_path = if target.starts_with('/') {
+                        &target[1..]
+                    } else {
+                        target
+                    };
+
+                    let source_path = Path::new(source);
+                    let metadata = std::fs::metadata(source_path)?;
+
+                    if metadata.is_file() {
+                        // Handle single file
+                        let content = std::fs::read(source_path)?;
+                        let mut header = tar::Header::new_gnu();
+                        header.set_size(content.len() as u64);
+                        header.set_mode(0o644);
+                        ar.append_data(&mut header, tar_path, &content[..])?;
+                    } else if metadata.is_dir() {
+                        // Handle directory recursively using sync operations
+                        // append_dir_all will recursively add all files from
+                        // source_path with tar_path as the
+                        // prefix in the archive
+                        ar.append_dir_all(tar_path, source_path)?;
+                    } else {
+                        anyhow::bail!(
+                            "Unsupported file type for source: {}",
+                            source
+                        );
+                    }
+                    let tar_data = ar.into_inner()?;
+
+                    // Upload to container root directory
+                    docker
+                        .upload_to_container(
+                            &id,
+                            Some(UploadToContainerOptions {
+                                path: "/".to_string(),
+                                ..Default::default()
+                            }),
+                            body_full(Bytes::from(tar_data)),
+                        )
+                        .await?;
+                }
+            }
+        }
 
         // Try to start the container, cleanup if it fails
         if let Err(e) = docker
@@ -79,6 +161,9 @@ impl DockerTestRunner {
             inspect,
         })
     }
+
+    // Removed start() method - file copy logic is now integrated into try_new()
+    // This method was problematic because it tried to use self in a static method
 
     #[allow(unused)]
     pub fn container_ip(&self) -> Option<String> {
