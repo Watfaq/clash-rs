@@ -98,8 +98,7 @@ impl TryFrom<&OutboundVless> for Handler {
                                         h.cloned()
                                     })
                                 })
-                                .unwrap_or(s.common_opts.server.to_owned())
-                                ,
+                                .unwrap_or(s.common_opts.server.to_owned()),
                         ),
                         s.network
                             .as_ref()
