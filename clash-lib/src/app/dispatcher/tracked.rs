@@ -143,7 +143,7 @@ impl TrackedStream {
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
                 rule_payload: rule
-                    .map(|x| x.payload().to_owned())
+                    .map(|x| x.payload())
                     .unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()
@@ -459,7 +459,7 @@ impl TrackedDatagram {
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
                 rule_payload: rule
-                    .map(|x| x.payload().to_owned())
+                    .map(|x| x.payload())
                     .unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()

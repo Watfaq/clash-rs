@@ -157,8 +157,8 @@ impl Handler {
         };
 
         // Set up periodic persistence for smart_stats
-        let cache_store_clone = cache_store.clone();
-        let group_name_clone = group_name.clone();
+        let cache_store_clone = cache_store;
+        let group_name_clone = group_name;
         let state_clone = Arc::clone(&handler.smart_state);
 
         tokio::spawn(async move {

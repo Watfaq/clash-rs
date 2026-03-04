@@ -93,7 +93,7 @@ impl NetStack {
         let (tcp_inbound_app, tcp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();
         let tcp_listener =
-            TcpListener::new(tcp_outbound_stack, packet_sender.clone());
+            TcpListener::new(tcp_outbound_stack, packet_sender);
 
         let stack = NetStack {
             udp_inbound: udp_inbound_app,

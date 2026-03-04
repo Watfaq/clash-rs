@@ -99,7 +99,7 @@ impl TryFrom<&OutboundVless> for Handler {
                                     })
                                 })
                                 .unwrap_or(s.common_opts.server.to_owned())
-                                .to_owned(),
+                                ,
                         ),
                         s.network
                             .as_ref()
