@@ -263,9 +263,9 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(over_stream: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(opt_ip: Option<String>, over_stream: bool) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
-            addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(), PORT).to_string(),
+            addr: SocketAddr::new(opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(), PORT).to_string(),
             password: "12345678".into(),
             username: "87654321".into(),
             server_name: "echo.free.beeceptor.com".into(),
@@ -281,7 +281,12 @@ mod tests {
     #[serial_test::serial]
     async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(false)?;
+
+        let container = get_shadowquic_runner().await?;
+
+        let container_ip =container.container_ip();
+
+        let opts = gen_options(container_ip,false)?;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
@@ -289,7 +294,7 @@ mod tests {
             .await;
         run_test_suites_and_cleanup(
             handler,
-            get_shadowquic_runner().await?,
+            container,
             Suite::all(),
         )
         .await
@@ -298,7 +303,11 @@ mod tests {
     #[serial_test::serial]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
-        let mut opts = gen_options(true)?;
+        let container = get_shadowquic_runner().await?;
+
+        let container_ip =container.container_ip();
+
+        let mut opts = gen_options(container_ip,true)?;
         opts.over_stream = true;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
@@ -307,7 +316,7 @@ mod tests {
             .await;
         run_test_suites_and_cleanup(
             handler,
-            get_shadowquic_runner().await?,
+            container,
             Suite::all(),
         )
         .await

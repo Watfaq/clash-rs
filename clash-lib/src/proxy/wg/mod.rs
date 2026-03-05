@@ -358,10 +358,13 @@ mod tests {
     #[serial_test::serial]
     async fn test_wg() -> anyhow::Result<()> {
         initialize();
+
+        let runner = get_runner().await?;
+        
         let opts = HandlerOptions {
             name: "wg".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: runner.container_ip().unwrap_or("127.0.0.1".to_owned()),
             port: 10002,
             ip: Ipv4Addr::new(10, 13, 13, 2),
             ipv6: None,
@@ -386,7 +389,7 @@ mod tests {
         // on bridge network mode and the `net.ipv4.conf.all.
         // src_valid_mark` is not supported in the host network mode the
         // latency test should be enough
-        let runner = get_runner().await?;
+        
         // FIXME: wait for the startup of the test runner in a more elegant way
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         run_test_suites_and_cleanup(

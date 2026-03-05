@@ -405,10 +405,10 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(skip_cert_verify: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(container_ip: Option<String>,skip_cert_verify: bool) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
-            server: LOCAL_ADDR.into(),
+            server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
             port: PORT,
             common_opts: Default::default(),
             uuid: "00000000-0000-0000-0000-000000000001".parse()?,
@@ -437,13 +437,15 @@ mod tests {
     #[serial_test::serial]
     async fn test_tuic_skip_cert_verify() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(true)?;
+
+        let container = get_tuic_runner().await?;
+        let opts = gen_options(container.container_ip(),true)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_tuic_runner().await?, Suite::all())
+        run_test_suites_and_cleanup(handler,container , Suite::all())
             .await
     }
 
@@ -451,7 +453,11 @@ mod tests {
     #[serial_test::serial]
     async fn test_tuic_cert_verify_expect_fail() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(false)?;
+
+        let container = get_tuic_runner().await?;
+
+        let opts = gen_options(container.container_ip(),false)?;
+
 
         let handler = Arc::new(Handler::new(opts));
         handler
@@ -459,7 +465,7 @@ mod tests {
             .await;
         let res = run_test_suites_and_cleanup(
             handler,
-            get_tuic_runner().await?,
+            container,
             Suite::all(),
         )
         .await;

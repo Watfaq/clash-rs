@@ -786,10 +786,13 @@ mod tests {
     async fn test_smart_group_smoke() -> anyhow::Result<()> {
         initialize();
         let ss_port = 10002;
+
+        let docker_runner = get_ss_runner(ss_port).await?;
+
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss-for-smart".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
+            server: docker_runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: ss_port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
@@ -840,7 +843,7 @@ mod tests {
         );
         let any_smart_handler: AnyOutboundHandler = Arc::new(smart_handler_instance);
 
-        let docker_runner = get_ss_runner(ss_port).await?;
+
 
         run_test_suites_and_cleanup(any_smart_handler, docker_runner, Suite::all())
             .await

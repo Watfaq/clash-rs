@@ -299,11 +299,7 @@ mod tests {
     }
 
     fn server_addr(runner: &DockerTestRunner) -> String {
-        if cfg!(target_os = "macos") {
-            runner.container_ip().expect("container IP not found")
-        } else {
-            LOCAL_ADDR.to_owned()
-        }
+        runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned())
     }
 
     #[tokio::test]

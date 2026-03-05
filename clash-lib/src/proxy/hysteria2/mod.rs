@@ -634,7 +634,12 @@ mod tests {
     #[serial_test::serial]
     async fn test_hysteria() -> anyhow::Result<()> {
         initialize();
-        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+        let container = get_hysteria_runner().await?;
+
+        let container_ip = container.container_ip().unwrap_or("127.0.0.1".to_owned());
+
+        let ip = IpAddr::from_str(&container_ip).unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         let port = 10002;
 
         let obfs = Some(Obfs::Salamander(SalamanderObfs {
@@ -671,7 +676,7 @@ mod tests {
             .await;
         run_test_suites_and_cleanup(
             handler,
-            get_hysteria_runner().await?,
+            container,
             Suite::all(),
         )
         .await
