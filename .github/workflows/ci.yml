@@ -44,5 +44,5 @@ jobs:
       image-name: 'clash-rs'
       platforms: 'linux/amd64,linux/arm64'
       binary-dir: './packages'
-      server-binary-amd64: 'bin-x86_64-linux-musl'
-      server-binary-arm64: 'bin-aarch64-linux-musl'
+      server-binary-amd64: 'clash-rs-x86_64-linux-musl'
+      server-binary-arm64: 'clash-rs-aarch64-linux-musl'
