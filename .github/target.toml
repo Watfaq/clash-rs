@@ -92,7 +92,7 @@ release-name = "mips-unknown-linux-musl"
 tool = "cross"
 extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
 build-std = true
-no-test = true
+skip-test = true
 
 [[target]]
 os = "ubuntu-latest"
@@ -101,7 +101,7 @@ release-name = "mipsel-unknown-linux-musl"
 tool = "cross"
 extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
 build-std = true
-no-test = true
+skip-test = true
 
 # Windows
 [[target]]
@@ -124,7 +124,7 @@ target = "aarch64-pc-windows-msvc"
 release-name = "aarch64-pc-windows-msvc"
 postfix = ".exe"
 extra-args = "-F standard"
-no-test = true
+skip-test = true
 
 # Windows static-crt variations
 [[target]]
@@ -163,7 +163,7 @@ target = "x86_64-unknown-freebsd"
 release-name = "x86_64-unknown-freebsd"
 tool = "cross"
 extra-args = "--no-default-features -F bsd"
-no-test = true
+skip-test = true
 
 # Android
 [[target]]
@@ -173,4 +173,4 @@ release-name = "x86_64-linux-android"
 tool = "cross"
 extra-args = "--no-default-features -F android"
 no-release = true
-no-test = true
+skip-test = true
