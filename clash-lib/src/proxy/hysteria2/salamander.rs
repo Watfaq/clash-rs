@@ -105,29 +105,44 @@ impl AsyncUdpSocket for Salamander {
         bufs: &mut [IoSliceMut<'_>],
         meta: &mut [RecvMeta],
     ) -> Poll<std::io::Result<usize>> {
-        // the number of udp packets received
         let packet_nums = ready!(self.inner.poll_recv(cx, bufs, meta))?;
-        meta.iter().take(packet_nums).for_each(|v| {
-            tracing::trace!("meta addr {:?}, dst_ip: {:?}", v.addr, v.dst_ip);
-        });
-        bufs.iter_mut()
-            .zip(meta.iter_mut())
-            // first step take and then filter
-            .take(packet_nums)
-            .filter(|(_, meta)| meta.len > 8)
-            .for_each(|(v, meta)| {
-                let buf = v.deref_mut();
-                let len = meta.len;
-                // decrypt in place, and drop first 8 bytes
-                self.obfs.decrypt(&mut buf[..len]);
-                // Move decrypted data to the beginning of the buffer
-                // This avoids unsafe transmute and is more portable
-                buf.copy_within(8..len, 0);
-                // MUST update meta.len
-                meta.len -= 8;
-            });
 
-        Poll::Ready(Ok(packet_nums))
+        let mut valid_count = 0;
+
+        for i in 0..packet_nums {
+            tracing::trace!(
+                "meta addr {:?}, dst_ip: {:?}",
+                meta[i].addr,
+                meta[i].dst_ip
+            );
+
+            // Salamander packets must have at least 8 bytes (salt) + 1 byte (data)
+            if meta[i].len <= 8 {
+                tracing::debug!(
+                    "invalid salamander packet: len={}, addr={:?}",
+                    meta[i].len,
+                    meta[i].addr
+                );
+                continue;
+            }
+
+            let len = meta[i].len;
+            let buf = bufs[i].deref_mut();
+
+            // Decrypt and strip the 8-byte salt prefix
+            self.obfs.decrypt(&mut buf[..len]);
+            buf.copy_within(8..len, 0);
+
+            // Compact valid packets to the front
+            if i != valid_count {
+                meta[valid_count] = meta[i];
+                bufs.swap(i, valid_count);
+            }
+            meta[valid_count].len -= 8;
+            valid_count += 1;
+        }
+
+        Poll::Ready(Ok(valid_count))
     }
 
     fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
