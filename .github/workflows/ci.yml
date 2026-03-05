@@ -1,4 +1,4 @@
-name: CI (reusable)
+name: CI
 
 on:
   push:
@@ -7,13 +7,38 @@ on:
   pull_request:
     branches: ["master"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build
     uses: rust-proxy/workflows/.github/workflows/rust-build-extended.yml@main
     with:
+      rust-toolchain: "stable"
       packages: "clash-rs"
       package-name: "clash"
-      image-name: "clash-rs"
-      registry: "ghcr.io"
-      rust-toolchain: "stable"
-      retention-days: 1
+      rustflags: ""
+
+  release:
+    name: Release
+    needs: [build]
+    uses: rust-proxy/workflows/.github/workflows/release-publish.yml@main
+    with:
+      cliff-config: '.github/cliff.toml'
+
+  docker:
+    name: Docker
+    needs: [build]
+    uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@main
+    secrets:
+      dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+    with:
+      docker-file: '.github/Dockerfile'
+      image-name: 'clash-rs'
+      platforms: 'linux/amd64,linux/arm64'
+      binary-dir: './packages'
+      server-binary-amd64: 'clash-x86_64-unknown-linux-musl'
+      server-binary-arm64: 'clash-aarch64-unknown-linux-musl'
