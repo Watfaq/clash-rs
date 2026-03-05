@@ -327,7 +327,7 @@ mod tests {
             plugin: Default::default(),
             udp: false,
         };
-        
+
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())

@@ -128,29 +128,32 @@ async fn test_connections_returns_proxy_chain_names() {
 
     wait_port_ready(8899).expect("Proxy port is not ready");
 
-    std::thread::spawn(move || {
-        // NOTE: use curl here for easy socks5h testing
-        let curl_args = vec![
-            "-s",
-            "-x",
-            "socks5h://127.0.0.1:8899",
-            "https://httpbin.yba.dev/drip?duration=100&delay=1&numbytes=1000",
-        ];
+    tokio::spawn(async {
+        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:8899")
+            .expect("Failed to create proxy");
 
-        let output = std::process::Command::new("curl")
-            .args(curl_args)
-            .output()
-            .expect("Failed to execute curl command");
+        let client = reqwest::Client::builder()
+            .proxy(proxy)
+            .build()
+            .expect("Failed to build reqwest client");
+
+        let response = client
+            .get("https://httpbin.yba.dev/drip?duration=100&delay=1&numbytes=1000")
+            .send()
+            .await
+            .expect("Failed to send request through proxy");
 
         assert!(
-            output.status.success(),
-            "Curl command failed with output: {}, stderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            response.status().is_success(),
+            "Request failed with status: {}",
+            response.status()
         );
     });
 
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Yield to allow the spawned task to start, then wait for connection to
+    // establish
+    tokio::task::yield_now().await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
 
     let connections_url = "http://127.0.0.1:9090/connections";
 
