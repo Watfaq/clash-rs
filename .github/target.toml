@@ -110,6 +110,7 @@ target = "x86_64-pc-windows-msvc"
 release-name = "x86_64-pc-windows-msvc"
 postfix = ".exe"
 extra-args = "-F plus"
+nasm = true
 
 [[target]]
 os = "windows-latest"
@@ -117,6 +118,7 @@ target = "i686-pc-windows-msvc"
 release-name = "i686-pc-windows-msvc"
 postfix = ".exe"
 extra-args = "-F plus"
+nasm = true
 
 [[target]]
 os = "windows-latest"
@@ -124,6 +126,7 @@ target = "aarch64-pc-windows-msvc"
 release-name = "aarch64-pc-windows-msvc"
 postfix = ".exe"
 extra-args = "-F standard"
+nasm = true
 skip-test = true
 
 # Windows static-crt variations
