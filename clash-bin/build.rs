@@ -8,7 +8,8 @@ fn main() {
         println!("cargo:rerun-if-env-changed={var}");
     }
 
-    // Prefer explicit CLASH_* vars; fall back to GITHUB_* which are set by GitHub Actions
+    // Prefer explicit CLASH_* vars; fall back to GITHUB_* which are set by GitHub
+    // Actions
     let git_ref = option_env!("CLASH_GIT_REF").or(option_env!("GITHUB_REF"));
     let git_sha = option_env!("CLASH_GIT_SHA").or(option_env!("GITHUB_SHA"));
 
