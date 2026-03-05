@@ -242,14 +242,14 @@ mod tests {
         let port = 10002;
         let container = get_ss_runner(port).await?;
 
-        let container_ip =container.container_ip();
+        let container_ip = container.container_ip();
 
         debug!("container ip: {:?}", container_ip);
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
             server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
-            port: port,
+            port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
             plugin: Default::default(),
@@ -271,12 +271,7 @@ mod tests {
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     #[tokio::test]
@@ -286,7 +281,7 @@ mod tests {
         let port = 10002;
         let container = get_ss_runner(port).await?;
 
-        let container_ip =container.container_ip();
+        let container_ip = container.container_ip();
 
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
@@ -314,11 +309,6 @@ mod tests {
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

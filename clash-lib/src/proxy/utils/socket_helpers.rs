@@ -152,8 +152,12 @@ pub async fn new_udp_socket(
                 #[cfg(target_os = "windows")]
                 {
                     let bind_addr = match family {
-                        socket2::Domain::IPV4 => "0.0.0.0:0".parse::<SocketAddr>().unwrap(),
-                        socket2::Domain::IPV6 => "[::]:0".parse::<SocketAddr>().unwrap(),
+                        socket2::Domain::IPV4 => {
+                            "0.0.0.0:0".parse::<SocketAddr>().unwrap()
+                        }
+                        socket2::Domain::IPV6 => {
+                            "[::]:0".parse::<SocketAddr>().unwrap()
+                        }
                         _ => "0.0.0.0:0".parse::<SocketAddr>().unwrap(),
                     };
                     socket.bind(&socket2::SockAddr::from(bind_addr))?;

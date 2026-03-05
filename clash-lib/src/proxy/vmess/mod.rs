@@ -325,8 +325,7 @@ mod tests {
             transport: Some(Box::new(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(handler, container, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -373,7 +372,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, container, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

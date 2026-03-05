@@ -210,6 +210,7 @@ rand_chacha = "=0.3"
 httpmock = "0.8.2" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
+reqwest = { version = "0.12", features = ["socks"] }
 
 [build-dependencies]
 prost-build = "0.14"

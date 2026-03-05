@@ -263,9 +263,16 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(opt_ip: Option<String>, over_stream: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(
+        opt_ip: Option<String>,
+        over_stream: bool,
+    ) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
-            addr: SocketAddr::new(opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(), PORT).to_string(),
+            addr: SocketAddr::new(
+                opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(),
+                PORT,
+            )
+            .to_string(),
             password: "12345678".into(),
             username: "87654321".into(),
             server_name: "echo.free.beeceptor.com".into(),
@@ -284,20 +291,15 @@ mod tests {
 
         let container = get_shadowquic_runner().await?;
 
-        let container_ip =container.container_ip();
+        let container_ip = container.container_ip();
 
-        let opts = gen_options(container_ip,false)?;
+        let opts = gen_options(container_ip, false)?;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
     #[tokio::test]
     #[serial_test::serial]
@@ -305,20 +307,15 @@ mod tests {
         initialize();
         let container = get_shadowquic_runner().await?;
 
-        let container_ip =container.container_ip();
+        let container_ip = container.container_ip();
 
-        let mut opts = gen_options(container_ip,true)?;
+        let mut opts = gen_options(container_ip, true)?;
         opts.over_stream = true;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

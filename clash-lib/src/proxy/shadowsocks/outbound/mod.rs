@@ -238,7 +238,6 @@ impl OutboundHandler for Handler {
 
 #[cfg(all(test, docker_test))]
 mod tests {
-    use bollard::container;
     use crate::{
         proxy::{
             transport::*,
@@ -254,6 +253,7 @@ mod tests {
         },
         tests::initialize,
     };
+    use bollard::container;
 
     use super::*;
 
@@ -333,12 +333,7 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_shadowtls_runner(
@@ -348,7 +343,11 @@ mod tests {
     ) -> anyhow::Result<DockerTestRunner> {
         // Use host.docker.internal to access SS server running in another
         // container via host port mapping
-        let ss_server_env = format!("SERVER={}:{}", ss_ip.unwrap_or("host.docker.internal".to_owned()),ss_port);
+        let ss_server_env = format!(
+            "SERVER={}:{}",
+            ss_ip.unwrap_or("host.docker.internal".to_owned()),
+            ss_port
+        );
         let listen_env = format!("LISTEN=0.0.0.0:{}", stls_port);
         let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
         DockerTestRunnerBuilder::new()
@@ -380,7 +379,12 @@ mod tests {
 
         let container1 = get_ss_runner(ss_port).await?;
 
-        let container2 = get_shadowtls_runner(container1.container_ip(),ss_port, shadow_tls_port).await?;
+        let container2 = get_shadowtls_runner(
+            container1.container_ip(),
+            ss_port,
+            shadow_tls_port,
+        )
+        .await?;
 
         let client =
             Shadowtls::new("www.feishu.cn".to_owned(), "password".to_owned(), true);
@@ -399,8 +403,7 @@ mod tests {
         // them can be destroyed after the test
         let mut chained = MultiDockerTestRunner::default();
         chained.add_with_runner(container1);
-        chained
-            .add_with_runner(container2);
+        chained.add_with_runner(container2);
         // currently, shadow-tls does't support udp proxy
         // see: https://github.com/ihciah/shadow-tls/issues/54
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
@@ -412,7 +415,11 @@ mod tests {
         obfs_port: u16,
         mode: SimpleOBFSMode,
     ) -> anyhow::Result<DockerTestRunner> {
-        let ss_server_env = format!("{}:{}",ss_ip.unwrap_or("host.docker.internal".to_owned()), ss_port);
+        let ss_server_env = format!(
+            "{}:{}",
+            ss_ip.unwrap_or("host.docker.internal".to_owned()),
+            ss_port
+        );
         let port = format!("{}", obfs_port);
         let mode = match mode {
             SimpleOBFSMode::Http => "http",
@@ -439,7 +446,9 @@ mod tests {
         let ss_port = 10004;
 
         let container1 = get_ss_runner(ss_port).await?;
-        let container2 = get_obfs_runner(container1.container_ip(), ss_port, obfs_port, mode).await?;
+        let container2 =
+            get_obfs_runner(container1.container_ip(), ss_port, obfs_port, mode)
+                .await?;
 
         let host = "www.bing.com".to_owned();
         let plugin = match mode {
@@ -462,8 +471,7 @@ mod tests {
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         let mut chained = MultiDockerTestRunner::default();
         chained.add_with_runner(container1);
-        chained
-            .add_with_runner(container2);
+        chained.add_with_runner(container2);
         run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
     }
 
@@ -509,11 +517,6 @@ mod tests {
         };
 
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::tcp_tests(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::tcp_tests()).await
     }
 }

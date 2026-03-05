@@ -271,7 +271,7 @@ mod tests {
             transport: Some(Box::new(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        
+
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

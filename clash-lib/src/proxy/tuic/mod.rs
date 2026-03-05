@@ -405,7 +405,10 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(container_ip: Option<String>,skip_cert_verify: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(
+        container_ip: Option<String>,
+        skip_cert_verify: bool,
+    ) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
             server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
@@ -439,14 +442,13 @@ mod tests {
         initialize();
 
         let container = get_tuic_runner().await?;
-        let opts = gen_options(container.container_ip(),true)?;
+        let opts = gen_options(container.container_ip(), true)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler,container , Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     #[tokio::test]
@@ -456,19 +458,14 @@ mod tests {
 
         let container = get_tuic_runner().await?;
 
-        let opts = gen_options(container.container_ip(),false)?;
-
+        let opts = gen_options(container.container_ip(), false)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        let res = run_test_suites_and_cleanup(
-            handler,
-            container,
-            Suite::all(),
-        )
-        .await;
+        let res =
+            run_test_suites_and_cleanup(handler, container, Suite::all()).await;
         assert!(res.is_err());
         assert!(res.unwrap_err().to_string().contains(
             "the cryptographic handshake failed: error 45: invalid peer \

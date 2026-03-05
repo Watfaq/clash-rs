@@ -267,9 +267,9 @@ mod tests {
         );
         let tls =
             transport::TlsClient::new(true, "example.org".to_owned(), None, None);
-        
+
         let container = get_ws_runner().await?;
-        
+
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
             common_opts: Default::default(),
@@ -285,8 +285,7 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         // ignore the udp test
-        run_test_suites_and_cleanup(handler, container, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -340,7 +339,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, runner, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

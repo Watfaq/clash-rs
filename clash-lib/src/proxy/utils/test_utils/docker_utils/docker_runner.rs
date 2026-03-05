@@ -156,35 +156,46 @@ impl DockerTestRunner {
         Ok(Self {
             instance: docker,
             id,
-            inspect
+            inspect,
         })
     }
 
     #[allow(unused)]
     pub fn container_ip(&self) -> Option<String> {
-        self.inspect.network_settings.as_ref()
+        self.inspect
+            .network_settings
+            .as_ref()
             .and_then(|i| i.networks.as_ref())
             .and_then(|b| {
                 b.values().find_map(|j| {
-                    [(&j.gateway, &j.ip_address), (&j.ipv6_gateway, &j.global_ipv6_address)]
-                        .into_iter()
-                        .find(|(gateway, _)| gateway.as_ref().map_or(false, |g| !g.is_empty()))
-                        .and_then(|(_, ip)| ip.as_ref())
-                        .filter(|ip| !ip.is_empty())
-                        .map(|ip| ip.to_string())
+                    [
+                        (&j.gateway, &j.ip_address),
+                        (&j.ipv6_gateway, &j.global_ipv6_address),
+                    ]
+                    .into_iter()
+                    .find(|(gateway, _)| {
+                        gateway.as_ref().map_or(false, |g| !g.is_empty())
+                    })
+                    .and_then(|(_, ip)| ip.as_ref())
+                    .filter(|ip| !ip.is_empty())
+                    .map(|ip| ip.to_string())
                 })
             })
     }
 
     #[allow(unused)]
     pub fn gateway_ip(&self) -> Option<String> {
-        self.inspect.network_settings.as_ref()
+        self.inspect
+            .network_settings
+            .as_ref()
             .and_then(|i| i.networks.as_ref())
             .and_then(|b| {
                 b.values().find_map(|j| {
                     [(&j.gateway), (&j.ipv6_gateway)]
                         .into_iter()
-                        .find(|(gateway)| gateway.as_ref().map_or(false, |g| !g.is_empty()))
+                        .find(|(gateway)| {
+                            gateway.as_ref().map_or(false, |g| !g.is_empty())
+                        })
                         .and_then(|(gateway)| gateway.as_ref())
                         .filter(|ip| !ip.is_empty())
                         .map(|ip| ip.to_string())
