@@ -116,15 +116,13 @@ impl AsyncUdpSocket for Salamander {
             .take(packet_nums)
             .filter(|(_, meta)| meta.len > 8)
             .for_each(|(v, meta)| {
-                let x = &mut v.deref_mut()[..meta.len];
+                let buf = v.deref_mut();
+                let len = meta.len;
                 // decrypt in place, and drop first 8 bytes
-                self.obfs.decrypt(x);
-                let data = &mut x[8..];
-                unsafe {
-                    //  because IoSliceMut is transparent and .0 is also transparent, so it is a &[u8]
-                    let b: IoSliceMut<'_> = std::mem::transmute(data);
-                    *v = b;
-                }
+                self.obfs.decrypt(&mut buf[..len]);
+                // Move decrypted data to the beginning of the buffer
+                // This avoids unsafe transmute and is more portable
+                buf.copy_within(8..len, 0);
                 // MUST update meta.len
                 meta.len -= 8;
             });
