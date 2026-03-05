@@ -20,6 +20,7 @@ jobs:
       packages: "clash-rs"
       target-config-file: ".github/target.toml"
       rustflags: ""
+      enable-tmate: true
 
   release:
     name: Release
