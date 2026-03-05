@@ -21,6 +21,7 @@ jobs:
       target-config-file: ".github/target.toml"
       rustflags: ""
       enable-tmate: true
+      only-clippy-tests-on-pr: true
 
   release:
     name: Release
