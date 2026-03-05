@@ -1,7 +1,7 @@
 FROM alpine:latest
-# Define an ARG for the target architecture
-ARG TARGETARCH
-COPY ./clash-rs/clash-${TARGETARCH} /usr/bin/clash
+# Accept binary name via build-arg to support different naming schemes
+ARG BINARY_NAME=clash
+COPY ./clash-rs/${BINARY_NAME} /usr/bin/clash
 # The yq library installed here is used to rewrite the config.yaml configuration file for clash, merge it, and other related operations.
 RUN apk update && apk add --no-cache -f yq && mkdir -p /root/.config/clash/ && chmod +x /usr/bin/clash
 WORKDIR /root
