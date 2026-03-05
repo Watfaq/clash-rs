@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build:
     name: Build
-    uses: rust-proxy/workflows/.github/workflows/rust-build.yml@v1.0.7
+    uses: rust-proxy/workflows/.github/workflows/rust-build.yml@main
     with:
       rust-toolchain: "stable"
       packages: "clash-rs"
@@ -26,7 +26,7 @@ jobs:
   release:
     name: Release
     needs: [build]
-    uses: rust-proxy/workflows/.github/workflows/release-publish.yml@v1.0.7
+    uses: rust-proxy/workflows/.github/workflows/release-publish.yml@main
     with:
       cliff-config: '.github/cliff.toml'
       create-latest-on-push: true
@@ -34,7 +34,7 @@ jobs:
   docker:
     name: Docker
     needs: [build]
-    uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@v1.0.7
+    uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@main
     secrets:
       dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
       dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
