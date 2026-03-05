@@ -29,6 +29,7 @@ jobs:
     uses: rust-proxy/workflows/.github/workflows/release-publish.yml@v1.0.7
     with:
       cliff-config: '.github/cliff.toml'
+      create-latest-on-push: true
 
   docker:
     name: Docker
