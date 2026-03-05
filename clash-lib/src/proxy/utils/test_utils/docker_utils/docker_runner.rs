@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path};
 
 use anyhow;
 use bollard::{
-    API_DEFAULT_VERSION, Docker, body_full, body_try_stream,
+    API_DEFAULT_VERSION, Docker, body_full,
     config::ContainerInspectResponse,
     models::ContainerCreateBody,
     query_parameters::{

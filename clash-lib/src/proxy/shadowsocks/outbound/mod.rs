@@ -253,7 +253,6 @@ mod tests {
         },
         tests::initialize,
     };
-    use bollard::container;
 
     use super::*;
 
@@ -328,7 +327,7 @@ mod tests {
             plugin: Default::default(),
             udp: false,
         };
-        let port = opts.port;
+        
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())

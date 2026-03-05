@@ -288,6 +288,7 @@ mod tests {
     /// `/config/sshd/sshd_config` in the container.
     /// before starting the container, we need to generate host key pairs in
     /// /tmp/.xxx/ssh/ssh_host_keys.
+    #[allow(unused)]
     async fn get_openssh_server_runner(
         ssh_config_path: PathBuf,
     ) -> anyhow::Result<DockerTestRunner> {
@@ -308,6 +309,7 @@ mod tests {
             .await
     }
 
+    #[allow(unused)]
     fn gen_ssh_key_pair(
         algo: russh::keys::Algorithm,
     ) -> anyhow::Result<(String, String)> {
@@ -324,12 +326,14 @@ mod tests {
     }
 
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct TestOption {
         password: bool,                // password or private key
         rsa: bool,                     // rsa or ed25519
         host_key: Option<Vec<String>>, // host key
     }
 
+    #[allow(unused)]
     async fn test_ssh_inner(opt: TestOption) -> anyhow::Result<()> {
         tracing::info!("testing ssh, using option: {:?}", opt);
         // dirty works: prepare ssh config directory for the docker container &
