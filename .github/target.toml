@@ -1,0 +1,180 @@
+# Clash-rs Build Target Configuration
+# Fully expanded from original CI matrix include
+
+# Linux GNU
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-gnu"
+release-name = "x86_64-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-linux-gnu"
+release-name = "i686-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+
+# Linux MUSL
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-musl"
+release-name = "x86_64-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F perf"
+
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-linux-musl"
+release-name = "i686-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F plus"
+
+# Static-CRT Linux
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-gnu"
+release-name = "x86_64-unknown-linux-gnu-static-crt"
+tool = "cross"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+# ARM GNU
+[[target]]
+os = "ubuntu-latest"
+target = "aarch64-unknown-linux-gnu"
+release-name = "aarch64-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-gnueabi"
+release-name = "armv7-unknown-linux-gnueabi"
+tool = "cross"
+extra-args = "-F plus"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-gnueabihf"
+release-name = "armv7-unknown-linux-gnueabihf"
+tool = "cross"
+extra-args = "-F plus"
+
+# ARM MUSL
+[[target]]
+os = "ubuntu-latest"
+target = "aarch64-unknown-linux-musl"
+release-name = "aarch64-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F perf"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-musleabihf"
+release-name = "armv7-unknown-linux-musleabihf"
+tool = "cross"
+extra-args = "-F plus"
+
+# RISC-V
+[[target]]
+os = "ubuntu-latest"
+target = "riscv64gc-unknown-linux-gnu"
+release-name = "riscv64gc-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F standard"
+
+# MIPS
+[[target]]
+os = "ubuntu-latest"
+target = "mips-unknown-linux-musl"
+release-name = "mips-unknown-linux-musl"
+tool = "cross"
+extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
+build-std = true
+skip-test = true
+
+[[target]]
+os = "ubuntu-latest"
+target = "mipsel-unknown-linux-musl"
+release-name = "mipsel-unknown-linux-musl"
+tool = "cross"
+extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
+build-std = true
+skip-test = true
+
+# Windows
+[[target]]
+os = "windows-latest"
+target = "x86_64-pc-windows-msvc"
+release-name = "x86_64-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F plus"
+nasm = true
+
+[[target]]
+os = "windows-latest"
+target = "i686-pc-windows-msvc"
+release-name = "i686-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F plus"
+nasm = true
+
+[[target]]
+os = "windows-latest"
+target = "aarch64-pc-windows-msvc"
+release-name = "aarch64-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F standard"
+nasm = true
+skip-test = true
+
+# Windows static-crt variations
+[[target]]
+os = "windows-latest"
+target = "x86_64-pc-windows-msvc"
+release-name = "x86_64-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+[[target]]
+os = "windows-latest"
+target = "i686-pc-windows-msvc"
+release-name = "i686-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+# macOS
+[[target]]
+os = "macos-latest"
+target = "x86_64-apple-darwin"
+release-name = "x86_64-apple-darwin"
+extra-args = "-F plus"
+
+[[target]]
+os = "macos-latest"
+target = "aarch64-apple-darwin"
+release-name = "aarch64-apple-darwin"
+extra-args = "-F plus"
+
+# BSD
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-freebsd"
+release-name = "x86_64-unknown-freebsd"
+tool = "cross"
+extra-args = "--no-default-features -F bsd"
+skip-test = true
+
+# Android
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-linux-android"
+release-name = "x86_64-linux-android"
+tool = "cross"
+extra-args = "--no-default-features -F android"
+no-release = true
+skip-test = true
