@@ -6,6 +6,7 @@ use std::{path::PathBuf, time::Duration};
 
 mod common;
 
+#[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 async fn test_get_set_allow_lan() {
@@ -83,6 +84,7 @@ async fn test_get_set_allow_lan() {
     );
 }
 
+#[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 async fn test_connections_returns_proxy_chain_names() {

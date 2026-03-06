@@ -2,14 +2,13 @@ use std::collections::HashMap;
 
 use bollard::{
     Docker,
+    config::ContainerInspectResponse,
     models::ContainerCreateBody,
-    query_parameters::{CreateImageOptions, LogsOptions},
+    query_parameters::{
+        CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
+        LogsOptions, RemoveContainerOptions, StartContainerOptions,
+    },
     secret::{HostConfig, Mount, PortBinding},
-};
-
-use bollard::query_parameters::{
-    CreateContainerOptions, CreateImageOptionsBuilder, RemoveContainerOptions,
-    StartContainerOptions,
 };
 use futures::{Future, TryStreamExt};
 
@@ -18,6 +17,7 @@ const TIMEOUT_DURATION: u64 = 30;
 pub struct DockerTestRunner {
     instance: Docker,
     id: String,
+    inspect: ContainerInspectResponse,
 }
 
 impl DockerTestRunner {
@@ -39,13 +39,54 @@ impl DockerTestRunner {
             )
             .await?
             .id;
-        docker
+
+        // Try to start the container, cleanup if it fails
+        if let Err(e) = docker
             .start_container(&id, Some(StartContainerOptions::default()))
-            .await?;
+            .await
+        {
+            // Cleanup the created container before returning error
+            let _ = docker
+                .remove_container(
+                    &id,
+                    Some(RemoveContainerOptions {
+                        force: true,
+                        ..Default::default()
+                    }),
+                )
+                .await;
+            return Err(e.into());
+        }
+
+        let inspect = docker.inspect_container(&id, None).await?;
+
         Ok(Self {
             instance: docker,
             id,
+            inspect,
         })
+    }
+
+    #[allow(unused)]
+    pub fn container_ip(&self) -> Option<String> {
+        self.inspect
+            .network_settings
+            .as_ref()
+            .and_then(|i| i.networks.as_ref())
+            .and_then(|b| b.values().next())
+            .and_then(|j| j.ip_address.as_ref())
+            .map(|r| r.to_string())
+    }
+
+    #[allow(unused)]
+    pub fn gateway_ip(&self) -> Option<String> {
+        self.inspect
+            .network_settings
+            .as_ref()
+            .and_then(|i| i.networks.as_ref())
+            .and_then(|b| b.values().next())
+            .and_then(|j| j.gateway.as_ref())
+            .map(|r| r.to_string())
     }
 
     // you can run the cleanup manually
@@ -104,6 +145,10 @@ impl MultiDockerTestRunner {
                      error: {:?}",
                     e
                 );
+                // Cleanup all previously added containers before returning error
+                for runner in std::mem::take(&mut self.runners) {
+                    let _ = runner.cleanup().await;
+                }
                 Err(e)
             }
         }
@@ -328,7 +373,6 @@ pub fn get_host_config(port: u16) -> HostConfig {
             .into_iter()
             .collect::<HashMap<_, _>>(),
         ),
-        // we need to use the host mode to enable the benchmark function
         #[cfg(not(target_os = "macos"))]
         network_mode: Some("host".to_owned()),
         ..Default::default()

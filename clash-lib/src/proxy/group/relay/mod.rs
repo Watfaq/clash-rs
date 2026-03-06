@@ -208,17 +208,19 @@ mod tests {
 
     use tokio::sync::RwLock;
 
-    use crate::proxy::{
-        mocks::MockDummyProxyProvider,
-        utils::test_utils::{
-            Suite,
-            consts::*,
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup,
-        },
-    };
-
     use super::*;
+    use crate::{
+        proxy::{
+            mocks::MockDummyProxyProvider,
+            utils::test_utils::{
+                Suite,
+                consts::*,
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
 
     const PASSWORD: &str = "FzcLbKs2dY9mhL";
     const CIPHER: &str = "aes-256-gcm";
@@ -236,6 +238,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_1() -> anyhow::Result<()> {
+        initialize();
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
@@ -273,6 +276,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_2() -> anyhow::Result<()> {
+        initialize();
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),

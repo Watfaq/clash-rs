@@ -761,6 +761,7 @@ mod tests {
                 run_test_suites_and_cleanup,
             },
         },
+        tests::initialize,
     };
     use tempfile::tempdir;
     use tokio::sync::RwLock;
@@ -783,7 +784,8 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_smart_group_smoke() -> anyhow::Result<()> {
-        let ss_port = 10003;
+        initialize();
+        let ss_port = 10002;
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss-for-smart".to_owned(),
             common_opts: Default::default(),

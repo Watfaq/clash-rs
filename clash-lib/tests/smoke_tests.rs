@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod common;
 
+#[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 /// Test Shadowsocks inbound and outbound functionality

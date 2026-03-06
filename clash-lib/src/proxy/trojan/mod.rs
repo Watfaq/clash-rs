@@ -217,18 +217,20 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::proxy::{
-        transport,
-        utils::test_utils::{
-            Suite,
-            config_helper::test_config_base_dir,
-            consts::*,
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup,
-        },
-    };
-
     use super::*;
+    use crate::{
+        proxy::{
+            transport,
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                consts::*,
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
@@ -305,6 +307,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
+        initialize();
         let transport = transport::GrpcClient::new(
             "example.org".to_owned(),
             "example"
