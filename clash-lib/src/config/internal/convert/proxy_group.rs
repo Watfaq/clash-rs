@@ -21,7 +21,7 @@ pub fn convert(
                     }
                 })?);
             proxy_names.push(group.name());
-            rv.insert(group.name().to_string(), group);
+            rv.insert(group.name(), group);
             Ok::<HashMap<String, OutboundProxy>, Error>(rv)
         },
     )

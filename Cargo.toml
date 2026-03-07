@@ -12,7 +12,7 @@ members = [
 
 
 [workspace.package]
-version = "0.9.4"
+version = "0.9.5"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
@@ -25,3 +25,10 @@ lto = "thin"
 strip = true
 debug = 2
 panic = "abort"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+redundant_clone = "deny"
+needless_collect = "deny"
