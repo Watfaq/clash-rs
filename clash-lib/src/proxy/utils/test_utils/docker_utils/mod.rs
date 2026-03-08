@@ -95,28 +95,34 @@ pub async fn ping_pong_test(
         let chunk = "hello";
         let mut buf = vec![0; 5];
 
-        tracing::info!("proxy_fn start write");
+        tracing::info!("proxy_fn(tcp) start write");
 
-        for _ in 0..100 {
+        for i in 0..100 {
             write_half
                 .write_all(chunk.as_bytes())
                 .await
                 .inspect_err(|x| {
-                    tracing::error!("proxy_fn write error: {x:?}");
+                    tracing::error!(
+                        "proxy_fn(tcp) write error at iteration {}: {x:?}",
+                        i
+                    );
                 })?;
         }
         write_half.flush().await?;
 
         tracing::info!("proxy_fn start read");
 
-        for _ in 0..100 {
+        for i in 0..100 {
             read_half.read_exact(&mut buf).await.inspect_err(|x| {
-                tracing::error!("proxy_fn read error: {x:?}");
+                tracing::error!(
+                    "proxy_fn(tcp) read error at iteration {}: {x:?}",
+                    i
+                );
             })?;
             assert_eq!(buf, "world".as_bytes().to_owned());
         }
 
-        tracing::info!("proxy_fn end");
+        tracing::info!("proxy_fn(tcp) end");
 
         Ok(())
     }
@@ -128,6 +134,8 @@ pub async fn ping_pong_test(
         let mut first_error: Option<anyhow::Error> = None;
 
         for destination in &destination_list {
+            tracing::trace!("Attempting TCP connection to: {}", destination);
+
             let dst: SocksAddr = match (destination.clone(), port).try_into() {
                 Ok(addr) => addr,
                 Err(e) => {
@@ -137,18 +145,36 @@ pub async fn ping_pong_test(
             };
 
             let sess = Session {
-                destination: dst,
+                destination: dst.clone(),
                 ..Default::default()
             };
 
-            let stream = match handler.connect_stream(&sess, resolver.clone()).await
+            let stream = match tokio::time::timeout(
+                Duration::from_secs(5),
+                handler.connect_stream(&sess, resolver.clone()),
+            )
+            .await
             {
-                Ok(stream) => stream,
-                Err(e) => {
-                    tracing::error!("Failed to proxy connection: {}", e);
+                Ok(Ok(stream)) => {
+                    tracing::info!("Successfully connected to: {:?}", dst);
+                    stream
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(
+                        "Failed to proxy connection to {:?}: {}",
+                        dst,
+                        e
+                    );
                     if first_error.is_none() {
                         first_error = Some(e.into());
                     }
+                    continue;
+                }
+                Err(_) => {
+                    tracing::error!(
+                        "connect_stream timeout (5s) for destination: {}",
+                        destination
+                    );
                     continue;
                 }
             };
@@ -205,14 +231,26 @@ pub async fn ping_pong_udp_test(
         let chunk = "world";
         let mut buf = vec![0; 5];
 
+        tracing::info!(
+            "destination_fn(udp) waiting for data on {}",
+            listener.local_addr()?
+        );
         tracing::trace!("destination_fn start read");
 
-        let (_, src) = listener.recv_from(&mut buf).await?;
+        let (len, src) = listener.recv_from(&mut buf).await?;
+        tracing::info!(
+            "destination_fn(udp) received {} bytes from {}: {:?}",
+            len,
+            src,
+            &buf[..len]
+        );
         assert_eq!(&buf, b"hello");
 
+        tracing::info!("destination_fn(udp) sending response to {}", src);
         tracing::trace!("destination_fn start write");
 
-        listener.send_to(chunk.as_bytes(), src).await?;
+        let sent = listener.send_to(chunk.as_bytes(), src).await?;
+        tracing::info!("destination_fn(udp) sent {} bytes", sent);
 
         tracing::trace!("destination_fn end");
         Ok(())
@@ -228,8 +266,15 @@ pub async fn ping_pong_udp_test(
         dst_addr: SocksAddr,
     ) -> anyhow::Result<()> {
         // let (mut sink, mut stream) = datagram.split();
-        let packet = UdpPacket::new(b"hello".to_vec(), src_addr, dst_addr);
+        let packet =
+            UdpPacket::new(b"hello".to_vec(), src_addr.clone(), dst_addr.clone());
 
+        tracing::info!(
+            "proxy_fn(udp) sending packet: src={:?}, dst={:?}, data={:?}",
+            src_addr,
+            dst_addr,
+            b"hello"
+        );
         tracing::trace!("proxy_fn(udp) start write");
 
         datagram.send(packet.clone()).await.map_err(|x| {
@@ -237,15 +282,36 @@ pub async fn ping_pong_udp_test(
             anyhow::Error::new(x)
         })?;
 
+        tracing::info!(
+            "proxy_fn(udp) packet sent successfully, waiting for response..."
+        );
         tracing::trace!("proxy_fn(udp) start read");
 
-        let pkt = datagram.next().await;
-        let pkt = pkt.ok_or_else(|| anyhow!("no packet received"))?;
-        assert_eq!(pkt.data, b"world");
+        let pkt =
+            tokio::time::timeout(Duration::from_secs(5), datagram.next()).await;
 
-        tracing::trace!("proxy_fn(udp) end");
-
-        Ok(())
+        match pkt {
+            Ok(Some(pkt)) => {
+                tracing::info!(
+                    "proxy_fn(udp) received response: {} bytes, data={:?}",
+                    pkt.data.len(),
+                    pkt.data
+                );
+                assert_eq!(pkt.data, b"world");
+                tracing::trace!("proxy_fn(udp) end");
+                Ok(())
+            }
+            Ok(None) => {
+                tracing::error!(
+                    "proxy_fn(udp) datagram stream closed without response"
+                );
+                Err(anyhow!("datagram stream closed"))
+            }
+            Err(_) => {
+                tracing::error!("proxy_fn(udp) timeout waiting for response (5s)");
+                Err(anyhow!("timeout waiting for UDP response"))
+            }
+        }
     }
 
     let proxy_task = tokio::spawn(async move {
@@ -311,8 +377,8 @@ pub async fn latency_test(
             .await
         {
             Ok(latency) => return Ok(latency),
-            Err(e) if attempt < 3 => {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+            Err(_) if attempt < 3 => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Err(e) => return Err(e.into()),
         }
