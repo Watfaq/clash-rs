@@ -179,8 +179,31 @@ pub async fn ping_pong_test(
                 }
             };
 
-            if let Ok(()) = proxy_fn(stream).await {
-                return Ok(());
+            match tokio::time::timeout(Duration::from_secs(10), proxy_fn(stream))
+                .await
+            {
+                Ok(Ok(())) => {
+                    tracing::info!(
+                        "proxy_fn succeeded for destination: {}",
+                        destination
+                    );
+                    return Ok(());
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(
+                        "proxy_fn failed for destination {}: {}",
+                        destination,
+                        e
+                    );
+                    continue;
+                }
+                Err(_) => {
+                    tracing::error!(
+                        "proxy_fn timeout (10s) for destination: {}",
+                        destination
+                    );
+                    continue;
+                }
             }
         }
 
@@ -345,8 +368,34 @@ pub async fn ping_pong_udp_test(
                     }
                 };
 
-            if let Ok(()) = proxy_fn(datagram, src, dst).await {
-                return Ok(());
+            match tokio::time::timeout(
+                Duration::from_secs(10),
+                proxy_fn(datagram, src, dst),
+            )
+            .await
+            {
+                Ok(Ok(())) => {
+                    tracing::info!(
+                        "proxy_fn(udp) succeeded for destination: {}",
+                        destination
+                    );
+                    return Ok(());
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(
+                        "proxy_fn(udp) failed for destination {}: {}",
+                        destination,
+                        e
+                    );
+                    continue;
+                }
+                Err(_) => {
+                    tracing::error!(
+                        "proxy_fn(udp) timeout (10s) for destination: {}",
+                        destination
+                    );
+                    continue;
+                }
             }
         }
         Err(anyhow!(

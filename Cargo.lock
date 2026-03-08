@@ -3838,6 +3838,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "hmac",
+ "num-bigint-dig",
  "p256",
  "p384",
  "p521",
@@ -4844,6 +4845,7 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.5",
+ "serde",
  "smallvec 1.15.1",
  "zeroize",
 ]
@@ -6307,6 +6309,7 @@ dependencies = [
  "rand_core 0.10.0-rc-3",
  "sha2 0.11.0-rc.3",
  "signature 3.0.0-rc.6",
+ "spki 0.8.0-rc.4",
  "zeroize",
 ]
 
@@ -6384,11 +6387,13 @@ dependencies = [
  "p521",
  "pageant",
  "pbkdf2",
+ "pkcs1 0.8.0-rc.4",
  "pkcs5",
  "pkcs8 0.10.2",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "ring",
+ "rsa 0.10.0-rc.12",
  "russh-cryptovec",
  "russh-util",
  "sec1",
