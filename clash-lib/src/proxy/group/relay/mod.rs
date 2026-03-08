@@ -239,17 +239,23 @@ mod tests {
     #[serial_test::serial]
     async fn test_relay_1() -> anyhow::Result<()> {
         initialize();
+        let port = 10002;
+        let container = get_ss_runner(port).await?;
+
+        let container_ip = container.container_ip();
+
+        debug!("container ip: {:?}", container_ip);
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
-            port: 10002,
+            server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
+            port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
             plugin: Default::default(),
             udp: false,
         };
-        let port = ss_opts.port;
+
         let ss_handler: AnyOutboundHandler =
             Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
                 as _;
@@ -265,29 +271,29 @@ mod tests {
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(
-            handler,
-            get_ss_runner(port).await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_relay_2() -> anyhow::Result<()> {
         initialize();
+        let port = 10002;
+        let container = get_ss_runner(port).await?;
+
+        let container_ip = container.container_ip();
+
         let ss_opts = crate::proxy::shadowsocks::outbound::HandlerOptions {
             name: "test-ss".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
-            port: 10002,
+            server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
+            port,
             password: PASSWORD.to_owned(),
             cipher: CIPHER.to_owned(),
             plugin: Default::default(),
             udp: false,
         };
-        let port = ss_opts.port;
+
         let ss_handler: AnyOutboundHandler =
             Arc::new(crate::proxy::shadowsocks::outbound::Handler::new(ss_opts))
                 as _;
@@ -303,11 +309,6 @@ mod tests {
 
         let handler =
             Handler::new(Default::default(), vec![Arc::new(RwLock::new(provider))]);
-        run_test_suites_and_cleanup(
-            handler,
-            get_ss_runner(port).await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

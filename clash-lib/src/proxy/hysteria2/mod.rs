@@ -177,6 +177,10 @@ impl Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> anyhow::Result<(Connection, SendRequest<OpenStreams, Bytes>)> {
+        tracing::trace!(
+            "hysteria2 new_authed_connection_inner: starting connection to {:?}",
+            self.opts.addr
+        );
         // Everytime we enstablish a new session, we should lookup the server
         // address. maybe it changed since it use ddns
         let server_socket_addr = match self.opts.addr.clone() {
@@ -245,10 +249,13 @@ impl Handler {
 
         ep.set_default_client_config(self.client_config.clone());
 
+        tracing::trace!("hysteria2 connecting to server: {:?}", server_socket_addr);
         let session = ep
             .connect(server_socket_addr, self.opts.sni.as_deref().unwrap_or(""))?
             .await?;
+        tracing::trace!("hysteria2 QUIC connection established");
         let (guard, _rx, udp) = Self::auth(&session, &self.opts.passwd).await?;
+        tracing::trace!("hysteria2 authentication successful, udp={}", udp);
         *self.support_udp.write().unwrap() = udp;
         // todo set congestion controller according to cc_rx
 
@@ -424,11 +431,15 @@ impl HysteriaConnection {
     }
 
     async fn spawn_tasks(self: Arc<Self>) {
+        tracing::trace!("hysteria2 spawn_tasks: starting datagram receive loop");
         let err = loop {
             tokio::select! {
                 res = self.conn.read_datagram() => {
                     match res {
-                        Ok(pkt) => self.clone().recv_packet(pkt).await,
+                        Ok(pkt) => {
+                            tracing::trace!("hysteria2 received datagram: {} bytes", pkt.len());
+                            self.clone().recv_packet(pkt).await
+                        },
                         Err(e) => {
                             tracing::error!("hysteria2 read datagram error: {}", e);
                             break e;
@@ -498,32 +509,70 @@ impl HysteriaConnection {
         session_id: u32,
         pkt_id: u16,
     ) -> std::io::Result<()> {
+        tracing::trace!(
+            "hysteria2 send_packet: session_id={}, pkt_id={}, addr={:?}, \
+             data_len={}",
+            session_id,
+            pkt_id,
+            addr,
+            pkt.len()
+        );
+
         let max_frag_size = match self.udp_mtu.or(self.conn.max_datagram_size()) {
-            Some(x) => x,
+            Some(x) => {
+                tracing::trace!("hysteria2 max_frag_size={}", x);
+                x
+            }
             None => {
+                tracing::error!("hysteria2 udp mtu not set");
                 return Err(std::io::Error::other(
                     "hysteria2 udp mtu not set, please check your \
                      disable_mtu_discovery and udp_mtu option",
                 ));
             }
         };
-        let fragments = Fragments::new(session_id, pkt_id, addr, max_frag_size, pkt);
+        let fragments =
+            Fragments::new(session_id, pkt_id, addr.clone(), max_frag_size, pkt);
+        let mut frag_count = 0;
         for frag in fragments {
+            frag_count += 1;
+            tracing::trace!(
+                "hysteria2 sending fragment #{} for session_id={}",
+                frag_count,
+                session_id
+            );
             self.conn
                 .send_datagram(frag)
                 .map_err(std::io::Error::other)?;
         }
+        tracing::trace!(
+            "hysteria2 sent {} fragments for session_id={}",
+            frag_count,
+            session_id
+        );
         Ok(())
     }
 
     pub async fn recv_packet(self: Arc<Self>, pkt: Bytes) {
+        tracing::trace!("hysteria2 recv_packet: {} bytes", pkt.len());
         let mut buf: BytesMut = pkt.into();
         let pkt = codec::HysUdpPacket::decode(&mut buf).unwrap();
         let session_id = pkt.session_id;
         let mut udp_sessions = self.udp_sessions.lock().await;
         match udp_sessions.get_mut(&session_id) {
             Some(session) => {
+                tracing::trace!(
+                    "hysteria2 found session {}, feeding packet",
+                    session_id
+                );
                 if let Some(pkt) = session.feed(pkt) {
+                    tracing::trace!(
+                        "hysteria2 complete packet received for session {}: {} \
+                         bytes to {:?}",
+                        session_id,
+                        pkt.data.len(),
+                        session.local_addr
+                    );
                     let _ = session
                         .incoming
                         .send(UdpPacket {
@@ -532,6 +581,11 @@ impl HysteriaConnection {
                             dst_addr: session.local_addr.clone(),
                         })
                         .await;
+                } else {
+                    tracing::trace!(
+                        "hysteria2 packet fragment buffered for session {}",
+                        session_id
+                    );
                 }
             }
             _ => {
@@ -634,7 +688,14 @@ mod tests {
     #[serial_test::serial]
     async fn test_hysteria() -> anyhow::Result<()> {
         initialize();
-        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+        let container = get_hysteria_runner().await?;
+
+        let container_ip =
+            container.container_ip().unwrap_or("127.0.0.1".to_owned());
+
+        let ip = IpAddr::from_str(&container_ip)
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         let port = 10002;
 
         let obfs = Some(Obfs::Salamander(SalamanderObfs {
@@ -669,11 +730,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            get_hysteria_runner().await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

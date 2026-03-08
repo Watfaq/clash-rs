@@ -268,10 +268,12 @@ mod tests {
         let tls =
             transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
+        let container = get_ws_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             password: "example".to_owned(),
             udp: true,
@@ -283,8 +285,7 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         // ignore the udp test
-        run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -322,10 +323,12 @@ mod tests {
             None,
         );
 
+        let runner = get_grpc_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             password: "example".to_owned(),
             udp: true,
@@ -336,7 +339,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

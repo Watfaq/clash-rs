@@ -39,7 +39,7 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
         let mut m: HashMap<String, Box<dyn Serialize + Send>> = HashMap::new();
         m.insert("type".to_string(), Box::new(self.type_name().to_owned()));
         m.insert("proxy".to_string(), Box::new(self.target().to_owned()));
-        m.insert("payload".to_string(), Box::new(self.payload().to_owned()));
+        m.insert("payload".to_string(), Box::new(self.payload()));
         m
     }
 }

@@ -1,16 +1,20 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
+use anyhow;
 use bollard::{
-    Docker,
+    API_DEFAULT_VERSION, Docker, body_full,
     config::ContainerInspectResponse,
     models::ContainerCreateBody,
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
         LogsOptions, RemoveContainerOptions, StartContainerOptions,
+        UploadToContainerOptions,
     },
     secret::{HostConfig, Mount, PortBinding},
 };
+use bytes::Bytes;
 use futures::{Future, TryStreamExt};
+use tar;
 
 const TIMEOUT_DURATION: u64 = 30;
 
@@ -23,22 +27,113 @@ pub struct DockerTestRunner {
 impl DockerTestRunner {
     pub async fn try_new(
         image_conf: Option<CreateImageOptions>,
-        container_conf: ContainerCreateBody,
+        mut container_conf: ContainerCreateBody,
     ) -> anyhow::Result<Self> {
-        let docker: Docker = Docker::connect_with_socket_defaults()?;
+        let docker: Docker = if let Some(url) = option_env!("DOCKER_HOST") {
+            if url.starts_with("http://")
+                || url.starts_with("https://")
+                || url.starts_with("tcp://")
+            {
+                Docker::connect_with_http(url, 60, API_DEFAULT_VERSION)?
+            } else if url.starts_with("unix://") || url.starts_with("npipe://") {
+                Docker::connect_with_socket(url, 60, API_DEFAULT_VERSION)?
+            } else {
+                anyhow::bail!("invalid DOCKER_HOST url: {}", url);
+            }
+        } else {
+            Docker::connect_with_socket_defaults()?
+        };
 
         docker
             .create_image(image_conf, None, None)
             .try_collect::<Vec<_>>()
             .await?;
 
-        let id = docker
+        // For remote Docker, we need to handle mounts differently
+        let mounts = container_conf
+            .host_config
+            .as_mut()
+            .and_then(|hc| hc.mounts.take());
+        let files_to_copy = if option_env!("DOCKER_HOST")
+            .map(|url| {
+                url.starts_with("http://")
+                    || url.starts_with("https://")
+                    || url.starts_with("tcp://")
+            })
+            .unwrap_or(false)
+        {
+            // Remote Docker - collect files to copy via API
+            mounts
+        } else {
+            // Local Docker - keep mounts in config
+            if let Some(mounts) = mounts {
+                container_conf.host_config.as_mut().unwrap().mounts = Some(mounts);
+            }
+            None
+        };
+
+        let container = docker
             .create_container(
                 Some(CreateContainerOptions::default()),
                 container_conf,
             )
-            .await?
-            .id;
+            .await?;
+        let id = container.id;
+
+        // Copy files to container if needed (for remote Docker)
+        if let Some(mounts) = files_to_copy {
+            for mount in mounts {
+                if let (Some(source), Some(target)) =
+                    (mount.source.as_deref(), mount.target.as_deref())
+                {
+                    // Create tar archive with full path structure
+                    let mut ar = tar::Builder::new(Vec::new());
+
+                    // Remove leading slash for tar path
+                    let tar_path = if target.starts_with('/') {
+                        &target[1..]
+                    } else {
+                        target
+                    };
+
+                    let source_path = Path::new(source);
+                    let metadata = std::fs::metadata(source_path)?;
+
+                    if metadata.is_file() {
+                        // Handle single file
+                        let content = std::fs::read(source_path)?;
+                        let mut header = tar::Header::new_gnu();
+                        header.set_size(content.len() as u64);
+                        header.set_mode(0o644);
+                        ar.append_data(&mut header, tar_path, &content[..])?;
+                    } else if metadata.is_dir() {
+                        // Handle directory recursively using sync operations
+                        // append_dir_all will recursively add all files from
+                        // source_path with tar_path as the
+                        // prefix in the archive
+                        ar.append_dir_all(tar_path, source_path)?;
+                    } else {
+                        anyhow::bail!(
+                            "Unsupported file type for source: {}",
+                            source
+                        );
+                    }
+                    let tar_data = ar.into_inner()?;
+
+                    // Upload to container root directory
+                    docker
+                        .upload_to_container(
+                            &id,
+                            Some(UploadToContainerOptions {
+                                path: "/".to_string(),
+                                ..Default::default()
+                            }),
+                            body_full(Bytes::from(tar_data)),
+                        )
+                        .await?;
+                }
+            }
+        }
 
         // Try to start the container, cleanup if it fails
         if let Err(e) = docker
@@ -57,9 +152,7 @@ impl DockerTestRunner {
                 .await;
             return Err(e.into());
         }
-
         let inspect = docker.inspect_container(&id, None).await?;
-
         Ok(Self {
             instance: docker,
             id,
@@ -73,9 +166,24 @@ impl DockerTestRunner {
             .network_settings
             .as_ref()
             .and_then(|i| i.networks.as_ref())
-            .and_then(|b| b.values().next())
-            .and_then(|j| j.ip_address.as_ref())
-            .map(|r| r.to_string())
+            .and_then(|b| {
+                b.values().find_map(|j| {
+                    [
+                        (&j.gateway, &j.ip_address),
+                        (&j.ipv6_gateway, &j.global_ipv6_address),
+                    ]
+                    .into_iter()
+                    .find(|(gateway, _)| {
+                        gateway.as_ref().map_or(false, |g| !g.is_empty())
+                    })
+                    .and_then(|(_, ip)| ip.as_ref())
+                    .filter(|ip| !ip.is_empty())
+                    .map(|ip| ip.to_string())
+                })
+            })
+            .inspect(|e| {
+                tracing::trace!("container_ip: {:?}", e);
+            })
     }
 
     #[allow(unused)]
@@ -84,9 +192,21 @@ impl DockerTestRunner {
             .network_settings
             .as_ref()
             .and_then(|i| i.networks.as_ref())
-            .and_then(|b| b.values().next())
-            .and_then(|j| j.gateway.as_ref())
-            .map(|r| r.to_string())
+            .and_then(|b| {
+                b.values().find_map(|j| {
+                    [(&j.gateway), (&j.ipv6_gateway)]
+                        .into_iter()
+                        .find(|(gateway)| {
+                            gateway.as_ref().map_or(false, |g| !g.is_empty())
+                        })
+                        .and_then(|(gateway)| gateway.as_ref())
+                        .filter(|ip| !ip.is_empty())
+                        .map(|ip| ip.to_string())
+                })
+            })
+            .inspect(|e| {
+                tracing::trace!("gateway_ip: {:?}", e);
+            })
     }
 
     // you can run the cleanup manually
@@ -153,10 +273,17 @@ impl MultiDockerTestRunner {
             }
         }
     }
+
+    #[allow(unused)]
+    pub fn add_with_runner(&mut self, runners: DockerTestRunner) {
+        self.runners.push(runners);
+    }
 }
 
 #[async_trait::async_trait]
 pub trait RunAndCleanup {
+    /// Get the docker gateway IP address.
+    fn docker_gateway_ip(&self) -> Option<String>;
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -165,6 +292,10 @@ pub trait RunAndCleanup {
 
 #[async_trait::async_trait]
 impl RunAndCleanup for DockerTestRunner {
+    fn docker_gateway_ip(&self) -> Option<String> {
+        self.gateway_ip()
+    }
+
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -190,6 +321,10 @@ impl RunAndCleanup for DockerTestRunner {
 
 #[async_trait::async_trait]
 impl RunAndCleanup for MultiDockerTestRunner {
+    fn docker_gateway_ip(&self) -> Option<String> {
+        self.runners.iter().find_map(|d| d.gateway_ip())
+    }
+
     async fn run_and_cleanup(
         self,
         f: impl Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -275,6 +410,7 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn env(mut self, env: &[&str]) -> Self {
         self.env = Some(env.iter().map(|x| x.to_string()).collect());
         self
@@ -304,6 +440,7 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn sysctls(mut self, sysctls: &[(&str, &str)]) -> Self {
         self.host_config.sysctls = Some(
             sysctls
@@ -315,12 +452,14 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn cap_add(mut self, caps: &[&str]) -> Self {
         self.host_config.cap_add =
             Some(caps.iter().map(|x| x.to_string()).collect());
         self
     }
 
+    #[allow(dead_code)]
     pub fn net_mode(mut self, mode: &str) -> Self {
         self.host_config.network_mode = Some(mode.to_string());
         self
@@ -373,8 +512,8 @@ pub fn get_host_config(port: u16) -> HostConfig {
             .into_iter()
             .collect::<HashMap<_, _>>(),
         ),
-        #[cfg(not(target_os = "macos"))]
-        network_mode: Some("host".to_owned()),
+        // #[cfg(not(target_os = "macos"))]
+        // network_mode: Some("host".to_owned()),
         ..Default::default()
     }
 }

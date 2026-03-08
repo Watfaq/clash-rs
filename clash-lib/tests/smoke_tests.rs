@@ -53,49 +53,57 @@ async fn smoke_test() {
         then.status(200).body("Mock response for testing");
     });
 
-    let curl_cmd = format!("curl -s {}", mock_server.url("/"));
-    let output = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(curl_cmd)
-        .output()
+    // 使用 reqwest 客户端发送请求
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(mock_server.url("/"))
+        .send()
         .await
-        .expect("Failed to execute curl command");
+        .expect("Failed to execute HTTP request");
 
     assert!(
-        output.status.success(),
-        "Curl command failed with output: {}",
-        String::from_utf8_lossy(&output.stderr)
+        response.status().is_success(),
+        "HTTP request failed with status: {}",
+        response.status()
     );
+
+    let body_str = response.text().await.expect("Failed to read response body");
+
     assert_eq!(mock.calls(), 1, "Mock server was not hit exactly once");
     assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "Mock response for testing",
+        body_str, "Mock response for testing",
         "Unexpected response from mock server"
     );
 
     wait_port_ready(8899).expect("Proxy port is not ready");
 
-    let curl_cmd = format!(
-        "curl -s -x socks5h://127.0.0.1:8899 {}",
-        mock_server.url("/")
-    );
-    let output = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(curl_cmd)
-        .output()
+    // 使用 reqwest 通过 SOCKS5 代理发送请求
+    let proxy = reqwest::Proxy::all("socks5://127.0.0.1:8899")
+        .expect("Failed to create proxy");
+
+    let client = reqwest::Client::builder()
+        .proxy(proxy)
+        .build()
+        .expect("Failed to build client with proxy");
+
+    let response = client
+        .get(mock_server.url("/"))
+        .send()
         .await
-        .expect("Failed to execute curl command");
+        .expect("Failed to send request through proxy");
 
     assert!(
-        output.status.success(),
-        "Curl command failed with output: {}",
-        String::from_utf8_lossy(&output.stderr)
+        response.status().is_success(),
+        "HTTP request through proxy failed with status: {}",
+        response.status()
     );
+
+    let body_str = response.text().await.expect("Failed to read response body");
 
     assert_eq!(mock.calls(), 2, "Mock server was not hit exactly twice");
     assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "Mock response for testing",
+        body_str, "Mock response for testing",
         "Unexpected response from mock server"
     );
 }
