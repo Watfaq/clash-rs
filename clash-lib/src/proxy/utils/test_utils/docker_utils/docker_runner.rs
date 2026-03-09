@@ -13,7 +13,7 @@ use bollard::{
     secret::{HostConfig, Mount, PortBinding},
 };
 use bytes::Bytes;
-use futures::{Future, TryStreamExt};
+use futures::{Future, StreamExt, TryStreamExt};
 use tar;
 
 const TIMEOUT_DURATION: u64 = 30;
@@ -120,6 +120,36 @@ impl DockerTestRunner {
                     }
                     let tar_data = ar.into_inner()?;
 
+                    // Debug: Print all files in the tar archive
+                    tracing::trace!(
+                        "=== TAR Archive Contents for mount {} -> {} ===",
+                        source,
+                        target
+                    );
+                    let mut archive = tar::Archive::new(&tar_data[..]);
+                    for (idx, entry) in archive.entries()?.enumerate() {
+                        match entry {
+                            Ok(e) => {
+                                let path = e.path().ok();
+                                let size = e.header().size().ok();
+                                tracing::trace!(
+                                    "  [{}] {:?} (size: {:?})",
+                                    idx,
+                                    path,
+                                    size
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "  [{}] Error reading entry: {}",
+                                    idx,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                    tracing::trace!("=== End TAR Archive Contents ===");
+
                     // Upload to container root directory
                     docker
                         .upload_to_container(
@@ -207,6 +237,46 @@ impl DockerTestRunner {
             .inspect(|e| {
                 tracing::trace!("gateway_ip: {:?}", e);
             })
+    }
+
+    /// For debugging use
+    #[allow(unused)]
+    pub async fn exec_command(&self, cmd: &[&str]) -> anyhow::Result<String> {
+        use bollard::exec::{CreateExecOptions, StartExecResults};
+
+        let exec = self
+            .instance
+            .create_exec(
+                &self.id,
+                CreateExecOptions {
+                    cmd: Some(cmd.iter().map(|s| s.to_string()).collect()),
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+        let start_result = self.instance.start_exec(&exec.id, None).await?;
+
+        match start_result {
+            StartExecResults::Attached { mut output, .. } => {
+                let mut result = String::new();
+                while let Some(log) = output.next().await {
+                    match log {
+                        Ok(log_output) => {
+                            result.push_str(&log_output.to_string());
+                        }
+                        Err(e) => {
+                            tracing::warn!("Error reading exec output: {}", e);
+                            break;
+                        }
+                    }
+                }
+                Ok(result)
+            }
+            StartExecResults::Detached => Ok(String::new()),
+        }
     }
 
     // you can run the cleanup manually

@@ -13,15 +13,66 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use sysinfo::Networks;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split},
     net::{TcpListener, UdpSocket},
 };
-use tracing::info;
+use tracing::{debug, info, trace};
 
 pub mod config_helper;
 pub mod consts;
 pub mod docker_runner;
+
+fn destination_list(gateway_ip: Option<String>) -> Vec<String> {
+    let mut destination_list = vec!["host.docker.internal".to_owned()];
+    if let Some(ip) = gateway_ip {
+        debug!("gateway_ip Ip: {}", ip);
+        destination_list.push(ip);
+    }
+    if let Some(ip) = option_env!("CLIENT_IP") {
+        debug!("client Ip: {}", ip);
+        destination_list.insert(0, ip.to_owned());
+    } else {
+        debug!("CLIENT_IP env not set, ");
+        let mut networks = Networks::new_with_refreshed_list();
+        networks.refresh(true);
+
+        trace!("networks: {:?}", networks);
+        // 收集所有有流量的网卡的 IPv4 地址
+        let mut active_interfaces = networks
+            .iter()
+            .filter(|(_, data)| {
+                data.mac_address().to_string() != "00:00:00:00:00:00"
+            })
+            .collect::<Vec<_>>();
+
+        // 按流量排序：优先按发送流量降序，其次按接收流量降序
+        active_interfaces.sort_by(|a, b| {
+            b.1.total_transmitted()
+                .cmp(&a.1.total_transmitted())
+                .then_with(|| b.1.total_received().cmp(&a.1.total_received()))
+        });
+        for (iface_name, data) in active_interfaces {
+            trace!("Processing interface: {}, {:#?}", iface_name, data);
+
+            // 获取该网卡的所有 IP 地址
+            for ip_network in data.ip_networks() {
+                let addr = ip_network.addr;
+                // 只添加 IPv4 地址，排除 loopback
+                if addr.is_ipv4() && !addr.is_loopback() {
+                    let ip_str = addr.to_string();
+                    // 跳过已存在的 IP
+                    if !destination_list.contains(&ip_str) {
+                        debug!("Found IPv4 address on {}: {}", iface_name, ip_str);
+                        destination_list.push(ip_str);
+                    }
+                }
+            }
+        }
+    }
+    destination_list
+}
 
 // TODO: add the throughput metrics
 pub async fn ping_pong_test(
@@ -32,17 +83,7 @@ pub async fn ping_pong_test(
     // PATH: our proxy handler -> proxy-server(container) -> target local
     // server(127.0.0.1:port)
 
-    let mut destination_list = vec![
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        "127.0.0.1".to_owned(),
-        "host.docker.internal".to_owned(),
-    ];
-    if let Some(ip) = option_env!("CLIENT_IP") {
-        destination_list.insert(0, ip.to_owned());
-    }
-    if let Some(ip) = gateway_ip {
-        destination_list.push(ip);
-    }
+    let destination_list = destination_list(gateway_ip);
 
     let resolver = config_helper::build_dns_resolver().await?;
 
@@ -59,33 +100,49 @@ pub async fn ping_pong_test(
         let chunk = "world";
         let mut buf = vec![0; 5];
 
-        tracing::info!("destination_fn start read");
+        info!("destination_fn(tcp) start read");
 
         for _ in 0..100 {
             read_half.read_exact(&mut buf).await?;
             assert_eq!(&buf, b"hello");
         }
 
-        tracing::info!("destination_fn start write");
-
+        info!("destination_fn(tcp) start write");
         for _ in 0..100 {
             write_half.write_all(chunk.as_bytes()).await?;
             write_half.flush().await?;
         }
 
-        tracing::info!("destination_fn end");
+        info!("destination_fn(tcp) end");
         Ok(())
     }
-
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let target_local_server_handler = tokio::spawn(async move {
+        let mut rx = rx;
         loop {
-            let (stream, _) = listener.accept().await?;
-
-            tracing::info!(
-                "Accepted connection from: {}",
-                stream.peer_addr().unwrap()
-            );
-            destination_fn(stream).await?
+            tokio::select! {
+                data = listener.accept() => {
+                    match data {
+                        Ok((stream, _)) => {
+                            info!(
+                                "Accepted connection(tcp) from: {:?}",
+                                stream.peer_addr().ok()
+                            );
+                            if let Err(e) = destination_fn(stream).await {
+                                info!("Error handling connection(tcp): {}", e);
+                            }
+                        },
+                        Err(e) => {
+                            info!("Error accepting connection(tcp): {}", e);
+                            continue;
+                        }
+                    }
+                }
+                _ = &mut rx => {
+                    info!("target_local_server_handler(tcp) received shutdown signal, exiting...");
+                    return Ok(());
+                }
+            }
         }
     });
 
@@ -95,7 +152,7 @@ pub async fn ping_pong_test(
         let chunk = "hello";
         let mut buf = vec![0; 5];
 
-        tracing::info!("proxy_fn(tcp) start write");
+        info!("proxy_fn(tcp) start write");
 
         for i in 0..100 {
             write_half
@@ -110,7 +167,7 @@ pub async fn ping_pong_test(
         }
         write_half.flush().await?;
 
-        tracing::info!("proxy_fn start read");
+        info!("proxy_fn start(tcp) read");
 
         for i in 0..100 {
             read_half.read_exact(&mut buf).await.inspect_err(|x| {
@@ -122,7 +179,7 @@ pub async fn ping_pong_test(
             assert_eq!(buf, "world".as_bytes().to_owned());
         }
 
-        tracing::info!("proxy_fn(tcp) end");
+        info!("proxy_fn(tcp) end");
 
         Ok(())
     }
@@ -134,12 +191,15 @@ pub async fn ping_pong_test(
         let mut first_error: Option<anyhow::Error> = None;
 
         for destination in &destination_list {
-            tracing::trace!("Attempting TCP connection to: {}", destination);
+            tracing::trace!("Attempting TCP connection(tcp) to: {}", destination);
 
             let dst: SocksAddr = match (destination.clone(), port).try_into() {
                 Ok(addr) => addr,
                 Err(e) => {
-                    tracing::error!("Failed to parse destination address: {}", e);
+                    tracing::error!(
+                        "Failed to parse destination address(tcp): {}",
+                        e
+                    );
                     continue;
                 }
             };
@@ -150,18 +210,18 @@ pub async fn ping_pong_test(
             };
 
             let stream = match tokio::time::timeout(
-                Duration::from_secs(5),
+                Duration::from_secs(3),
                 handler.connect_stream(&sess, resolver.clone()),
             )
             .await
             {
                 Ok(Ok(stream)) => {
-                    tracing::info!("Successfully connected to: {:?}", dst);
+                    tracing::info!("Successfully connected(tcp) to: {:?}", dst);
                     stream
                 }
                 Ok(Err(e)) => {
                     tracing::error!(
-                        "Failed to proxy connection to {:?}: {}",
+                        "Failed to proxy connection(tcp) to {:?}: {}",
                         dst,
                         e
                     );
@@ -172,26 +232,26 @@ pub async fn ping_pong_test(
                 }
                 Err(_) => {
                     tracing::error!(
-                        "connect_stream timeout (5s) for destination: {}",
+                        "connect_stream timeout (5s) for destination(tcp): {}",
                         destination
                     );
                     continue;
                 }
             };
 
-            match tokio::time::timeout(Duration::from_secs(10), proxy_fn(stream))
+            match tokio::time::timeout(Duration::from_secs(3), proxy_fn(stream))
                 .await
             {
                 Ok(Ok(())) => {
                     tracing::info!(
-                        "proxy_fn succeeded for destination: {}",
+                        "proxy_fn succeeded for destination(tcp): {}",
                         destination
                     );
                     return Ok(());
                 }
                 Ok(Err(e)) => {
                     tracing::error!(
-                        "proxy_fn failed for destination {}: {}",
+                        "proxy_fn failed for destination(tcp) {}: {}",
                         destination,
                         e
                     );
@@ -199,7 +259,7 @@ pub async fn ping_pong_test(
                 }
                 Err(_) => {
                     tracing::error!(
-                        "proxy_fn timeout (10s) for destination: {}",
+                        "proxy_fn timeout (3s) for destination(tcp): {}",
                         destination
                     );
                     continue;
@@ -213,7 +273,7 @@ pub async fn ping_pong_test(
             Err(err)
         } else {
             Err(anyhow!(
-                "all destination test error: [{:?}]",
+                "all destination test error(tcp): [{:?}]",
                 destination_list
             ))
         }
@@ -221,7 +281,9 @@ pub async fn ping_pong_test(
 
     let futs = vec![proxy_task, target_local_server_handler];
 
-    select_all(futs).await.0?
+    let res = select_all(futs).await.0?;
+    tx.send(()).ok(); // signal the target local server to shutdown
+    res
 }
 
 pub async fn ping_pong_udp_test(
@@ -232,56 +294,62 @@ pub async fn ping_pong_udp_test(
     // PATH: our proxy handler -> proxy-server(container) -> target local
     // server(127.0.0.1:port)
 
-    let mut destination_list = vec![
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        "127.0.0.1".to_owned(),
-        "host.docker.internal".to_owned(),
-    ];
-    if let Some(ip) = option_env!("CLIENT_IP") {
-        destination_list.insert(0, ip.to_owned());
-    }
-    if let Some(ip) = gateway_ip {
-        destination_list.push(ip);
-    }
+    let destination_list = destination_list(gateway_ip);
 
     let resolver = config_helper::build_dns_resolver().await?;
 
     let listener = UdpSocket::bind(format!("0.0.0.0:{}", port).as_str()).await?;
     info!("target local server started at: {}", listener.local_addr()?);
 
-    async fn destination_fn(listener: UdpSocket) -> anyhow::Result<()> {
+    async fn destination_fn(
+        mut rx: tokio::sync::oneshot::Receiver<()>,
+        listener: UdpSocket,
+    ) -> anyhow::Result<()> {
         // Use inbound_stream here
         let chunk = "world";
         let mut buf = vec![0; 5];
 
-        tracing::info!(
+        info!(
             "destination_fn(udp) waiting for data on {}",
             listener.local_addr()?
         );
         tracing::trace!("destination_fn start read");
 
-        let (len, src) = listener.recv_from(&mut buf).await?;
-        tracing::info!(
-            "destination_fn(udp) received {} bytes from {}: {:?}",
-            len,
-            src,
-            &buf[..len]
-        );
-        assert_eq!(&buf, b"hello");
-
-        tracing::info!("destination_fn(udp) sending response to {}", src);
-        tracing::trace!("destination_fn start write");
-
-        let sent = listener.send_to(chunk.as_bytes(), src).await?;
-        tracing::info!("destination_fn(udp) sent {} bytes", sent);
-
-        tracing::trace!("destination_fn end");
-        Ok(())
+        loop {
+            tokio::select! {
+                data = listener.recv_from(&mut buf) => {
+                    match data {
+                        Ok((len, src) ) => {
+                            info!(
+                                "destination_fn(udp) received {} bytes from {}: {:?}",
+                                len,
+                                src,
+                                &buf[..len]
+                            );
+                            assert_eq!(&buf, b"hello");
+                            info!("destination_fn(udp) sending response to {}", src);
+                            tracing::trace!("destination_fn start write");
+                            let sent = listener.send_to(chunk.as_bytes(), src).await?;
+                            info!("destination_fn(udp) sent {} bytes", sent);
+                            tracing::trace!("destination_fn end");
+                        },
+                        Err(e) => {
+                            info!("Error accepting connection(tcp): {}", e);
+                            continue;
+                        }
+                    }
+                }
+                _ = &mut rx => {
+                    info!("target_local_server_handler(tcp) received shutdown signal, exiting...");
+                    return Ok(());
+                }
+            }
+        }
     }
-
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let target_local_server_handler: tokio::task::JoinHandle<
         Result<(), anyhow::Error>,
-    > = tokio::spawn(async move { destination_fn(listener).await });
+    > = tokio::spawn(async move { destination_fn(rx, listener).await });
 
     async fn proxy_fn(
         mut datagram: BoxedChainedDatagram,
@@ -292,23 +360,19 @@ pub async fn ping_pong_udp_test(
         let packet =
             UdpPacket::new(b"hello".to_vec(), src_addr.clone(), dst_addr.clone());
 
-        tracing::info!(
+        info!(
             "proxy_fn(udp) sending packet: src={:?}, dst={:?}, data={:?}",
-            src_addr,
-            dst_addr,
-            b"hello"
+            src_addr, dst_addr, b"hello"
         );
-        tracing::trace!("proxy_fn(udp) start write");
+        trace!("proxy_fn(udp) start write");
 
         datagram.send(packet.clone()).await.map_err(|x| {
             tracing::error!("proxy_fn(udp) write error: {}", x);
             anyhow::Error::new(x)
         })?;
 
-        tracing::info!(
-            "proxy_fn(udp) packet sent successfully, waiting for response..."
-        );
-        tracing::trace!("proxy_fn(udp) start read");
+        info!("proxy_fn(udp) packet sent successfully, waiting for response...");
+        trace!("proxy_fn(udp) start read");
 
         let pkt =
             tokio::time::timeout(Duration::from_secs(5), datagram.next()).await;
@@ -369,7 +433,7 @@ pub async fn ping_pong_udp_test(
                 };
 
             match tokio::time::timeout(
-                Duration::from_secs(10),
+                Duration::from_secs(3),
                 proxy_fn(datagram, src, dst),
             )
             .await
@@ -391,7 +455,7 @@ pub async fn ping_pong_udp_test(
                 }
                 Err(_) => {
                     tracing::error!(
-                        "proxy_fn(udp) timeout (10s) for destination: {}",
+                        "proxy_fn(udp) timeout (3s) for destination: {}",
                         destination
                     );
                     continue;
@@ -405,8 +469,9 @@ pub async fn ping_pong_udp_test(
     });
 
     let futs = vec![proxy_task, target_local_server_handler];
-
-    select_all(futs).await.0?
+    let res = select_all(futs).await.0?;
+    tx.send(()).ok();
+    res
 }
 
 // latency test of the proxy, will reuse the `url_test` ability

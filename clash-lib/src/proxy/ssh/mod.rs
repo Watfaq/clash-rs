@@ -349,6 +349,24 @@ mod tests {
         // Copy SSH config files using Rust APIs (cross-platform)
         copy_dir_recursive(&ssh_config_path, &ssh_config_tmp_path).await?;
 
+        // IMPORTANT: Container expects sshd_config at /config/sshd/sshd_config
+        // Our source has it at ssh_host_keys/sshd_config, but the container
+        // startup script will ignore/delete it from there and generate a default
+        // config if /config/sshd/sshd_config doesn't exist.
+        // So we need to copy it to the correct location.
+        let source_sshd_config = ssh_config_tmp_path
+            .join("ssh_host_keys")
+            .join("sshd_config");
+        let target_sshd_dir = ssh_config_tmp_path.join("sshd");
+        tokio::fs::create_dir_all(&target_sshd_dir).await?;
+        let target_sshd_config = target_sshd_dir.join("sshd_config");
+        tokio::fs::copy(&source_sshd_config, &target_sshd_config).await?;
+        tracing::info!(
+            "Copied sshd_config from {:?} to {:?}",
+            source_sshd_config,
+            target_sshd_config
+        );
+
         // Debug: print directory structure
         tracing::debug!("SSH config directory structure after copy:");
         print_dir_structure(&ssh_config_tmp_path, 0).await?;
