@@ -13,6 +13,10 @@ env:
   RUST_TOOLCHAIN: "stable"
   RUSTC_BOOTSTRAP: "1"
   SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -22,6 +26,11 @@ jobs:
   build:
     name: Build
     uses: rust-proxy/workflows/.github/workflows/rust-build.yml@v1.0.9
+    env:
+      RUST_LOG: "clash_lib=TRACE"
+      RUST_TOOLCHAIN: "stable"
+      RUSTC_BOOTSTRAP: "1"
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     with:
       rust-toolchain: "stable"
       packages: "clash-rs"
