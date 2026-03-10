@@ -212,5 +212,5 @@ target = "x86_64-linux-android"
 release-name = "x86_64-linux-android"
 tool = "cross"
 extra-args = "--no-default-features -F android"
-no-release = true
+skip-upload = true
 skip-test = true
