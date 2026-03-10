@@ -26,6 +26,7 @@ jobs:
 
   release:
     name: Release
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')))
     needs: [build]
     uses: rust-proxy/workflows/.github/workflows/release-publish.yml@main
     with:
@@ -34,11 +35,12 @@ jobs:
 
   docker:
     name: Docker
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')))
     needs: [build]
     uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@main
     secrets:
       dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
-      dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+      dockerhub-token: ${{ secrts.DOCKERHUB_TOKEN }}
     with:
       docker-file: '.github/Dockerfile'
       image-name: 'clash-rs'
