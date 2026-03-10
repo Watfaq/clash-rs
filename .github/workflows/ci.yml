@@ -59,3 +59,4 @@ jobs:
       server-binary-amd64: 'clash-rs-x86_64-unknown-linux-musl'
       server-binary-arm64: 'clash-rs-aarch64-unknown-linux-musl'
 
+
