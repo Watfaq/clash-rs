@@ -1,11 +1,5 @@
 # Clash-rs Build Target Configuration
-# Expanded from original CI matrix include (some targets omitted)
-# Missing from original CI matrix:
-# - i686-unknown-freebsd
-# - macOS static-crt variants (x86_64-apple-darwin-static-crt, aarch64-apple-darwin-static-crt)
-# - Windows aarch64 static-crt (aarch64-pc-windows-msvc-static-crt)
-# - Zig settings for i686-unknown-linux-gnu, aarch64-unknown-linux-gnu, armv7-unknown-linux-gnueabihf
-# - Other possible differences (no-docker-test, etc.)
+# Fully expanded from original CI matrix include
 
 # Linux GNU
 [[target]]
@@ -21,6 +15,7 @@ target = "i686-unknown-linux-gnu"
 release-name = "i686-unknown-linux-gnu"
 tool = "cross"
 extra-args = "-F plus"
+zig = "2.17"
 
 # Linux MUSL
 [[target]]
@@ -37,22 +32,22 @@ release-name = "i686-unknown-linux-musl"
 tool = "cross"
 extra-args = "-F plus"
 
-# Static-CRT Linux
+# Linux x86 gnu static-crt
 [[target]]
 os = "ubuntu-latest"
 target = "x86_64-unknown-linux-gnu"
 release-name = "x86_64-unknown-linux-gnu-static-crt"
-tool = "cross"
 extra-args = "-F plus"
 rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
 
-# ARM GNU
+# Linux arm gnu
 [[target]]
 os = "ubuntu-latest"
 target = "aarch64-unknown-linux-gnu"
 release-name = "aarch64-unknown-linux-gnu"
 tool = "cross"
 extra-args = "-F plus"
+zig = "2.17"
 
 [[target]]
 os = "ubuntu-latest"
@@ -67,8 +62,9 @@ target = "armv7-unknown-linux-gnueabihf"
 release-name = "armv7-unknown-linux-gnueabihf"
 tool = "cross"
 extra-args = "-F plus"
+zig = "2.17"
 
-# ARM MUSL
+# Linux arm musl
 [[target]]
 os = "ubuntu-latest"
 target = "aarch64-unknown-linux-musl"
@@ -83,7 +79,7 @@ release-name = "armv7-unknown-linux-musleabihf"
 tool = "cross"
 extra-args = "-F plus"
 
-# RISC-V
+# Linux RISC-V
 [[target]]
 os = "ubuntu-latest"
 target = "riscv64gc-unknown-linux-gnu"
@@ -91,7 +87,7 @@ release-name = "riscv64gc-unknown-linux-gnu"
 tool = "cross"
 extra-args = "-F standard"
 
-# MIPS
+# Linux MIPS
 [[target]]
 os = "ubuntu-latest"
 target = "mips-unknown-linux-musl"
@@ -153,6 +149,16 @@ postfix = ".exe"
 extra-args = "-F plus"
 rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
 
+[[target]]
+os = "windows-latest"
+target = "aarch64-pc-windows-msvc"
+release-name = "aarch64-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F standard"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+nasm = true
+skip-test = true
+
 # macOS
 [[target]]
 os = "macos-latest"
@@ -166,6 +172,22 @@ target = "aarch64-apple-darwin"
 release-name = "aarch64-apple-darwin"
 extra-args = "-F plus"
 
+# macOS static-crt
+[[target]]
+os = "macos-latest"
+target = "x86_64-apple-darwin"
+release-name = "x86_64-apple-darwin-static-crt"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+[[target]]
+os = "macos-latest"
+target = "aarch64-apple-darwin"
+release-name = "aarch64-apple-darwin-static-crt"
+tool = "cargo"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
 # BSD
 [[target]]
 os = "ubuntu-latest"
@@ -175,7 +197,15 @@ tool = "cross"
 extra-args = "--no-default-features -F bsd"
 skip-test = true
 
-# Android
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-freebsd"
+release-name = "i686-unknown-freebsd"
+tool = "cross"
+extra-args = "--no-default-features -F bsd"
+skip-test = true
+
+# Android (no release)
 [[target]]
 os = "ubuntu-latest"
 target = "x86_64-linux-android"
