@@ -35,7 +35,6 @@ jobs:
 
   docker:
     name: Docker
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')))
     needs: [build]
     uses: rust-proxy/workflows/.github/workflows/docker-publish.yml@main
     secrets:
