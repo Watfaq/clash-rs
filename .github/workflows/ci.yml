@@ -8,11 +8,10 @@ on:
     branches: ["master"]
   workflow_dispatch:
 
-env:
-  RUST_LOG: "clash_lib=TRACE"
-  RUST_TOOLCHAIN: "stable"
-  RUSTC_BOOTSTRAP: "1"
-  SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash
@@ -23,20 +22,10 @@ env:
   RUSTC_BOOTSTRAP: "1"
   SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-
 jobs:
   build:
     name: Build
     uses: rust-proxy/workflows/.github/workflows/rust-build.yml@v1.0.9
-    env:
-      RUST_LOG: "clash_lib=TRACE"
-      RUST_TOOLCHAIN: "stable"
-      RUSTC_BOOTSTRAP: "1"
-      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     with:
       rust-toolchain: "stable"
       packages: "clash-rs"
@@ -68,7 +57,3 @@ jobs:
       binary-dir: './packages'
       server-binary-amd64: 'clash-rs-x86_64-unknown-linux-musl'
       server-binary-arm64: 'clash-rs-aarch64-unknown-linux-musl'
-
-
-
-
