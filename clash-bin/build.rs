@@ -9,12 +9,17 @@ fn main() {
     }
 
     // Prefer explicit CLASH_* vars; fall back to GITHUB_* which are set by GitHub
-    // Actions
-    let git_ref = option_env!("CLASH_GIT_REF").or(option_env!("GITHUB_REF"));
-    let git_sha = option_env!("CLASH_GIT_SHA").or(option_env!("GITHUB_SHA"));
+    // Actions. Use std::env::var_os to read at runtime, not option_env! at compile time.
+    let git_ref = std::env::var_os("CLASH_GIT_REF")
+        .or_else(|| std::env::var_os("GITHUB_REF"))
+        .and_then(|v| v.into_string().ok());
+    let git_sha = std::env::var_os("CLASH_GIT_SHA")
+        .or_else(|| std::env::var_os("GITHUB_SHA"))
+        .and_then(|v| v.into_string().ok());
 
-    let version = if let Some("refs/heads/master") = git_ref
-        && let Some(sha) = git_sha
+    let version = if let Some(ref git_ref_val) = git_ref
+        && git_ref_val == "refs/heads/master"
+        && let Some(ref sha) = git_sha
     {
         let short_sha = &sha[..7.min(sha.len())];
         // Nightly release below
