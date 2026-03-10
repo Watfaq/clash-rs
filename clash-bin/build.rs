@@ -9,7 +9,8 @@ fn main() {
     }
 
     // Prefer explicit CLASH_* vars; fall back to GITHUB_* which are set by GitHub
-    // Actions. Use std::env::var_os to read at runtime, not option_env! at compile time.
+    // Actions. Use std::env::var_os to read at runtime, not option_env! at compile
+    // time.
     let git_ref = std::env::var_os("CLASH_GIT_REF")
         .or_else(|| std::env::var_os("GITHUB_REF"))
         .and_then(|v| v.into_string().ok());
