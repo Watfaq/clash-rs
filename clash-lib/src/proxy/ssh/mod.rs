@@ -412,9 +412,11 @@ mod tests {
             get_openssh_server_runner(ssh_config_tmp_path.clone()).await?;
 
         // Configure client to connect to container
-        let ssh_private_key_path = ssh_config_tmp_path
-            .join(".ssh")
-            .join(if opt.rsa { "test_rsa" } else { "test_ed25519" });
+        let ssh_private_key_path = ssh_config_path.join(".ssh").join(if opt.rsa {
+            "test_rsa"
+        } else {
+            "test_ed25519"
+        });
         let ssh_private_key_path = ssh_private_key_path.to_str().unwrap();
 
         let password = if opt.password {
@@ -470,68 +472,8 @@ mod tests {
 
                 if entry.file_type().await?.is_dir() {
                     copy_dir_recursive(&src_path, &dst_path).await?;
-
-                    // Fix ownership and permissions for .ssh directory
-                    #[cfg(unix)]
-                    if dst_path.file_name().and_then(|n| n.to_str()) == Some(".ssh")
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        // Set .ssh directory to 700 and owned by 1000:1000
-                        let mut perms =
-                            tokio::fs::metadata(&dst_path).await?.permissions();
-                        perms.set_mode(0o700);
-                        tokio::fs::set_permissions(&dst_path, perms).await?;
-
-                        // Change ownership to UID 1000, GID 1000 (container user)
-
-                        let _ = std::os::unix::fs::chown(
-                            &dst_path,
-                            Some(1000),
-                            Some(1000),
-                        );
-                    }
                 } else {
                     tokio::fs::copy(&src_path, &dst_path).await?;
-
-                    // Fix permissions and ownership for files in .ssh directory
-                    #[cfg(unix)]
-                    if let Some(parent) = dst_path.parent() {
-                        if parent.file_name().and_then(|n| n.to_str())
-                            == Some(".ssh")
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            let file_name = dst_path
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or("");
-
-                            let mut perms =
-                                tokio::fs::metadata(&dst_path).await?.permissions();
-
-                            // Set appropriate permissions based on file type
-                            if !file_name.ends_with(".pub")
-                                && file_name != "authorized_keys"
-                                && file_name != "known_hosts"
-                            {
-                                // Private keys must be 600
-                                perms.set_mode(0o600);
-                            } else if file_name == "authorized_keys" {
-                                // authorized_keys should be 600
-                                perms.set_mode(0o600);
-                            } else {
-                                // Public keys and other files can be 644
-                                perms.set_mode(0o644);
-                            }
-
-                            tokio::fs::set_permissions(&dst_path, perms).await?;
-
-                            let _ = std::os::unix::fs::chown(
-                                &dst_path,
-                                Some(1000),
-                                Some(1000),
-                            );
-                        }
-                    }
                 }
             }
 
