@@ -531,8 +531,7 @@ impl HysteriaConnection {
                 ));
             }
         };
-        let fragments =
-            Fragments::new(session_id, pkt_id, addr.clone(), max_frag_size, pkt);
+        let fragments = Fragments::new(session_id, pkt_id, addr, max_frag_size, pkt);
         let mut frag_count = 0;
         for frag in fragments {
             frag_count += 1;

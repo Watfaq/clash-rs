@@ -709,23 +709,22 @@ impl Device for VirtualIpDevice {
                 // smoltcp::phy::Checksum::Tx` in capabilities(), but
                 // recalculating feels cleaner than disabling verification entirely
                 use smoltcp::wire::*;
-                if let Ok(IpVersion::Ipv4) = IpVersion::of_packet(&buffer) {
-                    if let Ok(ipv4) = Ipv4Packet::new_checked(&buffer[..]) {
-                        if ipv4.next_header() == IpProtocol::Udp {
-                            let src_addr = ipv4.src_addr();
-                            let dst_addr = ipv4.dst_addr();
-                            let ip_header_len = ipv4.header_len() as usize;
+                if let Ok(IpVersion::Ipv4) = IpVersion::of_packet(&buffer)
+                    && let Ok(ipv4) = Ipv4Packet::new_checked(&buffer[..])
+                    && ipv4.next_header() == IpProtocol::Udp
+                {
+                    let src_addr = ipv4.src_addr();
+                    let dst_addr = ipv4.dst_addr();
+                    let ip_header_len = ipv4.header_len() as usize;
 
-                            // Recalculate UDP checksum
-                            if let Ok(mut udp) =
-                                UdpPacket::new_checked(&mut buffer[ip_header_len..])
-                            {
-                                udp.fill_checksum(
-                                    &IpAddress::Ipv4(src_addr),
-                                    &IpAddress::Ipv4(dst_addr),
-                                );
-                            }
-                        }
+                    // Recalculate UDP checksum
+                    if let Ok(mut udp) =
+                        UdpPacket::new_checked(&mut buffer[ip_header_len..])
+                    {
+                        udp.fill_checksum(
+                            &IpAddress::Ipv4(src_addr),
+                            &IpAddress::Ipv4(dst_addr),
+                        );
                     }
                 }
 
