@@ -1,5 +1,11 @@
 # Clash-rs Build Target Configuration
-# Fully expanded from original CI matrix include
+# Expanded from original CI matrix include (some targets omitted)
+# Missing from original CI matrix:
+# - i686-unknown-freebsd
+# - macOS static-crt variants (x86_64-apple-darwin-static-crt, aarch64-apple-darwin-static-crt)
+# - Windows aarch64 static-crt (aarch64-pc-windows-msvc-static-crt)
+# - Zig settings for i686-unknown-linux-gnu, aarch64-unknown-linux-gnu, armv7-unknown-linux-gnueabihf
+# - Other possible differences (no-docker-test, etc.)
 
 # Linux GNU
 [[target]]
