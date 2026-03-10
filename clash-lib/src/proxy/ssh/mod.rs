@@ -483,7 +483,12 @@ mod tests {
                         tokio::fs::set_permissions(&dst_path, perms).await?;
 
                         // Change ownership to UID 1000, GID 1000 (container user)
-                        std::os::unix::fs::chown(&dst_path, Some(1000), Some(1000))?;
+
+                        let _ = std::os::unix::fs::chown(
+                            &dst_path,
+                            Some(1000),
+                            Some(1000),
+                        );
                     }
                 } else {
                     tokio::fs::copy(&src_path, &dst_path).await?;
@@ -520,13 +525,11 @@ mod tests {
 
                             tokio::fs::set_permissions(&dst_path, perms).await?;
 
-                            // Change ownership to UID 1000, GID 1000 (container
-                            // user)
-                            std::os::unix::fs::chown(
+                            let _ = std::os::unix::fs::chown(
                                 &dst_path,
                                 Some(1000),
                                 Some(1000),
-                            )?;
+                            );
                         }
                     }
                 }
