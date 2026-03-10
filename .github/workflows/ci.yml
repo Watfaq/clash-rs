@@ -27,8 +27,6 @@ jobs:
       RUST_TOOLCHAIN: "stable"
       RUSTC_BOOTSTRAP: "1"
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-    secrets:
-      sentry-dsn: ${{ secrets.SENTRY_DSN }}
     with:
       rust-toolchain: "stable"
       packages: "clash-rs"
