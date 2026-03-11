@@ -25,6 +25,65 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     )))
 }
 
+fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
+    let addr = format!("127.0.0.1:{}", port);
+    let mut attempts = 0;
+    while attempts < 30 {
+        if TcpStream::connect(&addr).is_err() {
+            return Ok(());
+        }
+        attempts += 1;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    Err(clash_lib::Error::Io(std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("Port {} is still open after 15 seconds", port),
+    )))
+}
+
+/// RAII guard for Clash instance that ensures proper cleanup
+pub struct ClashInstance {
+    ports: Vec<u16>,
+}
+
+impl ClashInstance {
+    pub fn start(
+        options: clash_lib::Options,
+        ports: Vec<u16>,
+    ) -> Result<Self, clash_lib::Error> {
+        std::thread::spawn(move || {
+            start_clash(options).expect("Failed to start clash");
+        });
+
+        // Wait for the main port (usually API port) to be ready
+        if let Some(&main_port) = ports.first() {
+            wait_port_ready(main_port)?;
+        }
+
+        Ok(Self { ports })
+    }
+}
+
+impl Drop for ClashInstance {
+    fn drop(&mut self) {
+        // Trigger shutdown
+        clash_lib::shutdown();
+
+        // Wait for all ports to be released
+        for &port in &self.ports {
+            if let Err(e) = wait_port_closed(port) {
+                eprintln!(
+                    "Warning: Failed to wait for port {} to close: {}",
+                    port, e
+                );
+            }
+        }
+
+        // Give a bit more time for full cleanup
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
 /// Sends an HTTP request to the specified URL using a TCP connection.
 /// Don't use any domain name in the URL, which will trigger DNS resolution.
 /// And libnss_files will likely cause a coredump(in static crt build).

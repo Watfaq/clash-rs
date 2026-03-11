@@ -18,6 +18,61 @@ use tar;
 
 const TIMEOUT_DURATION: u64 = 30;
 
+/// Creates a tar archive from a source path with the given target path.
+/// This is a blocking operation and should be called from `spawn_blocking`.
+fn create_tar_archive(source: &str, target: &str) -> anyhow::Result<Vec<u8>> {
+    let mut ar = tar::Builder::new(Vec::new());
+
+    // Remove leading slash for tar path
+    let tar_path = if target.starts_with('/') {
+        &target[1..]
+    } else {
+        target
+    };
+
+    let source_path = Path::new(source);
+    let metadata = std::fs::metadata(source_path)?;
+
+    if metadata.is_file() {
+        // Handle single file
+        let content = std::fs::read(source_path)?;
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        ar.append_data(&mut header, tar_path, &content[..])?;
+    } else if metadata.is_dir() {
+        // Handle directory recursively
+        ar.append_dir_all(tar_path, source_path)?;
+    } else {
+        anyhow::bail!("Unsupported file type for source: {}", source);
+    }
+
+    let tar_data = ar.into_inner()?;
+
+    // Debug: Print all files in the tar archive
+    tracing::trace!(
+        "=== TAR Archive Contents for mount {} -> {} ===",
+        source,
+        target
+    );
+    let mut archive = tar::Archive::new(&tar_data[..]);
+    for (idx, entry) in archive.entries()?.enumerate() {
+        match entry {
+            Ok(e) => {
+                let path = e.path().ok();
+                let size = e.header().size().ok();
+                tracing::trace!("  [{}] {:?} (size: {:?})", idx, path, size);
+            }
+            Err(e) => {
+                tracing::warn!("  [{}] Error reading entry: {}", idx, e);
+            }
+        }
+    }
+    tracing::trace!("=== End TAR Archive Contents ===");
+
+    Ok(tar_data)
+}
+
 pub struct DockerTestRunner {
     instance: Docker,
     id: String,
@@ -29,14 +84,14 @@ impl DockerTestRunner {
         image_conf: Option<CreateImageOptions>,
         mut container_conf: ContainerCreateBody,
     ) -> anyhow::Result<Self> {
-        let docker: Docker = if let Some(url) = option_env!("DOCKER_HOST") {
+        let docker: Docker = if let Some(url) = std::env::var("DOCKER_HOST").ok() {
             if url.starts_with("http://")
                 || url.starts_with("https://")
                 || url.starts_with("tcp://")
             {
-                Docker::connect_with_http(url, 60, API_DEFAULT_VERSION)?
+                Docker::connect_with_http(&url, 60, API_DEFAULT_VERSION)?
             } else if url.starts_with("unix://") || url.starts_with("npipe://") {
-                Docker::connect_with_socket(url, 60, API_DEFAULT_VERSION)?
+                Docker::connect_with_socket(&url, 60, API_DEFAULT_VERSION)?
             } else {
                 anyhow::bail!("invalid DOCKER_HOST url: {}", url);
             }
@@ -54,7 +109,8 @@ impl DockerTestRunner {
             .host_config
             .as_mut()
             .and_then(|hc| hc.mounts.take());
-        let files_to_copy = if option_env!("DOCKER_HOST")
+        let files_to_copy = if std::env::var("DOCKER_HOST")
+            .ok()
             .map(|url| {
                 url.starts_with("http://")
                     || url.starts_with("https://")
@@ -86,69 +142,13 @@ impl DockerTestRunner {
                 if let (Some(source), Some(target)) =
                     (mount.source.as_deref(), mount.target.as_deref())
                 {
-                    // Create tar archive with full path structure
-                    let mut ar = tar::Builder::new(Vec::new());
-
-                    // Remove leading slash for tar path
-                    let tar_path = if target.starts_with('/') {
-                        &target[1..]
-                    } else {
-                        target
-                    };
-
-                    let source_path = Path::new(source);
-                    let metadata = std::fs::metadata(source_path)?;
-
-                    if metadata.is_file() {
-                        // Handle single file
-                        let content = std::fs::read(source_path)?;
-                        let mut header = tar::Header::new_gnu();
-                        header.set_size(content.len() as u64);
-                        header.set_mode(0o644);
-                        ar.append_data(&mut header, tar_path, &content[..])?;
-                    } else if metadata.is_dir() {
-                        // Handle directory recursively using sync operations
-                        // append_dir_all will recursively add all files from
-                        // source_path with tar_path as the
-                        // prefix in the archive
-                        ar.append_dir_all(tar_path, source_path)?;
-                    } else {
-                        anyhow::bail!(
-                            "Unsupported file type for source: {}",
-                            source
-                        );
-                    }
-                    let tar_data = ar.into_inner()?;
-
-                    // Debug: Print all files in the tar archive
-                    tracing::trace!(
-                        "=== TAR Archive Contents for mount {} -> {} ===",
-                        source,
-                        target
-                    );
-                    let mut archive = tar::Archive::new(&tar_data[..]);
-                    for (idx, entry) in archive.entries()?.enumerate() {
-                        match entry {
-                            Ok(e) => {
-                                let path = e.path().ok();
-                                let size = e.header().size().ok();
-                                tracing::trace!(
-                                    "  [{}] {:?} (size: {:?})",
-                                    idx,
-                                    path,
-                                    size
-                                );
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "  [{}] Error reading entry: {}",
-                                    idx,
-                                    e
-                                );
-                            }
-                        }
-                    }
-                    tracing::trace!("=== End TAR Archive Contents ===");
+                    // Create tar archive in blocking context
+                    let source = source.to_string();
+                    let target = target.to_string();
+                    let tar_data = tokio::task::spawn_blocking(move || {
+                        create_tar_archive(&source, &target)
+                    })
+                    .await??;
 
                     // Upload to container root directory
                     docker

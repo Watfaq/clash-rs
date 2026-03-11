@@ -30,9 +30,9 @@ fn destination_list(gateway_ip: Option<String>) -> Vec<String> {
         debug!("gateway_ip Ip: {}", ip);
         destination_list.push(ip);
     }
-    if let Some(ip) = option_env!("CLIENT_IP") {
-        debug!("client Ip: {}", ip);
-        destination_list.insert(0, ip.to_owned());
+    if let Some(ip) = std::env::var("CLIENT_IP").ok() {
+        debug!("client Ip: {}", &ip);
+        destination_list.insert(0, ip);
     } else {
         debug!("CLIENT_IP env not set, ");
         let mut networks = Networks::new_with_refreshed_list();
