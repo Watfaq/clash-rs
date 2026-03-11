@@ -25,6 +25,7 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     )))
 }
 
+#[allow(dead_code)]
 fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
     let addr = format!("127.0.0.1:{}", port);
     let mut attempts = 0;
@@ -42,11 +43,14 @@ fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
 }
 
 /// RAII guard for Clash instance that ensures proper cleanup
+#[allow(dead_code)]
 pub struct ClashInstance {
     ports: Vec<u16>,
 }
 
 impl ClashInstance {
+    #[allow(dead_code)]
+
     pub fn start(
         options: clash_lib::Options,
         ports: Vec<u16>,
