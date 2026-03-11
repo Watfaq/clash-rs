@@ -1261,7 +1261,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serial_test",
- "sha1 0.11.0-rc.5",
+ "sha1 0.10.6",
  "sha2 0.10.9",
  "shadowquic",
  "shadowsocks",
