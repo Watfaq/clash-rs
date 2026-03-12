@@ -138,12 +138,12 @@ async fn test_connections_returns_proxy_chain_names() {
 
         let client = reqwest::Client::builder()
             .proxy(proxy)
-            .timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to build reqwest client");
 
         let response = client
-            .get("https://httpbin.yba.dev/drip?duration=5&delay=1&numbytes=1000")
+            .get("https://httpbin.yba.dev/drip?duration=2&delay=1&numbytes=500")
             .send()
             .await
             .expect("Failed to send request through proxy");
