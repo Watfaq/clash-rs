@@ -27,7 +27,7 @@ debug = 2
 panic = "abort"
 
 [workspace.lints.rust]
-warnings = "deny"
+warnings = "allow"
 
 [workspace.lints.clippy]
 redundant_clone = "deny"

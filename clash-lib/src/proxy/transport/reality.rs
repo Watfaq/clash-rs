@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use watfaq_rustls::{
     ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, SideData,
-    client::RealityConfig,
+    client::{ClientFingerprint, RealityConfig},
     pki_types::ServerName,
 };
 
@@ -29,6 +29,7 @@ pub struct RealityClient {
     public_key: [u8; 32],
     short_id: Vec<u8>,
     alpn: Option<Vec<String>>,
+    client_fingerprint: Option<String>,
 }
 
 impl RealityClient {
@@ -37,12 +38,14 @@ impl RealityClient {
         public_key: [u8; 32],
         short_id: Vec<u8>,
         alpn: Option<Vec<String>>,
+        client_fingerprint: Option<String>,
     ) -> Self {
         Self {
             sni,
             public_key,
             short_id,
             alpn,
+            client_fingerprint,
         }
     }
 }
@@ -50,11 +53,18 @@ impl RealityClient {
 #[async_trait]
 impl Transport for RealityClient {
     async fn proxy_stream(&self, stream: AnyStream) -> io::Result<AnyStream> {
-        let reality =
-            RealityConfig::new(self.public_key, self.short_id.clone())
+        let mut reality = RealityConfig::new(self.public_key, self.short_id.clone())
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
+            })?;
+
+        if let Some(client_fingerprint) = self.client_fingerprint.as_deref() {
+            let fingerprint = ClientFingerprint::from_name(client_fingerprint)
                 .map_err(|e| {
                     io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
                 })?;
+            reality = reality.with_client_fingerprint(fingerprint);
+        }
 
         let mut tls_config = ClientConfig::builder()
             .with_root_certificates(ROOT_STORE.clone())
@@ -67,7 +77,9 @@ impl Transport for RealityClient {
         }
 
         let sni: ServerName<'static> = ServerName::try_from(self.sni.clone())
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
+            })?;
 
         let conn = ClientConnection::new(Arc::new(tls_config), sni)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -98,11 +110,14 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> RealityTlsStream<IO> {
     }
 
     fn read_io(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<usize>> {
-        let mut reader = SyncReadAdapter { io: &mut self.io, cx };
+        let mut reader = SyncReadAdapter {
+            io: &mut self.io,
+            cx,
+        };
         let n = match self.session.read_tls(&mut reader) {
             Ok(n) => n,
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                return Poll::Pending
+                return Poll::Pending;
             }
             Err(e) => return Poll::Ready(Err(e)),
         };
@@ -113,7 +128,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> RealityTlsStream<IO> {
     }
 
     fn write_io(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<usize>> {
-        let mut writer = SyncWriteAdapter { io: &mut self.io, cx };
+        let mut writer = SyncWriteAdapter {
+            io: &mut self.io,
+            cx,
+        };
         match self.session.write_tls(&mut writer) {
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Poll::Pending,
             result => Poll::Ready(result),
@@ -367,9 +385,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> std::future::Future for RealityConnect<
             .expect("RealityConnect polled after completion");
 
         match stream.handshake(cx) {
-            Poll::Ready(Ok(())) => {
-                Poll::Ready(Ok(this.stream.take().unwrap()))
-            }
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(this.stream.take().unwrap())),
             Poll::Ready(Err(e)) => {
                 this.stream.take();
                 Poll::Ready(Err(e))
@@ -390,7 +406,11 @@ async fn reality_tls_connect<IO: AsyncRead + AsyncWrite + Unpin>(
 }
 
 // Suppress unused type parameter warning for unused SideData bound
-fn _assert_bounds<T: DerefMut + Deref<Target = ConnectionCommon<SD>>, SD: SideData>() {}
+fn _assert_bounds<
+    T: DerefMut + Deref<Target = ConnectionCommon<SD>>,
+    SD: SideData,
+>() {
+}
 
 #[cfg(test)]
 mod tests {
@@ -400,8 +420,13 @@ mod tests {
     fn test_reality_client_new() {
         let pk = [1u8; 32];
         let short_id = vec![0x1b, 0xc2, 0xc1, 0xef, 0x1c];
-        let client =
-            RealityClient::new("www.microsoft.com".to_owned(), pk, short_id.clone(), None);
+        let client = RealityClient::new(
+            "www.microsoft.com".to_owned(),
+            pk,
+            short_id.clone(),
+            None,
+            None,
+        );
         assert_eq!(client.sni, "www.microsoft.com");
         assert_eq!(client.public_key, pk);
         assert_eq!(client.short_id, short_id);
