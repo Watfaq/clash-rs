@@ -69,7 +69,7 @@ webpki-roots = "1.0"
 
 # shadow-tls
 tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false }
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "0e01771a894ab0c4c943302c077bd2c9f5796da8", default-features = false, features = ["std", "tls12"] }
 
 # Error handing & logging
 thiserror = "2"
@@ -98,6 +98,7 @@ lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 network-interface = { version = "2" }
 base64 = "0.22"
+hex = "0.4"
 zstd = "0.13"
 portable-atomic = { version = "1", features = ["serde"] }
 

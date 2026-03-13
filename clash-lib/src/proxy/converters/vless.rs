@@ -1,13 +1,15 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use tracing::warn;
+
 use crate::{
     Error,
     config::internal::proxy::OutboundVless,
     proxy::{
         HandlerCommonOptions,
-        transport::{GrpcClient, H2Client, TlsClient, WsClient},
+        transport::{GrpcClient, H2Client, RealityClient, TlsClient, WsClient},
         vless::{Handler, HandlerOptions},
     },
 };
-use tracing::warn;
 
 impl TryFrom<OutboundVless> for Handler {
     type Error = crate::Error;
@@ -28,6 +30,77 @@ impl TryFrom<&OutboundVless> for Handler {
                 s.common_opts.server
             );
         }
+
+        let tls: Option<Box<dyn crate::proxy::transport::Transport>> =
+            if let Some(reality_opts) = &s.reality_opts {
+                if s.skip_cert_verify.unwrap_or_default() {
+                    warn!(
+                        "skip-cert-verify is ignored when reality-opts is set for {}",
+                        s.common_opts.name
+                    );
+                }
+                if s.client_fingerprint.is_some() {
+                    warn!(
+                        "client-fingerprint (uTLS) is not yet implemented, ignored for {}",
+                        s.common_opts.name
+                    );
+                }
+                let pk_bytes: [u8; 32] = URL_SAFE_NO_PAD
+                    .decode(&reality_opts.public_key)
+                    .map_err(|e| {
+                        Error::InvalidConfig(format!(
+                            "reality public-key base64: {e}"
+                        ))
+                    })?
+                    .try_into()
+                    .map_err(|_| {
+                        Error::InvalidConfig(
+                            "reality public-key must decode to 32 bytes".into(),
+                        )
+                    })?;
+                let short_id = hex::decode(&reality_opts.short_id).map_err(|e| {
+                    Error::InvalidConfig(format!("reality short-id hex: {e}"))
+                })?;
+                let sni = s
+                    .server_name
+                    .clone()
+                    .unwrap_or_else(|| s.common_opts.server.clone());
+                Some(Box::new(RealityClient::new(sni, pk_bytes, short_id)) as _)
+            } else {
+                match s.tls.unwrap_or_default() {
+                    true => {
+                        let client = TlsClient::new(
+                            s.skip_cert_verify.unwrap_or_default(),
+                            s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
+                                s.ws_opts
+                                    .as_ref()
+                                    .and_then(|x| {
+                                        x.headers.clone().and_then(|x| {
+                                            let h = x.get("Host");
+                                            h.cloned()
+                                        })
+                                    })
+                                    .unwrap_or(s.common_opts.server.to_owned()),
+                            ),
+                            s.network
+                                .as_ref()
+                                .map(|x| match x.as_str() {
+                                    "tcp" => Ok(vec![]),
+                                    "ws" => Ok(vec!["http/1.1".to_owned()]),
+                                    "http" => Ok(vec![]),
+                                    "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
+                                    _ => Err(Error::InvalidConfig(format!(
+                                        "unsupported network: {x}"
+                                    ))),
+                                })
+                                .transpose()?,
+                            None,
+                        );
+                        Some(Box::new(client))
+                    }
+                    false => None,
+                }
+            };
 
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
@@ -87,39 +160,8 @@ impl TryFrom<&OutboundVless> for Handler {
                 })
                 .transpose()?
                 .flatten(),
-            tls: match s.tls.unwrap_or_default() {
-                true => {
-                    let client = TlsClient::new(
-                        s.skip_cert_verify.unwrap_or_default(),
-                        s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
-                            s.ws_opts
-                                .as_ref()
-                                .and_then(|x| {
-                                    x.headers.clone().and_then(|x| {
-                                        let h = x.get("Host");
-                                        h.cloned()
-                                    })
-                                })
-                                .unwrap_or(s.common_opts.server.to_owned()),
-                        ),
-                        s.network
-                            .as_ref()
-                            .map(|x| match x.as_str() {
-                                "tcp" => Ok(vec![]),
-                                "ws" => Ok(vec!["http/1.1".to_owned()]),
-                                "http" => Ok(vec![]),
-                                "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
-                                _ => Err(Error::InvalidConfig(format!(
-                                    "unsupported network: {x}"
-                                ))),
-                            })
-                            .transpose()?,
-                        None,
-                    );
-                    Some(Box::new(client))
-                }
-                false => None,
-            },
+            tls,
+            flow: s.flow.clone(),
         }))
     }
 }
@@ -127,94 +169,150 @@ impl TryFrom<&OutboundVless> for Handler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::internal::proxy::CommonConfigOptions;
+    use crate::config::internal::proxy::{CommonConfigOptions, RealityOpt};
 
-    #[test]
-    fn test_vless_network_tcp() {
-        // Test that network: tcp is accepted and results in successful parsing
-        let config = OutboundVless {
+    fn base_config() -> OutboundVless {
+        OutboundVless {
             common_opts: CommonConfigOptions {
-                name: "test-tcp".to_string(),
+                name: "test".to_string(),
                 server: "example.com".to_string(),
                 port: 443,
                 ..Default::default()
             },
-            uuid: "test-uuid".to_string(),
+            uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".to_string(),
             udp: Some(true),
-            tls: Some(true),
-            skip_cert_verify: Some(true),
-            server_name: Some("example.com".to_string()),
-            network: Some("tcp".to_string()),
-            ws_opts: None,
-            h2_opts: None,
-            grpc_opts: None,
-        };
-
-        let handler = Handler::try_from(&config);
-        assert!(
-            handler.is_ok(),
-            "VLess handler with network: tcp should parse successfully"
-        );
-    }
-
-    #[test]
-    fn test_vless_network_none() {
-        // Test that omitting network field also results in successful parsing
-        let config = OutboundVless {
-            common_opts: CommonConfigOptions {
-                name: "test-none".to_string(),
-                server: "example.com".to_string(),
-                port: 443,
-                ..Default::default()
-            },
-            uuid: "test-uuid".to_string(),
-            udp: Some(true),
-            tls: Some(true),
-            skip_cert_verify: Some(true),
-            server_name: Some("example.com".to_string()),
+            tls: None,
+            skip_cert_verify: None,
+            server_name: None,
             network: None,
             ws_opts: None,
             h2_opts: None,
             grpc_opts: None,
-        };
+            reality_opts: None,
+            flow: None,
+            client_fingerprint: None,
+        }
+    }
 
-        let handler = Handler::try_from(&config);
-        assert!(
-            handler.is_ok(),
-            "VLess handler without network field should parse successfully"
-        );
+    #[test]
+    fn test_vless_network_tcp() {
+        let config = OutboundVless {
+            tls: Some(true),
+            skip_cert_verify: Some(true),
+            server_name: Some("example.com".to_string()),
+            network: Some("tcp".to_string()),
+            ..base_config()
+        };
+        assert!(Handler::try_from(&config).is_ok());
+    }
+
+    #[test]
+    fn test_vless_network_none() {
+        let config = OutboundVless {
+            tls: Some(true),
+            skip_cert_verify: Some(true),
+            server_name: Some("example.com".to_string()),
+            ..base_config()
+        };
+        assert!(Handler::try_from(&config).is_ok());
     }
 
     #[test]
     fn test_vless_network_invalid() {
-        // Test that invalid network types are rejected
         let config = OutboundVless {
-            common_opts: CommonConfigOptions {
-                name: "test-invalid".to_string(),
-                server: "example.com".to_string(),
-                port: 443,
-                ..Default::default()
-            },
-            uuid: "test-uuid".to_string(),
-            udp: Some(true),
-            tls: Some(true),
-            skip_cert_verify: Some(true),
-            server_name: Some("example.com".to_string()),
             network: Some("invalid-network".to_string()),
-            ws_opts: None,
-            h2_opts: None,
-            grpc_opts: None,
+            ..base_config()
         };
+        let err = Handler::try_from(&config).unwrap_err();
+        assert!(err.to_string().contains("unsupported network"));
+    }
 
-        let handler = Handler::try_from(&config);
-        assert!(
-            handler.is_err(),
-            "VLess handler with invalid network should fail"
-        );
-        let err = handler.unwrap_err();
-        assert!(
-            err.to_string().contains("unsupported network"),
-            "Error should mention unsupported network"
-        );
+    #[test]
+    fn test_vless_reality_valid() {
+        // Vc8ycAgKqfRvtXjvGP0ry_U91o5wgrQlqOhHq72HYRs decodes to 32 bytes
+        let config = OutboundVless {
+            reality_opts: Some(RealityOpt {
+                public_key: "Vc8ycAgKqfRvtXjvGP0ry_U91o5wgrQlqOhHq72HYRs"
+                    .to_string(),
+                short_id: "1bc2c1ef1c".to_string(),
+            }),
+            server_name: Some("www.microsoft.com".to_string()),
+            ..base_config()
+        };
+        assert!(Handler::try_from(&config).is_ok());
+    }
+
+    #[test]
+    fn test_vless_reality_bad_pubkey_base64() {
+        let config = OutboundVless {
+            reality_opts: Some(RealityOpt {
+                public_key: "not!valid!base64!!!".to_string(),
+                short_id: "1bc2c1ef1c".to_string(),
+            }),
+            ..base_config()
+        };
+        let err = Handler::try_from(&config).unwrap_err();
+        assert!(err.to_string().contains("reality public-key base64"));
+    }
+
+    #[test]
+    fn test_vless_reality_pubkey_wrong_length() {
+        // "AAAA" decodes to 3 bytes, not 32
+        let config = OutboundVless {
+            reality_opts: Some(RealityOpt {
+                public_key: "AAAA".to_string(),
+                short_id: "1bc2c1ef1c".to_string(),
+            }),
+            ..base_config()
+        };
+        let err = Handler::try_from(&config).unwrap_err();
+        assert!(err.to_string().contains("32 bytes"));
+    }
+
+    #[test]
+    fn test_vless_reality_bad_short_id_hex() {
+        let config = OutboundVless {
+            reality_opts: Some(RealityOpt {
+                public_key: "Vc8ycAgKqfRvtXjvGP0ry_U91o5wgrQlqOhHq72HYRs"
+                    .to_string(),
+                short_id: "not-hex!!".to_string(),
+            }),
+            ..base_config()
+        };
+        let err = Handler::try_from(&config).unwrap_err();
+        assert!(err.to_string().contains("reality short-id hex"));
+    }
+
+    #[test]
+    fn test_vless_reality_overrides_tls() {
+        // When reality_opts is set, TlsClient should NOT be constructed
+        // (we use RealityClient instead, tls: true is irrelevant)
+        let config = OutboundVless {
+            tls: Some(true),
+            reality_opts: Some(RealityOpt {
+                public_key: "Vc8ycAgKqfRvtXjvGP0ry_U91o5wgrQlqOhHq72HYRs"
+                    .to_string(),
+                short_id: "1bc2c1ef1c".to_string(),
+            }),
+            server_name: Some("www.microsoft.com".to_string()),
+            ..base_config()
+        };
+        // Should succeed (RealityClient replaces TlsClient)
+        assert!(Handler::try_from(&config).is_ok());
+    }
+
+    #[test]
+    fn test_vless_reality_with_flow() {
+        let config = OutboundVless {
+            reality_opts: Some(RealityOpt {
+                public_key: "Vc8ycAgKqfRvtXjvGP0ry_U91o5wgrQlqOhHq72HYRs"
+                    .to_string(),
+                short_id: "1bc2c1ef1c".to_string(),
+            }),
+            server_name: Some("www.microsoft.com".to_string()),
+            flow: Some("xtls-rprx-vision".to_string()),
+            ..base_config()
+        };
+        assert!(Handler::try_from(&config).is_ok());
     }
 }

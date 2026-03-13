@@ -1,4 +1,4 @@
-use self::stream::VlessStream;
+use self::stream::{VisionStream, VlessStream};
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
@@ -33,6 +33,7 @@ pub struct HandlerOptions {
     pub udp: bool,
     pub transport: Option<Box<dyn Transport>>,
     pub tls: Option<Box<dyn Transport>>,
+    pub flow: Option<String>,
 }
 
 pub struct Handler {
@@ -76,10 +77,19 @@ impl Handler {
             s
         };
 
-        let vless_stream =
-            VlessStream::new(s, &self.opts.uuid, &sess.destination, is_udp)?;
+        let vless_stream = VlessStream::new(
+            s,
+            &self.opts.uuid,
+            &sess.destination,
+            is_udp,
+            self.opts.flow.clone(),
+        )?;
 
-        Ok(Box::new(vless_stream))
+        if self.opts.flow.as_deref() == Some("xtls-rprx-vision") {
+            Ok(Box::new(VisionStream::new(vless_stream)))
+        } else {
+            Ok(Box::new(vless_stream))
+        }
     }
 }
 
@@ -268,6 +278,7 @@ mod tests {
             udp: true,
             tls: tls_client(None),
             transport: Some(Box::new(ws_client)),
+            flow: None,
         };
         let handler = Arc::new(Handler::new(opts));
         let runner = get_ws_runner().await?;

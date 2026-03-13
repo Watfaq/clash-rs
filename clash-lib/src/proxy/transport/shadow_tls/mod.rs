@@ -18,10 +18,10 @@ use super::Transport;
 use crate::{common::errors::map_io_error, proxy::AnyStream};
 use prelude::*;
 
-static ROOT_STORE: LazyLock<Arc<watfaq_rustls::RootCertStore>> =
+static ROOT_STORE: LazyLock<Arc<tokio_watfaq_rustls::watfaq_rustls::RootCertStore>> =
     LazyLock::new(root_store);
 
-fn root_store() -> Arc<watfaq_rustls::RootCertStore> {
+fn root_store() -> Arc<tokio_watfaq_rustls::watfaq_rustls::RootCertStore> {
     let root_store = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
     Arc::new(root_store)
 }
@@ -50,7 +50,7 @@ impl Client {
         // handshake
         let hamc_handshake = Hmac::new(&self.password, (&[], &[]));
         let sni_name =
-            watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
+            tokio_watfaq_rustls::watfaq_rustls::pki_types::ServerName::try_from(self.host.clone())
                 .map_err(map_io_error)?;
         let session_id_generator =
             move |data: &_| generate_session_id(&hamc_handshake, data);
@@ -120,7 +120,7 @@ impl Transport for Client {
 }
 
 fn new_connector() -> TlsConnector {
-    let tls_config = watfaq_rustls::ClientConfig::builder()
+    let tls_config = tokio_watfaq_rustls::watfaq_rustls::ClientConfig::builder()
         .with_root_certificates(ROOT_STORE.clone())
         .with_no_client_auth();
 
