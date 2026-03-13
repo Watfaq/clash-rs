@@ -75,7 +75,7 @@ dns:
 
 allow-lan: true
 mode: rule
-log-level: trace
+log-level: info
 external-controller: :9090
 external-ui: "public"
 secret: "clash-rs"

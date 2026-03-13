@@ -194,7 +194,12 @@ impl TunRunner {
 }
 
 impl Runner for TunRunner {
-    fn run(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn run_async(&self) {
+        if !self.cfg.enable {
+            info!("tun is disabled, skipping");
+            return;
+        }
+
         let so_mark = self.cfg.so_mark;
         let dispatcher = self.dispatcher.clone();
         let resolver = self.resolver.clone();
@@ -204,7 +209,7 @@ impl Runner for TunRunner {
         // Call new_internal outside the async move closure
         let internal_result = self.new_internal();
 
-        Box::pin(async move {
+        tokio::spawn(async move {
             let (tun, stack, mut tcp_listener, udp_socket) = internal_result?;
 
             let framed = tun_rs::async_framed::DeviceFramed::new(
@@ -299,22 +304,18 @@ impl Runner for TunRunner {
                     Ok(())
                 },
             }
-        })
+        });
     }
 
-    fn shutdown(&self) -> BoxFuture<'_, Result<(), Error>> {
-        async {
-            info!("shutting down tun runner");
-            match routes::maybe_routes_clean_up(&self.cfg) {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("failed to clean up routes: {}", e);
-                }
+    fn shutdown(&self) {
+        info!("shutting down tun runner");
+        match routes::maybe_routes_clean_up(&self.cfg) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("failed to clean up routes: {}", e);
             }
-            self.cancellation_token.cancel();
-            Ok(())
         }
-        .boxed()
+        self.cancellation_token.cancel();
     }
 
     fn join(&self) -> BoxFuture<'_, Result<(), Error>> {

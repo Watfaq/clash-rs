@@ -14,7 +14,7 @@ use tower_http::{
     services::ServeDir,
     trace::TraceLayer,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::{
     GlobalState,
@@ -82,7 +82,7 @@ impl ApiRunner {
 }
 
 impl Runner for ApiRunner {
-    fn run(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
+    fn run_async(&self) {
         let inbound_manager = self.inbound_manager.clone();
         let dispatcher = self.dispatcher.clone();
         let global_state = self.global_state.clone();
@@ -125,7 +125,7 @@ impl Runner for ApiRunner {
             statistics_manager: statistics_manager.clone(),
         });
         let cancellation_token = self.cancellation_token.clone();
-        Box::pin(async move {
+        tokio::spawn(async move {
             info!("Starting API server");
             let mut router = Router::new()
                 .route("/", get(handlers::hello::handle))
@@ -186,7 +186,7 @@ impl Runner for ApiRunner {
                 let bind_addr = if bind_addr.starts_with(':') {
                     info!(
                         "TCP API Server address not supplied, listening on \
-                         `localhost`"
+                         `127.0.0.1`"
                     );
                     format!("127.0.0.1{bind_addr}")
                 } else {
@@ -255,7 +255,7 @@ impl Runner for ApiRunner {
 
             match (tcp_fut, ipc_fut) {
                 (Some(tcp), Some(ipc)) => {
-                    info!(
+                    debug!(
                         "API server is running on both TCP {} and IPC {}",
                         tcp_addr_display.unwrap_or_default(),
                         ipc_addr_display.unwrap_or_default()
@@ -270,7 +270,7 @@ impl Runner for ApiRunner {
                     }
                 }
                 (Some(tcp), None) => {
-                    info!(
+                    debug!(
                         "API server is running on TCP {}",
                         tcp_addr_display.clone().unwrap_or_default()
                     );
@@ -283,7 +283,7 @@ impl Runner for ApiRunner {
                     }
                 }
                 (None, Some(ipc)) => {
-                    info!(
+                    debug!(
                         "API server is running on IPC {}",
                         ipc_addr_display.unwrap_or_default()
                     );
@@ -295,19 +295,17 @@ impl Runner for ApiRunner {
                         }
                     }
                 }
-                (None, None) => Err(crate::Error::Operation(
-                    "No API server listener configured".to_string(),
-                )),
+                (None, None) => {
+                    info!("API server: no listener configured, skipping");
+                    Ok(())
+                }
             }
-        })
+        });
     }
 
-    fn shutdown(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
-        Box::pin(async move {
-            info!("Shutting down API server");
-            self.cancellation_token.cancel();
-            Ok(())
-        })
+    fn shutdown(&self) {
+        info!("Shutting down API server");
+        self.cancellation_token.cancel();
     }
 
     fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
