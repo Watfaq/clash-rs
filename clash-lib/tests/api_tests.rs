@@ -1,4 +1,6 @@
-use crate::common::{ClashInstance, send_http_request};
+use crate::common::{
+    ClashInstance, send_http_request, start_clash, wait_port_ready,
+};
 use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options, shutdown};
 use http_body_util::BodyExt;
