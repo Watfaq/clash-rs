@@ -65,7 +65,20 @@ impl TryFrom<&OutboundVless> for Handler {
                     .server_name
                     .clone()
                     .unwrap_or_else(|| s.common_opts.server.clone());
-                Some(Box::new(RealityClient::new(sni, pk_bytes, short_id)) as _)
+                let alpn = s
+                    .network
+                    .as_ref()
+                    .map(|x| match x.as_str() {
+                        "tcp" => Ok(vec![]),
+                        "ws" => Ok(vec!["http/1.1".to_owned()]),
+                        "http" => Ok(vec![]),
+                        "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
+                        _ => {
+                            Err(Error::InvalidConfig(format!("unsupported network: {x}")))
+                        }
+                    })
+                    .transpose()?;
+                Some(Box::new(RealityClient::new(sni, pk_bytes, short_id, alpn)) as _)
             } else {
                 match s.tls.unwrap_or_default() {
                     true => {

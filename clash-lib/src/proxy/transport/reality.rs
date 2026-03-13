@@ -28,14 +28,21 @@ pub struct RealityClient {
     sni: String,
     public_key: [u8; 32],
     short_id: Vec<u8>,
+    alpn: Option<Vec<String>>,
 }
 
 impl RealityClient {
-    pub fn new(sni: String, public_key: [u8; 32], short_id: Vec<u8>) -> Self {
+    pub fn new(
+        sni: String,
+        public_key: [u8; 32],
+        short_id: Vec<u8>,
+        alpn: Option<Vec<String>>,
+    ) -> Self {
         Self {
             sni,
             public_key,
             short_id,
+            alpn,
         }
     }
 }
@@ -49,10 +56,15 @@ impl Transport for RealityClient {
                     io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
                 })?;
 
-        let tls_config = ClientConfig::builder()
+        let mut tls_config = ClientConfig::builder()
             .with_root_certificates(ROOT_STORE.clone())
             .with_reality(reality)
             .with_no_client_auth();
+
+        if let Some(alpn) = &self.alpn {
+            tls_config.alpn_protocols =
+                alpn.iter().map(|s| s.as_bytes().to_vec()).collect();
+        }
 
         let sni: ServerName<'static> = ServerName::try_from(self.sni.clone())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
@@ -389,7 +401,7 @@ mod tests {
         let pk = [1u8; 32];
         let short_id = vec![0x1b, 0xc2, 0xc1, 0xef, 0x1c];
         let client =
-            RealityClient::new("www.microsoft.com".to_owned(), pk, short_id.clone());
+            RealityClient::new("www.microsoft.com".to_owned(), pk, short_id.clone(), None);
         assert_eq!(client.sni, "www.microsoft.com");
         assert_eq!(client.public_key, pk);
         assert_eq!(client.short_id, short_id);
