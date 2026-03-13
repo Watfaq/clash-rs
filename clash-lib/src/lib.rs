@@ -230,8 +230,8 @@ pub async fn start(
         None,
     ));
 
-    // api_listener is not part of components because it requires componenets to be initialized before it can be initialized.
-    // start it manually.
+    // api_listener is not part of components because it requires componenets to be
+    // initialized before it can be initialized. start it manually.
     api_listener.run_async();
 
     {
@@ -267,9 +267,11 @@ pub async fn start(
             components.stop_all();
             new_components.start_all();
 
-            // TODO: every reload is causing the API server to restart, we should make the API server reloadable instead of restarting it.
+            // TODO: every reload is causing the API server to restart, we should
+            // make the API server reloadable instead of restarting it.
             // maybe adding APIs to replace components
-            // and only recreate the listeners when necessary (e.g. when the listen address or port is changed)
+            // and only recreate the listeners when necessary (e.g. when the listen
+            // address or port is changed)
             let new_api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
                 controller_cfg,
                 log_tx.clone(),
