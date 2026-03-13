@@ -1,4 +1,4 @@
-use self::stream::{VisionStream, VlessStream};
+use self::stream::VlessStream;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType,
@@ -85,11 +85,9 @@ impl Handler {
             self.opts.flow.clone(),
         )?;
 
-        if self.opts.flow.as_deref() == Some("xtls-rprx-vision") {
-            Ok(Box::new(VisionStream::new(vless_stream)))
-        } else {
-            Ok(Box::new(vless_stream))
-        }
+        // For Vision flow we currently only advertise flow in VLESS addon.
+        // Framing stays as regular VLESS stream to remain compatible with Xray/Sing-box servers.
+        Ok(Box::new(vless_stream))
     }
 }
 
