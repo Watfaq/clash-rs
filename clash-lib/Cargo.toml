@@ -69,7 +69,7 @@ webpki-roots = "1.0"
 
 # shadow-tls
 tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
-watfaq-rustls = { git = "https://github.com/Rigby-Foundation/rustls.git", rev = "1053ba8da88e6382a18e77226122c2773ff92bd4", default-features = false, features = ["std", "tls12"] }
+watfaq-rustls = { git = "https://github.com/Rigby-Foundation/rustls.git", rev = "ef566803a032efeea404de7bbb515de88e244ebc", default-features = false, features = ["std", "tls12"] }
 
 # Error handing & logging
 thiserror = "2"

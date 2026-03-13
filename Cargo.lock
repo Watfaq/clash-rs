@@ -1298,7 +1298,7 @@ dependencies = [
  "uuid",
  "watfaq-dns",
  "watfaq-netstack",
- "watfaq-rustls 0.23.21 (git+https://github.com/Rigby-Foundation/rustls.git?rev=1053ba8da88e6382a18e77226122c2773ff92bd4)",
+ "watfaq-rustls 0.23.21 (git+https://github.com/Rigby-Foundation/rustls.git?rev=ef566803a032efeea404de7bbb515de88e244ebc)",
  "webpki-roots",
  "windows 0.62.2",
  "zstd",
@@ -9870,11 +9870,10 @@ dependencies = [
 [[package]]
 name = "watfaq-rustls"
 version = "0.23.21"
-source = "git+https://github.com/Rigby-Foundation/rustls.git?rev=1053ba8da88e6382a18e77226122c2773ff92bd4#1053ba8da88e6382a18e77226122c2773ff92bd4"
+source = "git+https://github.com/Watfaq/rustls.git?rev=4cae3aa2e84ea29d8a74b495793773bdb0a72206#4cae3aa2e84ea29d8a74b495793773bdb0a72206"
 dependencies = [
- "aws-lc-rs",
+ "log",
  "once_cell",
- "ring",
  "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "subtle",
@@ -9884,10 +9883,11 @@ dependencies = [
 [[package]]
 name = "watfaq-rustls"
 version = "0.23.21"
-source = "git+https://github.com/Watfaq/rustls.git?rev=4cae3aa2e84ea29d8a74b495793773bdb0a72206#4cae3aa2e84ea29d8a74b495793773bdb0a72206"
+source = "git+https://github.com/Rigby-Foundation/rustls.git?rev=ef566803a032efeea404de7bbb515de88e244ebc#ef566803a032efeea404de7bbb515de88e244ebc"
 dependencies = [
- "log",
+ "aws-lc-rs",
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "subtle",
