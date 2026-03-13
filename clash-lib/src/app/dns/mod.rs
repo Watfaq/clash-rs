@@ -22,9 +22,9 @@ pub use config::{Config, EdnsClientSubnet};
 
 pub use resolver::{EnhancedResolver, SystemResolver, new as new_resolver};
 
+pub use server::DnsRunner;
 #[cfg(feature = "tun")]
 pub use server::exchange_with_resolver;
-pub use server::get_dns_listener;
 
 #[async_trait]
 pub trait Client: Sync + Send + Debug {
