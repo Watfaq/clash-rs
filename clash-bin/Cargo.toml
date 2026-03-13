@@ -36,6 +36,7 @@ ring = ["clash-lib/ring"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+anyhow = "1"
 
 clash-lib = { path = "../clash-lib", default-features = false }
 

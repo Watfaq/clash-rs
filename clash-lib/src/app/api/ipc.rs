@@ -384,4 +384,92 @@ mod tests {
         server_handle.abort();
         let _ = server_handle.await;
     }
+
+    #[tokio::test]
+    #[traced_test]
+    #[cfg(windows)]
+    async fn test_serve_ipc_windows_multiple_clients() -> anyhow::Result<()> {
+        use hyper::client::conn;
+        use hyper_util::rt::TokioIo;
+        use tokio::{
+            net::windows::named_pipe::ClientOptions,
+            time::{Duration, timeout},
+        };
+
+        let router = test_router();
+        let path = r"\\.\pipe\test_named_pipe_win_multi_client";
+
+        let server_handle = tokio::spawn({
+            let router = router.clone();
+            async move {
+                let _ = serve_ipc(router, path).await;
+            }
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let mut handles = vec![];
+        for i in 0..3 {
+            handles.push(tokio::spawn(async move {
+                timeout(Duration::from_secs(5), async {
+                    use anyhow::Context;
+                    use bytes::Bytes;
+                    use futures::StreamExt;
+                    use http_body_util::{BodyExt, Empty};
+                    tokio::time::sleep(Duration::from_millis(100 * i)).await;
+                    let client = ClientOptions::new()
+                        .open(path)
+                        .context("Failed to connect to named pipe")?;
+
+                    let io = TokioIo::new(client);
+                    let (mut request_sender, connection) =
+                        conn::http1::handshake(io)
+                            .await
+                            .context("Failed to handshake")?;
+
+                    tokio::spawn(async move {
+                        if let Err(e) = connection.await {
+                            eprintln!("Connection error: {}", e);
+                        }
+                    });
+
+                    let request = hyper::Request::builder()
+                        .uri("http://localhost/test")
+                        .header("Host", "localhost")
+                        .body(Empty::<Bytes>::new())
+                        .context("Failed to build request")?;
+
+                    let response = request_sender
+                        .send_request(request)
+                        .await
+                        .context("Failed to send request")?;
+
+                    let body = response
+                        .into_body()
+                        .into_data_stream()
+                        .next()
+                        .await
+                        .context("Failed to read response body")??;
+
+                    let response: Response = serde_json::from_slice(&body)
+                        .context("Failed to parse response JSON")?;
+
+                    assert_eq!(response.message, "Hello, World!");
+                    println!("Client {} received response: {}", i, response.message);
+                    anyhow::Ok(())
+                })
+                .await
+                .expect("Client test timed out")
+            }));
+        }
+
+        for handle in handles {
+            let result = handle.await.unwrap();
+            assert!(result.is_ok());
+        }
+
+        server_handle.abort();
+        let _ = server_handle.await;
+        Ok(())
+    }
 }

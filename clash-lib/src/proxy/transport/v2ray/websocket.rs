@@ -63,12 +63,12 @@ impl V2rayWsClient {
             headers.insert("Host".to_owned(), host.clone());
         }
         let ws_client = transport::WsClient::new(
-            host.clone(),
+            host,
             port,
             if path.is_empty() {
                 "/".to_owned()
             } else {
-                path.clone()
+                path
             },
             headers,
             None,

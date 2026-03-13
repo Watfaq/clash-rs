@@ -10,6 +10,8 @@ target/
 /output/
 rust-project.json
 /build/
+docs
+.history
 
 # don't check in this real config
 ignore*.yaml
@@ -29,3 +31,6 @@ shell.nix
 codecov.json
 
 .env
+
+# trace files
+**/trace-*.json
