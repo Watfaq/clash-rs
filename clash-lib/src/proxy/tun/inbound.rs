@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use futures::{SinkExt, StreamExt};
-use std::sync::Arc;
+use std::{sync::Arc, thread::sleep, time::Duration};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -142,6 +142,24 @@ pub fn get_runner(
             let dev = tun_builder.build_async()?;
 
             if !tun_exist {
+                let mut tun_visible = false;
+                for _ in 0..40 {
+                    tun_visible = network_interface::NetworkInterface::show()
+                        .map(|ifs| ifs.into_iter().any(|x| x.name == tun_name))
+                        .unwrap_or(false);
+                    if tun_visible {
+                        break;
+                    }
+                    sleep(Duration::from_millis(50));
+                }
+
+                if !tun_visible {
+                    return Err(Error::Operation(format!(
+                        "tun device {} not visible after waiting 2000ms",
+                        tun_name
+                    )));
+                }
+
                 info!("setting up routes for tun {}", &tun_name);
                 maybe_add_routes(&cfg, &tun_name)?;
             } else {
