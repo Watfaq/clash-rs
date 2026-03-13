@@ -44,7 +44,7 @@ use std::{
 };
 use thiserror::Error;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub mod app;
 pub mod config;
@@ -160,14 +160,19 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
     })
 }
 
-static SHUTDOWN_TOKEN: OnceLock<tokio_util::sync::CancellationToken> =
-    OnceLock::new();
+static SHUTDOWN_TOKEN: std::sync::Mutex<Vec<tokio_util::sync::CancellationToken>> =
+    std::sync::Mutex::new(Vec::new());
 
 pub fn shutdown() -> bool {
-    if let Some(token) = SHUTDOWN_TOKEN.get() {
-        token.cancel();
+    let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
+    if !token_guard.is_empty() {
+        for token in token_guard.drain(..) {
+            token.cancel();
+        }
+        warn!("Shutdown signal sent, waiting for shutdown to complete...");
         true
     } else {
+        warn!("Shutdown token not initialized, cannot shutdown");
         false
     }
 }
@@ -193,8 +198,12 @@ pub async fn start(
 ) -> Result<()> {
     setup_default_crypto_provider();
 
-    let shutdown_token =
-        SHUTDOWN_TOKEN.get_or_init(tokio_util::sync::CancellationToken::new);
+    let shutdown_token = tokio_util::sync::CancellationToken::new();
+
+    {
+        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
+        token_guard.push(shutdown_token.clone());
+    }
 
     let cwd = PathBuf::from(cwd);
 
@@ -227,7 +236,7 @@ pub async fn start(
         components.cache_store.clone(),
         components.router.clone(),
         cwd.to_string_lossy().to_string(),
-        None,
+        Some(shutdown_token.child_token()),
     ));
 
     // api_listener is not part of components because it requires components to be
@@ -246,6 +255,8 @@ pub async fn start(
     components.start_all();
 
     let cwd_clone = cwd.clone();
+
+    let reload_token = shutdown_token.child_token();
     tokio::spawn(async move {
         // Listen for config reload signal and reload config
         while let Some((config, done)) = reload_rx.recv().await {
@@ -284,7 +295,7 @@ pub async fn start(
                 new_components.cache_store.clone(),
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
-                None,
+                Some(reload_token.clone()),
             ));
             let mut g = global_state.lock().await;
 

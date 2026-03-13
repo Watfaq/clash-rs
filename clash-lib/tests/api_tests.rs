@@ -1,8 +1,6 @@
-use crate::common::{
-    ClashInstance, send_http_request, start_clash, wait_port_ready,
-};
+use crate::common::{ClashInstance, send_http_request};
 use bytes::{Buf, Bytes};
-use clash_lib::{Config, Options, shutdown};
+use clash_lib::{Config, Options};
 use http_body_util::BodyExt;
 use std::{path::PathBuf, time::Duration};
 
@@ -108,8 +106,6 @@ proxies:
         !get_allow_lan(9091).await,
         "expected allow-lan=false after reload"
     );
-
-    shutdown();
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -124,17 +120,16 @@ async fn test_get_set_allow_lan() {
         config_path.to_string_lossy()
     );
 
-    std::thread::spawn(move || {
-        start_clash(Options {
+    let _clash = ClashInstance::start(
+        Options {
             config: Config::File(config_path.to_string_lossy().to_string()),
             cwd: Some(wd.to_string_lossy().to_string()),
             rt: None,
             log_file: None,
-        })
-        .expect("Failed to start clash");
-    });
-
-    wait_port_ready(9090).expect("Clash server is not ready");
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
 
     assert!(
         get_allow_lan(9090).await,

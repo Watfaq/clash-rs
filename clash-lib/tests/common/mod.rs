@@ -21,7 +21,7 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     }
     Err(clash_lib::Error::Io(std::io::Error::new(
         std::io::ErrorKind::TimedOut,
-        format!("Port {} is not ready after 10 attempts", port),
+        format!("Port {} is not ready after 30 attempts", port),
     )))
 }
 

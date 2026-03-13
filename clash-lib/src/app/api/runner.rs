@@ -126,7 +126,6 @@ impl Runner for ApiRunner {
         });
         let cancellation_token = self.cancellation_token.clone();
         tokio::spawn(async move {
-            info!("Starting API server");
             let mut router = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
@@ -194,8 +193,11 @@ impl Runner for ApiRunner {
                 };
                 let router_clone = router.clone();
                 Some(async move {
-                    info!("Starting API server on TCP address {bind_addr}");
                     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+                    info!(
+                        "API server is listening on TCP address {}",
+                        listener.local_addr()?
+                    );
                     // TCP related security checks
                     if let Ok(addr) = listener.local_addr() {
                         if !addr.ip().is_loopback()
@@ -253,7 +255,7 @@ impl Runner for ApiRunner {
                 async move { ipc::serve_ipc(router, &ipc_path).await }
             });
 
-            match (tcp_fut, ipc_fut) {
+            let result = match (tcp_fut, ipc_fut) {
                 (Some(tcp), Some(ipc)) => {
                     debug!(
                         "API server is running on both TCP {} and IPC {}",
@@ -264,7 +266,7 @@ impl Runner for ApiRunner {
                         result = tcp => result,
                         result = ipc => result,
                         _ = cancellation_token.cancelled() => {
-                            info!("API server is closed");
+                            info!("All API server closed");
                             Ok(())
                         }
                     }
@@ -277,7 +279,7 @@ impl Runner for ApiRunner {
                     tokio::select! {
                         result = tcp => result,
                         _ = cancellation_token.cancelled() => {
-                            info!("API server is closed");
+                            info!("TCP API server is closed");
                             Ok(())
                         }
                     }
@@ -290,7 +292,7 @@ impl Runner for ApiRunner {
                     tokio::select! {
                         result = ipc => result,
                         _ = cancellation_token.cancelled() => {
-                            info!("API server is closed");
+                            info!("IPC API server is closed");
                             Ok(())
                         }
                     }
@@ -299,6 +301,9 @@ impl Runner for ApiRunner {
                     info!("API server: no listener configured, skipping");
                     Ok(())
                 }
+            };
+            if let Err(e) = result {
+                error!("API server failed to start, error: {}", e);
             }
         });
     }
