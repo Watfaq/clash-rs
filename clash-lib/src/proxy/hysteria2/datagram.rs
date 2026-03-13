@@ -39,6 +39,12 @@ impl HysteriaDatagramOutbound {
         conn: Arc<HysteriaConnection>,
         local_addr: SocksAddr,
     ) -> Self {
+        tracing::trace!(
+            "HysteriaDatagramOutbound::new: session_id={}, local_addr={:?}",
+            session_id,
+            local_addr
+        );
+
         let (send_tx, send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let udp_sessions = conn.udp_sessions.clone();
@@ -46,10 +52,15 @@ impl HysteriaDatagramOutbound {
             session_id,
             UdpSession {
                 incoming: recv_tx,
-                local_addr,
+                local_addr: local_addr.clone(),
                 defragger: Defragger::default(),
             },
         );
+        tracing::trace!(
+            "HysteriaDatagramOutbound: UDP session {} registered",
+            session_id
+        );
+
         tokio::spawn(async move {
             // capture vars
             let mut send_rx = send_rx;
@@ -60,6 +71,13 @@ impl HysteriaDatagramOutbound {
                 let pkt_id =
                     next_pkt_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let pkt_id = (pkt_id % u16::MAX as u32) as u16;
+                tracing::trace!(
+                    "HysteriaDatagramOutbound: sending packet for session {}, \
+                     pkt_id={}, dst={:?}",
+                    session_id,
+                    pkt_id,
+                    next_send.dst_addr
+                );
                 if let Err(e) = conn.send_packet(
                     next_send.data.into(),
                     next_send.dst_addr,
