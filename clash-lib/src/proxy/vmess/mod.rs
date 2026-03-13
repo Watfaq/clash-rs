@@ -267,10 +267,12 @@ mod tests {
             "".to_owned(),
         );
 
+        let runner = get_ws_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-vmess-ws".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -280,7 +282,7 @@ mod tests {
             transport: Some(Box::new(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        let runner = get_ws_runner().await?;
+
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 
@@ -309,10 +311,11 @@ mod tests {
             "example.org".to_owned(),
             "example!".to_owned().try_into()?,
         );
+        let container = get_grpc_runner().await?;
         let opts = HandlerOptions {
             name: "test-vmess-grpc".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -322,8 +325,7 @@ mod tests {
             transport: Some(Box::new(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -353,10 +355,11 @@ mod tests {
             http::Method::POST,
             "/test".to_owned().try_into()?,
         );
+        let container = get_h2_runner().await?;
         let opts = HandlerOptions {
             name: "test-vmess-h2".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -369,7 +372,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }
