@@ -230,7 +230,7 @@ pub async fn start(
         None,
     ));
 
-    // api_listener is not part of components because it requires componenets to be
+    // api_listener is not part of components because it requires components to be
     // initialized before it can be initialized. start it manually.
     api_listener.run_async();
 
