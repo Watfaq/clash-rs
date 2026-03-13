@@ -1224,6 +1224,7 @@ dependencies = [
  "h2",
  "h3 0.0.8",
  "h3-quinn 0.0.10",
+ "hex",
  "hickory-client",
  "hickory-proto",
  "hickory-resolver",
@@ -8139,7 +8140,7 @@ dependencies = [
 [[package]]
 name = "tokio-watfaq-rustls"
 version = "0.26.0"
-source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=638db32084d7ecf9c2660847b55d48d1186b4055#638db32084d7ecf9c2660847b55d48d1186b4055"
+source = "git+https://github.com/Watfaq/tokio-rustls.git?rev=cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8#cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8"
 dependencies = [
  "rustls-pki-types",
  "tokio",
@@ -10028,7 +10029,7 @@ dependencies = [
 [[package]]
 name = "watfaq-rustls"
 version = "0.23.21"
-source = "git+https://github.com/Watfaq/rustls.git?rev=4cae3aa2e84ea29d8a74b495793773bdb0a72206#4cae3aa2e84ea29d8a74b495793773bdb0a72206"
+source = "git+https://github.com/Watfaq/rustls.git?rev=c3ab043d673029d245fd618b9bc86fd6a6109bae#c3ab043d673029d245fd618b9bc86fd6a6109bae"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -10037,6 +10038,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-webpki 0.102.8",
  "subtle",
+ "x25519-dalek",
  "zeroize",
 ]
 
