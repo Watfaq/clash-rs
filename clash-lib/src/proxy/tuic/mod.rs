@@ -13,7 +13,6 @@ use async_trait::async_trait;
 use quinn::{
     EndpointConfig, TokioRuntime,
     congestion::{BbrConfig, NewRenoConfig},
-    crypto::rustls::QuicClientConfig,
 };
 use tracing::debug;
 
@@ -44,11 +43,12 @@ use crate::{
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
-use quinn::{
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+use tuic_core::quinn::quinn::{
     ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
     TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
+    crypto::rustls::QuicClientConfig,
 };
-use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 

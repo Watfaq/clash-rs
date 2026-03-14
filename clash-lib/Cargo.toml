@@ -76,7 +76,7 @@ thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "=0.3", features = ["macros", "local-offset"] }
+time = { version = "0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = { version = "0.2" }
 tracing-log = "0.2"
@@ -160,11 +160,11 @@ maxminddb = "0.27"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.38", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.40", optional = true, default-features = false }
+arti-client = { version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.39", optional = true, default-features = false }
 
 # tuic
-tuic-core= { tag = "v1.7.1", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
+tuic-core= { tag = "v1.6.7", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -205,8 +205,7 @@ bollard = "0.20"
 tar = "0.4.44"
 serial_test = "3.4"
 env_logger = "0.11"
-# donnot change the version, russh is not compatible with the latest version of rand_core
-rand_chacha = "=0.3"
+rand_chacha = "0.9"
 httpmock = "0.8.3" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"

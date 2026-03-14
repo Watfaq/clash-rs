@@ -1,8 +1,8 @@
 use crate::{proxy::datagram::UdpPacket, session::SocksAddr as ClashSocksAddr};
 use anyhow::{Result, anyhow};
 use bytes::Bytes;
-use quinn::ZeroRttAccepted;
 use std::{sync::Arc, time::Duration};
+use tuic_core::quinn::quinn::ZeroRttAccepted;
 use tuic_core::{
     Address,
     quinn::{Connect, Packet},

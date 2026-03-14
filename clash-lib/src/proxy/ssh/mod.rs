@@ -313,6 +313,7 @@ mod tests {
     fn gen_ssh_key_pair(
         algo: russh::keys::Algorithm,
     ) -> anyhow::Result<(String, String)> {
+        use rand_core::SeedableRng;
         let mut rng = rand_chacha::ChaCha12Rng::from_seed(Default::default());
         let ssh_private_key = russh::keys::PrivateKey::random(&mut rng, algo)?;
         let ssh_public_key = ssh_private_key.public_key();
