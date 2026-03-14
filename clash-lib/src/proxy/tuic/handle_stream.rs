@@ -4,8 +4,10 @@ use anyhow::anyhow;
 use bytes::Bytes;
 use register_count::Register;
 use std::sync::{Arc, atomic::Ordering};
-use tuic_core::quinn::Task;
-use tuic_core::quinn::quinn::{RecvStream, SendStream, VarInt};
+use tuic_core::quinn::{
+    Task,
+    quinn::{RecvStream, SendStream, VarInt},
+};
 
 impl TuicConnection {
     pub async fn accept_uni_stream(&self) -> anyhow::Result<(RecvStream, Register)> {
