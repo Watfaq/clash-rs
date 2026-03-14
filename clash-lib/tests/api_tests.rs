@@ -279,3 +279,233 @@ async fn test_connections_returns_proxy_chain_names() {
 
     // Both _server and _client will be dropped here, automatically cleaning up
 }
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_configs_listeners() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    // listeners field should be present and non-empty
+    let listeners = json
+        .get("listeners")
+        .expect("'listeners' field missing")
+        .as_array()
+        .expect("'listeners' should be an array");
+    assert!(!listeners.is_empty(), "listeners should not be empty");
+
+    // Each listener should have name, type, port, active fields
+    for listener in listeners {
+        assert!(
+            listener.get("name").is_some(),
+            "listener missing 'name': {listener}"
+        );
+        assert!(
+            listener.get("type").is_some(),
+            "listener missing 'type': {listener}"
+        );
+        let port = listener
+            .get("port")
+            .and_then(|p| p.as_u64())
+            .expect("listener missing 'port' or not a number");
+        assert!(port > 0, "listener port should be > 0");
+        assert!(
+            listener.get("active").is_some(),
+            "listener missing 'active': {listener}"
+        );
+    }
+
+    // Verify known ports are present (config has port:8888, socks:8889, mixed:8899)
+    let ports: Vec<u64> = listeners
+        .iter()
+        .filter_map(|l| l.get("port").and_then(|p| p.as_u64()))
+        .collect();
+    assert!(ports.contains(&8888), "expected port 8888 in listeners");
+    assert!(ports.contains(&8889), "expected port 8889 in listeners");
+    assert!(ports.contains(&8899), "expected port 8899 in listeners");
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_configs_lan_ips_when_allow_lan() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    // rules.yaml has allow-lan: true
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    // allow-lan is true, so lan-ips should be present and contain only IPv4
+    let lan_ips = json
+        .get("lan-ips")
+        .expect("'lan-ips' field missing when allow-lan is true")
+        .as_array()
+        .expect("'lan-ips' should be an array");
+
+    for ip in lan_ips {
+        let ip_str = ip.as_str().expect("lan-ips entry should be a string");
+        // Only IPv4 should be returned
+        assert!(
+            ip_str.parse::<std::net::Ipv4Addr>().is_ok(),
+            "expected only IPv4 addresses in lan-ips, got: {ip_str}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_configs_dns_listen_when_enabled() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    // Reload with dns.enable: true so dns-listen is populated
+    let new_payload = r#"
+mixed-port: 8899
+allow-lan: true
+mode: direct
+log-level: info
+external-controller: :9090
+secret: clash-rs
+dns:
+  enable: true
+  ipv6: false
+  listen:
+    udp: 127.0.0.1:53553
+    tcp: 127.0.0.1:53553
+  default-nameserver:
+    - 8.8.8.8
+  nameserver:
+    - 8.8.8.8
+tun:
+  enable: false
+proxies:
+  - {name: DIRECT_alias, type: direct}
+"#;
+    let body = serde_json::json!({ "payload": new_payload }).to_string();
+    let configs_url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body(body)
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(configs_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send PUT /configs");
+    assert_eq!(res.status(), http::StatusCode::NO_CONTENT);
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let req = hyper::Request::builder()
+        .uri(configs_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(configs_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send GET /configs");
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    let dns_listen = json
+        .get("dns-listen")
+        .expect("'dns-listen' field missing when dns.enable is true");
+
+    let udp = dns_listen
+        .get("udp")
+        .and_then(|v| v.as_str())
+        .expect("'dns-listen.udp' field missing");
+    assert_eq!(udp, "127.0.0.1:53553");
+
+    let tcp = dns_listen
+        .get("tcp")
+        .and_then(|v| v.as_str())
+        .expect("'dns-listen.tcp' field missing");
+    assert_eq!(tcp, "127.0.0.1:53553");
+}

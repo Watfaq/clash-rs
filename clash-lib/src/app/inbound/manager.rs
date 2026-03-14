@@ -31,6 +31,15 @@ pub struct Ports {
     pub mixed_port: Option<u16>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InboundEndpoint {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub inbound_type: String,
+    pub port: u16,
+    pub active: bool,
+}
+
 pub struct InboundManager {
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
@@ -218,6 +227,23 @@ impl InboundManager {
         } else {
             BindAddress::default()
         }
+    }
+
+    pub async fn get_listeners(&self) -> Vec<InboundEndpoint> {
+        let guard = self.inbound_handlers.read().await;
+        guard
+            .iter()
+            .map(|(opts, handler)| {
+                let common = opts.common_opts();
+                let active = handler.as_ref().map_or(false, |h| !h.is_finished());
+                InboundEndpoint {
+                    name: common.name.clone(),
+                    inbound_type: opts.type_name().to_string(),
+                    port: common.port,
+                    active,
+                }
+            })
+            .collect()
     }
 
     pub async fn set_bind_address(&self, bind_address: BindAddress) {

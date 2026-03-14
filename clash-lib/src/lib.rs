@@ -11,7 +11,7 @@ use crate::proxy::tun;
 use crate::{
     app::{
         dispatcher::{Dispatcher, StatisticsManager},
-        dns::{self, SystemResolver, ThreadSafeDNSResolver},
+        dns::{self, SystemResolver, ThreadSafeDNSResolver, config::DNSListenAddr},
         inbound::manager::InboundManager,
         logging::LogEvent,
         net::init_net_config,
@@ -237,6 +237,8 @@ pub async fn start(
         components.router.clone(),
         cwd.to_string_lossy().to_string(),
         Some(shutdown_token.child_token()),
+        components.dns_listen.clone(),
+        components.dns_enabled,
     ));
 
     // api_listener is not part of components because it requires components to be
@@ -296,6 +298,8 @@ pub async fn start(
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
                 Some(reload_token.clone()),
+                new_components.dns_listen.clone(),
+                new_components.dns_enabled,
             ));
             let mut g = global_state.lock().await;
 
@@ -330,6 +334,8 @@ struct RuntimeComponents {
     tun_runner: ArcRunner,
     dns_listener: ArcRunner,
     inbound_manager: Arc<InboundManager>,
+    dns_listen: DNSListenAddr,
+    dns_enabled: bool,
 }
 
 impl RuntimeComponents {
@@ -533,7 +539,7 @@ async fn create_components(
     debug!("initializing dns listener");
     let dns_listener: ArcRunner = Arc::new(dns::DnsRunner::new(
         dns_enable,
-        dns_listen,
+        dns_listen.clone(),
         dns_resolver.clone(),
         &cwd,
         Some(cancellation_token.child_token()),
@@ -551,6 +557,8 @@ async fn create_components(
         #[cfg(feature = "tun")]
         tun_runner,
         dns_listener,
+        dns_listen,
+        dns_enabled: dns_enable,
     })
 }
 

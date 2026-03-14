@@ -21,7 +21,7 @@ use crate::{
     app::{
         api::{AppState, handlers, ipc, middlewares},
         dispatcher::{self, StatisticsManager},
-        dns::ThreadSafeDNSResolver,
+        dns::{ThreadSafeDNSResolver, config::DNSListenAddr},
         inbound::manager::InboundManager,
         logging::LogEvent,
         outbound::manager::ThreadSafeOutboundManager,
@@ -46,6 +46,8 @@ pub struct ApiRunner {
     cwd: String,
 
     cancellation_token: tokio_util::sync::CancellationToken,
+    dns_listen_addr: DNSListenAddr,
+    dns_enabled: bool,
 }
 
 impl ApiRunner {
@@ -63,6 +65,8 @@ impl ApiRunner {
         router: ThreadSafeRouter,
         cwd: String,
         cancellation_token: Option<tokio_util::sync::CancellationToken>,
+        dns_listen_addr: DNSListenAddr,
+        dns_enabled: bool,
     ) -> Self {
         Self {
             controller_cfg,
@@ -77,6 +81,8 @@ impl ApiRunner {
             router,
             cwd,
             cancellation_token: cancellation_token.unwrap_or_default(),
+            dns_listen_addr,
+            dns_enabled,
         }
     }
 }
@@ -93,6 +99,8 @@ impl Runner for ApiRunner {
         let controller_cfg = self.controller_cfg.clone();
         let router = self.router.clone();
         let cwd = self.cwd.clone();
+        let dns_listen_addr = self.dns_listen_addr.clone();
+        let dns_enabled = self.dns_enabled;
 
         let ipc_addr = controller_cfg.external_controller_ipc;
         let tcp_addr = controller_cfg.external_controller;
@@ -140,6 +148,8 @@ impl Runner for ApiRunner {
                         dispatcher,
                         global_state,
                         dns_resolver.clone(),
+                        dns_listen_addr,
+                        dns_enabled,
                     ),
                 )
                 .nest("/rules", handlers::rule::routes(router))

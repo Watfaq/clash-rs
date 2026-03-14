@@ -16,11 +16,25 @@ use crate::{
     app::{
         api::AppState,
         dispatcher,
-        dns::ThreadSafeDNSResolver,
-        inbound::manager::{InboundManager, Ports},
+        dns::{ThreadSafeDNSResolver, config::DNSListenAddr},
+        inbound::manager::{InboundEndpoint, InboundManager, Ports},
     },
     config::{def, internal::config::BindAddress},
 };
+
+#[derive(Serialize, Deserialize)]
+struct DnsListenInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    udp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tcp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    doh: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dot: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    doh3: Option<String>,
+}
 
 #[derive(Clone)]
 struct ConfigState {
@@ -28,6 +42,8 @@ struct ConfigState {
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
+    dns_listen_addr: DNSListenAddr,
+    dns_enabled: bool,
 }
 
 pub fn routes(
@@ -35,6 +51,8 @@ pub fn routes(
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
+    dns_listen_addr: DNSListenAddr,
+    dns_enabled: bool,
 ) -> Router<Arc<AppState>> {
     Router::new()
         .route(
@@ -46,31 +64,70 @@ pub fn routes(
             dispatcher,
             global_state,
             dns_resolver,
+            dns_listen_addr,
+            dns_enabled,
         })
 }
 
 async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
     let run_mode = state.dispatcher.get_mode().await;
     let global_state = state.global_state.lock().await;
-    let dns_resolver = state.dns_resolver;
     let inbound_manager = state.inbound_manager.clone();
 
-    let ports = state.inbound_manager.get_ports().await;
+    let ports = inbound_manager.get_ports().await;
+    let allow_lan = inbound_manager.get_allow_lan().await;
+    let listeners = inbound_manager.get_listeners().await;
+    let bind_address = inbound_manager.get_bind_address().await.0.to_string();
 
-    axum::response::Json(PatchConfigRequest {
+    let lan_ips = if allow_lan {
+        use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+        Some(
+            NetworkInterface::show()
+                .unwrap_or_default()
+                .into_iter()
+                .flat_map(|iface| {
+                    iface.addr.into_iter().filter_map(|addr| match addr {
+                        network_interface::Addr::V4(v4)
+                            if !v4.ip.is_loopback() && !v4.ip.is_link_local() =>
+                        {
+                            Some(v4.ip.to_string())
+                        }
+                        _ => None,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        None
+    };
+
+    let dns_listen = if state.dns_enabled {
+        let addr = &state.dns_listen_addr;
+        Some(DnsListenInfo {
+            udp: addr.udp.map(|a| a.to_string()),
+            tcp: addr.tcp.map(|a| a.to_string()),
+            doh: addr.doh.as_ref().map(|c| c.addr.to_string()),
+            dot: addr.dot.as_ref().map(|c| c.addr.to_string()),
+            doh3: addr.doh3.as_ref().map(|c| c.addr.to_string()),
+        })
+    } else {
+        None
+    };
+
+    axum::response::Json(GetConfigResponse {
         port: ports.port,
         socks_port: ports.socks_port,
         redir_port: ports.redir_port,
         tproxy_port: ports.tproxy_port,
         mixed_port: ports.mixed_port,
-        bind_address: Some(
-            state.inbound_manager.get_bind_address().await.0.to_string(),
-        ),
-
+        bind_address: Some(bind_address),
         mode: Some(run_mode),
         log_level: Some(global_state.log_level),
-        ipv6: Some(dns_resolver.ipv6()),
-        allow_lan: Some(inbound_manager.get_allow_lan().await),
+        ipv6: Some(state.dns_resolver.ipv6()),
+        allow_lan: Some(allow_lan),
+        listeners: Some(listeners),
+        lan_ips,
+        dns_listen,
     })
 }
 
@@ -143,6 +200,27 @@ async fn update_configs(
             (StatusCode::BAD_REQUEST, "no path or payload provided").into_response()
         }
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct GetConfigResponse {
+    port: Option<u16>,
+    socks_port: Option<u16>,
+    redir_port: Option<u16>,
+    tproxy_port: Option<u16>,
+    mixed_port: Option<u16>,
+    bind_address: Option<String>,
+    mode: Option<def::RunMode>,
+    log_level: Option<def::LogLevel>,
+    ipv6: Option<bool>,
+    allow_lan: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    listeners: Option<Vec<InboundEndpoint>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lan_ips: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dns_listen: Option<DnsListenInfo>,
 }
 
 #[derive(Serialize, Deserialize)]
