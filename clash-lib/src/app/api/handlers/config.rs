@@ -22,7 +22,7 @@ use crate::{
     config::{def, internal::config::BindAddress},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 struct DnsListenInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     udp: Option<String>,
@@ -71,7 +71,10 @@ pub fn routes(
 
 async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
     let run_mode = state.dispatcher.get_mode().await;
-    let global_state = state.global_state.lock().await;
+    let log_level = {
+        let global_state = state.global_state.lock().await;
+        global_state.log_level
+    };
     let inbound_manager = state.inbound_manager.clone();
 
     let ports = inbound_manager.get_ports().await;
@@ -81,8 +84,8 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
 
     let lan_ips = if allow_lan {
         use network_interface::{NetworkInterface, NetworkInterfaceConfig};
-        Some(
-            NetworkInterface::show()
+        Some({
+            let mut ips = NetworkInterface::show()
                 .unwrap_or_default()
                 .into_iter()
                 .flat_map(|iface| {
@@ -95,8 +98,11 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
                         _ => None,
                     })
                 })
-                .collect::<Vec<_>>(),
-        )
+                .collect::<Vec<_>>();
+            ips.sort();
+            ips.dedup();
+            ips
+        })
     } else {
         None
     };
@@ -122,7 +128,7 @@ async fn get_configs(State(state): State<ConfigState>) -> impl IntoResponse {
         mixed_port: ports.mixed_port,
         bind_address: Some(bind_address),
         mode: Some(run_mode),
-        log_level: Some(global_state.log_level),
+        log_level: Some(log_level),
         ipv6: Some(state.dns_resolver.ipv6()),
         allow_lan: Some(allow_lan),
         listeners: Some(listeners),
