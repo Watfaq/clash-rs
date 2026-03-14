@@ -1,5 +1,6 @@
 mod grpc;
 mod h2;
+mod reality;
 mod shadow_tls;
 mod simple_obfs;
 mod sip003;
@@ -9,6 +10,7 @@ mod ws;
 
 pub use grpc::Client as GrpcClient;
 pub use h2::Client as H2Client;
+pub use reality::RealityClient;
 pub use shadow_tls::Client as Shadowtls;
 pub use simple_obfs::*;
 pub use sip003::Plugin as Sip003Plugin;

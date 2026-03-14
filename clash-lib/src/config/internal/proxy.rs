@@ -264,6 +264,13 @@ pub struct OutboundVmess {
     pub grpc_opts: Option<GrpcOpt>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct RealityOpt {
+    pub public_key: String,
+    pub short_id: String,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundVless {
@@ -279,6 +286,9 @@ pub struct OutboundVless {
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
+    pub reality_opts: Option<RealityOpt>,
+    pub flow: Option<String>,
+    pub client_fingerprint: Option<String>,
 }
 
 #[cfg(feature = "wireguard")]
