@@ -235,7 +235,7 @@ impl InboundManager {
             .iter()
             .map(|(opts, handler)| {
                 let common = opts.common_opts();
-                let active = handler.as_ref().map_or(false, |h| !h.is_finished());
+                let active = handler.as_ref().is_some_and(|h| !h.is_finished());
                 InboundEndpoint {
                     name: common.name.clone(),
                     inbound_type: opts.type_name().to_string(),

@@ -22,7 +22,7 @@ use crate::{
     config::{def, internal::config::BindAddress},
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 struct DnsListenInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     udp: Option<String>,
