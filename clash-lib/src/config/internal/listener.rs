@@ -89,6 +89,21 @@ impl InboundOpts {
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
         }
     }
+
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            InboundOpts::Http { .. } => "http",
+            InboundOpts::Socks { .. } => "socks",
+            InboundOpts::Mixed { .. } => "mixed",
+            #[cfg(feature = "tproxy")]
+            InboundOpts::TProxy { .. } => "tproxy",
+            InboundOpts::Tunnel { .. } => "tunnel",
+            #[cfg(feature = "redir")]
+            InboundOpts::Redir { .. } => "redir",
+            #[cfg(feature = "shadowsocks")]
+            InboundOpts::Shadowsocks { .. } => "shadowsocks",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
