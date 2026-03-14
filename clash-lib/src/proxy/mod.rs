@@ -85,8 +85,15 @@ pub enum ProxyError {
     Socks5(String),
 }
 
-pub trait ProxyStream: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
-impl<T> ProxyStream for T where T: AsyncRead + AsyncWrite + Send + Sync + Unpin {}
+pub trait ProxyStream:
+    Downcast + AsyncRead + AsyncWrite + Send + Sync + Unpin
+{
+}
+impl<T> ProxyStream for T where
+    T: Downcast + AsyncRead + AsyncWrite + Send + Sync + Unpin
+{
+}
+impl_downcast!(ProxyStream);
 pub type AnyStream = Box<dyn ProxyStream>;
 
 pub trait ClientStream: Downcast + AsyncRead + AsyncWrite + Send + Unpin {}

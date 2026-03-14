@@ -9,8 +9,10 @@ use std::{
 
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tracing::debug;
 use watfaq_rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, SideData,
+    ClientConfig, ClientConnection, ConnectionCommon, Error as RustlsError,
+    RootCertStore, SideData,
     client::{ClientFingerprint, RealityConfig},
     pki_types::ServerName,
 };
@@ -98,6 +100,10 @@ struct RealityTlsStream<IO> {
     io: IO,
     session: ClientConnection,
     eof: bool,
+    raw_write_mode: bool,
+    raw_read_mode: bool,
+    raw_read_buf: Vec<u8>,
+    raw_read_pos: usize,
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> RealityTlsStream<IO> {
@@ -106,7 +112,63 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> RealityTlsStream<IO> {
             io,
             session,
             eof: false,
+            raw_write_mode: false,
+            raw_read_mode: false,
+            raw_read_buf: Vec::new(),
+            raw_read_pos: 0,
         }
+    }
+
+    fn switch_raw_write_mode(&mut self) {
+        self.raw_write_mode = true;
+    }
+
+    fn switch_raw_read_mode(&mut self) {
+        if self.raw_read_mode {
+            return;
+        }
+        let (pending_plaintext, pending_raw) =
+            self.session.take_vision_direct_buffers();
+        let raw_head = pending_raw
+            .iter()
+            .take(8)
+            .map(|b| format!("{b:02x}"))
+            .collect::<Vec<_>>()
+            .join("");
+        let raw_full = if pending_raw.len() <= 64 {
+            pending_raw
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join("")
+        } else {
+            String::new()
+        };
+        debug!(
+            "reality raw read switch: plaintext={} raw={} raw_head={} raw_full={}",
+            pending_plaintext.len(),
+            pending_raw.len(),
+            raw_head,
+            raw_full
+        );
+        self.raw_read_buf = pending_plaintext;
+        self.raw_read_buf.extend_from_slice(&pending_raw);
+        self.raw_read_pos = 0;
+        self.raw_read_mode = true;
+    }
+
+    fn should_autoswitch_raw_read(err: &io::Error) -> bool {
+        if err.kind() != io::ErrorKind::InvalidData {
+            return false;
+        }
+
+        if let Some(inner) = err.get_ref() {
+            if let Some(tls_err) = inner.downcast_ref::<RustlsError>() {
+                return matches!(tls_err, RustlsError::DecryptError);
+            }
+        }
+
+        err.to_string().contains("cannot decrypt peer's message")
     }
 
     fn read_io(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<usize>> {
@@ -121,9 +183,17 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> RealityTlsStream<IO> {
             }
             Err(e) => return Poll::Ready(Err(e)),
         };
-        self.session
+        let io_state = self
+            .session
             .process_new_packets()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        debug!(
+            "reality read_io: tls_read={} plaintext_ready={} tls_to_write={} wants_read={}",
+            n,
+            io_state.plaintext_bytes_to_read(),
+            io_state.tls_bytes_to_write(),
+            self.session.wants_read()
+        );
         Poll::Ready(Ok(n))
     }
 
@@ -197,9 +267,27 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for RealityTlsStream<IO> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        if self.raw_read_mode {
+            if self.raw_read_pos < self.raw_read_buf.len() {
+                let remaining = &self.raw_read_buf[self.raw_read_pos..];
+                let to_copy = remaining.len().min(buf.remaining());
+                buf.put_slice(&remaining[..to_copy]);
+                self.raw_read_pos += to_copy;
+                if self.raw_read_pos >= self.raw_read_buf.len() {
+                    self.raw_read_buf.clear();
+                    self.raw_read_pos = 0;
+                }
+                return Poll::Ready(Ok(()));
+            }
+            return Pin::new(&mut self.io).poll_read(cx, buf);
+        }
+
         let mut io_pending = false;
 
-        while !self.eof && self.session.wants_read() {
+        // Drain all currently-available TLS bytes each poll. For Vision traffic,
+        // small trailing chunks (for example, record tails) may arrive just after
+        // the first read and should be picked up without waiting for long timers.
+        while !self.eof {
             match self.read_io(cx) {
                 Poll::Ready(Ok(0)) => break,
                 Poll::Ready(Ok(_)) => {}
@@ -207,7 +295,43 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for RealityTlsStream<IO> {
                     io_pending = true;
                     break;
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(Err(e)) => {
+                    if !self.raw_read_mode
+                        && self.raw_write_mode
+                        && Self::should_autoswitch_raw_read(&e)
+                    {
+                        // Try draining already-decoded plaintext first.
+                        // In Vision direct transition, decrypt errors can happen
+                        // after we already decoded the final framed bytes.
+                        match self.session.reader().read(buf.initialize_unfilled()) {
+                            Ok(n) if n > 0 => {
+                                buf.advance(n);
+                                return Poll::Ready(Ok(()));
+                            }
+                            Ok(_) => {}
+                            Err(ref read_err)
+                                if read_err.kind() == io::ErrorKind::WouldBlock => {}
+                            Err(read_err) => {
+                                return Poll::Ready(Err(read_err));
+                            }
+                        }
+
+                        self.switch_raw_read_mode();
+                        if self.raw_read_pos < self.raw_read_buf.len() {
+                            let remaining = &self.raw_read_buf[self.raw_read_pos..];
+                            let to_copy = remaining.len().min(buf.remaining());
+                            buf.put_slice(&remaining[..to_copy]);
+                            self.raw_read_pos += to_copy;
+                            if self.raw_read_pos >= self.raw_read_buf.len() {
+                                self.raw_read_buf.clear();
+                                self.raw_read_pos = 0;
+                            }
+                            return Poll::Ready(Ok(()));
+                        }
+                        return Pin::new(&mut self.io).poll_read(cx, buf);
+                    }
+                    return Poll::Ready(Err(e));
+                }
             }
         }
 
@@ -233,6 +357,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RealityTlsStream<IO> {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        if self.raw_write_mode {
+            return Pin::new(&mut self.io).poll_write(cx, buf);
+        }
+
         let mut pos = 0;
         while pos != buf.len() {
             let mut would_block = false;
@@ -264,6 +392,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RealityTlsStream<IO> {
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
+        if self.raw_write_mode {
+            return Pin::new(&mut self.io).poll_write_vectored(cx, bufs);
+        }
+
         if bufs.iter().all(|b| b.is_empty()) {
             return Poll::Ready(Ok(0));
         }
@@ -297,6 +429,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RealityTlsStream<IO> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<()>> {
+        if self.raw_write_mode {
+            return Pin::new(&mut self.io).poll_flush(cx);
+        }
+
         self.session.writer().flush()?;
         while self.session.wants_write() {
             match self.write_io(cx) {
@@ -312,6 +448,10 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for RealityTlsStream<IO> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<()>> {
+        if self.raw_write_mode {
+            return Pin::new(&mut self.io).poll_shutdown(cx);
+        }
+
         while self.session.wants_write() {
             match self.write_io(cx) {
                 Poll::Ready(Ok(_)) => {}
@@ -331,9 +471,9 @@ struct SyncReadAdapter<'a, 'b, T> {
 
 impl<'a, 'b, T: AsyncRead + Unpin> Read for SyncReadAdapter<'a, 'b, T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut buf = ReadBuf::new(buf);
-        match Pin::new(&mut self.io).poll_read(self.cx, &mut buf) {
-            Poll::Ready(Ok(())) => Ok(buf.filled().len()),
+        let mut read_buf = ReadBuf::new(buf);
+        match Pin::new(&mut self.io).poll_read(self.cx, &mut read_buf) {
+            Poll::Ready(Ok(())) => Ok(read_buf.filled().len()),
             Poll::Ready(Err(e)) => Err(e),
             Poll::Pending => Err(io::ErrorKind::WouldBlock.into()),
         }
@@ -403,6 +543,26 @@ async fn reality_tls_connect<IO: AsyncRead + AsyncWrite + Unpin>(
         stream: Some(RealityTlsStream::new(io, conn)),
     }
     .await
+}
+
+pub(crate) fn switch_reality_raw_modes(
+    stream: &mut AnyStream,
+    read: bool,
+    write: bool,
+) -> io::Result<bool> {
+    if let Some(reality_stream) =
+        stream.downcast_mut::<RealityTlsStream<AnyStream>>()
+    {
+        if write {
+            reality_stream.switch_raw_write_mode();
+        }
+        if read {
+            reality_stream.switch_raw_read_mode();
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 // Suppress unused type parameter warning for unused SideData bound

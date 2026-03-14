@@ -126,6 +126,12 @@ impl TryFrom<&OutboundVless> for Handler {
             }
         };
 
+        let flow = s.flow.clone();
+        let vision_flow = matches!(
+            flow.as_deref(),
+            Some("xtls-rprx-vision" | "xtls-rprx-vision-udp443")
+        );
+
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             common_opts: HandlerCommonOptions {
@@ -135,7 +141,9 @@ impl TryFrom<&OutboundVless> for Handler {
             server: s.common_opts.server.to_owned(),
             port: s.common_opts.port,
             uuid: s.uuid.clone(),
-            udp: s.udp.unwrap_or(true),
+            // Vision flow currently wraps TCP stream framing only.
+            // Keep UDP disabled here to avoid broken datagrams on unsupported path.
+            udp: s.udp.unwrap_or(true) && !vision_flow,
             transport: s
                 .network
                 .clone()
@@ -185,7 +193,7 @@ impl TryFrom<&OutboundVless> for Handler {
                 .transpose()?
                 .flatten(),
             tls,
-            flow: s.flow.clone(),
+            flow,
         }))
     }
 }

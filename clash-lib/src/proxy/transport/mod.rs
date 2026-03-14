@@ -11,6 +11,7 @@ mod ws;
 pub use grpc::Client as GrpcClient;
 pub use h2::Client as H2Client;
 pub use reality::RealityClient;
+pub(crate) use reality::switch_reality_raw_modes;
 pub use shadow_tls::Client as Shadowtls;
 pub use simple_obfs::*;
 pub use sip003::Plugin as Sip003Plugin;
