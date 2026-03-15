@@ -4,9 +4,6 @@ use crate::{
     session::SocksAddr as ClashSocksAddr,
 };
 use anyhow::{Result, anyhow};
-use quinn::{
-    Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
-};
 use register_count::Counter;
 use std::{
     collections::HashMap,
@@ -16,7 +13,12 @@ use std::{
 };
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::debug;
-use tuic_core::quinn::Connection as InnerConnection;
+use tuic_core::quinn::{
+    Connection as InnerConnection,
+    quinn::{
+        Connection as QuinnConnection, Endpoint as QuinnEndpoint, ZeroRttAccepted,
+    },
+};
 use uuid::Uuid;
 
 pub struct TuicEndpoint {
