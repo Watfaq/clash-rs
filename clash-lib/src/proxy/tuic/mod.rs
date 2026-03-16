@@ -16,7 +16,9 @@ use quinn::{
 };
 use tracing::debug;
 
+use erased_serde::Serialize as ErasedSerialize;
 use std::{
+    collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr},
     sync::{
         Arc,
@@ -54,7 +56,7 @@ use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
     ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
-    datagram::UdpPacket,
+    PlainProxyAPIResponse, datagram::UdpPacket,
 };
 
 #[derive(Debug, Clone)]
@@ -144,6 +146,44 @@ impl OutboundHandler for Handler {
 
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("uuid".to_owned(), Box::new(self.opts.uuid.to_string()) as _);
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        let udp_relay_mode = match &self.opts.udp_relay_mode {
+            crate::proxy::tuic::types::UdpRelayMode::Native => "native",
+            crate::proxy::tuic::types::UdpRelayMode::Quic => "quic",
+        };
+        m.insert(
+            "udp-relay-mode".to_owned(),
+            Box::new(udp_relay_mode.to_string()) as _,
+        );
+        if self.opts.skip_cert_verify {
+            m.insert("skip-cert-verify".to_owned(), Box::new(true) as _);
+        }
+        if let Some(sni) = self.opts.sni.as_ref() {
+            m.insert("sni".to_owned(), Box::new(sni.clone()) as _);
+        }
+        if self.opts.disable_sni {
+            m.insert("disable-sni".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 

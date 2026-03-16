@@ -1,6 +1,9 @@
-use std::{borrow::Cow, io, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow, collections::HashMap, io, pin::Pin, sync::Arc, time::Duration,
+};
 
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 
 mod auth;
 mod connector;
@@ -28,7 +31,7 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, ProxyStream, utils::RemoteConnector,
+    OutboundType, PlainProxyAPIResponse, ProxyStream, utils::RemoteConnector,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait
@@ -225,6 +228,32 @@ impl OutboundHandler for Handler {
         _resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         Err(new_io_error("ssh udp is not implemented yet"))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "username".to_owned(),
+            Box::new(self.opts.username.clone()) as _,
+        );
+        if self.opts.password.is_some() {
+            m.insert("password".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.private_key.is_some() {
+            m.insert("private-key".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 

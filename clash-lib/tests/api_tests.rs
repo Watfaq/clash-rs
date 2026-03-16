@@ -509,3 +509,86 @@ proxies:
         .expect("'dns-listen.tcp' field missing");
     assert_eq!(tcp, "127.0.0.1:53553");
 }
+
+async fn get_proxy_info(api_port: u16, proxy_name: &str) -> serde_json::Value {
+    let url = format!("http://127.0.0.1:{}/proxies/{}", api_port, proxy_name);
+    let req = hyper::Request::builder()
+        .uri(&url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+    serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON")
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_plain_proxy_api_response_direct_reject() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(
+                wd.join("rules.yaml").to_string_lossy().to_string(),
+            ),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let direct = get_proxy_info(9090, "DIRECT").await;
+    assert_eq!(direct["name"], "DIRECT");
+    assert_eq!(direct["type"], "Direct");
+
+    let reject = get_proxy_info(9090, "REJECT").await;
+    assert_eq!(reject["name"], "REJECT");
+    assert_eq!(reject["type"], "Reject");
+}
+
+#[cfg(feature = "shadowsocks")]
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_plain_proxy_api_response_shadowsocks() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(
+                wd.join("rules.yaml").to_string_lossy().to_string(),
+            ),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let proxy = get_proxy_info(9090, "ss-simple").await;
+    assert_eq!(proxy["name"], "ss-simple");
+    assert_eq!(proxy["type"], "Shadowsocks");
+    assert_eq!(proxy["server"], "127.0.0.1");
+    assert_eq!(proxy["port"], 8901);
+    assert_eq!(proxy["cipher"], "2022-blake3-aes-256-gcm");
+    assert!(
+        proxy.get("password").is_some(),
+        "password should be present"
+    );
+    assert_eq!(proxy["udp"], true);
+}

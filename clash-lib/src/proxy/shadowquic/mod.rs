@@ -1,6 +1,8 @@
-use std::{io, net::SocketAddr, str::FromStr};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, fmt::Debug, io, net::SocketAddr, str::FromStr};
 
 use async_trait::async_trait;
+
 use compat::UdpSessionWrapper;
 use shadowquic::{
     config,
@@ -25,11 +27,9 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    utils::new_udp_socket,
+    PlainProxyAPIResponse, utils::new_udp_socket,
 };
 use crate::app::dispatcher::ChainedStream;
-use std::fmt::Debug;
-
 // This is ugly, it may be exposed better by shadowquic in the future
 type SQConn = shadowquic::squic::SQConn<<EndClient as QuicClient>::C>;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
@@ -208,6 +208,36 @@ impl OutboundHandler for Handler {
     /// relay related
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.addr.clone()) as _);
+        m.insert(
+            "server-name".to_owned(),
+            Box::new(self.opts.server_name.clone()) as _,
+        );
+        m.insert(
+            "username".to_owned(),
+            Box::new(self.opts.username.clone()) as _,
+        );
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        if !self.opts.alpn.is_empty() {
+            m.insert("alpn".to_owned(), Box::new(self.opts.alpn.clone()) as _);
+        }
+        m
     }
 }
 

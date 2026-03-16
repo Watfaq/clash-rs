@@ -18,7 +18,7 @@ use crate::{
     impl_default_connector,
     proxy::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-        OutboundHandler, OutboundType,
+        OutboundHandler, OutboundType, PlainProxyAPIResponse,
         shadowsocks::map_cipher,
         transport::Sip003Plugin,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
@@ -26,11 +26,12 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 use shadowsocks::{
     ProxyClientStream, ProxySocket, ServerConfig, config::ServerType,
     context::Context, relay::udprelay::proxy_socket::UdpSocketType,
 };
-use std::{fmt::Debug, io, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, io, sync::Arc};
 use tracing::debug;
 
 pub struct HandlerOptions {
@@ -233,6 +234,33 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("cipher".to_owned(), Box::new(self.opts.cipher.clone()) as _);
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.plugin.is_some() {
+            m.insert("plugin".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 

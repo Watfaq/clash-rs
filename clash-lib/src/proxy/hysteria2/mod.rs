@@ -11,8 +11,8 @@ use self::{
 };
 use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    converters::hysteria2::PortGenerator, datagram::UdpPacket,
-    utils::new_udp_socket,
+    PlainProxyAPIResponse, converters::hysteria2::PortGenerator,
+    datagram::UdpPacket, utils::new_udp_socket,
 };
 use crate::{
     app::{
@@ -28,6 +28,7 @@ use crate::{
 use anyhow::anyhow;
 use bytes::{Bytes, BytesMut};
 use codec::Fragments;
+use erased_serde::Serialize as ErasedSerialize;
 use futures::{SinkExt, StreamExt};
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
@@ -404,6 +405,48 @@ impl OutboundHandler for Handler {
         let s = ChainedDatagramWrapper::new(hy_datagram);
         s.append_to_chain(self.name()).await;
         Ok(Box::new(s))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait::async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        let (server, port) = match &self.opts.addr {
+            crate::session::SocksAddr::Ip(addr) => {
+                (addr.ip().to_string(), addr.port())
+            }
+            crate::session::SocksAddr::Domain(host, port) => (host.clone(), *port),
+        };
+        m.insert("server".to_owned(), Box::new(server) as _);
+        m.insert("port".to_owned(), Box::new(port) as _);
+        if let Some(sni) = self.opts.sni.as_ref() {
+            m.insert("sni".to_owned(), Box::new(sni.clone()) as _);
+        }
+        if self.opts.skip_cert_verify {
+            m.insert("skip-cert-verify".to_owned(), Box::new(true) as _);
+        }
+        if let Some(obfs) = self.opts.obfs.as_ref() {
+            m.insert(
+                "obfs".to_owned(),
+                Box::new(
+                    match obfs {
+                        Obfs::Salamander(_) => "salamander",
+                    }
+                    .to_owned(),
+                ) as _,
+            );
+        }
+        if !self.opts.alpn.is_empty() {
+            m.insert("alpn".to_owned(), Box::new(self.opts.alpn.clone()) as _);
+        }
+        m
     }
 }
 

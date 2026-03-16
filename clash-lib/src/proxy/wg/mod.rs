@@ -1,7 +1,7 @@
 use self::{keys::KeyBytes, wireguard::Config};
 use super::{
     ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, utils::RemoteConnector,
+    OutboundType, PlainProxyAPIResponse, utils::RemoteConnector,
 };
 use crate::{
     Error,
@@ -17,10 +17,12 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 use futures::TryFutureExt;
 use ipnet::IpNet;
 use rand::seq::IndexedRandom;
 use std::{
+    collections::HashMap,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Arc,
@@ -303,6 +305,29 @@ impl OutboundHandler for Handler {
 
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "public-key".to_owned(),
+            Box::new(self.opts.public_key.clone()) as _,
+        );
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 
