@@ -8,10 +8,11 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 use serde::Serialize;
-use std::io;
+use std::{collections::HashMap, io};
 
-use super::{ConnectorType, DialWithConnector, OutboundType};
+use super::{ConnectorType, DialWithConnector, OutboundType, PlainProxyAPIResponse};
 
 #[derive(Serialize)]
 pub struct Handler {
@@ -66,5 +67,19 @@ impl OutboundHandler for Handler {
 
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::All
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m
     }
 }
