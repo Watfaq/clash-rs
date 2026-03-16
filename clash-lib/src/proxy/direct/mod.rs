@@ -17,9 +17,12 @@ use crate::{
     },
     session::Session,
 };
+use erased_serde::Serialize as ErasedSerialize;
+use std::collections::HashMap;
 
 use super::{
-    ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
+    ConnectorType, DialWithConnector, OutboundType, PlainProxyAPIResponse,
+    utils::RemoteConnector,
 };
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -153,5 +156,19 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m
     }
 }

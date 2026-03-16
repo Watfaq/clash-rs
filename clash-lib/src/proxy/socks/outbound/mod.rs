@@ -1,7 +1,6 @@
 mod datagram;
 
-use std::{fmt::Debug, sync::Arc};
-
+use super::socks5::{client_handshake, socks_command};
 use crate::{
     app::{
         dispatcher::{
@@ -14,18 +13,17 @@ use crate::{
     impl_default_connector,
     proxy::{
         AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-        OutboundHandler, OutboundType,
+        OutboundHandler, OutboundType, PlainProxyAPIResponse,
         transport::Transport,
         utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector, new_udp_socket},
     },
     session::Session,
 };
-
 use async_trait::async_trait;
 use datagram::Socks5Datagram;
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tracing::{debug, trace};
-
-use super::socks5::{client_handshake, socks_command};
 
 #[derive(Default)]
 pub struct HandlerOptions {
@@ -254,6 +252,34 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        if let Some(username) = self.opts.user.as_ref() {
+            m.insert("username".to_owned(), Box::new(username.clone()) as _);
+        }
+        if let Some(password) = self.opts.password.as_ref() {
+            m.insert("password".to_owned(), Box::new(password.clone()) as _);
+        }
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls_client.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 

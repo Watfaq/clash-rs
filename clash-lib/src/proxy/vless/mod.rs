@@ -1,7 +1,7 @@
 use self::stream::VlessStream;
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    OutboundHandler, OutboundType, PlainProxyAPIResponse,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
@@ -18,7 +18,8 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
-use std::{io, sync::Arc};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, io, sync::Arc};
 use tracing::debug;
 
 mod datagram;
@@ -191,6 +192,29 @@ impl OutboundHandler for Handler {
         let chained = ChainedDatagramWrapper::new(d);
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("uuid".to_owned(), Box::new(self.opts.uuid.clone()) as _);
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 

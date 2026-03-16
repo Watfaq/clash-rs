@@ -146,6 +146,8 @@ impl OutboundManager {
         for (k, v) in self.handlers.iter() {
             let mut m = if let Some(g) = v.try_as_group_handler() {
                 g.as_map().await
+            } else if let Some(p) = v.try_as_plain_handler() {
+                p.as_map().await
             } else {
                 let mut m = HashMap::new();
                 m.insert("type".to_string(), Box::new(v.proto()) as _);
@@ -154,12 +156,9 @@ impl OutboundManager {
 
             let alive = proxy_manager.alive(k).await;
             let history = proxy_manager.delay_history(k).await;
-            let support_udp = v.support_udp().await;
 
             m.insert("history".to_string(), Box::new(history));
             m.insert("alive".to_string(), Box::new(alive));
-            m.insert("name".to_string(), Box::new(k.to_owned()));
-            m.insert("udp".to_string(), Box::new(support_udp));
 
             r.insert(k.clone(), Box::new(m) as _);
         }
@@ -173,6 +172,8 @@ impl OutboundManager {
     ) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = if let Some(g) = proxy.try_as_group_handler() {
             g.as_map().await
+        } else if let Some(p) = proxy.try_as_plain_handler() {
+            p.as_map().await
         } else {
             let mut m = HashMap::new();
             m.insert("type".to_string(), Box::new(proxy.proto()) as _);
@@ -183,12 +184,9 @@ impl OutboundManager {
 
         let alive = proxy_manager.alive(proxy.name()).await;
         let history = proxy_manager.delay_history(proxy.name()).await;
-        let support_udp = proxy.support_udp().await;
 
         r.insert("history".to_string(), Box::new(history));
         r.insert("alive".to_string(), Box::new(alive));
-        r.insert("name".to_string(), Box::new(proxy.name().to_owned()));
-        r.insert("udp".to_string(), Box::new(support_udp));
 
         r
     }
