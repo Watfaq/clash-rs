@@ -169,7 +169,6 @@ impl PlainProxyAPIResponse for Handler {
         let udp_relay_mode = match &self.opts.udp_relay_mode {
             crate::proxy::tuic::types::UdpRelayMode::Native => "native",
             crate::proxy::tuic::types::UdpRelayMode::Quic => "quic",
-            crate::proxy::tuic::types::UdpRelayMode::Legacy => "legacy",
         };
         m.insert(
             "udp-relay-mode".to_owned(),
