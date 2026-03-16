@@ -166,9 +166,14 @@ impl PlainProxyAPIResponse for Handler {
             "password".to_owned(),
             Box::new(self.opts.password.clone()) as _,
         );
+        let udp_relay_mode = match &self.opts.udp_relay_mode {
+            crate::proxy::tuic::types::UdpRelayMode::Native => "native",
+            crate::proxy::tuic::types::UdpRelayMode::Quic => "quic",
+            crate::proxy::tuic::types::UdpRelayMode::Legacy => "legacy",
+        };
         m.insert(
             "udp-relay-mode".to_owned(),
-            Box::new(format!("{:?}", self.opts.udp_relay_mode)) as _,
+            Box::new(udp_relay_mode.to_string()) as _,
         );
         if self.opts.skip_cert_verify {
             m.insert("skip-cert-verify".to_owned(), Box::new(true) as _);
