@@ -10,6 +10,8 @@ use crate::{
     config::internal::{config::BindAddress, listener::InboundOpts},
     runner::Runner,
 };
+#[cfg(feature = "shadowsocks")]
+use crate::proxy::shadowsocks::inbound::SharedUserStats;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
