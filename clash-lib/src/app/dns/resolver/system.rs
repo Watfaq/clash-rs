@@ -30,6 +30,13 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
+        // If the host is already an IP address literal, return it directly
+        // without DNS resolution. This ensures IPv6 literals work correctly
+        // even when dns.ipv6 is disabled.
+        if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            return Ok(Some(ip));
+        }
+
         let response = tokio::net::lookup_host(format!("{host}:0"))
             .await?
             .filter_map(|x| {
