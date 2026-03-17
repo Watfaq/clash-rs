@@ -17,8 +17,7 @@ use crate::{
     session::Session,
 };
 
-pub type OutboundHandlerRegistry =
-    Arc<RwLock<HashMap<String, AnyOutboundHandler>>>;
+pub type OutboundHandlerRegistry = Arc<RwLock<HashMap<String, AnyOutboundHandler>>>;
 
 /// An outbound handler that dynamically resolves to an actual handler
 /// from a shared registry at connection time. This allows DNS and HTTP
