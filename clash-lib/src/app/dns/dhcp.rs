@@ -9,7 +9,6 @@ use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use std::{
-    collections::HashMap,
     env,
     fmt::{Debug, Formatter},
     io,
@@ -105,7 +104,7 @@ impl DhcpClient {
                     })
                     .collect(),
                 None,
-                HashMap::new(),
+                Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
                 None,
                 self.fw_mark,
             )

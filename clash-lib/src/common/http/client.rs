@@ -1,13 +1,13 @@
 use crate::{
     app::dns::ThreadSafeDNSResolver,
     common::tls::GLOBAL_ROOT_STORE,
-    config::proxy::PROXY_DIRECT,
-    proxy::{AnyOutboundHandler, direct},
+    config::internal::proxy::PROXY_DIRECT,
+    proxy::{AnyOutboundHandler, direct, utils::OutboundHandlerRegistry},
     session::Session,
 };
 use futures::FutureExt;
 use hyper_util::rt::TokioIo;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tracing::{trace, warn};
 
 #[derive(Clone, Debug)]
@@ -20,7 +20,7 @@ pub(crate) struct ClashHTTPClientExt {
 #[derive(Clone)]
 pub struct HttpClient {
     dns_resolver: ThreadSafeDNSResolver,
-    outbounds: Option<HashMap<String, AnyOutboundHandler>>,
+    outbounds: Option<OutboundHandlerRegistry>,
     tls_config: Arc<rustls::ClientConfig>,
     timeout: tokio::time::Duration,
 }
@@ -28,7 +28,7 @@ pub struct HttpClient {
 impl HttpClient {
     pub fn new(
         dns_resolver: ThreadSafeDNSResolver,
-        bootstrap_outbounds: Option<Vec<AnyOutboundHandler>>,
+        bootstrap_outbounds: Option<OutboundHandlerRegistry>,
         timeout: Option<tokio::time::Duration>,
     ) -> std::io::Result<HttpClient> {
         let mut tls_config = rustls::ClientConfig::builder()
@@ -40,13 +40,7 @@ impl HttpClient {
 
         Ok(HttpClient {
             dns_resolver,
-            outbounds: bootstrap_outbounds.map(|obs| {
-                let mut map = HashMap::new();
-                for handler in obs {
-                    map.insert(handler.name().to_owned(), handler);
-                }
-                map
-            }),
+            outbounds: bootstrap_outbounds,
             tls_config: Arc::new(tls_config),
             timeout: timeout.unwrap_or(tokio::time::Duration::from_secs(10)),
         })
@@ -97,16 +91,24 @@ impl HttpClient {
             );
         }
 
-        let req_ext = req.extensions().get::<ClashHTTPClientExt>();
-        let outbound = req_ext
-            .and_then(|ext| ext.outbound.clone())
-            .as_ref()
-            .and_then(|x| {
-                self.outbounds
-                    .as_ref()
-                    .and_then(|outbounds| outbounds.get(x).cloned())
-            })
-            .unwrap_or(Arc::new(direct::Handler::new(PROXY_DIRECT)) as _);
+        let req_ext = req.extensions().get::<ClashHTTPClientExt>().cloned();
+        let outbound_name = req_ext.and_then(|ext| ext.outbound);
+        let outbound: AnyOutboundHandler = if let Some(name) = outbound_name {
+            if let Some(registry) = &self.outbounds {
+                registry
+                    .read()
+                    .await
+                    .get(&name)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
+                    })
+            } else {
+                Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
+            }
+        } else {
+            Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
+        };
 
         trace!(outbound = %outbound.name(), "using outbound");
         let sess = Session {
@@ -183,7 +185,7 @@ impl HttpClient {
 /// outbounds, that is used by clash to send outgoing HTTP requests.
 pub fn new_http_client(
     dns_resolver: ThreadSafeDNSResolver,
-    bootstrap_outbounds: Option<Vec<AnyOutboundHandler>>,
+    bootstrap_outbounds: Option<OutboundHandlerRegistry>,
 ) -> std::io::Result<HttpClient> {
     HttpClient::new(dns_resolver, bootstrap_outbounds, None)
 }

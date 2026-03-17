@@ -19,7 +19,6 @@ use futures::{FutureExt, TryFutureExt};
 use hickory_proto::{op, rr};
 use rand::seq::IndexedRandom;
 use std::{
-    collections::HashMap,
     net,
     sync::{
         Arc,
@@ -70,7 +69,9 @@ impl EnhancedResolver {
                     proxy: None,
                 }],
                 None,
-                HashMap::new(),
+                std::sync::Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
                 None,
                 None,
             )
@@ -91,7 +92,7 @@ impl EnhancedResolver {
         cfg: Config,
         store: ThreadSafeCacheFile,
         mmdb: Option<MmdbLookup>,
-        outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+        outbounds: crate::proxy::utils::OutboundHandlerRegistry,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
         let default_resolver = Arc::new(EnhancedResolver {

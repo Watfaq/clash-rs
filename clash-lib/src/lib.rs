@@ -32,12 +32,10 @@ use crate::{
         def::{self, LogLevel},
         internal::proxy::OutboundProxy,
     },
-    proxy::OutboundHandler,
     runner::Runner,
 };
 
 use std::{
-    collections::HashMap,
     io,
     path::PathBuf,
     sync::{Arc, OnceLock},
@@ -389,7 +387,15 @@ async fn create_components(
     );
 
     let client =
-        new_http_client(system_resolver.clone(), Some(plain_outbounds.clone()))
+        new_http_client(
+            system_resolver.clone(),
+            Some(Arc::new(tokio::sync::RwLock::new(
+                plain_outbounds
+                    .iter()
+                    .map(|x| (x.name().to_string(), x.clone()))
+                    .collect(),
+            ))),
+        )
             .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
@@ -415,16 +421,18 @@ async fn create_components(
     // TODO: we should separate the DNS resolver and DNS server config here
     let dns_listen = config.dns.listen.clone();
     let dns_enable = config.dns.enable;
-    let plain_outbounds_map = HashMap::<String, Arc<dyn OutboundHandler>>::from_iter(
-        plain_outbounds
-            .iter()
-            .map(|x| (x.name().to_string(), x.clone())),
-    );
+    let outbound_registry: crate::proxy::utils::OutboundHandlerRegistry =
+        Arc::new(tokio::sync::RwLock::new(
+            plain_outbounds
+                .iter()
+                .map(|x| (x.name().to_string(), x.clone()))
+                .collect(),
+        ));
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
         country_mmdb.clone(),
-        plain_outbounds_map,
+        outbound_registry.clone(),
     )
     .await;
 
@@ -449,6 +457,15 @@ async fn create_components(
         )
         .await?,
     );
+
+    // Update the shared registry with the full set of outbounds (including
+    // proxy groups and providers) so DNS and HTTP clients can use them.
+    {
+        let mut registry = outbound_registry.write().await;
+        for (name, handler) in outbound_manager.get_outbounds() {
+            registry.insert(name.clone(), handler.clone());
+        }
+    }
 
     debug!("initializing geosite");
     let geodata = if let Some(geosite_file) = config.general.geosite {

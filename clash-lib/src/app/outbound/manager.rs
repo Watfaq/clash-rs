@@ -124,6 +124,10 @@ impl OutboundManager {
         self.handlers.get(name).cloned()
     }
 
+    pub fn get_outbounds(&self) -> &HashMap<String, AnyOutboundHandler> {
+        &self.handlers
+    }
+
     /// this doesn't populate history/liveness information
     pub fn get_proxy_provider(&self, name: &str) -> Option<ThreadSafeProxyProvider> {
         self.proxy_providers.get(name).cloned()
