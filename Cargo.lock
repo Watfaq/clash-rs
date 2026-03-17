@@ -1267,6 +1267,7 @@ dependencies = [
  "shadowquic",
  "shadowsocks",
  "smoltcp 0.12.0 (git+https://github.com/smoltcp-rs/smoltcp.git?rev=ac32e64)",
+ "snow",
  "sock2proc",
  "socket2 0.6.3",
  "ssh-key",
@@ -7335,6 +7336,22 @@ dependencies = [
  "heapless",
  "log",
  "managed",
+]
+
+[[package]]
+name = "snow"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "850948bee068e713b8ab860fe1adc4d109676ab4c3b621fd8147f06b261f2f85"
+dependencies = [
+ "aes-gcm",
+ "blake2",
+ "chacha20poly1305",
+ "curve25519-dalek",
+ "rand_core 0.6.4",
+ "rustc_version",
+ "sha2 0.10.9",
+ "subtle",
 ]
 
 [[package]]

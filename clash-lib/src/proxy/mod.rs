@@ -37,6 +37,7 @@ pub(crate) mod datagram;
 
 pub mod converters;
 pub mod hysteria2;
+pub mod rigby;
 #[cfg(feature = "shadowquic")]
 pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
@@ -135,6 +136,7 @@ pub enum OutboundType {
     Tuic,
     Socks5,
     Hysteria2,
+    Rigby,
     Ssh,
     ShadowQuic,
 
@@ -162,6 +164,7 @@ impl Display for OutboundType {
             OutboundType::Tuic => write!(f, "Tuic"),
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
+            OutboundType::Rigby => write!(f, "Rigby"),
             OutboundType::Ssh => write!(f, "ssh"),
             OutboundType::ShadowQuic => write!(f, "ShadowQuic"),
 

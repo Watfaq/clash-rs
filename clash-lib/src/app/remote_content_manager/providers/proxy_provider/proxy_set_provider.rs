@@ -23,7 +23,7 @@ use crate::{
     proxy::{
         AnyOutboundHandler,
         direct::{self},
-        hysteria2, reject, socks, trojan, vless, vmess,
+        hysteria2, reject, rigby, socks, trojan, vless, vmess,
     },
 };
 use async_trait::async_trait;
@@ -150,6 +150,10 @@ impl ProxySetProvider {
                                 }
                                 OutboundProxyProtocol::Hysteria2(h) => {
                                     let h: hysteria2::Handler = h.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Rigby(r) => {
+                                    let h: rigby::Handler = r.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 #[cfg(feature = "ssh")]

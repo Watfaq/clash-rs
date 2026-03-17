@@ -37,7 +37,7 @@ use crate::{
         direct::{self},
         fallback,
         group::smart,
-        hysteria2, loadbalance, reject, relay,
+        hysteria2, loadbalance, reject, relay, rigby,
         selector::{self, ThreadSafeSelectorControl},
         socks, trojan, urltest,
         utils::{DirectConnector, ProxyConnector},
@@ -308,6 +308,15 @@ impl OutboundManager {
                                 "failed to load hysteria2 outbound {}: {}",
                                 name, e
                             );
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Rigby(r) => {
+                    let name = r.common_opts.name.clone();
+                    r.try_into()
+                        .map(|x: rigby::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load rigby outbound {}: {}", name, e);
                         })
                         .ok()
                 }

@@ -1,4 +1,5 @@
 pub mod hysteria2;
+pub mod rigby;
 #[cfg(feature = "shadowquic")]
 pub mod shadowquic;
 #[cfg(feature = "shadowsocks")]
