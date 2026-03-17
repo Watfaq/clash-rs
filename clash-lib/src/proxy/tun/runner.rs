@@ -15,6 +15,12 @@ use crate::{
     runner::Runner,
 };
 
+/// Maximum number of attempts to wait for a newly created TUN interface to
+/// become visible via NetworkInterface::show().
+const TUN_VISIBILITY_MAX_ATTEMPTS: u32 = 40;
+/// Interval in milliseconds between each visibility poll attempt.
+const TUN_VISIBILITY_POLL_INTERVAL_MS: u64 = 50;
+
 #[derive(Default)]
 struct TunInitializationConfig {
     fd: Option<u32>,
@@ -45,8 +51,8 @@ impl TunRunner {
         })
     }
 
-    fn new_internal(
-        &self,
+    async fn new_internal(
+        cfg: &TunConfig,
     ) -> Result<
         (
             tun_rs::AsyncDevice,
@@ -57,7 +63,7 @@ impl TunRunner {
         Error,
     > {
         let mut tun_init_config = TunInitializationConfig::default();
-        match Url::parse(&self.cfg.device_id) {
+        match Url::parse(&cfg.device_id) {
             Ok(u) => match u.scheme() {
                 "fd" => {
                     let fd = u
@@ -74,7 +80,7 @@ impl TunRunner {
                     if cfg!(target_os = "macos") && !dev.starts_with("utun") {
                         return Err(Error::InvalidConfig(format!(
                             "invalid device id: {}. tun name must be utunX",
-                            self.cfg.device_id
+                            cfg.device_id
                         )));
                     }
                     tun_init_config.tun_name = Some(dev);
@@ -92,20 +98,20 @@ impl TunRunner {
                 _ => {
                     return Err(Error::InvalidConfig(format!(
                         "invalid device id: {}",
-                        self.cfg.device_id
+                        cfg.device_id
                     )));
                 }
             },
             Err(_) => {
                 if cfg!(target_os = "macos")
-                    && !&self.cfg.device_id.starts_with("utun")
+                    && !&cfg.device_id.starts_with("utun")
                 {
                     return Err(Error::InvalidConfig(format!(
                         "invalid device id: {}. tun name must be utunX",
-                        self.cfg.device_id
+                        cfg.device_id
                     )));
                 }
-                tun_init_config.tun_name = Some(self.cfg.device_id.clone());
+                tun_init_config.tun_name = Some(cfg.device_id.clone());
             }
         };
 
@@ -143,7 +149,7 @@ impl TunRunner {
 
                 let mut tun_builder = DeviceBuilder::new();
                 tun_builder = tun_builder.name(&tun_name).mtu(
-                    self.cfg.mtu.unwrap_or(if cfg!(windows) {
+                    cfg.mtu.unwrap_or(if cfg!(windows) {
                         65535u16
                     } else {
                         1500u16
@@ -151,15 +157,15 @@ impl TunRunner {
                 );
 
                 if !tun_exist {
-                    debug!("setting tun ipv4 addr: {:?}", self.cfg.gateway);
+                    debug!("setting tun ipv4 addr: {:?}", cfg.gateway);
                     tun_builder = tun_builder.ipv4(
-                        self.cfg.gateway.addr(),
-                        self.cfg.gateway.netmask(),
+                        cfg.gateway.addr(),
+                        cfg.gateway.netmask(),
                         None,
                     );
 
-                    if let Some(gateway_v6) = self.cfg.gateway_v6 {
-                        debug!("setting tun ipv6 addr: {:?}", self.cfg.gateway_v6);
+                    if let Some(gateway_v6) = cfg.gateway_v6 {
+                        debug!("setting tun ipv6 addr: {:?}", cfg.gateway_v6);
                         tun_builder = tun_builder
                             .ipv6(gateway_v6.addr(), gateway_v6.netmask());
                     }
@@ -172,8 +178,34 @@ impl TunRunner {
                 let dev = tun_builder.build_async()?;
 
                 if !tun_exist {
+                    // After build_async(), the new TUN interface may not be
+                    // immediately visible via NetworkInterface::show(). Wait up
+                    // to 2 seconds for it to appear before setting up routes.
+                    let mut tun_visible = false;
+                    for _ in 0..TUN_VISIBILITY_MAX_ATTEMPTS {
+                        tun_visible = network_interface::NetworkInterface::show()
+                            .map(|ifs| ifs.into_iter().any(|x| x.name == tun_name))
+                            .unwrap_or(false);
+                        if tun_visible {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            TUN_VISIBILITY_POLL_INTERVAL_MS,
+                        ))
+                        .await;
+                    }
+
+                    if !tun_visible {
+                        return Err(Error::Operation(format!(
+                            "tun device {} not visible after waiting {}ms",
+                            tun_name,
+                            TUN_VISIBILITY_MAX_ATTEMPTS as u64
+                                * TUN_VISIBILITY_POLL_INTERVAL_MS
+                        )));
+                    }
+
                     info!("setting up routes for tun {}", &tun_name);
-                    maybe_add_routes(&self.cfg, &tun_name)?;
+                    maybe_add_routes(cfg, &tun_name)?;
                 } else {
                     info!("skipping route setup for existing tun {}", &tun_name);
                 }
@@ -200,17 +232,16 @@ impl Runner for TunRunner {
             return;
         }
 
+        let cfg = self.cfg.clone();
         let so_mark = self.cfg.so_mark;
         let dispatcher = self.dispatcher.clone();
         let resolver = self.resolver.clone();
         let dns_hijack = self.cfg.dns_hijack;
         let cancellation_token = self.cancellation_token.clone();
 
-        // Call new_internal outside the async move closure
-        let internal_result = self.new_internal();
-
         tokio::spawn(async move {
-            let (tun, stack, mut tcp_listener, udp_socket) = internal_result?;
+            let (tun, stack, mut tcp_listener, udp_socket) =
+                TunRunner::new_internal(&cfg).await?;
 
             let framed = tun_rs::async_framed::DeviceFramed::new(
                 tun,
