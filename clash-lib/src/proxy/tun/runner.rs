@@ -208,8 +208,8 @@ impl TunRunner {
                                 * TUN_VISIBILITY_POLL_INTERVAL_MS;
                             let err_msg = match last_show_err {
                                 Some(e) => format!(
-                                    "tun device {} not visible after waiting \
-                                     {}ms (last error: {})",
+                                    "tun device {} not visible after waiting {}ms \
+                                     (last error: {})",
                                     tun_name, total_ms, e
                                 ),
                                 None => format!(
