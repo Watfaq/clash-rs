@@ -484,7 +484,10 @@ proxies:
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    assert!(api_ready, "API server did not come back up within 10 s after reload");
+    assert!(
+        api_ready,
+        "API server did not come back up within 10 s after reload"
+    );
 
     let req = hyper::Request::builder()
         .uri(configs_url)
