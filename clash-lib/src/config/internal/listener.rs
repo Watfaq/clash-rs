@@ -3,6 +3,16 @@ use serde::{Deserialize, Serialize};
 
 use super::config::BindAddress;
 
+/// A single Shadowsocks user entry for SS-2022 multi-user support.
+/// The `password` field must be a base64-encoded raw key whose length matches
+/// the cipher's key size (16 bytes for AES-128, 32 bytes for AES-256/CHACHA20).
+#[cfg(feature = "shadowsocks")]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+pub struct ShadowsocksUser {
+    pub name: String,
+    pub password: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
@@ -56,6 +66,11 @@ pub enum InboundOpts {
         udp: bool,
         cipher: String,
         password: String,
+        /// Optional list of SS-2022 sub-users. When non-empty and the cipher is
+        /// an SS-2022 cipher (`2022-blake3-*`), a `ServerUserManager` is built
+        /// from these entries, enabling EIH multi-user support.
+        #[serde(default)]
+        users: Vec<ShadowsocksUser>,
     },
 }
 

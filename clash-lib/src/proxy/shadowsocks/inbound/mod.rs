@@ -3,6 +3,7 @@ mod datagram;
 use crate::{
     Dispatcher,
     common::{auth::ThreadSafeAuthenticator, errors::new_io_error},
+    config::internal::listener::ShadowsocksUser,
     proxy::{
         inbound::InboundHandlerTrait,
         shadowsocks::{inbound::datagram::InboundShadowsocksDatagram, map_cipher},
@@ -15,9 +16,27 @@ use crate::{
 };
 
 use async_trait::async_trait;
+use base64::Engine as _;
 use shadowsocks::{ProxySocket, context::Context, net::AcceptOpts, relay::Address};
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+use tokio::sync::RwLock;
 use tracing::{debug, warn};
+
+/// Per-user traffic statistics counters.
+#[derive(Debug, Default)]
+pub struct UserTrafficStat {
+    #[allow(dead_code)]
+    pub upload_bytes: Arc<AtomicU64>,
+    #[allow(dead_code)]
+    pub download_bytes: Arc<AtomicU64>,
+}
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
@@ -30,6 +49,13 @@ pub struct ShadowsocksInbound {
     #[allow(unused)]
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
+    users: Vec<ShadowsocksUser>,
+    /// Per-user traffic stats, keyed by user name.
+    /// Initialised at construction time with zero counters for every configured
+    /// user.  Per-connection attribution is a TODO pending upstream exposure of
+    /// `user_key()` from `ProxyServerStream`.
+    #[allow(dead_code)]
+    user_traffic_stats: Arc<RwLock<HashMap<String, Arc<UserTrafficStat>>>>,
 
     udp_closer: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<u8>>>>,
 }
@@ -49,10 +75,19 @@ pub struct InboundOptions {
     pub dispatcher: Arc<Dispatcher>,
     pub authenticator: ThreadSafeAuthenticator,
     pub fw_mark: Option<u32>,
+    pub users: Vec<ShadowsocksUser>,
 }
 
 impl ShadowsocksInbound {
     pub fn new(opts: InboundOptions) -> Self {
+        // Pre-populate traffic stats map so callers can observe zero-valued
+        // entries even before any connection arrives.
+        let user_traffic_stats: HashMap<String, Arc<UserTrafficStat>> = opts
+            .users
+            .iter()
+            .map(|u| (u.name.clone(), Arc::new(UserTrafficStat::default())))
+            .collect();
+
         Self {
             addr: opts.addr,
             password: opts.password,
@@ -62,21 +97,82 @@ impl ShadowsocksInbound {
             dispatcher: opts.dispatcher,
             authenticator: opts.authenticator,
             fw_mark: opts.fw_mark,
+            users: opts.users,
+            user_traffic_stats: Arc::new(RwLock::new(user_traffic_stats)),
             udp_closer: Default::default(),
         }
+    }
+
+    /// Returns a snapshot of per-user traffic as `(upload_bytes, download_bytes)`.
+    #[allow(dead_code)]
+    pub async fn get_user_traffic_stats(&self) -> HashMap<String, (u64, u64)> {
+        self.user_traffic_stats
+            .read()
+            .await
+            .iter()
+            .map(|(name, stat)| {
+                (
+                    name.clone(),
+                    (
+                        stat.upload_bytes.load(Ordering::Relaxed),
+                        stat.download_bytes.load(Ordering::Relaxed),
+                    ),
+                )
+            })
+            .collect()
     }
 
     fn get_server_config(
         &self,
     ) -> std::io::Result<shadowsocks::config::ServerConfig> {
-        shadowsocks::config::ServerConfig::new(
+        let cipher_kind = map_cipher(&self.cipher)?;
+
+        let mut config = shadowsocks::config::ServerConfig::new(
             self.addr,
             &self.password,
-            map_cipher(&self.cipher)?,
+            cipher_kind,
         )
         .map_err(|e| {
             new_io_error(format!("Failed to create Shadowsocks config: {e}"))
-        })
+        })?;
+
+        // Build a ServerUserManager for SS-2022 ciphers when sub-users are
+        // configured.  For regular AEAD ciphers the single-password path is
+        // used instead.
+        if !self.users.is_empty() && cipher_kind.is_aead_2022() {
+            let expected_key_len = cipher_kind.key_len();
+            let mut user_manager =
+                shadowsocks::config::ServerUserManager::new();
+
+            for user in &self.users {
+                let raw_key = base64::engine::general_purpose::STANDARD
+                    .decode(&user.password)
+                    .map_err(|_| {
+                        new_io_error(format!(
+                            "Failed to base64-decode SS-2022 key for user '{}'",
+                            user.name
+                        ))
+                    })?;
+
+                if raw_key.len() != expected_key_len {
+                    return Err(new_io_error(format!(
+                        "Invalid key length for SS-2022 user '{}': \
+                         expected {expected_key_len} bytes",
+                        user.name,
+                    )));
+                }
+
+                let ss_user = shadowsocks::config::ServerUser::new(
+                    user.name.clone(),
+                    bytes::Bytes::from(raw_key),
+                );
+                user_manager.add_user(ss_user);
+            }
+
+            config.set_user_manager(user_manager);
+        }
+
+        Ok(config)
     }
 }
 
@@ -93,11 +189,6 @@ impl InboundHandlerTrait for ShadowsocksInbound {
     async fn listen_tcp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
         let config = self.get_server_config()?;
-
-        // TODO: support multiple users
-        // let user_manager = shadowsocks::config::ServerUserManager::new();
-        //
-        // config.set_user_manager(user_manager);
 
         let listener = try_create_dualstack_tcplistener(self.addr)?;
 
@@ -173,11 +264,6 @@ impl InboundHandlerTrait for ShadowsocksInbound {
     async fn listen_udp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
         let config = self.get_server_config()?;
-
-        // TODO: support multiple users
-        // let user_manager = shadowsocks::config::ServerUserManager::new();
-        //
-        // config.set_user_manager(user_manager);
 
         let socket = new_udp_socket(
             Some(self.addr),

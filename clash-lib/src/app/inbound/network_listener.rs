@@ -168,6 +168,7 @@ fn build_handler(
             udp,
             cipher,
             password,
+            users,
         } => Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
             addr: (common_opts.listen.0, common_opts.port).into(),
             password: password.clone(),
@@ -177,6 +178,7 @@ fn build_handler(
             dispatcher,
             authenticator,
             fw_mark: common_opts.fw_mark,
+            users: users.clone(),
         }))),
     }
 }
