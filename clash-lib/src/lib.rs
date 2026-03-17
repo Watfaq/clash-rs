@@ -462,9 +462,12 @@ async fn create_components(
     // proxy groups and providers) so DNS and HTTP clients can use them.
     {
         let mut registry = outbound_registry.write().await;
-        for (name, handler) in outbound_manager.get_outbounds() {
-            registry.insert(name.clone(), handler.clone());
-        }
+        registry.extend(
+            outbound_manager
+                .get_outbounds()
+                .iter()
+                .map(|(name, handler)| (name.clone(), handler.clone())),
+        );
     }
 
     debug!("initializing geosite");

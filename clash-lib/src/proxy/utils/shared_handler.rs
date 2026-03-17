@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt, io, sync::Arc};
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
+use tracing::warn;
 
 use crate::{
     app::{
@@ -40,6 +41,10 @@ impl SharedOutboundHandler {
             .get(&self.name)
             .cloned()
             .unwrap_or_else(|| {
+                warn!(
+                    proxy = %self.name,
+                    "proxy not found in registry, falling back to DIRECT"
+                );
                 Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler
             })
     }

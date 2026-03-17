@@ -91,8 +91,10 @@ impl HttpClient {
             );
         }
 
-        let req_ext = req.extensions().get::<ClashHTTPClientExt>().cloned();
-        let outbound_name = req_ext.and_then(|ext| ext.outbound);
+        let outbound_name = req
+            .extensions()
+            .get::<ClashHTTPClientExt>()
+            .and_then(|ext| ext.outbound.clone());
         let make_direct =
             || Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler;
         let outbound: AnyOutboundHandler = if let Some(name) = outbound_name {
