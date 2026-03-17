@@ -40,7 +40,7 @@ use crate::{
         hysteria2, loadbalance, reject, relay,
         selector::{self, ThreadSafeSelectorControl},
         socks, trojan, urltest,
-        utils::{DirectConnector, ProxyConnector},
+        utils::{DirectConnector, OutboundHandlerRegistry, ProxyConnector},
         vless, vmess,
     },
 };
@@ -56,6 +56,11 @@ static RESERVED_PROVIDER_NAME: &str = "default";
 pub struct OutboundManager {
     /// name -> handler
     handlers: HashMap<String, AnyOutboundHandler>,
+    /// Shared registry that keeps DNS / HTTP clients in sync with this
+    /// manager's handler set. Populated at the end of `new()` and updated
+    /// whenever handlers change (e.g. after provider refreshes add new
+    /// entries).
+    registry: OutboundHandlerRegistry,
     /// name -> provider
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
     proxy_manager: ProxyManager,
@@ -93,6 +98,7 @@ impl OutboundManager {
         cache_store: ThreadSafeCacheFile,
         cwd: String,
         fw_mark: Option<u32>,
+        registry: OutboundHandlerRegistry,
     ) -> Result<Self, Error> {
         let handlers = HashMap::new();
         let provider_registry = HashMap::new();
@@ -101,6 +107,7 @@ impl OutboundManager {
 
         let mut m = Self {
             handlers,
+            registry,
             proxy_manager,
             selector_control,
             proxy_providers: provider_registry,
@@ -116,6 +123,17 @@ impl OutboundManager {
 
         debug!("initializing connectors");
         m.init_handler_connectors().await?;
+
+        // Populate the shared registry with all fully-initialized handlers so
+        // that DNS clients and the HTTP client can use any of them (including
+        // proxy groups and provider-backed groups) from this point onwards.
+        {
+            let mut reg = m.registry.write().await;
+            for (name, handler) in &m.handlers {
+                debug!("registering outbound '{}' in bootstrap registry", name);
+                reg.insert(name.clone(), handler.clone());
+            }
+        }
 
         Ok(m)
     }

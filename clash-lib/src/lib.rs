@@ -451,22 +451,10 @@ async fn create_components(
             cache_store.clone(),
             cwd.to_string_lossy().to_string(),
             config.general.routing_mask,
+            outbound_registry.clone(),
         )
         .await?,
     );
-
-    // Extend the shared registry with the full set of outbounds (plain +
-    // proxy groups + provider proxies) so DNS and HTTP clients can use them.
-    // Plain outbounds already in the registry are overwritten by the same
-    // handler from OutboundManager, which is expected since proxy names must
-    // be unique across all outbound types.
-    {
-        let mut registry = outbound_registry.write().await;
-        for (name, handler) in outbound_manager.get_outbounds() {
-            debug!("registering outbound '{}' in bootstrap registry", name);
-            registry.insert(name.clone(), handler.clone());
-        }
-    }
 
     debug!("initializing geosite");
     let geodata = if let Some(geosite_file) = config.general.geosite {
