@@ -93,6 +93,8 @@ impl HttpClient {
 
         let req_ext = req.extensions().get::<ClashHTTPClientExt>().cloned();
         let outbound_name = req_ext.and_then(|ext| ext.outbound);
+        let make_direct =
+            || Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler;
         let outbound: AnyOutboundHandler = if let Some(name) = outbound_name {
             if let Some(registry) = &self.outbounds {
                 registry
@@ -100,14 +102,12 @@ impl HttpClient {
                     .await
                     .get(&name)
                     .cloned()
-                    .unwrap_or_else(|| {
-                        Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
-                    })
+                    .unwrap_or_else(make_direct)
             } else {
-                Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
+                make_direct()
             }
         } else {
-            Arc::new(direct::Handler::new(PROXY_DIRECT)) as _
+            make_direct()
         };
 
         trace!(outbound = %outbound.name(), "using outbound");
