@@ -11,6 +11,7 @@ use crate::{
             IPNetFilter,
         },
         helper::make_clients,
+        parse_ip_literal,
     },
 };
 use anyhow::anyhow;
@@ -504,10 +505,7 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::IpAddr>> {
-        // If the host is already an IP address literal, return it directly
-        // without DNS resolution. This ensures IPv6 literals work correctly
-        // even when dns.ipv6 is disabled.
-        if let Ok(ip) = host.parse::<net::IpAddr>() {
+        if let Some(ip) = parse_ip_literal(host) {
             return Ok(Some(ip));
         }
 
@@ -582,9 +580,7 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::Ipv6Addr>> {
-        // Return IPv6 literal addresses directly without DNS resolution,
-        // regardless of the ipv6 flag (no DNS lookup needed for literals).
-        if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
+        if let Some(std::net::IpAddr::V6(ip)) = parse_ip_literal(host) {
             return Ok(Some(ip));
         }
 
@@ -746,10 +742,9 @@ mod tests {
         let resolver = EnhancedResolver::new_default().await;
         resolver.set_ipv6(false);
 
-        let result = resolver
-            .resolve_v6("::1", false)
-            .await
-            .expect("resolve_v6 should not error for IPv6 literal when ipv6 disabled");
+        let result = resolver.resolve_v6("::1", false).await.expect(
+            "resolve_v6 should not error for IPv6 literal when ipv6 disabled",
+        );
         assert_eq!(
             result,
             Some("::1".parse::<std::net::Ipv6Addr>().unwrap()),
