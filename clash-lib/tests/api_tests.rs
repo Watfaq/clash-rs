@@ -471,7 +471,20 @@ proxies:
         .expect("Failed to send PUT /configs");
     assert_eq!(res.status(), http::StatusCode::NO_CONTENT);
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Poll until the API server is back up after the reload. A fixed sleep is
+    // not always enough on slow CI machines, so we retry for up to 10 s.
+    let mut api_ready = false;
+    for _ in 0..20 {
+        if tokio::net::TcpStream::connect("127.0.0.1:9090")
+            .await
+            .is_ok()
+        {
+            api_ready = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert!(api_ready, "API server did not come back up within 10 s after reload");
 
     let req = hyper::Request::builder()
         .uri(configs_url)
