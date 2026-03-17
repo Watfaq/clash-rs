@@ -129,14 +129,18 @@ impl OutboundManager {
         debug!("initializing connectors");
         m.init_handler_connectors(&handlers).await?;
 
-        // Write the fully-assembled handler map into the shared registry so
-        // that DNS / HTTP clients can resolve any outbound by name.
+        // Replace the shared registry with the freshly assembled handler map.
+        // Using `clone()` + `*reg = ...` ensures stale entries from previous
+        // initialisation rounds (e.g. across hot reloads) are removed.
         {
             let mut reg = m.registry.write().await;
-            for (name, handler) in &handlers {
-                debug!("registering outbound '{}' in bootstrap registry", name);
-                reg.insert(name.clone(), handler.clone());
-            }
+            *reg = handlers
+                .iter()
+                .map(|(k, v)| {
+                    debug!("registering outbound '{}' in bootstrap registry", k);
+                    (k.clone(), v.clone())
+                })
+                .collect();
         }
 
         Ok(m)

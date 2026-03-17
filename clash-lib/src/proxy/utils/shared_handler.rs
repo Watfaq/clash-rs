@@ -19,6 +19,14 @@ use crate::{
 
 pub type OutboundHandlerRegistry = Arc<RwLock<HashMap<String, AnyOutboundHandler>>>;
 
+/// A globally-shared DIRECT handler used as the fallback when a named proxy
+/// cannot be found in the registry.  Avoids allocating a new `Handler` on
+/// every lookup miss.
+pub(crate) static FALLBACK_DIRECT: std::sync::LazyLock<AnyOutboundHandler> =
+    std::sync::LazyLock::new(|| {
+        Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler
+    });
+
 /// An outbound handler that dynamically resolves to an actual handler
 /// from a shared registry at connection time. This allows DNS and HTTP
 /// clients to reference proxy groups and providers that are initialized
@@ -28,24 +36,36 @@ pub struct SharedOutboundHandler {
     registry: OutboundHandlerRegistry,
 }
 
+/// Construct an `OutboundHandlerRegistry` that contains only the built-in
+/// DIRECT handler.  Useful for contexts (e.g. DHCP DNS probing) that always
+/// connect directly and should not trigger registry-miss warnings.
+pub fn direct_only_registry() -> OutboundHandlerRegistry {
+    let mut map = HashMap::new();
+    map.insert(PROXY_DIRECT.to_owned(), FALLBACK_DIRECT.clone());
+    Arc::new(RwLock::new(map))
+}
+
 impl SharedOutboundHandler {
     pub fn new(name: String, registry: OutboundHandlerRegistry) -> Self {
         Self { name, registry }
     }
 
     async fn get_inner(&self) -> AnyOutboundHandler {
-        self.registry
-            .read()
-            .await
-            .get(&self.name)
-            .cloned()
-            .unwrap_or_else(|| {
-                warn!(
-                    proxy = %self.name,
-                    "proxy not found in registry, falling back to DIRECT"
-                );
-                Arc::new(direct::Handler::new(PROXY_DIRECT)) as AnyOutboundHandler
-            })
+        match self.registry.read().await.get(&self.name).cloned() {
+            Some(h) => h,
+            None => {
+                // Only warn when the proxy name is not the well-known DIRECT
+                // constant.  DIRECT is never inserted into the registry
+                // explicitly, so a miss is expected and silent.
+                if self.name != PROXY_DIRECT {
+                    warn!(
+                        proxy = %self.name,
+                        "proxy not found in registry, falling back to DIRECT"
+                    );
+                }
+                FALLBACK_DIRECT.clone()
+            }
+        }
     }
 }
 
