@@ -386,16 +386,20 @@ async fn create_components(
             .collect(),
     );
 
+    // Create a shared outbound registry seeded with plain outbounds.
+    // After OutboundManager is initialized it will be extended with all
+    // handlers (plain + proxy groups + provider proxies), so DNS clients
+    // and the HTTP client can use any of them for bootstrap traffic.
+    let outbound_registry: crate::proxy::utils::OutboundHandlerRegistry =
+        Arc::new(tokio::sync::RwLock::new(
+            plain_outbounds
+                .iter()
+                .map(|x| (x.name().to_string(), x.clone()))
+                .collect(),
+        ));
+
     let client =
-        new_http_client(
-            system_resolver.clone(),
-            Some(Arc::new(tokio::sync::RwLock::new(
-                plain_outbounds
-                    .iter()
-                    .map(|x| (x.name().to_string(), x.clone()))
-                    .collect(),
-            ))),
-        )
+        new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))
             .map_err(|x| Error::DNSError(x.to_string()))?;
 
     debug!("initializing mmdb");
@@ -421,13 +425,6 @@ async fn create_components(
     // TODO: we should separate the DNS resolver and DNS server config here
     let dns_listen = config.dns.listen.clone();
     let dns_enable = config.dns.enable;
-    let outbound_registry: crate::proxy::utils::OutboundHandlerRegistry =
-        Arc::new(tokio::sync::RwLock::new(
-            plain_outbounds
-                .iter()
-                .map(|x| (x.name().to_string(), x.clone()))
-                .collect(),
-        ));
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
@@ -458,16 +455,17 @@ async fn create_components(
         .await?,
     );
 
-    // Update the shared registry with the full set of outbounds (including
-    // proxy groups and providers) so DNS and HTTP clients can use them.
+    // Extend the shared registry with the full set of outbounds (plain +
+    // proxy groups + provider proxies) so DNS and HTTP clients can use them.
+    // Plain outbounds already in the registry are overwritten by the same
+    // handler from OutboundManager, which is expected since proxy names must
+    // be unique across all outbound types.
     {
         let mut registry = outbound_registry.write().await;
-        registry.extend(
-            outbound_manager
-                .get_outbounds()
-                .iter()
-                .map(|(name, handler)| (name.clone(), handler.clone())),
-        );
+        for (name, handler) in outbound_manager.get_outbounds() {
+            debug!("registering outbound '{}' in bootstrap registry", name);
+            registry.insert(name.clone(), handler.clone());
+        }
     }
 
     debug!("initializing geosite");
