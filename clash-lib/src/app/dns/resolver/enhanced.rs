@@ -11,6 +11,7 @@ use crate::{
             IPNetFilter,
         },
         helper::make_clients,
+        parse_ip_literal,
     },
 };
 use anyhow::anyhow;
@@ -504,6 +505,10 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::IpAddr>> {
+        if let Some(ip) = parse_ip_literal(host) {
+            return Ok(Some(ip));
+        }
+
         match self.ipv6.load(Relaxed) {
             true => {
                 let fut1 = self
@@ -575,6 +580,10 @@ impl ClashResolver for EnhancedResolver {
         host: &str,
         enhanced: bool,
     ) -> anyhow::Result<Option<net::Ipv6Addr>> {
+        if let Some(std::net::IpAddr::V6(ip)) = parse_ip_literal(host) {
+            return Ok(Some(ip));
+        }
+
         if !self.ipv6.load(Relaxed) {
             return Err(Error::DNSError("ipv6 disabled".into()).into());
         }
@@ -587,10 +596,6 @@ impl ClashResolver for EnhancedResolver {
                 net::IpAddr::V6(v6) => *v6,
                 _ => unreachable!("invalid IP family"),
             }));
-        }
-
-        if let Ok(ip) = host.parse::<net::Ipv6Addr>() {
-            return Ok(Some(ip));
         }
 
         match self.lookup_ip(host, rr::RecordType::AAAA).await {
@@ -683,13 +688,69 @@ mod tests {
 
     use crate::{
         app::dns::{
-            ThreadSafeDNSClient,
+            ClashResolver, ThreadSafeDNSClient,
             dns_client::{DNSNetMode, DnsClient, Opts},
             resolver::enhanced::EnhancedResolver,
             runtime::DnsRuntimeProvider,
         },
         proxy,
     };
+
+    /// Regression test for https://github.com/Watfaq/clash-rs/issues/976
+    /// IPv6 literal addresses must be returned directly even when dns.ipv6 is
+    /// disabled, because they do not require DNS resolution.
+    #[tokio::test]
+    async fn test_resolve_ipv6_literal_when_ipv6_disabled() {
+        let resolver = EnhancedResolver::new_default().await;
+        // Ensure ipv6 is disabled, mirroring `dns.ipv6 = false`.
+        resolver.set_ipv6(false);
+        assert!(!resolver.ipv6(), "ipv6 should be disabled");
+
+        // Resolving an IPv6 literal must succeed even with ipv6 disabled.
+        let result = resolver
+            .resolve("::1", false)
+            .await
+            .expect("resolve should not error for IPv6 literal");
+        assert_eq!(
+            result,
+            Some(std::net::IpAddr::V6("::1".parse().unwrap())),
+            "IPv6 literal should be returned as-is"
+        );
+    }
+
+    /// Resolving a plain IPv4 literal must still work when ipv6 is disabled.
+    #[tokio::test]
+    async fn test_resolve_ipv4_literal_when_ipv6_disabled() {
+        let resolver = EnhancedResolver::new_default().await;
+        resolver.set_ipv6(false);
+
+        let result = resolver
+            .resolve("127.0.0.1", false)
+            .await
+            .expect("resolve should not error for IPv4 literal");
+        assert_eq!(
+            result,
+            Some(std::net::IpAddr::V4("127.0.0.1".parse().unwrap())),
+            "IPv4 literal should be returned as-is"
+        );
+    }
+
+    /// resolve_v6 must return an IPv6 literal directly even when ipv6 is
+    /// disabled (no DNS lookup needed for a literal).
+    #[tokio::test]
+    async fn test_resolve_v6_literal_when_ipv6_disabled() {
+        let resolver = EnhancedResolver::new_default().await;
+        resolver.set_ipv6(false);
+
+        let result = resolver.resolve_v6("::1", false).await.expect(
+            "resolve_v6 should not error for IPv6 literal when ipv6 disabled",
+        );
+        assert_eq!(
+            result,
+            Some("::1".parse::<std::net::Ipv6Addr>().unwrap()),
+            "IPv6 literal should be returned directly"
+        );
+    }
 
     #[tokio::test]
     async fn test_bad_labels_with_custom_resolver() {

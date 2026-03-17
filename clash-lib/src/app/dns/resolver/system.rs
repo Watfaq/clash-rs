@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicBool;
 
 use crate::{
     Error,
-    app::dns::{ClashResolver, ResolverKind},
+    app::dns::{ClashResolver, ResolverKind, parse_ip_literal},
 };
 use async_trait::async_trait;
 use rand::seq::IteratorRandom;
@@ -30,6 +30,10 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
+        if let Some(ip) = parse_ip_literal(host) {
+            return Ok(Some(ip));
+        }
+
         let response = tokio::net::lookup_host(format!("{host}:0"))
             .await?
             .filter_map(|x| {
