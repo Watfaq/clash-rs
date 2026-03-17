@@ -80,3 +80,9 @@ pub trait ClashResolver: Sync + Send {
 
     fn kind(&self) -> ResolverKind;
 }
+
+/// Returns the IP address if `host` is a valid IP literal, otherwise `None`.
+/// Used by resolvers to short-circuit DNS resolution for IP literals.
+pub(crate) fn parse_ip_literal(host: &str) -> Option<std::net::IpAddr> {
+    host.parse().ok()
+}
