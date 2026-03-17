@@ -19,6 +19,7 @@ pub(super) fn convert(c: &def::Config) -> Result<General, crate::Error> {
         controller: Controller {
             external_controller: c.external_controller.clone(),
             external_ui: c.external_ui.clone(),
+            external_ui_download_url: c.external_ui_download_url.clone(),
             secret: c.secret.clone(),
             cors_allow_origins: c.cors_allow_origins.clone(),
             external_controller_ipc: c.external_controller_ipc.clone(),
