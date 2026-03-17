@@ -11,6 +11,7 @@ use std::{
 pub mod fetcher;
 pub mod file_vehicle;
 pub mod http_vehicle;
+pub mod inbound_provider;
 pub mod proxy_provider;
 pub mod rule_provider;
 
@@ -50,12 +51,14 @@ pub trait ProviderVehicle {
 pub enum ProviderType {
     Proxy,
     Rule,
+    Inbound,
 }
 impl Display for ProviderType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ProviderType::Proxy => write!(f, "Proxy"),
             ProviderType::Rule => write!(f, "Rule"),
+            ProviderType::Inbound => write!(f, "Inbound"),
         }
     }
 }

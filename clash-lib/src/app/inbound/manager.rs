@@ -15,7 +15,6 @@ use std::{
     sync::Arc,
 };
 use tracing::{info, warn};
-
 /// Legacy ports configuration for inbounds.
 /// Newer inbounds have their own port configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -46,6 +45,10 @@ pub struct InboundManager {
 
     /// Inbound options for each inbound type -> listening Task
     inbound_handlers: Arc<RwLock<HashMap<InboundOpts, Option<JoinHandle<()>>>>>,
+
+    /// Tracks which inbound options belong to which named provider.
+    /// Used to diff and apply provider updates without affecting static inbounds.
+    provider_inbounds: Arc<RwLock<HashMap<String, HashSet<InboundOpts>>>>,
 
     cancellation_token: tokio_util::sync::CancellationToken,
 }
@@ -87,6 +90,7 @@ impl InboundManager {
             inbound_handlers: Arc::new(RwLock::new(
                 inbounds_opt.into_iter().map(|opts| (opts, None)).collect(),
             )),
+            provider_inbounds: Arc::new(RwLock::new(HashMap::new())),
             dispatcher,
             authenticator,
             cancellation_token: cancellation_token.unwrap_or_default(),
@@ -169,6 +173,68 @@ impl InboundManager {
         )
         .await;
         Ok(())
+    }
+
+    /// Apply a new set of inbound options from a named provider.
+    ///
+    /// Stops any listeners that were previously registered by this provider but
+    /// are not present in `new_inbounds`, and starts any listeners that are new.
+    /// Static inbounds (not registered via any provider) are never touched.
+    pub async fn apply_provider_inbounds(
+        &self,
+        provider_name: &str,
+        new_inbounds: Vec<InboundOpts>,
+    ) {
+        let new_set: HashSet<InboundOpts> = new_inbounds.into_iter().collect();
+
+        let mut provider_map = self.provider_inbounds.write().await;
+        let old_set = provider_map
+            .get(provider_name)
+            .cloned()
+            .unwrap_or_default();
+
+        let to_remove: HashSet<_> = old_set.difference(&new_set).cloned().collect();
+        let to_add: HashSet<_> = new_set.difference(&old_set).cloned().collect();
+
+        let mut handlers = self.inbound_handlers.write().await;
+
+        // Stop and remove old listeners for this provider.
+        for opts in &to_remove {
+            if let Some(handle) = handlers.remove(opts).flatten() {
+                warn!(
+                    "Stopping provider inbound listener: {}",
+                    opts.common_opts().name
+                );
+                handle.abort();
+            }
+        }
+
+        // Start new listeners for this provider.
+        for opts in &to_add {
+            let cancellation_token = self.cancellation_token.clone();
+            let name = opts.common_opts().name.clone();
+            let handle = build_network_listeners(
+                opts,
+                self.dispatcher.clone(),
+                self.authenticator.clone(),
+            )
+            .map(|r| {
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = futures::future::join_all(r) => {
+                            warn!("Provider inbound handler {} has exited", name);
+                        },
+                        _ = cancellation_token.cancelled() => {
+                            info!("Provider inbound handler {} is closed", name);
+                        },
+                    }
+                })
+            });
+            handlers.insert(opts.clone(), handle);
+        }
+
+        // Update the tracking map.
+        provider_map.insert(provider_name.to_string(), new_set);
     }
 
     pub async fn get_ports(&self) -> Ports {

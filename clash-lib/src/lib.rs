@@ -526,6 +526,85 @@ async fn create_components(
         .await,
     );
 
+    // Initialize listener providers (remote/file-based inbound subscriptions).
+    if !config.listener_providers.is_empty() {
+        use crate::{
+            app::remote_content_manager::providers::{
+                Provider,
+                file_vehicle, http_vehicle,
+                inbound_provider::InboundSetProvider,
+            },
+            config::internal::config::{
+                InboundHttpProvider, InboundListenerProviderDef,
+            },
+        };
+
+        for (name, provider_def) in config.listener_providers {
+            let im = inbound_manager.clone();
+            let pname = name.clone();
+            let on_update = Some(Box::new(
+                move |inbounds| -> futures::future::BoxFuture<'static, ()> {
+                    let im = im.clone();
+                    let pname = pname.clone();
+                    Box::pin(async move {
+                        im.apply_provider_inbounds(&pname, inbounds).await;
+                    })
+                },
+            ) as _);
+
+            let provider = match provider_def {
+                InboundListenerProviderDef::Http(InboundHttpProvider {
+                    url,
+                    interval,
+                    path,
+                    ..
+                }) => {
+                    let vehicle = Arc::new(http_vehicle::Vehicle::new(
+                        url.parse::<hyper::Uri>().map_err(|e| {
+                            Error::InvalidConfig(format!(
+                                "invalid listener provider URL for {name}: {e}"
+                            ))
+                        })?,
+                        &path,
+                        Some(&cwd.to_string_lossy().into_owned()),
+                        dns_resolver.clone(),
+                    ));
+                    InboundSetProvider::new(
+                        name.clone(),
+                        std::time::Duration::from_secs(interval),
+                        vehicle,
+                        on_update,
+                    )
+                }
+                InboundListenerProviderDef::File(ref fp) => {
+                    let vehicle = Arc::new(file_vehicle::Vehicle::new(
+                        &cwd.join(&fp.path).to_string_lossy().into_owned(),
+                    ));
+                    InboundSetProvider::new(
+                        name.clone(),
+                        std::time::Duration::from_secs(
+                            fp.interval.unwrap_or(0),
+                        ),
+                        vehicle,
+                        on_update,
+                    )
+                }
+            }
+            .map_err(|e| {
+                Error::InvalidConfig(format!(
+                    "failed to create listener provider {name}: {e}"
+                ))
+            })?;
+
+            debug!("initializing listener provider: {name}");
+            provider.initialize().await.map_err(|e| {
+                Error::InvalidConfig(format!(
+                    "listener provider {name} failed to initialize: {e}"
+                ))
+            })?;
+        }
+    }
+
     #[cfg(feature = "tun")]
     debug!("initializing tun runner");
     #[cfg(feature = "tun")]
