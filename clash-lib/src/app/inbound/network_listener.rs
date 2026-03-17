@@ -17,19 +17,32 @@ use futures::future::BoxFuture;
 use tracing::{error, info, warn};
 
 #[cfg(feature = "shadowsocks")]
-use crate::proxy::shadowsocks::inbound::{InboundOptions, ShadowsocksInbound};
+use crate::proxy::shadowsocks::inbound::{
+    InboundOptions, SharedUserStats, ShadowsocksInbound,
+};
 use std::sync::Arc;
 
+/// Returns the listener futures AND, for inbound types that support per-user
+/// traffic stats, a `SharedUserStats` Arc (keyed by user name, plus
+/// `STAT_KEY_TOTAL`).  The caller is responsible for storing the stats
+/// somewhere accessible (e.g. `InboundManager::listener_stats`).
 pub(crate) fn build_network_listeners(
     inbound_opts: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
-) -> Option<Vec<BoxFuture<'static, Result<(), crate::Error>>>> {
+) -> (
+    Option<Vec<BoxFuture<'static, Result<(), crate::Error>>>>,
+    Option<SharedUserStats>,
+) {
     let name = &inbound_opts.common_opts().name;
     let addr = inbound_opts.common_opts().listen.0;
     let port = inbound_opts.common_opts().port;
 
-    if let Some(handler) = build_handler(inbound_opts, dispatcher, authenticator) {
+    let mut stats_out: Option<SharedUserStats> = None;
+
+    let runners = if let Some(handler) =
+        build_handler(inbound_opts, dispatcher, authenticator, &mut stats_out)
+    {
         let mut runners: Vec<BoxFuture<'static, Result<(), crate::Error>>> =
             Vec::new();
 
@@ -66,18 +79,22 @@ pub(crate) fn build_network_listeners(
 
         if runners.is_empty() {
             warn!("no listener for {}", name);
-            return None;
+            None
+        } else {
+            Some(runners)
         }
-        Some(runners)
     } else {
         None
-    }
+    };
+
+    (runners, stats_out)
 }
 
 fn build_handler(
     listener: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    #[allow(unused_variables)] stats_out: &mut Option<SharedUserStats>,
 ) -> Option<Arc<dyn InboundHandlerTrait>> {
     let fw_mark = listener.common_opts().fw_mark;
     match listener {
@@ -168,15 +185,22 @@ fn build_handler(
             udp,
             cipher,
             password,
-        } => Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
-            addr: (common_opts.listen.0, common_opts.port).into(),
-            password: password.clone(),
-            udp: *udp,
-            cipher: cipher.clone(),
-            allow_lan: common_opts.allow_lan,
-            dispatcher,
-            authenticator,
-            fw_mark: common_opts.fw_mark,
-        }))),
+            users,
+        } => {
+            let inbound = ShadowsocksInbound::new(InboundOptions {
+                addr: (common_opts.listen.0, common_opts.port).into(),
+                password: password.clone(),
+                udp: *udp,
+                cipher: cipher.clone(),
+                allow_lan: common_opts.allow_lan,
+                dispatcher,
+                authenticator,
+                fw_mark: common_opts.fw_mark,
+                users: users.clone(),
+            });
+            // Capture the shared stats Arc before we lose the concrete type.
+            *stats_out = Some(inbound.user_traffic_stats.clone());
+            Some(Arc::new(inbound))
+        }
     }
 }

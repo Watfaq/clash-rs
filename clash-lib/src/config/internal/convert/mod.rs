@@ -24,7 +24,7 @@ mod rule_provider;
 mod tun;
 
 use super::{
-    config::{self, Profile},
+    config::{self, InboundListenerProviderDef, Profile},
     proxy::{
         OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
         map_serde_error,
@@ -146,6 +146,34 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             })
             .unwrap_or_default(),
         listeners: listener::convert(c.listeners.take(), &c)?,
+        listener_providers: c
+            .listener_provider
+            .take()
+            .map(|m| {
+                m.into_iter()
+                    .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                        body.insert(
+                            "name".to_owned(),
+                            serde_yaml::Value::String(name.clone()),
+                        );
+                        let provider =
+                            InboundListenerProviderDef::deserialize(
+                                MapDeserializer::new(body.into_iter()),
+                            )
+                            .map_err(|x| {
+                                Error::InvalidConfig(format!(
+                                    "invalid listener provider {name}: {x}"
+                                ))
+                            })?;
+                        rv.insert(name, provider);
+                        Ok::<
+                            HashMap<String, InboundListenerProviderDef>,
+                            Error,
+                        >(rv)
+                    })
+            })
+            .transpose()?
+            .unwrap_or_default(),
     }
     .validate()
 }

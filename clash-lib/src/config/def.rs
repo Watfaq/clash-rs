@@ -467,6 +467,11 @@ pub struct Config {
     pub tun: Option<TunConfig>,
 
     pub listeners: Option<Vec<HashMap<String, Value>>>,
+
+    #[serde(rename = "listener-providers")]
+    /// listener provider settings — each entry is a remote or local snippet
+    /// that supplies additional inbound listener definitions.
+    pub listener_provider: Option<HashMap<String, HashMap<String, Value>>>,
 }
 
 impl TryFrom<PathBuf> for Config {

@@ -24,6 +24,37 @@ use std::{
 
 use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
 
+/// Defines a remote or local provider of inbound listener configurations.
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum InboundListenerProviderDef {
+    Http(InboundHttpProvider),
+    File(InboundFileProvider),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct InboundHttpProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub url: String,
+    /// Refresh interval in seconds.
+    pub interval: u64,
+    /// Local cache path for the fetched content.
+    pub path: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct InboundFileProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub path: String,
+    /// Optional refresh interval in seconds.
+    pub interval: Option<u64>,
+}
+
 pub struct Config {
     pub general: General,
     pub dns: dns::Config,
@@ -39,6 +70,7 @@ pub struct Config {
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
     pub listeners: HashSet<InboundOpts>,
+    pub listener_providers: HashMap<String, InboundListenerProviderDef>,
 }
 
 impl Config {
