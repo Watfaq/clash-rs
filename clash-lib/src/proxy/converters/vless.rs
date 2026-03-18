@@ -3,7 +3,9 @@ use crate::{
     config::internal::proxy::OutboundVless,
     proxy::{
         HandlerCommonOptions,
-        transport::{GrpcClient, H2Client, TlsClient, WsClient},
+        transport::{
+            GrpcClient, H2Client, RealityClient, TlsClient, Transport, WsClient,
+        },
         vless::{Handler, HandlerOptions},
     },
 };
@@ -28,6 +30,69 @@ impl TryFrom<&OutboundVless> for Handler {
                 s.common_opts.server
             );
         }
+
+        if s.client_fingerprint.is_some() {
+            warn!(
+                "client-fingerprint (uTLS) is not yet implemented, ignored for {}",
+                s.common_opts.name
+            );
+        }
+
+        let tls: Option<Box<dyn Transport>> = if let Some(ref reality_opts) =
+            s.reality_opts
+        {
+            // vless with reality
+
+            // reality public-key bytes
+            let pk_bytes =
+                super::utils::decode_base64_public_key(&reality_opts.public_key)?;
+
+            // reality short id bytes
+            let short_id = super::utils::decode_short_id(&reality_opts.short_id)?;
+
+            // SNI
+            let sni = s
+                .server_name
+                .clone()
+                .unwrap_or_else(|| s.common_opts.server.clone());
+
+            Some(Box::new(RealityClient::new(sni, pk_bytes, short_id)))
+        } else {
+            // vless without reality
+            match s.tls.unwrap_or_default() {
+                true => {
+                    let client = TlsClient::new(
+                        s.skip_cert_verify.unwrap_or_default(),
+                        s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
+                            s.ws_opts
+                                .as_ref()
+                                .and_then(|x| {
+                                    x.headers.clone().and_then(|x| {
+                                        let h = x.get("Host");
+                                        h.cloned()
+                                    })
+                                })
+                                .unwrap_or(s.common_opts.server.to_owned()),
+                        ),
+                        s.network
+                            .as_ref()
+                            .map(|x| match x.as_str() {
+                                "tcp" => Ok(vec![]),
+                                "ws" => Ok(vec!["http/1.1".to_owned()]),
+                                "http" => Ok(vec![]),
+                                "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
+                                _ => Err(Error::InvalidConfig(format!(
+                                    "unsupported network: {x}"
+                                ))),
+                            })
+                            .transpose()?,
+                        None,
+                    );
+                    Some(Box::new(client))
+                }
+                false => None,
+            }
+        };
 
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
@@ -87,39 +152,8 @@ impl TryFrom<&OutboundVless> for Handler {
                 })
                 .transpose()?
                 .flatten(),
-            tls: match s.tls.unwrap_or_default() {
-                true => {
-                    let client = TlsClient::new(
-                        s.skip_cert_verify.unwrap_or_default(),
-                        s.server_name.as_ref().map(|x| x.to_owned()).unwrap_or(
-                            s.ws_opts
-                                .as_ref()
-                                .and_then(|x| {
-                                    x.headers.clone().and_then(|x| {
-                                        let h = x.get("Host");
-                                        h.cloned()
-                                    })
-                                })
-                                .unwrap_or(s.common_opts.server.to_owned()),
-                        ),
-                        s.network
-                            .as_ref()
-                            .map(|x| match x.as_str() {
-                                "tcp" => Ok(vec![]),
-                                "ws" => Ok(vec!["http/1.1".to_owned()]),
-                                "http" => Ok(vec![]),
-                                "h2" | "grpc" => Ok(vec!["h2".to_owned()]),
-                                _ => Err(Error::InvalidConfig(format!(
-                                    "unsupported network: {x}"
-                                ))),
-                            })
-                            .transpose()?,
-                        None,
-                    );
-                    Some(Box::new(client))
-                }
-                false => None,
-            },
+            tls,
+            flow: s.flow.clone(),
         }))
     }
 }
@@ -148,6 +182,7 @@ mod tests {
             ws_opts: None,
             h2_opts: None,
             grpc_opts: None,
+            ..Default::default()
         };
 
         let handler = Handler::try_from(&config);
@@ -176,6 +211,7 @@ mod tests {
             ws_opts: None,
             h2_opts: None,
             grpc_opts: None,
+            ..Default::default()
         };
 
         let handler = Handler::try_from(&config);
@@ -204,6 +240,7 @@ mod tests {
             ws_opts: None,
             h2_opts: None,
             grpc_opts: None,
+            ..Default::default()
         };
 
         let handler = Handler::try_from(&config);
