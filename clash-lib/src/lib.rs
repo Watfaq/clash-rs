@@ -402,33 +402,28 @@ async fn create_components(
         new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))
             .map_err(|x| Error::DNSError(x.to_string()))?;
 
-    debug!("initializing mmdb");
-    let country_mmdb = if let Some(country_mmdb_file) = config.general.mmdb {
-        Some(Arc::new(
-            mmdb::Mmdb::new(
-                cwd.join(&country_mmdb_file),
-                config
-                    .general
-                    .mmdb_download_url
-                    .unwrap_or(DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string()),
-                client.clone(),
-            )
-            .await?,
-        ) as MmdbLookup)
-    } else {
-        debug!("country mmdb not set, skipping");
-        None
-    };
-
     debug!("initializing dns resolver");
     // Clone the dns.listen for the DNS Server later before we consume the config
     // TODO: we should separate the DNS resolver and DNS server config here
     let dns_listen = config.dns.listen.clone();
     let dns_enable = config.dns.enable;
+
+    // Extract the country MMDB file/url config early so they can be consumed
+    // here, while the actual MMDB loading happens after OutboundManager (like
+    // geodata and asn_mmdb) so it benefits from the fully-populated outbound
+    // registry when downloading the file.
+    let country_mmdb_file = config.general.mmdb;
+    let country_mmdb_download_url = config.general.mmdb_download_url;
+
+    // Create a shared pending handle that the DNS resolver's GeoIPFilter holds.
+    // It starts empty and is populated once the MMDB is loaded below.
+    let pending_country_mmdb: Option<dns::PendingMmdb> =
+        country_mmdb_file.as_ref().map(|_| Arc::new(OnceLock::new()));
+
     let dns_resolver = dns::new_resolver(
         config.dns,
         Some(cache_store.clone()),
-        country_mmdb.clone(),
+        pending_country_mmdb.clone(),
         outbound_registry.clone(),
     )
     .await;
@@ -455,6 +450,35 @@ async fn create_components(
         )
         .await?,
     );
+
+    debug!("initializing mmdb");
+    let country_mmdb = if let Some(ref mmdb_file) = country_mmdb_file {
+        let mmdb = Arc::new(
+            mmdb::Mmdb::new(
+                cwd.join(mmdb_file),
+                country_mmdb_download_url
+                    .unwrap_or(DEFAULT_COUNTRY_MMDB_DOWNLOAD_URL.to_string()),
+                client.clone(),
+            )
+            .await?,
+        ) as MmdbLookup;
+        // Populate the shared handle so the DNS resolver's GeoIPFilter can use
+        // it. Any inflight DNS fallback-IP filtering that ran before this point
+        // will have been permissive (MMDB absent = pass-through), which is the
+        // safe default during startup.
+        if let Some(pending) = &pending_country_mmdb {
+            if pending.set(mmdb.clone()).is_err() {
+                warn!(
+                    "country MMDB OnceLock was already set — this is unexpected \
+                     and indicates a double-initialization bug"
+                );
+            }
+        }
+        Some(mmdb)
+    } else {
+        debug!("country mmdb not set, skipping");
+        None
+    };
 
     debug!("initializing geosite");
     let geodata = if let Some(geosite_file) = config.general.geosite {

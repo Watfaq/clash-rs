@@ -1,14 +1,14 @@
 use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
-    common::{mmdb::MmdbLookup, trie},
+    common::trie,
     config::def::DNSMode,
     dns::{
         ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
         fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
         filters::{
             DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
-            IPNetFilter,
+            IPNetFilter, PendingMmdb,
         },
         helper::make_clients,
     },
@@ -91,7 +91,7 @@ impl EnhancedResolver {
     pub async fn new(
         cfg: Config,
         store: ThreadSafeCacheFile,
-        mmdb: Option<MmdbLookup>,
+        mmdb: Option<PendingMmdb>,
         outbounds: crate::proxy::utils::OutboundHandlerRegistry,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();

@@ -20,6 +20,8 @@ mod server;
 
 pub use config::{Config, EdnsClientSubnet};
 
+pub use filters::PendingMmdb;
+
 pub use resolver::{EnhancedResolver, SystemResolver, new as new_resolver};
 
 pub use server::DnsRunner;
