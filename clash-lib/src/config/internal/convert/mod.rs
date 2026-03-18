@@ -25,6 +25,7 @@ mod tun;
 
 use super::{
     config::{self, Profile},
+    listener::InboundProviderDef,
     proxy::{
         OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
         map_serde_error,
@@ -146,6 +147,28 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
             })
             .unwrap_or_default(),
         listeners: listener::convert(c.listeners.take(), &c)?,
+        inbound_providers: c
+            .inbound_provider
+            .take()
+            .map(|m| {
+                m.into_iter()
+                    .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
+                        body.insert(
+                            "name".to_owned(),
+                            serde_yaml::Value::String(name.clone()),
+                        );
+                        let provider =
+                            InboundProviderDef::try_from(body).map_err(|x| {
+                                Error::InvalidConfig(format!(
+                                    "invalid inbound provider {name}: {x}"
+                                ))
+                            })?;
+                        rv.insert(name, provider);
+                        Ok::<HashMap<String, InboundProviderDef>, Error>(rv)
+                    })
+                    .expect("inbound provider parse error")
+            })
+            .unwrap_or_default(),
     }
     .validate()
 }

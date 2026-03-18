@@ -4,17 +4,29 @@ use tokio::{sync::RwLock, task::JoinHandle};
 
 use crate::{
     app::{
-        dispatcher::Dispatcher, inbound::network_listener::build_network_listeners,
+        dispatcher::Dispatcher,
+        dns::ThreadSafeDNSResolver,
+        inbound::network_listener::build_network_listeners,
+        remote_content_manager::providers::{
+            file_vehicle, http_vehicle, inbound_provider::InboundSetProvider,
+        },
     },
     common::auth::ThreadSafeAuthenticator,
-    config::internal::{config::BindAddress, listener::InboundOpts},
+    config::internal::{
+        config::BindAddress,
+        listener::{
+            InboundFileProvider, InboundHttpProvider, InboundOpts,
+            InboundProviderDef,
+        },
+    },
     runner::Runner,
 };
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Duration,
 };
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// Legacy ports configuration for inbounds.
 /// Newer inbounds have their own port configuration
@@ -46,6 +58,9 @@ pub struct InboundManager {
 
     /// Inbound options for each inbound type -> listening Task
     inbound_handlers: Arc<RwLock<HashMap<InboundOpts, Option<JoinHandle<()>>>>>,
+
+    /// provider name -> set of InboundOpts currently active from that provider
+    provider_opts: Arc<RwLock<HashMap<String, HashSet<InboundOpts>>>>,
 
     cancellation_token: tokio_util::sync::CancellationToken,
 }
@@ -87,9 +102,128 @@ impl InboundManager {
             inbound_handlers: Arc::new(RwLock::new(
                 inbounds_opt.into_iter().map(|opts| (opts, None)).collect(),
             )),
+            provider_opts: Arc::new(RwLock::new(HashMap::new())),
             dispatcher,
             authenticator,
             cancellation_token: cancellation_token.unwrap_or_default(),
+        }
+    }
+
+    /// Load and initialise inbound providers (http/file), analogous to
+    /// `OutboundManager::load_proxy_providers`.  Should be called once after
+    /// `new()`, before `run_async()`.
+    pub async fn load_inbound_providers(
+        &self,
+        cwd: String,
+        providers: HashMap<String, InboundProviderDef>,
+        dns_resolver: ThreadSafeDNSResolver,
+    ) {
+        for (name, def) in providers {
+            let (vehicle, interval): (
+                Arc<dyn crate::app::remote_content_manager::providers::ProviderVehicle + Send + Sync>,
+                Duration,
+            ) = match def {
+                InboundProviderDef::Http(InboundHttpProvider {
+                    url,
+                    path,
+                    interval,
+                    ..
+                }) => {
+                    let v = http_vehicle::Vehicle::new(
+                        url.parse::<hyper::Uri>().expect("invalid inbound provider URL"),
+                        path,
+                        Some(cwd.clone()),
+                        dns_resolver.clone(),
+                    );
+                    (Arc::new(v), Duration::from_secs(interval))
+                }
+                InboundProviderDef::File(InboundFileProvider { path, interval, .. }) => {
+                    let v = file_vehicle::Vehicle::new(&path);
+                    (Arc::new(v), Duration::from_secs(interval.unwrap_or(0)))
+                }
+            };
+
+            // Capture what the updater needs to apply changes without an
+            // Arc<InboundManager> back-reference.
+            let handlers = self.inbound_handlers.clone();
+            let provider_opts = self.provider_opts.clone();
+            let dispatcher = self.dispatcher.clone();
+            let authenticator = self.authenticator.clone();
+            let cancellation_token = self.cancellation_token.clone();
+            let provider_name = name.clone();
+
+            let on_update = move |new_opts: Vec<InboundOpts>| {
+                let handlers = handlers.clone();
+                let provider_opts = provider_opts.clone();
+                let dispatcher = dispatcher.clone();
+                let authenticator = authenticator.clone();
+                let cancellation_token = cancellation_token.clone();
+                let provider_name = provider_name.clone();
+
+                Box::pin(async move {
+                    let mut handlers_guard = handlers.write().await;
+                    let mut provider_opts_guard = provider_opts.write().await;
+
+                    // Abort and remove listeners from the previous snapshot of
+                    // this provider.
+                    if let Some(old_opts) =
+                        provider_opts_guard.remove(&provider_name)
+                    {
+                        for opt in old_opts {
+                            if let Some(Some(handle)) = handlers_guard.remove(&opt) {
+                                handle.abort();
+                            }
+                        }
+                    }
+
+                    // Start listeners for the new snapshot.
+                    let new_opts_set: HashSet<InboundOpts> =
+                        new_opts.iter().cloned().collect();
+                    for opts in new_opts {
+                        let ct = cancellation_token.clone();
+                        let listener_name = opts.common_opts().name.clone();
+                        let handle = build_network_listeners(
+                            &opts,
+                            dispatcher.clone(),
+                            authenticator.clone(),
+                        )
+                        .map(|runners| {
+                            tokio::spawn(async move {
+                                tokio::select! {
+                                    _ = futures::future::join_all(runners) => {
+                                        warn!("Provider inbound {} exited", listener_name);
+                                    }
+                                    _ = ct.cancelled() => {
+                                        info!("Provider inbound {} closed", listener_name);
+                                    }
+                                }
+                            })
+                        });
+                        handlers_guard.insert(opts, handle);
+                    }
+
+                    provider_opts_guard.insert(provider_name, new_opts_set);
+                }) as BoxFuture<'static, ()>
+            };
+
+            match InboundSetProvider::new(name.clone(), interval, vehicle, on_update)
+            {
+                Ok(provider) => match provider.initialize().await {
+                    Ok(initial_opts) => {
+                        info!(
+                            provider = %name,
+                            count = initial_opts.len(),
+                            "inbound provider initialised"
+                        );
+                    }
+                    Err(e) => {
+                        error!(provider = %name, "inbound provider init failed: {e}");
+                    }
+                },
+                Err(e) => {
+                    error!(provider = %name, "failed to create inbound provider: {e}")
+                }
+            }
         }
     }
 

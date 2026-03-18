@@ -11,6 +11,7 @@ use std::{
 pub mod fetcher;
 pub mod file_vehicle;
 pub mod http_vehicle;
+pub mod inbound_provider;
 pub mod proxy_provider;
 pub mod rule_provider;
 
