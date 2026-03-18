@@ -467,6 +467,9 @@ pub struct Config {
     pub tun: Option<TunConfig>,
 
     pub listeners: Option<Vec<HashMap<String, Value>>>,
+
+    #[serde(rename = "inbound-providers")]
+    pub inbound_provider: Option<HashMap<String, HashMap<String, Value>>>,
 }
 
 impl TryFrom<PathBuf> for Config {

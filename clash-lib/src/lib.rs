@@ -525,6 +525,16 @@ async fn create_components(
         )
         .await,
     );
+    if !config.inbound_providers.is_empty() {
+        debug!("loading inbound providers");
+        inbound_manager
+            .load_inbound_providers(
+                cwd.to_string_lossy().to_string(),
+                config.inbound_providers,
+                dns_resolver.clone(),
+            )
+            .await;
+    }
 
     #[cfg(feature = "tun")]
     debug!("initializing tun runner");

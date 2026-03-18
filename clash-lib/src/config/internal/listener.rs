@@ -1,5 +1,7 @@
 use crate::common::utils::default_bool_true;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use std::collections::HashMap;
 
 use super::config::BindAddress;
 
@@ -103,6 +105,57 @@ impl InboundOpts {
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { .. } => "shadowsocks",
         }
+    }
+}
+
+/// Mirrors `OutboundProxyProviderDef` but for inbound listeners.
+/// The provider URL/file must return YAML with a top-level `listeners:` key
+/// containing a list of `InboundOpts`-compatible objects.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum InboundProviderDef {
+    Http(InboundHttpProvider),
+    File(InboundFileProvider),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct InboundHttpProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub url: String,
+    pub interval: u64,
+    pub path: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct InboundFileProvider {
+    #[serde(skip)]
+    pub name: String,
+    pub path: String,
+    pub interval: Option<u64>,
+}
+
+impl TryFrom<HashMap<String, Value>> for InboundProviderDef {
+    type Error = crate::Error;
+
+    fn try_from(mapping: HashMap<String, Value>) -> Result<Self, Self::Error> {
+        use serde::de::value::MapDeserializer;
+        let name = mapping
+            .get("name")
+            .and_then(|x| x.as_str())
+            .ok_or_else(|| {
+                crate::Error::InvalidConfig(
+                    "missing field `name` in inbound provider".into(),
+                )
+            })?
+            .to_owned();
+        InboundProviderDef::deserialize(MapDeserializer::new(mapping.into_iter()))
+            .map_err(|e| {
+                crate::Error::InvalidConfig(format!("inbound provider {name}: {e}"))
+            })
     }
 }
 
