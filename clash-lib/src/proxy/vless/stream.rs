@@ -22,6 +22,7 @@ pub struct VlessStream {
     uuid: uuid::Uuid,
     destination: SocksAddr,
     is_udp: bool,
+    flow: Option<String>,
 }
 
 impl VlessStream {
@@ -30,6 +31,7 @@ impl VlessStream {
         uuid: &str,
         destination: &SocksAddr,
         is_udp: bool,
+        flow: Option<String>,
     ) -> io::Result<Self> {
         let uuid = uuid::Uuid::parse_str(uuid).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "invalid UUID format")
@@ -45,6 +47,7 @@ impl VlessStream {
             uuid,
             destination: destination.clone(),
             is_udp,
+            flow,
         })
     }
 
@@ -52,12 +55,19 @@ impl VlessStream {
         let mut buf = BytesMut::new();
 
         // VLESS request header:
-        // Version (1 byte) + UUID (16 bytes) + Additional info length (1 byte)
-        // + Command (1 byte) + Port (2 bytes) + Address type + Address + Additional
-        //   info
+        // Version (1 byte) + UUID (16 bytes) + Addon length (1 byte)
+        // + Addon bytes (variable) + Command (1 byte) + Port (2 bytes)
+        // + Address type + Address
         buf.put_u8(VLESS_VERSION);
         buf.put_slice(self.uuid.as_bytes());
-        buf.put_u8(0); // Additional info length (0 for simplicity)
+
+        if let Some(ref flow) = self.flow {
+            let addon = build_addon_bytes(flow);
+            buf.put_u8(addon.len() as u8);
+            buf.extend_from_slice(&addon);
+        } else {
+            buf.put_u8(0); // No addon
+        }
 
         if self.is_udp {
             buf.put_u8(VLESS_COMMAND_UDP);
@@ -135,8 +145,9 @@ impl VlessStream {
                 e
             })?;
             debug!(
-                "VLESS additional info received: {} bytes",
-                additional_info_len
+                "VLESS additional info received: {} bytes: {:02x?}",
+                additional_info_len,
+                &additional_info[..additional_info_len.min(32) as usize],
             );
         }
 
@@ -201,5 +212,95 @@ impl AsyncWrite for VlessStream {
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+/// Encode the flow field as a Protobuf field-1 length-delimited value.
+/// Format: [0x0A][varint len][bytes]
+pub(crate) fn build_addon_bytes(flow: &str) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(2 + flow.len());
+    buf.push(0x0A); // field 1, wire type 2 (length-delimited)
+    buf.push(flow.len() as u8); // single-byte varint (flow strings are short)
+    buf.extend_from_slice(flow.as_bytes());
+    buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::SocksAddr;
+
+    fn dummy_stream() -> AnyStream {
+        let (client, _server) = tokio::io::duplex(1024);
+        Box::new(client)
+    }
+
+    fn tcp_dest() -> SocksAddr {
+        "1.2.3.4:80".parse().unwrap()
+    }
+
+    // --- build_addon_bytes ---
+
+    #[test]
+    fn test_build_addon_bytes_empty_flow() {
+        let addon = build_addon_bytes("");
+        // tag(1) + len(0) = 2 bytes, no payload
+        assert_eq!(addon, vec![0x0A, 0x00]);
+    }
+
+    #[test]
+    fn test_build_addon_bytes_vision_flow() {
+        let flow = "xtls-rprx-vision";
+        let addon = build_addon_bytes(flow);
+        assert_eq!(addon.len(), 2 + flow.len()); // 18 bytes
+        assert_eq!(addon[0], 0x0A); // field-1, wire-type-2 tag
+        assert_eq!(addon[1], flow.len() as u8); // 0x10 = 16
+        assert_eq!(&addon[2..], flow.as_bytes());
+    }
+
+    // --- build_handshake_header ---
+
+    #[test]
+    fn test_handshake_header_no_flow() {
+        let s = VlessStream::new(
+            dummy_stream(),
+            "5415d8e0-df92-3655-afa4-b79de66413f5",
+            &tcp_dest(),
+            false,
+            None,
+        )
+        .unwrap();
+        let hdr = s.build_handshake_header();
+        // byte 17 (0-indexed) is the addon-length byte
+        assert_eq!(hdr[17], 0); // no addon
+    }
+
+    #[test]
+    fn test_handshake_header_with_flow() {
+        let flow = "xtls-rprx-vision";
+        let s = VlessStream::new(
+            dummy_stream(),
+            "5415d8e0-df92-3655-afa4-b79de66413f5",
+            &tcp_dest(),
+            false,
+            Some(flow.to_string()),
+        )
+        .unwrap();
+        let hdr = s.build_handshake_header();
+        let addon_len = hdr[17] as usize;
+        assert_eq!(addon_len, 2 + flow.len()); // 18
+        let addon = &hdr[18..18 + addon_len];
+        assert_eq!(addon[0], 0x0A);
+        assert_eq!(addon[1], flow.len() as u8);
+        assert_eq!(&addon[2..], flow.as_bytes());
+    }
+
+    // --- new() ---
+
+    #[test]
+    fn test_new_invalid_uuid() {
+        let result =
+            VlessStream::new(dummy_stream(), "not-a-uuid", &tcp_dest(), false, None);
+        assert!(result.is_err());
     }
 }

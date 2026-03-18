@@ -1,4 +1,4 @@
-use self::stream::VlessStream;
+use self::{stream::VlessStream, vision::VisionStream};
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
@@ -24,6 +24,7 @@ use tracing::debug;
 
 mod datagram;
 mod stream;
+mod vision;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -34,6 +35,7 @@ pub struct HandlerOptions {
     pub udp: bool,
     pub transport: Option<Box<dyn Transport>>,
     pub tls: Option<Box<dyn Transport>>,
+    pub flow: Option<String>,
 }
 
 pub struct Handler {
@@ -65,10 +67,10 @@ impl Handler {
         sess: &Session,
         is_udp: bool,
     ) -> io::Result<AnyStream> {
-        let s = if let Some(tls) = self.opts.tls.as_ref() {
-            tls.proxy_stream(s).await?
+        let (s, vision_opts) = if let Some(tls) = self.opts.tls.as_ref() {
+            tls.proxy_stream_spliced(s).await?
         } else {
-            s
+            (s, None)
         };
 
         let s = if let Some(transport) = self.opts.transport.as_ref() {
@@ -77,10 +79,23 @@ impl Handler {
             s
         };
 
-        let vless_stream =
-            VlessStream::new(s, &self.opts.uuid, &sess.destination, is_udp)?;
+        let vless_stream = VlessStream::new(
+            s,
+            &self.opts.uuid,
+            &sess.destination,
+            is_udp,
+            self.opts.flow.clone(),
+        )?;
 
-        Ok(Box::new(vless_stream))
+        if self.opts.flow.as_deref() == Some("xtls-rprx-vision") {
+            Ok(Box::new(VisionStream::new(
+                Box::new(vless_stream),
+                self.opts.uuid.clone(),
+                vision_opts,
+            )?))
+        } else {
+            Ok(Box::new(vless_stream))
+        }
     }
 }
 
@@ -293,6 +308,7 @@ mod tests {
             udp: true,
             tls: tls_client(None),
             transport: Some(Box::new(ws_client)),
+            flow: None,
         };
         let handler = Arc::new(Handler::new(opts));
 
