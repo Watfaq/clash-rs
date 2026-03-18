@@ -166,8 +166,8 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                         rv.insert(name, provider);
                         Ok::<HashMap<String, InboundProviderDef>, Error>(rv)
                     })
-                    .expect("inbound provider parse error")
             })
+            .transpose()?
             .unwrap_or_default(),
     }
     .validate()

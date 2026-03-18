@@ -62,6 +62,9 @@ pub struct InboundManager {
     /// provider name -> set of InboundOpts currently active from that provider
     provider_opts: Arc<RwLock<HashMap<String, HashSet<InboundOpts>>>>,
 
+    /// provider name -> provider (kept alive for lifecycle management)
+    inbound_providers: Arc<RwLock<HashMap<String, Arc<InboundSetProvider>>>>,
+
     cancellation_token: tokio_util::sync::CancellationToken,
 }
 
@@ -103,6 +106,7 @@ impl InboundManager {
                 inbounds_opt.into_iter().map(|opts| (opts, None)).collect(),
             )),
             provider_opts: Arc::new(RwLock::new(HashMap::new())),
+            inbound_providers: Arc::new(RwLock::new(HashMap::new())),
             dispatcher,
             authenticator,
             cancellation_token: cancellation_token.unwrap_or_default(),
@@ -110,7 +114,7 @@ impl InboundManager {
     }
 
     /// Load and initialise inbound providers (http/file), analogous to
-    /// `OutboundManager::load_proxy_providers`.  Should be called once after
+    /// `OutboundManager::load_proxy_providers`. Should be called once after
     /// `new()`, before `run_async()`.
     pub async fn load_inbound_providers(
         &self,
@@ -129,8 +133,15 @@ impl InboundManager {
                     interval,
                     ..
                 }) => {
+                    let uri = match url.parse::<hyper::Uri>() {
+                        Ok(u) => u,
+                        Err(e) => {
+                            error!(provider = %name, "invalid inbound provider URL: {e}");
+                            continue;
+                        }
+                    };
                     let v = http_vehicle::Vehicle::new(
-                        url.parse::<hyper::Uri>().expect("invalid inbound provider URL"),
+                        uri,
                         path,
                         Some(cwd.clone()),
                         dns_resolver.clone(),
@@ -143,8 +154,6 @@ impl InboundManager {
                 }
             };
 
-            // Capture what the updater needs to apply changes without an
-            // Arc<InboundManager> back-reference.
             let handlers = self.inbound_handlers.clone();
             let provider_opts = self.provider_opts.clone();
             let dispatcher = self.dispatcher.clone();
@@ -164,8 +173,6 @@ impl InboundManager {
                     let mut handlers_guard = handlers.write().await;
                     let mut provider_opts_guard = provider_opts.write().await;
 
-                    // Abort and remove listeners from the previous snapshot of
-                    // this provider.
                     if let Some(old_opts) =
                         provider_opts_guard.remove(&provider_name)
                     {
@@ -176,7 +183,6 @@ impl InboundManager {
                         }
                     }
 
-                    // Start listeners for the new snapshot.
                     let new_opts_set: HashSet<InboundOpts> =
                         new_opts.iter().cloned().collect();
                     for opts in new_opts {
@@ -208,18 +214,25 @@ impl InboundManager {
 
             match InboundSetProvider::new(name.clone(), interval, vehicle, on_update)
             {
-                Ok(provider) => match provider.initialize().await {
-                    Ok(initial_opts) => {
-                        info!(
-                            provider = %name,
-                            count = initial_opts.len(),
-                            "inbound provider initialised"
-                        );
+                Ok(provider) => {
+                    let provider = Arc::new(provider);
+                    match provider.initialize().await {
+                        Ok(initial_opts) => {
+                            info!(
+                                provider = %name,
+                                count = initial_opts.len(),
+                                "inbound provider initialised"
+                            );
+                            self.inbound_providers
+                                .write()
+                                .await
+                                .insert(name, provider);
+                        }
+                        Err(e) => {
+                            error!(provider = %name, "inbound provider init failed: {e}");
+                        }
                     }
-                    Err(e) => {
-                        error!(provider = %name, "inbound provider init failed: {e}");
-                    }
-                },
+                }
                 Err(e) => {
                     error!(provider = %name, "failed to create inbound provider: {e}")
                 }
