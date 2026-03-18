@@ -26,6 +26,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
+type ProviderHandles =
+    Arc<RwLock<HashMap<String, HashMap<InboundOpts, Option<JoinHandle<()>>>>>>;
 use tracing::{error, info, warn};
 
 /// Legacy ports configuration for inbounds.
@@ -61,8 +64,7 @@ pub struct InboundManager {
 
     /// provider name -> (InboundOpts -> JoinHandle) for provider-owned
     /// listeners
-    provider_handles:
-        Arc<RwLock<HashMap<String, HashMap<InboundOpts, Option<JoinHandle<()>>>>>>,
+    provider_handles: ProviderHandles,
 
     /// provider name -> provider (kept alive for lifecycle management)
     inbound_providers: Arc<RwLock<HashMap<String, Arc<InboundSetProvider>>>>,
