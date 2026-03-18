@@ -417,8 +417,9 @@ async fn create_components(
 
     // Create a shared pending handle that the DNS resolver's GeoIPFilter holds.
     // It starts empty and is populated once the MMDB is loaded below.
-    let pending_country_mmdb: Option<dns::PendingMmdb> =
-        country_mmdb_file.as_ref().map(|_| Arc::new(OnceLock::new()));
+    let pending_country_mmdb: Option<dns::PendingMmdb> = country_mmdb_file
+        .as_ref()
+        .map(|_| Arc::new(OnceLock::new()));
 
     let dns_resolver = dns::new_resolver(
         config.dns,
@@ -466,13 +467,13 @@ async fn create_components(
         // it. Any inflight DNS fallback-IP filtering that ran before this point
         // will have been permissive (MMDB absent = pass-through), which is the
         // safe default during startup.
-        if let Some(pending) = &pending_country_mmdb {
-            if pending.set(mmdb.clone()).is_err() {
-                warn!(
-                    "country MMDB OnceLock was already set — this is unexpected \
-                     and indicates a double-initialization bug"
-                );
-            }
+        if let Some(pending) = &pending_country_mmdb
+            && pending.set(mmdb.clone()).is_err()
+        {
+            warn!(
+                "country MMDB OnceLock was already set — this is unexpected and \
+                 indicates a double-initialization bug"
+            );
         }
         Some(mmdb)
     } else {

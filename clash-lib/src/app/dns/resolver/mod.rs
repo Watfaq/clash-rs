@@ -15,9 +15,7 @@ pub use system::SystemResolver;
 
 use super::{Config, ThreadSafeDNSResolver};
 use crate::{
-    app::profile::ThreadSafeCacheFile,
-    dns::filters::PendingMmdb,
-    print_and_exit,
+    app::profile::ThreadSafeCacheFile, dns::filters::PendingMmdb, print_and_exit,
     proxy::utils::OutboundHandlerRegistry,
 };
 
