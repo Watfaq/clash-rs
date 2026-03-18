@@ -59,8 +59,10 @@ pub struct InboundManager {
     /// Inbound options for each inbound type -> listening Task
     inbound_handlers: Arc<RwLock<HashMap<InboundOpts, Option<JoinHandle<()>>>>>,
 
-    /// provider name -> set of InboundOpts currently active from that provider
-    provider_opts: Arc<RwLock<HashMap<String, HashSet<InboundOpts>>>>,
+    /// provider name -> (InboundOpts -> JoinHandle) for provider-owned
+    /// listeners
+    provider_handles:
+        Arc<RwLock<HashMap<String, HashMap<InboundOpts, Option<JoinHandle<()>>>>>>,
 
     /// provider name -> provider (kept alive for lifecycle management)
     inbound_providers: Arc<RwLock<HashMap<String, Arc<InboundSetProvider>>>>,
@@ -105,7 +107,7 @@ impl InboundManager {
             inbound_handlers: Arc::new(RwLock::new(
                 inbounds_opt.into_iter().map(|opts| (opts, None)).collect(),
             )),
-            provider_opts: Arc::new(RwLock::new(HashMap::new())),
+            provider_handles: Arc::new(RwLock::new(HashMap::new())),
             inbound_providers: Arc::new(RwLock::new(HashMap::new())),
             dispatcher,
             authenticator,
@@ -154,61 +156,64 @@ impl InboundManager {
                 }
             };
 
-            let handlers = self.inbound_handlers.clone();
-            let provider_opts = self.provider_opts.clone();
+            let provider_handles = self.provider_handles.clone();
             let dispatcher = self.dispatcher.clone();
             let authenticator = self.authenticator.clone();
             let cancellation_token = self.cancellation_token.clone();
             let provider_name = name.clone();
 
             let on_update = move |new_opts: Vec<InboundOpts>| {
-                let handlers = handlers.clone();
-                let provider_opts = provider_opts.clone();
+                let provider_handles = provider_handles.clone();
                 let dispatcher = dispatcher.clone();
                 let authenticator = authenticator.clone();
                 let cancellation_token = cancellation_token.clone();
                 let provider_name = provider_name.clone();
 
                 Box::pin(async move {
-                    let mut handlers_guard = handlers.write().await;
-                    let mut provider_opts_guard = provider_opts.write().await;
+                    let mut provider_handles_guard = provider_handles.write().await;
+                    let mut old_handles = provider_handles_guard
+                        .remove(&provider_name)
+                        .unwrap_or_default();
 
-                    if let Some(old_opts) =
-                        provider_opts_guard.remove(&provider_name)
-                    {
-                        for opt in old_opts {
-                            if let Some(Some(handle)) = handlers_guard.remove(&opt) {
-                                handle.abort();
-                            }
+                    // Reuse handles for unchanged opts; start fresh for new ones.
+                    let mut new_handles = HashMap::new();
+                    for opts in new_opts {
+                        if let Some(handle) = old_handles.remove(&opts) {
+                            // Unchanged — keep existing listener.
+                            new_handles.insert(opts, handle);
+                        } else {
+                            // New opt — start a listener.
+                            let ct = cancellation_token.clone();
+                            let listener_name = opts.common_opts().name.clone();
+                            let handle = build_network_listeners(
+                                &opts,
+                                dispatcher.clone(),
+                                authenticator.clone(),
+                            )
+                            .map(|runners| {
+                                tokio::spawn(async move {
+                                    tokio::select! {
+                                        _ = futures::future::join_all(runners) => {
+                                            warn!("Provider inbound {} exited", listener_name);
+                                        }
+                                        _ = ct.cancelled() => {
+                                            info!("Provider inbound {} closed", listener_name);
+                                        }
+                                    }
+                                })
+                            });
+                            new_handles.insert(opts, handle);
                         }
                     }
 
-                    let new_opts_set: HashSet<InboundOpts> =
-                        new_opts.iter().cloned().collect();
-                    for opts in new_opts {
-                        let ct = cancellation_token.clone();
-                        let listener_name = opts.common_opts().name.clone();
-                        let handle = build_network_listeners(
-                            &opts,
-                            dispatcher.clone(),
-                            authenticator.clone(),
-                        )
-                        .map(|runners| {
-                            tokio::spawn(async move {
-                                tokio::select! {
-                                    _ = futures::future::join_all(runners) => {
-                                        warn!("Provider inbound {} exited", listener_name);
-                                    }
-                                    _ = ct.cancelled() => {
-                                        info!("Provider inbound {} closed", listener_name);
-                                    }
-                                }
-                            })
-                        });
-                        handlers_guard.insert(opts, handle);
+                    // Abort handles for opts removed from the provider.
+                    for (_, handle) in old_handles {
+                        if let Some(h) = handle {
+                            h.abort();
+                        }
                     }
 
-                    provider_opts_guard.insert(provider_name, new_opts_set);
+                    provider_handles_guard.insert(provider_name, new_handles);
                 }) as BoxFuture<'static, ()>
             };
 
@@ -277,6 +282,17 @@ impl InboundManager {
             }
             *l = None;
         }
+        for handles in self.provider_handles.write().await.values_mut() {
+            for (opt, handle) in handles.iter_mut() {
+                if let Some(h) = handle.take() {
+                    warn!(
+                        "Shutting down provider inbound handler: {}",
+                        opt.common_opts().name
+                    );
+                    h.abort();
+                }
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -293,6 +309,24 @@ impl InboundManager {
                     );
                     last_join_error = Some(e);
                 });
+            }
+        }
+        for handles in self.provider_handles.write().await.values_mut() {
+            for (opt, handle) in handles.iter_mut() {
+                if let Some(h) = handle.take() {
+                    warn!(
+                        "Shutting down provider inbound handler: {}",
+                        opt.common_opts().name
+                    );
+                    h.await.unwrap_or_else(|e| {
+                        warn!(
+                            "Provider inbound handler {} shutdown with error: {}",
+                            opt.common_opts().name,
+                            e
+                        );
+                        last_join_error = Some(e);
+                    });
+                }
             }
         }
         last_join_error
@@ -377,8 +411,10 @@ impl InboundManager {
     }
 
     pub async fn get_listeners(&self) -> Vec<InboundEndpoint> {
-        let guard = self.inbound_handlers.read().await;
-        guard
+        let mut result: Vec<InboundEndpoint> = self
+            .inbound_handlers
+            .read()
+            .await
             .iter()
             .map(|(opts, handler)| {
                 let common = opts.common_opts();
@@ -390,7 +426,22 @@ impl InboundManager {
                     active,
                 }
             })
-            .collect()
+            .collect();
+
+        for handles in self.provider_handles.read().await.values() {
+            for (opts, handle) in handles {
+                let common = opts.common_opts();
+                let active = handle.as_ref().is_some_and(|h| !h.is_finished());
+                result.push(InboundEndpoint {
+                    name: common.name.clone(),
+                    inbound_type: opts.type_name().to_string(),
+                    port: common.port,
+                    active,
+                });
+            }
+        }
+
+        result
     }
 
     pub async fn set_bind_address(&self, bind_address: BindAddress) {
