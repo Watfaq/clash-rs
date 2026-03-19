@@ -1,4 +1,7 @@
-use std::{net, sync::Arc};
+use std::{
+    net,
+    sync::{Arc, OnceLock},
+};
 
 use crate::common::{mmdb::MmdbLookup, trie};
 
@@ -6,21 +9,34 @@ pub trait FallbackIPFilter: Sync + Send {
     fn apply(&self, ip: &net::IpAddr) -> bool;
 }
 
-pub struct GeoIPFilter(String, Option<MmdbLookup>);
+/// A shared, lazily-populated MMDB handle.  The `OnceLock` starts empty and is
+/// filled in after the `OutboundManager` (and its full outbound registry) is
+/// ready, so that any MMDB download can use proxy groups if needed.
+pub type PendingMmdb = Arc<OnceLock<MmdbLookup>>;
+
+pub struct GeoIPFilter(String, Option<PendingMmdb>);
 
 impl GeoIPFilter {
-    pub fn new(code: &str, mmdb: Option<MmdbLookup>) -> Self {
+    pub fn new(code: &str, mmdb: Option<PendingMmdb>) -> Self {
         Self(code.to_owned(), mmdb)
     }
 }
 
 impl FallbackIPFilter for GeoIPFilter {
     fn apply(&self, ip: &net::IpAddr) -> bool {
-        !self.1.as_ref().is_some_and(|mmdb| {
-            mmdb.lookup_country(*ip)
-                .map(|x| x.country_code)
-                .is_ok_and(|x| x == self.0)
-        })
+        // When the OnceLock is not yet populated (e.g. during startup before the
+        // MMDB is loaded) `lock.get()` returns `None`, making this return `true`
+        // — the permissive default that lets all IPs through to the fallback
+        // resolver.  Once the MMDB is set the filter behaves normally.
+        !self
+            .1
+            .as_ref()
+            .and_then(|lock| lock.get())
+            .is_some_and(|mmdb| {
+                mmdb.lookup_country(*ip)
+                    .map(|x| x.country_code)
+                    .is_ok_and(|x| x == self.0)
+            })
     }
 }
 

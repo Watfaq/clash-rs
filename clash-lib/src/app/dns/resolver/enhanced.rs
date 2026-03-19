@@ -1,14 +1,14 @@
 use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
-    common::{mmdb::MmdbLookup, trie},
+    common::trie,
     config::def::DNSMode,
     dns::{
         ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
         fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
         filters::{
             DomainFilter, FallbackDomainFilter, FallbackIPFilter, GeoIPFilter,
-            IPNetFilter,
+            IPNetFilter, PendingMmdb,
         },
         helper::make_clients,
         parse_ip_literal,
@@ -20,7 +20,6 @@ use futures::{FutureExt, TryFutureExt};
 use hickory_proto::{op, rr};
 use rand::seq::IndexedRandom;
 use std::{
-    collections::HashMap,
     net,
     sync::{
         Arc,
@@ -71,7 +70,9 @@ impl EnhancedResolver {
                     proxy: None,
                 }],
                 None,
-                HashMap::new(),
+                std::sync::Arc::new(tokio::sync::RwLock::new(
+                    std::collections::HashMap::new(),
+                )),
                 None,
                 None,
             )
@@ -91,8 +92,8 @@ impl EnhancedResolver {
     pub async fn new(
         cfg: Config,
         store: ThreadSafeCacheFile,
-        mmdb: Option<MmdbLookup>,
-        outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+        mmdb: Option<PendingMmdb>,
+        outbounds: crate::proxy::utils::OutboundHandlerRegistry,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
         let default_resolver = Arc::new(EnhancedResolver {

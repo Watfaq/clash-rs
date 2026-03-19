@@ -50,7 +50,6 @@ pub struct ClashInstance {
 
 impl ClashInstance {
     #[allow(dead_code)]
-
     pub fn start(
         options: clash_lib::Options,
         ports: Vec<u16>,
@@ -110,10 +109,7 @@ where
     let io = TokioIo::new(stream);
     let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
         .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to establish connection: {}", e),
-            )
+            std::io::Error::other(format!("Failed to establish connection: {}", e))
         })
         .await?;
 
@@ -125,12 +121,7 @@ where
 
     let res = sender
         .send_request(req)
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to send request: {}", e),
-            )
-        })
+        .map_err(|e| std::io::Error::other(format!("Failed to send request: {}", e)))
         .await?;
 
     Ok(res)

@@ -1,4 +1,4 @@
-use crate::common::{ClashInstance, send_http_request};
+use crate::common::{ClashInstance, send_http_request, wait_port_ready};
 use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options};
 use http_body_util::BodyExt;
@@ -471,7 +471,11 @@ proxies:
         .expect("Failed to send PUT /configs");
     assert_eq!(res.status(), http::StatusCode::NO_CONTENT);
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait for the API server to come back up after the reload.
+    tokio::task::spawn_blocking(|| wait_port_ready(9090))
+        .await
+        .expect("spawn_blocking panicked")
+        .expect("API server did not come back up within 60 s after reload");
 
     let req = hyper::Request::builder()
         .uri(configs_url)
