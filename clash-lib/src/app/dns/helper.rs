@@ -1,14 +1,17 @@
 use crate::{
     app::net::DEFAULT_OUTBOUND_INTERFACE,
-    config::proxy::PROXY_DIRECT,
+    config::internal::proxy::PROXY_DIRECT,
     dns::{
         ClashResolver, EdnsClientSubnet, ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
     },
-    proxy,
+    proxy::{
+        self,
+        utils::{OutboundHandlerRegistry, SharedOutboundHandler},
+    },
 };
 use hickory_proto::rr::rdata::opt::EdnsCode;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tracing::{debug, warn};
 
 use super::config::NameServer;
@@ -16,7 +19,7 @@ use super::config::NameServer;
 pub async fn make_clients(
     servers: Vec<NameServer>,
     resolver: Option<Arc<dyn ClashResolver>>,
-    outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+    outbounds: OutboundHandlerRegistry,
     edns_client_subnet: Option<EdnsClientSubnet>,
     fw_mark: Option<u32>,
 ) -> Vec<ThreadSafeDNSClient> {
@@ -25,10 +28,9 @@ pub async fn make_clients(
     for s in servers {
         debug!("building nameserver: {}", s);
 
-        let proxy = outbounds
-            .get(&s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string()))
-            .cloned()
-            .unwrap_or(Arc::new(proxy::direct::Handler::new(PROXY_DIRECT)));
+        let proxy_name = s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string());
+        let proxy: Arc<dyn proxy::OutboundHandler> =
+            Arc::new(SharedOutboundHandler::new(proxy_name, outbounds.clone()));
 
         let port = if s.net == DNSNetMode::Dhcp { 0 } else { s.port };
 
