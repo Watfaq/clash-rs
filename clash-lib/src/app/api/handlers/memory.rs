@@ -24,5 +24,5 @@ pub async fn handle(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         inuse: mgr.memory_usage(),
         oslimit: 0,
     };
-    return Json(snapshot).into_response();
+    Json(snapshot).into_response()
 }
