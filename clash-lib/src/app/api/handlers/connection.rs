@@ -31,8 +31,8 @@ pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState
 }
 
 #[derive(Deserialize)]
-struct GetConnectionsQuery {
-    interval: Option<u64>,
+pub struct GetConnectionsQuery {
+    pub interval: Option<u64>,
 }
 
 async fn get_connections(

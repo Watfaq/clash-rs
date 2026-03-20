@@ -10,6 +10,5 @@ pub mod proxy;
 pub mod restart;
 pub mod rule;
 pub mod traffic;
+pub mod utils;
 pub mod version;
-
-mod utils;
