@@ -1,6 +1,8 @@
-use std::{io, net::SocketAddr, str::FromStr};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, fmt::Debug, io, net::SocketAddr, str::FromStr};
 
 use async_trait::async_trait;
+
 use compat::UdpSessionWrapper;
 use shadowquic::{
     config,
@@ -25,11 +27,9 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
-    utils::new_udp_socket,
+    PlainProxyAPIResponse, utils::new_udp_socket,
 };
 use crate::app::dispatcher::ChainedStream;
-use std::fmt::Debug;
-
 // This is ugly, it may be exposed better by shadowquic in the future
 type SQConn = shadowquic::squic::SQConn<<EndClient as QuicClient>::C>;
 pub type HandlerOptions = config::ShadowQuicClientCfg;
@@ -209,6 +209,36 @@ impl OutboundHandler for Handler {
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.addr.clone()) as _);
+        m.insert(
+            "server-name".to_owned(),
+            Box::new(self.opts.server_name.clone()) as _,
+        );
+        m.insert(
+            "username".to_owned(),
+            Box::new(self.opts.username.clone()) as _,
+        );
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        if !self.opts.alpn.is_empty() {
+            m.insert("alpn".to_owned(), Box::new(self.opts.alpn.clone()) as _);
+        }
+        m
+    }
 }
 
 fn to_sq_socks_addr(x: SocksAddr) -> SQAddr {
@@ -263,9 +293,16 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(over_stream: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(
+        opt_ip: Option<String>,
+        over_stream: bool,
+    ) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
-            addr: SocketAddr::new(LOCAL_ADDR.parse().unwrap(), PORT).to_string(),
+            addr: SocketAddr::new(
+                opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(),
+                PORT,
+            )
+            .to_string(),
             password: "12345678".into(),
             username: "87654321".into(),
             server_name: "echo.free.beeceptor.com".into(),
@@ -281,35 +318,34 @@ mod tests {
     #[serial_test::serial]
     async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(false)?;
+
+        let container = get_shadowquic_runner().await?;
+
+        let container_ip = container.container_ip();
+
+        let opts = gen_options(container_ip, false)?;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            get_shadowquic_runner().await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
     #[tokio::test]
     #[serial_test::serial]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
-        let mut opts = gen_options(true)?;
+        let container = get_shadowquic_runner().await?;
+
+        let container_ip = container.container_ip();
+
+        let mut opts = gen_options(container_ip, true)?;
         opts.over_stream = true;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(
-            handler,
-            get_shadowquic_runner().await?,
-            Suite::all(),
-        )
-        .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }

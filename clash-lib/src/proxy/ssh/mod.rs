@@ -1,6 +1,9 @@
-use std::{borrow::Cow, io, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    borrow::Cow, collections::HashMap, io, pin::Pin, sync::Arc, time::Duration,
+};
 
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 
 mod auth;
 mod connector;
@@ -28,7 +31,7 @@ use crate::{
 
 use super::{
     ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, ProxyStream, utils::RemoteConnector,
+    OutboundType, PlainProxyAPIResponse, ProxyStream, utils::RemoteConnector,
 };
 
 /// Wrapper for `ChannelStream` for `Debug` trait
@@ -226,6 +229,32 @@ impl OutboundHandler for Handler {
     ) -> std::io::Result<BoxedChainedDatagram> {
         Err(new_io_error("ssh udp is not implemented yet"))
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "username".to_owned(),
+            Box::new(self.opts.username.clone()) as _,
+        );
+        if self.opts.password.is_some() {
+            m.insert("password".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.private_key.is_some() {
+            m.insert("private-key".to_owned(), Box::new(true) as _);
+        }
+        m
+    }
 }
 
 async fn auth0(
@@ -245,23 +274,23 @@ async fn auth0(
 
 #[cfg(all(test, docker_test))]
 mod tests {
-    use std::path::PathBuf;
+    use std::{future::Future, path::PathBuf};
 
     use aead::rand_core::SeedableRng;
     use russh::keys::HashAlg;
     use tempfile::tempdir;
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner,
+    use super::{
+        super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner},
+        *,
     };
-    use crate::proxy::utils::test_utils::{
-        Suite,
-        config_helper::test_config_base_dir,
-        docker_runner::{DockerTestRunnerBuilder, MultiDockerTestRunner},
-        run_test_suites_and_cleanup,
+    use crate::{
+        proxy::utils::test_utils::{
+            Suite, config_helper::test_config_base_dir,
+            docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+        },
+        tests::initialize,
     };
-
-    use super::*;
 
     const PASSWORD: &str = "123456789";
 
@@ -288,6 +317,7 @@ mod tests {
     /// `/config/sshd/sshd_config` in the container.
     /// before starting the container, we need to generate host key pairs in
     /// /tmp/.xxx/ssh/ssh_host_keys.
+    #[allow(unused)]
     async fn get_openssh_server_runner(
         ssh_config_path: PathBuf,
     ) -> anyhow::Result<DockerTestRunner> {
@@ -308,6 +338,7 @@ mod tests {
             .await
     }
 
+    #[allow(unused)]
     fn gen_ssh_key_pair(
         algo: russh::keys::Algorithm,
     ) -> anyhow::Result<(String, String)> {
@@ -324,60 +355,77 @@ mod tests {
     }
 
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct TestOption {
         password: bool,                // password or private key
         rsa: bool,                     // rsa or ed25519
         host_key: Option<Vec<String>>, // host key
     }
 
+    #[allow(unused)]
     async fn test_ssh_inner(opt: TestOption) -> anyhow::Result<()> {
         tracing::info!("testing ssh, using option: {:?}", opt);
-        // dirty works: prepare ssh config directory for the docker container &
-        // generate host key pairs
-        // under /tmp
-        // it's ok for cross test's docker in docker, since we declared volume of
-        // /tmp
+
+        // Prepare SSH config directory for the docker container
+        // We need a writable temp directory because:
+        // 1. Host keys must be generated at runtime
+        // 2. Container needs to write logs
         let temp_dir = tempdir()?;
         let test_config_base_dir = test_config_base_dir();
         let ssh_config_path = test_config_base_dir.join("ssh");
         let ssh_config_tmp_path = temp_dir.path().join("ssh");
 
-        // cp files under ssh_config_path to temp_dir
-        tokio::process::Command::new("cp")
-            .args([
-                "-r",
-                ssh_config_path.to_str().unwrap(),
-                ssh_config_tmp_path.to_str().unwrap(),
-            ])
-            .output()
-            .await
-            .expect("failed to copy ssh config files");
-        tokio::process::Command::new("chmod")
-            .args(["-R", "777", ssh_config_tmp_path.to_str().unwrap()])
-            .output()
-            .await
-            .expect("failed to chmod ssh config files");
+        // Copy SSH config files using Rust APIs (cross-platform)
+        copy_dir_recursive(&ssh_config_path, &ssh_config_tmp_path).await?;
+
+        // IMPORTANT: Container expects sshd_config at /config/sshd/sshd_config
+        // Our source has it at ssh_host_keys/sshd_config, but the container
+        // startup script will ignore/delete it from there and generate a default
+        // config if /config/sshd/sshd_config doesn't exist.
+        // So we need to copy it to the correct location.
+        let source_sshd_config = ssh_config_tmp_path
+            .join("ssh_host_keys")
+            .join("sshd_config");
+        let target_sshd_dir = ssh_config_tmp_path.join("sshd");
+        tokio::fs::create_dir_all(&target_sshd_dir).await?;
+        let target_sshd_config = target_sshd_dir.join("sshd_config");
+        tokio::fs::copy(&source_sshd_config, &target_sshd_config).await?;
+        tracing::info!(
+            "Copied sshd_config from {:?} to {:?}",
+            source_sshd_config,
+            target_sshd_config
+        );
+
+        // Debug: print directory structure
+        tracing::debug!("SSH config directory structure after copy:");
+        print_dir_structure(&ssh_config_tmp_path, 0).await?;
+
         tracing::info!("ssh_config tmp mounting path: {:?}", ssh_config_tmp_path);
+
+        // Create logs directory
         tokio::fs::create_dir_all(&ssh_config_tmp_path.join("logs").join("openssh"))
             .await?;
 
-        // generate host key pairs
-        // ignore rsa, it's too slow
+        // Generate host key pairs (ecdsa, ed25519, and rsa for test_ssh2)
+        // Note: RSA key generation doesn't need hash parameter (hash is only for
+        // signing)
         let name_and_key_pairs = [
             (
                 "ecdsa",
-                russh::keys::Algorithm::Ecdsa {
+                Algorithm::Ecdsa {
                     curve: russh::keys::EcdsaCurve::NistP256,
                 },
             ),
-            ("ed25519", russh::keys::Algorithm::Ed25519),
+            ("ed25519", Algorithm::Ed25519),
         ]
         .into_iter()
         .map(|(name, algo)| {
-            let (private_key, public_key) = gen_ssh_key_pair(algo).unwrap();
+            let (private_key, public_key) =
+                gen_ssh_key_pair(algo).expect("Key generation failed");
             (name, private_key, public_key)
         })
         .collect::<Vec<_>>();
+
         let host_key_path = ssh_config_tmp_path.join("ssh_host_keys");
         for (name, private_key, public_key) in name_and_key_pairs {
             let private_key_path =
@@ -388,12 +436,18 @@ mod tests {
             tokio::fs::write(public_key_path, public_key).await?;
         }
 
-        // now we are fine, real test starts
+        // Start the container
+        let container =
+            get_openssh_server_runner(ssh_config_tmp_path.clone()).await?;
 
-        let ssh_private_key_path = ssh_config_tmp_path
-            .join(".ssh")
-            .join(if opt.rsa { "test_rsa" } else { "test_ed25519" });
+        // Configure client to connect to container
+        let ssh_private_key_path = ssh_config_path.join(".ssh").join(if opt.rsa {
+            "test_rsa"
+        } else {
+            "test_ed25519"
+        });
         let ssh_private_key_path = ssh_private_key_path.to_str().unwrap();
+
         let password = if opt.password {
             Some(PASSWORD.to_owned())
         } else {
@@ -408,8 +462,8 @@ mod tests {
         let opts = HandlerOptions {
             name: "test-ssh".to_owned(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.to_owned(),
-            port: 2222, // in accordance with sshd_config'sport
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
+            port: 2222,
             password,
             private_key,
             private_key_passphrase: None,
@@ -417,7 +471,6 @@ mod tests {
             host_key: opt.host_key.clone(),
             host_key_algorithms: Some(vec![
                 Algorithm::Ed25519,
-                Algorithm::Rsa { hash: None },
                 Algorithm::Rsa {
                     hash: Some(HashAlg::Sha256),
                 },
@@ -428,19 +481,66 @@ mod tests {
             totp: None,
         };
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
-        // we need to store all the runners in a container, to make sure all of
-        // them can be destroyed after the test
-        let mut chained = MultiDockerTestRunner::default();
-        chained
-            .add(get_openssh_server_runner(ssh_config_tmp_path))
-            .await?;
-        run_test_suites_and_cleanup(handler, chained, Suite::tcp_tests()).await
+
+        run_test_suites_and_cleanup(handler, container, Suite::tcp_tests()).await
     }
 
-    #[cfg(target_os = "linux")]
+    /// Recursively copy a directory using async Rust APIs
+    #[allow(unused)]
+    fn copy_dir_recursive<'a>(
+        src: &'a std::path::Path,
+        dst: &'a std::path::Path,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
+        Box::pin(async move {
+            tokio::fs::create_dir_all(dst).await?;
+
+            let mut entries = tokio::fs::read_dir(src).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let src_path = entry.path();
+                let dst_path = dst.join(entry.file_name());
+
+                if entry.file_type().await?.is_dir() {
+                    copy_dir_recursive(&src_path, &dst_path).await?;
+                } else {
+                    tokio::fs::copy(&src_path, &dst_path).await?;
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Print directory structure for debugging
+    #[allow(unused)]
+    fn print_dir_structure<'a>(
+        path: &'a std::path::Path,
+        indent: usize,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
+        Box::pin(async move {
+            let mut entries = tokio::fs::read_dir(path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let file_name = entry.file_name();
+                let indent_str = "  ".repeat(indent);
+
+                if entry.file_type().await?.is_dir() {
+                    tracing::debug!(
+                        "{}{}/",
+                        indent_str,
+                        file_name.to_string_lossy()
+                    );
+                    print_dir_structure(&entry.path(), indent + 1).await?;
+                } else {
+                    tracing::debug!("{}{}", indent_str, file_name.to_string_lossy());
+                }
+            }
+            Ok(())
+        })
+    }
+
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ssh1() -> anyhow::Result<()> {
+        initialize();
         test_ssh_inner(TestOption {
             password: true,
             rsa: false,
@@ -449,11 +549,10 @@ mod tests {
         .await
     }
 
-    #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "this does pass locally, but not in CI. TODO: #720"]
     async fn test_ssh2() -> anyhow::Result<()> {
+        initialize();
         test_ssh_inner(TestOption {
             password: false,
             rsa: true,
@@ -462,11 +561,10 @@ mod tests {
         .await
     }
 
-    #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "this does pass locally, but not in CI. TODO: #720"]
     async fn test_ssh3() -> anyhow::Result<()> {
+        initialize();
         test_ssh_inner(TestOption {
             password: false,
             rsa: false,
@@ -475,10 +573,10 @@ mod tests {
         .await
     }
 
-    #[cfg(target_os = "linux")]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_ssh4() -> anyhow::Result<()> {
+        initialize();
         // config wrong host key, expect failure
         let host_key = Some(
             vec![

@@ -33,3 +33,6 @@ shell.nix
 codecov.json
 
 .env
+
+# trace files
+**/trace-*.json

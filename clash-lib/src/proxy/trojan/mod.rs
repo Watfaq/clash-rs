@@ -1,4 +1,5 @@
-use std::{io, sync::Arc};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, io, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
@@ -23,7 +24,7 @@ use self::datagram::OutboundDatagramTrojan;
 
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    OutboundHandler, OutboundType, PlainProxyAPIResponse,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
@@ -210,6 +211,32 @@ impl OutboundHandler for Handler {
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
+    }
 }
 
 #[cfg(all(test, docker_test))]
@@ -217,18 +244,20 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use crate::proxy::{
-        transport,
-        utils::test_utils::{
-            Suite,
-            config_helper::test_config_base_dir,
-            consts::*,
-            docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-            run_test_suites_and_cleanup,
-        },
-    };
-
     use super::*;
+    use crate::{
+        proxy::{
+            transport,
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                consts::*,
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
@@ -266,10 +295,12 @@ mod tests {
         let tls =
             transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
+        let container = get_ws_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             password: "example".to_owned(),
             udp: true,
@@ -281,8 +312,7 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         // ignore the udp test
-        run_test_suites_and_cleanup(handler, get_ws_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
@@ -305,6 +335,7 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
+        initialize();
         let transport = transport::GrpcClient::new(
             "example.org".to_owned(),
             "example"
@@ -319,10 +350,12 @@ mod tests {
             None,
         );
 
+        let runner = get_grpc_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             password: "example".to_owned(),
             udp: true,
@@ -333,7 +366,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

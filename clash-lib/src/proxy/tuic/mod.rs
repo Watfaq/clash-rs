@@ -13,11 +13,12 @@ use async_trait::async_trait;
 use quinn::{
     EndpointConfig, TokioRuntime,
     congestion::{BbrConfig, NewRenoConfig},
-    crypto::rustls::QuicClientConfig,
 };
 use tracing::debug;
 
+use erased_serde::Serialize as ErasedSerialize;
 use std::{
+    collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr},
     sync::{
         Arc,
@@ -44,17 +45,18 @@ use crate::{
 };
 
 use crate::session::SocksAddr as ClashSocksAddr;
-use quinn::{
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+use tuic_core::quinn::quinn::{
     ClientConfig as QuinnConfig, Endpoint as QuinnEndpoint,
     TransportConfig as QuinnTransportConfig, VarInt, congestion::CubicConfig,
+    crypto::rustls::QuicClientConfig,
 };
-use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use self::types::{CongestionControl, TuicConnection, UdpRelayMode, UdpSession};
 
 use super::{
     ConnectorType, HandlerCommonOptions, OutboundHandler, OutboundType,
-    datagram::UdpPacket,
+    PlainProxyAPIResponse, datagram::UdpPacket,
 };
 
 #[derive(Debug, Clone)]
@@ -144,6 +146,44 @@ impl OutboundHandler for Handler {
 
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("uuid".to_owned(), Box::new(self.opts.uuid.to_string()) as _);
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        let udp_relay_mode = match &self.opts.udp_relay_mode {
+            crate::proxy::tuic::types::UdpRelayMode::Native => "native",
+            crate::proxy::tuic::types::UdpRelayMode::Quic => "quic",
+        };
+        m.insert(
+            "udp-relay-mode".to_owned(),
+            Box::new(udp_relay_mode.to_string()) as _,
+        );
+        if self.opts.skip_cert_verify {
+            m.insert("skip-cert-verify".to_owned(), Box::new(true) as _);
+        }
+        if let Some(sni) = self.opts.sni.as_ref() {
+            m.insert("sni".to_owned(), Box::new(sni.clone()) as _);
+        }
+        if self.opts.disable_sni {
+            m.insert("disable-sni".to_owned(), Box::new(true) as _);
+        }
+        m
     }
 }
 
@@ -405,10 +445,13 @@ mod tests {
 
     const PORT: u16 = 10002;
 
-    fn gen_options(skip_cert_verify: bool) -> anyhow::Result<HandlerOptions> {
+    fn gen_options(
+        container_ip: Option<String>,
+        skip_cert_verify: bool,
+    ) -> anyhow::Result<HandlerOptions> {
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
-            server: LOCAL_ADDR.into(),
+            server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
             port: PORT,
             common_opts: Default::default(),
             uuid: "00000000-0000-0000-0000-000000000001".parse()?,
@@ -437,32 +480,32 @@ mod tests {
     #[serial_test::serial]
     async fn test_tuic_skip_cert_verify() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(true)?;
+
+        let container = get_tuic_runner().await?;
+        let opts = gen_options(container.container_ip(), true)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_tuic_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     #[tokio::test]
     #[serial_test::serial]
     async fn test_tuic_cert_verify_expect_fail() -> anyhow::Result<()> {
         initialize();
-        let opts = gen_options(false)?;
+
+        let container = get_tuic_runner().await?;
+
+        let opts = gen_options(container.container_ip(), false)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        let res = run_test_suites_and_cleanup(
-            handler,
-            get_tuic_runner().await?,
-            Suite::all(),
-        )
-        .await;
+        let res =
+            run_test_suites_and_cleanup(handler, container, Suite::all()).await;
         assert!(res.is_err());
         assert!(res.unwrap_err().to_string().contains(
             "the cryptographic handshake failed: error 45: invalid peer \

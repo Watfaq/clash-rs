@@ -68,15 +68,15 @@ rustls = { version = "0.23", default-features = false }
 webpki-roots = "1.0"
 
 # shadow-tls
-tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "638db32084d7ecf9c2660847b55d48d1186b4055", default-features = false, features = ["logging", "tls12"] }
-watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "4cae3aa2e84ea29d8a74b495793773bdb0a72206", default-features = false }
+tokio-watfaq-rustls = { git = "https://github.com/Watfaq/tokio-rustls.git", rev = "cf8961ac1a36e580d0e38bedc8a41ca4a9b301e8", default-features = false, features = ["logging", "tls12"] }
+watfaq-rustls = { git = "https://github.com/Watfaq/rustls.git", rev = "c3ab043d673029d245fd618b9bc86fd6a6109bae", default-features = false }
 
 # Error handing & logging
 thiserror = "2"
 anyhow = "1"
 
 # logging
-time = { version = "=0.3", features = ["macros", "local-offset"] }
+time = { version = "0.3", features = ["macros", "local-offset"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
 tracing-appender = { version = "0.2" }
 tracing-log = "0.2"
@@ -98,6 +98,7 @@ lru_time_cache = "0.11"
 uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics", "serde"] }
 network-interface = { version = "2" }
 base64 = "0.22"
+hex = "0.4"
 zstd = "0.13"
 portable-atomic = { version = "1", features = ["serde"] }
 
@@ -132,7 +133,7 @@ watfaq-netstack = { path = "../clash-netstack", optional = true }
 smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-udp", "socket-tcp"], optional = true, git = "https://github.com/smoltcp-rs/smoltcp.git", rev = "ac32e64" }
 
 # WireGuard
-boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "e8a17ec", package = "boring-noise", optional = true, default-features = false }
+boringtun = { version = "0.1.0", git = "https://github.com/Watfaq/boring-noise.git", rev = "9ddf1b5", package = "boring-noise", optional = true, default-features = false }
 
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -155,13 +156,13 @@ ssh-key = { version = "0.6", features = ["std"] }
 rand = "0.9"
 tracing = "0.1"
 
-shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher"] }
+shadowsocks = { version = "1.24", optional = true, features = ["aead-cipher-2022", "stream-cipher", "aead-cipher-extra"] }
 maxminddb = "0.27"
 public-suffix = "0.1"
 murmur3 = "0.5"
 
-arti-client = { version = "0.38", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.38", optional = true, default-features = false }
+arti-client = { version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
+tor-rtcompat = { version = "0.39", optional = true, default-features = false }
 
 # tuic
 tuic-core= { tag = "v1.6.7", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
@@ -172,21 +173,21 @@ quinn = { version = "0.11", default-features = false, features = ["futures-io", 
 # hysteria2
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
-quinn-proto = { version = "0.11.13", default-features = false }
+quinn-proto = { version = "0.11", default-features = false }
 blake2 = "0.10.6"
-digest = "0.10.7"
+digest = "0.11.1"
 
 console-subscriber = { git = "https://github.com/tokio-rs/console.git" }
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"], optional = true }
 memory-stats = "1.0.0"
 
 # ssh
-russh = { version = "0.56", default-features = false, features = ["async-trait"], optional = true }
+russh = { version = "0.57", default-features = false, features = ["async-trait","rsa"], optional = true }
 dirs = { version = "6.0", optional = true }
 totp-rs = { version = "^5.7", features = ["serde_support"], optional = true }
 
 # shadowquic
-shadowquic = { version = "0.3.2", optional = true}
+shadowquic = { version = "0.3.3", optional = true}
 
 # experimental
 downcast-rs = "2.0"
@@ -194,21 +195,23 @@ downcast-rs = "2.0"
 aws-lc-rs = { version = "1", default-features = false, optional = true }
 
 # tproxy
-etherparse = {version = "0.12", optional = true }
+etherparse = {version = "0.19", optional = true }
 
 [dev-dependencies]
-tempfile = "3.24"
+tempfile = "3.27"
 mockall = "0.14.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.0"
 bollard = "0.20"
-serial_test = "3.3"
+tar = "0.4.44"
+serial_test = "3.4"
 env_logger = "0.11"
-# donnot change the version, russh is not compatible with the latest version of rand_core
 rand_chacha = "=0.3"
-httpmock = "0.8.2" # TODO replace with wiremock
+httpmock = "0.8.3" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
+reqwest = { version = "0.13", features = ["socks"] }
+sysinfo = { version = "0.38", features = ["network"]}
 
 [build-dependencies]
 prost-build = "0.14"
@@ -224,7 +227,7 @@ hyperlocal = { version = "0.9", features = ["client"] }
 unix-udp-sock = { git = "https://github.com/Watfaq/unix-udp-sock.git", rev = "847c80b519f0fd8cff5c887ae708429897d08671" }
 
 [target.'cfg(macos)'.dependencies]
-security-framework = "3.5.1"
+security-framework = "3.7.0"
 
 [target.'cfg(target_os="ios")'.dependencies]
 tracing-oslog = "0.3"
@@ -240,3 +243,6 @@ windows = { version = "0.62", features = [
     "Win32_Security_Authorization",
     "Win32_System_Memory"
 ] }
+
+[lints]
+workspace = true

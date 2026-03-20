@@ -1,7 +1,7 @@
-use self::stream::VlessStream;
+use self::{stream::VlessStream, vision::VisionStream};
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    OutboundHandler, OutboundType, PlainProxyAPIResponse,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
@@ -18,11 +18,13 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
-use std::{io, sync::Arc};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, io, sync::Arc};
 use tracing::debug;
 
 mod datagram;
 mod stream;
+mod vision;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -33,6 +35,7 @@ pub struct HandlerOptions {
     pub udp: bool,
     pub transport: Option<Box<dyn Transport>>,
     pub tls: Option<Box<dyn Transport>>,
+    pub flow: Option<String>,
 }
 
 pub struct Handler {
@@ -64,10 +67,10 @@ impl Handler {
         sess: &Session,
         is_udp: bool,
     ) -> io::Result<AnyStream> {
-        let s = if let Some(tls) = self.opts.tls.as_ref() {
-            tls.proxy_stream(s).await?
+        let (s, vision_opts) = if let Some(tls) = self.opts.tls.as_ref() {
+            tls.proxy_stream_spliced(s).await?
         } else {
-            s
+            (s, None)
         };
 
         let s = if let Some(transport) = self.opts.transport.as_ref() {
@@ -76,10 +79,23 @@ impl Handler {
             s
         };
 
-        let vless_stream =
-            VlessStream::new(s, &self.opts.uuid, &sess.destination, is_udp)?;
+        let vless_stream = VlessStream::new(
+            s,
+            &self.opts.uuid,
+            &sess.destination,
+            is_udp,
+            self.opts.flow.clone(),
+        )?;
 
-        Ok(Box::new(vless_stream))
+        if self.opts.flow.as_deref() == Some("xtls-rprx-vision") {
+            Ok(Box::new(VisionStream::new(
+                Box::new(vless_stream),
+                self.opts.uuid.clone(),
+                vision_opts,
+            )?))
+        } else {
+            Ok(Box::new(vless_stream))
+        }
     }
 }
 
@@ -192,6 +208,29 @@ impl OutboundHandler for Handler {
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("uuid".to_owned(), Box::new(self.opts.uuid.clone()) as _);
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
+    }
 }
 
 #[cfg(all(test, docker_test))]
@@ -232,6 +271,7 @@ mod tests {
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
+            .port(8443)
             .mounts(&[
                 (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
@@ -258,19 +298,20 @@ mod tests {
             0,
             "".to_owned(),
         );
-
+        let runner = get_ws_runner().await?;
         let opts = HandlerOptions {
             name: "test-vless-ws".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 8443,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             udp: true,
             tls: tls_client(None),
             transport: Some(Box::new(ws_client)),
+            flow: None,
         };
         let handler = Arc::new(Handler::new(opts));
-        let runner = get_ws_runner().await?;
+
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }

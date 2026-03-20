@@ -10,6 +10,6 @@ repos:
       - id: rustfmt
         name: rustfmt
         description: Check if all files follow the rustfmt style
-        entry: cargo fmt --all -- --check --color always
+        entry: cargo +nightly fmt --all -- --check --color always
         language: system
         pass_filenames: false

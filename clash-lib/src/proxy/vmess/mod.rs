@@ -1,6 +1,6 @@
 use super::{
     AnyStream, ConnectorType, DialWithConnector, HandlerCommonOptions,
-    OutboundHandler, OutboundType,
+    OutboundHandler, OutboundType, PlainProxyAPIResponse,
     transport::Transport,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
@@ -16,7 +16,8 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
-use std::{io, sync::Arc};
+use erased_serde::Serialize as ErasedSerialize;
+use std::{collections::HashMap, io, sync::Arc};
 use tracing::debug;
 use vmess_impl::OutboundDatagramVmess;
 
@@ -202,6 +203,34 @@ impl OutboundHandler for Handler {
         chained.append_to_chain(self.name()).await;
         Ok(Box::new(chained))
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert("uuid".to_owned(), Box::new(self.opts.uuid.clone()) as _);
+        m.insert("alter-id".to_owned(), Box::new(self.opts.alter_id) as _);
+        m.insert(
+            "cipher".to_owned(),
+            Box::new(self.opts.security.clone()) as _,
+        );
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
+    }
 }
 
 #[cfg(all(test, docker_test))]
@@ -267,10 +296,12 @@ mod tests {
             "".to_owned(),
         );
 
+        let runner = get_ws_runner().await?;
+
         let opts = HandlerOptions {
             name: "test-vmess-ws".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -280,7 +311,7 @@ mod tests {
             transport: Some(Box::new(ws_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        let runner = get_ws_runner().await?;
+
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 
@@ -309,10 +340,11 @@ mod tests {
             "example.org".to_owned(),
             "example!".to_owned().try_into()?,
         );
+        let container = get_grpc_runner().await?;
         let opts = HandlerOptions {
             name: "test-vmess-grpc".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -322,8 +354,7 @@ mod tests {
             transport: Some(Box::new(grpc_client)),
         };
         let handler = Arc::new(Handler::new(opts));
-        run_test_suites_and_cleanup(handler, get_grpc_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
@@ -353,10 +384,11 @@ mod tests {
             http::Method::POST,
             "/test".to_owned().try_into()?,
         );
+        let container = get_h2_runner().await?;
         let opts = HandlerOptions {
             name: "test-vmess-h2".into(),
             common_opts: Default::default(),
-            server: LOCAL_ADDR.into(),
+            server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             alter_id: 0,
@@ -369,7 +401,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, get_h2_runner().await?, Suite::all())
-            .await
+        run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }
