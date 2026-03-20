@@ -12,3 +12,5 @@ pub struct V2RayOBFSOption {
     pub skip_cert_verify: bool,
     pub mux: bool,
 }
+
+pub use websocket::V2rayWsClient;

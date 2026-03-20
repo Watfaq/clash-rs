@@ -13,3 +13,6 @@ pub struct SimpleOBFSOption {
     pub mode: SimpleOBFSMode,
     pub host: String,
 }
+
+pub use http::Client as SimpleObfsHttp;
+pub use tls::Client as SimpleObfsTLS;
