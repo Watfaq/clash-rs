@@ -23,9 +23,7 @@ pub struct GroupState {
     outbound_manager: ThreadSafeOutboundManager,
 }
 
-pub fn routes(
-    outbound_manager: ThreadSafeOutboundManager,
-) -> Router<Arc<AppState>> {
+pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppState>> {
     let state = GroupState { outbound_manager };
     Router::new()
         .nest(

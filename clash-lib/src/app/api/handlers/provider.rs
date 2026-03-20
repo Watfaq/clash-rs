@@ -22,9 +22,7 @@ struct ProviderState {
     outbound_manager: ThreadSafeOutboundManager,
 }
 
-pub fn routes(
-    outbound_manager: ThreadSafeOutboundManager,
-) -> Router<Arc<AppState>> {
+pub fn routes(outbound_manager: ThreadSafeOutboundManager) -> Router<Arc<AppState>> {
     let state = ProviderState { outbound_manager };
     Router::new()
         .route("/", get(get_providers))
