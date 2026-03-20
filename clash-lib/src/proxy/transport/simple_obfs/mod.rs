@@ -3,7 +3,6 @@
 mod http;
 mod tls;
 
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SimpleOBFSMode {
     Http,

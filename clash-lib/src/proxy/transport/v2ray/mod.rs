@@ -1,6 +1,5 @@
 mod websocket;
 
-
 #[allow(dead_code)]
 pub struct V2RayOBFSOption {
     /// currently only websocket is supported

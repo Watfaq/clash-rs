@@ -1,4 +1,3 @@
-
 mod common;
 
 #[cfg(feature = "shadowsocks")]
