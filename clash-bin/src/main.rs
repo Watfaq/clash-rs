@@ -190,36 +190,6 @@ fn main() -> anyhow::Result<()> {
         config.geosite = Some("geosite.dat".to_string());
     }
 
-    {
-        let mut debug_file = std::fs::File::create(&log_path)?;
-        // empty content
-        debug_file.set_len(0)?;
-        // add timestamp using time
-
-        debug_file.write_all(
-            format!(
-                "Timestamp: {}\n",
-                OffsetDateTime::now_local()
-                    .unwrap_or_else(|_| OffsetDateTime::now_utc())
-            )
-            .as_bytes(),
-        )?;
-        if let Some(dir) = &cli.directory {
-            debug_file.write_all(
-                format!("Working directory {}\n", dir.to_string_lossy().to_string())
-                    .as_bytes(),
-            )?;
-        } else {
-            debug_file.write_all(
-                format!("Working directory {:#?}\n", std::env::current_dir()?)
-                    .as_bytes(),
-            )?;
-        }
-        debug_file.write_all(
-            format!("Configuration loaded: {:#?}\n", config).as_bytes(),
-        )?;
-    }
-
     clash::start_scaffold(clash::Options {
         config: clash::Config::Def(config),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
