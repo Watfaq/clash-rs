@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use async_trait::async_trait;
 use rand::{Rng, distr::Distribution};
 use std::{

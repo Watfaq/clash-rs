@@ -1,6 +1,5 @@
 mod websocket;
 
-pub use websocket::V2rayWsClient;
 
 #[allow(dead_code)]
 pub struct V2RayOBFSOption {

@@ -213,7 +213,6 @@ impl axum::serve::Listener for NamedPipeListener {
 mod tests {
     use super::*;
     use axum::{Json, Router, routing::get};
-    use futures::SinkExt;
     use serde::{Deserialize, Serialize};
     use tracing_test::traced_test;
 
@@ -228,6 +227,7 @@ mod tests {
         )
     }
 
+    #[allow(dead_code)]
     fn test_router_with_websocket() -> Router {
         use axum::{
             extract::ws::{WebSocket, WebSocketUpgrade},

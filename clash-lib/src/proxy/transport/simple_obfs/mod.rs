@@ -1,12 +1,8 @@
+#![allow(dead_code)]
+
 mod http;
 mod tls;
 
-#[deprecated(
-    since = "0.1.0",
-    note = "should be removed since v2ray-plugin is widely used"
-)]
-pub use http::Client as SimpleObfsHttp;
-pub use tls::Client as SimpleObfsTLS;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SimpleOBFSMode {
