@@ -51,13 +51,9 @@ pub fn routes(
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
     dns_resolver: ThreadSafeDNSResolver,
-<<<<<<< HEAD
-) -> Router<Arc<CtrlState>> {
-=======
     dns_listen_addr: DNSListenAddr,
     dns_enabled: bool,
 ) -> Router<Arc<AppState>> {
->>>>>>> origin/master
     Router::new()
         .route(
             "/",

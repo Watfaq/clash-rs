@@ -13,14 +13,15 @@ use serde_json::json;
 use tracing::{debug, warn};
 
 use crate::app::api::{
-    CtrlState,
+    AppState,
     handlers::{
         connection::GetConnectionsQuery,
         memory::{GetMemoryQuery, GetMemoryResponse},
     },
 };
 
-pub fn routes(state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
+#[allow(dead_code)]
+pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/connections", get(connections))
         .route("/traffic", get(traffic))
@@ -29,9 +30,10 @@ pub fn routes(state: Arc<CtrlState>) -> Router<Arc<CtrlState>> {
         .with_state(state)
 }
 
+#[allow(dead_code)]
 pub async fn connections(
     ws: WebSocketUpgrade,
-    State(state): State<Arc<CtrlState>>,
+    State(state): State<Arc<AppState>>,
     query: Query<GetConnectionsQuery>,
 ) -> impl IntoResponse {
     let callback = async move |mut socket: WebSocket| {
@@ -59,9 +61,10 @@ pub async fn connections(
     })
 }
 
+#[allow(dead_code)]
 pub async fn traffic(
     ws: WebSocketUpgrade,
-    State(state): State<Arc<CtrlState>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let callback = async move |mut socket: WebSocket| {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -89,9 +92,10 @@ pub async fn traffic(
     })
 }
 
+#[allow(dead_code)]
 pub async fn memory(
     ws: WebSocketUpgrade,
-    State(state): State<Arc<CtrlState>>,
+    State(state): State<Arc<AppState>>,
     query: Query<GetMemoryQuery>,
 ) -> impl IntoResponse {
     let callback = async move |mut socket: WebSocket| {
@@ -122,9 +126,10 @@ pub async fn memory(
     })
 }
 
+#[allow(dead_code)]
 pub async fn log(
     ws: WebSocketUpgrade,
-    State(state): State<Arc<CtrlState>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     ws.on_failed_upgrade(move |e| {
         warn!("ws upgrade error: {}", e);

@@ -153,12 +153,16 @@ fn create_named_pipe_with_security(
         // {e}")))
     }
 }
+#[cfg(windows)]
 use tokio::net::windows::named_pipe::NamedPipeServer;
 
+#[cfg(windows)]
 struct NamedPipeListener {
     path: String,
     first_instance: bool,
 }
+
+#[cfg(windows)]
 impl axum::serve::Listener for NamedPipeListener {
     type Addr = ();
     type Io = NamedPipeServer;

@@ -2,20 +2,25 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{Router, extract::State, response::IntoResponse, routing::get};
 
-use crate::app::{
-    api::{CtrlResult, CtrlState},
-    router::ArcRouter,
-};
+use crate::app::{api::AppState, router::ThreadSafeRouter};
 
-pub fn routes(router: ArcRouter) -> Router<Arc<CtrlState>> {
-    Router::new().route("/", get(get_rules)).with_state(router)
+#[derive(Clone)]
+struct RuleState {
+    router: ThreadSafeRouter,
 }
 
-async fn get_rules(
-    State(router): State<ArcRouter>,
-) -> CtrlResult<impl IntoResponse> {
-    let rules = router.get_all_rules();
+pub fn routes(router: ThreadSafeRouter) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/", get(get_rules))
+        .with_state(RuleState { router })
+}
+
+async fn get_rules(State(state): State<RuleState>) -> impl IntoResponse {
+    let rules = state.router.get_all_rules();
     let mut r = HashMap::new();
-    r.insert("rules", rules);
-    Ok(serde_json::to_string(&r)?)
+    r.insert(
+        "rules",
+        rules.iter().map(|r| r.as_map()).collect::<Vec<_>>(),
+    );
+    axum::response::Json(r)
 }

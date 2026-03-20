@@ -11,7 +11,7 @@ use http::StatusCode;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::app::{api::CtrlState, dns::ThreadSafeDNSResolver};
+use crate::app::{api::AppState, dns::ThreadSafeDNSResolver};
 
 #[derive(Clone)]
 struct DNSState {
@@ -19,7 +19,7 @@ struct DNSState {
     resolver: ThreadSafeDNSResolver,
 }
 
-pub fn routes(resolver: ThreadSafeDNSResolver) -> Router<Arc<CtrlState>> {
+pub fn routes(resolver: ThreadSafeDNSResolver) -> Router<Arc<AppState>> {
     let state = DNSState { resolver };
     Router::new()
         .route("/query", get(query_dns))

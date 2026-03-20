@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::{
     app::{
-        api::CtrlState, outbound::manager::ThreadSafeOutboundManager,
+        api::AppState, outbound::manager::ThreadSafeOutboundManager,
         remote_content_manager::providers::proxy_provider::ThreadSafeProxyProvider,
     },
     proxy::AnyOutboundHandler,
@@ -24,7 +24,7 @@ struct ProviderState {
 
 pub fn routes(
     outbound_manager: ThreadSafeOutboundManager,
-) -> Router<Arc<CtrlState>> {
+) -> Router<Arc<AppState>> {
     let state = ProviderState { outbound_manager };
     Router::new()
         .route("/", get(get_providers))
