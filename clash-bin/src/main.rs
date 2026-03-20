@@ -22,7 +22,6 @@ use std::{
     path::{Path, PathBuf},
     process::exit,
 };
-use time::OffsetDateTime;
 
 #[derive(Parser)]
 #[clap(author, about, long_about = None)]
@@ -94,7 +93,7 @@ fn main() -> anyhow::Result<()> {
 
     // Those arguments are for compatibility with `mihomo`
     // Technically, I do not think `mihomo` is a modern/standard POSIX Cli program
-    let mut args: Vec<String> = std::env::args()
+    let args: Vec<String> = std::env::args()
         .map(|arg| match arg.as_str() {
             "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
             "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
