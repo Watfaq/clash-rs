@@ -34,6 +34,7 @@ pub struct Router {
     asn_mmdb: Option<MmdbLookup>,
 }
 
+pub type ArcRouter = Arc<Router>;
 pub type ThreadSafeRouter = Arc<Router>;
 
 const MATCH: &str = "MATCH";

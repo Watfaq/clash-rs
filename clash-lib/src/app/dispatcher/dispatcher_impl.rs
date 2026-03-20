@@ -3,7 +3,7 @@ use crate::{
         dispatcher::tracked::{TrackedDatagram, TrackedStream},
         dns::ClashResolver,
         outbound::manager::ThreadSafeOutboundManager,
-        router::ThreadSafeRouter,
+        router::ArcRouter,
     },
     common::io::copy_bidirectional,
     config::{
@@ -32,7 +32,7 @@ const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
-    router: ThreadSafeRouter,
+    router: ArcRouter,
     resolver: ThreadSafeDNSResolver,
     mode: Arc<RwLock<RunMode>>,
     manager: Arc<Manager>,
@@ -48,7 +48,7 @@ impl Debug for Dispatcher {
 impl Dispatcher {
     pub fn new(
         outbound_manager: ThreadSafeOutboundManager,
-        router: ThreadSafeRouter,
+        router: ArcRouter,
         resolver: ThreadSafeDNSResolver,
         mode: RunMode,
         statistics_manager: Arc<Manager>,

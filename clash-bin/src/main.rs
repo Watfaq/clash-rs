@@ -79,7 +79,7 @@ struct Cli {
     #[clap(
         long,
         value_parser,
-        action = clap::ArgAction::SetTrue,
+        default_value = "true",
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."
@@ -173,18 +173,24 @@ fn main() -> anyhow::Result<()> {
             },
         )));
     }
-
-    let mut config = clash::Config::File(file).try_parse()?;
-
-    config.general.controller.external_controller_ipc = cli.controller_ipc;
+    let mut config = clash_lib::config::def::Config::try_from(PathBuf::from(file))?;
+    config.external_controller_ipc =
+        cli.controller_ipc.or(config.external_controller_ipc);
 
     if cli.compatibility {
-        config.general.mmdb = Some("Country.mmdb".to_string());
-        config.general.geosite = Some("geosite.dat".to_string());
+        println!(
+            "Compatibility mode enabled. This may cause some issues, but it is \
+             recommended to enable this if you are using clash verge."
+        );
+        if let Some(dir) = &cli.directory {
+            std::env::set_current_dir(dir)?;
+        }
+        config.mmdb = Some("Country.mmdb".to_string());
+        config.geosite = Some("geosite.dat".to_string());
     }
 
     clash::start_scaffold(clash::Options {
-        config: clash::Config::Internal(config),
+        config: clash::Config::Def(config),
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,

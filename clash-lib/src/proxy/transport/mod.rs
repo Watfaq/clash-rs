@@ -13,7 +13,9 @@ pub use grpc::Client as GrpcClient;
 pub use h2::Client as H2Client;
 pub use reality::Client as RealityClient;
 pub use shadow_tls::Client as Shadowtls;
-pub use simple_obfs::*;
+pub use simple_obfs::{
+    SimpleOBFSMode, SimpleOBFSOption, SimpleObfsHttp, SimpleObfsTLS,
+};
 pub use sip003::Plugin as Sip003Plugin;
 pub use splice_tls::VisionOptions;
 pub use tls::Client as TlsClient;

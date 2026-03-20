@@ -8,10 +8,11 @@ mod handlers;
 mod ipc;
 mod middlewares;
 mod runner;
+mod websocket;
 
 pub use runner::ApiRunner;
 
 pub struct AppState {
-    log_source_tx: Sender<LogEvent>,
-    statistics_manager: Arc<StatisticsManager>,
+    pub log_source_tx: Sender<LogEvent>,
+    pub statistics_manager: Arc<StatisticsManager>,
 }

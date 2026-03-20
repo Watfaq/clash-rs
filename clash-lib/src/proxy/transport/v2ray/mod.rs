@@ -1,7 +1,5 @@
 mod websocket;
 
-pub use websocket::V2rayWsClient;
-
 #[allow(dead_code)]
 pub struct V2RayOBFSOption {
     /// currently only websocket is supported
@@ -14,3 +12,5 @@ pub struct V2RayOBFSOption {
     pub skip_cert_verify: bool,
     pub mux: bool,
 }
+
+pub use websocket::V2rayWsClient;

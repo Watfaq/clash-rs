@@ -28,7 +28,7 @@ tun = ["clash-lib/tun"]
 
 bench = ["clash-lib/bench"]
 dhat-heap = ["dep:dhat"]
-tracing = ["clash-lib/tracing"]
+telemetry = ["clash-lib/telemetry"]
 jemallocator = ["dep:tikv-jemallocator"]
 
 aws-lc-rs = ["dep:aws-lc-rs", "clash-lib/aws-lc-rs"]
@@ -37,6 +37,7 @@ ring = ["clash-lib/ring"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+time = { version = "0.3", features = ["macros", "local-offset"] }
 
 clash-lib = { path = "../clash-lib", default-features = false }
 

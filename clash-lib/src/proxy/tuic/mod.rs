@@ -80,6 +80,8 @@ pub struct HandlerOptions {
     pub send_window: u64,
     pub receive_window: VarInt,
     pub skip_cert_verify: bool,
+    pub ip: Option<String>,
+    pub sni: Option<String>,
 
     #[allow(dead_code)]
     pub common_opts: HandlerCommonOptions,
@@ -87,8 +89,6 @@ pub struct HandlerOptions {
     /// not used
     #[allow(dead_code)]
     pub max_udp_relay_packet_size: u64,
-    pub ip: Option<String>,
-    pub sni: Option<String>,
 }
 
 pub struct Handler {
@@ -251,7 +251,7 @@ impl Handler {
             } else {
                 new_udp_socket(
                     Some((Ipv4Addr::UNSPECIFIED, 0).into()),
-                    None,
+                    sess.iface.as_ref(),
                     #[cfg(target_os = "linux")]
                     sess.so_mark,
                     None,

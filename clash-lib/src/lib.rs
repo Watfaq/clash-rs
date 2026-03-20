@@ -121,6 +121,7 @@ pub struct GlobalState {
     #[cfg(feature = "tun")]
     tunnel_runner: ArcRunner,
     dns_listener: ArcRunner,
+    #[allow(dead_code)]
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
 }
