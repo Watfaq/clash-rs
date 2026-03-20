@@ -101,9 +101,6 @@ fn main() -> anyhow::Result<()> {
             _ => arg,
         })
         .collect();
-    args.push("--log-file".to_string());
-    let log_path = PathBuf::from(r"C:\Workspace\Code\clash-rs\debug.log");
-    args.push(log_path.to_string_lossy().to_string());
     let cli = Cli::parse_from(args);
 
     if cli.version {
