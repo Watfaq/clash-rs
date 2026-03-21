@@ -137,9 +137,23 @@ impl TcpListener {
         tcp_stream_waker: Arc<AtomicWaker>,
     ) -> std::io::Result<()> {
         let mut packet_buf = Vec::with_capacity(32);
+        let mut syn_tracker: HashMap<(SocketAddr, SocketAddr), std::time::Instant> =
+            HashMap::new();
+        let mut last_prune_time = std::time::Instant::now();
+
         while let n = inbound.recv_many(&mut packet_buf, 32).await
             && n > 0
         {
+            let now = std::time::Instant::now();
+            if now.duration_since(last_prune_time)
+                > std::time::Duration::from_secs(60)
+            {
+                syn_tracker.retain(|_, time| {
+                    now.duration_since(*time) < std::time::Duration::from_secs(60)
+                });
+                last_prune_time = now;
+            }
+
             trace!("Received {n} packets from inbound channel");
             for frame in packet_buf.drain(..) {
                 let packet = match IpPacket::new_checked(frame.data()) {
@@ -190,6 +204,30 @@ impl TcpListener {
                 let dst_addr = SocketAddr::new(dst_ip, dst_port);
 
                 if packet.syn() && !packet.ack() {
+                    let now = std::time::Instant::now();
+                    let conn_tuple = (src_addr, dst_addr);
+
+                    if let Some(time) = syn_tracker.get(&conn_tuple) {
+                        if now.duration_since(*time)
+                            < std::time::Duration::from_secs(60)
+                        {
+                            if let Err(e) = device_injector.send(frame) {
+                                warn!(
+                                    "Failed to inject retransmitted SYN packet: {e}"
+                                );
+                            }
+                            continue;
+                        }
+                    }
+
+                    if syn_tracker.len() >= 10000 {
+                        warn!(
+                            "SYN flood protection: dropping SYN packet from {src_addr}"
+                        );
+                        continue;
+                    }
+                    syn_tracker.insert(conn_tuple, now);
+
                     let mut socket = tcp::Socket::new(
                         tcp::SocketBuffer::new(vec![
                             0u8;
