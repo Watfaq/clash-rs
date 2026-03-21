@@ -190,22 +190,6 @@ pub fn setup_default_crypto_provider() {
     });
 }
 
-/// Tries to download and extract a dashboard archive from `download_url` to
-/// `dir`, logging any failures as warnings so the proxy always starts.
-async fn try_download_dashboard(dir: PathBuf, download_url: &str) {
-    match SystemResolver::new(false) {
-        Ok(resolver) => match new_http_client(Arc::new(resolver), None) {
-            Ok(client) => {
-                dashboard::download_dashboard(dir, download_url, &client)
-                    .await
-                    .unwrap_or_else(|e| warn!("dashboard download failed: {}", e));
-            }
-            Err(e) => warn!("dashboard download skipped (http client error): {}", e),
-        },
-        Err(e) => warn!("dashboard download skipped (resolver error): {}", e),
-    }
-}
-
 pub async fn start(
     config: InternalConfig,
     cwd: String,
@@ -225,15 +209,6 @@ pub async fn start(
     // things we need to clone before consuming config
     let controller_cfg = config.general.controller.clone();
     let log_level = config.general.log_level;
-
-    // Download the dashboard if both `external-ui` and `external-ui-url` are
-    // configured and the directory is absent or empty.
-    if let (Some(ui_path), Some(download_url)) = (
-        &controller_cfg.external_ui,
-        &controller_cfg.external_ui_download_url,
-    ) {
-        try_download_dashboard(cwd.join(ui_path), download_url).await;
-    }
 
     let components = create_components(cwd.clone(), config).await?;
 
@@ -296,14 +271,6 @@ pub async fn start(
             };
 
             let controller_cfg = config.general.controller.clone();
-
-            // Re-download dashboard on reload if configured.
-            if let (Some(ui_path), Some(download_url)) = (
-                &controller_cfg.external_ui,
-                &controller_cfg.external_ui_download_url,
-            ) {
-                try_download_dashboard(cwd_clone.join(ui_path), download_url).await;
-            }
 
             let new_components =
                 create_components(cwd_clone.clone(), config).await?;
@@ -436,6 +403,21 @@ async fn create_components(
     let client =
         new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))
             .map_err(|x| Error::DNSError(x.to_string()))?;
+
+    // Download the dashboard if both `external-ui` and `external-ui-url` are
+    // configured and the directory is absent or empty. This is done here so
+    // it can use the proxy-aware HTTP client (plain outbound handlers are
+    // already loaded into the registry at this point).
+    if let (Some(ui_path), Some(download_url)) = (
+        &config.general.controller.external_ui,
+        &config.general.controller.external_ui_download_url,
+    ) {
+        let dir = cwd.join(ui_path);
+        let url = download_url.clone();
+        dashboard::download_dashboard(dir, &url, &client)
+            .await
+            .unwrap_or_else(|e| warn!("dashboard download failed: {}", e));
+    }
 
     debug!("initializing dns resolver");
     // Clone the dns.listen for the DNS Server later before we consume the config
