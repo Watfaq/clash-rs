@@ -184,14 +184,20 @@ mod tests {
     use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::sync::mpsc;
 
-    fn build_stream() -> TcpStream {
-        let (tx, _rx) = mpsc::unbounded_channel();
-        TcpStream {
-            local_addr: "127.0.0.1:12345".parse().unwrap(),
-            remote_addr: "127.0.0.1:80".parse().unwrap(),
-            handle: Arc::new(TcpStreamHandle::new()),
-            stack_notifier: tx,
-        }
+    fn build_stream() -> (
+        TcpStream,
+        mpsc::UnboundedReceiver<IfaceEvent<'static>>,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (
+            TcpStream {
+                local_addr: "127.0.0.1:12345".parse().unwrap(),
+                remote_addr: "127.0.0.1:80".parse().unwrap(),
+                handle: Arc::new(TcpStreamHandle::new()),
+                stack_notifier: tx,
+            },
+            rx,
+        )
     }
 
     fn noop_cx() -> Context<'static> {
@@ -200,7 +206,7 @@ mod tests {
 
     #[test]
     fn poll_read_returns_eof_after_peer_close() {
-        let mut stream = build_stream();
+        let (mut stream, _rx) = build_stream();
         stream.handle.read_closed.store(true, Ordering::Release);
         let mut cx = noop_cx();
         let mut bytes = [0u8; 16];
@@ -214,7 +220,7 @@ mod tests {
 
     #[test]
     fn poll_shutdown_marks_write_shutdown() {
-        let mut stream = build_stream();
+        let (mut stream, _rx) = build_stream();
         let mut cx = noop_cx();
 
         let result = Pin::new(&mut stream).poll_shutdown(&mut cx);
@@ -225,7 +231,7 @@ mod tests {
 
     #[test]
     fn poll_write_fails_after_write_close() {
-        let mut stream = build_stream();
+        let (mut stream, _rx) = build_stream();
         stream.handle.write_closed.store(true, Ordering::Release);
         let mut cx = noop_cx();
 
