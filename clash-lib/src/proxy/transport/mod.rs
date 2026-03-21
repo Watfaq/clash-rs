@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 mod grpc;
 mod h2;
 mod reality;
