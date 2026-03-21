@@ -20,8 +20,7 @@ use crate::{
         router::Router,
     },
     common::{
-        auth,
-        dashboard,
+        auth, dashboard,
         geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoDataLookup},
         http::new_http_client,
         mmdb::{

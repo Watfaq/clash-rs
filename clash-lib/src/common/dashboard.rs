@@ -41,7 +41,9 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 
     download(download_url, &tmp_path, http_client)
         .await
-        .map_err(|e| Error::InvalidConfig(format!("dashboard download failed: {e}")))?;
+        .map_err(|e| {
+            Error::InvalidConfig(format!("dashboard download failed: {e}"))
+        })?;
 
     let bytes = fs::read(&tmp_path)?;
     if let Err(e) = fs::remove_file(&tmp_path) {
@@ -126,10 +128,7 @@ fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
         let rel: PathBuf = match strip_prefix {
             Some(ref prefix) => {
                 let s = enclosed.to_string_lossy();
-                PathBuf::from(
-                    s.strip_prefix(prefix.as_str())
-                        .unwrap_or(s.as_ref()),
-                )
+                PathBuf::from(s.strip_prefix(prefix.as_str()).unwrap_or(s.as_ref()))
             }
             None => enclosed.clone(),
         };
@@ -161,8 +160,8 @@ fn extract_tgz(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
         .entries()
         .map_err(|e| Error::InvalidConfig(format!("tgz open failed: {e}")))?
     {
-        let mut entry =
-            entry.map_err(|e| Error::InvalidConfig(format!("tgz entry failed: {e}")))?;
+        let mut entry = entry
+            .map_err(|e| Error::InvalidConfig(format!("tgz entry failed: {e}")))?;
         let path = entry
             .path()
             .map_err(|e| Error::InvalidConfig(format!("tgz entry path: {e}")))?
