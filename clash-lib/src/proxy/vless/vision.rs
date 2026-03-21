@@ -379,7 +379,7 @@ mod tests {
     fn parse_frame(buf: &[u8], offset: usize) -> (u8, Vec<u8>, u16, usize) {
         let cmd = buf[offset];
         let clan = u16::from_be_bytes([buf[offset + 1], buf[offset + 2]]) as usize;
-        let plen = u16::from_be_bytes([buf[offset + 3], buf[offset + 4]]) as u16;
+        let plen = u16::from_be_bytes([buf[offset + 3], buf[offset + 4]]);
         let content = buf[offset + 5..offset + 5 + clan].to_vec();
         let next = offset + 5 + clan + plen as usize;
         (cmd, content, plen, next)
@@ -415,7 +415,7 @@ mod tests {
         vs.flush().await.unwrap();
 
         let mut buf = vec![0u8; 65536];
-        server.read(&mut buf).await.unwrap(); // drain first frame
+        let _ = server.read(&mut buf).await.unwrap(); // drain first frame
 
         let payload = b"second";
         vs.write_all(payload).await.unwrap();
