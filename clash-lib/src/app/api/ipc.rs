@@ -625,6 +625,7 @@ mod tests {
     #[traced_test]
     #[cfg(windows)]
     async fn test_serve_ipc_windows_websocket() -> anyhow::Result<()> {
+        use futures::SinkExt;
         use tokio::{net::windows::named_pipe::ClientOptions, time::Duration};
         use tokio_tungstenite::tungstenite::{
             client::IntoClientRequest, protocol::Message,
