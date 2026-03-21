@@ -28,7 +28,7 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 
     let needs_download = !dir.exists()
         || dir.read_dir().map_or(true, |mut d| d.next().is_none())
-        || download_url.contains("force=true");
+        || download_url.contains("#force=true");
 
     if !needs_download {
         return Ok(());

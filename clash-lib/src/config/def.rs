@@ -435,9 +435,7 @@ pub struct Config {
     /// Append `#force=true` to force re-download even if the directory already
     /// contains files. To route the download through a specific proxy outbound,
     /// append `#_clash_outbound=<name>` to the URL.
-    /// The user-facing config key is `external-ui-url`.
-    #[serde(rename = "external-ui-url", alias = "external-ui-download-url")]
-    pub external_ui_download_url: Option<String>,
+    pub external_ui_url: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
     /// CORS allowed origins
