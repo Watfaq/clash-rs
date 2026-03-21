@@ -203,12 +203,19 @@ fn extract_tgz(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
                 continue;
             }
 
-            let top = path
-                .components()
-                .next()
-                .map(|c| c.as_os_str().to_string_lossy().into_owned());
+            let mut comps = path.components();
+            let top = comps.next();
+            // If the entry has only one component (a file directly at archive
+            // root with no subdirectory), there is no common top-level
+            // directory to strip.
+            if comps.next().is_none() {
+                all_share = false;
+                break;
+            }
 
-            match (&first, top) {
+            let top_str = top.map(|c| c.as_os_str().to_string_lossy().into_owned());
+
+            match (&first, top_str) {
                 (None, Some(t)) => first = Some(t),
                 (Some(f), Some(t)) if f != &t => {
                     all_share = false;
@@ -257,8 +264,13 @@ fn extract_tgz(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
 
         let rel: PathBuf = match &strip_prefix {
             Some(prefix) => {
-                let s = path.to_string_lossy();
-                PathBuf::from(s.strip_prefix(prefix.as_str()).unwrap_or(s.as_ref()))
+                // Use Path::strip_prefix to remove the common top-level dir by
+                // path component (e.g. "dist/index.html" → "index.html") without
+                // going through a string representation.
+                let prefix_path = Path::new(prefix.trim_end_matches('/'));
+                path.strip_prefix(prefix_path)
+                    .unwrap_or(&path)
+                    .to_path_buf()
             }
             None => path.clone(),
         };
@@ -442,17 +454,13 @@ mod tests {
 
     #[test]
     fn tgz_rejects_absolute_paths() {
-        let bytes =
-            make_tgz_unchecked(&[("/etc/passwd", b"bad"), ("ok.txt", b"good")]);
+        // Use a distinctive name that is guaranteed not to pre-exist so the
+        // assertion is unambiguous and portable (avoids reading /etc/passwd).
+        let abs_name = "/clash_rs_must_not_exist_absolute_4d9e2a1b";
+        let bytes = make_tgz_unchecked(&[(abs_name, b"bad"), ("ok.txt", b"good")]);
         let tmp = tempfile::tempdir().unwrap();
         extract_tgz(&bytes, tmp.path()).unwrap();
-        assert!(
-            !Path::new("/etc/passwd").exists() || {
-                // On systems where /etc/passwd pre-exists, just verify we didn't
-                // overwrite it with our test payload.
-                std::fs::read("/etc/passwd").unwrap() != b"bad"
-            }
-        );
+        assert!(!Path::new(abs_name).exists());
         assert!(tmp.path().join("ok.txt").exists());
     }
 }
