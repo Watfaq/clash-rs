@@ -20,7 +20,7 @@ use crate::{
         router::Router,
     },
     common::{
-        auth,
+        auth, dashboard,
         geodata::{DEFAULT_GEOSITE_DOWNLOAD_URL, GeoDataLookup},
         http::new_http_client,
         mmdb::{
@@ -189,6 +189,7 @@ pub fn setup_default_crypto_provider() {
         }
     });
 }
+
 pub async fn start(
     config: InternalConfig,
     cwd: String,
@@ -270,6 +271,7 @@ pub async fn start(
             };
 
             let controller_cfg = config.general.controller.clone();
+
             let new_components =
                 create_components(cwd_clone.clone(), config).await?;
 
@@ -401,6 +403,21 @@ async fn create_components(
     let client =
         new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))
             .map_err(|x| Error::DNSError(x.to_string()))?;
+
+    // Download the dashboard if both `external-ui` and `external-ui-url` are
+    // configured and the directory is absent or empty. This is done here so
+    // it can use the proxy-aware HTTP client (plain outbound handlers are
+    // already loaded into the registry at this point).
+    if let (Some(ui_path), Some(download_url)) = (
+        &config.general.controller.external_ui,
+        &config.general.controller.external_ui_download_url,
+    ) {
+        let dir = cwd.join(ui_path);
+        let url = download_url.clone();
+        dashboard::download_dashboard(dir, &url, &client)
+            .await
+            .unwrap_or_else(|e| warn!("dashboard download failed: {}", e));
+    }
 
     debug!("initializing dns resolver");
     // Clone the dns.listen for the DNS Server later before we consume the config

@@ -127,6 +127,11 @@ axum = { version = "0.8", features = ["ws"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 chrono = { version = "0.4", features = ["serde"] }
 
+# Dashboard auto-download
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
 watfaq-netstack = { path = "../clash-netstack", optional = true }
