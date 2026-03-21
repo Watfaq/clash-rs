@@ -433,7 +433,10 @@ pub struct Config {
     /// will automatically download and extract the dashboard archive (zip or
     /// tgz) to the `external-ui` directory if it does not exist or is empty.
     /// Append `#force=true` to force re-download even if the directory already
-    /// contains files.
+    /// contains files. To route the download through a specific proxy outbound,
+    /// append `#_clash_outbound=<name>` to the URL.
+    /// The user-facing config key is `external-ui-url`.
+    #[serde(rename = "external-ui-url", alias = "external-ui-download-url")]
     pub external_ui_download_url: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
