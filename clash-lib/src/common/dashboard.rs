@@ -15,7 +15,8 @@ use crate::{
 /// Downloads and extracts a dashboard archive (zip or tgz) to `dir`.
 ///
 /// The download is skipped when `dir` already exists and is non-empty,
-/// unless the URL fragment contains `force=true`.
+/// unless the URL fragment contains the parameter `force=true`
+/// (e.g. `https://example.com/dist.tgz#force=true`).
 ///
 /// To route the download through a configured proxy outbound, append
 /// `#_clash_outbound=<name>` to the URL.
@@ -26,9 +27,17 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 ) -> Result<(), Error> {
     let dir = dir.as_ref();
 
-    let needs_download = !dir.exists()
-        || dir.read_dir().map_or(true, |mut d| d.next().is_none())
-        || download_url.contains("#force=true");
+    // Parse the URL fragment to extract parameters (same convention as
+    // `common::utils::download` uses for `_clash_outbound`).
+    let fragment = download_url
+        .rsplit_once('#')
+        .map(|x| x.1)
+        .unwrap_or_default();
+    let force = fragment.split('&').any(|kv| kv == "force=true");
+
+    let needs_download = force
+        || !dir.exists()
+        || dir.read_dir().map_or(true, |mut d| d.next().is_none());
 
     if !needs_download {
         return Ok(());
@@ -39,18 +48,26 @@ pub async fn download_dashboard<P: AsRef<Path>>(
     let rand_part: u64 = rand::rng().random();
     let base_dir = dir.parent().unwrap_or(Path::new("."));
 
-    // Ensure the directory that will hold the temp file exists.
+    // Ensure the directory that will hold the temp files exists.
     fs::create_dir_all(base_dir)?;
 
     let tmp_path = base_dir.join(format!("_dashboard_tmp_{rand_part:016x}"));
 
-    download(download_url, &tmp_path, http_client)
-        .await
-        .map_err(|e| {
-            Error::InvalidConfig(format!("dashboard download failed: {e}"))
-        })?;
+    // Clean up the temp file on any failure to avoid leaving stale files.
+    if let Err(e) = download(download_url, &tmp_path, http_client).await {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(Error::InvalidConfig(format!(
+            "dashboard download failed: {e}"
+        )));
+    }
 
-    let bytes = fs::read(&tmp_path)?;
+    let bytes = match fs::read(&tmp_path) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e.into());
+        }
+    };
     if let Err(e) = fs::remove_file(&tmp_path) {
         warn!(
             "failed to remove dashboard temp file {}: {}",
@@ -74,16 +91,47 @@ pub async fn download_dashboard<P: AsRef<Path>>(
     };
 
     if let Err(e) = extract_result {
-        // Clean up the failed extraction directory.
         let _ = fs::remove_dir_all(&extract_tmp);
         return Err(e);
     }
 
-    // Atomically replace the target directory.
-    if dir.exists() {
-        fs::remove_dir_all(dir)?;
+    // Safely replace the target directory using a backup-and-swap strategy
+    // so the existing dashboard is preserved if the rename fails.
+    let backup = if dir.exists() {
+        let rand_part3: u64 = rand::rng().random();
+        let backup_dir =
+            base_dir.join(format!("_dashboard_backup_{rand_part3:016x}"));
+        fs::rename(dir, &backup_dir)?;
+        Some(backup_dir)
+    } else {
+        None
+    };
+
+    if let Err(e) = fs::rename(&extract_tmp, dir) {
+        // Rollback: restore the previous dashboard from backup.
+        if let Some(ref backup_dir) = backup {
+            if let Err(restore_err) = fs::rename(backup_dir, dir) {
+                warn!(
+                    "failed to restore dashboard from backup {}: {}",
+                    backup_dir.display(),
+                    restore_err
+                );
+            }
+        }
+        let _ = fs::remove_dir_all(&extract_tmp);
+        return Err(e.into());
     }
-    fs::rename(&extract_tmp, dir)?;
+
+    // New dashboard is in place; remove the backup.
+    if let Some(backup_dir) = backup {
+        if let Err(e) = fs::remove_dir_all(&backup_dir) {
+            warn!(
+                "failed to remove dashboard backup {}: {}",
+                backup_dir.display(),
+                e
+            );
+        }
+    }
 
     info!("dashboard extracted to {}", dir.display());
     Ok(())
