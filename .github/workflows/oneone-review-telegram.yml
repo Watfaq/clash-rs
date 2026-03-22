@@ -1,0 +1,86 @@
+name: OneOne PR review -> Telegram
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  notify:
+    if: >-
+      (github.event.pull_request.user.login == 'OneOne-ai') &&
+      (github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Build Telegram message
+        id: msg
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+
+          EVENT="${{ github.event_name }}"
+
+          if [[ "$EVENT" == "pull_request_review" ]]; then
+            REVIEWER="${{ github.event.review.user.login }}"
+            STATE="${{ github.event.review.state }}"
+            BODY="${{ github.event.review.body }}"
+            KIND="Review submitted"
+          else
+            REVIEWER="${{ github.event.comment.user.login }}"
+            STATE="comment"
+            BODY="${{ github.event.comment.body }}"
+            KIND="Review comment"
+          fi
+
+          BODY_TRIMMED="$(printf "%s" "$BODY" | head -c 700)"
+
+          TEXT="$(cat <<EOF
+${KIND} on OneOne-ai PR
+PR #${PR_NUMBER}: ${PR_TITLE}
+By: ${REVIEWER} (${STATE})
+
+${PR_URL}
+
+@ddan13l
+
+Excerpt:
+${BODY_TRIMMED}
+EOF
+)"
+
+          {
+            echo "text<<'EOF'"
+            echo "$TEXT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEXT: ${{ steps.msg.outputs.text }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}" \
+            -d "disable_web_page_preview=true"
+
+      - name: Acknowledge on PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr comment "${{ github.event.pull_request.html_url }}" --body "Review feedback received; I'm on it. (auto)"

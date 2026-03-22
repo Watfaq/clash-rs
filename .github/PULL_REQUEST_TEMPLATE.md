@@ -1,49 +1,29 @@
 <!--
-First of all, thank you for your contribution! 😄
-For requesting to pull a new feature or bugfix, please send it from a feature/bugfix branch based on the `master` branch.
-Before submitting your pull request, please make sure the checklist below is confirmed.
-Your pull requests will be merged after one of the collaborators approve.
-Thank you!
+Thanks for contributing!
+
+This template also supports progress updates: after each push, leave a short PR comment and @mention relevant stakeholders.
 -->
 
-### 🤔 This is a ...
+## What
+- 
 
-- [ ] New feature
-- [ ] Bug fix
-- [ ] Performance optimization
-- [ ] Enhancement feature
-- [ ] Refactoring
-- [ ] Code style optimization
-- [ ] Test Case
-- [ ] Branch merge
-- [ ] Workflow
-- [ ] Other (about what?)
+## Why
+- 
 
-### 🔗 Related issue link
+## How
+- 
 
-<!--
-1. Put the related issue or discussion links here.
-2. close #xxxx or fix #xxxx for instance.
--->
+## Checklist
+- [ ] Tests added/updated if needed
+- [ ] `cargo fmt` / `cargo clippy` checked if relevant
+- [ ] Docs updated if needed
 
-### 💡 Background and solution
+## Progress updates (after each push)
+When you push new commits to this PR, leave a short comment:
 
-<!--
-1. Describe the problem and the scenario.
-2. Provider a sample config if you can.
-3. How to fix the problem, and list the final implementation and usage sample if that is a new feature.
--->
-
-### 📝 Changelog
-
-<!--
-Describe changes from the user side, and list all potential break changes or other risks.
---->
-
-
-### ☑️ Self-Check before Merge
-
-⚠️ Please check all items below before requesting a reviewing. ⚠️
-
-- [ ] Doc is updated/provided or not needed
-- [ ] Changelog is provided or not needed
+```text
+Update: <1-line summary>
+Changes: <bullets>
+Next: <what you'll do next / what you need>
+CC: @<reviewer1> @<reviewer2>
+```
