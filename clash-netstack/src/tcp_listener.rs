@@ -371,9 +371,7 @@ impl TcpListener {
                     }
 
                     if !socket.may_send()
-                        && !socket_control
-                            .write_closed
-                            .swap(true, Ordering::AcqRel)
+                        && !socket_control.write_closed.swap(true, Ordering::AcqRel)
                     {
                         socket_control.send_waker.wake();
                     }

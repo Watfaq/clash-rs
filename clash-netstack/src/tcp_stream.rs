@@ -4,11 +4,8 @@ use std::{
     io::{Error, ErrorKind},
     net::SocketAddr,
     pin::Pin,
-    sync::{
-        Arc,
-        atomic::Ordering,
-    },
-    task::{Context, Poll, ready},
+    sync::{atomic::Ordering, Arc},
+    task::{ready, Context, Poll},
 };
 
 pub struct TcpStream {
@@ -172,10 +169,10 @@ impl tokio::io::AsyncWrite for TcpStream {
     }
 
     fn poll_shutdown(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        ready!(self.poll_flush(cx))?;
+        ready!(self.as_mut().poll_flush(cx))?;
         trace!("TcpStream::poll_shutdown called, client side closing");
         self.handle.write_shutdown.store(true, Ordering::Release);
         self.stack_notifier
@@ -194,10 +191,7 @@ mod tests {
     use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::sync::mpsc;
 
-    fn build_stream() -> (
-        TcpStream,
-        mpsc::UnboundedReceiver<IfaceEvent<'static>>,
-    ) {
+    fn build_stream() -> (TcpStream, mpsc::UnboundedReceiver<IfaceEvent<'static>>) {
         let (tx, rx) = mpsc::unbounded_channel();
         (
             TcpStream {
@@ -249,6 +243,8 @@ mod tests {
 
         let result = Pin::new(&mut stream).poll_write(&mut cx, b"hello");
 
-        assert!(matches!(result, Poll::Ready(Err(err)) if err.kind() == ErrorKind::BrokenPipe));
+        assert!(
+            matches!(result, Poll::Ready(Err(err)) if err.kind() == ErrorKind::BrokenPipe)
+        );
     }
 }
