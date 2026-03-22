@@ -215,40 +215,34 @@ impl TcpListener {
                 let dst_addr = SocketAddr::new(dst_ip, dst_port);
 
                 if packet.syn() && !packet.ack() {
-                    let now = std::time::Instant::now();
                     let conn_tuple = (src_addr, dst_addr);
 
-                    if let Some(time) = syn_tracker.get_mut(&conn_tuple) {
-                        if now.duration_since(*time) < SYN_TRACK_TTL {
-                            // Refresh timestamp so the entry doesn't expire
-                            // while the connection is still retransmitting SYNs.
-                            *time = now;
-                            device_injector
-                                .send(frame)
-                                .map_err(|e| {
-                                    error!(
-                                        "Failed to inject retransmitted SYN packet: {e}"
-                                    );
-                                    std::io::Error::other(
-                                        "Failed to inject retransmitted SYN packet",
-                                    )
-                                })?;
-                            continue;
-                        }
+                    if let Some(time) = syn_tracker.get_mut(&conn_tuple)
+                        && now.duration_since(*time) < SYN_TRACK_TTL
+                    {
+                        // Refresh timestamp so the entry doesn't expire
+                        // while the connection is still retransmitting SYNs.
+                        *time = now;
+                        device_injector.send(frame).map_err(|e| {
+                            error!("Failed to inject retransmitted SYN packet: {e}");
+                            std::io::Error::other(
+                                "Failed to inject retransmitted SYN packet",
+                            )
+                        })?;
+                        continue;
                     }
 
                     if syn_tracker.len() >= SYN_TRACK_MAX {
                         syn_drop_count += 1;
-                        let now_drop = std::time::Instant::now();
                         if syn_drop_count == 1
-                            || now_drop.duration_since(last_syn_drop_log)
+                            || now.duration_since(last_syn_drop_log)
                                 >= Duration::from_secs(10)
                         {
                             debug!(
                                 "SYN flood protection: dropping SYN from \
                                  {src_addr} ({syn_drop_count} total dropped)"
                             );
-                            last_syn_drop_log = now_drop;
+                            last_syn_drop_log = now;
                         }
                         continue;
                     }
