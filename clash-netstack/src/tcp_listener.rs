@@ -17,14 +17,33 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
 
-/// Time-to-live for SYN tracker entries. Kept short so that legitimate
-/// connections reusing the same tuple are not misclassified as retransmissions.
-const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+/// Time-to-live for SYN tracker entries. Long enough to cover typical TCP SYN
+/// retransmission windows so duplicates within ~60s are suppressed, while still
+/// bounding memory use for stale half-open connections.
+const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Approximate per-connection memory footprint used to bound SYN tracking.
+/// This is a conservative estimate that accounts for:
+///  - TcpStreamHandle's send/recv ring buffers
+///  - smoltcp's internal TCP socket buffers
+///
+/// We approximate this cost as 2x the sum of the configured send/recv buffer
+/// sizes to avoid underestimating memory usage.
+const SYN_APPROX_PER_CONN_BYTES: usize =
+    ((DEFAULT_TCP_SEND_BUFFER_SIZE + DEFAULT_TCP_RECV_BUFFER_SIZE) as usize) * 2;
+
+/// Rough global memory budget for half-open SYN tracking.
+/// This caps the amount of memory that can be consumed by tracked SYNs even
+/// under adversarial load (e.g., SYN floods).
+const SYN_TRACK_MEMORY_BUDGET_BYTES: usize = 512 * 1024 * 1024; // 512 MiB
+
 /// Maximum number of concurrent half-open SYN entries tracked.
-const SYN_TRACK_MAX: usize = 10_000;
+/// This is derived from the per-connection memory estimate and the global
+/// memory budget to help prevent OOM under SYN flood.
+const SYN_TRACK_MAX: usize = SYN_TRACK_MEMORY_BUDGET_BYTES / SYN_APPROX_PER_CONN_BYTES;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
