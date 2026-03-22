@@ -4,8 +4,8 @@ use std::{
     io::{Error, ErrorKind},
     net::SocketAddr,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
-    task::{ready, Context, Poll},
+    sync::{Arc, atomic::Ordering},
+    task::{Context, Poll, ready},
 };
 
 pub struct TcpStream {
@@ -186,8 +186,8 @@ impl tokio::io::AsyncWrite for TcpStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::task::noop_waker_ref;
     use crate::tcp_listener::TcpStreamHandle;
+    use futures::task::noop_waker_ref;
     use tokio::io::{AsyncRead, AsyncWrite};
     use tokio::sync::mpsc;
 

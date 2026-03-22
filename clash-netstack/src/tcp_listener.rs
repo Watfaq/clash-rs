@@ -353,16 +353,12 @@ impl TcpListener {
 
                     if !socket.may_recv()
                         && !socket.can_recv()
-                        && !socket_control
-                            .read_closed
-                            .swap(true, Ordering::AcqRel)
+                        && !socket_control.read_closed.swap(true, Ordering::AcqRel)
                     {
                         socket_control.recv_waker.wake();
                     }
 
-                    if socket_control
-                        .write_shutdown
-                        .load(Ordering::Acquire)
+                    if socket_control.write_shutdown.load(Ordering::Acquire)
                         && buf.is_empty()
                         && socket.may_send()
                     {
