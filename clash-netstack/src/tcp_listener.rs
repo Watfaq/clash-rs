@@ -218,8 +218,11 @@ impl TcpListener {
                     let now = std::time::Instant::now();
                     let conn_tuple = (src_addr, dst_addr);
 
-                    if let Some(time) = syn_tracker.get(&conn_tuple) {
+                    if let Some(time) = syn_tracker.get_mut(&conn_tuple) {
                         if now.duration_since(*time) < SYN_TRACK_TTL {
+                            // Refresh timestamp so the entry doesn't expire
+                            // while the connection is still retransmitting SYNs.
+                            *time = now;
                             device_injector
                                 .send(frame)
                                 .map_err(|e| {
