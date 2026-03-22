@@ -13,8 +13,7 @@ permissions:
 jobs:
   notify:
     if: >-
-      (github.event.pull_request.user.login == 'OneOne-ai') &&
-      (github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event.pull_request.user.login == 'OneOne-ai')
     runs-on: ubuntu-latest
 
     steps:
@@ -50,8 +49,6 @@ PR #${PR_NUMBER}: ${PR_TITLE}
 By: ${REVIEWER} (${STATE})
 
 ${PR_URL}
-
-@ddan13l
 
 Excerpt:
 ${BODY_TRIMMED}
