@@ -88,7 +88,10 @@ impl tokio::io::AsyncRead for TcpStream {
                 return Poll::Ready(Ok(()));
             }
 
-            return Poll::Pending;
+            // Re-check buffer after registering waker to avoid missed wakeups.
+            if read_buf.is_empty() {
+                return Poll::Pending;
+            }
         }
 
         buf.initialize_unfilled();
@@ -141,7 +144,11 @@ impl tokio::io::AsyncWrite for TcpStream {
                     "TCP stream write half closed",
                 )));
             }
-            return Poll::Pending;
+
+            // Re-check fullness after registering the waker to avoid missing a wake
+            if send_buf.is_full() {
+                return Poll::Pending;
+            }
         }
 
         let n = send_buf.enqueue_slice(buf);

@@ -352,6 +352,7 @@ impl TcpListener {
                     }
 
                     if !socket.may_recv()
+                        && !socket.can_recv()
                         && !socket_control
                             .read_closed
                             .swap(true, Ordering::AcqRel)
