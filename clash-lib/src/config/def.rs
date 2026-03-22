@@ -429,6 +429,13 @@ pub struct Config {
     pub external_controller_ipc: Option<String>,
     /// dashboard folder path relative to the $CWD
     pub external_ui: Option<String>,
+    /// dashboard download url - when set together with `external-ui`, clash-rs
+    /// will automatically download and extract the dashboard archive (zip or
+    /// tgz) to the `external-ui` directory if it does not exist or is empty.
+    /// Append `#force=true` to force re-download even if the directory already
+    /// contains files. To route the download through a specific proxy outbound,
+    /// append `#_clash_outbound=<name>` to the URL.
+    pub external_ui_url: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
     /// CORS allowed origins

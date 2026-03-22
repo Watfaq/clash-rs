@@ -138,7 +138,10 @@ where
 {
     use std::io::Write;
     debug!("downloading data from {url}");
-    let url = url.parse::<hyper::Uri>()?;
+    // Strip URI fragment before parsing: HTTP clients must not include fragments
+    // in request-target URIs (RFC 7230 §5.3), and hyper::Uri rejects them.
+    let url_no_fragment = url.rsplit_once('#').map(|x| x.0).unwrap_or(url);
+    let url = url_no_fragment.parse::<hyper::Uri>()?;
     let mut req = http::Request::builder()
         .header(http::header::USER_AGENT, DEFAULT_USER_AGENT)
         .uri(&url)

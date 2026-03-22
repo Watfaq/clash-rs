@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod crypto;
+pub mod dashboard;
 pub mod defer;
 pub mod errors;
 pub mod geodata;
