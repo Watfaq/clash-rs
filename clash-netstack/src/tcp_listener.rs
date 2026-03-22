@@ -25,25 +25,12 @@ const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
 /// bounding memory use for stale half-open connections.
 const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Approximate per-connection memory footprint used to bound SYN tracking.
-/// This is a conservative estimate that accounts for:
-///  - TcpStreamHandle's send/recv ring buffers
-///  - smoltcp's internal TCP socket buffers
-///
-/// We approximate this cost as 2x the sum of the configured send/recv buffer
-/// sizes to avoid underestimating memory usage.
-const SYN_APPROX_PER_CONN_BYTES: usize =
-    ((DEFAULT_TCP_SEND_BUFFER_SIZE + DEFAULT_TCP_RECV_BUFFER_SIZE) as usize) * 2;
-
-/// Rough global memory budget for half-open SYN tracking.
-/// This caps the amount of memory that can be consumed by tracked SYNs even
-/// under adversarial load (e.g., SYN floods).
-const SYN_TRACK_MEMORY_BUDGET_BYTES: usize = 512 * 1024 * 1024; // 512 MiB
-
 /// Maximum number of concurrent half-open SYN entries tracked.
-/// This is derived from the per-connection memory estimate and the global
-/// memory budget to help prevent OOM under SYN flood.
-const SYN_TRACK_MAX: usize = SYN_TRACK_MEMORY_BUDGET_BYTES / SYN_APPROX_PER_CONN_BYTES;
+/// Caps the SYN tracker to prevent OOM under SYN flood attacks.
+/// Each entry is a (SocketAddr, SocketAddr) -> Instant mapping (~100 bytes),
+/// so 10 000 entries ≈ 1 MiB — negligible compared to the per-connection
+/// socket buffers that are only allocated once the SYN is accepted.
+const SYN_TRACK_MAX: usize = 10_000;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -165,6 +152,8 @@ impl TcpListener {
         let mut syn_tracker: HashMap<(SocketAddr, SocketAddr), std::time::Instant> =
             HashMap::new();
         let mut last_prune_time = std::time::Instant::now();
+        let mut syn_drop_count: u64 = 0;
+        let mut last_syn_drop_log = std::time::Instant::now();
 
         while let n = inbound.recv_many(&mut packet_buf, 32).await
             && n > 0
@@ -246,9 +235,18 @@ impl TcpListener {
                     }
 
                     if syn_tracker.len() >= SYN_TRACK_MAX {
-                        debug!(
-                            "SYN flood protection: dropping SYN packet from {src_addr}"
-                        );
+                        syn_drop_count += 1;
+                        let now_drop = std::time::Instant::now();
+                        if syn_drop_count == 1
+                            || now_drop.duration_since(last_syn_drop_log)
+                                >= Duration::from_secs(10)
+                        {
+                            debug!(
+                                "SYN flood protection: dropping SYN from \
+                                 {src_addr} ({syn_drop_count} total dropped)"
+                            );
+                            last_syn_drop_log = now_drop;
+                        }
                         continue;
                     }
 
@@ -308,6 +306,10 @@ impl TcpListener {
                             std::io::Error::other("Failed to send TCP stream event")
                         })?;
                     tcp_stream_waker.wake();
+                } else {
+                    // Non-SYN packet: the connection has progressed past the
+                    // handshake, so remove the tracker entry to free the slot.
+                    syn_tracker.remove(&(src_addr, dst_addr));
                 }
 
                 device_injector.send(frame).map_err(|e| {
