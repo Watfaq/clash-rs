@@ -133,7 +133,9 @@ impl tokio::io::AsyncWrite for TcpStream {
                 .send(IfaceEvent::TcpSocketReady)
                 .expect("Failed to notify TCP socket ready");
 
-            if self.handle.write_closed.load(Ordering::Acquire) {
+            if self.handle.write_closed.load(Ordering::Acquire)
+                || self.handle.write_shutdown.load(Ordering::Acquire)
+            {
                 return Poll::Ready(Err(Error::new(
                     ErrorKind::BrokenPipe,
                     "TCP stream write half closed",
@@ -170,9 +172,6 @@ impl tokio::io::AsyncWrite for TcpStream {
         trace!("TcpStream::poll_shutdown called, client side closing");
         self.handle.write_shutdown.store(true, Ordering::Release);
         self.handle.send_waker.wake();
-        self.stack_notifier
-            .send(IfaceEvent::TcpSocketReady)
-            .expect("Failed to notify TCP socket ready");
         Poll::Ready(Ok(()))
     }
 }
@@ -221,13 +220,15 @@ mod tests {
 
     #[test]
     fn poll_shutdown_marks_write_shutdown() {
-        let (mut stream, _rx) = build_stream();
+        let (mut stream, mut rx) = build_stream();
         let mut cx = noop_cx();
 
         let result = Pin::new(&mut stream).poll_shutdown(&mut cx);
 
         assert!(matches!(result, Poll::Ready(Ok(()))));
         assert!(stream.handle.write_shutdown.load(Ordering::Acquire));
+        assert!(matches!(rx.try_recv(), Ok(IfaceEvent::TcpSocketReady)));
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]
