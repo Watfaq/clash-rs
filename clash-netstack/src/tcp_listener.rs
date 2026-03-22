@@ -3,7 +3,7 @@ use crate::{
     ring_buffer::LockFreeRingBuffer, stack::IfaceEvent, tcp_stream::TcpStream,
 };
 use futures::task::AtomicWaker;
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use smoltcp::{
     iface::Interface,
     socket::tcp,
@@ -19,6 +19,12 @@ use tokio::sync::mpsc;
 
 const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
 const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
+
+/// Time-to-live for SYN tracker entries. Kept short so that legitimate
+/// connections reusing the same tuple are not misclassified as retransmissions.
+const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+/// Maximum number of concurrent half-open SYN entries tracked.
+const SYN_TRACK_MAX: usize = 10_000;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -145,12 +151,9 @@ impl TcpListener {
             && n > 0
         {
             let now = std::time::Instant::now();
-            if now.duration_since(last_prune_time)
-                > std::time::Duration::from_secs(60)
-            {
-                syn_tracker.retain(|_, time| {
-                    now.duration_since(*time) < std::time::Duration::from_secs(60)
-                });
+            if now.duration_since(last_prune_time) > SYN_TRACK_TTL {
+                syn_tracker
+                    .retain(|_, time| now.duration_since(*time) < SYN_TRACK_TTL);
                 last_prune_time = now;
             }
 
@@ -208,25 +211,27 @@ impl TcpListener {
                     let conn_tuple = (src_addr, dst_addr);
 
                     if let Some(time) = syn_tracker.get(&conn_tuple) {
-                        if now.duration_since(*time)
-                            < std::time::Duration::from_secs(60)
-                        {
-                            if let Err(e) = device_injector.send(frame) {
-                                warn!(
-                                    "Failed to inject retransmitted SYN packet: {e}"
-                                );
-                            }
+                        if now.duration_since(*time) < SYN_TRACK_TTL {
+                            device_injector
+                                .send(frame)
+                                .map_err(|e| {
+                                    error!(
+                                        "Failed to inject retransmitted SYN packet: {e}"
+                                    );
+                                    std::io::Error::other(
+                                        "Failed to inject retransmitted SYN packet",
+                                    )
+                                })?;
                             continue;
                         }
                     }
 
-                    if syn_tracker.len() >= 10000 {
-                        warn!(
+                    if syn_tracker.len() >= SYN_TRACK_MAX {
+                        debug!(
                             "SYN flood protection: dropping SYN packet from {src_addr}"
                         );
                         continue;
                     }
-                    syn_tracker.insert(conn_tuple, now);
 
                     let mut socket = tcp::Socket::new(
                         tcp::SocketBuffer::new(vec![
@@ -256,6 +261,10 @@ impl TcpListener {
                         error!("listen error: {err:?}");
                         continue;
                     }
+
+                    // Track after listen() succeeds so a failed listen
+                    // doesn't block future SYNs for the same tuple.
+                    syn_tracker.insert(conn_tuple, now);
 
                     trace!("created TCP connection for {src_addr} <-> {dst_addr}");
 
