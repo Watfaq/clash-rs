@@ -109,28 +109,28 @@ pub async fn download_dashboard<P: AsRef<Path>>(
 
     if let Err(e) = fs::rename(&extract_tmp, dir) {
         // Rollback: restore the previous dashboard from backup.
-        if let Some(ref backup_dir) = backup {
-            if let Err(restore_err) = fs::rename(backup_dir, dir) {
-                warn!(
-                    "failed to restore dashboard from backup {}: {}",
-                    backup_dir.display(),
-                    restore_err
-                );
-            }
+        if let Some(ref backup_dir) = backup
+            && let Err(restore_err) = fs::rename(backup_dir, dir)
+        {
+            warn!(
+                "failed to restore dashboard from backup {}: {}",
+                backup_dir.display(),
+                restore_err
+            );
         }
         let _ = fs::remove_dir_all(&extract_tmp);
         return Err(e.into());
     }
 
     // New dashboard is in place; remove the backup.
-    if let Some(backup_dir) = backup {
-        if let Err(e) = fs::remove_dir_all(&backup_dir) {
-            warn!(
-                "failed to remove dashboard backup {}: {}",
-                backup_dir.display(),
-                e
-            );
-        }
+    if let Some(backup_dir) = backup
+        && let Err(e) = fs::remove_dir_all(&backup_dir)
+    {
+        warn!(
+            "failed to remove dashboard backup {}: {}",
+            backup_dir.display(),
+            e
+        );
     }
 
     info!("dashboard extracted to {}", dir.display());
