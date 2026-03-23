@@ -77,50 +77,74 @@ where
 }
 
 #[cfg(windows)]
-fn create_pipe_security_attributes()
--> crate::Result<windows::Win32::Security::SECURITY_ATTRIBUTES> {
-    use windows::{
-        Win32::Security::{
-            Authorization::{
-                ConvertStringSecurityDescriptorToSecurityDescriptorA,
-                SDDL_REVISION_1,
+struct SecurityAttributesGuard {
+    sa: windows::Win32::Security::SECURITY_ATTRIBUTES,
+}
+
+#[cfg(windows)]
+impl SecurityAttributesGuard {
+    fn new() -> crate::Result<Self> {
+        use windows::{
+            Win32::Security::{
+                Authorization::{
+                    ConvertStringSecurityDescriptorToSecurityDescriptorA,
+                    SDDL_REVISION_1,
+                },
+                PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
             },
-            PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
-        },
-        core::PSTR,
-    };
-
-    // SDDL string for:
-    // - Allow Read/Write for BUILTIN\Users
-    // - Allow Read/Write for NT AUTHORITY\SYSTEM
-    // D: = DACL
-    // (A;;GRGW;;;BU) = Allow Generic Read/Generic Write for Built-in Users
-    // (A;;GRGW;;;SY) = Allow Generic Read/Generic Write for System
-    let sddl = b"D:(A;;GRGW;;;BU)(A;;GRGW;;;SY)\0";
-
-    unsafe {
-        let mut sd = PSECURITY_DESCRIPTOR::default();
-        let mut sd_size = 0u32;
-
-        ConvertStringSecurityDescriptorToSecurityDescriptorA(
-            PSTR::from_raw(sddl.as_ptr() as *mut u8),
-            SDDL_REVISION_1,
-            &mut sd,
-            Some(&mut sd_size),
-        )
-        .map_err(|e| {
-            crate::Error::Operation(format!(
-                "Failed to convert SDDL to security descriptor: {e:?}"
-            ))
-        })?;
-
-        let sa = SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: sd.0,
-            bInheritHandle: windows::Win32::Foundation::FALSE,
+            core::PSTR,
         };
 
-        Ok(sa)
+        // SDDL string for:
+        // - Allow Read/Write for BUILTIN\Users
+        // - Allow Read/Write for NT AUTHORITY\SYSTEM
+        // D: = DACL
+        // (A;;GRGW;;;BU) = Allow Generic Read/Generic Write for Built-in Users
+        // (A;;GRGW;;;SY) = Allow Generic Read/Generic Write for System
+        let sddl = b"D:(A;;GRGW;;;BU)(A;;GRGW;;;SY)\0";
+
+        unsafe {
+            let mut sd = PSECURITY_DESCRIPTOR::default();
+            let mut sd_size = 0u32;
+
+            ConvertStringSecurityDescriptorToSecurityDescriptorA(
+                PSTR::from_raw(sddl.as_ptr() as *mut u8),
+                SDDL_REVISION_1,
+                &mut sd,
+                Some(&mut sd_size),
+            )
+            .map_err(|e| {
+                crate::Error::Operation(format!(
+                    "Failed to convert SDDL to security descriptor: {e:?}"
+                ))
+            })?;
+
+            let sa = SECURITY_ATTRIBUTES {
+                nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+                lpSecurityDescriptor: sd.0,
+                bInheritHandle: windows::Win32::Foundation::FALSE,
+            };
+
+            Ok(Self { sa })
+        }
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+        &mut self.sa as *mut _ as *mut std::ffi::c_void
+    }
+}
+
+#[cfg(windows)]
+impl Drop for SecurityAttributesGuard {
+    fn drop(&mut self) {
+        use windows::Win32::System::Memory::LocalFree;
+        unsafe {
+            // Free the security descriptor allocated by
+            // ConvertStringSecurityDescriptorToSecurityDescriptorA
+            let _ = LocalFree(Some(windows::Win32::Foundation::HLOCAL(
+                self.sa.lpSecurityDescriptor,
+            )));
+        }
     }
 }
 
@@ -131,7 +155,7 @@ fn create_named_pipe_with_security(
 ) -> crate::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
     use tokio::net::windows::named_pipe;
 
-    let mut sa = create_pipe_security_attributes()?;
+    let mut guard = SecurityAttributesGuard::new()?;
 
     unsafe {
         let mut options = named_pipe::ServerOptions::new();
@@ -141,16 +165,13 @@ fn create_named_pipe_with_security(
             options.first_pipe_instance(true);
         }
 
-        options
-            .create_with_security_attributes_raw(
-                path,
-                &mut sa as *mut _ as *mut std::ffi::c_void,
-            )
-            .map_err(|e| crate::Error::Operation(format!("Cannot create pipe {e}")))
-        // options
-        //     .create(path)
-        //     .map_err(|e| crate::Error::Operation(format!("Cannot create pipe
-        // {e}")))
+        let result = options
+            .create_with_security_attributes_raw(path, guard.as_mut_ptr())
+            .map_err(|e| crate::Error::Operation(format!("Cannot create pipe {e}")));
+
+        // SecurityAttributesGuard::drop will automatically free the security
+        // descriptor here
+        result
     }
 }
 #[cfg(windows)]
