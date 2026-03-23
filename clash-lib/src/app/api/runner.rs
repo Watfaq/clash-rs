@@ -145,7 +145,7 @@ impl Runner for ApiRunner {
                 .route("/version", get(handlers::version::handle))
                 .route("/memory", get(handlers::memory::handle))
                 .route("/restart", post(handlers::restart::handle))
-                .merge(websocket::routes(app_state.clone()))
+                .nest("/ws", websocket::routes(app_state.clone()))
                 .nest(
                     "/configs",
                     handlers::config::routes(
