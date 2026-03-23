@@ -65,8 +65,13 @@ async fn get_connections(
 
         loop {
             let snapshot = mgr.snapshot().await;
-            let j = serde_json::to_vec(&snapshot).unwrap();
-            let body = String::from_utf8(j).unwrap();
+            let body = match serde_json::to_string(&snapshot) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to serialize connection snapshot: {}", e);
+                    continue;
+                }
+            };
 
             if let Err(e) = socket.send(Message::Text(body.into())).await {
                 // likely client gone
