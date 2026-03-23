@@ -66,10 +66,7 @@ pub async fn serve_ipc(router: Router, path: &str) -> crate::Result<()> {
 }
 
 #[cfg(all(not(unix), not(windows)))]
-pub async fn serve_ipc<S>(service: S, path: &str) -> crate::Result<()>
-where
-    S: Clone + Send + 'static,
-{
+pub async fn serve_ipc(_router: Router, _path: &str) -> crate::Result<()> {
     error!("IPC only get supported on Unix and Windows");
     Err(crate::Error::Operation(
         "IPC only get supported on Unix and Windows".to_string(),
