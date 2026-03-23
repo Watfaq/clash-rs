@@ -134,7 +134,7 @@ impl SecurityAttributesGuard {
 #[cfg(windows)]
 impl Drop for SecurityAttributesGuard {
     fn drop(&mut self) {
-        use windows::Win32::System::Memory::LocalFree;
+        use windows::Win32::Foundation::LocalFree;
         unsafe {
             // Free the security descriptor allocated by
             // ConvertStringSecurityDescriptorToSecurityDescriptorA
