@@ -20,7 +20,6 @@ use crate::app::api::{
     },
 };
 
-#[allow(dead_code)]
 pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/connections", get(connections))
@@ -30,7 +29,6 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .with_state(state)
 }
 
-#[allow(dead_code)]
 pub async fn connections(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -66,7 +64,6 @@ pub async fn connections(
     })
 }
 
-#[allow(dead_code)]
 pub async fn traffic(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -97,7 +94,6 @@ pub async fn traffic(
     })
 }
 
-#[allow(dead_code)]
 pub async fn memory(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
@@ -136,7 +132,6 @@ pub async fn memory(
     })
 }
 
-#[allow(dead_code)]
 pub async fn log(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,

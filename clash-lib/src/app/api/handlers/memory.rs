@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use crate::app::api::AppState;
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct GetMemoryQuery {
     pub interval: Option<u64>,
 }
