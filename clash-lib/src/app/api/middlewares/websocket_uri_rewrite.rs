@@ -10,7 +10,7 @@ use crate::app::api::handlers::utils::is_request_websocket;
 /// to ensure it runs before routing.
 pub(crate) fn rewrite_websocket_uri(mut req: Request) -> Request {
     // Check if this is a WebSocket upgrade request
-    if is_request_websocket(req.headers().clone()) {
+    if is_request_websocket(req.headers()) {
         let original_uri = req.uri().clone();
         let path = original_uri.path();
 

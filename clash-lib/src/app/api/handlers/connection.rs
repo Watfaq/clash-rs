@@ -41,7 +41,7 @@ async fn get_connections(
     q: Query<GetConnectionsQuery>,
     req: Request<Body>,
 ) -> impl IntoResponse {
-    if !is_request_websocket(headers) {
+    if !is_request_websocket(&headers) {
         let mgr = state.statistics_manager.clone();
         let snapshot = mgr.snapshot().await;
         return Json(snapshot).into_response();
