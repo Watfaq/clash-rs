@@ -22,8 +22,11 @@ pub(crate) fn rewrite_websocket_uri(mut req: Request) -> Request {
         let original_uri = req.uri().clone();
         let path = original_uri.path();
 
-        // Only rewrite if the path doesn't already start with /ws
-        if !path.starts_with("/ws") {
+        // Only rewrite if the path doesn't already have /ws prefix
+        // Check for exact "/ws" or starts with "/ws/" to avoid matching
+        // "/wssomething"
+        let has_ws_prefix = path == "/ws" || path.starts_with("/ws/");
+        if !has_ws_prefix {
             // Construct new path with /ws prefix, removing trailing slash from
             // original path
             let trimmed_path = path.trim_end_matches('/');
@@ -213,6 +216,30 @@ mod tests {
         let uri = String::from_utf8(body.to_vec()).unwrap();
 
         assert_eq!(uri, "/ws");
+    }
+
+    #[tokio::test]
+    async fn test_wssomething_path_gets_rewritten() {
+        // Paths like /wssomething should be rewritten to /ws/wssomething
+        // not treated as already having /ws prefix
+        let router = Router::new().route("/ws/wssomething", get(test_handler));
+        let app = MapRequestLayer::new(rewrite_websocket_uri).layer(router);
+
+        let request = Request::builder()
+            .uri("/wssomething")
+            .header("upgrade", "websocket")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let uri = String::from_utf8(body.to_vec()).unwrap();
+
+        assert_eq!(uri, "/ws/wssomething");
     }
 
     #[tokio::test]
