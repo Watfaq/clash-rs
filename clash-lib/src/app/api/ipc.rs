@@ -259,6 +259,7 @@ mod tests {
         )
     }
 
+    #[cfg(windows)]
     fn test_router_with_websocket() -> Router {
         use axum::{
             extract::ws::{WebSocket, WebSocketUpgrade},
