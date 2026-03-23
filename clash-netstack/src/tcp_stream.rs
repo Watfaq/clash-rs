@@ -175,9 +175,6 @@ impl tokio::io::AsyncWrite for TcpStream {
         ready!(self.as_mut().poll_flush(cx))?;
         trace!("TcpStream::poll_shutdown called, client side closing");
         self.handle.write_shutdown.store(true, Ordering::Release);
-        self.stack_notifier
-            .send(IfaceEvent::TcpSocketReady)
-            .expect("Failed to notify TCP socket ready");
         self.handle.send_waker.wake();
         Poll::Ready(Ok(()))
     }
