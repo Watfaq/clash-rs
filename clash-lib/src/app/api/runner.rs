@@ -22,7 +22,7 @@ use crate::{
     app::{
         api::{
             AppState, handlers, ipc, middlewares,
-            middlewares::websocket_uri_rewrite::rewrite_websocket_uri,
+            middlewares::websocket_uri_rewrite::rewrite_websocket_uri, websocket,
         },
         dispatcher::{self, StatisticsManager},
         dns::{ThreadSafeDNSResolver, config::DNSListenAddr},
@@ -145,6 +145,7 @@ impl Runner for ApiRunner {
                 .route("/version", get(handlers::version::handle))
                 .route("/memory", get(handlers::memory::handle))
                 .route("/restart", post(handlers::restart::handle))
+                .merge(websocket::routes(app_state.clone()))
                 .nest(
                     "/configs",
                     handlers::config::routes(
