@@ -232,6 +232,7 @@ impl TcpListener {
                         continue;
                     }
 
+                    // TODO: get rid of this stupid log
                     if syn_tracker.len() >= SYN_TRACK_MAX {
                         syn_drop_count += 1;
                         if syn_drop_count == 1
