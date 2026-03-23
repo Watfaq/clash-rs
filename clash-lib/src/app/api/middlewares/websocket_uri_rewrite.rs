@@ -1,7 +1,6 @@
-use axum::{
-    extract::Request,
-    http::{Uri, header},
-};
+use axum::{extract::Request, http::Uri};
+
+use crate::app::api::handlers::utils::is_request_websocket;
 
 /// Rewrite WebSocket request URIs by adding /ws prefix to the path
 ///
@@ -11,14 +10,7 @@ use axum::{
 /// to ensure it runs before routing.
 pub(crate) fn rewrite_websocket_uri(mut req: Request) -> Request {
     // Check if this is a WebSocket upgrade request
-    let is_websocket = req
-        .headers()
-        .get(header::UPGRADE)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-
-    if is_websocket {
+    if is_request_websocket(req.headers().clone()) {
         let original_uri = req.uri().clone();
         let path = original_uri.path();
 
@@ -117,6 +109,7 @@ mod tests {
         let request = Request::builder()
             .uri("/api/messages?token=abc123&limit=10")
             .header("upgrade", "websocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
@@ -160,6 +153,7 @@ mod tests {
         let request = Request::builder()
             .uri("/ws/api/messages")
             .header("upgrade", "websocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
@@ -182,6 +176,7 @@ mod tests {
         let request = Request::builder()
             .uri("/api/messages/")
             .header("upgrade", "websocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
@@ -204,6 +199,7 @@ mod tests {
         let request = Request::builder()
             .uri("/")
             .header("upgrade", "websocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
@@ -228,6 +224,7 @@ mod tests {
         let request = Request::builder()
             .uri("/wssomething")
             .header("upgrade", "websocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
@@ -250,6 +247,7 @@ mod tests {
         let request = Request::builder()
             .uri("/api/chat")
             .header("upgrade", "WebSocket")
+            .header("connection", "upgrade")
             .body(Body::empty())
             .unwrap();
 
