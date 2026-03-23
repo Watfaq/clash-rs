@@ -188,8 +188,10 @@ mod tests {
     use super::*;
     use crate::tcp_listener::TcpStreamHandle;
     use futures::task::noop_waker_ref;
-    use tokio::io::{AsyncRead, AsyncWrite};
-    use tokio::sync::mpsc;
+    use tokio::{
+        io::{AsyncRead, AsyncWrite},
+        sync::mpsc,
+    };
 
     fn build_stream() -> (TcpStream, mpsc::UnboundedReceiver<IfaceEvent<'static>>) {
         let (tx, rx) = mpsc::unbounded_channel();
