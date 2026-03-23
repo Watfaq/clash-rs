@@ -3,7 +3,7 @@ use crate::{
     ring_buffer::LockFreeRingBuffer, stack::IfaceEvent, tcp_stream::TcpStream,
 };
 use futures::task::AtomicWaker;
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use smoltcp::{
     iface::Interface,
     socket::tcp,
@@ -17,8 +17,20 @@ use std::{
 };
 use tokio::sync::mpsc;
 
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 512 KB
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
+
+/// Time-to-live for SYN tracker entries. Long enough to cover typical TCP SYN
+/// retransmission windows so duplicates within ~60s are suppressed, while still
+/// bounding memory use for stale half-open connections.
+const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Maximum number of concurrent half-open SYN entries tracked.
+/// Caps the SYN tracker to prevent OOM under SYN flood attacks.
+/// Each entry is a (SocketAddr, SocketAddr) -> Instant mapping (~100 bytes),
+/// so 10 000 entries ≈ 1 MiB — negligible compared to the per-connection
+/// socket buffers that are only allocated once the SYN is accepted.
+const SYN_TRACK_MAX: usize = 10_000;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -137,9 +149,22 @@ impl TcpListener {
         tcp_stream_waker: Arc<AtomicWaker>,
     ) -> std::io::Result<()> {
         let mut packet_buf = Vec::with_capacity(32);
+        let mut syn_tracker: HashMap<(SocketAddr, SocketAddr), std::time::Instant> =
+            HashMap::new();
+        let mut last_prune_time = std::time::Instant::now();
+        let mut syn_drop_count: u64 = 0;
+        let mut last_syn_drop_log = std::time::Instant::now();
+
         while let n = inbound.recv_many(&mut packet_buf, 32).await
             && n > 0
         {
+            let now = std::time::Instant::now();
+            if now.duration_since(last_prune_time) > SYN_TRACK_TTL {
+                syn_tracker
+                    .retain(|_, time| now.duration_since(*time) < SYN_TRACK_TTL);
+                last_prune_time = now;
+            }
+
             trace!("Received {n} packets from inbound channel");
             for frame in packet_buf.drain(..) {
                 let packet = match IpPacket::new_checked(frame.data()) {
@@ -190,6 +215,39 @@ impl TcpListener {
                 let dst_addr = SocketAddr::new(dst_ip, dst_port);
 
                 if packet.syn() && !packet.ack() {
+                    let conn_tuple = (src_addr, dst_addr);
+
+                    if let Some(time) = syn_tracker.get_mut(&conn_tuple)
+                        && now.duration_since(*time) < SYN_TRACK_TTL
+                    {
+                        // Refresh timestamp so the entry doesn't expire
+                        // while the connection is still retransmitting SYNs.
+                        *time = now;
+                        device_injector.send(frame).map_err(|e| {
+                            error!("Failed to inject retransmitted SYN packet: {e}");
+                            std::io::Error::other(
+                                "Failed to inject retransmitted SYN packet",
+                            )
+                        })?;
+                        continue;
+                    }
+
+                    // TODO: get rid of this stupid log
+                    if syn_tracker.len() >= SYN_TRACK_MAX {
+                        syn_drop_count += 1;
+                        if syn_drop_count == 1
+                            || now.duration_since(last_syn_drop_log)
+                                >= Duration::from_secs(10)
+                        {
+                            debug!(
+                                "SYN flood protection: dropping SYN from \
+                                 {src_addr} ({syn_drop_count} total dropped)"
+                            );
+                            last_syn_drop_log = now;
+                        }
+                        continue;
+                    }
+
                     let mut socket = tcp::Socket::new(
                         tcp::SocketBuffer::new(vec![
                             0u8;
@@ -219,6 +277,10 @@ impl TcpListener {
                         continue;
                     }
 
+                    // Track after listen() succeeds so a failed listen
+                    // doesn't block future SYNs for the same tuple.
+                    syn_tracker.insert(conn_tuple, now);
+
                     trace!("created TCP connection for {src_addr} <-> {dst_addr}");
 
                     let handle = Arc::new(TcpStreamHandle::new());
@@ -242,6 +304,10 @@ impl TcpListener {
                             std::io::Error::other("Failed to send TCP stream event")
                         })?;
                     tcp_stream_waker.wake();
+                } else {
+                    // Non-SYN packet: the connection has progressed past the
+                    // handshake, so remove the tracker entry to free the slot.
+                    syn_tracker.remove(&(src_addr, dst_addr));
                 }
 
                 device_injector.send(frame).map_err(|e| {
