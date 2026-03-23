@@ -80,7 +80,7 @@ async fn get_connections(
             }
 
             tokio::time::sleep(tokio::time::Duration::from_secs(
-                interval.unwrap_or(1),
+                interval.unwrap_or(1).max(1),
             ))
             .await;
         }
