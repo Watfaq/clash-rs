@@ -162,6 +162,7 @@ fn create_named_pipe_with_security(
             options.first_pipe_instance(true);
         }
 
+        #[allow(clippy::let_and_return)]
         let result = options
             .create_with_security_attributes_raw(path, guard.as_mut_ptr())
             .map_err(|e| crate::Error::Operation(format!("Cannot create pipe {e}")));
@@ -201,7 +202,7 @@ impl axum::serve::Listener for NamedPipeListener {
                         .saturating_mul(retry_count)
                         .min(Duration::from_secs(30));
 
-                    if retry_count % 10 == 0 {
+                    if retry_count.is_multiple_of(10) {
                         error!(
                             "Failed to create named pipe after {} attempts: {}. \
                              Continuing to retry...",
