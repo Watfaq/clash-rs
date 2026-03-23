@@ -68,3 +68,70 @@ iperf Done.
 ```
 
 There should be room for the performance improve.
+
+---
+
+## Automated CI Benchmarking
+
+### Overview
+
+The project includes automated TUN throughput benchmarking that runs on every PR affecting TUN-related code. The benchmark results are automatically posted as comments on the PR.
+
+### How It Works
+
+1. **Trigger**: The benchmark workflow runs when PRs modify:
+   - `clash-lib/src/proxy/tun/**`
+   - `clash-netstack/**`
+   - `bench/**`
+   - `.github/workflows/benchmark.yml`
+
+2. **Execution**:
+   - Builds the PR code in release mode
+   - Runs iperf3 throughput tests through the TUN device
+   - Checks out master branch and runs the same benchmark
+   - Compares results and posts a comment on the PR
+
+3. **Results**: The workflow posts a comment showing:
+   - Current PR throughput performance
+   - Comparison with master branch baseline
+   - Regression/improvement percentage
+   - Warning if regression exceeds 10%
+
+### Running Benchmarks Locally
+
+```bash
+# Build clash-rs
+cargo build --release --bin clash-rs --all-features
+
+# Run the benchmark
+python3 bench/run_tun_benchmark.py \
+  --config bench/tun-benchmark.yaml \
+  --duration 10 \
+  --output results.json
+
+# Compare with baseline (optional)
+python3 bench/compare_results.py \
+  --current results.json \
+  --baseline baseline.json \
+  --output comment.md
+```
+
+### Configuration
+
+- **Benchmark config**: `bench/tun-benchmark.yaml` - Minimal TUN config for CI
+- **Test duration**: Default 10 seconds (configurable via `--duration`)
+- **Regression threshold**: 10% decrease triggers a warning
+- **Server**: Uses localhost iperf3 server
+
+### Requirements
+
+- iperf3 (`apt-get install iperf3`)
+- iproute2 (`apt-get install iproute2`)
+- Python 3.x
+- Root/sudo access for TUN device creation (on Linux)
+
+### Files
+
+- `run_tun_benchmark.py` - Main benchmark script
+- `compare_results.py` - Results comparison and comment generation
+- `tun-benchmark.yaml` - CI benchmark configuration

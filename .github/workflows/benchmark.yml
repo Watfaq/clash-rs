@@ -1,0 +1,281 @@
+name: TUN Throughput Benchmark
+
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - 'clash-lib/src/proxy/tun/**'
+      - 'clash-netstack/**'
+      - 'bench/**'
+      - '.github/workflows/benchmark.yml'
+  issue_comment:
+    types: [created]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+  pull-requests: write  # Required to post comments
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.issue.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_TOOLCHAIN: "stable"
+  BENCH_DURATION: "10"  # Duration in seconds for each benchmark run
+
+jobs:
+  # Check if benchmark should run (for comment triggers)
+  check-trigger:
+    name: Check Trigger
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'issue_comment' || 
+      (github.event.issue.pull_request && 
+       (contains(github.event.comment.body, '/benchmark') || 
+        contains(github.event.comment.body, '/run-benchmark')))
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      pr_number: ${{ steps.check.outputs.pr_number }}
+      pr_sha: ${{ steps.check.outputs.pr_sha }}
+    steps:
+      - name: Check conditions
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let shouldRun = 'true';
+            let prNumber = '';
+            let prSha = '';
+            
+            if (context.eventName === 'issue_comment') {
+              // For comment triggers, verify it's on a PR
+              if (!context.payload.issue.pull_request) {
+                shouldRun = 'false';
+                core.setOutput('should_run', shouldRun);
+                return;
+              }
+              
+              // Get PR details
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              
+              prNumber = context.issue.number.toString();
+              prSha = pr.head.sha;
+              
+              // React to the comment
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: 'rocket'
+              });
+              
+              console.log(`Benchmark triggered by comment on PR #${prNumber}`);
+            } else if (context.eventName === 'pull_request') {
+              prNumber = context.payload.pull_request.number.toString();
+              prSha = context.payload.pull_request.head.sha;
+            }
+            
+            core.setOutput('should_run', shouldRun);
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('pr_sha', prSha);
+
+  benchmark:
+    name: TUN Throughput Benchmark
+    runs-on: ubuntu-latest
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_run == 'true'
+    
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comparison
+          ref: ${{ needs.check-trigger.outputs.pr_sha || github.event.pull_request.head.sha }}
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: benchmark-${{ runner.os }}
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iperf3 iproute2 cmake libclang-dev
+      
+      - name: Build clash-rs (release mode)
+        run: |
+          cargo build --release --bin clash-rs --all-features
+          echo "CLASH_BINARY=$PWD/target/release/clash-rs" >> $GITHUB_ENV
+      
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+      
+      - name: Run benchmark on PR code
+        id: pr_benchmark
+        run: |
+          chmod +x bench/run_tun_benchmark.py
+          python3 bench/run_tun_benchmark.py \
+            --config clash-bin/tests/data/config/tun.yaml \
+            --duration ${{ env.BENCH_DURATION }} \
+            --output benchmark-pr.json \
+            --skip-baseline
+        continue-on-error: true
+      
+      - name: Upload PR benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-pr-results
+          path: benchmark-pr.json
+          retention-days: 30
+      
+      # Checkout and benchmark baseline (master branch)
+      - name: Fetch baseline results from master
+        id: fetch_baseline
+        run: |
+          # Try to download latest baseline from artifacts
+          # This will be empty on first run, which is okay
+          echo "baseline_exists=false" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Checkout master branch
+        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        run: |
+          git fetch origin master:master
+          git checkout master
+      
+      - name: Build baseline (master)
+        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        run: |
+          cargo clean
+          cargo build --release --bin clash-rs --all-features
+        continue-on-error: true
+      
+      - name: Run benchmark on master
+        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        id: master_benchmark
+        run: |
+          python3 bench/run_tun_benchmark.py \
+            --config clash-bin/tests/data/config/tun.yaml \
+            --duration ${{ env.BENCH_DURATION }} \
+            --output benchmark-master.json \
+            --skip-baseline
+        continue-on-error: true
+      
+      - name: Upload master benchmark results
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        with:
+          name: benchmark-master-results
+          path: benchmark-master.json
+          retention-days: 90
+      
+      - name: Checkout PR branch again
+        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        run: |
+          git checkout ${{ needs.check-trigger.outputs.pr_sha || github.event.pull_request.head.sha }}
+      
+      - name: Compare results and generate comment
+        id: compare
+        run: |
+          chmod +x bench/compare_results.py
+          
+          # Determine baseline argument
+          BASELINE_ARG=""
+          if [ -f "benchmark-master.json" ]; then
+            BASELINE_ARG="--baseline benchmark-master.json"
+          fi
+          
+          python3 bench/compare_results.py \
+            --current benchmark-pr.json \
+            $BASELINE_ARG \
+            --output benchmark-comment.md \
+            --fail-on-regression 10
+        continue-on-error: true
+      
+      - name: Read comment file
+        id: read_comment
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f benchmark-comment.md ]; then
+            {
+              echo 'COMMENT<<EOF'
+              cat benchmark-comment.md
+              echo EOF
+            } >> $GITHUB_OUTPUT
+          else
+            echo "COMMENT=⚠️ Benchmark comparison failed - check workflow logs for details." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comment = process.env.COMMENT;
+            
+            // Find existing benchmark comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && 
+              c.body.includes('TUN Throughput Benchmark Results')
+            );
+            
+            const commentBody = comment;
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+              console.log('Updated existing benchmark comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+              console.log('Created new benchmark comment');
+            }
+        env:
+          COMMENT: ${{ steps.read_comment.outputs.COMMENT }}
+      
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-artifacts
+          path: |
+            benchmark-*.json
+            benchmark-comment.md
+            /tmp/clash-rs-bench.log
+          retention-days: 30
+      
+      - name: Check for significant regression
+        if: steps.compare.outcome == 'failure'
+        run: |
+          echo "::warning::Significant performance regression detected (>10%)"
+          echo "Review the benchmark results in the PR comment"
+          exit 1
