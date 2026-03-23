@@ -190,39 +190,53 @@ impl axum::serve::Listener for NamedPipeListener {
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
         use tokio::time::{Duration, sleep};
-        use tracing::{info, warn};
+        use tracing::{error, info, warn};
 
-        let max_retries = 5;
-        let mut retry_count = 0;
+        let mut retry_count = 0u32;
 
         let server = loop {
             match create_named_pipe_with_security(&self.path, self.first_instance) {
                 Ok(server) => break server,
                 Err(e) => {
                     retry_count += 1;
-                    if retry_count >= max_retries {
-                        panic!(
-                            "Failed to create named pipe after {} retries: {}",
-                            max_retries, e
+                    // Use exponential backoff capped at 30 seconds
+                    let delay = Duration::from_millis(200)
+                        .saturating_mul(retry_count)
+                        .min(Duration::from_secs(30));
+
+                    if retry_count % 10 == 0 {
+                        error!(
+                            "Failed to create named pipe after {} attempts: {}. \
+                             Continuing to retry...",
+                            retry_count, e
+                        );
+                    } else {
+                        warn!(
+                            "Failed to create named pipe (attempt {}): {}. \
+                             Retrying in {:?}...",
+                            retry_count, e, delay
                         );
                     }
-                    warn!(
-                        "Failed to create named pipe (attempt {}/{}): {}. \
-                         Retrying...",
-                        retry_count, max_retries, e
-                    );
-                    sleep(Duration::from_millis(200 * retry_count as u64)).await;
+                    sleep(delay).await;
                 }
             }
         };
 
         self.first_instance = false;
-        server
-            .connect()
-            .await
-            .expect("Failed to connect named pipe");
-        info!("Client connected to NamedPipe {}", self.path);
-        (server, ())
+
+        // Wait for client connection with indefinite retry
+        loop {
+            match server.connect().await {
+                Ok(()) => {
+                    info!("Client connected to NamedPipe {}", self.path);
+                    return (server, ());
+                }
+                Err(e) => {
+                    warn!("Failed to connect named pipe: {}. Retrying...", e);
+                    sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
     }
 
     fn local_addr(&self) -> tokio::io::Result<Self::Addr> {
