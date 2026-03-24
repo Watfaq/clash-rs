@@ -31,8 +31,8 @@ pub fn routes(statistics_manager: Arc<StatisticsManager>) -> Router<Arc<AppState
 }
 
 #[derive(Deserialize)]
-struct GetConnectionsQuery {
-    interval: Option<u64>,
+pub struct GetConnectionsQuery {
+    pub interval: Option<u64>,
 }
 
 async fn get_connections(
@@ -41,7 +41,7 @@ async fn get_connections(
     q: Query<GetConnectionsQuery>,
     req: Request<Body>,
 ) -> impl IntoResponse {
-    if !is_request_websocket(headers) {
+    if !is_request_websocket(&headers) {
         let mgr = state.statistics_manager.clone();
         let snapshot = mgr.snapshot().await;
         return Json(snapshot).into_response();
@@ -65,8 +65,13 @@ async fn get_connections(
 
         loop {
             let snapshot = mgr.snapshot().await;
-            let j = serde_json::to_vec(&snapshot).unwrap();
-            let body = String::from_utf8(j).unwrap();
+            let body = match serde_json::to_string(&snapshot) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to serialize connection snapshot: {}", e);
+                    continue;
+                }
+            };
 
             if let Err(e) = socket.send(Message::Text(body.into())).await {
                 // likely client gone
@@ -75,7 +80,7 @@ async fn get_connections(
             }
 
             tokio::time::sleep(tokio::time::Duration::from_secs(
-                interval.unwrap_or(1),
+                interval.unwrap_or(1).max(1),
             ))
             .await;
         }

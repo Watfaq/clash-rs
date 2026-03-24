@@ -1,10 +1,11 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    Router, middleware,
+    Router, ServiceExt, middleware,
     response::Redirect,
     routing::{get, post},
 };
+use tower::{Layer, util::MapRequestLayer};
 
 use http::{Method, header};
 use tokio::sync::{Mutex, broadcast::Sender};
@@ -19,7 +20,10 @@ use tracing::{debug, error, info, warn};
 use crate::{
     GlobalState,
     app::{
-        api::{AppState, handlers, ipc, middlewares},
+        api::{
+            AppState, handlers, ipc, middlewares,
+            middlewares::websocket_uri_rewrite::rewrite_websocket_uri, websocket,
+        },
         dispatcher::{self, StatisticsManager},
         dns::{ThreadSafeDNSResolver, config::DNSListenAddr},
         inbound::manager::InboundManager,
@@ -141,6 +145,7 @@ impl Runner for ApiRunner {
                 .route("/version", get(handlers::version::handle))
                 .route("/memory", get(handlers::memory::handle))
                 .route("/restart", post(handlers::restart::handle))
+                .nest("/ws", websocket::routes(app_state.clone()))
                 .nest(
                     "/configs",
                     handlers::config::routes(
@@ -245,10 +250,11 @@ impl Runner for ApiRunner {
                             ));
                         }
                     }
+                    let app = MapRequestLayer::new(rewrite_websocket_uri)
+                        .layer(router_clone);
                     axum::serve(
                         listener,
-                        router_clone
-                            .into_make_service_with_connect_info::<SocketAddr>(),
+                        app.into_make_service_with_connect_info::<SocketAddr>(),
                     )
                     .await
                     .map_err(|x| {
