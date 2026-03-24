@@ -196,9 +196,9 @@ jobs:
               echo ""
               echo "### PR Benchmark"
               if [ -f benchmark-pr.json ]; then
-                echo "\`\`\`json"
+                echo '```json'
                 cat benchmark-pr.json
-                echo "\`\`\`"
+                echo '```'
               else
                 echo "❌ PR benchmark failed - check workflow logs"
               fi
