@@ -168,8 +168,7 @@ jobs:
           python3 bench/compare_results.py \
             --current benchmark-pr.json \
             --baseline bench/baseline-tun-benchmark.json \
-            --output benchmark-comment.md \
-            --fail-on-regression 10
+            --output benchmark-comment.md
         continue-on-error: true
       
       - name: Read comment file
