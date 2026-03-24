@@ -176,33 +176,32 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           if [ -f benchmark-comment.md ]; then
-            {
-              echo 'COMMENT<<__BENCHMARK_COMMENT_END__'
-              cat benchmark-comment.md
-              echo __BENCHMARK_COMMENT_END__
-            } >> $GITHUB_OUTPUT
+            # Use delimiter with newlines to ensure proper multiline handling
+            delimiter="$(openssl rand -hex 8)"
+            echo "COMMENT<<${delimiter}" >> $GITHUB_OUTPUT
+            cat benchmark-comment.md >> $GITHUB_OUTPUT
+            echo "${delimiter}" >> $GITHUB_OUTPUT
           elif [ "${{ steps.check_baseline.outputs.baseline_exists }}" == "false" ]; then
-            {
-              echo 'COMMENT<<__BENCHMARK_COMMENT_END__'
-              echo "## ⚠️ TUN Throughput Benchmark Results"
-              echo ""
-              echo "**No baseline file found** - comparison skipped."
-              echo ""
-              echo "To enable benchmark comparisons:"
-              echo "1. Run the benchmark script on the master branch"
-              echo "2. Commit the generated \`bench/baseline-tun-benchmark.json\` file"
-              echo "3. Future PRs will compare against this baseline"
-              echo ""
-              echo "### PR Benchmark"
-              if [ -f benchmark-pr.json ]; then
-                echo '```json'
-                cat benchmark-pr.json
-                echo '```'
-              else
-                echo "❌ PR benchmark failed - check workflow logs"
-              fi
-              echo __BENCHMARK_COMMENT_END__
-            } >> $GITHUB_OUTPUT
+            delimiter="$(openssl rand -hex 8)"
+            echo "COMMENT<<${delimiter}" >> $GITHUB_OUTPUT
+            echo "## ⚠️ TUN Throughput Benchmark Results" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "**No baseline file found** - comparison skipped." >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "To enable benchmark comparisons:" >> $GITHUB_OUTPUT
+            echo "1. Run the benchmark script on the master branch" >> $GITHUB_OUTPUT
+            echo "2. Commit the generated \`bench/baseline-tun-benchmark.json\` file" >> $GITHUB_OUTPUT
+            echo "3. Future PRs will compare against this baseline" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "### PR Benchmark" >> $GITHUB_OUTPUT
+            if [ -f benchmark-pr.json ]; then
+              echo '```json' >> $GITHUB_OUTPUT
+              cat benchmark-pr.json >> $GITHUB_OUTPUT
+              echo '```' >> $GITHUB_OUTPUT
+            else
+              echo "❌ PR benchmark failed - check workflow logs" >> $GITHUB_OUTPUT
+            fi
+            echo "${delimiter}" >> $GITHUB_OUTPUT
           else
             echo "COMMENT=⚠️ Benchmark comparison failed - check workflow logs for details." >> $GITHUB_OUTPUT
           fi
