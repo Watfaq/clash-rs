@@ -108,48 +108,39 @@ jobs:
             --output benchmark-comment.md
         continue-on-error: true
       
-      - name: Read comment file
-        id: read_comment
-        if: github.event_name == 'pull_request'
-        run: |
-          if [ -f benchmark-comment.md ]; then
-            # Use delimiter with newlines to ensure proper multiline handling
-            delimiter="$(openssl rand -hex 8)"
-            echo "COMMENT<<${delimiter}" >> $GITHUB_OUTPUT
-            cat benchmark-comment.md >> $GITHUB_OUTPUT
-            echo "${delimiter}" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.check_baseline.outputs.baseline_exists }}" == "false" ]; then
-            delimiter="$(openssl rand -hex 8)"
-            echo "COMMENT<<${delimiter}" >> $GITHUB_OUTPUT
-            echo "## ⚠️ TUN Throughput Benchmark Results" >> $GITHUB_OUTPUT
-            echo "" >> $GITHUB_OUTPUT
-            echo "**No baseline file found** - comparison skipped." >> $GITHUB_OUTPUT
-            echo "" >> $GITHUB_OUTPUT
-            echo "To enable benchmark comparisons:" >> $GITHUB_OUTPUT
-            echo "1. Run the benchmark script on the master branch" >> $GITHUB_OUTPUT
-            echo "2. Commit the generated \`bench/baseline-tun-benchmark.json\` file" >> $GITHUB_OUTPUT
-            echo "3. Future PRs will compare against this baseline" >> $GITHUB_OUTPUT
-            echo "" >> $GITHUB_OUTPUT
-            echo "### PR Benchmark" >> $GITHUB_OUTPUT
-            if [ -f benchmark-pr.json ]; then
-              echo '```json' >> $GITHUB_OUTPUT
-              cat benchmark-pr.json >> $GITHUB_OUTPUT
-              echo '```' >> $GITHUB_OUTPUT
-            else
-              echo "❌ PR benchmark failed - check workflow logs" >> $GITHUB_OUTPUT
-            fi
-            echo "${delimiter}" >> $GITHUB_OUTPUT
-          else
-            echo "COMMENT=⚠️ Benchmark comparison failed - check workflow logs for details." >> $GITHUB_OUTPUT
-          fi
-      
       - name: Post PR comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const comment = process.env.COMMENT;
+            const fs = require('fs');
+            
+            // Read comment from file or generate fallback
+            let commentBody;
+            if (fs.existsSync('benchmark-comment.md')) {
+              commentBody = fs.readFileSync('benchmark-comment.md', 'utf8');
+            } else if ('${{ steps.check_baseline.outputs.baseline_exists }}' === 'false') {
+              commentBody = `## ⚠️ TUN Throughput Benchmark Results
+
+**No baseline file found** - comparison skipped.
+
+To enable benchmark comparisons:
+1. Run the benchmark script on the master branch
+2. Commit the generated \`bench/baseline-tun-benchmark.json\` file
+3. Future PRs will compare against this baseline
+
+### PR Benchmark
+`;
+              if (fs.existsSync('benchmark-pr.json')) {
+                const prData = fs.readFileSync('benchmark-pr.json', 'utf8');
+                commentBody += '```json\n' + prData + '\n```\n';
+              } else {
+                commentBody += '❌ PR benchmark failed - check workflow logs\n';
+              }
+            } else {
+              commentBody = '⚠️ Benchmark comparison failed - check workflow logs for details.';
+            }
             
             // Find existing benchmark comment
             const { data: comments } = await github.rest.issues.listComments({
@@ -162,8 +153,6 @@ jobs:
               c.user.type === 'Bot' && 
               c.body.includes('TUN Throughput Benchmark Results')
             );
-            
-            const commentBody = comment;
             
             if (botComment) {
               // Update existing comment
@@ -184,8 +173,6 @@ jobs:
               });
               console.log('Created new benchmark comment');
             }
-        env:
-          COMMENT: ${{ steps.read_comment.outputs.COMMENT }}
       
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
