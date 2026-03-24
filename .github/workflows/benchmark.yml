@@ -121,17 +121,13 @@ jobs:
             if (fs.existsSync('benchmark-comment.md')) {
               commentBody = fs.readFileSync('benchmark-comment.md', 'utf8');
             } else if ('${{ steps.check_baseline.outputs.baseline_exists }}' === 'false') {
-              commentBody = `## ⚠️ TUN Throughput Benchmark Results
-
-**No baseline file found** - comparison skipped.
-
-To enable benchmark comparisons:
-1. Run the benchmark script on the master branch
-2. Commit the generated \`bench/baseline-tun-benchmark.json\` file
-3. Future PRs will compare against this baseline
-
-### PR Benchmark
-`;
+              commentBody = '## ⚠️ TUN Throughput Benchmark Results\n\n';
+              commentBody += '**No baseline file found** - comparison skipped.\n\n';
+              commentBody += 'To enable benchmark comparisons:\n';
+              commentBody += '1. Run the benchmark script on the master branch\n';
+              commentBody += '2. Commit the generated `bench/baseline-tun-benchmark.json` file\n';
+              commentBody += '3. Future PRs will compare against this baseline\n\n';
+              commentBody += '### PR Benchmark\n';
               if (fs.existsSync('benchmark-pr.json')) {
                 const prData = fs.readFileSync('benchmark-pr.json', 'utf8');
                 commentBody += '```json\n' + prData + '\n```\n';
