@@ -299,19 +299,26 @@ def run_clash_rs(config_path, log_file):
         print(f"stderr: {stderr.decode()}", file=sys.stderr)
         return None
 
-    # Verify TUN device exists
-    result = subprocess.run(
-        ["ip", "link", "show", "clash-bench"],
-        capture_output=True,
-    )
-
-    if result.returncode == 0:
-        print("✓ TUN device detected: clash-bench")
-    else:
-        print("✗ TUN device not found", file=sys.stderr)
-        return None
-
-    return proc
+    # Verify TUN device exists with retries
+    max_retries = 5
+    for attempt in range(max_retries):
+        result = subprocess.run(
+            ["ip", "link", "show", "clash-bench"],
+            capture_output=True,
+        )
+        
+        if result.returncode == 0:
+            print("✓ TUN device detected: clash-bench")
+            # Extra stabilization delay for CI environments
+            time.sleep(2)
+            return proc
+        
+        if attempt < max_retries - 1:
+            print(f"  TUN device not ready yet, retry {attempt + 1}/{max_retries - 1}...")
+            time.sleep(1)
+    
+    print("✗ TUN device not found after retries", file=sys.stderr)
+    return None
 
 
 def stop_clash_rs(proc):
@@ -322,49 +329,68 @@ def stop_clash_rs(proc):
         time.sleep(1)
 
 
-def run_iperf_test(server_ip, duration=10, bind_address=None):
+def run_iperf_test(server_ip, duration=10, bind_address=None, retries=2):
     """Run iperf3 client test and parse results."""
-    cmd = [
-        "iperf3",
-        "-c",
-        server_ip,
-        "-t",
-        str(duration),
-        "-J",  # JSON output
-    ]
+    for attempt in range(retries + 1):
+        cmd = [
+            "iperf3",
+            "-c",
+            server_ip,
+            "-t",
+            str(duration),
+            "-J",  # JSON output
+        ]
 
-    if bind_address:
-        cmd.extend(["-B", bind_address])
-        print(f"  Binding client to source address: {bind_address}")
+        if bind_address:
+            cmd.extend(["-B", bind_address])
+            if attempt == 0:
+                print(f"  Binding client to source address: {bind_address}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 10)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=duration + 10)
 
-    if result.returncode != 0:
-        print(f"✗ iperf3 test failed: {result.stderr}", file=sys.stderr)
-        return None
+            if result.returncode != 0:
+                if attempt < retries:
+                    print(f"  iperf3 attempt {attempt + 1} failed, retrying...", file=sys.stderr)
+                    time.sleep(2)
+                    continue
+                print(f"✗ iperf3 test failed after {retries + 1} attempts: {result.stderr}", file=sys.stderr)
+                return None
 
-    try:
-        data = json.loads(result.stdout)
+            data = json.loads(result.stdout)
 
-        # Extract relevant metrics
-        end_data = data.get("end", {})
-        sum_received = end_data.get("sum_received", {})
+            # Extract relevant metrics
+            end_data = data.get("end", {})
+            sum_received = end_data.get("sum_received", {})
 
-        throughput_bps = sum_received.get("bits_per_second", 0)
-        bytes_transferred = sum_received.get("bytes", 0)
-        retransmits = end_data.get("sum_sent", {}).get("retransmits", 0)
-        duration_actual = sum_received.get("seconds", duration)
+            throughput_bps = sum_received.get("bits_per_second", 0)
+            bytes_transferred = sum_received.get("bytes", 0)
+            retransmits = end_data.get("sum_sent", {}).get("retransmits", 0)
+            duration_actual = sum_received.get("seconds", duration)
 
-        return {
-            "throughput_bps": throughput_bps,
-            "throughput_gbps": throughput_bps / 1e9,
-            "bytes_transferred": bytes_transferred,
-            "retransmits": retransmits,
-            "duration_seconds": duration_actual,
-        }
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"✗ Failed to parse iperf3 output: {e}", file=sys.stderr)
-        return None
+            return {
+                "throughput_bps": throughput_bps,
+                "throughput_gbps": throughput_bps / 1e9,
+                "bytes_transferred": bytes_transferred,
+                "retransmits": retransmits,
+                "duration_seconds": duration_actual,
+            }
+        except subprocess.TimeoutExpired:
+            if attempt < retries:
+                print(f"  iperf3 attempt {attempt + 1} timed out, retrying...", file=sys.stderr)
+                time.sleep(2)
+                continue
+            print(f"✗ iperf3 test timed out after {retries + 1} attempts", file=sys.stderr)
+            return None
+        except (json.JSONDecodeError, KeyError) as e:
+            if attempt < retries:
+                print(f"  iperf3 attempt {attempt + 1} parse error, retrying...", file=sys.stderr)
+                time.sleep(2)
+                continue
+            print(f"✗ Failed to parse iperf3 output after {retries + 1} attempts: {e}", file=sys.stderr)
+            return None
+    
+    return None
 
 
 def run_baseline_test(server_ip, duration):
@@ -496,6 +522,9 @@ def run_tun_test(config_path, server_ip, duration):
         print("✓ Fwmark policy routing configured")
         print("  → Unmarked traffic: table 100 → TUN device")
         print("  → Marked traffic (666): main table → direct veth0")
+
+        # Allow routing to stabilize (important for CI environments)
+        time.sleep(2)
 
         # Start iperf server
         iperf_proc = start_iperf_server(server_ip)
