@@ -114,6 +114,21 @@ def generate_comment(current_results, baseline_results=None):
         lines.append(f"| **Duration** | {tun['duration_seconds']:.2f}s |")
         lines.append(f"| **Retransmits** | {tun.get('retransmits', 0)} |")
         lines.append("")
+    else:
+        lines.append("### ❌ Benchmark Failed")
+        lines.append("")
+        lines.append("The TUN benchmark test failed to complete. Check the workflow logs for details.")
+        lines.append("")
+        if current_results.get("baseline"):
+            baseline = current_results["baseline"]
+            lines.append("**Baseline test succeeded:**")
+            lines.append(f"- Throughput: {format_throughput(baseline['throughput_bps'])}")
+            lines.append("")
+        lines.append("**Common causes:**")
+        lines.append("- TUN device initialization failure")
+        lines.append("- Network configuration issues")
+        lines.append("- Timeout during iperf3 test")
+        lines.append("")
 
     # Comparison with baseline
     if baseline_results and baseline_results.get("tun"):
