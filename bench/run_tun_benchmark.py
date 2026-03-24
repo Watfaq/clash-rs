@@ -12,9 +12,101 @@ By routing the same destination through TUN, we measure actual TUN overhead.
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
+
+
+def collect_environment_info():
+    """Collect system and network environment information."""
+    env_info = {}
+    
+    # OS information
+    env_info["os"] = {
+        "system": platform.system(),
+        "release": platform.release(),
+        "version": platform.version(),
+        "machine": platform.machine(),
+        "processor": platform.processor(),
+    }
+    
+    # CPU information
+    try:
+        with open("/proc/cpuinfo") as f:
+            cpuinfo = f.read()
+            # Get CPU model
+            for line in cpuinfo.split("\n"):
+                if "model name" in line:
+                    env_info["cpu"] = line.split(":")[1].strip()
+                    break
+            # Count CPU cores
+            env_info["cpu_cores"] = cpuinfo.count("processor")
+    except:
+        env_info["cpu"] = platform.processor()
+        env_info["cpu_cores"] = os.cpu_count()
+    
+    # Memory information
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = f.read()
+            for line in meminfo.split("\n"):
+                if "MemTotal" in line:
+                    mem_kb = int(line.split()[1])
+                    env_info["memory_gb"] = round(mem_kb / 1024 / 1024, 2)
+                    break
+    except:
+        env_info["memory_gb"] = "unknown"
+    
+    # Network interface information
+    try:
+        result = subprocess.run(
+            ["ip", "-o", "link", "show"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            interfaces = []
+            for line in result.stdout.strip().split("\n"):
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    iface_name = parts[1].strip()
+                    # Skip loopback and veth
+                    if not iface_name.startswith(("lo", "veth")):
+                        iface_info = {"name": iface_name}
+                        
+                        # Try to get interface speed from sysfs
+                        speed_path = f"/sys/class/net/{iface_name}/speed"
+                        try:
+                            with open(speed_path) as f:
+                                speed = int(f.read().strip())
+                                if speed > 0:
+                                    iface_info["speed_mbps"] = speed
+                                else:
+                                    iface_info["speed_mbps"] = "unknown"
+                        except (FileNotFoundError, ValueError, PermissionError):
+                            iface_info["speed_mbps"] = "unknown"
+                        
+                        interfaces.append(iface_info)
+            env_info["interfaces"] = interfaces[:5]  # Limit to first 5
+    except:
+        env_info["interfaces"] = []
+    
+    # Kernel version
+    try:
+        result = subprocess.run(
+            ["uname", "-r"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            env_info["kernel"] = result.stdout.strip()
+    except:
+        pass
+    
+    return env_info
 
 
 def check_requirements():
@@ -496,6 +588,7 @@ def main():
             "timestamp": time.time(),
             "config": args.config,
             "duration": args.duration,
+            "environment": collect_environment_info(),
         }
 
         # Run baseline test

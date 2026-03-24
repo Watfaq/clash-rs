@@ -49,6 +49,57 @@ def generate_comment(current_results, baseline_results=None):
     """Generate markdown comment for PR."""
     lines = ["## 🚀 TUN Throughput Benchmark Results\n"]
 
+    # Environment information
+    if current_results.get("environment"):
+        env = current_results["environment"]
+        lines.append("<details>")
+        lines.append("<summary>📊 Test Environment</summary>")
+        lines.append("")
+        lines.append("| Component | Details |")
+        lines.append("|-----------|---------|")
+        
+        # OS info
+        if env.get("os"):
+            os_info = env["os"]
+            os_str = f"{os_info.get('system', 'Unknown')} {os_info.get('release', '')}"
+            lines.append(f"| **OS** | {os_str} |")
+            lines.append(f"| **Architecture** | {os_info.get('machine', 'Unknown')} |")
+        
+        # CPU info
+        if env.get("cpu"):
+            lines.append(f"| **CPU** | {env['cpu']} |")
+        if env.get("cpu_cores"):
+            lines.append(f"| **CPU Cores** | {env['cpu_cores']} |")
+        
+        # Memory info
+        if env.get("memory_gb"):
+            lines.append(f"| **Memory** | {env['memory_gb']} GB |")
+        
+        # Kernel info
+        if env.get("kernel"):
+            lines.append(f"| **Kernel** | {env['kernel']} |")
+        
+        # Network interfaces
+        if env.get("interfaces"):
+            interfaces = env["interfaces"]
+            iface_parts = []
+            for iface in interfaces:
+                if isinstance(iface, dict):
+                    name = iface.get("name", "unknown")
+                    speed = iface.get("speed_mbps", "unknown")
+                    if speed != "unknown":
+                        iface_parts.append(f"{name} ({speed} Mbps)")
+                    else:
+                        iface_parts.append(name)
+                else:
+                    iface_parts.append(str(iface))
+            ifaces = ", ".join(iface_parts)
+            lines.append(f"| **Network Interfaces** | {ifaces} |")
+        
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
     # Current PR results
     if current_results.get("tun"):
         tun = current_results["tun"]
@@ -113,8 +164,19 @@ def generate_comment(current_results, baseline_results=None):
         lines.append("")
 
     # Footer
-    lines.append("<sub>Benchmark run on GitHub Actions CI • ")
-    lines.append(f"Test duration: {current_results.get('duration', 10)}s</sub>")
+    footer_parts = []
+    footer_parts.append(f"Test duration: {current_results.get('duration', 10)}s")
+    
+    if current_results.get("environment"):
+        env = current_results["environment"]
+        if env.get("os", {}).get("system"):
+            footer_parts.append(f"{env['os']['system']} {env['os'].get('machine', '')}")
+        if env.get("cpu_cores"):
+            footer_parts.append(f"{env['cpu_cores']} cores")
+    
+    lines.append("<sub>🤖 Benchmark run on GitHub Actions CI • ")
+    lines.append(" • ".join(footer_parts))
+    lines.append("</sub>")
 
     return "\n".join(lines)
 
