@@ -8,16 +8,14 @@ on:
       - 'clash-netstack/**'
       - 'bench/**'
       - '.github/workflows/benchmark.yml'
-  issue_comment:
-    types: [created]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger via GitHub UI
 
 permissions:
   contents: read
   pull-requests: write  # Required to post comments
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.issue.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -25,70 +23,9 @@ env:
   BENCH_DURATION: "10"  # Duration in seconds for each benchmark run
 
 jobs:
-  # Check if benchmark should run (for comment triggers)
-  check-trigger:
-    name: Check Trigger
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name != 'issue_comment' || 
-      (github.event.issue.pull_request && 
-       (contains(github.event.comment.body, '/benchmark') || 
-        contains(github.event.comment.body, '/run-benchmark')))
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-      pr_number: ${{ steps.check.outputs.pr_number }}
-      pr_sha: ${{ steps.check.outputs.pr_sha }}
-    steps:
-      - name: Check conditions
-        id: check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            let shouldRun = 'true';
-            let prNumber = '';
-            let prSha = '';
-            
-            if (context.eventName === 'issue_comment') {
-              // For comment triggers, verify it's on a PR
-              if (!context.payload.issue.pull_request) {
-                shouldRun = 'false';
-                core.setOutput('should_run', shouldRun);
-                return;
-              }
-              
-              // Get PR details
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number
-              });
-              
-              prNumber = context.issue.number.toString();
-              prSha = pr.head.sha;
-              
-              // React to the comment
-              await github.rest.reactions.createForIssueComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: context.payload.comment.id,
-                content: 'rocket'
-              });
-              
-              console.log(`Benchmark triggered by comment on PR #${prNumber}`);
-            } else if (context.eventName === 'pull_request') {
-              prNumber = context.payload.pull_request.number.toString();
-              prSha = context.payload.pull_request.head.sha;
-            }
-            
-            core.setOutput('should_run', shouldRun);
-            core.setOutput('pr_number', prNumber);
-            core.setOutput('pr_sha', prSha);
-
   benchmark:
     name: TUN Throughput Benchmark
     runs-on: ubuntu-latest
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
     
     steps:
       - name: Checkout PR branch
