@@ -178,13 +178,13 @@ jobs:
         run: |
           if [ -f benchmark-comment.md ]; then
             {
-              echo 'COMMENT<<EOF'
+              echo 'COMMENT<<__BENCHMARK_COMMENT_END__'
               cat benchmark-comment.md
-              echo EOF
+              echo __BENCHMARK_COMMENT_END__
             } >> $GITHUB_OUTPUT
           elif [ "${{ steps.check_baseline.outputs.baseline_exists }}" == "false" ]; then
             {
-              echo 'COMMENT<<EOF'
+              echo 'COMMENT<<__BENCHMARK_COMMENT_END__'
               echo "## ⚠️ TUN Throughput Benchmark Results"
               echo ""
               echo "**No baseline file found** - comparison skipped."
@@ -202,7 +202,7 @@ jobs:
               else
                 echo "❌ PR benchmark failed - check workflow logs"
               fi
-              echo EOF
+              echo __BENCHMARK_COMMENT_END__
             } >> $GITHUB_OUTPUT
           else
             echo "COMMENT=⚠️ Benchmark comparison failed - check workflow logs for details." >> $GITHUB_OUTPUT
