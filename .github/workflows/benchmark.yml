@@ -124,12 +124,10 @@ jobs:
       - name: Run benchmark on PR code
         id: pr_benchmark
         run: |
-          chmod +x bench/run_tun_benchmark.py
-          python3 bench/run_tun_benchmark.py \
-            --config clash-bin/tests/data/config/tun.yaml \
+          sudo python3 bench/run_tun_benchmark.py \
+            --config bench/tun-benchmark.yaml \
             --duration ${{ env.BENCH_DURATION }} \
-            --output benchmark-pr.json \
-            --skip-baseline
+            --output benchmark-pr.json
         continue-on-error: true
       
       - name: Upload PR benchmark results
@@ -140,66 +138,36 @@ jobs:
           path: benchmark-pr.json
           retention-days: 30
       
-      # Checkout and benchmark baseline (master branch)
-      - name: Fetch baseline results from master
-        id: fetch_baseline
-        run: |
-          # Try to download latest baseline from artifacts
-          # This will be empty on first run, which is okay
-          echo "baseline_exists=false" >> $GITHUB_OUTPUT
-        continue-on-error: true
-      
-      - name: Checkout master branch
-        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
-        run: |
-          git fetch origin master:master
-          git checkout master
-      
-      - name: Build baseline (master)
-        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
-        run: |
-          cargo clean
-          cargo build --release --bin clash-rs --all-features
-        continue-on-error: true
-      
-      - name: Run benchmark on master
-        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
-        id: master_benchmark
-        run: |
-          python3 bench/run_tun_benchmark.py \
-            --config clash-bin/tests/data/config/tun.yaml \
-            --duration ${{ env.BENCH_DURATION }} \
-            --output benchmark-master.json \
-            --skip-baseline
-        continue-on-error: true
-      
-      - name: Upload master benchmark results
+      - name: Upload clash-rs logs
         uses: actions/upload-artifact@v4
-        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+        if: always()
         with:
-          name: benchmark-master-results
-          path: benchmark-master.json
-          retention-days: 90
+          name: clash-rs-bench-log
+          path: clash-rs-bench.log
+          retention-days: 30
       
-      - name: Checkout PR branch again
-        if: github.event_name == 'pull_request' || github.event_name == 'issue_comment'
+      # Check for committed baseline file
+      - name: Check for baseline file
+        id: check_baseline
         run: |
-          git checkout ${{ needs.check-trigger.outputs.pr_sha || github.event.pull_request.head.sha }}
+          if [ -f "bench/baseline-tun-benchmark.json" ]; then
+            echo "baseline_exists=true" >> $GITHUB_OUTPUT
+            echo "✓ Found committed baseline file"
+            cat bench/baseline-tun-benchmark.json | head -20
+          else
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  No baseline file found - comparison will be skipped"
+            echo "To create a baseline, run the benchmark on master and commit the result."
+          fi
       
       - name: Compare results and generate comment
         id: compare
+        if: steps.check_baseline.outputs.baseline_exists == 'true'
         run: |
-          chmod +x bench/compare_results.py
-          
-          # Determine baseline argument
-          BASELINE_ARG=""
-          if [ -f "benchmark-master.json" ]; then
-            BASELINE_ARG="--baseline benchmark-master.json"
-          fi
-          
+          echo "Using committed baseline file"
           python3 bench/compare_results.py \
             --current benchmark-pr.json \
-            $BASELINE_ARG \
+            --baseline bench/baseline-tun-benchmark.json \
             --output benchmark-comment.md \
             --fail-on-regression 10
         continue-on-error: true
@@ -212,6 +180,28 @@ jobs:
             {
               echo 'COMMENT<<EOF'
               cat benchmark-comment.md
+              echo EOF
+            } >> $GITHUB_OUTPUT
+          elif [ "${{ steps.check_baseline.outputs.baseline_exists }}" == "false" ]; then
+            {
+              echo 'COMMENT<<EOF'
+              echo "## ⚠️ TUN Throughput Benchmark Results"
+              echo ""
+              echo "**No baseline file found** - comparison skipped."
+              echo ""
+              echo "To enable benchmark comparisons:"
+              echo "1. Run the benchmark script on the master branch"
+              echo "2. Commit the generated \`bench/baseline-tun-benchmark.json\` file"
+              echo "3. Future PRs will compare against this baseline"
+              echo ""
+              echo "### PR Benchmark"
+              if [ -f benchmark-pr.json ]; then
+                echo "\`\`\`json"
+                cat benchmark-pr.json
+                echo "\`\`\`"
+              else
+                echo "❌ PR benchmark failed - check workflow logs"
+              fi
               echo EOF
             } >> $GITHUB_OUTPUT
           else
@@ -270,7 +260,7 @@ jobs:
           path: |
             benchmark-*.json
             benchmark-comment.md
-            /tmp/clash-rs-bench.log
+            clash-rs-bench.log
           retention-days: 30
       
       - name: Check for significant regression

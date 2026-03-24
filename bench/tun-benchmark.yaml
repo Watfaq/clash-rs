@@ -18,11 +18,11 @@ dns:
 tun:
   enable: true
   device-id: "dev://clash-bench"
-  route-all: false  # Don't route all traffic, just specific routes
+  route-all: false  # Don't route all traffic
   gateway: "198.19.0.1/24"
   dns-hijack: false  # Disable DNS hijacking for benchmarking
-  routes:
-    - 127.0.0.0/8  # Route localhost through TUN for testing
+  auto-route: false  # Disable auto-routing, we'll manage routes manually
+  so-mark: 666  # Mark clash-rs outbound traffic to prevent routing loops
 
 rules:
   - MATCH, DIRECT
