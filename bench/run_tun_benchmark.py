@@ -21,7 +21,7 @@ import time
 def collect_environment_info():
     """Collect system and network environment information."""
     env_info = {}
-    
+
     # OS information
     env_info["os"] = {
         "system": platform.system(),
@@ -30,7 +30,7 @@ def collect_environment_info():
         "machine": platform.machine(),
         "processor": platform.processor(),
     }
-    
+
     # CPU information
     try:
         with open("/proc/cpuinfo") as f:
@@ -45,7 +45,7 @@ def collect_environment_info():
     except:
         env_info["cpu"] = platform.processor()
         env_info["cpu_cores"] = os.cpu_count()
-    
+
     # Memory information
     try:
         with open("/proc/meminfo") as f:
@@ -57,14 +57,11 @@ def collect_environment_info():
                     break
     except:
         env_info["memory_gb"] = "unknown"
-    
+
     # Network interface information
     try:
         result = subprocess.run(
-            ["ip", "-o", "link", "show"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["ip", "-o", "link", "show"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             interfaces = []
@@ -75,7 +72,7 @@ def collect_environment_info():
                     # Skip loopback and veth
                     if not iface_name.startswith(("lo", "veth")):
                         iface_info = {"name": iface_name}
-                        
+
                         # Try to get interface speed from sysfs
                         speed_path = f"/sys/class/net/{iface_name}/speed"
                         try:
@@ -87,25 +84,22 @@ def collect_environment_info():
                                     iface_info["speed_mbps"] = "unknown"
                         except (FileNotFoundError, ValueError, PermissionError):
                             iface_info["speed_mbps"] = "unknown"
-                        
+
                         interfaces.append(iface_info)
             env_info["interfaces"] = interfaces[:5]  # Limit to first 5
     except:
         env_info["interfaces"] = []
-    
+
     # Kernel version
     try:
         result = subprocess.run(
-            ["uname", "-r"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["uname", "-r"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             env_info["kernel"] = result.stdout.strip()
     except:
         pass
-    
+
     return env_info
 
 
