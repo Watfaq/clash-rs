@@ -49,6 +49,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y iperf3 iproute2 cmake libclang-dev
       
+      - name: Setup TUN device support
+        run: |
+          # Load TUN kernel module
+          sudo modprobe tun
+          # Verify TUN device exists
+          ls -la /dev/net/tun
+          # Check kernel capabilities
+          echo "Kernel version:"
+          uname -a
+          echo "Network namespaces support:"
+          sudo ip netns list || echo "No namespaces yet"
+          # Clean up any leftover network state from previous runs
+          echo "Cleaning up any leftover network state..."
+          sudo ip netns del benchns 2>/dev/null || true
+          sudo ip link del veth0 2>/dev/null || true
+          sudo ip link del clash-bench 2>/dev/null || true
+          sudo pkill -9 iperf3 2>/dev/null || true
+          sudo pkill -9 clash-rs 2>/dev/null || true
+          echo "Cleanup complete"
+      
       - name: Build clash-rs (release mode)
         run: |
           cargo build --release --bin clash-rs --all-features
@@ -61,10 +81,23 @@ jobs:
       - name: Run benchmark on PR code
         id: pr_benchmark
         run: |
+          echo "Starting TUN benchmark..."
           sudo python3 bench/run_tun_benchmark.py \
             --config bench/tun-benchmark.yaml \
             --duration ${{ env.BENCH_DURATION }} \
-            --output benchmark-pr.json
+            --output benchmark-pr.json || {
+            echo "Benchmark failed with exit code: $?"
+            echo "Checking for partial results..."
+            if [ -f benchmark-pr.json ]; then
+              echo "Partial results found:"
+              cat benchmark-pr.json
+            fi
+            if [ -f clash-rs-bench.log ]; then
+              echo "Clash-rs log excerpt:"
+              tail -50 clash-rs-bench.log
+            fi
+            exit 1
+          }
         continue-on-error: true
       
       - name: Upload PR benchmark results
