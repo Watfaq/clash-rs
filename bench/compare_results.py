@@ -117,12 +117,16 @@ def generate_comment(current_results, baseline_results=None):
     else:
         lines.append("### ❌ Benchmark Failed")
         lines.append("")
-        lines.append("The TUN benchmark test failed to complete. Check the workflow logs for details.")
+        lines.append(
+            "The TUN benchmark test failed to complete. Check the workflow logs for details."
+        )
         lines.append("")
         if current_results.get("baseline"):
             baseline = current_results["baseline"]
             lines.append("**Baseline test succeeded:**")
-            lines.append(f"- Throughput: {format_throughput(baseline['throughput_bps'])}")
+            lines.append(
+                f"- Throughput: {format_throughput(baseline['throughput_bps'])}"
+            )
             lines.append("")
         lines.append("**Common causes:**")
         lines.append("- TUN device initialization failure")

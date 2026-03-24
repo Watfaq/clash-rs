@@ -473,9 +473,7 @@ proxies:
 
     // Wait briefly for the reload to propagate
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    wait_port_ready(9090)
-        .await
-        .expect("API port not ready after reload");
+    wait_port_ready(9090).expect("API port not ready after reload");
     let req = hyper::Request::builder()
         .uri(configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
