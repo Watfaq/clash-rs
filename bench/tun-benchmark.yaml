@@ -1,0 +1,28 @@
+---
+# Minimal TUN configuration for CI benchmarking
+port: 7890
+log-level: info
+
+dns:
+  enable: true
+  listen:
+    udp: 127.0.0.1:53
+  default-nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - 8.8.8.8
+
+tun:
+  enable: true
+  device-id: "dev://clash-bench"
+  route-all: false  # Don't route all traffic
+  gateway: "198.19.0.1/24"
+  dns-hijack: false  # Disable DNS hijacking for benchmarking
+  auto-route: false  # Disable auto-routing, we'll manage routes manually
+  so-mark: 666  # Mark clash-rs outbound traffic to prevent routing loops
+
+rules:
+  - MATCH, DIRECT

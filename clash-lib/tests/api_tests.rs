@@ -471,12 +471,9 @@ proxies:
         .expect("Failed to send PUT /configs");
     assert_eq!(res.status(), http::StatusCode::NO_CONTENT);
 
-    // Wait for the API server to come back up after the reload.
-    tokio::task::spawn_blocking(|| wait_port_ready(9090))
-        .await
-        .expect("spawn_blocking panicked")
-        .expect("API server did not come back up within 60 s after reload");
-
+    // Wait briefly for the reload to propagate
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    wait_port_ready(9090).expect("API port not ready after reload");
     let req = hyper::Request::builder()
         .uri(configs_url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")

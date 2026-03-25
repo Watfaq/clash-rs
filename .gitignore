@@ -34,3 +34,12 @@ codecov.json
 
 # trace files
 **/trace-*.json
+
+# Temporary benchmark files
+benchmark-*.json
+clash-rs-bench.log
+benchmark-comment.md
+
+# But keep the committed baseline
+!bench/baseline-*.json
+__pycache__/

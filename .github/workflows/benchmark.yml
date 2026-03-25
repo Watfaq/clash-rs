@@ -1,0 +1,222 @@
+name: TUN Throughput Benchmark
+
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - 'clash-lib/src/proxy/tun/**'
+      - 'clash-netstack/**'
+      - 'bench/**'
+      - '.github/workflows/benchmark.yml'
+  workflow_dispatch:  # Allow manual trigger via GitHub UI
+
+permissions:
+  contents: read
+  pull-requests: write  # Required to post comments
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_TOOLCHAIN: "stable"
+  BENCH_DURATION: "10"  # Duration in seconds for each benchmark run
+
+jobs:
+  benchmark:
+    name: TUN Throughput Benchmark
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comparison
+          ref: ${{ needs.check-trigger.outputs.pr_sha || github.event.pull_request.head.sha }}
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: benchmark-${{ runner.os }}
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iperf3 iproute2 cmake libclang-dev
+      
+      - name: Setup TUN device support
+        run: |
+          # Load TUN kernel module
+          sudo modprobe tun
+          # Verify TUN device exists
+          ls -la /dev/net/tun
+          # Check kernel capabilities
+          echo "Kernel version:"
+          uname -a
+          echo "Network namespaces support:"
+          sudo ip netns list || echo "No namespaces yet"
+          # Clean up any leftover network state from previous runs
+          echo "Cleaning up any leftover network state..."
+          sudo ip netns del benchns 2>/dev/null || true
+          sudo ip link del veth0 2>/dev/null || true
+          sudo ip link del clash-bench 2>/dev/null || true
+          sudo pkill -9 iperf3 2>/dev/null || true
+          sudo pkill -9 clash-rs 2>/dev/null || true
+          echo "Cleanup complete"
+      
+      - name: Build clash-rs (release mode)
+        run: |
+          cargo build --release --bin clash-rs --all-features
+          echo "CLASH_BINARY=$PWD/target/release/clash-rs" >> $GITHUB_ENV
+      
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+      
+      - name: Run benchmark on PR code
+        id: pr_benchmark
+        run: |
+          echo "Starting TUN benchmark..."
+          sudo python3 bench/run_tun_benchmark.py \
+            --config bench/tun-benchmark.yaml \
+            --duration ${{ env.BENCH_DURATION }} \
+            --output benchmark-pr.json || {
+            echo "Benchmark failed with exit code: $?"
+            echo "Checking for partial results..."
+            if [ -f benchmark-pr.json ]; then
+              echo "Partial results found:"
+              cat benchmark-pr.json
+            fi
+            if [ -f clash-rs-bench.log ]; then
+              echo "Clash-rs log excerpt:"
+              tail -50 clash-rs-bench.log
+            fi
+            exit 1
+          }
+        continue-on-error: true
+      
+      - name: Upload PR benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-pr-results
+          path: benchmark-pr.json
+          retention-days: 30
+      
+      - name: Upload clash-rs logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clash-rs-bench-log
+          path: clash-rs-bench.log
+          retention-days: 30
+      
+      # Check for committed baseline file
+      - name: Check for baseline file
+        id: check_baseline
+        run: |
+          if [ -f "bench/baseline-tun-benchmark.json" ]; then
+            echo "baseline_exists=true" >> $GITHUB_OUTPUT
+            echo "✓ Found committed baseline file"
+            cat bench/baseline-tun-benchmark.json | head -20
+          else
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  No baseline file found - comparison will be skipped"
+            echo "To create a baseline, run the benchmark on master and commit the result."
+          fi
+      
+      - name: Compare results and generate comment
+        id: compare
+        if: steps.check_baseline.outputs.baseline_exists == 'true'
+        run: |
+          echo "Using committed baseline file"
+          python3 bench/compare_results.py \
+            --current benchmark-pr.json \
+            --baseline bench/baseline-tun-benchmark.json \
+            --output benchmark-comment.md
+        continue-on-error: true
+      
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            // Read comment from file or generate fallback
+            let commentBody;
+            if (fs.existsSync('benchmark-comment.md')) {
+              commentBody = fs.readFileSync('benchmark-comment.md', 'utf8');
+            } else if ('${{ steps.check_baseline.outputs.baseline_exists }}' === 'false') {
+              commentBody = '## ⚠️ TUN Throughput Benchmark Results\n\n';
+              commentBody += '**No baseline file found** - comparison skipped.\n\n';
+              commentBody += 'To enable benchmark comparisons:\n';
+              commentBody += '1. Run the benchmark script on the master branch\n';
+              commentBody += '2. Commit the generated `bench/baseline-tun-benchmark.json` file\n';
+              commentBody += '3. Future PRs will compare against this baseline\n\n';
+              commentBody += '### PR Benchmark\n';
+              if (fs.existsSync('benchmark-pr.json')) {
+                const prData = fs.readFileSync('benchmark-pr.json', 'utf8');
+                commentBody += '```json\n' + prData + '\n```\n';
+              } else {
+                commentBody += '❌ PR benchmark failed - check workflow logs\n';
+              }
+            } else {
+              commentBody = '⚠️ Benchmark comparison failed - check workflow logs for details.';
+            }
+            
+            // Find existing benchmark comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && 
+              c.body.includes('TUN Throughput Benchmark Results')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+              console.log('Updated existing benchmark comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+              console.log('Created new benchmark comment');
+            }
+      
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-artifacts
+          path: |
+            benchmark-*.json
+            benchmark-comment.md
+            clash-rs-bench.log
+          retention-days: 30
+      
+      - name: Check for significant regression
+        if: steps.compare.outcome == 'failure'
+        run: |
+          echo "::warning::Significant performance regression detected (>10%)"
+          echo "Review the benchmark results in the PR comment"
+          exit 1
