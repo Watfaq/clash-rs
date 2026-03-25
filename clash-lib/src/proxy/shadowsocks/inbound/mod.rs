@@ -15,20 +15,17 @@ use crate::{
     session::{Network, Session, SocksAddr, Type},
 };
 
-use aes::cipher::{BlockDecrypt, KeyInit};
 use aes::Aes256;
+use aes::cipher::{BlockDecrypt, KeyInit};
 use async_trait::async_trait;
 use shadowsocks::{
     ProxySocket,
     config::{ServerConfig, ServerUser, ServerUserManager},
     context::Context,
-    relay::{
-        Address,
-        tcprelay::proxy_stream::server::ProxyServerStream,
-    },
+    relay::{Address, tcprelay::proxy_stream::server::ProxyServerStream},
 };
 use std::{net::SocketAddr, sync::Arc};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
@@ -41,7 +38,10 @@ pub struct ShadowsocksInbound {
     #[allow(unused)]
     authenticator: ThreadSafeAuthenticator,
     fw_mark: Option<u32>,
-    users: Vec<InboundUser>,
+    /// Watch receiver for the user list. The manager pushes updated user lists
+    /// here without restarting the listener; TCP picks them up between accepts
+    /// and UDP restarts its socket gracefully.
+    users_rx: tokio::sync::watch::Receiver<Vec<InboundUser>>,
 
     udp_closer: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<u8>>>>,
 }
@@ -61,7 +61,9 @@ pub struct InboundOptions {
     pub dispatcher: Arc<Dispatcher>,
     pub authenticator: ThreadSafeAuthenticator,
     pub fw_mark: Option<u32>,
-    pub users: Vec<InboundUser>,
+    /// Watch receiver for the live user list. Pass the receiver half of a
+    /// `tokio::sync::watch::channel(initial_users)` created by the caller.
+    pub users_rx: tokio::sync::watch::Receiver<Vec<InboundUser>>,
 }
 
 impl ShadowsocksInbound {
@@ -75,30 +77,41 @@ impl ShadowsocksInbound {
             dispatcher: opts.dispatcher,
             authenticator: opts.authenticator,
             fw_mark: opts.fw_mark,
-            users: opts.users,
+            users_rx: opts.users_rx,
             udp_closer: Default::default(),
         }
     }
 
     fn build_server_config(&self) -> std::io::Result<ServerConfig> {
-        ServerConfig::new(self.addr, &self.password, map_cipher(&self.cipher)?).map_err(|e| {
-            new_io_error(format!("Failed to create Shadowsocks config: {e}"))
-        })
+        ServerConfig::new(self.addr, &self.password, map_cipher(&self.cipher)?)
+            .map_err(|e| {
+                new_io_error(format!("Failed to create Shadowsocks config: {e}"))
+            })
     }
+}
 
-    fn build_user_manager(&self) -> Option<Arc<ServerUserManager>> {
-        if self.users.is_empty() {
-            return None;
-        }
-        let mut mgr = ServerUserManager::new();
-        for u in &self.users {
-            match ServerUser::with_encoded_key(&u.name, &u.password) {
-                Ok(user) => mgr.add_user(user),
-                Err(e) => warn!("Skipping invalid SS user '{}': {}", u.name, e),
-            }
-        }
-        Some(Arc::new(mgr))
+/// Build a `ServerUserManager` from a slice of `InboundUser` entries.
+/// Returns `None` when the slice is empty (single-user mode).
+fn build_user_manager(
+    users: &[InboundUser],
+    addr: SocketAddr,
+) -> Option<Arc<ServerUserManager>> {
+    if users.is_empty() {
+        return None;
     }
+    let mut mgr = ServerUserManager::new();
+    let mut loaded = 0usize;
+    for u in users {
+        match ServerUser::with_encoded_key(&u.name, &u.password) {
+            Ok(user) => {
+                mgr.add_user(user);
+                loaded += 1;
+            }
+            Err(e) => warn!("Skipping invalid SS user '{}': {}", u.name, e),
+        }
+    }
+    info!("shadowsocks inbound {addr}: loaded {loaded}/{} users", users.len());
+    Some(Arc::new(mgr))
 }
 
 /// Peek at the first 48 bytes (salt + EIH) of an SS2022 stream and resolve
@@ -122,7 +135,8 @@ async fn peek_user_identity(
 
     // BLAKE3 KDF — exact context string and key material from shadowsocks crate
     let key_material = [server_key_bytes, salt].concat();
-    let subkey = blake3::derive_key("shadowsocks 2022 identity subkey", &key_material);
+    let subkey =
+        blake3::derive_key("shadowsocks 2022 identity subkey", &key_material);
 
     // AES-256-ECB single-block decrypt
     let cipher = Aes256::new_from_slice(&subkey[0..32]).ok()?;
@@ -147,8 +161,6 @@ impl InboundHandlerTrait for ShadowsocksInbound {
     async fn listen_tcp(&self) -> std::io::Result<()> {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
         let config = self.build_server_config()?;
-        let user_manager = self.build_user_manager();
-
         let method = map_cipher(&self.cipher)?;
 
         // Decode the server password bytes once for EIH subkey derivation.
@@ -157,115 +169,165 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         // try_create_dualstack_tcplistener already returns a tokio TcpListener.
         let raw_listener = try_create_dualstack_tcplistener(self.addr)?;
 
+        let mut users_rx = self.users_rx.clone();
+        let mut user_manager =
+            build_user_manager(&users_rx.borrow_and_update(), self.addr);
+
         loop {
-            let (stream, src_addr) = match raw_listener.accept().await {
-                Ok(s) => s,
-                Err(e) => {
-                    warn!("Failed to accept Shadowsocks TCP connection: {}", e);
-                    continue;
-                }
-            };
+            // Rebuild the user manager whenever the watch fires — no restart needed.
+            tokio::select! {
+                result = raw_listener.accept() => {
+                    let (stream, src_addr) = match result {
+                        Ok(s) => s,
+                        Err(e) => {
+                            warn!("Failed to accept Shadowsocks TCP connection: {}", e);
+                            continue;
+                        }
+                    };
 
-            debug!("Accepted Shadowsocks TCP connection from {}", src_addr);
+                    debug!("Accepted Shadowsocks TCP connection from {}", src_addr);
 
-            let src_addr = src_addr.to_canonical();
+                    let src_addr = src_addr.to_canonical();
 
-            if !self.allow_lan && src_addr.ip() != raw_listener.local_addr()?.ip() {
-                warn!("Connection from {} is not allowed", src_addr);
-                continue;
-            }
-
-            // Resolve EIH user identity before handing the stream to shadowsocks.
-            // peek() does not consume bytes, so the crate can re-read them normally.
-            let inbound_user = if let Some(ref mgr) = user_manager {
-                peek_user_identity(&stream, &server_key_bytes, mgr).await
-            } else {
-                None
-            };
-
-            // ProxyServerStream<S> is generic — pass tokio TcpStream directly.
-            let mut socket = ProxyServerStream::from_stream_with_user_manager(
-                context.clone(),
-                stream,
-                method,
-                config.key(),
-                user_manager.clone(),
-            );
-
-            let Ok(target) = socket.handshake().await else {
-                warn!("Failed to perform Shadowsocks handshake");
-                continue;
-            };
-
-            debug!("Shadowsocks TCP connection target: {:?}", target);
-
-            if apply_tcp_options(socket.get_ref()).is_err() {
-                warn!("Failed to apply TCP options to Shadowsocks socket");
-                continue;
-            };
-
-            let sess = Session {
-                network: Network::Tcp,
-                typ: Type::Shadowsocks,
-                source: src_addr,
-                so_mark: self.fw_mark,
-                destination: match target {
-                    Address::SocketAddress(addr) => SocksAddr::Ip(addr),
-                    Address::DomainNameAddress(domain, port) => {
-                        SocksAddr::Domain(domain, port)
+                    if !self.allow_lan && src_addr.ip() != raw_listener.local_addr()?.ip() && !raw_listener.local_addr()?.ip().is_unspecified() {
+                        warn!(
+                            "Connection from {} is not allowed. Listening at {}",
+                            src_addr,
+                            raw_listener.local_addr()?
+                        );
+                        continue;
                     }
-                },
-                inbound_user,
-                ..Default::default()
-            };
 
-            let dispatcher = self.dispatcher.clone();
+                    // Resolve EIH user identity before handing the stream to shadowsocks.
+                    // peek() does not consume bytes, so the crate can re-read them normally.
+                    let inbound_user = if let Some(ref mgr) = user_manager {
+                        peek_user_identity(&stream, &server_key_bytes, mgr).await
+                    } else {
+                        None
+                    };
 
-            tokio::spawn(async move {
-                dispatcher.dispatch_stream(sess, Box::new(socket)).await;
-            });
+                    // ProxyServerStream<S> is generic — pass tokio TcpStream directly.
+                    let mut socket = ProxyServerStream::from_stream_with_user_manager(
+                        context.clone(),
+                        stream,
+                        method,
+                        config.key(),
+                        user_manager.clone(),
+                    );
+
+                    let Ok(target) = socket.handshake().await else {
+                        warn!("Failed to perform Shadowsocks handshake");
+                        continue;
+                    };
+
+                    debug!("Shadowsocks TCP connection target: {:?}", target);
+
+                    if apply_tcp_options(socket.get_ref()).is_err() {
+                        warn!("Failed to apply TCP options to Shadowsocks socket");
+                        continue;
+                    };
+
+                    let sess = Session {
+                        network: Network::Tcp,
+                        typ: Type::Shadowsocks,
+                        source: src_addr,
+                        so_mark: self.fw_mark,
+                        destination: match target {
+                            Address::SocketAddress(addr) => SocksAddr::Ip(addr),
+                            Address::DomainNameAddress(domain, port) => {
+                                SocksAddr::Domain(domain, port)
+                            }
+                        },
+                        inbound_user,
+                        ..Default::default()
+                    };
+
+                    let dispatcher = self.dispatcher.clone();
+                    tokio::spawn(async move {
+                        dispatcher.dispatch_stream(sess, Box::new(socket)).await;
+                    });
+                }
+
+                Ok(()) = users_rx.changed() => {
+                    let users = users_rx.borrow_and_update().clone();
+                    info!("shadowsocks inbound {}: TCP user list updated ({} users)", self.addr, users.len());
+                    user_manager = build_user_manager(&users, self.addr);
+                }
+            }
         }
     }
 
     async fn listen_udp(&self) -> std::io::Result<()> {
-        let context = Context::new_shared(shadowsocks::config::ServerType::Server);
-        let mut config = self.build_server_config()?;
+        let mut users_rx = self.users_rx.clone();
 
-        if let Some(mgr) = self.build_user_manager() {
-            config.set_user_manager(Arc::try_unwrap(mgr).unwrap_or_else(|arc| (*arc).clone()));
+        loop {
+            // Create UDP socket with the current user list.
+            let context =
+                Context::new_shared(shadowsocks::config::ServerType::Server);
+            let mut config = self.build_server_config()?;
+
+            {
+                let users = users_rx.borrow_and_update();
+                if let Some(mgr) = build_user_manager(&users, self.addr) {
+                    config.set_user_manager(
+                        Arc::try_unwrap(mgr).unwrap_or_else(|arc| (*arc).clone()),
+                    );
+                }
+            }
+
+            let socket = new_udp_socket(
+                Some(self.addr),
+                None,
+                #[cfg(target_os = "linux")]
+                self.fw_mark,
+                None,
+            )
+            .await?;
+
+            let proxy_socket: ProxySocket<shadowsocks::net::UdpSocket> =
+                ProxySocket::from_socket(
+                    shadowsocks::relay::udprelay::proxy_socket::UdpSocketType::Server,
+                    context,
+                    &config,
+                    socket.into(),
+                );
+
+            let dispatcher = self.dispatcher.clone();
+            let wrapped_socket =
+                Box::new(InboundShadowsocksDatagram::new(proxy_socket));
+            let sess = Session {
+                network: Network::Udp,
+                typ: Type::Shadowsocks,
+                source: self.addr,
+                so_mark: self.fw_mark,
+                iface: None,
+                ..Default::default()
+            };
+
+            let closer = dispatcher.dispatch_datagram(sess, wrapped_socket).await;
+            {
+                let mut g = self.udp_closer.lock().await;
+                *g = Some(closer);
+            }
+
+            // Block until the user list changes; then close the UDP socket and
+            // loop to rebind with the new users.
+            match users_rx.changed().await {
+                Ok(()) => {
+                    info!("shadowsocks inbound {}: user list changed, restarting UDP socket", self.addr);
+                    if let Some(c) = self.udp_closer.lock().await.take() {
+                        let _ = c.send(0);
+                    }
+                    // Brief yield so the dispatcher can drop the old socket.
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+                Err(_) => {
+                    // Sender dropped — listener is shutting down.
+                    break;
+                }
+            }
         }
 
-        let socket = new_udp_socket(
-            Some(self.addr),
-            None,
-            #[cfg(target_os = "linux")]
-            self.fw_mark,
-            None,
-        )
-        .await?;
-
-        let proxy_socket: ProxySocket<shadowsocks::net::UdpSocket> =
-            ProxySocket::from_socket(
-                shadowsocks::relay::udprelay::proxy_socket::UdpSocketType::Server,
-                context,
-                &config,
-                socket.into(),
-            );
-
-        let dispatcher = self.dispatcher.clone();
-        let wrapped_socket = Box::new(InboundShadowsocksDatagram::new(proxy_socket));
-        let sess = Session {
-            network: Network::Udp,
-            typ: Type::Shadowsocks,
-            source: self.addr,
-            so_mark: self.fw_mark,
-            iface: None,
-            ..Default::default()
-        };
-
-        let closer = dispatcher.dispatch_datagram(sess, wrapped_socket).await;
-        let mut g = self.udp_closer.lock().await;
-        *g = Some(closer);
         Ok(())
     }
 }

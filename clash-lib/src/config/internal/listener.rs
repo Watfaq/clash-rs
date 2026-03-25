@@ -14,7 +14,7 @@ pub struct InboundUser {
     pub password: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum InboundOpts {
@@ -73,6 +73,96 @@ pub enum InboundOpts {
         #[serde(default)]
         users: Vec<InboundUser>,
     },
+}
+
+/// Equality and hashing for `InboundOpts` intentionally exclude the `users`
+/// field of the `Shadowsocks` variant so that a change to the user list
+/// does not cause a full listener restart. All structural parameters
+/// (address, port, cipher, server password) are still compared.
+impl PartialEq for InboundOpts {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (InboundOpts::Http { common_opts: a }, InboundOpts::Http { common_opts: b }) => a == b,
+            (
+                InboundOpts::Socks { common_opts: a, udp: ua },
+                InboundOpts::Socks { common_opts: b, udp: ub },
+            ) => a == b && ua == ub,
+            (
+                InboundOpts::Mixed { common_opts: a, udp: ua },
+                InboundOpts::Mixed { common_opts: b, udp: ub },
+            ) => a == b && ua == ub,
+            #[cfg(feature = "tproxy")]
+            (
+                InboundOpts::TProxy { common_opts: a, udp: ua },
+                InboundOpts::TProxy { common_opts: b, udp: ub },
+            ) => a == b && ua == ub,
+            #[cfg(feature = "redir")]
+            (InboundOpts::Redir { common_opts: a }, InboundOpts::Redir { common_opts: b }) => {
+                a == b
+            }
+            (
+                InboundOpts::Tunnel { common_opts: a, network: na, target: ta },
+                InboundOpts::Tunnel { common_opts: b, network: nb, target: tb },
+            ) => a == b && na == nb && ta == tb,
+            #[cfg(feature = "shadowsocks")]
+            (
+                InboundOpts::Shadowsocks {
+                    common_opts: a,
+                    udp: ua,
+                    cipher: ca,
+                    password: pa,
+                    ..
+                },
+                InboundOpts::Shadowsocks {
+                    common_opts: b,
+                    udp: ub,
+                    cipher: cb,
+                    password: pb,
+                    ..
+                },
+            ) => a == b && ua == ub && ca == cb && pa == pb,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for InboundOpts {}
+
+impl std::hash::Hash for InboundOpts {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            InboundOpts::Http { common_opts } => common_opts.hash(state),
+            InboundOpts::Socks { common_opts, udp } => {
+                common_opts.hash(state);
+                udp.hash(state);
+            }
+            InboundOpts::Mixed { common_opts, udp } => {
+                common_opts.hash(state);
+                udp.hash(state);
+            }
+            #[cfg(feature = "tproxy")]
+            InboundOpts::TProxy { common_opts, udp } => {
+                common_opts.hash(state);
+                udp.hash(state);
+            }
+            #[cfg(feature = "redir")]
+            InboundOpts::Redir { common_opts } => common_opts.hash(state),
+            InboundOpts::Tunnel { common_opts, network, target } => {
+                common_opts.hash(state);
+                network.hash(state);
+                target.hash(state);
+            }
+            #[cfg(feature = "shadowsocks")]
+            InboundOpts::Shadowsocks { common_opts, udp, cipher, password, .. } => {
+                common_opts.hash(state);
+                udp.hash(state);
+                cipher.hash(state);
+                password.hash(state);
+                // `users` intentionally excluded — handled via watch channel
+            }
+        }
+    }
 }
 
 impl InboundOpts {
