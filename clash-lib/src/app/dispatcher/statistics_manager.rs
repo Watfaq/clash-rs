@@ -13,6 +13,13 @@ use crate::session::Session;
 
 use super::tracked::Tracked;
 
+/// Per-user traffic since the last drain.  Both upload and download are in bytes.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct UserTraffic {
+    pub upload: u64,
+    pub download: u64,
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct ProxyChain(Arc<RwLock<Vec<String>>>);
 
@@ -67,6 +74,9 @@ pub struct Manager {
     download_blip: AtomicU64,
     upload_total: AtomicU64,
     download_total: AtomicU64,
+    /// Bytes accumulated from **closed** connections, keyed by inbound_user.
+    /// Drained (and reset) by [`Manager::drain_user_stats`].
+    user_period_stats: Arc<Mutex<HashMap<String, UserTraffic>>>,
 }
 
 impl Manager {
@@ -79,6 +89,7 @@ impl Manager {
             download_blip: AtomicU64::new(0),
             upload_total: AtomicU64::new(0),
             download_total: AtomicU64::new(0),
+            user_period_stats: Arc::new(Mutex::new(HashMap::new())),
         });
         let c = v.clone();
         tokio::spawn(async move {
@@ -94,14 +105,67 @@ impl Manager {
     }
 
     /// Untrack a connection.
-    /// this method is not async because it is called in Drop.
+    /// This method is not async because it is called in Drop.
+    /// When the connection has an inbound_user, its final byte counts are
+    /// accumulated into `user_period_stats` so they survive connection close.
     pub fn untrack(&self, id: uuid::Uuid) {
         let connections = self.connections.clone();
+        let user_period_stats = self.user_period_stats.clone();
 
         tokio::spawn(async move {
             let mut connections = connections.lock().await;
-            connections.remove(&id);
+            if let Some((tracked, _)) = connections.remove(&id) {
+                let info = tracked.tracker_info();
+                // Atomically take the remaining bytes that haven't been reported yet.
+                let upload =
+                    info.upload_total.swap(0, Ordering::AcqRel);
+                let download =
+                    info.download_total.swap(0, Ordering::AcqRel);
+                if let Some(ref user) = info.session_holder.inbound_user {
+                    if upload > 0 || download > 0 {
+                        let mut stats = user_period_stats.lock().await;
+                        let entry = stats
+                            .entry(user.clone())
+                            .or_insert_with(UserTraffic::default);
+                        entry.upload += upload;
+                        entry.download += download;
+                    }
+                }
+            }
         });
+    }
+
+    /// Return per-user traffic accumulated since the last call (for both closed
+    /// and currently-active connections) and reset all counters.
+    ///
+    /// Called by the `/user-stats` REST endpoint so FAC can poll for deltas.
+    pub async fn drain_user_stats(&self) -> HashMap<String, UserTraffic> {
+        // Drain the closed-connection accumulator.
+        let mut result: HashMap<String, UserTraffic> = {
+            let mut stats = self.user_period_stats.lock().await;
+            std::mem::take(&mut *stats)
+        };
+
+        // Include bytes from still-active connections by atomically swapping
+        // their counters to 0. The next drain will only see new bytes.
+        let connections = self.connections.lock().await;
+        for (_, (tracked, _)) in connections.iter() {
+            let info = tracked.tracker_info();
+            if let Some(ref user) = info.session_holder.inbound_user {
+                let upload = info.upload_total.swap(0, Ordering::AcqRel);
+                let download =
+                    info.download_total.swap(0, Ordering::AcqRel);
+                if upload > 0 || download > 0 {
+                    let entry = result
+                        .entry(user.clone())
+                        .or_insert_with(UserTraffic::default);
+                    entry.upload += upload;
+                    entry.download += download;
+                }
+            }
+        }
+
+        result
     }
 
     pub async fn close(&self, id: uuid::Uuid) {

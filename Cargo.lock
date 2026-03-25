@@ -1207,6 +1207,7 @@ dependencies = [
  "axum-macros",
  "base64 0.22.1",
  "blake2",
+ "blake3",
  "bollard",
  "boring-noise",
  "byteorder",

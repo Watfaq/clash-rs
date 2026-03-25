@@ -5,6 +5,15 @@ use std::collections::HashMap;
 
 use super::config::BindAddress;
 
+/// A single user entry for SS2022 multi-user inbound.
+/// `name` is stored in session metadata as `inboundUser` for traffic attribution.
+/// `password` is a base64-encoded 32-byte key (for 2022-blake3-aes-256-gcm).
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
+pub struct InboundUser {
+    pub name: String,
+    pub password: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
@@ -58,6 +67,11 @@ pub enum InboundOpts {
         udp: bool,
         cipher: String,
         password: String,
+        /// Multi-user list for SS2022 EIH. Each entry has a name (FAC user_id)
+        /// and a base64-encoded 32-byte user key. When non-empty, EIH is used
+        /// to identify which user owns each connection.
+        #[serde(default)]
+        users: Vec<InboundUser>,
     },
 }
 
