@@ -10,12 +10,11 @@ use crate::app::{api::AppState, dispatcher::StatisticsManager};
 /// resets all counters.  Intended for FAC to poll periodically (≤ every 60 s).
 ///
 /// Response: `{ "<user_id>": { "upload": <bytes>, "download": <bytes> }, … }`
-pub async fn handle(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+pub async fn handle(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let mgr: Arc<StatisticsManager> = state.statistics_manager.clone();
     let stats = mgr.drain_user_stats().await;
-    Json(serde_json::to_value(stats).unwrap_or(serde_json::Value::Object(
-        serde_json::Map::new(),
-    )))
+    Json(
+        serde_json::to_value(stats)
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
+    )
 }

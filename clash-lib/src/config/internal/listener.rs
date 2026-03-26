@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use super::config::BindAddress;
 
 /// A single user entry for SS2022 multi-user inbound.
-/// `name` is stored in session metadata as `inboundUser` for traffic attribution.
-/// `password` is a base64-encoded 32-byte key (for 2022-blake3-aes-256-gcm).
+/// `name` is stored in session metadata as `inboundUser` for traffic
+/// attribution. `password` is a base64-encoded 32-byte key (for
+/// 2022-blake3-aes-256-gcm).
 #[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
 pub struct InboundUser {
     pub name: String,
@@ -82,27 +83,57 @@ pub enum InboundOpts {
 impl PartialEq for InboundOpts {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (InboundOpts::Http { common_opts: a }, InboundOpts::Http { common_opts: b }) => a == b,
             (
-                InboundOpts::Socks { common_opts: a, udp: ua },
-                InboundOpts::Socks { common_opts: b, udp: ub },
+                InboundOpts::Http { common_opts: a },
+                InboundOpts::Http { common_opts: b },
+            ) => a == b,
+            (
+                InboundOpts::Socks {
+                    common_opts: a,
+                    udp: ua,
+                },
+                InboundOpts::Socks {
+                    common_opts: b,
+                    udp: ub,
+                },
             ) => a == b && ua == ub,
             (
-                InboundOpts::Mixed { common_opts: a, udp: ua },
-                InboundOpts::Mixed { common_opts: b, udp: ub },
+                InboundOpts::Mixed {
+                    common_opts: a,
+                    udp: ua,
+                },
+                InboundOpts::Mixed {
+                    common_opts: b,
+                    udp: ub,
+                },
             ) => a == b && ua == ub,
             #[cfg(feature = "tproxy")]
             (
-                InboundOpts::TProxy { common_opts: a, udp: ua },
-                InboundOpts::TProxy { common_opts: b, udp: ub },
+                InboundOpts::TProxy {
+                    common_opts: a,
+                    udp: ua,
+                },
+                InboundOpts::TProxy {
+                    common_opts: b,
+                    udp: ub,
+                },
             ) => a == b && ua == ub,
             #[cfg(feature = "redir")]
-            (InboundOpts::Redir { common_opts: a }, InboundOpts::Redir { common_opts: b }) => {
-                a == b
-            }
             (
-                InboundOpts::Tunnel { common_opts: a, network: na, target: ta },
-                InboundOpts::Tunnel { common_opts: b, network: nb, target: tb },
+                InboundOpts::Redir { common_opts: a },
+                InboundOpts::Redir { common_opts: b },
+            ) => a == b,
+            (
+                InboundOpts::Tunnel {
+                    common_opts: a,
+                    network: na,
+                    target: ta,
+                },
+                InboundOpts::Tunnel {
+                    common_opts: b,
+                    network: nb,
+                    target: tb,
+                },
             ) => a == b && na == nb && ta == tb,
             #[cfg(feature = "shadowsocks")]
             (
@@ -148,13 +179,23 @@ impl std::hash::Hash for InboundOpts {
             }
             #[cfg(feature = "redir")]
             InboundOpts::Redir { common_opts } => common_opts.hash(state),
-            InboundOpts::Tunnel { common_opts, network, target } => {
+            InboundOpts::Tunnel {
+                common_opts,
+                network,
+                target,
+            } => {
                 common_opts.hash(state);
                 network.hash(state);
                 target.hash(state);
             }
             #[cfg(feature = "shadowsocks")]
-            InboundOpts::Shadowsocks { common_opts, udp, cipher, password, .. } => {
+            InboundOpts::Shadowsocks {
+                common_opts,
+                udp,
+                cipher,
+                password,
+                ..
+            } => {
                 common_opts.hash(state);
                 udp.hash(state);
                 cipher.hash(state);

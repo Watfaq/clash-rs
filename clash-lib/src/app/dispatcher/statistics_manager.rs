@@ -13,7 +13,8 @@ use crate::session::Session;
 
 use super::tracked::Tracked;
 
-/// Per-user traffic since the last drain.  Both upload and download are in bytes.
+/// Per-user traffic since the last drain.  Both upload and download are in
+/// bytes.
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct UserTraffic {
     pub upload: u64,
@@ -116,11 +117,10 @@ impl Manager {
             let mut connections = connections.lock().await;
             if let Some((tracked, _)) = connections.remove(&id) {
                 let info = tracked.tracker_info();
-                // Atomically take the remaining bytes that haven't been reported yet.
-                let upload =
-                    info.upload_total.swap(0, Ordering::AcqRel);
-                let download =
-                    info.download_total.swap(0, Ordering::AcqRel);
+                // Atomically take the remaining bytes that haven't been reported
+                // yet.
+                let upload = info.upload_total.swap(0, Ordering::AcqRel);
+                let download = info.download_total.swap(0, Ordering::AcqRel);
                 if let Some(ref user) = info.session_holder.inbound_user {
                     if upload > 0 || download > 0 {
                         let mut stats = user_period_stats.lock().await;
@@ -153,8 +153,7 @@ impl Manager {
             let info = tracked.tracker_info();
             if let Some(ref user) = info.session_holder.inbound_user {
                 let upload = info.upload_total.swap(0, Ordering::AcqRel);
-                let download =
-                    info.download_total.swap(0, Ordering::AcqRel);
+                let download = info.download_total.swap(0, Ordering::AcqRel);
                 if upload > 0 || download > 0 {
                     let entry = result
                         .entry(user.clone())

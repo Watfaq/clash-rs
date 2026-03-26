@@ -204,7 +204,11 @@ impl InboundManager {
                             ) = (&opts, &entry.users_tx)
                             {
                                 if tx.send(users.clone()).is_ok() {
-                                    info!("inbound provider {provider_name}: user list updated in place ({} users)", users.len());
+                                    info!(
+                                        "inbound provider {provider_name}: user \
+                                         list updated in place ({} users)",
+                                        users.len()
+                                    );
                                 }
                             }
                             new_handles.insert(opts, entry);
@@ -217,7 +221,11 @@ impl InboundManager {
                     // ports are released before we try to bind them again.
                     let has_removed = !old_handles.is_empty();
                     for (removed_opts, entry) in old_handles {
-                        info!("inbound provider {provider_name}: removing listener '{}'", removed_opts.common_opts().name);
+                        info!(
+                            "inbound provider {provider_name}: removing listener \
+                             '{}'",
+                            removed_opts.common_opts().name
+                        );
                         if let Some(h) = entry.handle {
                             h.abort();
                         }
@@ -233,20 +241,27 @@ impl InboundManager {
                     for opts in opts_to_start {
                         let ct = cancellation_token.clone();
                         let listener_name = opts.common_opts().name.clone();
-                        info!("inbound provider {provider_name}: starting listener '{listener_name}'");
+                        info!(
+                            "inbound provider {provider_name}: starting listener \
+                             '{listener_name}'"
+                        );
 
                         // For Shadowsocks, create a watch channel so future
                         // user-list updates can be pushed without a restart.
                         #[cfg(feature = "shadowsocks")]
                         let (users_rx, users_tx) =
                             if let InboundOpts::Shadowsocks { users, .. } = &opts {
-                                let (tx, rx) = tokio::sync::watch::channel(users.clone());
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
                             } else {
                                 (None, None)
                             };
                         #[cfg(not(feature = "shadowsocks"))]
-                        let (users_rx, users_tx) = (None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>, None);
+                        let (users_rx, users_tx) = (
+                            None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
+                            None,
+                        );
 
                         let handle = build_network_listeners(
                             &opts,
@@ -266,7 +281,8 @@ impl InboundManager {
                                 }
                             })
                         });
-                        new_handles.insert(opts, ProviderHandleEntry { handle, users_tx });
+                        new_handles
+                            .insert(opts, ProviderHandleEntry { handle, users_tx });
                     }
 
                     provider_handles_guard.insert(provider_name, new_handles);
@@ -279,7 +295,11 @@ impl InboundManager {
                     let provider = Arc::new(provider);
                     match provider.initialize().await {
                         Ok(initial_opts) => {
-                            info!("inbound provider '{name}' initialised ({} listeners)", initial_opts.len());
+                            info!(
+                                "inbound provider '{name}' initialised ({} \
+                                 listeners)",
+                                initial_opts.len()
+                            );
                             self.inbound_providers
                                 .write()
                                 .await

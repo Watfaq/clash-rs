@@ -15,8 +15,10 @@ use crate::{
     session::{Network, Session, SocksAddr, Type},
 };
 
-use aes::Aes256;
-use aes::cipher::{BlockDecrypt, KeyInit};
+use aes::{
+    Aes256,
+    cipher::{BlockDecrypt, KeyInit},
+};
 use async_trait::async_trait;
 use shadowsocks::{
     ProxySocket,
@@ -110,7 +112,10 @@ fn build_user_manager(
             Err(e) => warn!("Skipping invalid SS user '{}': {}", u.name, e),
         }
     }
-    info!("shadowsocks inbound {addr}: loaded {loaded}/{} users", users.len());
+    info!(
+        "shadowsocks inbound {addr}: loaded {loaded}/{} users",
+        users.len()
+    );
     Some(Arc::new(mgr))
 }
 
@@ -314,7 +319,11 @@ impl InboundHandlerTrait for ShadowsocksInbound {
             // loop to rebind with the new users.
             match users_rx.changed().await {
                 Ok(()) => {
-                    info!("shadowsocks inbound {}: user list changed, restarting UDP socket", self.addr);
+                    info!(
+                        "shadowsocks inbound {}: user list changed, restarting UDP \
+                         socket",
+                        self.addr
+                    );
                     if let Some(c) = self.udp_closer.lock().await.take() {
                         let _ = c.send(0);
                     }

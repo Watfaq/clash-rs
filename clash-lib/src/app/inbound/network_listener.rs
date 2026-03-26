@@ -30,7 +30,9 @@ pub(crate) fn build_network_listeners(
     let addr = inbound_opts.common_opts().listen.0;
     let port = inbound_opts.common_opts().port;
 
-    if let Some(handler) = build_handler(inbound_opts, dispatcher, authenticator, users_rx) {
+    if let Some(handler) =
+        build_handler(inbound_opts, dispatcher, authenticator, users_rx)
+    {
         let mut runners: Vec<BoxFuture<'static, Result<(), crate::Error>>> =
             Vec::new();
 
@@ -174,9 +176,8 @@ fn build_handler(
         } => {
             // Use the provided watch receiver, or create a static one for
             // non-provider (static config) inbounds whose user list never changes.
-            let rx = users_rx.unwrap_or_else(|| {
-                tokio::sync::watch::channel(users.clone()).1
-            });
+            let rx = users_rx
+                .unwrap_or_else(|| tokio::sync::watch::channel(users.clone()).1);
             Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
                 addr: (common_opts.listen.0, common_opts.port).into(),
                 password: password.clone(),
