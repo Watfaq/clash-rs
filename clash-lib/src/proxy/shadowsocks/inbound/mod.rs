@@ -351,3 +351,63 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A valid 32-byte base64 key (same value used in the test server config).
+    const VALID_KEY: &str = "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU=";
+
+    fn addr() -> std::net::SocketAddr {
+        "127.0.0.1:8080".parse().unwrap()
+    }
+
+    #[test]
+    fn test_build_user_manager_empty_returns_none() {
+        assert!(
+            build_user_manager(&[], addr()).is_none(),
+            "empty user list should yield single-user mode (None)"
+        );
+    }
+
+    #[test]
+    fn test_build_user_manager_valid_user_returns_some() {
+        let users = vec![InboundUser {
+            name: "user1".to_string(),
+            password: VALID_KEY.to_string(),
+        }];
+        assert!(
+            build_user_manager(&users, addr()).is_some(),
+            "valid user should produce a ServerUserManager"
+        );
+    }
+
+    #[test]
+    fn test_build_user_manager_invalid_password_does_not_panic() {
+        // Invalid base64 — should be skipped with a warning, not panic.
+        let users = vec![InboundUser {
+            name: "bad".to_string(),
+            password: "not-valid-base64!!!".to_string(),
+        }];
+        // Returns Some because the users slice is non-empty, even though
+        // the single entry failed to load.
+        let _mgr = build_user_manager(&users, addr());
+    }
+
+    #[test]
+    fn test_build_user_manager_mixes_valid_and_invalid() {
+        let users = vec![
+            InboundUser {
+                name: "good".to_string(),
+                password: VALID_KEY.to_string(),
+            },
+            InboundUser {
+                name: "bad".to_string(),
+                password: "!!!".to_string(),
+            },
+        ];
+        // Invalid entry is skipped; valid entry is loaded — must not panic.
+        assert!(build_user_manager(&users, addr()).is_some());
+    }
+}

@@ -263,6 +263,21 @@ impl Manager {
         memory_stats().map(|x| x.physical_mem).unwrap_or(0)
     }
 
+    /// Test helper: directly populate `user_period_stats` to simulate closed
+    /// connections without going through the full `Tracked` machinery.
+    #[cfg(test)]
+    pub async fn inject_closed_user_bytes(
+        &self,
+        user: &str,
+        upload: u64,
+        download: u64,
+    ) {
+        let mut stats = self.user_period_stats.lock().await;
+        let entry = stats.entry(user.to_string()).or_default();
+        entry.upload += upload;
+        entry.download += download;
+    }
+
     async fn kick_off(&self) {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
@@ -276,5 +291,70 @@ impl Manager {
             );
             self.download_temp.store(0, Ordering::Relaxed);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_drain_user_stats_empty() {
+        let mgr = Manager::new();
+        let stats = mgr.drain_user_stats().await;
+        assert!(stats.is_empty(), "fresh manager should have no user stats");
+    }
+
+    #[tokio::test]
+    async fn test_drain_user_stats_returns_closed_connection_bytes() {
+        let mgr = Manager::new();
+        mgr.inject_closed_user_bytes("user1", 1000, 2000).await;
+
+        let stats = mgr.drain_user_stats().await;
+        let u = stats.get("user1").expect("user1 not found");
+        assert_eq!(u.upload, 1000);
+        assert_eq!(u.download, 2000);
+    }
+
+    #[tokio::test]
+    async fn test_drain_user_stats_resets_on_read() {
+        let mgr = Manager::new();
+        mgr.inject_closed_user_bytes("user1", 500, 750).await;
+
+        let first = mgr.drain_user_stats().await;
+        assert!(!first.is_empty());
+
+        let second = mgr.drain_user_stats().await;
+        assert!(
+            second.is_empty(),
+            "second drain should be empty after reset"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_drain_user_stats_multiple_users() {
+        let mgr = Manager::new();
+        mgr.inject_closed_user_bytes("alice", 100, 200).await;
+        mgr.inject_closed_user_bytes("bob", 300, 400).await;
+
+        let stats = mgr.drain_user_stats().await;
+        assert_eq!(stats.len(), 2);
+        assert_eq!(stats["alice"].upload, 100);
+        assert_eq!(stats["alice"].download, 200);
+        assert_eq!(stats["bob"].upload, 300);
+        assert_eq!(stats["bob"].download, 400);
+    }
+
+    #[tokio::test]
+    async fn test_drain_user_stats_accumulates_across_connections() {
+        let mgr = Manager::new();
+        // Same user closes two separate connections before a drain.
+        mgr.inject_closed_user_bytes("user1", 100, 200).await;
+        mgr.inject_closed_user_bytes("user1", 50, 80).await;
+
+        let stats = mgr.drain_user_stats().await;
+        let u = stats.get("user1").expect("user1 not found");
+        assert_eq!(u.upload, 150, "upload should be sum of both connections");
+        assert_eq!(u.download, 280, "download should be sum of both connections");
     }
 }
