@@ -202,15 +202,13 @@ impl InboundManager {
                                 InboundOpts::Shadowsocks { users, .. },
                                 Some(tx),
                             ) = (&opts, &entry.users_tx)
-                            {
-                                if tx.send(users.clone()).is_ok() {
+                                && tx.send(users.clone()).is_ok() {
                                     info!(
                                         "inbound provider {provider_name}: user \
                                          list updated in place ({} users)",
                                         users.len()
                                     );
                                 }
-                            }
                             new_handles.insert(opts, entry);
                         } else {
                             opts_to_start.push(opts);

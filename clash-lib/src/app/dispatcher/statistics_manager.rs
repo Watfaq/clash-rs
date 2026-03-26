@@ -121,8 +121,8 @@ impl Manager {
                 // yet.
                 let upload = info.upload_total.swap(0, Ordering::AcqRel);
                 let download = info.download_total.swap(0, Ordering::AcqRel);
-                if let Some(ref user) = info.session_holder.inbound_user {
-                    if upload > 0 || download > 0 {
+                if let Some(ref user) = info.session_holder.inbound_user
+                    && (upload > 0 || download > 0) {
                         let mut stats = user_period_stats.lock().await;
                         let entry = stats
                             .entry(user.clone())
@@ -130,7 +130,6 @@ impl Manager {
                         entry.upload += upload;
                         entry.download += download;
                     }
-                }
             }
         });
     }
@@ -157,7 +156,7 @@ impl Manager {
                 if upload > 0 || download > 0 {
                     let entry = result
                         .entry(user.clone())
-                        .or_insert_with(UserTraffic::default);
+                        .or_default();
                     entry.upload += upload;
                     entry.download += download;
                 }
