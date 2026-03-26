@@ -168,18 +168,19 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         let config = self.build_server_config()?;
         let method = map_cipher(&self.cipher)?;
 
-        // Decode the server password bytes once for EIH subkey derivation.
-        let server_key_bytes: Vec<u8> = config.key().to_vec();
+        // Arc so each spawned task gets a cheap clone instead of a full copy.
+        let server_key_bytes: Arc<Vec<u8>> = Arc::new(config.key().to_vec());
 
-        // try_create_dualstack_tcplistener already returns a tokio TcpListener.
         let raw_listener = try_create_dualstack_tcplistener(self.addr)?;
+        // Extract once so the accept loop body never calls local_addr() with ?.
+        let local_addr = raw_listener.local_addr()?;
+        let local_ip = local_addr.ip();
 
         let mut users_rx = self.users_rx.clone();
         let mut user_manager =
             build_user_manager(&users_rx.borrow_and_update(), self.addr);
 
         loop {
-            // Rebuild the user manager whenever the watch fires — no restart needed.
             tokio::select! {
                 result = raw_listener.accept() => {
                     let (stream, src_addr) = match result {
@@ -190,77 +191,82 @@ impl InboundHandlerTrait for ShadowsocksInbound {
                         }
                     };
 
-                    debug!("Accepted Shadowsocks TCP connection from {}", src_addr);
-
                     let src_addr = src_addr.to_canonical();
 
-                    if !self.allow_lan {
-                        let local_addr = raw_listener.local_addr()?;
-                        let local_ip = local_addr.ip();
-
-                        if src_addr.ip() != local_ip && !local_ip.is_unspecified() {
-                            warn!(
-                                "Connection from {} is not allowed. Listening at {}",
-                                src_addr,
-                                local_addr
-                            );
-                            continue;
-                        }
+                    if !self.allow_lan
+                        && !local_ip.is_unspecified()
+                        && src_addr.ip() != local_ip
+                    {
+                        warn!(
+                            "Connection from {} is not allowed. Listening at {}",
+                            src_addr, local_addr
+                        );
+                        continue;
                     }
 
-                    // Resolve EIH user identity before handing the stream to shadowsocks.
-                    // peek() does not consume bytes, so the crate can re-read them normally.
-                    let inbound_user = if let Some(ref mgr) = user_manager {
-                        peek_user_identity(&stream, &server_key_bytes, mgr).await
-                    } else {
-                        None
-                    };
-
-                    // ProxyServerStream<S> is generic — pass tokio TcpStream directly.
-                    let mut socket = ProxyServerStream::from_stream_with_user_manager(
-                        context.clone(),
-                        stream,
-                        method,
-                        config.key(),
-                        user_manager.clone(),
-                    );
-
-                    let Ok(target) = socket.handshake().await else {
-                        warn!("Failed to perform Shadowsocks handshake");
-                        continue;
-                    };
-
-                    debug!("Shadowsocks TCP connection target: {:?}", target);
-
-                    if apply_tcp_options(socket.get_ref()).is_err() {
-                        warn!("Failed to apply TCP options to Shadowsocks socket");
-                        continue;
-                    };
-
-                    let sess = Session {
-                        network: Network::Tcp,
-                        typ: Type::Shadowsocks,
-                        source: src_addr,
-                        so_mark: self.fw_mark,
-                        destination: match target {
-                            Address::SocketAddress(addr) => SocksAddr::Ip(addr),
-                            Address::DomainNameAddress(domain, port) => {
-                                SocksAddr::Domain(domain, port)
-                            }
-                        },
-                        inbound_user,
-                        ..Default::default()
-                    };
-
+                    // Spawn immediately so the accept loop is never blocked by
+                    // per-connection I/O (peek, handshake). A stalling client
+                    // only affects its own task.
                     let dispatcher = self.dispatcher.clone();
+                    let context = context.clone();
+                    let key_bytes = Arc::clone(&server_key_bytes);
+                    let mgr = user_manager.clone();
+                    let fw_mark = self.fw_mark;
+
                     tokio::spawn(async move {
+                        let inbound_user = if let Some(ref m) = mgr {
+                            peek_user_identity(&stream, &key_bytes, m).await
+                        } else {
+                            None
+                        };
+
+                        let mut socket =
+                            ProxyServerStream::from_stream_with_user_manager(
+                                context,
+                                stream,
+                                method,
+                                &key_bytes,
+                                mgr,
+                            );
+
+                        let Ok(target) = socket.handshake().await else {
+                            warn!("Failed to perform Shadowsocks handshake");
+                            return;
+                        };
+
+                        debug!("Shadowsocks TCP connection target: {:?}", target);
+
+                        if apply_tcp_options(socket.get_ref()).is_err() {
+                            warn!("Failed to apply TCP options to Shadowsocks socket");
+                            return;
+                        }
+
+                        let sess = Session {
+                            network: Network::Tcp,
+                            typ: Type::Shadowsocks,
+                            source: src_addr,
+                            so_mark: fw_mark,
+                            destination: match target {
+                                Address::SocketAddress(addr) => SocksAddr::Ip(addr),
+                                Address::DomainNameAddress(domain, port) => {
+                                    SocksAddr::Domain(domain, port)
+                                }
+                            },
+                            inbound_user,
+                            ..Default::default()
+                        };
+
                         dispatcher.dispatch_stream(sess, Box::new(socket)).await;
                     });
                 }
 
                 Ok(()) = users_rx.changed() => {
                     let users = users_rx.borrow_and_update().clone();
-                    info!("shadowsocks inbound {}: TCP user list updated ({} users)", self.addr, users.len());
+                    info!(
+                        "shadowsocks inbound {}: TCP user list updated ({} users)",
+                        self.addr,
+                        users.len()
+                    );
                     user_manager = build_user_manager(&users, self.addr);
                 }
             }

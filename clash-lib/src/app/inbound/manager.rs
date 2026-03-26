@@ -198,17 +198,16 @@ impl InboundManager {
                             // Push updated user list via watch channel if present —
                             // this avoids restarting the listener entirely.
                             #[cfg(feature = "shadowsocks")]
-                            if let (
-                                InboundOpts::Shadowsocks { users, .. },
-                                Some(tx),
-                            ) = (&opts, &entry.users_tx)
-                                && tx.send(users.clone()).is_ok() {
-                                    info!(
-                                        "inbound provider {provider_name}: user \
+                            if let (InboundOpts::Shadowsocks { users, .. }, Some(tx)) =
+                                (&opts, &entry.users_tx)
+                                && tx.send(users.clone()).is_ok()
+                            {
+                                info!(
+                                    "inbound provider {provider_name}: user \
                                          list updated in place ({} users)",
-                                        users.len()
-                                    );
-                                }
+                                    users.len()
+                                );
+                            }
                             new_handles.insert(opts, entry);
                         } else {
                             opts_to_start.push(opts);

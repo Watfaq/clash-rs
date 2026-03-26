@@ -54,6 +54,14 @@ pub struct TrackerInfo {
     pub proxy_chain_holder: ProxyChain,
     #[serde(skip)]
     pub session_holder: Session,
+
+    /// Per-user byte counters, separate from `upload_total`/`download_total`.
+    /// Only incremented when `session_holder.inbound_user` is set.
+    /// Swapped to 0 on drain — never touched by `snapshot()`.
+    #[serde(skip)]
+    pub user_upload: AtomicU64,
+    #[serde(skip)]
+    pub user_download: AtomicU64,
 }
 
 #[derive(Serialize)]
@@ -117,19 +125,20 @@ impl Manager {
             let mut connections = connections.lock().await;
             if let Some((tracked, _)) = connections.remove(&id) {
                 let info = tracked.tracker_info();
-                // Atomically take the remaining bytes that haven't been reported
-                // yet.
-                let upload = info.upload_total.swap(0, Ordering::AcqRel);
-                let download = info.download_total.swap(0, Ordering::AcqRel);
+                // Atomically take the remaining user-accounting bytes.
+                // upload_total/download_total are left intact for /connections.
+                let upload = info.user_upload.swap(0, Ordering::AcqRel);
+                let download = info.user_download.swap(0, Ordering::AcqRel);
                 if let Some(ref user) = info.session_holder.inbound_user
-                    && (upload > 0 || download > 0) {
-                        let mut stats = user_period_stats.lock().await;
-                        let entry = stats
-                            .entry(user.clone())
-                            .or_insert_with(UserTraffic::default);
-                        entry.upload += upload;
-                        entry.download += download;
-                    }
+                    && (upload > 0 || download > 0)
+                {
+                    let mut stats = user_period_stats.lock().await;
+                    let entry = stats
+                        .entry(user.clone())
+                        .or_insert_with(UserTraffic::default);
+                    entry.upload += upload;
+                    entry.download += download;
+                }
             }
         });
     }
@@ -146,17 +155,16 @@ impl Manager {
         };
 
         // Include bytes from still-active connections by atomically swapping
-        // their counters to 0. The next drain will only see new bytes.
+        // their user counters to 0. upload_total/download_total are untouched
+        // so /connections keeps seeing the correct cumulative values.
         let connections = self.connections.lock().await;
         for (_, (tracked, _)) in connections.iter() {
             let info = tracked.tracker_info();
             if let Some(ref user) = info.session_holder.inbound_user {
-                let upload = info.upload_total.swap(0, Ordering::AcqRel);
-                let download = info.download_total.swap(0, Ordering::AcqRel);
+                let upload = info.user_upload.swap(0, Ordering::AcqRel);
+                let download = info.user_download.swap(0, Ordering::AcqRel);
                 if upload > 0 || download > 0 {
-                    let entry = result
-                        .entry(user.clone())
-                        .or_default();
+                    let entry = result.entry(user.clone()).or_default();
                     entry.upload += upload;
                     entry.download += download;
                 }
