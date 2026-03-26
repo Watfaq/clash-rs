@@ -76,9 +76,7 @@ impl futures::Stream for InboundShadowsocksDatagram {
                         SocksAddr::Domain(domain, port)
                     }
                 },
-                inbound_user: ctrl
-                    .and_then(|c| c.user)
-                    .map(|u| u.name().to_owned()),
+                inbound_user: ctrl.and_then(|c| c.user).map(|u| u.name().to_owned()),
             })),
             Err(e) => {
                 error!("failed to receive udp packet: {}", e);

@@ -355,6 +355,9 @@ mod tests {
         let stats = mgr.drain_user_stats().await;
         let u = stats.get("user1").expect("user1 not found");
         assert_eq!(u.upload, 150, "upload should be sum of both connections");
-        assert_eq!(u.download, 280, "download should be sum of both connections");
+        assert_eq!(
+            u.download, 280,
+            "download should be sum of both connections"
+        );
     }
 }

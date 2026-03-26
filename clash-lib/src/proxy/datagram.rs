@@ -17,7 +17,8 @@ pub struct UdpPacket {
     pub src_addr: SocksAddr,
     pub dst_addr: SocksAddr,
     /// Authenticated user name from SS2022 EIH, propagated to the dispatcher
-    /// session for per-user traffic attribution. `None` for all other protocols.
+    /// session for per-user traffic attribution. `None` for all other
+    /// protocols.
     pub inbound_user: Option<String>,
 }
 
