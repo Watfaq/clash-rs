@@ -16,6 +16,9 @@ pub struct UdpPacket {
     pub data: Vec<u8>,
     pub src_addr: SocksAddr,
     pub dst_addr: SocksAddr,
+    /// Authenticated user name from SS2022 EIH, propagated to the dispatcher
+    /// session for per-user traffic attribution. `None` for all other protocols.
+    pub inbound_user: Option<String>,
 }
 
 impl Default for UdpPacket {
@@ -24,6 +27,7 @@ impl Default for UdpPacket {
             data: Vec::new(),
             src_addr: SocksAddr::any_ipv4(),
             dst_addr: SocksAddr::any_ipv4(),
+            inbound_user: None,
         }
     }
 }
@@ -55,6 +59,7 @@ impl UdpPacket {
             data,
             src_addr,
             dst_addr,
+            inbound_user: None,
         }
     }
 }
@@ -194,6 +199,7 @@ impl Stream for OutboundDatagramImpl {
                     data,
                     src_addr: src.into(),
                     dst_addr: SocksAddr::any_ipv4(),
+                    inbound_user: None,
                 }))
             }
             Err(_) => Poll::Ready(None),

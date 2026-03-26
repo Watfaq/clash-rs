@@ -63,11 +63,11 @@ impl futures::Stream for InboundShadowsocksDatagram {
         buf.resize(buf.capacity(), 0);
         let mut buf = ReadBuf::new(buf);
 
-        let rv = ready!(socket.poll_recv_from(cx, &mut buf));
+        let rv = ready!(socket.poll_recv_from_with_ctrl(cx, &mut buf));
         debug!("recv udp packet from inbound: {:?}", rv);
 
         match rv {
-            Ok((n, src, target, ..)) => Poll::Ready(Some(UdpPacket {
+            Ok((n, src, target, _, ctrl)) => Poll::Ready(Some(UdpPacket {
                 data: buf.filled()[..n].to_vec(),
                 src_addr: src.into(),
                 dst_addr: match target {
@@ -76,6 +76,9 @@ impl futures::Stream for InboundShadowsocksDatagram {
                         SocksAddr::Domain(domain, port)
                     }
                 },
+                inbound_user: ctrl
+                    .and_then(|c| c.user)
+                    .map(|u| u.name().to_owned()),
             })),
             Err(e) => {
                 error!("failed to receive udp packet: {}", e);

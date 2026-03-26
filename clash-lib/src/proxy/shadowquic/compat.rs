@@ -66,6 +66,7 @@ impl Stream for UdpSessionWrapper {
                 data: x.0.into(),
                 src_addr: self.src_addr.clone(),
                 dst_addr: to_clash_socks_addr(x.1),
+                inbound_user: None,
             })
         })
     }
