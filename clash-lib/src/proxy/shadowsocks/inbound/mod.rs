@@ -194,13 +194,18 @@ impl InboundHandlerTrait for ShadowsocksInbound {
 
                     let src_addr = src_addr.to_canonical();
 
-                    if !self.allow_lan && src_addr.ip() != raw_listener.local_addr()?.ip() && !raw_listener.local_addr()?.ip().is_unspecified() {
-                        warn!(
-                            "Connection from {} is not allowed. Listening at {}",
-                            src_addr,
-                            raw_listener.local_addr()?
-                        );
-                        continue;
+                    if !self.allow_lan {
+                        let local_addr = raw_listener.local_addr()?;
+                        let local_ip = local_addr.ip();
+
+                        if src_addr.ip() != local_ip && !local_ip.is_unspecified() {
+                            warn!(
+                                "Connection from {} is not allowed. Listening at {}",
+                                src_addr,
+                                local_addr
+                            );
+                            continue;
+                        }
                     }
 
                     // Resolve EIH user identity before handing the stream to shadowsocks.
