@@ -203,8 +203,8 @@ impl InboundManager {
                                 && tx.send(users.clone()).is_ok()
                             {
                                 info!(
-                                    "inbound provider {provider_name}: user \
-                                         list updated in place ({} users)",
+                                    "inbound provider {provider_name}: user list \
+                                     updated in place ({} users)",
                                     users.len()
                                 );
                             }
