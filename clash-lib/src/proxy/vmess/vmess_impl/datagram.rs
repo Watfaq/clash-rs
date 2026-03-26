@@ -165,6 +165,7 @@ impl Stream for OutboundDatagramVmess {
                 data: buf.filled().to_vec(),
                 src_addr: remote_addr.clone(),
                 dst_addr: SocksAddr::any_ipv4(),
+                inbound_user: None,
             })),
             Err(_) => Poll::Ready(None),
         }

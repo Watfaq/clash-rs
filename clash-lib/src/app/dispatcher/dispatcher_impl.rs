@@ -269,6 +269,7 @@ impl Dispatcher {
                 let orig_dest = packet.dst_addr.clone();
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = dest.clone();
+                sess.inbound_user = packet.inbound_user.clone();
 
                 // mutate packet for fake ip
                 // resolve is done in OutboundDatagramImpl so it's fine to have

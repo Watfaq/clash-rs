@@ -108,6 +108,7 @@ impl Stream for InboundUdp<UdpFramed<Socks5UDPCodec>> {
                         data: pkt.to_vec(),
                         src_addr: SocksAddr::Ip(src),
                         dst_addr: dst,
+                        inbound_user: None,
                     })),
                     Err(_) => Poll::Ready(None),
                 },

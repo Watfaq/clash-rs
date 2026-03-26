@@ -191,6 +191,7 @@ where
                     _ => SocksAddr::any_ipv4(),
                 },
                 dst_addr: SocksAddr::any_ipv4(),
+                inbound_user: None,
             })),
             Err(_) => Poll::Ready(None),
         }
@@ -229,6 +230,7 @@ impl DatagramSend for ShadowsocksUdpIo {
             data: buf.to_vec(),
             src_addr: SocksAddr::any_ipv4(),
             dst_addr: target.into(),
+            inbound_user: None,
         }) {
             Ok(_) => {}
             Err(e) => return Poll::Ready(Err(new_io_error(e.to_string()))),

@@ -142,6 +142,7 @@ impl Runner for ApiRunner {
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
                 .route("/traffic", get(handlers::traffic::handle))
+                .route("/user-stats", get(handlers::user_stats::handle))
                 .route("/version", get(handlers::version::handle))
                 .route("/memory", get(handlers::memory::handle))
                 .route("/restart", post(handlers::restart::handle))

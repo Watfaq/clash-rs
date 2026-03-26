@@ -1,6 +1,6 @@
 use crate::{
     common::auth::ThreadSafeAuthenticator,
-    config::listener::InboundOpts,
+    config::listener::{InboundOpts, InboundUser},
     proxy::{
         http::HttpInbound, inbound::InboundHandlerTrait, mixed::MixedInbound,
         socks::inbound::SocksInbound, tunnel::TunnelInbound,
@@ -24,12 +24,15 @@ pub(crate) fn build_network_listeners(
     inbound_opts: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    users_rx: Option<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
 ) -> Option<Vec<BoxFuture<'static, Result<(), crate::Error>>>> {
     let name = &inbound_opts.common_opts().name;
     let addr = inbound_opts.common_opts().listen.0;
     let port = inbound_opts.common_opts().port;
 
-    if let Some(handler) = build_handler(inbound_opts, dispatcher, authenticator) {
+    if let Some(handler) =
+        build_handler(inbound_opts, dispatcher, authenticator, users_rx)
+    {
         let mut runners: Vec<BoxFuture<'static, Result<(), crate::Error>>> =
             Vec::new();
 
@@ -78,6 +81,7 @@ fn build_handler(
     listener: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
+    users_rx: Option<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
 ) -> Option<Arc<dyn InboundHandlerTrait>> {
     let fw_mark = listener.common_opts().fw_mark;
     match listener {
@@ -168,15 +172,23 @@ fn build_handler(
             udp,
             cipher,
             password,
-        } => Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
-            addr: (common_opts.listen.0, common_opts.port).into(),
-            password: password.clone(),
-            udp: *udp,
-            cipher: cipher.clone(),
-            allow_lan: common_opts.allow_lan,
-            dispatcher,
-            authenticator,
-            fw_mark: common_opts.fw_mark,
-        }))),
+            users,
+        } => {
+            // Use the provided watch receiver, or create a static one for
+            // non-provider (static config) inbounds whose user list never changes.
+            let rx = users_rx
+                .unwrap_or_else(|| tokio::sync::watch::channel(users.clone()).1);
+            Some(Arc::new(ShadowsocksInbound::new(InboundOptions {
+                addr: (common_opts.listen.0, common_opts.port).into(),
+                password: password.clone(),
+                udp: *udp,
+                cipher: cipher.clone(),
+                allow_lan: common_opts.allow_lan,
+                dispatcher,
+                authenticator,
+                fw_mark: common_opts.fw_mark,
+                users_rx: rx,
+            })))
+        }
     }
 }

@@ -1,0 +1,22 @@
+listeners:
+  - name: "ss-multiuser"
+    type: shadowsocks
+    listen: 0.0.0.0
+    port: 8902
+    cipher: 2022-blake3-aes-256-gcm
+    password: "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU="
+    udp: true
+    users:
+      - name: "user1"
+        password: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      - name: "user2"
+        password: "AQIDAQIDAQIDAQIDAQIDAQIDAQIDAQIDAQIDAQIDAQID"
+
+allow-lan: true
+mode: rule
+log-level: trace
+external-controller: :9092
+secret: "test-secret"
+
+rules:
+  - MATCH, DIRECT

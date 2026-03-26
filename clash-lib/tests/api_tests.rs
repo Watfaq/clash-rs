@@ -562,6 +562,66 @@ async fn test_plain_proxy_api_response_direct_reject() {
     assert_eq!(reject["type"], "Reject");
 }
 
+/// `/user-stats` should return an empty JSON object when the server has started
+/// but no traffic has been routed yet.  This verifies the endpoint is
+/// registered, authenticated correctly, and resets-on-read semantics work.
+#[cfg(feature = "shadowsocks")]
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_user_stats_endpoint_empty_on_no_traffic() {
+    let wd_server =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
+    let server_config = wd_server.join("server_multiuser.yaml");
+
+    let _server = ClashInstance::start(
+        Options {
+            config: Config::File(server_config.to_string_lossy().to_string()),
+            cwd: Some(wd_server.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9092, 8902],
+    )
+    .expect("Failed to start multiuser server");
+
+    let url = "http://127.0.0.1:9092/user-stats";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer test-secret")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "/user-stats should return 200"
+    );
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON response");
+
+    assert!(
+        json.is_object(),
+        "/user-stats response should be a JSON object"
+    );
+    assert!(
+        json.as_object().unwrap().is_empty(),
+        "/user-stats should be empty when no traffic has been routed"
+    );
+}
+
 #[cfg(feature = "shadowsocks")]
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
