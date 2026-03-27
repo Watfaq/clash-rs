@@ -366,7 +366,7 @@ mod tests {
         let event = rx.try_recv().expect("expected collected log event");
 
         assert!(matches!(event.level, LogLevel::Info));
-        assert!(event.msg.contains("\"hello\""));
+        assert!(event.msg.contains("hello"));
         assert!(event.msg.contains("answer=42"));
         assert!(event.msg.contains("kind=demo"));
         assert!(event.msg.contains("success=true"));

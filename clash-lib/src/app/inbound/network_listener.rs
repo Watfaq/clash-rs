@@ -81,7 +81,9 @@ fn build_handler(
     listener: &InboundOpts,
     dispatcher: Arc<Dispatcher>,
     authenticator: ThreadSafeAuthenticator,
-    users_rx: Option<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
+    #[allow(unused)] users_rx: Option<
+        tokio::sync::watch::Receiver<Vec<InboundUser>>,
+    >,
 ) -> Option<Arc<dyn InboundHandlerTrait>> {
     let fw_mark = listener.common_opts().fw_mark;
     match listener {
