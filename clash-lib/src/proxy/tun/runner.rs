@@ -257,7 +257,25 @@ impl Runner for TunRunner {
 
         tokio::spawn(async move {
             let (tun, stack, mut tcp_listener, udp_socket) =
-                TunRunner::new_internal(&cfg).await?;
+                TunRunner::new_internal(&cfg)
+                    .await
+                    .inspect_err(|e| match e {
+                        Error::Io(e) => {
+                            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                error!(
+                                    "tun initialization failed: permission denied. \
+                                     Please make sure the program has the \
+                                     necessary permissions to create and manage \
+                                     TUN interfaces."
+                                );
+                            } else {
+                                error!("tun initialization I/O error: {}", e);
+                            }
+                        }
+                        _ => {
+                            error!("tun initialization error: {}", e);
+                        }
+                    })?;
 
             let framed = tun_rs::async_framed::DeviceFramed::new(
                 tun,
@@ -268,7 +286,6 @@ impl Runner for TunRunner {
             let (mut stack_sink, mut stack_stream) = stack.split();
 
             // dispatcher -> stack -> tun
-
             let mut fut_dispatcher_tun = async || {
                 while let Some(pkt) = stack_stream.next().await {
                     match pkt {
@@ -341,15 +358,24 @@ impl Runner for TunRunner {
                 Err(Error::Operation("tun stopped unexpectedly 3".to_string()))
             };
 
-            tokio::select! {
+            match tokio::select! {
                 res = fut_dispatcher_tun() => res,
                 res = fut_tun_dispatcher() => res,
                 res = fut_tcp_dispatch() => res,
                 res = fut_udp_dispatch() => res,
                 _ = cancellation_token.cancelled() => {
-                    info!("tun runner is closed");
+                    info!("tun stop signal received");
                     Ok(())
                 },
+            } {
+                Ok(_) => {
+                    info!("tun runner exited");
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("tun runner error: {}", e);
+                    Err(e)
+                }
             }
         });
     }

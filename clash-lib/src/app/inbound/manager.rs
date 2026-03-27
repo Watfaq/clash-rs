@@ -33,6 +33,7 @@ struct ProviderHandleEntry {
     handle: Option<JoinHandle<()>>,
     /// Present only for Shadowsocks listeners — used to push updated user
     /// lists into the running listener without a restart.
+    #[allow(dead_code)]
     users_tx: Option<tokio::sync::watch::Sender<Vec<InboundUser>>>,
 }
 
