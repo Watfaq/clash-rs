@@ -48,5 +48,3 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
         m
     }
 }
-
-
