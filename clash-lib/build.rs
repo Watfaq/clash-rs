@@ -15,15 +15,23 @@ fn main() -> anyhow::Result<()> {
 
     prost_build::compile_fds(file_descriptors)?;
 
-    let vars = ["CLASH_GIT_REF", "CLASH_GIT_SHA"];
+    let vars = ["CLASH_GIT_REF", "CLASH_GIT_SHA", "GITHUB_REF", "GITHUB_SHA"];
     for var in vars {
         println!("cargo:rerun-if-env-changed={var}");
     }
 
-    let version = if let Some("refs/heads/master") = option_env!("CLASH_GIT_REF")
-        && let Some(sha) = option_env!("CLASH_GIT_SHA")
+    let git_ref = std::env::var_os("CLASH_GIT_REF")
+        .or_else(|| std::env::var_os("GITHUB_REF"))
+        .and_then(|v| v.into_string().ok());
+    let git_sha = std::env::var_os("CLASH_GIT_SHA")
+        .or_else(|| std::env::var_os("GITHUB_SHA"))
+        .and_then(|v| v.into_string().ok());
+
+    let version = if let Some(ref git_ref_val) = git_ref
+        && git_ref_val == "refs/heads/master"
+        && let Some(ref sha) = git_sha
     {
-        let short_sha = &sha[..7];
+        let short_sha = &sha[..7.min(sha.len())];
         // Nightly release below
         format!("{}-alpha+sha.{short_sha}", env!("CARGO_PKG_VERSION"))
     } else {
