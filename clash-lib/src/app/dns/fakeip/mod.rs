@@ -102,11 +102,19 @@ impl FakeDns {
     }
 
     pub async fn is_fake_ip(&mut self, ip: net::IpAddr) -> bool {
-        if !ip.is_ipv4() {
-            false
-        } else {
-            self.ipnet.contains(&ip)
+        let net::IpAddr::V4(v4) = ip else {
+            return false;
+        };
+        // Broadcast and multicast addresses are never allocated as fake IPs.
+        if v4.is_broadcast() || v4.is_multicast() {
+            return false;
         }
+        // Only IPs that are both within the fake-IP range *and* have actually
+        // been allocated in the store should be treated as fake IPs.  This
+        // prevents directed-broadcast addresses (e.g. 198.18.0.255 for the
+        // /24 TUN subnet) that fall inside the wider fake-IP /16 range from
+        // triggering a failed reverse-lookup in the dispatcher.
+        self.ipnet.contains(&ip) && self.store.exist(ip).await
     }
 
     #[allow(dead_code)]
@@ -288,5 +296,58 @@ mod tests {
 
         assert!(new_pool.reverse_lookup(first).await.is_some());
         assert!(new_pool.reverse_lookup(last).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_is_fake_ip_excludes_broadcast_and_unallocated() {
+        let store = Box::new(InMemStore::new(10));
+
+        // Use 198.18.0.0/16 (the default fake-ip-range) to mirror the real
+        // production setup described in the bug report, where the TUN gateway
+        // is 198.18.0.1/24 and its subnet broadcast 198.18.0.255 fell inside
+        // the wider /16 fake-ip range.
+        let ipnet = "198.18.0.0/16".parse::<ipnet::IpNet>().unwrap();
+        let mut pool = FakeDns::new(Opts {
+            ipnet,
+            skipped_hostnames: None,
+            store,
+        })
+        .unwrap();
+
+        // Allocate one real fake IP.
+        let allocated = pool.lookup("foo.com").await;
+        assert!(
+            pool.is_fake_ip(allocated).await,
+            "allocated IP must be fake"
+        );
+
+        // Directed broadcast for the /24 TUN subnet (198.18.0.0/24) – never
+        // allocated, yet it falls inside the /16 range.
+        let directed_broadcast: net::IpAddr = "198.18.0.255".parse().unwrap();
+        assert!(
+            !pool.is_fake_ip(directed_broadcast).await,
+            "directed broadcast must not be treated as a fake IP"
+        );
+
+        // Global broadcast must never be a fake IP.
+        let global_broadcast: net::IpAddr = "255.255.255.255".parse().unwrap();
+        assert!(
+            !pool.is_fake_ip(global_broadcast).await,
+            "255.255.255.255 must not be a fake IP"
+        );
+
+        // A multicast address must never be a fake IP.
+        let multicast: net::IpAddr = "224.0.0.1".parse().unwrap();
+        assert!(
+            !pool.is_fake_ip(multicast).await,
+            "multicast must not be a fake IP"
+        );
+
+        // An IP in the range that was never allocated must not be fake.
+        let unallocated: net::IpAddr = "198.18.1.1".parse().unwrap();
+        assert!(
+            !pool.is_fake_ip(unallocated).await,
+            "unallocated in-range IP must not be treated as a fake IP"
+        );
     }
 }

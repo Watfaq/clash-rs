@@ -167,7 +167,18 @@ impl TunRunner {
                         }
                     }
                     #[cfg(target_os = "windows")]
-                    if let Some(guid) = tun_init_config.guid {
+                    {
+                        // Use the explicitly configured GUID, or derive a
+                        // deterministic one from the device name so that the
+                        // same adapter is reused across restarts instead of
+                        // creating a new one every time.
+                        let guid = tun_init_config.guid.unwrap_or_else(|| {
+                            uuid::Uuid::new_v5(
+                                &uuid::Uuid::NAMESPACE_DNS,
+                                tun_name.as_bytes(),
+                            )
+                            .as_u128()
+                        });
                         tun_builder = tun_builder.device_guid(guid);
                     }
 
