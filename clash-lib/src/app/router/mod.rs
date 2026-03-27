@@ -35,6 +35,7 @@ pub struct Router {
 }
 
 pub type ThreadSafeRouter = Arc<Router>;
+pub type ArcRouter = Arc<Router>;
 
 const MATCH: &str = "MATCH";
 
