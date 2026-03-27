@@ -417,7 +417,20 @@ impl TcpListener {
                         socket_control.send_waker.wake();
                     }
 
-                    if !socket.may_recv()
+                    // Only signal EOF/close after the socket has moved past
+                    // the handshake states (Listen, SynSent, SynReceived).
+                    // During the handshake may_recv()/may_send() return false
+                    // but that does NOT mean the connection is closing — the
+                    // flags are one-way and would permanently break the stream.
+                    let past_handshake = !matches!(
+                        socket.state(),
+                        tcp::State::Listen
+                            | tcp::State::SynSent
+                            | tcp::State::SynReceived
+                    );
+
+                    if past_handshake
+                        && !socket.may_recv()
                         && !socket.can_recv()
                         && !socket_control.read_closed.swap(true, Ordering::AcqRel)
                     {
@@ -432,7 +445,8 @@ impl TcpListener {
                         socket.close();
                     }
 
-                    if !socket.may_send()
+                    if past_handshake
+                        && !socket.may_send()
                         && !socket_control.write_closed.swap(true, Ordering::AcqRel)
                     {
                         socket_control.send_waker.wake();
