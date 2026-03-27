@@ -14,13 +14,6 @@ where
     io::Error::other(format!("{:?}", anyhow::anyhow!(err)))
 }
 
-#[macro_export]
-macro_rules! print_and_exit {
-    ($($arg:tt)*) => {{
-        eprintln!($($arg)*);
-        std::process::exit(1);
-    }};
-}
 
 pub trait IntoIoResultExt<T> {
     fn into_io(self) -> std::io::Result<T>;

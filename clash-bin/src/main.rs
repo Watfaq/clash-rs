@@ -195,6 +195,7 @@ fn main() -> anyhow::Result<()> {
         cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,
+        ctx: None,
     })
     .inspect_err(|err| eprintln!("Failed to start clash: {err}"))?;
     Ok(())

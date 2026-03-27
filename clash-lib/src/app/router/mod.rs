@@ -12,7 +12,6 @@ use crate::{
         final_::Final, ipcidr::IpCidr, ruleset::RuleSet,
     },
     config::internal::{config::RuleProviderDef, rule::RuleType},
-    print_and_exit,
     session::Session,
 };
 
@@ -72,7 +71,7 @@ impl Router {
                         Some(&rule_provider_registry),
                     )
                 })
-                .collect(),
+                .collect::<crate::Result<Vec<_>>>().unwrap_or_default(),
             dns_resolver,
 
             asn_mmdb,
@@ -145,9 +144,7 @@ impl Router {
             match provider {
                 RuleProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
-                        http.url.parse::<Uri>().unwrap_or_else(|_| {
-                            print_and_exit!("invalid provider url: {}", http.url)
-                        }),
+                        http.url.parse::<Uri>().map_err(|_| crate::Error::InvalidConfig(format!("invalid provider url: {}", http.url)))?,
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),
@@ -242,8 +239,8 @@ pub fn map_rule_type(
     mmdb: Option<MmdbLookup>,
     geodata: Option<GeoDataLookup>,
     rule_provider_registry: Option<&HashMap<String, ThreadSafeRuleProvider>>,
-) -> Box<dyn RuleMatcher> {
-    match rule_type {
+) -> crate::Result<Box<dyn RuleMatcher>> {
+    Ok(match rule_type {
         RuleType::Domain { domain, target } => {
             Box::new(Domain { domain, target }) as Box<dyn RuleMatcher>
         }
@@ -339,9 +336,9 @@ pub fn map_rule_type(
                 target,
                 rule_provider_registry
                     .get(&rule_set)
-                    .unwrap_or_else(|| {
-                        print_and_exit!("rule provider {} not found", rule_set)
-                    })
+                    .ok_or_else(|| {
+                        crate::Error::InvalidConfig(format!("rule provider {} not found", rule_set))
+                    })?
                     .clone(),
             )),
             None => {
@@ -380,7 +377,7 @@ pub fn map_rule_type(
             }
         }
         RuleType::Match { target } => Box::new(Final { target }),
-    }
+    })
 }
 
 #[cfg(test)]

@@ -447,7 +447,7 @@ fn make_classical_rules(
 
         let rule_matcher =
             map_rule_type(rule_type, mmdb.clone(), geodata.clone(), None);
-        rv.push(rule_matcher);
+        rv.push(rule_matcher?);
     }
     Ok(rv)
 }
