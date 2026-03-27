@@ -277,44 +277,18 @@ fn setup_logging_inner(
 
 struct EventVisitor<'a>(&'a mut Vec<String>);
 
-impl tracing::field::Visit for EventVisitor<'_> {
-    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        println!("f64 {} = {}", field.name(), value);
-    }
-
-    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        println!("i64 {} = {}", field.name(), value);
-    }
-
-    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        println!("u64 {} = {}", field.name(), value);
-    }
-
-    fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
-        println!("i128 {} = {}", field.name(), value);
-    }
-
-    fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
-        println!("u128 {} = {}", field.name(), value);
-    }
-
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        println!("bool {} = {}", field.name(), value);
-    }
-
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        println!("str {} = {}", field.name(), value);
-    }
-
-    fn record_error(
+impl EventVisitor<'_> {
+    fn push_display(
         &mut self,
         field: &tracing::field::Field,
-        value: &(dyn std::error::Error + 'static),
+        value: impl std::fmt::Display,
     ) {
-        println!("error {} = {}", field.name(), value);
+        if field.name() != "message" {
+            self.0.push(format!("{}={}", field.name(), value));
+        }
     }
 
-    fn record_debug(
+    fn push_debug(
         &mut self,
         field: &tracing::field::Field,
         value: &dyn std::fmt::Debug,
@@ -322,7 +296,79 @@ impl tracing::field::Visit for EventVisitor<'_> {
         if field.name() == "message" {
             self.0.push(format!("{value:?}"));
         } else {
-            println!("debug {} = {:?}", field.name(), value);
+            self.0.push(format!("{}={value:?}", field.name()));
         }
+    }
+}
+
+impl tracing::field::Visit for EventVisitor<'_> {
+    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
+        self.push_display(field, value);
+    }
+
+    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
+        self.push_display(field, value);
+    }
+
+    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+        self.push_display(field, value);
+    }
+
+    fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
+        self.push_display(field, value);
+    }
+
+    fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
+        self.push_display(field, value);
+    }
+
+    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
+        self.push_display(field, value);
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        self.push_display(field, value);
+    }
+
+    fn record_error(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &(dyn std::error::Error + 'static),
+    ) {
+        self.push_display(field, value);
+    }
+
+    fn record_debug(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &dyn std::fmt::Debug,
+    ) {
+        self.push_debug(field, value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EventCollector, LogLevel};
+    use tokio::sync::broadcast;
+    use tracing_subscriber::{layer::SubscriberExt, registry};
+
+    #[test]
+    fn collector_keeps_message_and_fields_inline() {
+        let (tx, mut rx) = broadcast::channel(1);
+        let collector = EventCollector::new(vec![tx]);
+        let subscriber = registry().with(collector);
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(answer = 42u64, kind = "demo", success = true, "hello");
+        });
+
+        let event = rx.try_recv().expect("expected collected log event");
+
+        assert!(matches!(event.level, LogLevel::Info));
+        assert!(event.msg.contains("\"hello\""));
+        assert!(event.msg.contains("answer=42"));
+        assert!(event.msg.contains("kind=demo"));
+        assert!(event.msg.contains("success=true"));
     }
 }
