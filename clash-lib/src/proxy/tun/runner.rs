@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use futures::{FutureExt, SinkExt, StreamExt, future::BoxFuture};
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 use url::Url;
 
@@ -33,7 +32,7 @@ pub struct TunRunner {
     cfg: TunConfig,
     dispatcher: Arc<Dispatcher>,
     resolver: ThreadSafeDNSResolver,
-    cancellation_token: CancellationToken,
+    ctx: crate::app::context::AppContext,
 }
 
 impl TunRunner {
@@ -41,13 +40,13 @@ impl TunRunner {
         cfg: TunConfig,
         dispatcher: Arc<Dispatcher>,
         resolver: ThreadSafeDNSResolver,
-        cancellation_token: Option<CancellationToken>,
+        ctx: crate::app::context::AppContext,
     ) -> Result<TunRunner, Error> {
         Ok(Self {
             cfg,
             dispatcher,
             resolver,
-            cancellation_token: cancellation_token.unwrap_or_default(),
+            ctx,
         })
     }
 
@@ -253,7 +252,7 @@ impl Runner for TunRunner {
         let dispatcher = self.dispatcher.clone();
         let resolver = self.resolver.clone();
         let dns_hijack = self.cfg.dns_hijack;
-        let cancellation_token = self.cancellation_token.clone();
+        let cancellation_token = self.ctx.shutdown_token.clone();
 
         tokio::spawn(async move {
             let (tun, stack, mut tcp_listener, udp_socket) =
@@ -388,7 +387,7 @@ impl Runner for TunRunner {
                 error!("failed to clean up routes: {}", e);
             }
         }
-        self.cancellation_token.cancel();
+        self.ctx.shutdown();
     }
 
     fn join(&self) -> BoxFuture<'_, Result<(), Error>> {

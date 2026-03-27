@@ -220,7 +220,7 @@ pub async fn start(
         components.cache_store.clone(),
         components.router.clone(),
         cwd.to_string_lossy().to_string(),
-        Some(ctx.shutdown_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
         components.dns_listen.clone(),
         components.dns_enabled,
     ));
@@ -283,7 +283,7 @@ pub async fn start(
                 new_components.cache_store.clone(),
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
-                Some(reload_token.clone()),
+                crate::app::context::AppContext::with_token(reload_token.clone()),
                 new_components.dns_listen.clone(),
                 new_components.dns_enabled,
             ));
@@ -555,7 +555,7 @@ async fn create_components(
             dispatcher.clone(),
             authenticator,
             config.listeners,
-            Some(ctx.shutdown_token.child_token()),
+            crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
         )
         .await,
     );
@@ -577,7 +577,7 @@ async fn create_components(
         config.tun,
         dispatcher.clone(),
         dns_resolver.clone(),
-        Some(ctx.shutdown_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
     )?);
 
     debug!("initializing dns listener");
@@ -586,7 +586,7 @@ async fn create_components(
         dns_listen.clone(),
         dns_resolver.clone(),
         &cwd,
-        Some(ctx.shutdown_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
     ));
 
     info!("all components initialized");
