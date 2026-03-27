@@ -1,7 +1,7 @@
 use axum::response::IntoResponse;
 use serde_json::json;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CLASH_VERSION_OVERRIDE");
 
 pub async fn handle() -> impl IntoResponse {
     json!({
