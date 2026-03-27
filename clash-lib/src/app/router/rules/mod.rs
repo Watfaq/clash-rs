@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
 use erased_serde::Serialize;
-use serde::ser::SerializeMap as _;
 
 use crate::session::Session;
 
