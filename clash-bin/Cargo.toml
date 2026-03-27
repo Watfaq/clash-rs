@@ -28,7 +28,7 @@ tun = ["clash-lib/tun"]
 
 bench = ["clash-lib/bench"]
 dhat-heap = ["dep:dhat"]
-tracing = ["clash-lib/tracing"]
+telemetry = ["clash-lib/telemetry"]
 jemallocator = ["dep:tikv-jemallocator"]
 
 aws-lc-rs = ["dep:aws-lc-rs", "clash-lib/aws-lc-rs"]

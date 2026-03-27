@@ -43,7 +43,7 @@ tun = [
 redir = []
 zero_copy = []
 bench = ["dep:criterion"]
-tracing = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
+telemetry = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 
 [dependencies]
 # Async
