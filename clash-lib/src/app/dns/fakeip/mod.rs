@@ -316,7 +316,10 @@ mod tests {
 
         // Allocate one real fake IP.
         let allocated = pool.lookup("foo.com").await;
-        assert!(pool.is_fake_ip(allocated).await, "allocated IP must be fake");
+        assert!(
+            pool.is_fake_ip(allocated).await,
+            "allocated IP must be fake"
+        );
 
         // Directed broadcast for the /24 TUN subnet (198.18.0.0/24) – never
         // allocated, yet it falls inside the /16 range.
