@@ -50,16 +50,4 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
     }
 }
 
-impl serde::Serialize for dyn RuleMatcher {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(4))?;
-        map.serialize_entry("type", &self.type_name())?;
-        map.serialize_entry("proxy", &self.target())?;
-        map.serialize_entry("payload", &self.payload())?;
-        map.serialize_entry("size", &self.size())?;
-        map.end()
-    }
-}
+
