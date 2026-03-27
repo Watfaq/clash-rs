@@ -36,6 +36,9 @@ pub struct Router {
 
 pub type ArcRouter = Arc<Router>;
 
+#[deprecated(note = "ThreadSafeRouter has been renamed to ArcRouter; use ArcRouter instead")]
+pub type ThreadSafeRouter = ArcRouter;
+
 const MATCH: &str = "MATCH";
 
 impl Router {
