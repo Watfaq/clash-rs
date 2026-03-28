@@ -34,7 +34,12 @@ pub struct Router {
     asn_mmdb: Option<MmdbLookup>,
 }
 
-pub type ThreadSafeRouter = Arc<Router>;
+pub type ArcRouter = Arc<Router>;
+
+#[deprecated(
+    note = "ThreadSafeRouter has been renamed to ArcRouter; use ArcRouter instead"
+)]
+pub type ThreadSafeRouter = ArcRouter;
 
 const MATCH: &str = "MATCH";
 
