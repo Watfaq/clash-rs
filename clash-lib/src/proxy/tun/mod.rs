@@ -11,7 +11,7 @@ pub use datagram::TunDatagram;
 mod tests {
     use std::thread;
 
-    use crate::{Config, Options, shutdown, start_scaffold};
+    use crate::{Config, Options, start_scaffold};
 
     fn wait_port_open(port: u16) {
         let mut count = 0;
@@ -53,11 +53,15 @@ mod tests {
         let log_file = uuid::Uuid::new_v4().to_string() + ".log";
 
         let cwd_clone = cwd.clone();
+
+        let ctx = crate::app::context::AppContext::new();
+        let ctx_clone = ctx.clone();
         let log_file_clone = log_file.clone();
 
         let handle = thread::spawn(|| {
             start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
+                ctx: Some(ctx_clone),
                 cwd: Some(cwd_clone),
                 rt: None,
                 log_file: Some(log_file_clone),
@@ -81,7 +85,7 @@ mod tests {
 
         assert_eq!(buf[0], req[0]);
 
-        assert!(shutdown());
+        ctx.shutdown();
 
         thread::sleep(std::time::Duration::from_secs(1));
 
@@ -124,11 +128,15 @@ mod tests {
         let log_file = uuid::Uuid::new_v4().to_string() + ".log";
 
         let cwd_clone = cwd.clone();
+
+        let ctx = crate::app::context::AppContext::new();
+        let ctx_clone = ctx.clone();
         let log_file_clone = log_file.clone();
 
         let handle = thread::spawn(|| {
             start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
+                ctx: Some(ctx_clone),
                 cwd: Some(cwd_clone),
                 rt: None,
                 log_file: Some(log_file_clone),
@@ -155,7 +163,7 @@ mod tests {
 
         assert_eq!(b"hello", &buf[..5]);
 
-        assert!(shutdown());
+        ctx.shutdown();
 
         thread::sleep(std::time::Duration::from_secs(1));
 

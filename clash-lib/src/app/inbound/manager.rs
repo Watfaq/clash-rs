@@ -79,7 +79,7 @@ pub struct InboundManager {
     /// provider name -> provider (kept alive for lifecycle management)
     inbound_providers: Arc<RwLock<HashMap<String, Arc<InboundSetProvider>>>>,
 
-    cancellation_token: tokio_util::sync::CancellationToken,
+    ctx: crate::app::context::AppContext,
 }
 
 impl Runner for InboundManager {
@@ -87,21 +87,21 @@ impl Runner for InboundManager {
         let inbound_handlers = self.inbound_handlers.clone();
         let dispatcher = self.dispatcher.clone();
         let authenticator = self.authenticator.clone();
-        let cancellation_token = self.cancellation_token.clone();
+        let ctx = self.ctx.clone();
 
         tokio::spawn(async move {
             Self::start_all_listeners(
                 dispatcher,
                 authenticator,
                 inbound_handlers,
-                cancellation_token,
+                ctx,
             )
             .await;
         });
     }
 
     fn shutdown(&self) {
-        self.cancellation_token.cancel();
+        self.ctx.shutdown();
     }
 
     fn join(&self) -> BoxFuture<'_, Result<(), crate::Error>> {
@@ -113,7 +113,7 @@ impl InboundManager {
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
         inbounds_opt: HashSet<InboundOpts>,
-        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+        ctx: crate::app::context::AppContext,
     ) -> Self {
         Self {
             inbound_handlers: Arc::new(RwLock::new(
@@ -123,7 +123,7 @@ impl InboundManager {
             inbound_providers: Arc::new(RwLock::new(HashMap::new())),
             dispatcher,
             authenticator,
-            cancellation_token: cancellation_token.unwrap_or_default(),
+            ctx,
         }
     }
 
@@ -171,14 +171,14 @@ impl InboundManager {
             let provider_handles = self.provider_handles.clone();
             let dispatcher = self.dispatcher.clone();
             let authenticator = self.authenticator.clone();
-            let cancellation_token = self.cancellation_token.clone();
+            let ctx = self.ctx.clone();
             let provider_name = name.clone();
 
             let on_update = move |new_opts: Vec<InboundOpts>| {
                 let provider_handles = provider_handles.clone();
                 let dispatcher = dispatcher.clone();
                 let authenticator = authenticator.clone();
-                let cancellation_token = cancellation_token.clone();
+                let cancellation_token = ctx.shutdown_token.clone();
                 let provider_name = provider_name.clone();
 
                 Box::pin(async move {
@@ -319,10 +319,10 @@ impl InboundManager {
         dispatcher: Arc<Dispatcher>,
         authenticator: ThreadSafeAuthenticator,
         inbound_handlers: Arc<RwLock<HashMap<InboundOpts, Option<JoinHandle<()>>>>>,
-        cancellation_token: tokio_util::sync::CancellationToken,
+        ctx: crate::app::context::AppContext,
     ) {
         for (opts, handler) in inbound_handlers.write().await.iter_mut() {
-            let cancellation_token = cancellation_token.clone();
+            let cancellation_token = ctx.shutdown_token.clone();
             let name = opts.common_opts().name.clone();
             *handler = build_network_listeners(
                 opts,
@@ -412,12 +412,12 @@ impl InboundManager {
         let inbound_handlers = self.inbound_handlers.clone();
         let dispatcher = self.dispatcher.clone();
         let authenticator = self.authenticator.clone();
-        let cancellation_token = self.cancellation_token.clone();
+        let ctx = self.ctx.clone();
         Self::start_all_listeners(
             dispatcher,
             authenticator,
             inbound_handlers,
-            cancellation_token,
+            ctx,
         )
         .await;
         Ok(())

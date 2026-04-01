@@ -253,7 +253,7 @@ impl CompositeRule {
         // It's a leaf rule - parse as RuleType
         let rule = RuleType::new(rule_type, rest, "", None)?;
         let matcher = map_rule_type(rule, mmdb, geodata, rule_provider_registry);
-        Ok(RuleExpression::Rule(matcher))
+        Ok(RuleExpression::Rule(matcher?))
     }
 }
 

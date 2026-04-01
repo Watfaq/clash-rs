@@ -36,7 +36,7 @@ pub struct DnsRunner {
     resolver: ThreadSafeDNSResolver,
     cwd: std::path::PathBuf,
 
-    cancellation_token: tokio_util::sync::CancellationToken,
+    ctx: crate::app::context::AppContext,
 }
 
 impl DnsRunner {
@@ -45,14 +45,14 @@ impl DnsRunner {
         listen: DNSListenAddr,
         resolver: ThreadSafeDNSResolver,
         cwd: &std::path::Path,
-        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+        ctx: crate::app::context::AppContext,
     ) -> Self {
         Self {
             enable,
             listener: listen,
             resolver,
             cwd: cwd.to_path_buf(),
-            cancellation_token: cancellation_token.unwrap_or_default(),
+            ctx,
         }
     }
 }
@@ -67,7 +67,7 @@ impl Runner for DnsRunner {
         let resolver = self.resolver.clone();
         let listen = self.listener.clone();
         let cwd = self.cwd.clone();
-        let cancellation_token = self.cancellation_token.clone();
+        let cancellation_token = self.ctx.shutdown_token.clone();
 
         tokio::spawn(async move {
             let h = DnsMessageExchanger { resolver };
@@ -95,7 +95,7 @@ impl Runner for DnsRunner {
 
     fn shutdown(&self) {
         info!("Shutting down DNS server");
-        self.cancellation_token.cancel();
+        self.ctx.shutdown();
     }
 
     fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {

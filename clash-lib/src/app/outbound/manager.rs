@@ -31,7 +31,6 @@ use crate::{
         OutboundGroupProtocol, OutboundProxyProtocol, OutboundProxyProviderDef,
         PROXY_DIRECT, PROXY_GLOBAL, PROXY_REJECT,
     },
-    print_and_exit,
     proxy::{
         AnyOutboundHandler,
         direct::{self},
@@ -578,19 +577,20 @@ impl OutboundManager {
             provider_names: &Option<Vec<String>>,
             provider_registry: &HashMap<String, ThreadSafeProxyProvider>,
             providers: &mut Vec<ThreadSafeProxyProvider>,
-        ) {
+        ) -> crate::Result<()> {
             if let Some(provider_names) = provider_names {
                 for provider_name in provider_names {
                     let provider = provider_registry
                         .get(provider_name)
-                        .unwrap_or_else(|| {
-                            print_and_exit!("provider {} not found", provider_name);
-                        })
+                        .ok_or_else(|| {
+                            crate::Error::InvalidConfig(format!("provider {} not found", provider_name))
+                        })?
                         .clone();
 
                     providers.push(provider);
                 }
             }
+            Ok(())
         }
 
         fn check_group_empty(
@@ -631,7 +631,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let relay = relay::Handler::new(
                         relay::HandlerOptions {
@@ -672,7 +672,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let url_test = urltest::Handler::new(
                         urltest::HandlerOptions {
@@ -716,7 +716,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let fallback = fallback::Handler::new(
                         fallback::HandlerOptions {
@@ -760,7 +760,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let load_balance = loadbalance::Handler::new(
                         loadbalance::HandlerOptions {
@@ -804,7 +804,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let stored_selection =
                         cache_store.get_selected(&proto.name).await;
@@ -853,7 +853,7 @@ impl OutboundManager {
                         &proto.use_provider,
                         provider_registry,
                         &mut providers,
-                    );
+                    )?;
 
                     let smart_handler = smart::Handler::new_with_cache(
                         smart::HandlerOptions {
@@ -892,9 +892,7 @@ impl OutboundManager {
             match provider {
                 OutboundProxyProviderDef::Http(http) => {
                     let vehicle = http_vehicle::Vehicle::new(
-                        http.url.parse::<Uri>().unwrap_or_else(|_| {
-                            print_and_exit!("invalid provider url: {}", http.url);
-                        }),
+                        http.url.parse::<Uri>().map_err(|_| crate::Error::InvalidConfig(format!("invalid provider url: {}", http.url)))?,
                         http.path,
                         Some(cwd.clone()),
                         resolver.clone(),

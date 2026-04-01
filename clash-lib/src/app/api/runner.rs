@@ -49,7 +49,7 @@ pub struct ApiRunner {
     router: ArcRouter,
     cwd: String,
 
-    cancellation_token: tokio_util::sync::CancellationToken,
+    ctx: crate::app::context::AppContext,
     dns_listen_addr: DNSListenAddr,
     dns_enabled: bool,
 }
@@ -68,7 +68,7 @@ impl ApiRunner {
         cache_store: ThreadSafeCacheFile,
         router: ArcRouter,
         cwd: String,
-        cancellation_token: Option<tokio_util::sync::CancellationToken>,
+        ctx: crate::app::context::AppContext,
         dns_listen_addr: DNSListenAddr,
         dns_enabled: bool,
     ) -> Self {
@@ -84,7 +84,7 @@ impl ApiRunner {
             cache_store,
             router,
             cwd,
-            cancellation_token: cancellation_token.unwrap_or_default(),
+            ctx,
             dns_listen_addr,
             dns_enabled,
         }
@@ -136,7 +136,7 @@ impl Runner for ApiRunner {
             log_source_tx: self.log_source.clone(),
             statistics_manager: statistics_manager.clone(),
         });
-        let cancellation_token = self.cancellation_token.clone();
+        let cancellation_token = self.ctx.shutdown_token.clone();
         tokio::spawn(async move {
             let mut router = Router::new()
                 .route("/", get(handlers::hello::handle))
@@ -327,7 +327,7 @@ impl Runner for ApiRunner {
 
     fn shutdown(&self) {
         info!("Shutting down API server");
-        self.cancellation_token.cancel();
+        self.ctx.shutdown();
     }
 
     fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {

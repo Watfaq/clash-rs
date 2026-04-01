@@ -88,6 +88,7 @@ pub struct Options {
     pub cwd: Option<String>,
     pub rt: Option<TokioRuntime>,
     pub log_file: Option<String>,
+    pub ctx: Option<app::context::AppContext>,
 }
 
 pub enum TokioRuntime {
@@ -147,8 +148,10 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
         opts.log_file,
     );
 
+    let ctx = opts.ctx.unwrap_or_else(app::context::AppContext::new);
+
     rt.block_on(async {
-        match start(config, cwd, log_tx).await {
+        match start(ctx, config, cwd, log_tx).await {
             Err(e) => {
                 eprintln!("start error: {e}");
                 Err(e)
@@ -158,22 +161,6 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
     })
 }
 
-static SHUTDOWN_TOKEN: std::sync::Mutex<Vec<tokio_util::sync::CancellationToken>> =
-    std::sync::Mutex::new(Vec::new());
-
-pub fn shutdown() -> bool {
-    let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
-    if !token_guard.is_empty() {
-        for token in token_guard.drain(..) {
-            token.cancel();
-        }
-        warn!("Shutdown signal sent, waiting for shutdown to complete...");
-        true
-    } else {
-        warn!("Shutdown token not initialized, cannot shutdown");
-        false
-    }
-}
 
 static CRYPTO_PROVIDER_LOCK: OnceLock<()> = OnceLock::new();
 
@@ -191,17 +178,15 @@ pub fn setup_default_crypto_provider() {
 }
 
 pub async fn start(
+    ctx: app::context::AppContext,
     config: InternalConfig,
     cwd: String,
     log_tx: broadcast::Sender<LogEvent>,
 ) -> Result<()> {
     setup_default_crypto_provider();
 
-    let shutdown_token = tokio_util::sync::CancellationToken::new();
 
     {
-        let mut token_guard = SHUTDOWN_TOKEN.lock().unwrap();
-        token_guard.push(shutdown_token.clone());
     }
 
     let cwd = PathBuf::from(cwd);
@@ -210,7 +195,7 @@ pub async fn start(
     let controller_cfg = config.general.controller.clone();
     let log_level = config.general.log_level;
 
-    let components = create_components(cwd.clone(), config).await?;
+    let components = create_components(ctx.clone(), cwd.clone(), config).await?;
 
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
 
@@ -235,7 +220,7 @@ pub async fn start(
         components.cache_store.clone(),
         components.router.clone(),
         cwd.to_string_lossy().to_string(),
-        Some(shutdown_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
         components.dns_listen.clone(),
         components.dns_enabled,
     ));
@@ -257,7 +242,8 @@ pub async fn start(
 
     let cwd_clone = cwd.clone();
 
-    let reload_token = shutdown_token.child_token();
+    let reload_token = ctx.shutdown_token.child_token();
+    let ctx_clone = ctx.clone();
     tokio::spawn(async move {
         // Listen for config reload signal and reload config
         while let Some((config, done)) = reload_rx.recv().await {
@@ -273,7 +259,7 @@ pub async fn start(
             let controller_cfg = config.general.controller.clone();
 
             let new_components =
-                create_components(cwd_clone.clone(), config).await?;
+                create_components(ctx_clone.clone(), cwd_clone.clone(), config).await?;
 
             done.send(()).unwrap();
 
@@ -297,7 +283,7 @@ pub async fn start(
                 new_components.cache_store.clone(),
                 new_components.router.clone(),
                 cwd_clone.to_string_lossy().to_string(),
-                Some(reload_token.clone()),
+                crate::app::context::AppContext::with_token(reload_token.clone()),
                 new_components.dns_listen.clone(),
                 new_components.dns_enabled,
             ));
@@ -317,7 +303,7 @@ pub async fn start(
 
     tokio::select! {
         result = tokio::signal::ctrl_c() => { result.map_err(Error::Io)?; }
-        _ = shutdown_token.cancelled() => {}
+        _ = ctx.shutdown_token.cancelled() => {}
     }
     Ok(())
 }
@@ -355,6 +341,7 @@ impl RuntimeComponents {
 }
 
 async fn create_components(
+    ctx: app::context::AppContext,
     cwd: PathBuf,
     config: InternalConfig,
 ) -> Result<RuntimeComponents> {
@@ -363,7 +350,6 @@ async fn create_components(
         init_net_config(config.tun.so_mark).await;
     }
 
-    let cancellation_token = tokio_util::sync::CancellationToken::new();
 
     debug!("initializing cache store");
     let cache_store = profile::ThreadSafeCacheFile::new(
@@ -444,7 +430,7 @@ async fn create_components(
         pending_country_mmdb.clone(),
         outbound_registry.clone(),
     )
-    .await;
+    .await?;
 
     debug!("initializing outbound manager");
     let outbound_manager = Arc::new(
@@ -569,7 +555,7 @@ async fn create_components(
             dispatcher.clone(),
             authenticator,
             config.listeners,
-            Some(cancellation_token.child_token()),
+            crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
         )
         .await,
     );
@@ -591,7 +577,7 @@ async fn create_components(
         config.tun,
         dispatcher.clone(),
         dns_resolver.clone(),
-        Some(cancellation_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
     )?);
 
     debug!("initializing dns listener");
@@ -600,7 +586,7 @@ async fn create_components(
         dns_listen.clone(),
         dns_resolver.clone(),
         &cwd,
-        Some(cancellation_token.child_token()),
+        crate::app::context::AppContext::with_token(ctx.shutdown_token.child_token()),
     ));
 
     info!("all components initialized");
@@ -622,7 +608,7 @@ async fn create_components(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Options, shutdown, start_scaffold};
+    use crate::{Config, Options, start_scaffold};
     use std::{sync::Once, thread, time::Duration};
 
     static INIT: Once = Once::new();
@@ -645,9 +631,12 @@ mod tests {
           - {name: REJECT_alias, type: reject}
         "#;
 
-        let handle = thread::spawn(|| {
+        let ctx = crate::app::context::AppContext::new();
+        let ctx_clone = ctx.clone();
+        let handle = thread::spawn(move || {
             start_scaffold(Options {
                 config: Config::Str(conf.to_string()),
+                ctx: Some(ctx_clone),
                 cwd: None,
                 rt: None,
                 log_file: None,
@@ -655,9 +644,9 @@ mod tests {
             .unwrap()
         });
 
-        thread::spawn(|| {
+        thread::spawn(move || {
             thread::sleep(Duration::from_secs(3));
-            assert!(shutdown());
+            ctx.shutdown();
         });
 
         handle.join().unwrap();
