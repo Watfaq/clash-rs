@@ -202,10 +202,7 @@ fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
                 let stripped = raw.strip_prefix(prefix.as_str()).unwrap_or(raw);
                 // Re-build a PathBuf from the '/' separated components so the
                 // result uses native separators on all platforms.
-                stripped
-                    .split('/')
-                    .filter(|c| !c.is_empty())
-                    .collect()
+                stripped.split('/').filter(|c| !c.is_empty()).collect()
             }
             None => enclosed.clone(),
         };

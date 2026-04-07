@@ -1,5 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-use std::sync::Mutex as StdMutex;
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex as StdMutex},
+};
 
 use axum::{
     Router, ServiceExt, middleware,
