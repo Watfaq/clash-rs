@@ -223,10 +223,10 @@ impl DockerTestRunner {
                 b.values().find_map(|j| {
                     [(&j.gateway), (&j.ipv6_gateway)]
                         .into_iter()
-                        .find(|(gateway)| {
+                        .find(|gateway| {
                             gateway.as_ref().map_or(false, |g| !g.is_empty())
                         })
-                        .and_then(|(gateway)| gateway.as_ref())
+                        .and_then(|gateway| gateway.as_ref())
                         .filter(|ip| !ip.is_empty())
                         .map(|ip| ip.to_string())
                 })
@@ -237,6 +237,7 @@ impl DockerTestRunner {
     }
 
     /// For debugging use
+    #[allow(dead_code)]
     pub async fn exec_command(&self, cmd: &[&str]) -> anyhow::Result<String> {
         use bollard::exec::{CreateExecOptions, StartExecResults};
 
@@ -315,6 +316,7 @@ pub struct MultiDockerTestRunner {
 
 #[cfg(docker_test)]
 impl MultiDockerTestRunner {
+    #[allow(dead_code)]
     pub async fn add(
         &mut self,
         creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,
