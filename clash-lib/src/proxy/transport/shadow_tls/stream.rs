@@ -78,6 +78,7 @@ impl<S> ProxyTlsStream<S> {
         &self.certs
     }
 
+    #[allow(dead_code)]
     pub fn tls13(&self) -> bool {
         self.tls13
     }
