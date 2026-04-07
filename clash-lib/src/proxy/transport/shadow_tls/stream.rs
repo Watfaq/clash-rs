@@ -78,7 +78,6 @@ impl<S> ProxyTlsStream<S> {
         &self.certs
     }
 
-    #[allow(unused)]
     pub fn tls13(&self) -> bool {
         self.tls13
     }
