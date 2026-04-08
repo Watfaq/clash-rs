@@ -223,7 +223,7 @@ pub async fn start(
         cwd: cwd.to_string_lossy().to_string(),
     }));
 
-    let api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
+    let mut api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
         controller_cfg.clone(),
         log_tx.clone(),
         components.inbound_manager.clone(),
@@ -310,7 +310,11 @@ pub async fn start(
             g.dns_listener = new_components.dns_listener.clone();
 
             api_listener.shutdown();
+            // Wait for the old API server to fully stop before starting the new
+            // one, to avoid EADDRINUSE on the same port.
+            api_listener.join().await.ok();
             new_api_listener.run_async();
+            api_listener = new_api_listener;
         }
         Ok::<(), Error>(())
     });

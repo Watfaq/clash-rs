@@ -7,8 +7,8 @@ use std::{
 
 use blake2::{Blake2b, Digest};
 use bytes::{BufMut, Bytes, BytesMut};
-use digest::consts::U32;
 use futures::ready;
+use generic_array::typenum::U32;
 use quinn::{
     AsyncUdpSocket, TokioRuntime,
     udp::{RecvMeta, Transmit},

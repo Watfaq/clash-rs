@@ -66,19 +66,6 @@ mod macos {
         Ok(stream)
     }
 
-    #[allow(unused)]
-    async fn new_udp_packet(iface: &str) -> std::io::Result<tokio::net::UdpSocket> {
-        let socket =
-            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?;
-        socket.set_only_v6(false)?;
-        let iface_index = get_interface_index(iface);
-        assert_ne!(iface_index, 0, "interface index must not be zero");
-        socket.bind_device_by_index_v6(iface_index.try_into().ok())?;
-        socket.set_nonblocking(true)?;
-
-        tokio::net::UdpSocket::from_std(socket.into())
-    }
-
     async fn handle_inbound_stream(mut stream: netstack_smoltcp::TcpStream) {
         let start = std::time::Instant::now();
         let mut remote_stream =

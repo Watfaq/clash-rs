@@ -192,11 +192,17 @@ fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), Error> {
             }
         };
 
-        // Strip the common prefix if present
+        // Strip the common prefix if present.
+        // Use the raw zip entry name (always '/' separated, platform-independent)
+        // rather than the PathBuf representation (which uses OS separators on
+        // Windows) so that prefix matching works correctly cross-platform.
         let rel: PathBuf = match strip_prefix {
             Some(ref prefix) => {
-                let s = enclosed.to_string_lossy();
-                PathBuf::from(s.strip_prefix(prefix.as_str()).unwrap_or(s.as_ref()))
+                let raw = file.name();
+                let stripped = raw.strip_prefix(prefix.as_str()).unwrap_or(raw);
+                // Re-build a PathBuf from the '/' separated components so the
+                // result uses native separators on all platforms.
+                stripped.split('/').filter(|c| !c.is_empty()).collect()
             }
             None => enclosed.clone(),
         };

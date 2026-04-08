@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex as StdMutex},
+};
 
 use axum::{
     Router, ServiceExt, middleware,
@@ -52,6 +56,7 @@ pub struct ApiRunner {
     cancellation_token: tokio_util::sync::CancellationToken,
     dns_listen_addr: DNSListenAddr,
     dns_enabled: bool,
+    task_handle: StdMutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl ApiRunner {
@@ -87,6 +92,7 @@ impl ApiRunner {
             cancellation_token: cancellation_token.unwrap_or_default(),
             dns_listen_addr,
             dns_enabled,
+            task_handle: StdMutex::new(None),
         }
     }
 }
@@ -137,7 +143,7 @@ impl Runner for ApiRunner {
             statistics_manager: statistics_manager.clone(),
         });
         let cancellation_token = self.cancellation_token.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let mut router = Router::new()
                 .route("/", get(handlers::hello::handle))
                 .route("/logs", get(handlers::log::handle))
@@ -323,6 +329,7 @@ impl Runner for ApiRunner {
                 error!("API server failed to start, error: {}", e);
             }
         });
+        *self.task_handle.lock().unwrap() = Some(handle);
     }
 
     fn shutdown(&self) {
@@ -331,6 +338,12 @@ impl Runner for ApiRunner {
     }
 
     fn join(&self) -> futures::future::BoxFuture<'_, Result<(), crate::Error>> {
-        Box::pin(async move { Ok(()) })
+        Box::pin(async move {
+            let handle = self.task_handle.lock().unwrap().take();
+            if let Some(h) = handle {
+                let _ = h.await;
+            }
+            Ok(())
+        })
     }
 }

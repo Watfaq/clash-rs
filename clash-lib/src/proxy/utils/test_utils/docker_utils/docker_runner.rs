@@ -4,13 +4,12 @@ use anyhow;
 use bollard::{
     API_DEFAULT_VERSION, Docker, body_full,
     config::ContainerInspectResponse,
-    models::ContainerCreateBody,
+    models::{ContainerCreateBody, HostConfig, Mount, MountTypeEnum, PortBinding},
     query_parameters::{
         CreateContainerOptions, CreateImageOptions, CreateImageOptionsBuilder,
         LogsOptions, RemoveContainerOptions, StartContainerOptions,
         UploadToContainerOptions,
     },
-    secret::{HostConfig, Mount, PortBinding},
 };
 use bytes::Bytes;
 use futures::{Future, StreamExt, TryStreamExt};
@@ -190,7 +189,6 @@ impl DockerTestRunner {
         })
     }
 
-    #[allow(unused)]
     pub fn container_ip(&self) -> Option<String> {
         self.inspect
             .network_settings
@@ -216,7 +214,6 @@ impl DockerTestRunner {
             })
     }
 
-    #[allow(unused)]
     pub fn gateway_ip(&self) -> Option<String> {
         self.inspect
             .network_settings
@@ -226,10 +223,10 @@ impl DockerTestRunner {
                 b.values().find_map(|j| {
                     [(&j.gateway), (&j.ipv6_gateway)]
                         .into_iter()
-                        .find(|(gateway)| {
+                        .find(|gateway| {
                             gateway.as_ref().map_or(false, |g| !g.is_empty())
                         })
-                        .and_then(|(gateway)| gateway.as_ref())
+                        .and_then(|gateway| gateway.as_ref())
                         .filter(|ip| !ip.is_empty())
                         .map(|ip| ip.to_string())
                 })
@@ -240,7 +237,7 @@ impl DockerTestRunner {
     }
 
     /// For debugging use
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub async fn exec_command(&self, cmd: &[&str]) -> anyhow::Result<String> {
         use bollard::exec::{CreateExecOptions, StartExecResults};
 
@@ -319,7 +316,7 @@ pub struct MultiDockerTestRunner {
 
 #[cfg(docker_test)]
 impl MultiDockerTestRunner {
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub async fn add(
         &mut self,
         creator: impl Future<Output = anyhow::Result<DockerTestRunner>>,
@@ -344,7 +341,6 @@ impl MultiDockerTestRunner {
         }
     }
 
-    #[allow(unused)]
     pub fn add_with_runner(&mut self, runners: DockerTestRunner) {
         self.runners.push(runners);
     }
@@ -464,7 +460,6 @@ impl DockerTestRunnerBuilder {
         self
     }
 
-    #[allow(unused)]
     pub fn port(mut self, port: u16) -> Self {
         self._server_port = port;
         self.exposed_ports = vec![format!("{}/tcp", port), format!("{}/udp", port)];
@@ -487,7 +482,6 @@ impl DockerTestRunnerBuilder {
     }
 
     #[cfg(docker_test)]
-    #[allow(unused)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self
@@ -500,7 +494,7 @@ impl DockerTestRunnerBuilder {
                 .map(|(src, dst)| Mount {
                     target: Some(dst.to_string()),
                     source: Some(src.to_string()),
-                    typ: Some(bollard::secret::MountTypeEnum::BIND),
+                    typ: Some(MountTypeEnum::BIND),
                     read_only: Some(false),
                     ..Default::default()
                 })

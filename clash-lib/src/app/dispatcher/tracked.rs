@@ -51,7 +51,6 @@ impl<T> ChainedStreamWrapper<T> {
         }
     }
 
-    #[allow(unused)]
     pub fn inner_mut(&mut self) -> &mut T {
         &mut self.inner
     }
@@ -118,7 +117,6 @@ pub struct TrackedStream {
     close_notify: Receiver<()>,
 }
 
-#[allow(unused)]
 impl TrackedStream {
     #[allow(clippy::borrowed_box)]
     pub async fn new(

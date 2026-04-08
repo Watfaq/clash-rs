@@ -14,8 +14,7 @@ pub const IMAGE_VMESS: &str = "v2fly/v2fly-core:v4.45.2";
 pub const IMAGE_VLESS: &str = "v2fly/v2fly-core:v4.45.2";
 pub const IMAGE_XRAY: &str = "teddysun/xray:latest";
 pub const IMAGE_SOCKS5: &str = "v2fly/v2fly-core:v4.45.2";
-#[cfg(feature = "ssh")]
-#[allow(unused)]
+#[cfg(all(feature = "ssh", docker_test))]
 pub const IMAGE_OPENSSH: &str = "docker.io/linuxserver/openssh-server:latest";
 pub const IMAGE_HYSTERIA: &str = "tobyxdd/hysteria:latest";
 #[cfg(feature = "tuic")]
