@@ -73,15 +73,18 @@ impl futures::Stream for InboundShadowsocksDatagram {
                         data: read_buf.filled()[..n].to_vec(),
                         src_addr: src.into(),
                         dst_addr: match target {
-                            shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                            shadowsocks::relay::Address::DomainNameAddress(domain, port) => {
-                                SocksAddr::Domain(domain, port)
+                            shadowsocks::relay::Address::SocketAddress(a) => {
+                                a.into()
                             }
+                            shadowsocks::relay::Address::DomainNameAddress(
+                                domain,
+                                port,
+                            ) => SocksAddr::Domain(domain, port),
                         },
                         inbound_user: ctrl
                             .and_then(|c| c.user)
                             .map(|u| u.name().to_owned()),
-                    }))
+                    }));
                 }
                 Err(e) => {
                     // Log the error but keep the stream alive. Without looping
