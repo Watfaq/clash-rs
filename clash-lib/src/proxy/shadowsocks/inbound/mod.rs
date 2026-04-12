@@ -21,6 +21,8 @@ use shadowsocks::{
     context::Context,
     relay::{Address, tcprelay::proxy_stream::server::ProxyServerStream},
 };
+use std::{net::SocketAddr, sync::Arc};
+use tracing::{debug, info, warn};
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
