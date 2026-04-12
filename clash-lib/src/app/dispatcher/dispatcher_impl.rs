@@ -257,6 +257,16 @@ impl Dispatcher {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
 
+                // Preserve the original destination IP before reverse_lookup
+                // may convert it to a domain name (via DNS cache). This is used
+                // by family_hint_for_session so the outbound socket uses the
+                // same address family as the client requested, rather than
+                // re-resolving the domain to a potentially different family
+                // (e.g. IPv4 1.1.1.1 → domain → AAAA → IPv6 → EINVAL on bind).
+                if let crate::session::SocksAddr::Ip(addr) = &packet.dst_addr {
+                    sess.resolved_ip = Some(addr.ip());
+                }
+
                 let dest = match reverse_lookup(&resolver, &packet.dst_addr).await {
                     Some(dest) => dest,
                     None => {
