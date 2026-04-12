@@ -14,11 +14,6 @@ use crate::{
     },
     session::{Network, Session, SocksAddr, Type},
 };
-
-use aes::{
-    Aes256,
-    cipher::{BlockDecrypt, KeyInit},
-};
 use async_trait::async_trait;
 use shadowsocks::{
     ProxySocket,
@@ -26,8 +21,6 @@ use shadowsocks::{
     context::Context,
     relay::{Address, tcprelay::proxy_stream::server::ProxyServerStream},
 };
-use std::{net::SocketAddr, sync::Arc};
-use tracing::{debug, info, warn};
 
 #[derive(Clone)]
 pub struct ShadowsocksInbound {
@@ -119,40 +112,6 @@ fn build_user_manager(
     Some(Arc::new(mgr))
 }
 
-/// Peek at the first 48 bytes (salt + EIH) of an SS2022 stream and resolve
-/// the authenticated user name without consuming any bytes.
-///
-/// Returns `None` if the stream has fewer than 48 bytes, the cipher is not
-/// AES-256-based (only 2022-blake3-aes-256-gcm is currently supported), or
-/// the EIH doesn't match any registered user.
-async fn peek_user_identity(
-    stream: &tokio::net::TcpStream,
-    server_key_bytes: &[u8],
-    user_manager: &ServerUserManager,
-) -> Option<String> {
-    let mut buf = [0u8; 48];
-    if stream.peek(&mut buf).await.ok()? < 48 {
-        return None;
-    }
-
-    let salt = &buf[0..32];
-    let eih = &buf[32..48];
-
-    // BLAKE3 KDF — exact context string and key material from shadowsocks crate
-    let key_material = [server_key_bytes, salt].concat();
-    let subkey =
-        blake3::derive_key("shadowsocks 2022 identity subkey", &key_material);
-
-    // AES-256-ECB single-block decrypt
-    let cipher = Aes256::new_from_slice(&subkey[0..32]).ok()?;
-    let mut user_hash = aes::Block::default();
-    cipher.decrypt_block_b2b(aes::Block::from_slice(eih), &mut user_hash);
-
-    user_manager
-        .get_user_by_hash(user_hash.as_slice())
-        .map(|u| u.name().to_string())
-}
-
 #[async_trait]
 impl InboundHandlerTrait for ShadowsocksInbound {
     fn handle_tcp(&self) -> bool {
@@ -167,8 +126,6 @@ impl InboundHandlerTrait for ShadowsocksInbound {
         let context = Context::new_shared(shadowsocks::config::ServerType::Server);
         let config = self.build_server_config()?;
         let method = map_cipher(&self.cipher)?;
-
-        // Arc so each spawned task gets a cheap clone instead of a full copy.
         let server_key_bytes: Arc<Vec<u8>> = Arc::new(config.key().to_vec());
 
         let raw_listener = try_create_dualstack_tcplistener(self.addr)?;
@@ -205,7 +162,7 @@ impl InboundHandlerTrait for ShadowsocksInbound {
                     }
 
                     // Spawn immediately so the accept loop is never blocked by
-                    // per-connection I/O (peek, handshake). A stalling client
+                    // per-connection I/O (handshake). A stalling client
                     // only affects its own task.
                     let dispatcher = self.dispatcher.clone();
                     let context = context.clone();
@@ -214,25 +171,27 @@ impl InboundHandlerTrait for ShadowsocksInbound {
                     let fw_mark = self.fw_mark;
 
                     tokio::spawn(async move {
-                        let inbound_user = if let Some(ref m) = mgr {
-                            peek_user_identity(&stream, &key_bytes, m).await
-                        } else {
-                            None
-                        };
-
                         let mut socket =
                             ProxyServerStream::from_stream_with_user_manager(
                                 context,
                                 stream,
                                 method,
                                 &key_bytes,
-                                mgr,
+                                mgr.clone(),
                             );
 
                         let Ok(target) = socket.handshake().await else {
                             warn!("Failed to perform Shadowsocks handshake");
                             return;
                         };
+
+                        // Resolve the authenticated user name from the key
+                        // exposed by the handshake — no manual peek needed.
+                        let inbound_user = socket.user_key().and_then(|key| {
+                            mgr.as_ref()?.users_iter()
+                                .find(|u| u.key() == key)
+                                .map(|u| u.name().to_owned())
+                        });
 
                         debug!("Shadowsocks TCP connection target: {:?}", target);
 
