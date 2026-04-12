@@ -60,28 +60,39 @@ impl futures::Stream for InboundShadowsocksDatagram {
             ..
         } = self.get_mut();
 
-        buf.resize(buf.capacity(), 0);
-        let mut buf = ReadBuf::new(buf);
+        loop {
+            buf.resize(buf.capacity(), 0);
+            let mut read_buf = ReadBuf::new(buf);
 
-        let rv = ready!(socket.poll_recv_from_with_ctrl(cx, &mut buf));
-        debug!("recv udp packet from inbound: {:?}", rv);
+            let rv = ready!(socket.poll_recv_from_with_ctrl(cx, &mut read_buf));
+            debug!("recv udp packet from inbound: {:?}", rv);
 
-        match rv {
-            Ok((n, src, target, _, ctrl)) => Poll::Ready(Some(UdpPacket {
-                data: buf.filled()[..n].to_vec(),
-                src_addr: src.into(),
-                dst_addr: match target {
-                    shadowsocks::relay::Address::SocketAddress(a) => a.into(),
-                    shadowsocks::relay::Address::DomainNameAddress(domain, port) => {
-                        SocksAddr::Domain(domain, port)
-                    }
-                },
-                inbound_user: ctrl.and_then(|c| c.user).map(|u| u.name().to_owned()),
-            })),
-            Err(e) => {
-                error!("failed to receive udp packet: {}", e);
-                // Don't close the stream.
-                Poll::Pending
+            match rv {
+                Ok((n, src, target, _, ctrl)) => {
+                    return Poll::Ready(Some(UdpPacket {
+                        data: read_buf.filled()[..n].to_vec(),
+                        src_addr: src.into(),
+                        dst_addr: match target {
+                            shadowsocks::relay::Address::SocketAddress(a) => a.into(),
+                            shadowsocks::relay::Address::DomainNameAddress(domain, port) => {
+                                SocksAddr::Domain(domain, port)
+                            }
+                        },
+                        inbound_user: ctrl
+                            .and_then(|c| c.user)
+                            .map(|u| u.name().to_owned()),
+                    }))
+                }
+                Err(e) => {
+                    // Log the error but keep the stream alive. Without looping
+                    // here, returning Poll::Pending would leave the task without
+                    // a registered waker (the waker was consumed when data
+                    // arrived), permanently suspending the UDP dispatch loop.
+                    error!("failed to receive udp packet: {}", e);
+                    // Fall through to the next loop iteration: if the socket
+                    // is empty, poll_recv_from_with_ctrl will re-register the
+                    // waker and return Poll::Pending via ready!().
+                }
             }
         }
     }
