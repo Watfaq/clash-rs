@@ -51,7 +51,6 @@ impl<T> ChainedStreamWrapper<T> {
         }
     }
 
-    #[allow(unused)]
     pub fn inner_mut(&mut self) -> &mut T {
         &mut self.inner
     }
@@ -118,7 +117,6 @@ pub struct TrackedStream {
     close_notify: Receiver<()>,
 }
 
-#[allow(unused)]
 impl TrackedStream {
     #[allow(clippy::borrowed_box)]
     pub async fn new(
@@ -142,9 +140,7 @@ impl TrackedStream {
                     .as_ref()
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
-                rule_payload: rule
-                    .map(|x| x.payload().to_owned())
-                    .unwrap_or_default(),
+                rule_payload: rule.map(|x| x.payload()).unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()
             }),
@@ -168,6 +164,7 @@ impl TrackedStream {
         &mut self.inner
     }
 
+    #[cfg(all(target_os = "linux", feature = "zero_copy"))]
     pub fn trackers(
         &self,
     ) -> (
@@ -184,29 +181,30 @@ impl TrackedStream {
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub trait TrackCopy {
     fn track(&self, total: usize);
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl TrackCopy for ReadTracker {
     fn track(&self, total: usize) {
         self.push_downloaded(total);
     }
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl TrackCopy for WriteTracker {
     fn track(&self, total: usize) {
         self.push_uploaded(total);
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub struct ReadTracker {
     tracker: Arc<TrackerInfo>,
     manager: Arc<Manager>,
 }
 
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl ReadTracker {
     fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
         Self { tracker, manager }
@@ -217,15 +215,20 @@ impl ReadTracker {
         self.tracker
             .download_total
             .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+        if self.tracker.session_holder.inbound_user.is_some() {
+            self.tracker
+                .user_download
+                .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }
 
-#[allow(unused)]
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 pub struct WriteTracker {
     tracker: Arc<TrackerInfo>,
     manager: Arc<Manager>,
 }
-
+#[cfg(all(target_os = "linux", feature = "zero_copy"))]
 impl WriteTracker {
     fn new(tracker: Arc<TrackerInfo>, manager: Arc<Manager>) -> Self {
         Self { tracker, manager }
@@ -236,6 +239,11 @@ impl WriteTracker {
         self.tracker
             .upload_total
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
+        if self.tracker.session_holder.inbound_user.is_some() {
+            self.tracker
+                .user_upload
+                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }
 
@@ -272,6 +280,11 @@ impl AsyncRead for TrackedStream {
         self.tracker
             .download_total
             .fetch_add(download as u64, std::sync::atomic::Ordering::Release);
+        if self.tracker.session_holder.inbound_user.is_some() {
+            self.tracker
+                .user_download
+                .fetch_add(download as u64, std::sync::atomic::Ordering::Relaxed);
+        }
 
         v
     }
@@ -302,6 +315,11 @@ impl AsyncWrite for TrackedStream {
         self.tracker
             .upload_total
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Release);
+        if self.tracker.session_holder.inbound_user.is_some() {
+            self.tracker
+                .user_upload
+                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
+        }
 
         v
     }
@@ -456,9 +474,7 @@ impl TrackedDatagram {
                     .as_ref()
                     .map(|x| x.type_name().to_owned())
                     .unwrap_or_default(),
-                rule_payload: rule
-                    .map(|x| x.payload().to_owned())
-                    .unwrap_or_default(),
+                rule_payload: rule.map(|x| x.payload()).unwrap_or_default(),
                 proxy_chain_holder: chain.clone(),
                 ..Default::default()
             }),
@@ -503,11 +519,16 @@ impl Stream for TrackedDatagram {
 
         let r = Pin::new(self.inner.as_mut()).poll_next(cx);
         if let Poll::Ready(Some(ref pkt)) = r {
-            self.manager.push_downloaded(pkt.data.len());
-            self.tracker.download_total.fetch_add(
-                pkt.data.len() as u64,
-                std::sync::atomic::Ordering::Relaxed,
-            );
+            let n = pkt.data.len();
+            self.manager.push_downloaded(n);
+            self.tracker
+                .download_total
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+            if self.tracker.session_holder.inbound_user.is_some() {
+                self.tracker
+                    .user_download
+                    .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+            }
         }
         r
     }
@@ -551,6 +572,11 @@ impl Sink<UdpPacket> for TrackedDatagram {
         self.tracker
             .upload_total
             .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
+        if self.tracker.session_holder.inbound_user.is_some() {
+            self.tracker
+                .user_upload
+                .fetch_add(upload as u64, std::sync::atomic::Ordering::Relaxed);
+        }
         Pin::new(self.inner.as_mut()).start_send(item)
     }
 

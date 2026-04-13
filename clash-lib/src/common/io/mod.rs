@@ -105,6 +105,8 @@ impl CopyBuffer {
         cx: &mut Context<'_>,
         mut reader: Pin<&mut R>,
         mut writer: Pin<&mut W>,
+        mut idle_timeout: Option<&mut Pin<Box<tokio::time::Sleep>>>,
+        idle_timeout_duration: Option<Duration>,
     ) -> Poll<io::Result<u64>>
     where
         R: AsyncRead + ?Sized,
@@ -139,6 +141,14 @@ impl CopyBuffer {
                 } else {
                     self.pos = 0;
                     self.cap = n;
+                    // Reset idle timeout on successful read
+                    if let (Some(timeout), Some(duration)) =
+                        (idle_timeout.as_mut(), idle_timeout_duration)
+                    {
+                        timeout
+                            .as_mut()
+                            .reset(tokio::time::Instant::now() + duration);
+                    }
                 }
             }
 
@@ -156,6 +166,14 @@ impl CopyBuffer {
                     self.pos += i;
                     self.amt += i as u64;
                     self.need_flush = true;
+                    // Reset idle timeout on successful write
+                    if let (Some(timeout), Some(duration)) =
+                        (idle_timeout.as_mut(), idle_timeout_duration)
+                    {
+                        timeout
+                            .as_mut()
+                            .reset(tokio::time::Instant::now() + duration);
+                    }
                 }
             }
 
@@ -194,6 +212,8 @@ struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
     b_to_a_delay: Option<Pin<Box<tokio::time::Sleep>>>,
     a_to_b_timeout_duration: Duration,
     b_to_a_timeout_duration: Duration,
+    idle_timeout: Pin<Box<tokio::time::Sleep>>,
+    idle_timeout_duration: Duration,
 }
 
 impl<A, B> Future for CopyBidirectional<'_, A, B>
@@ -216,15 +236,43 @@ where
             b_to_a_delay,
             a_to_b_timeout_duration,
             b_to_a_timeout_duration,
+            idle_timeout,
+            idle_timeout_duration,
         } = &mut *self;
 
         let mut a = Pin::new(a);
         let mut b = Pin::new(b);
 
+        // Check idle timeout - if expired, force both directions to shutdown
+        if idle_timeout.as_mut().poll(cx).is_ready() {
+            if !matches!(a_to_b, TransferState::Done) {
+                let count = match a_to_b {
+                    TransferState::Running(buf) => buf.amount_transferred(),
+                    TransferState::ShuttingDown(count) => *count,
+                    TransferState::Done => 0,
+                };
+                *a_to_b = TransferState::ShuttingDown(count);
+            }
+            if !matches!(b_to_a, TransferState::Done) {
+                let count = match b_to_a {
+                    TransferState::Running(buf) => buf.amount_transferred(),
+                    TransferState::ShuttingDown(count) => *count,
+                    TransferState::Done => 0,
+                };
+                *b_to_a = TransferState::ShuttingDown(count);
+            }
+        }
+
         loop {
             match a_to_b {
                 TransferState::Running(buf) => {
-                    let res = buf.poll_copy(cx, a.as_mut(), b.as_mut());
+                    let res = buf.poll_copy(
+                        cx,
+                        a.as_mut(),
+                        b.as_mut(),
+                        Some(idle_timeout),
+                        Some(*idle_timeout_duration),
+                    );
                     match res {
                         Poll::Ready(Ok(count)) => {
                             *a_to_b = TransferState::ShuttingDown(count);
@@ -274,7 +322,13 @@ where
 
             match b_to_a {
                 TransferState::Running(buf) => {
-                    let res = buf.poll_copy(cx, b.as_mut(), a.as_mut());
+                    let res = buf.poll_copy(
+                        cx,
+                        b.as_mut(),
+                        a.as_mut(),
+                        Some(idle_timeout),
+                        Some(*idle_timeout_duration),
+                    );
                     match res {
                         Poll::Ready(Ok(count)) => {
                             *b_to_a = TransferState::ShuttingDown(count);
@@ -403,6 +457,7 @@ where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
 {
+    let idle_timeout_duration = Duration::from_secs(60);
     CopyBidirectional {
         a,
         b,
@@ -414,6 +469,8 @@ where
         b_to_a_delay: None,
         a_to_b_timeout_duration,
         b_to_a_timeout_duration,
+        idle_timeout: Box::pin(tokio::time::sleep(idle_timeout_duration)),
+        idle_timeout_duration,
     }
     .await
 }

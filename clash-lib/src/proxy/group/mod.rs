@@ -29,7 +29,9 @@ pub trait GroupProxyAPIResponse: OutboundHandler {
         let all = self.get_proxies().await;
 
         let mut m = HashMap::new();
+        m.insert("name".to_string(), Box::new(self.name().to_owned()) as _);
         m.insert("type".to_string(), Box::new(self.proto()) as _);
+        m.insert("udp".to_string(), Box::new(self.support_udp().await) as _);
 
         if let Some(active) = self.get_active_proxy().await {
             m.insert("now".to_string(), Box::new(active.name().to_owned()) as _);

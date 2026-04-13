@@ -8,22 +8,22 @@ mod system;
 #[path = "system.rs"]
 mod system;
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 pub use enhanced::EnhancedResolver;
 pub use system::SystemResolver;
 
 use super::{Config, ThreadSafeDNSResolver};
 use crate::{
-    app::profile::ThreadSafeCacheFile, common::mmdb::MmdbLookup, print_and_exit,
-    proxy::OutboundHandler,
+    app::profile::ThreadSafeCacheFile, dns::filters::PendingMmdb, print_and_exit,
+    proxy::utils::OutboundHandlerRegistry,
 };
 
 pub async fn new(
     cfg: Config,
     store: Option<ThreadSafeCacheFile>,
-    mmdb: Option<MmdbLookup>,
-    outbounds: HashMap<String, Arc<dyn OutboundHandler>>,
+    mmdb: Option<PendingMmdb>,
+    outbounds: OutboundHandlerRegistry,
 ) -> ThreadSafeDNSResolver {
     if cfg.enable {
         match store {

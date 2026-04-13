@@ -291,12 +291,10 @@ mod tests {
         mock_vehicle.expect_read().returning(|| {
             Ok(r#"
 proxies:
-  - name: "ss"
-    type: ss
+  - name: "socks5"
+    type: socks5
     server: localhost
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
+    port: 1080
     udp: true
 "#
             .as_bytes()
@@ -313,7 +311,7 @@ proxies:
 
         let mock_resolver = MockClashResolver::new();
 
-        let latency_manager = ProxyManager::new(Arc::new(mock_resolver));
+        let latency_manager = ProxyManager::new(Arc::new(mock_resolver), None);
         let hc = HealthCheck::new(
             vec![],
             "http://www.google.com".to_owned(),

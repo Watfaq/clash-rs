@@ -1,7 +1,9 @@
 // https://stackoverflow.com/a/29963675/1109167
+#[allow(dead_code)]
 pub struct ScopeCall<F: FnOnce()> {
     pub c: Option<F>,
 }
+
 impl<F: FnOnce()> Drop for ScopeCall<F> {
     fn drop(&mut self) {
         self.c.take().unwrap()()

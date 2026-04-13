@@ -1,0 +1,216 @@
+# Clash-rs Build Target Configuration
+# Fully expanded from original CI matrix include
+
+# Linux GNU
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-gnu"
+release-name = "x86_64-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-linux-gnu"
+release-name = "i686-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+zig = "2.17"
+
+# Linux MUSL
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-musl"
+release-name = "x86_64-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F perf"
+
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-linux-musl"
+release-name = "i686-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F plus"
+
+# Linux x86 gnu static-crt
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-linux-gnu"
+release-name = "x86_64-unknown-linux-gnu-static-crt"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+# Linux arm gnu
+[[target]]
+os = "ubuntu-latest"
+target = "aarch64-unknown-linux-gnu"
+release-name = "aarch64-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F plus"
+zig = "2.17"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-gnueabi"
+release-name = "armv7-unknown-linux-gnueabi"
+tool = "cross"
+extra-args = "-F plus"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-gnueabihf"
+release-name = "armv7-unknown-linux-gnueabihf"
+tool = "cross"
+extra-args = "-F plus"
+zig = "2.17"
+
+# Linux arm musl
+[[target]]
+os = "ubuntu-latest"
+target = "aarch64-unknown-linux-musl"
+release-name = "aarch64-unknown-linux-musl"
+tool = "cross"
+extra-args = "-F perf"
+
+[[target]]
+os = "ubuntu-latest"
+target = "armv7-unknown-linux-musleabihf"
+release-name = "armv7-unknown-linux-musleabihf"
+tool = "cross"
+extra-args = "-F plus"
+
+# Linux RISC-V
+[[target]]
+os = "ubuntu-latest"
+target = "riscv64gc-unknown-linux-gnu"
+release-name = "riscv64gc-unknown-linux-gnu"
+tool = "cross"
+extra-args = "-F standard"
+
+# Linux MIPS
+[[target]]
+os = "ubuntu-latest"
+target = "mips-unknown-linux-musl"
+release-name = "mips-unknown-linux-musl"
+tool = "cross"
+extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
+build-std = true
+skip-test = true
+
+[[target]]
+os = "ubuntu-latest"
+target = "mipsel-unknown-linux-musl"
+release-name = "mipsel-unknown-linux-musl"
+tool = "cross"
+extra-args = "--no-default-features -F standard,ring -Z build-std=std,panic_abort"
+build-std = true
+skip-test = true
+
+# Windows
+[[target]]
+os = "windows-latest"
+target = "x86_64-pc-windows-msvc"
+release-name = "x86_64-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F plus"
+nasm = true
+
+[[target]]
+os = "windows-latest"
+target = "i686-pc-windows-msvc"
+release-name = "i686-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F plus"
+nasm = true
+
+[[target]]
+os = "windows-latest"
+target = "aarch64-pc-windows-msvc"
+release-name = "aarch64-pc-windows-msvc"
+postfix = ".exe"
+extra-args = "-F standard"
+nasm = true
+skip-test = true
+
+# Windows static-crt variations
+[[target]]
+os = "windows-latest"
+target = "x86_64-pc-windows-msvc"
+release-name = "x86_64-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+[[target]]
+os = "windows-latest"
+target = "i686-pc-windows-msvc"
+release-name = "i686-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+[[target]]
+os = "windows-latest"
+target = "aarch64-pc-windows-msvc"
+release-name = "aarch64-pc-windows-msvc-static-crt"
+postfix = ".exe"
+extra-args = "-F standard"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+nasm = true
+skip-test = true
+
+# macOS
+[[target]]
+os = "macos-latest"
+target = "x86_64-apple-darwin"
+release-name = "x86_64-apple-darwin"
+extra-args = "-F plus"
+
+[[target]]
+os = "macos-latest"
+target = "aarch64-apple-darwin"
+release-name = "aarch64-apple-darwin"
+extra-args = "-F plus"
+
+# macOS static-crt
+[[target]]
+os = "macos-latest"
+target = "x86_64-apple-darwin"
+release-name = "x86_64-apple-darwin-static-crt"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+[[target]]
+os = "macos-latest"
+target = "aarch64-apple-darwin"
+release-name = "aarch64-apple-darwin-static-crt"
+tool = "cargo"
+extra-args = "-F plus"
+rustflags = "-Ctarget-feature=+crt-static --cfg tokio_unstable"
+
+# BSD
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-unknown-freebsd"
+release-name = "x86_64-unknown-freebsd"
+tool = "cross"
+extra-args = "--no-default-features -F bsd"
+skip-test = true
+
+[[target]]
+os = "ubuntu-latest"
+target = "i686-unknown-freebsd"
+release-name = "i686-unknown-freebsd"
+tool = "cross"
+extra-args = "--no-default-features -F bsd"
+skip-test = true
+
+# Android (no release)
+[[target]]
+os = "ubuntu-latest"
+target = "x86_64-linux-android"
+release-name = "x86_64-linux-android"
+tool = "cross"
+extra-args = "--no-default-features -F android"
+skip-upload = true
+skip-test = true

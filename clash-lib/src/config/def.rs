@@ -4,7 +4,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
 use std::{collections::HashMap, fmt::Display, path::PathBuf, str::FromStr};
 
-const DEFAULT_SO_MARK: u32 = 3389;
 const DEFAULT_ROUTE_TABLE: u32 = 2468;
 
 use super::config::BindAddress;
@@ -15,9 +14,6 @@ fn default_tun_device_id() -> String {
 
 fn default_tun_address() -> String {
     "198.18.0.1/24".to_string()
-}
-fn default_tun_so_mark() -> u32 {
-    DEFAULT_SO_MARK
 }
 
 fn default_route_table() -> u32 {
@@ -66,8 +62,7 @@ pub struct TunConfig {
     pub route_all: bool,
     pub mtu: Option<u16>,
     /// fwmark on Linux only
-    #[serde(default = "default_tun_so_mark")]
-    pub so_mark: u32,
+    pub so_mark: Option<u32>,
     /// policy routing table on Linux only
     #[serde(default = "default_route_table")]
     pub route_table: u32,
@@ -434,6 +429,13 @@ pub struct Config {
     pub external_controller_ipc: Option<String>,
     /// dashboard folder path relative to the $CWD
     pub external_ui: Option<String>,
+    /// dashboard download url - when set together with `external-ui`, clash-rs
+    /// will automatically download and extract the dashboard archive (zip or
+    /// tgz) to the `external-ui` directory if it does not exist or is empty.
+    /// Append `#force=true` to force re-download even if the directory already
+    /// contains files. To route the download through a specific proxy outbound,
+    /// append `#_clash_outbound=<name>` to the URL.
+    pub external_ui_url: Option<String>,
     /// external controller secret
     pub secret: Option<String>,
     /// CORS allowed origins
@@ -472,6 +474,9 @@ pub struct Config {
     pub tun: Option<TunConfig>,
 
     pub listeners: Option<Vec<HashMap<String, Value>>>,
+
+    #[serde(rename = "inbound-providers")]
+    pub inbound_provider: Option<HashMap<String, HashMap<String, Value>>>,
 }
 
 impl TryFrom<PathBuf> for Config {
@@ -532,6 +537,9 @@ pub enum DNSListen {
 ///       addr: 127.0.0.1:53555
 ///       ca-cert: dns.crt
 ///       ca-key: dns.key
+///   # edns-client-subnet:
+///   #   ipv4: 1.2.3.0/24
+///   #   ipv6: 2001:db8::/56
 /// ```
 
 #[derive(Serialize, Deserialize, Educe)]
@@ -570,6 +578,8 @@ pub struct DNS {
     pub default_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
+    /// Configure EDNS Client Subnet information to send with upstream queries
+    pub edns_client_subnet: Option<EdnsClientSubnet>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -596,6 +606,15 @@ pub struct FallbackFilter {
     #[serde(rename = "ipcidr")]
     pub ip_cidr: Vec<String>,
     pub domain: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub struct EdnsClientSubnet {
+    /// IPv4 subnet expressed in CIDR notation, e.g. `1.2.3.0/24`
+    pub ipv4: Option<String>,
+    /// IPv6 subnet expressed in CIDR notation, e.g. `2001:db8::/56`
+    pub ipv6: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

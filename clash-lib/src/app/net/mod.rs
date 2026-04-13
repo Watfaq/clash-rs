@@ -20,9 +20,9 @@ pub static TUN_SOMARK: LazyLock<tokio::sync::RwLock<Option<u32>>> =
 /// globally manage default outbound interface
 /// This function should be called as early as possible
 /// so that other config initialization can use the default outbound interface
-pub async fn init_net_config(tun_somark: u32) {
+pub async fn init_net_config(tun_somark: Option<u32>) {
     *DEFAULT_OUTBOUND_INTERFACE.write().await = get_outbound_interface();
-    *TUN_SOMARK.write().await = Some(tun_somark);
+    *TUN_SOMARK.write().await = tun_somark;
 
     trace!(
         "default outbound interface: {:?}, tun somark: {:?}",
@@ -143,17 +143,20 @@ pub fn get_outbound_interface() -> Option<OutboundInterface> {
         })
         .collect::<Vec<_>>();
 
-    let priority = [
-        "eth",
-        "en",
-        "pdp_ip",
-        "WLAN",
-        "wlp",
-        "Ethernet",
-        "vEthernet",
-        "Wi-Fi",
-        "Tailscale",
-    ];
+    let priority: &[&str] = if cfg!(target_os = "android") {
+        &[
+            "wlan",  // Android Wi-Fi interface
+            "rmnet", // Android mobile data interface
+        ]
+    } else if cfg!(target_os = "windows") {
+        &["Ethernet", "Wi-Fi", "Tailscale"]
+    } else if cfg!(target_os = "linux") {
+        &["eth", "wlp", "en", "Tailscale"]
+    } else if cfg!(target_os = "macos") {
+        &["en", "pdp_ip", "Tailscale"]
+    } else {
+        &["eth", "en", "wlp"]
+    };
 
     all_outbounds.sort_by(|left, right| {
         match (left.addr_v6, right.addr_v6) {

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 
 use rand::seq::IndexedRandom;
@@ -697,13 +697,38 @@ impl Device for VirtualIpDevice {
         let next = self.packet_receiver.try_recv().ok();
         match next {
             Some((_proto, data)) => {
-                let rx_token = RxToken {
-                    buffer: {
-                        let mut buffer = BytesMut::new();
-                        buffer.put(data);
-                        buffer
-                    },
-                };
+                // Convert to mutable buffer for potential checksum fix
+                let mut buffer = BytesMut::from(&data[..]);
+
+                // Fix UDP checksum if needed
+                // Some environments (NAT, checksum offload, virtualization) may
+                // corrupt the checksum We recalculate it here since
+                // WireGuard AEAD already guarantees data integrity
+                // Note: An alternative approach is to skip RX checksum verification
+                // by setting `caps.checksum.udp =
+                // smoltcp::phy::Checksum::Tx` in capabilities(), but
+                // recalculating feels cleaner than disabling verification entirely
+                use smoltcp::wire::*;
+                if let Ok(IpVersion::Ipv4) = IpVersion::of_packet(&buffer)
+                    && let Ok(ipv4) = Ipv4Packet::new_checked(&buffer[..])
+                    && ipv4.next_header() == IpProtocol::Udp
+                {
+                    let src_addr = ipv4.src_addr();
+                    let dst_addr = ipv4.dst_addr();
+                    let ip_header_len = ipv4.header_len() as usize;
+
+                    // Recalculate UDP checksum
+                    if let Ok(mut udp) =
+                        UdpPacket::new_checked(&mut buffer[ip_header_len..])
+                    {
+                        udp.fill_checksum(
+                            &IpAddress::Ipv4(src_addr),
+                            &IpAddress::Ipv4(dst_addr),
+                        );
+                    }
+                }
+
+                let rx_token = RxToken { buffer };
                 let tx_token = TxToken {
                     sender: self.packet_sender.clone(),
                 };

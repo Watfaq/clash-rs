@@ -67,7 +67,7 @@ impl Debug for WireguardTunnel {
 pub struct Config {
     pub private_key: StaticSecret,
     pub endpoint_public_key: PublicKey,
-    pub preshared_key: Option<StaticSecret>,
+    pub pre_shared_key: Option<StaticSecret>,
     pub remote_endpoint: SocketAddr,
     pub source_peer_ip: Ipv4Addr,
     pub source_peer_ipv6: Option<Ipv6Addr>,
@@ -88,7 +88,7 @@ impl WireguardTunnel {
         let peer = Tunn::new(
             config.private_key,
             config.endpoint_public_key,
-            config.preshared_key.map(|x| x.to_bytes()),
+            config.pre_shared_key.map(|x| x.to_bytes()),
             config.keepalive_seconds,
             0,
             None,
@@ -139,6 +139,7 @@ impl WireguardTunnel {
                 data: packet.to_vec(),
                 src_addr: SocksAddr::any_ipv4(),
                 dst_addr: self.endpoint.into(),
+                inbound_user: None,
             })
             .await
     }

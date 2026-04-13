@@ -6,7 +6,8 @@ zero_rtt_handshake = false
 dual_stack = false
 
 acl = '''
-direct localhost
+direct 0.0.0.0/0
+direct ::/0
 '''
 
 [users]

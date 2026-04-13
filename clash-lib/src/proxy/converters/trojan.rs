@@ -1,6 +1,7 @@
 use tracing::warn;
 
-static DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
+const DEFAULT_ALPN: [&str; 2] = ["h2", "http/1.1"];
+const DEFAULT_WS_ALPN: [&str; 1] = ["http/1.1"];
 
 use crate::{
     Error,
@@ -49,13 +50,19 @@ impl TryFrom<&OutboundTrojan> for Handler {
                         .as_ref()
                         .map(|x| x.to_owned())
                         .unwrap_or(s.common_opts.server.to_owned()),
-                    s.alpn.clone().or(Some(
-                        DEFAULT_ALPN
-                            .iter()
+                    s.alpn.clone().or(Some({
+                        let network = s.network.as_deref();
+                        let alpn: &[&str] = if let Some("ws") = network {
+                            &DEFAULT_WS_ALPN
+                        } else {
+                            &DEFAULT_ALPN
+                        };
+
+                        alpn.iter()
                             .copied()
                             .map(|x| x.to_owned())
-                            .collect::<Vec<String>>(),
-                    )),
+                            .collect::<Vec<String>>()
+                    })),
                     None,
                 );
                 Some(Box::new(client))

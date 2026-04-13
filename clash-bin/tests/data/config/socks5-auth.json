@@ -1,0 +1,28 @@
+{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "password",
+                "accounts": [
+                    {
+                        "user": "user",
+                        "pass": "password"
+                    }
+                ],
+                "udp": true,
+                "ip": "0.0.0.0"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}

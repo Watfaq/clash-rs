@@ -17,7 +17,7 @@ use hickory_server::{
 };
 #[cfg(feature = "aws-lc-rs")]
 use rustls::crypto::aws_lc_rs::sign::any_supported_type;
-#[cfg(feature = "ring")]
+#[cfg(all(not(feature = "aws-lc-rs"), feature = "ring"))]
 use rustls::crypto::ring::sign::any_supported_type;
 use rustls::{server::AlwaysResolvesServerRawPublicKeys, sign::CertifiedKey};
 use std::{sync::Arc, time::Duration};
@@ -362,7 +362,7 @@ mod tests {
         tls::{self, global_root_store},
     };
     use futures::FutureExt;
-    use hickory_client::client::{self, Client, ClientHandle};
+    use hickory_client::client::{Client, ClientHandle};
     use hickory_proto::{
         h2::HttpsClientStreamBuilder,
         h3::H3ClientStreamBuilder,
@@ -374,18 +374,11 @@ mod tests {
     };
     use rustls::ClientConfig;
     use std::{sync::Arc, time::Duration};
-    use tokio::task::JoinHandle;
-    mod addr {
-        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio::{
+        net::{TcpListener, UdpSocket},
+        task::JoinHandle,
+    };
 
-        const LOCAL: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-
-        pub(super) const UDP: SocketAddr = SocketAddr::new(LOCAL, 53553);
-        pub(super) const TCP: SocketAddr = SocketAddr::new(LOCAL, 53554);
-        pub(super) const DOT: SocketAddr = SocketAddr::new(LOCAL, 53555);
-        pub(super) const DOH: SocketAddr = SocketAddr::new(LOCAL, 53556);
-        pub(super) const DOH3: SocketAddr = SocketAddr::new(LOCAL, 53557);
-    }
     async fn send_query(client: &mut Client) -> anyhow::Result<()> {
         let name = Name::from_ascii("www.example.com.").unwrap();
 
@@ -441,22 +434,52 @@ mod tests {
             .boxed()
         });
 
+        // Bind to port 0 to get OS-assigned available ports
+        let udp_sock = UdpSocket::bind("127.0.0.1:0").await?;
+        let udp_addr = udp_sock.local_addr()?;
+        drop(udp_sock);
+
+        let tcp_sock = TcpListener::bind("127.0.0.1:0").await?;
+        let tcp_addr = tcp_sock.local_addr()?;
+        drop(tcp_sock);
+
+        let dot_sock = TcpListener::bind("127.0.0.1:0").await?;
+        let dot_addr = dot_sock.local_addr()?;
+        drop(dot_sock);
+
+        let doh_sock = TcpListener::bind("127.0.0.1:0").await?;
+        let doh_addr = doh_sock.local_addr()?;
+        drop(doh_sock);
+
+        let doh3_sock = UdpSocket::bind("127.0.0.1:0").await?;
+        let doh3_addr = doh3_sock.local_addr()?;
+        drop(doh3_sock);
+
+        eprintln!(
+            "Test using ports - UDP:{}, TCP:{}, DoT:{}, DoH:{}, DoH3:{}",
+            udp_addr.port(),
+            tcp_addr.port(),
+            dot_addr.port(),
+            doh_addr.port(),
+            doh3_addr.port()
+        );
+
         let cfg = DNSListenAddr {
-            udp: Some(addr::UDP),
-            tcp: Some(addr::TCP),
+            udp: Some(udp_addr),
+            tcp: Some(tcp_addr),
             dot: Some(DoTConfig {
-                addr: addr::DOT,
+                addr: dot_addr,
                 ca_key: None,
                 ca_cert: None,
             }),
             doh: Some(DoHConfig {
-                addr: addr::DOH,
+                addr: doh_addr,
                 hostname: Some("dns.example.com".to_string()),
                 ca_key: None,
                 ca_cert: None,
             }),
             doh3: Some(DoH3Config {
-                addr: addr::DOH3,
+                addr: doh3_addr,
                 hostname: Some("dns.example.com".to_string()),
                 ca_key: None,
                 ca_cert: None,
@@ -473,18 +496,21 @@ mod tests {
             Ok(())
         });
 
-        let stream =
-            UdpClientStream::builder(addr::UDP, TokioRuntimeProvider::new()).build();
+        // Wait for servers to start
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let (mut client, handle) = client::Client::connect(stream).await?;
+        let stream =
+            UdpClientStream::builder(udp_addr, TokioRuntimeProvider::new()).build();
+
+        let (mut client, handle) = Client::connect(stream).await?;
         tokio::spawn(handle);
 
         send_query(&mut client).await?;
 
         let (stream, sender) =
-            TcpClientStream::new(addr::TCP, None, None, TokioRuntimeProvider::new());
+            TcpClientStream::new(tcp_addr, None, None, TokioRuntimeProvider::new());
 
-        let (mut client, handle) = client::Client::new(stream, sender, None).await?;
+        let (mut client, handle) = Client::new(stream, sender, None).await?;
         tokio::spawn(handle);
 
         send_query(&mut client).await?;
@@ -498,22 +524,18 @@ mod tests {
             .set_certificate_verifier(Arc::new(tls::DummyTlsVerifier::new()));
 
         let (stream, sender) = tls_client_connect(
-            addr::DOT,
+            dot_addr,
             "dns.example.com".to_owned(),
             Arc::new(tls_config),
             TokioRuntimeProvider::new(),
         );
 
-        let (mut client, handle) = client::Client::with_timeout(
-            stream,
-            sender,
-            Duration::from_secs(5),
-            None,
-        )
-        .await
-        .inspect_err(|e| {
-            assert!(false, "Failed to connect to DoT server: {}", e);
-        })?;
+        let (mut client, handle) =
+            Client::with_timeout(stream, sender, Duration::from_secs(5), None)
+                .await
+                .inspect_err(|e| {
+                    assert!(false, "Failed to connect to DoT server: {}", e);
+                })?;
         tokio::spawn(handle);
 
         send_query(&mut client).await?;
@@ -532,12 +554,12 @@ mod tests {
             TokioRuntimeProvider::new(),
         )
         .build(
-            addr::DOH,
+            doh_addr,
             "dns.example.com".to_owned(),
             "/dns-query".to_owned(),
         );
 
-        let (mut client, handle) = client::Client::connect(stream).await?;
+        let (mut client, handle) = Client::connect(stream).await?;
         tokio::spawn(handle);
 
         send_query(&mut client).await?;
@@ -555,12 +577,12 @@ mod tests {
             .crypto_config(tls_config)
             .clone()
             .build(
-                addr::DOH3,
+                doh3_addr,
                 "dns.example.com".to_owned(),
                 "/dns-query".to_owned(),
             );
 
-        let (mut client, handle) = client::Client::connect(stream).await?;
+        let (mut client, handle) = Client::connect(stream).await?;
         tokio::spawn(handle);
 
         send_query(&mut client).await?;

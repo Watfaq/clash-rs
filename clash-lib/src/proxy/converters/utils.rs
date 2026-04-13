@@ -1,6 +1,8 @@
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use http::uri::InvalidUri;
 
 use crate::{
+    Error,
     config::proxy::{CommonConfigOptions, GrpcOpt, H2Opt, WsOpt},
     proxy::transport::{self, GrpcClient, H2Client, WsClient},
 };
@@ -70,4 +72,21 @@ impl TryFrom<(&H2Opt, &CommonConfigOptions)> for H2Client {
             path.try_into()?,
         ))
     }
+}
+
+pub fn decode_base64_public_key(base64_public_key: &str) -> Result<[u8; 32], Error> {
+    URL_SAFE_NO_PAD
+        .decode(base64_public_key)
+        .map_err(|e| {
+            Error::InvalidConfig(format!("reality public-key base64: {e}"))
+        })?
+        .try_into()
+        .map_err(|_| {
+            Error::InvalidConfig("reality public-key must decode to 32 bytes".into())
+        })
+}
+
+pub fn decode_short_id(hex_short_id: &str) -> Result<Vec<u8>, Error> {
+    hex::decode(hex_short_id)
+        .map_err(|e| Error::InvalidConfig(format!("reality short-id hex: {e}")))
 }

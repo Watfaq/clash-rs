@@ -35,7 +35,7 @@ mod macos {
         }
     }
 
-    async fn new_tcp_stream<'a>(
+    async fn new_tcp_stream(
         addr: SocketAddr,
         iface: &str,
     ) -> std::io::Result<TcpStream> {
@@ -66,22 +66,10 @@ mod macos {
         Ok(stream)
     }
 
-    async fn new_udp_packet(iface: &str) -> std::io::Result<tokio::net::UdpSocket> {
-        let socket =
-            socket2::Socket::new(socket2::Domain::IPV6, socket2::Type::DGRAM, None)?;
-        socket.set_only_v6(false)?;
-        let iface_index = get_interface_index(iface);
-        assert_ne!(iface_index, 0, "interface index must not be zero");
-        socket.bind_device_by_index_v6(iface_index.try_into().ok())?;
-        socket.set_nonblocking(true)?;
-
-        tokio::net::UdpSocket::from_std(socket.into())
-    }
-
     async fn handle_inbound_stream(mut stream: Pin<Box<netstack_lwip::TcpStream>>) {
         let start = std::time::Instant::now();
         let mut remote_stream =
-            new_tcp_stream(*stream.remote_addr(), &OUTBOUND_INTERFACE)
+            new_tcp_stream(*stream.remote_addr(), OUTBOUND_INTERFACE)
                 .await
                 .expect("Failed to connect to remote stream");
 
@@ -241,10 +229,7 @@ mod macos {
                 }
             }
 
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "tun stopped unexpectedly 0",
-            ))
+            Err(std::io::Error::other("tun stopped unexpectedly 0"))
         }));
 
         // tun -> stack -> dispatcher
@@ -264,10 +249,7 @@ mod macos {
                 }
             }
 
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "tun stopped unexpectedly 1",
-            ))
+            Err(std::io::Error::other("tun stopped unexpectedly 1"))
         }));
 
         futs.push(Box::pin(async move {
@@ -276,8 +258,7 @@ mod macos {
                 tokio::spawn(handle_inbound_stream(stream));
             }
 
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(std::io::Error::other(
                 "tun TCP listener stopped unexpectedly",
             ))
         }));

@@ -60,6 +60,15 @@ pub enum RuleType {
     Match {
         target: String,
     },
+    Network {
+        network: crate::session::Network,
+        target: String,
+    },
+    Composite {
+        operator: String,
+        expression: String,
+        target: String,
+    },
 }
 
 impl RuleType {
@@ -79,6 +88,8 @@ impl RuleType {
             RuleType::ProcessPath { target, .. } => target,
             RuleType::RuleSet { target, .. } => target,
             RuleType::Match { target } => target,
+            RuleType::Network { target, .. } => target,
+            RuleType::Composite { target, .. } => target,
         }
     }
 }
@@ -104,6 +115,8 @@ impl Display for RuleType {
             RuleType::ProcessPath { .. } => write!(f, "PROCESS-PATH"),
             RuleType::RuleSet { .. } => write!(f, "RULE-SET"),
             RuleType::Match { .. } => write!(f, "MATCH"),
+            RuleType::Network { .. } => write!(f, "NETWORK"),
+            RuleType::Composite { .. } => write!(f, "COMPOSITE"),
         }
     }
 }
@@ -191,6 +204,28 @@ impl RuleType {
             "MATCH" => Ok(RuleType::Match {
                 target: target.to_string(),
             }),
+            "NETWORK" => {
+                let network = match payload {
+                    "TCP" | "tcp" => crate::session::Network::Tcp,
+                    "UDP" | "udp" => crate::session::Network::Udp,
+                    _ => {
+                        return Err(Error::InvalidConfig(format!(
+                            "invalid network type: {}, expected TCP or UDP",
+                            payload
+                        )));
+                    }
+                };
+                Ok(RuleType::Network {
+                    network,
+                    target: target.to_string(),
+                })
+            }
+            "AND" | "OR" | "NOT" => Ok(RuleType::Composite {
+                operator: proto.to_string(),
+                expression: payload.to_string(),
+                target: target.to_string(),
+            }),
+
             _ => Err(Error::InvalidConfig(format!(
                 "unsupported rule type: {proto}"
             ))),
@@ -202,6 +237,36 @@ impl TryFrom<String> for RuleType {
     type Error = crate::Error;
 
     fn try_from(line: String) -> Result<Self, Self::Error> {
+        // Check if this is a composite rule (contains parentheses)
+        if line.contains('(') {
+            // For composite rules: OPERATOR,((expression)),TARGET
+            // Split on first and last comma
+            let first_comma = line.find(',').ok_or_else(|| {
+                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
+            })?;
+
+            let last_comma = line.rfind(',').ok_or_else(|| {
+                Error::InvalidConfig(format!("invalid rule line (no comma): {line}"))
+            })?;
+
+            if first_comma == last_comma {
+                return Err(Error::InvalidConfig(format!(
+                    "composite rule needs at least 2 commas: {line}"
+                )));
+            }
+
+            let operator = line[..first_comma].trim();
+            let expression = line[first_comma + 1..last_comma].trim();
+            let target = line[last_comma + 1..].trim();
+
+            return Ok(RuleType::Composite {
+                operator: operator.to_string(),
+                expression: expression.to_string(),
+                target: target.to_string(),
+            });
+        }
+
+        // For non-composite rules, use simple split
         let parts = line.split(',').map(str::trim).collect::<Vec<&str>>();
 
         match parts.as_slice() {
@@ -220,5 +285,47 @@ impl FromStr for RuleType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.to_string().try_into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_network_rule_parsing() {
+        // Test TCP network rule
+        let rule = RuleType::try_from("NETWORK,TCP,PROXY".to_string()).unwrap();
+        match rule {
+            RuleType::Network { network, target } => {
+                assert_eq!(network, crate::session::Network::Tcp);
+                assert_eq!(target, "PROXY");
+            }
+            _ => panic!("Expected Network rule"),
+        }
+
+        // Test UDP network rule
+        let rule = RuleType::try_from("NETWORK,UDP,PROXY".to_string()).unwrap();
+        match rule {
+            RuleType::Network { network, target } => {
+                assert_eq!(network, crate::session::Network::Udp);
+                assert_eq!(target, "PROXY");
+            }
+            _ => panic!("Expected Network rule"),
+        }
+
+        // Test lowercase network types
+        let rule = RuleType::try_from("NETWORK,tcp,PROXY".to_string()).unwrap();
+        match rule {
+            RuleType::Network { network, target } => {
+                assert_eq!(network, crate::session::Network::Tcp);
+                assert_eq!(target, "PROXY");
+            }
+            _ => panic!("Expected Network rule"),
+        }
+
+        // Test invalid network type
+        let rule = RuleType::try_from("NETWORK,INVALID,PROXY".to_string());
+        assert!(rule.is_err());
     }
 }

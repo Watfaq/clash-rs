@@ -1,7 +1,10 @@
 use super::http::HttpClient;
 use crate::{
     Error,
-    common::{errors::map_io_error, utils::download},
+    common::{
+        errors::{map_io_error, new_io_error},
+        utils::download,
+    },
 };
 use maxminddb::geoip2;
 use std::{fs, net::IpAddr, path::Path, sync::Arc};
@@ -37,36 +40,46 @@ pub trait MmdbLookupTrait {
 
 impl MmdbLookupTrait for Mmdb {
     fn lookup_country(&self, ip: IpAddr) -> std::io::Result<MmdbLookupCountry> {
-        self.reader
-            .lookup::<geoip2::Country>(ip)
+        match self
+            .reader
+            .lookup(ip)
             .map_err(map_io_error)?
-            .map(|c| MmdbLookupCountry {
-                country_code: c
+            .decode::<geoip2::Country>()
+        {
+            Err(err) => Err(new_io_error(err)),
+            Ok(Some(country)) => Ok(MmdbLookupCountry {
+                country_code: country
                     .country
-                    .and_then(|x| x.iso_code)
+                    .iso_code
                     .unwrap_or_default()
                     .to_string(),
-            })
-            .ok_or(std::io::Error::new(
+            }),
+            Ok(None) => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "country not found",
-            ))
+            )),
+        }
     }
 
     fn lookup_asn(&self, ip: IpAddr) -> std::io::Result<MmdbLookupAsn> {
-        self.reader
-            .lookup::<geoip2::Asn>(ip)
+        match self
+            .reader
+            .lookup(ip)
             .map_err(map_io_error)?
-            .map(|c| MmdbLookupAsn {
-                asn_name: c
+            .decode::<geoip2::Asn>()
+        {
+            Err(err) => Err(new_io_error(err)),
+            Ok(Some(asn)) => Ok(MmdbLookupAsn {
+                asn_name: asn
                     .autonomous_system_organization
                     .unwrap_or_default()
                     .to_string(),
-            })
-            .ok_or(std::io::Error::new(
+            }),
+            Ok(None) => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "asn not found",
-            ))
+            )),
+        }
     }
 }
 
@@ -99,43 +112,33 @@ impl Mmdb {
 
         match maxminddb::Reader::open_readfile(&path) {
             Ok(r) => Ok(r),
-            Err(e) => match e {
-                maxminddb::MaxMindDbError::InvalidDatabase(_)
-                | maxminddb::MaxMindDbError::Io(_) => {
-                    warn!(
-                        "invalid mmdb `{}`: {}, trying to download again",
-                        path.as_ref().to_string_lossy(),
-                        e.to_string()
-                    );
-
-                    // try to download again
-                    fs::remove_file(&mmdb_file)?;
-
-                    info!(
-                        "mmdb {:?} corrupt, re-downloading mmdb from {download_url}",
-                        mmdb_file.file_name()
-                    );
-                    download(&download_url, &mmdb_file, http_client)
-                        .await
-                        .map_err(|x| {
-                            Error::InvalidConfig(format!(
-                                "mmdb download failed: {x}"
-                            ))
-                        })?;
-                    Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
-                        Error::InvalidConfig(format!(
-                            "cant open mmdb `{}`: {}",
-                            path.as_ref().to_string_lossy(),
-                            x
-                        ))
-                    })?)
-                }
-                _ => Err(Error::InvalidConfig(format!(
-                    "cant open mmdb `{}`: {}",
+            Err(e) => {
+                warn!(
+                    "invalid mmdb `{}`: {}, trying to download again",
                     path.as_ref().to_string_lossy(),
-                    e
-                ))),
-            },
+                    e.to_string()
+                );
+
+                // try to download again
+                fs::remove_file(&mmdb_file)?;
+
+                info!(
+                    "mmdb {:?} corrupt, re-downloading mmdb from {download_url}",
+                    mmdb_file.file_name()
+                );
+                download(&download_url, &mmdb_file, http_client)
+                    .await
+                    .map_err(|x| {
+                        Error::InvalidConfig(format!("mmdb download failed: {x}"))
+                    })?;
+                Ok(maxminddb::Reader::open_readfile(&path).map_err(|x| {
+                    Error::InvalidConfig(format!(
+                        "cant open mmdb `{}`: {}",
+                        path.as_ref().to_string_lossy(),
+                        x
+                    ))
+                })?)
+            }
         }
     }
 }

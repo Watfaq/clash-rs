@@ -3,13 +3,12 @@ use crate::{
         Client, EnhancedResolver, ThreadSafeDNSClient, dns_client::DNSNetMode,
         helper::make_clients,
     },
-    proxy::utils::new_udp_socket,
+    proxy::utils::{direct_only_registry, new_udp_socket},
 };
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use std::{
-    collections::HashMap,
     env,
     fmt::{Debug, Formatter},
     io,
@@ -38,6 +37,7 @@ struct Inner {
 
 pub struct DhcpClient {
     iface: OutboundInterface,
+    fw_mark: Option<u32>,
 
     inner: Mutex<Inner>,
 }
@@ -72,7 +72,7 @@ impl Client for DhcpClient {
 }
 
 impl DhcpClient {
-    pub async fn new(iface: &str) -> Self {
+    pub async fn new(iface: &str, fw_mark: Option<u32>) -> Self {
         let iface = get_interface_by_name(iface)
             .unwrap_or_else(|| panic!("can not find interface: {iface}"));
         Self {
@@ -83,6 +83,7 @@ impl DhcpClient {
                 dns_expires_at: Instant::now(),
                 iface_addr: ipnet::IpNet::default(),
             }),
+            fw_mark,
         }
     }
 
@@ -96,13 +97,16 @@ impl DhcpClient {
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::Udp,
-                        address: format!("{s}:53"),
+                        host: url::Host::Ipv4(s),
+                        port: 53,
                         interface: None,
                         proxy: None,
                     })
                     .collect(),
                 None,
-                HashMap::new(),
+                direct_only_registry(),
+                None,
+                self.fw_mark,
             )
             .await;
         }

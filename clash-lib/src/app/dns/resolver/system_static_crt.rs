@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use hickory_resolver::TokioResolver;
 use rand::seq::IteratorRandom;
 
-use crate::app::dns::{ClashResolver, ResolverKind};
+use crate::app::dns::{ClashResolver, ResolverKind, parse_ip_literal};
 
 pub struct SystemResolver {
     inner: TokioResolver,
@@ -28,6 +28,10 @@ impl ClashResolver for SystemResolver {
         host: &str,
         _: bool,
     ) -> anyhow::Result<Option<std::net::IpAddr>> {
+        if let Some(ip) = parse_ip_literal(host) {
+            return Ok(Some(ip));
+        }
+
         let response = self.inner.lookup_ip(host).await?;
         Ok(response
             .iter()

@@ -201,7 +201,7 @@ mod tests {
                 name: "c".to_string(),
             }) as _,
         ];
-        let manager = ProxyManager::new(resolver);
+        let manager = ProxyManager::new(resolver, None);
         // if the proxy alive state isn't set, will return true by default
         // so we need to clear the alive states first
         manager.report_alive("a", false).await;

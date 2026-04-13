@@ -1,53 +1,43 @@
 use crate::{
     app::net::DEFAULT_OUTBOUND_INTERFACE,
-    config::proxy::PROXY_DIRECT,
+    config::internal::proxy::PROXY_DIRECT,
     dns::{
-        ClashResolver, ThreadSafeDNSClient,
+        ClashResolver, EdnsClientSubnet, ThreadSafeDNSClient,
         dns_client::{DNSNetMode, DnsClient, Opts},
     },
-    proxy,
+    proxy::{
+        self,
+        utils::{OutboundHandlerRegistry, SharedOutboundHandler},
+    },
 };
 use hickory_proto::rr::rdata::opt::EdnsCode;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tracing::{debug, warn};
 
 use super::config::NameServer;
-use crate::print_and_exit;
 
 pub async fn make_clients(
     servers: Vec<NameServer>,
     resolver: Option<Arc<dyn ClashResolver>>,
-    outbounds: HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>,
+    outbounds: OutboundHandlerRegistry,
+    edns_client_subnet: Option<EdnsClientSubnet>,
+    fw_mark: Option<u32>,
 ) -> Vec<ThreadSafeDNSClient> {
     let mut rv = Vec::new();
 
     for s in servers {
         debug!("building nameserver: {}", s);
 
-        let proxy = outbounds
-            .get(&s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string()))
-            .cloned()
-            .unwrap_or(Arc::new(proxy::direct::Handler::new(PROXY_DIRECT)));
+        let proxy_name = s.proxy.clone().unwrap_or(PROXY_DIRECT.to_string());
+        let proxy: Arc<dyn proxy::OutboundHandler> =
+            Arc::new(SharedOutboundHandler::new(proxy_name, outbounds.clone()));
 
-        let (host, port) = if s.net == DNSNetMode::Dhcp {
-            (s.address.as_str(), "0")
-        } else {
-            let port = s.address.split(':').next_back().unwrap();
-            let host = s
-                .address
-                .strip_suffix(format!(":{port}").as_str())
-                .unwrap_or_else(|| {
-                    print_and_exit!("invalid address: {}", s.address);
-                });
-            (host, port)
-        };
+        let port = if s.net == DNSNetMode::Dhcp { 0 } else { s.port };
 
         match DnsClient::new_client(Opts {
-            r: resolver.as_ref().cloned(),
-            host: host.to_string(),
-            port: port.parse::<u16>().unwrap_or_else(|_| {
-                print_and_exit!("invalid port: {}", port);
-            }),
+            father: resolver.as_ref().cloned(),
+            host: s.host.clone(),
+            port,
             net: s.net.to_owned(),
             iface: s
                 .interface
@@ -56,6 +46,8 @@ pub async fn make_clients(
                 .inspect(|x| debug!("DNS client interface: {:?}", x))
                 .cloned(),
             proxy,
+            ecs: edns_client_subnet.clone(),
+            fw_mark,
         })
         .await
         {

@@ -124,7 +124,7 @@ fn new_connector() -> TlsConnector {
         .with_root_certificates(ROOT_STORE.clone())
         .with_no_client_auth();
 
-    TlsConnector::from(Arc::new(tls_config.clone()))
+    TlsConnector::from(Arc::new(tls_config))
 }
 
 /// Take a slice of tls message[5..] and returns signed session id.

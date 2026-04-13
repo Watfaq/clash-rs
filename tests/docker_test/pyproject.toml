@@ -1,0 +1,10 @@
+[project]
+name = "clash-rs-tests"
+version = "0.1.0"
+description = "Integration tests for clash-rs"
+dependencies = [
+    "socks-client",
+]
+
+[tool.uv]
+managed = true

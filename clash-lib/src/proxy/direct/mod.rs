@@ -17,9 +17,12 @@ use crate::{
     },
     session::Session,
 };
+use erased_serde::Serialize as ErasedSerialize;
+use std::collections::HashMap;
 
 use super::{
-    ConnectorType, DialWithConnector, OutboundType, utils::RemoteConnector,
+    ConnectorType, DialWithConnector, OutboundType, PlainProxyAPIResponse,
+    utils::RemoteConnector,
 };
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -89,8 +92,13 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let family_hint = family_hint_for_session(sess, &resolver).await;
+        let bind_addr: std::net::IpAddr = if sess.source.is_ipv4() {
+            std::net::Ipv4Addr::UNSPECIFIED.into()
+        } else {
+            std::net::Ipv6Addr::UNSPECIFIED.into()
+        };
         let d = new_udp_socket(
-            Some(sess.source),
+            Some((bind_addr, 0).into()),
             sess.iface.as_ref(),
             #[cfg(target_os = "linux")]
             sess.so_mark,
@@ -148,5 +156,19 @@ impl OutboundHandler for Handler {
         let d = ChainedDatagramWrapper::new(d);
         d.append_to_chain(self.name()).await;
         Ok(Box::new(d))
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m
     }
 }

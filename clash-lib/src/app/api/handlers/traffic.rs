@@ -28,12 +28,15 @@ pub async fn handle(
         loop {
             let (up, down) = mgr.now();
             let res = TrafficResponse { up, down };
-            let j = serde_json::to_vec(&res).unwrap();
+            let j_str = match serde_json::to_string(&res) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to serialize traffic stats: {}", e);
+                    continue;
+                }
+            };
 
-            if let Err(e) = socket
-                .send(Message::Text(String::from_utf8(j).unwrap().into()))
-                .await
-            {
+            if let Err(e) = socket.send(Message::Text(j_str.into())).await {
                 warn!("ws send error: {}", e);
                 break;
             }

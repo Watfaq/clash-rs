@@ -231,6 +231,13 @@ pub struct GrpcOpt {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
+pub struct RealityOpt {
+    pub public_key: String,
+    pub short_id: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
@@ -279,8 +286,12 @@ pub struct OutboundVless {
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
+    pub reality_opts: Option<RealityOpt>,
+    pub flow: Option<String>,
+    pub client_fingerprint: Option<String>,
 }
 
+#[cfg(feature = "wireguard")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundWireguard {
@@ -288,7 +299,8 @@ pub struct OutboundWireguard {
     pub common_opts: CommonConfigOptions,
     pub private_key: String,
     pub public_key: String,
-    pub preshared_key: Option<String>,
+    #[serde(alias = "preshared-key")]
+    pub pre_shared_key: Option<String>,
     pub mtu: Option<u16>,
     pub udp: Option<bool>,
     pub ip: String,
@@ -299,6 +311,7 @@ pub struct OutboundWireguard {
     pub reserved_bits: Option<Vec<u8>>,
 }
 
+#[cfg(feature = "onion")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct OutboundTor {
@@ -312,7 +325,7 @@ pub struct OutboundTuic {
     pub common_opts: CommonConfigOptions,
     pub uuid: Uuid,
     pub password: String,
-    /// override field 'server' dns record, not used for now
+    /// override field 'server' dns record
     pub ip: Option<String>,
     pub heartbeat_interval: Option<u64>,
     /// h3
@@ -368,6 +381,13 @@ pub struct OutboundShadowQuic {
     /// keep alive interval in milliseconds
     /// 0 means disable keep alive, should be smaller than 30_000(idle time)
     pub keep_alive_interval: Option<u32>,
+    /// Generalized Segmentation Offload for QUIC udp connection, default to
+    /// true.
+    pub gso: Option<bool>,
+    /// MTU discovery for QUIC connection, default to true. If false, will use
+    /// initial mtu as fixed mtu. This is useful for network with stable MTU
+    /// and high packet loss.
+    pub mtu_discovery: Option<bool>,
 }
 
 #[cfg(feature = "ssh")]
@@ -656,5 +676,74 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
             mapping.into_iter(),
         ))
         .map_err(map_serde_error(name))
+    }
+}
+
+#[cfg(all(test, feature = "wireguard"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wireguard_pre_shared_key_field_name() {
+        // Test the new standard field name "pre-shared-key"
+        let yaml_new = r#"
+            name: wg-test
+            type: wireguard
+            server: example.com
+            port: 51820
+            private-key: KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=
+            public-key: INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=
+            pre-shared-key: +JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=
+            ip: 10.0.0.2/32
+        "#;
+
+        let config: OutboundWireguard = serde_yaml::from_str(yaml_new)
+            .expect("should parse with pre-shared-key");
+        assert!(config.pre_shared_key.is_some());
+        assert_eq!(
+            config.pre_shared_key.unwrap(),
+            "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc="
+        );
+    }
+
+    #[test]
+    fn test_wireguard_preshared_key_legacy_alias() {
+        // Test the legacy field name "preshared-key" for backward compatibility
+        let yaml_legacy = r#"
+            name: wg-test
+            type: wireguard
+            server: example.com
+            port: 51820
+            private-key: KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=
+            public-key: INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=
+            preshared-key: +JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc=
+            ip: 10.0.0.2/32
+        "#;
+
+        let config: OutboundWireguard = serde_yaml::from_str(yaml_legacy)
+            .expect("should parse with preshared-key (legacy)");
+        assert!(config.pre_shared_key.is_some());
+        assert_eq!(
+            config.pre_shared_key.unwrap(),
+            "+JmZErvtDT4ZfQequxWhZSydBV+ItqUcPMHUWY1j2yc="
+        );
+    }
+
+    #[test]
+    fn test_wireguard_without_pre_shared_key() {
+        // Test config without pre-shared-key (should be optional)
+        let yaml_no_psk = r#"
+            name: wg-test
+            type: wireguard
+            server: example.com
+            port: 51820
+            private-key: KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=
+            public-key: INBZyvB715sA5zatkiX8Jn3Dh5tZZboZ09x4pkr66ig=
+            ip: 10.0.0.2/32
+        "#;
+
+        let config: OutboundWireguard = serde_yaml::from_str(yaml_no_psk)
+            .expect("should parse without pre-shared-key");
+        assert!(config.pre_shared_key.is_none());
     }
 }

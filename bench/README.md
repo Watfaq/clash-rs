@@ -68,3 +68,120 @@ iperf Done.
 ```
 
 There should be room for the performance improve.
+
+---
+
+## Automated CI Benchmarking
+
+### Overview
+
+The project includes automated TUN throughput benchmarking that runs on every PR affecting TUN-related code. The benchmark results are automatically posted as comments on the PR.
+
+### How It Works
+
+1. **Trigger**: The benchmark workflow runs when PRs modify:
+   - `clash-lib/src/proxy/tun/**`
+   - `clash-netstack/**`
+   - `bench/**`
+   - `.github/workflows/benchmark.yml`
+
+2. **Baseline Comparison**:
+   - The repo includes a committed baseline file (`bench/baseline-tun-benchmark.json`)
+   - This baseline represents the performance of the latest master branch
+   - PRs are compared against this baseline (no need to rebuild master every time)
+   - When a PR with good performance is merged, update the baseline for future comparisons
+
+3. **Execution**:
+   - Creates a veth pair (veth0 <-> veth1 @ namespace) with TEST-NET-1 IPs
+   - Builds the PR code in release mode
+   - Runs TUN benchmark with traffic routing through TUN device
+   - Compares with committed baseline file
+   - Posts results as a PR comment
+
+4. **Results**: The workflow posts a comment showing:
+   - Current PR throughput performance
+   - Comparison with baseline (master branch)
+   - Performance difference percentage
+   - Warning if regression exceeds 10%
+   - Clash-rs logs available as downloadable artifact
+
+### Test Methodology
+
+The benchmark uses **veth pairs with network namespaces** to ensure traffic actually goes through the TUN device:
+
+- **Setup**: Creates veth pair using TEST-NET-1 range (192.0.2.1 <-> 192.0.2.2@namespace)
+  - Uses RFC 5737 reserved range to avoid conflicts with real networks
+  - veth1 placed in separate network namespace to prevent kernel local routing
+- **Baseline**: Direct connection to 192.0.2.2 via veth (no TUN routing)
+  - Expected: ~5-20 Gbps (virtual network interface speed)
+- **TUN Test**: 
+  - Removes direct route to 192.0.2.2
+  - Configures TUN to route 192.0.2.0/24
+  - Traffic to 192.0.2.2 **must** go through TUN
+  - Expected: ~1-3 Gbps (TUN adds overhead)
+- **Comparison**: Shows TUN overhead as percentage difference
+
+### Running Benchmarks Locally
+
+```bash
+# Build clash-rs
+cargo build --release --bin clash-rs --all-features
+
+# Run the benchmark (includes baseline test)
+python3 bench/run_tun_benchmark.py \
+  --config bench/tun-benchmark.yaml \
+  --duration 10 \
+  --output results.json
+
+# Run TUN-only benchmark (skip baseline, like CI)
+python3 bench/run_tun_benchmark.py \
+  --config bench/tun-benchmark.yaml \
+  --duration 10 \
+  --output results.json \
+  --skip-baseline
+
+# Compare with baseline
+python3 bench/compare_results.py \
+  --current results.json \
+  --baseline bench/baseline-tun-benchmark.json \
+  --output comment.md
+```
+
+### Updating the Baseline
+
+When merging a PR that improves performance or after significant changes:
+
+```bash
+# Run benchmark to generate new baseline
+python3 bench/run_tun_benchmark.py \
+  --config bench/tun-benchmark.yaml \
+  --duration 10 \
+  --output bench/baseline-tun-benchmark.json \
+  --skip-baseline
+
+# Commit the updated baseline
+git add bench/baseline-tun-benchmark.json
+git commit -m "chore: update TUN benchmark baseline"
+```
+
+The committed baseline becomes the reference point for all future PRs.
+
+### Configuration
+
+- **Benchmark config**: `bench/tun-benchmark.yaml` - Minimal TUN config for CI
+- **Test duration**: Default 10 seconds (configurable via `--duration`)
+- **Regression threshold**: 10% decrease triggers a warning
+- **Server**: Uses localhost iperf3 server
+
+### Requirements
+
+- iperf3 (`apt-get install iperf3`)
+- iproute2 (`apt-get install iproute2`)
+- Python 3.x
+- sudo/root access (required for creating network interfaces and TUN device)
+
+### Files
+
+- `run_tun_benchmark.py` - Main benchmark script
+- `compare_results.py` - Results comparison and comment generation
+- `tun-benchmark.yaml` - CI benchmark configuration

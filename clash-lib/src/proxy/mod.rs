@@ -8,11 +8,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use downcast_rs::{Downcast, impl_downcast};
+use erased_serde::Serialize as ErasedSerialize;
 use futures::{Sink, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display},
     io,
     sync::Arc,
@@ -234,6 +236,10 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     fn try_as_group_handler(&self) -> Option<&dyn GroupProxyAPIResponse> {
         None
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        None
+    }
 }
 pub type AnyOutboundHandler = Arc<dyn OutboundHandler>;
 
@@ -246,4 +252,12 @@ pub trait DialWithConnector {
     /// register a dialer for the outbound handler
     /// this must be called before the outbound handler is used
     async fn register_connector(&self, _: Arc<dyn RemoteConnector>) {}
+}
+
+/// Plain outbound implements this trait to serialize itself for rest API
+/// response.
+#[async_trait]
+pub trait PlainProxyAPIResponse: OutboundHandler {
+    /// used in the API responses.
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>>;
 }
