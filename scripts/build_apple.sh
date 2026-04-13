@@ -15,6 +15,14 @@ MIN_MACOS_VERSION="14.0"
 CRATE_NAME="clash-ffi"
 LIB_NAME="clashrs"
 OUTPUT_DIR="build"
+FULL_APPLE_BUILD="false"
+
+if [ "${1:-}" = "--full" ]; then
+    FULL_APPLE_BUILD="true"
+elif [ -n "${1:-}" ]; then
+    echo "Usage: $0 [--full]"
+    exit 1
+fi
 
 HEADERS_DIR="${OUTPUT_DIR}/Headers"
 HEADER_FILE="${HEADERS_DIR}/${LIB_NAME}/${LIB_NAME}.h"
@@ -43,7 +51,12 @@ fi
 
 # Install necessary Rust targets
 echo "Installing necessary Rust targets..."
-for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
+TARGETS=("${IOS_ARCHS[@]}")
+if [ "$FULL_APPLE_BUILD" = "true" ]; then
+    TARGETS+=("${MACOS_ARCHS[@]}")
+fi
+
+for target in "${TARGETS[@]}"; do
     rustup target add "$target" --toolchain $TOOLCHAIN || echo "Target $target is Tier 3 and may need local stdlib build."
 done
 
@@ -62,9 +75,14 @@ EOF
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$HEADERS_DIR"
 
-# Build for all targets
-echo "Building library for iOS and macOS targets..."
-for target in "${IOS_ARCHS[@]}" "${MACOS_ARCHS[@]}"; do
+# Build for selected targets
+if [ "$FULL_APPLE_BUILD" = "true" ]; then
+    echo "Building library for iOS and macOS targets..."
+else
+    echo "Building library for iOS targets only..."
+fi
+
+for target in "${TARGETS[@]}"; do
     MACOSX_DEPLOYMENT_TARGET=$MIN_MACOS_VERSION IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo +$TOOLCHAIN build --target "$target" --release
     mkdir -p "$OUTPUT_DIR/$target"
     cp "target/$target/release/lib${LIB_NAME}.a" "$OUTPUT_DIR/$target/"
@@ -72,7 +90,9 @@ done
 
 # Ensure directories for universal binaries
 mkdir -p "$OUTPUT_DIR/ios-simulator-universal"
-mkdir -p "$OUTPUT_DIR/macos-universal"
+if [ "$FULL_APPLE_BUILD" = "true" ]; then
+    mkdir -p "$OUTPUT_DIR/macos-universal"
+fi
 
 # Lipo operations for universal binaries
 echo "Creating universal binaries using lipo..."
@@ -83,20 +103,30 @@ echo "Creating universal binaries using lipo..."
 #     "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" \
 #     -output "$OUTPUT_DIR/ios-simulator-universal/lib${LIB_NAME}.a"
 
-# macOS lipo: aarch64-apple-darwin + x86_64-apple-darwin
-lipo -create \
-    "$OUTPUT_DIR/aarch64-apple-darwin/lib${LIB_NAME}.a" \
-    "$OUTPUT_DIR/x86_64-apple-darwin/lib${LIB_NAME}.a" \
-    -output "$OUTPUT_DIR/macos-universal/lib${LIB_NAME}.a"
+if [ "$FULL_APPLE_BUILD" = "true" ]; then
+    # macOS lipo: aarch64-apple-darwin + x86_64-apple-darwin
+    lipo -create \
+        "$OUTPUT_DIR/aarch64-apple-darwin/lib${LIB_NAME}.a" \
+        "$OUTPUT_DIR/x86_64-apple-darwin/lib${LIB_NAME}.a" \
+        -output "$OUTPUT_DIR/macos-universal/lib${LIB_NAME}.a"
+fi
 
 # Create XCFramework
 echo "Creating XCFramework..."
 rm -rf "$XCFRAMEWORK_DIR"
-xcodebuild -create-xcframework \
-    -library "$OUTPUT_DIR/aarch64-apple-ios/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
-    -library "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
-    -library "$OUTPUT_DIR/macos-universal/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
-    -output "$XCFRAMEWORK_DIR"
+
+if [ "$FULL_APPLE_BUILD" = "true" ]; then
+    xcodebuild -create-xcframework \
+        -library "$OUTPUT_DIR/aarch64-apple-ios/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
+        -library "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
+        -library "$OUTPUT_DIR/macos-universal/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
+        -output "$XCFRAMEWORK_DIR"
+else
+    xcodebuild -create-xcframework \
+        -library "$OUTPUT_DIR/aarch64-apple-ios/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
+        -library "$OUTPUT_DIR/aarch64-apple-ios-sim/lib${LIB_NAME}.a" -headers "$HEADERS_DIR" \
+        -output "$XCFRAMEWORK_DIR"
+fi
 
 echo "XCFramework created at $XCFRAMEWORK_DIR"
 
