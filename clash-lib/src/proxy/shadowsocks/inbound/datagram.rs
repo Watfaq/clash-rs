@@ -172,7 +172,6 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             ref mut pkt,
             ref mut flushed,
             ref mut client_controls,
-            ref server_session_id,
             ..
         } = *self;
 
@@ -192,14 +191,26 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             };
 
             // Look up the per-client control for this response's destination.
-            // If no entry exists (e.g. non-SS2022 path), fall back to a
-            // default with the shared server_session_id.
+            // This entry must already exist: a response can only arrive after
+            // poll_next() has received and dispatched the corresponding request
+            // from this client, which is what populates client_controls.
+            // A missing entry would mean we have no user key, so we'd silently
+            // encrypt with iPSK and the client would get a MAC failure —
+            // exactly the bug we are fixing. Error out loudly instead.
             let client_addr = pkt.dst_addr.clone().must_into_socket_addr();
-            let control = client_controls.entry(client_addr).or_insert_with(|| {
-                let mut d = UdpSocketControlData::default();
-                d.server_session_id = *server_session_id;
-                d
-            });
+            let control =
+                match client_controls.get_mut(&client_addr) {
+                    Some(c) => c,
+                    None => {
+                        error!(
+                            "no control entry for client {client_addr} — \
+                             dropping response to avoid iPSK fallback"
+                        );
+                        *pkt_container = None;
+                        *flushed = true;
+                        return Poll::Ready(Ok(()));
+                    }
+                };
 
             let n = ready!(socket.poll_send_to_with_ctrl(
                 pkt.dst_addr.clone().must_into_socket_addr(),
