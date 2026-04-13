@@ -15,9 +15,11 @@ use crate::{
     runner::Runner,
 };
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 /// Maximum number of attempts to wait for a newly created TUN interface to
 /// become visible via NetworkInterface::show().
 const TUN_VISIBILITY_MAX_ATTEMPTS: u32 = 40;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 /// Interval in milliseconds between each visibility poll attempt.
 const TUN_VISIBILITY_POLL_INTERVAL_MS: u64 = 50;
 

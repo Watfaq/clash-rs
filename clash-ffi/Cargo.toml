@@ -5,7 +5,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-clash-lib = { path = "../clash-lib", default-features = false, features = ["shadowsocks", "tuic", "ssh", "zero_copy"] }
+clash-lib = { path = "../clash-lib", default-features = false, features = ["shadowsocks", "tuic", "ssh", "zero_copy", "aws-lc-rs"] }
 tracing = "0.1.41"
 tracing-oslog = "0.3.0"
 tracing-subscriber = "0.3.20"
