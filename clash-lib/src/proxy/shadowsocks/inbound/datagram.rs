@@ -2,7 +2,7 @@ use crate::{
     common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
 };
 use futures::ready;
-use shadowsocks::{relay::udprelay::options::UdpSocketControlData, ProxySocket};
+use shadowsocks::{ProxySocket, relay::udprelay::options::UdpSocketControlData};
 use std::{
     pin::Pin,
     task::{Context, Poll},
