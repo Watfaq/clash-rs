@@ -10,7 +10,7 @@ use crate::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
+    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket, utils::ToCanonical},
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -256,6 +256,16 @@ impl Dispatcher {
         let t1 = tokio::spawn(async move {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
+
+                // Canonicalize IPv4-mapped IPv6 destination addresses to plain
+                // IPv4.  Some SS2022 inbound paths produce ::ffff:x.x.x.x when
+                // the original target was IPv4 (e.g. because the proxy socket is
+                // internally dual-stack).  Without this, new_udp_socket picks
+                // AF_INET6, while bind_addr is still 0.0.0.0 (IPv4), causing
+                // EINVAL on bind.
+                if let crate::session::SocksAddr::Ip(addr) = &mut packet.dst_addr {
+                    *addr = addr.to_canonical();
+                }
 
                 // Preserve the original destination IP before reverse_lookup
                 // may convert it to a domain name (via DNS cache). This is used
