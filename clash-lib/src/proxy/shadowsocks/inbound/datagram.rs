@@ -195,25 +195,24 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             // poll_next() has received and dispatched the corresponding request
             // from this client, which is what populates client_controls.
             // A missing entry would mean we have no user key, so we'd silently
-            // encrypt with iPSK and the client would get a MAC failure —
+            // encrypt with iPSK and the client would get a MAC failure --
             // exactly the bug we are fixing. Error out loudly instead.
             let client_addr = pkt.dst_addr.clone().must_into_socket_addr();
-            let control =
-                match client_controls.get_mut(&client_addr) {
-                    Some(c) => c,
-                    None => {
-                        error!(
-                            "no control entry for client {client_addr} — \
-                             dropping response to avoid iPSK fallback"
-                        );
-                        *pkt_container = None;
-                        *flushed = true;
-                        return Poll::Ready(Ok(()));
-                    }
-                };
+            let control = match client_controls.get_mut(&client_addr) {
+                Some(c) => c,
+                None => {
+                    error!(
+                        "no control entry for client {client_addr} - dropping \
+                         response to avoid iPSK fallback"
+                    );
+                    *pkt_container = None;
+                    *flushed = true;
+                    return Poll::Ready(Ok(()));
+                }
+            };
 
             let n = ready!(socket.poll_send_to_with_ctrl(
-                pkt.dst_addr.clone().must_into_socket_addr(),
+                client_addr,
                 &addr,
                 control,
                 pkt.data.as_ref(),
