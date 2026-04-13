@@ -2,7 +2,7 @@ use crate::{
     common::errors::new_io_error, proxy::datagram::UdpPacket, session::SocksAddr,
 };
 use futures::ready;
-use shadowsocks::{ProxySocket, relay::udprelay::options::UdpSocketControlData};
+use shadowsocks::{relay::udprelay::options::UdpSocketControlData, ProxySocket};
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -34,7 +34,11 @@ impl std::fmt::Debug for InboundShadowsocksDatagram {
 impl InboundShadowsocksDatagram {
     pub fn new(socket: ProxySocket<shadowsocks::net::UdpSocket>) -> Self {
         let mut control = UdpSocketControlData::default();
+        // Both IDs are overwritten on the first received packet; set random
+        // values here so any accidental early send is at least non-trivially
+        // predictable.
         control.client_session_id = rand::random::<u64>();
+        control.server_session_id = rand::random::<u64>();
 
         Self {
             buf: bytes::BytesMut::with_capacity(65535),
@@ -54,11 +58,12 @@ impl futures::Stream for InboundShadowsocksDatagram {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let &mut Self {
+        let Self {
             ref mut buf,
             ref socket,
+            ref mut control,
             ..
-        } = self.get_mut();
+        } = *self.get_mut();
 
         loop {
             buf.resize(buf.capacity(), 0);
@@ -69,6 +74,18 @@ impl futures::Stream for InboundShadowsocksDatagram {
 
             match rv {
                 Ok((n, src, target, _, ctrl)) => {
+                    // Propagate the sender's session context into self.control
+                    // so that the subsequent response is encrypted with the
+                    // correct user key (uPSK) and echoes the correct
+                    // client_session_id. Without this, multi-user SS2022 UDP
+                    // responses are encrypted with the server iPSK, causing
+                    // MAC failure on clients that expect uPSK-encrypted replies
+                    // (e.g. sing-shadowsocks).
+                    if let Some(ref c) = ctrl {
+                        control.client_session_id = c.client_session_id;
+                        control.user = c.user.clone();
+                    }
+
                     return Poll::Ready(Some(UdpPacket {
                         data: read_buf.filled()[..n].to_vec(),
                         src_addr: src.into(),
