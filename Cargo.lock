@@ -1268,21 +1268,21 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clash-doc"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-ffi"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "clash-lib",
 ]
 
 [[package]]
 name = "clash-lib"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "aead 0.5.2",
  "aes 0.8.4",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "clash-rs"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -3768,7 +3768,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -4112,7 +4112,7 @@ dependencies = [
  "pin-project-lite",
  "rustc-hash 2.1.2",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -4153,7 +4153,7 @@ checksum = "f981dadd5a072a9e0efcd24bdcc388e570073f7e51b33505ceb1ef4668c80c86"
 dependencies = [
  "cfg_aliases",
  "libc",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -6211,7 +6211,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.2",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6290,7 +6290,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.3",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -10524,7 +10524,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-dns"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10545,7 +10545,7 @@ dependencies = [
 
 [[package]]
 name = "watfaq-netstack"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "env_logger",
