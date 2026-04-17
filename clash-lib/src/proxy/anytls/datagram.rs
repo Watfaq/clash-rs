@@ -230,8 +230,8 @@ impl Stream for OutboundDatagramAnytls {
                                 let mut buf = vec![0u8; domain_len as usize];
                                 let fut = pin.read_exact(&mut buf);
                                 pin_mut!(fut);
-                                let n = match ready!(fut.poll(cx)) {
-                                    Ok(n) => n,
+                                match ready!(fut.poll(cx)) {
+                                    Ok(_) => {}
                                     Err(err) => {
                                         debug!(
                                             "failed to read socks addr from anytls \
@@ -240,9 +240,6 @@ impl Stream for OutboundDatagramAnytls {
                                         );
                                         return Poll::Ready(None);
                                     }
-                                };
-                                if n != domain_len as usize {
-                                    return Poll::Ready(None);
                                 }
                                 let domain = String::from_utf8(buf);
                                 let domain = match domain {
@@ -348,12 +345,7 @@ impl Stream for OutboundDatagramAnytls {
                     let fut = pin.read_exact(read_buf);
                     pin_mut!(fut);
                     match ready!(fut.poll(cx)) {
-                        Ok(n) => {
-                            if n != *len {
-                                debug!("invalid anytls data");
-                                return Poll::Ready(None);
-                            }
-
+                        Ok(_) => {
                             let addr = addr.to_owned();
                             let len = len.to_owned();
 
