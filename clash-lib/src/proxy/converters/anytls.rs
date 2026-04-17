@@ -4,8 +4,8 @@ use crate::{
     config::internal::proxy::OutboundAnytls,
     proxy::{
         HandlerCommonOptions, OutboundType,
+        anytls::{Handler, HandlerOptions},
         transport::TlsClient,
-        trojan::{Handler, HandlerOptions},
     },
 };
 

@@ -37,6 +37,7 @@ pub mod redir;
 
 pub(crate) mod datagram;
 
+pub mod anytls;
 pub mod converters;
 pub mod hysteria2;
 #[cfg(feature = "shadowquic")]
