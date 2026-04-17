@@ -136,6 +136,10 @@ impl ProxySetProvider {
                                         s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
+                                OutboundProxyProtocol::Anytls(anytls) => {
+                                    let h: trojan::Handler = anytls.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
                                 OutboundProxyProtocol::Trojan(tr) => {
                                     let h: trojan::Handler = tr.try_into()?;
                                     Ok(Arc::new(h) as _)
