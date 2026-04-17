@@ -3,7 +3,7 @@ use tracing::warn;
 use crate::{
     config::internal::proxy::OutboundAnytls,
     proxy::{
-        HandlerCommonOptions, OutboundType,
+        HandlerCommonOptions,
         anytls::{Handler, HandlerOptions},
         transport::TlsClient,
     },
@@ -48,7 +48,6 @@ impl TryFrom<&OutboundAnytls> for Handler {
 
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
-            proto: OutboundType::Anytls,
             common_opts: HandlerCommonOptions {
                 connector: s.common_opts.connect_via.clone(),
                 ..Default::default()
