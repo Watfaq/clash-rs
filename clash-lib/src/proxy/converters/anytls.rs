@@ -30,6 +30,21 @@ impl TryFrom<&OutboundAnytls> for Handler {
                 s.common_opts.server
             );
         }
+        if s.fingerprint.is_some() || s.client_fingerprint.is_some() {
+            warn!(
+                "anytls fingerprint fields are parsed but not applied yet for {}",
+                s.common_opts.name
+            );
+        }
+        if s.idle_session_check_interval.is_some()
+            || s.idle_session_timeout.is_some()
+            || s.min_idle_session.is_some()
+        {
+            warn!(
+                "anytls idle-session fields are parsed but not applied yet for {}",
+                s.common_opts.name
+            );
+        }
 
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),

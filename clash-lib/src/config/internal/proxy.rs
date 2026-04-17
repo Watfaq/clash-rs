@@ -249,11 +249,16 @@ pub struct OutboundAnytls {
     pub alpn: Option<Vec<String>>,
     pub sni: Option<String>,
     pub skip_cert_verify: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
     pub fingerprint: Option<String>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
     pub client_fingerprint: Option<String>,
     pub udp: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
     pub idle_session_check_interval: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
     pub idle_session_timeout: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
     pub min_idle_session: Option<u64>,
 }
 
