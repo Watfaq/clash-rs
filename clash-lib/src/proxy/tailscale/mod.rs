@@ -23,8 +23,6 @@ use super::{
 
 const TAILSCALE_CLIENT_NAME: &str = "clash-rs";
 const TAILSCALE_STATE_FILE_NAME: &str = "tailscale_state.json";
-const TAILSCALE_RS_EXPERIMENT_ENV: &str = "TS_RS_EXPERIMENT";
-const TAILSCALE_RS_EXPERIMENT_VALUE: &str = "this_is_unstable_software";
 
 #[derive(Clone)]
 pub struct HandlerOptions {
@@ -58,15 +56,6 @@ impl Handler {
     }
 
     async fn get_device(&self) -> io::Result<Arc<::tailscale::Device>> {
-        if std::env::var(TAILSCALE_RS_EXPERIMENT_ENV).as_deref()
-            != Ok(TAILSCALE_RS_EXPERIMENT_VALUE)
-        {
-            return Err(io::Error::other(format!(
-                "{TAILSCALE_RS_EXPERIMENT_ENV}={TAILSCALE_RS_EXPERIMENT_VALUE} \
-                     is required to enable tailscale-rs runtime"
-            )));
-        }
-
         let mut guard = self.device.lock().await;
         if let Some(device) = guard.as_ref() {
             return Ok(Arc::clone(device));
