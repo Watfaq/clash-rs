@@ -21,7 +21,7 @@ use super::{
     PlainProxyAPIResponse,
 };
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct HandlerOptions {
     pub name: String,
     pub state_dir: Option<String>,
@@ -144,7 +144,11 @@ mod tests {
     async fn tailscale_support_udp_is_disabled() {
         let h = Handler::new(HandlerOptions {
             name: "ts".to_owned(),
-            ..Default::default()
+            state_dir: None,
+            auth_key: None,
+            hostname: None,
+            control_url: None,
+            ephemeral: false,
         });
         assert!(!h.support_udp().await);
     }
@@ -153,8 +157,11 @@ mod tests {
     async fn tailscale_api_response_redacts_auth_key() {
         let h = Handler::new(HandlerOptions {
             name: "ts".to_owned(),
+            state_dir: None,
             auth_key: Some("tskey-auth-xxxx".to_owned()),
-            ..Default::default()
+            hostname: None,
+            control_url: None,
+            ephemeral: false,
         });
         let map = h.as_map().await;
         assert!(
