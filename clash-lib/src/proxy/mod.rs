@@ -46,6 +46,8 @@ pub mod shadowsocks;
 pub mod socks;
 #[cfg(feature = "ssh")]
 pub mod ssh;
+#[cfg(feature = "tailscale")]
+pub mod tailscale;
 #[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;
@@ -131,6 +133,7 @@ pub enum OutboundType {
     Socks5,
     Hysteria2,
     Ssh,
+    Tailscale,
     ShadowQuic,
 
     #[serde(rename = "URLTest")]
@@ -158,6 +161,7 @@ impl Display for OutboundType {
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
             OutboundType::Ssh => write!(f, "ssh"),
+            OutboundType::Tailscale => write!(f, "Tailscale"),
             OutboundType::ShadowQuic => write!(f, "ShadowQuic"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),

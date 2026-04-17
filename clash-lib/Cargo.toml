@@ -32,6 +32,7 @@ ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
+tailscale = []
 tproxy = [
     "dep:etherparse",
 ]
