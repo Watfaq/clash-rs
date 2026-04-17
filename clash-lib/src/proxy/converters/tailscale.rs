@@ -1,8 +1,8 @@
 use crate::{
+    Error,
     config::internal::proxy::OutboundTailscale,
     proxy::tailscale::{Handler, HandlerOptions},
 };
-use tracing::warn;
 
 impl TryFrom<OutboundTailscale> for Handler {
     type Error = crate::Error;
@@ -14,10 +14,12 @@ impl TryFrom<OutboundTailscale> for Handler {
             || value.control_url.is_some()
             || value.ephemeral
         {
-            warn!(
-                "tailscale config auth/runtime fields are parsed but tsnet auth bootstrap is not enabled in this build; {} will use host network tailscale state",
-                value.name
-            );
+            return Err(Error::InvalidConfig(
+                "tailscale auth/runtime fields are not supported in this build. \
+                 remove `state-dir`, `auth-key`, `hostname`, `control-url`, and \
+                 `ephemeral` or enable a build with embedded tsnet integration"
+                    .to_owned(),
+            ));
         }
         Ok(Handler::new(HandlerOptions {
             name: value.name,
@@ -27,5 +29,27 @@ impl TryFrom<OutboundTailscale> for Handler {
             control_url: value.control_url,
             ephemeral: value.ephemeral,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Handler;
+    use crate::config::internal::proxy::OutboundTailscale;
+
+    #[test]
+    fn tailscale_rejects_tsnet_auth_fields_without_embedded_tsnet() {
+        let result = Handler::try_from(OutboundTailscale {
+            name: "ts".to_owned(),
+            auth_key: Some("tskey-auth-xxxx".to_owned()),
+            ..Default::default()
+        });
+
+        assert!(result.is_err());
+        let err = result.expect_err("expected invalid config error");
+        assert!(
+            err.to_string().contains("not supported in this build"),
+            "unexpected error: {err}"
+        );
     }
 }
