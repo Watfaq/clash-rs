@@ -21,6 +21,11 @@ use super::{
     PlainProxyAPIResponse,
 };
 
+const TAILSCALE_CLIENT_NAME: &str = "clash-rs";
+const TAILSCALE_STATE_FILE_NAME: &str = "tailscale_state.json";
+const TAILSCALE_RS_EXPERIMENT_ENV: &str = "TS_RS_EXPERIMENT";
+const TAILSCALE_RS_EXPERIMENT_VALUE: &str = "this_is_unstable_software";
+
 #[derive(Clone)]
 pub struct HandlerOptions {
     pub name: String,
@@ -53,10 +58,13 @@ impl Handler {
     }
 
     async fn get_device(&self) -> io::Result<Arc<::tailscale::Device>> {
-        if std::env::var_os("TS_RS_EXPERIMENT").is_none() {
-            return Err(io::Error::other(
-                "TS_RS_EXPERIMENT=this_is_unstable_software is required for tailscale-rs",
-            ));
+        if std::env::var(TAILSCALE_RS_EXPERIMENT_ENV).as_deref()
+            != Ok(TAILSCALE_RS_EXPERIMENT_VALUE)
+        {
+            return Err(io::Error::other(format!(
+                "{TAILSCALE_RS_EXPERIMENT_ENV}={TAILSCALE_RS_EXPERIMENT_VALUE} \
+                     is required to enable tailscale-rs runtime"
+            )));
         }
 
         let mut guard = self.device.lock().await;
@@ -67,7 +75,8 @@ impl Handler {
         let key_state = if self.opts.ephemeral {
             Default::default()
         } else if let Some(state_dir) = self.opts.state_dir.as_ref() {
-            let state_file = PathBuf::from(state_dir).join("tsrs_state.json");
+            let state_file =
+                PathBuf::from(state_dir).join(TAILSCALE_STATE_FILE_NAME);
             ::tailscale::load_key_file(
                 state_file,
                 ::tailscale::BadFormatBehavior::Error,
@@ -86,7 +95,7 @@ impl Handler {
             key_state,
             ..Default::default()
         };
-        config.client_name = Some("clash-rs".to_owned());
+        config.client_name = Some(TAILSCALE_CLIENT_NAME.to_owned());
         config.requested_hostname = self.opts.hostname.clone();
 
         if let Some(control_url) = self.opts.control_url.as_ref() {
