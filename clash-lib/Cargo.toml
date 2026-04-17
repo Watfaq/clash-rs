@@ -32,7 +32,7 @@ ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
-tailscale = []
+tailscale = ["dep:tailscale"]
 tproxy = [
     "dep:etherparse",
 ]
@@ -199,6 +199,7 @@ shadowquic = { version = "0.3.4", optional = true}
 
 # experimental
 downcast-rs = "2.0"
+tailscale = { version = "0.2.0", optional = true }
 
 aws-lc-rs = { version = "1", default-features = false, optional = true }
 

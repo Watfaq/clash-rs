@@ -1,7 +1,8 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, io, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use erased_serde::Serialize as ErasedSerialize;
+use tokio::sync::Mutex;
 
 use crate::{
     app::{
@@ -12,7 +13,6 @@ use crate::{
         dns::ThreadSafeDNSResolver,
     },
     common::errors::map_io_error,
-    proxy::utils::new_tcp_stream,
     session::Session,
 };
 
@@ -33,6 +33,7 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
+    device: Mutex<Option<Arc<::tailscale::Device>>>,
 }
 
 impl Debug for Handler {
@@ -45,7 +46,66 @@ impl Debug for Handler {
 
 impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
-        Self { opts }
+        Self {
+            opts,
+            device: Mutex::new(None),
+        }
+    }
+
+    async fn get_device(&self) -> io::Result<Arc<::tailscale::Device>> {
+        if std::env::var_os("TS_RS_EXPERIMENT").is_none() {
+            return Err(io::Error::other(
+                "TS_RS_EXPERIMENT=this_is_unstable_software is required for tailscale-rs",
+            ));
+        }
+
+        let mut guard = self.device.lock().await;
+        if let Some(device) = guard.as_ref() {
+            return Ok(Arc::clone(device));
+        }
+
+        let key_state = if self.opts.ephemeral {
+            Default::default()
+        } else if let Some(state_dir) = self.opts.state_dir.as_ref() {
+            let state_file = PathBuf::from(state_dir).join("tsrs_state.json");
+            ::tailscale::load_key_file(
+                state_file,
+                ::tailscale::BadFormatBehavior::Error,
+            )
+            .await
+            .map_err(|e| {
+                io::Error::other(format!(
+                    "failed to initialize tailscale key state: {e}"
+                ))
+            })?
+        } else {
+            Default::default()
+        };
+
+        let mut config = ::tailscale::Config {
+            key_state,
+            ..Default::default()
+        };
+        config.client_name = Some("clash-rs".to_owned());
+        config.requested_hostname = self.opts.hostname.clone();
+
+        if let Some(control_url) = self.opts.control_url.as_ref() {
+            config.control_server_url = control_url.parse().map_err(|e| {
+                io::Error::other(format!("invalid tailscale control-url: {e}"))
+            })?;
+        }
+
+        let device = Arc::new(
+            ::tailscale::Device::new(&config, self.opts.auth_key.clone())
+                .await
+                .map_err(|e| {
+                    io::Error::other(format!(
+                        "failed to initialize tailscale-rs device: {e}"
+                    ))
+                })?,
+        );
+        *guard = Some(Arc::clone(&device));
+        Ok(device)
     }
 }
 
@@ -74,15 +134,18 @@ impl OutboundHandler for Handler {
             .resolve(sess.destination.host().as_str(), false)
             .await
             .map_err(map_io_error)?
-            .ok_or_else(|| std::io::Error::other("no dns result"))?;
-
-        let s = new_tcp_stream(
-            (remote_ip, sess.destination.port()).into(),
-            sess.iface.as_ref(),
-            #[cfg(target_os = "linux")]
-            sess.so_mark,
-        )
-        .await?;
+            .ok_or_else(|| io::Error::other("no dns result"))?;
+        let device = self.get_device().await?;
+        let s = device
+            .tcp_connect((remote_ip, sess.destination.port()).into())
+            .await
+            .map_err(|e| {
+                io::Error::other(format!(
+                    "failed to connect over tailscale-rs to {}:{}: {e}",
+                    remote_ip,
+                    sess.destination.port()
+                ))
+            })?;
 
         let s = ChainedStreamWrapper::new(s);
         s.append_to_chain(self.name()).await;
