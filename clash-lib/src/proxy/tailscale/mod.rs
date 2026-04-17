@@ -145,12 +145,15 @@ impl TailscaleDatagramOutbound {
                         SocksAddr::Ip(addr) => addr,
                         SocksAddr::Domain(domain, port) => {
                             let ip = if prefer_ipv6 {
-                                resolver.resolve(&domain, false).await
+                                resolver
+                                    .resolve_v6(&domain, false)
+                                    .await
+                                    .map(|x| x.map(std::net::IpAddr::V6))
                             } else {
                                 resolver
                                     .resolve_v4(&domain, false)
                                     .await
-                                    .map(|x| x.map(Into::into))
+                                    .map(|x| x.map(std::net::IpAddr::V4))
                             };
 
                             let ip = match ip.map_err(map_io_error) {
@@ -195,7 +198,7 @@ impl TailscaleDatagramOutbound {
 
                 if recv_tx
                     .send(UdpPacket {
-                        data: data.to_vec(),
+                        data: data.into(),
                         src_addr: remote.into(),
                         dst_addr: local_addr_socks.clone(),
                         inbound_user: None,
@@ -224,7 +227,7 @@ impl Sink<UdpPacket> for TailscaleDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_ready_unpin(cx)
-            .map_err(|err| new_io_error(format!("{err:?}")))
+            .map_err(|_| new_io_error("tailscale udp send channel not ready"))
     }
 
     fn start_send(
@@ -233,7 +236,7 @@ impl Sink<UdpPacket> for TailscaleDatagramOutbound {
     ) -> Result<(), Self::Error> {
         self.send_tx
             .start_send_unpin(item)
-            .map_err(|err| new_io_error(format!("{err:?}")))
+            .map_err(|_| new_io_error("tailscale udp send channel closed"))
     }
 
     fn poll_flush(
@@ -242,7 +245,7 @@ impl Sink<UdpPacket> for TailscaleDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_flush_unpin(cx)
-            .map_err(|err| new_io_error(format!("{err:?}")))
+            .map_err(|_| new_io_error("tailscale udp send channel flush failed"))
     }
 
     fn poll_close(
@@ -251,7 +254,7 @@ impl Sink<UdpPacket> for TailscaleDatagramOutbound {
     ) -> Poll<Result<(), Self::Error>> {
         self.send_tx
             .poll_close_unpin(cx)
-            .map_err(|err| new_io_error(format!("{err:?}")))
+            .map_err(|_| new_io_error("tailscale udp send channel close failed"))
     }
 }
 
