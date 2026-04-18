@@ -451,9 +451,13 @@ mod tests {
             .get_device()
             .await
             .expect("tailscale device should initialize with TS_AUTH_KEY");
-        let _ = device
+        let addr = device
             .ipv4_addr()
             .await
             .expect("tailscale device should acquire an IPv4 address");
+        assert!(
+            !addr.is_unspecified(),
+            "tailscale device returned an unspecified IPv4 address"
+        );
     }
 }
