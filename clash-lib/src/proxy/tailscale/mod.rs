@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use erased_serde::Serialize as ErasedSerialize;
 use futures::{Sink, SinkExt, Stream};
 use tokio::sync::Mutex;
-use tokio_util::sync::PollSender;
+use tokio_util::sync::{CancellationToken, PollSender};
 
 use crate::{
     app::{
@@ -124,52 +124,66 @@ impl DialWithConnector for Handler {}
 struct TailscaleDatagramOutbound {
     send_tx: PollSender<UdpPacket>,
     recv_rx: tokio::sync::mpsc::Receiver<UdpPacket>,
+    cancel: CancellationToken,
+    _send_task: tokio::task::JoinHandle<()>,
+    _recv_task: tokio::task::JoinHandle<()>,
 }
 
 impl TailscaleDatagramOutbound {
     fn new(socket: ::tailscale::UdpSocket, resolver: ThreadSafeDNSResolver) -> Self {
         let local_addr = socket.local_addr();
         let local_addr_socks: SocksAddr = local_addr.into();
-        let prefer_ipv6 = local_addr.is_ipv6();
         let socket = Arc::new(socket);
         let (send_tx, mut send_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
         let (recv_tx, recv_rx) = tokio::sync::mpsc::channel::<UdpPacket>(32);
+        let cancel = CancellationToken::new();
 
-        {
+        let send_task = {
             let socket = Arc::clone(&socket);
             let resolver = resolver.clone();
+            let cancel = cancel.clone();
             tokio::spawn(async move {
-                while let Some(pkt) = send_rx.recv().await {
+                loop {
+                    let pkt = tokio::select! {
+                        _ = cancel.cancelled() => break,
+                        pkt = send_rx.recv() => match pkt {
+                            Some(p) => p,
+                            None => break,
+                        },
+                    };
+
                     let dst = match pkt.dst_addr {
                         SocksAddr::Ip(addr) => addr,
                         SocksAddr::Domain(domain, port) => {
-                            let ip = if prefer_ipv6 {
-                                resolver
-                                    .resolve_v6(&domain, false)
-                                    .await
-                                    .map(|x| x.map(std::net::IpAddr::V6))
-                            } else {
-                                resolver
-                                    .resolve_v4(&domain, false)
-                                    .await
-                                    .map(|x| x.map(std::net::IpAddr::V4))
-                            };
-
-                            let ip = match ip.map_err(map_io_error) {
-                                Ok(Some(ip)) => ip,
-                                Ok(None) => {
-                                    tracing::warn!(
-                                        "tailscale udp resolve returned no result \
-                                         for {domain}"
-                                    );
-                                    continue;
-                                }
-                                Err(err) => {
-                                    tracing::warn!(
-                                        "tailscale udp resolve failed for \
-                                         {domain}: {err}"
-                                    );
-                                    continue;
+                            // Try v4 first, fall back to v6.
+                            let ip = match resolver
+                                .resolve_v4(&domain, false)
+                                .await
+                                .map_err(map_io_error)
+                            {
+                                Ok(Some(ip)) => std::net::IpAddr::V4(ip),
+                                _ => {
+                                    match resolver
+                                        .resolve_v6(&domain, false)
+                                        .await
+                                        .map_err(map_io_error)
+                                    {
+                                        Ok(Some(ip)) => std::net::IpAddr::V6(ip),
+                                        Ok(None) => {
+                                            tracing::warn!(
+                                                "tailscale udp resolve returned no \
+                                                 result for {domain}"
+                                            );
+                                            continue;
+                                        }
+                                        Err(err) => {
+                                            tracing::warn!(
+                                                "tailscale udp resolve failed for \
+                                                 {domain}: {err}"
+                                            );
+                                            continue;
+                                        }
+                                    }
                                 }
                             };
                             (ip, port).into()
@@ -180,42 +194,62 @@ impl TailscaleDatagramOutbound {
                         tracing::warn!(
                             "tailscale udp send_to failed for {dst}: {err}"
                         );
+                        // Issue 3: continue instead of break so a single
+                        // failed send does not tear down the whole loop.
+                        continue;
+                    }
+                }
+            })
+        };
+
+        let recv_task = {
+            let cancel = cancel.clone();
+            tokio::spawn(async move {
+                loop {
+                    let recv = tokio::select! {
+                        _ = cancel.cancelled() => break,
+                        r = socket.recv_from_bytes() => r,
+                    };
+                    let (remote, data) = match recv {
+                        Ok(recv) => recv,
+                        Err(err) => {
+                            tracing::warn!("tailscale udp recv_from failed: {err}");
+                            break;
+                        }
+                    };
+
+                    if recv_tx
+                        .send(UdpPacket {
+                            data: data.into(),
+                            src_addr: remote.into(),
+                            dst_addr: local_addr_socks.clone(),
+                            inbound_user: None,
+                        })
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
-            });
-        }
-
-        tokio::spawn(async move {
-            loop {
-                let recv = socket.recv_from_bytes().await;
-                let (remote, data) = match recv {
-                    Ok(recv) => recv,
-                    Err(err) => {
-                        tracing::warn!("tailscale udp recv_from failed: {err}");
-                        break;
-                    }
-                };
-
-                if recv_tx
-                    .send(UdpPacket {
-                        data: data.into(),
-                        src_addr: remote.into(),
-                        dst_addr: local_addr_socks.clone(),
-                        inbound_user: None,
-                    })
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
+            })
+        };
 
         Self {
             send_tx: PollSender::new(send_tx),
             recv_rx,
+            cancel,
+            _send_task: send_task,
+            _recv_task: recv_task,
         }
+    }
+}
+
+impl Drop for TailscaleDatagramOutbound {
+    fn drop(&mut self) {
+        // Cancel both background tasks so they exit cleanly.
+        self.cancel.cancel();
+        self._send_task.abort();
+        self._recv_task.abort();
     }
 }
 
@@ -289,11 +323,16 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
-        let remote_ip = resolver
-            .resolve(sess.destination.host().as_str(), false)
-            .await
-            .map_err(map_io_error)?
-            .ok_or_else(|| io::Error::other("no dns result"))?;
+        // Issue 1: avoid calling the resolver for IP-literal destinations;
+        // some resolvers reject plain IP addresses.
+        let remote_ip = match &sess.destination {
+            SocksAddr::Ip(addr) => addr.ip(),
+            SocksAddr::Domain(host, _) => resolver
+                .resolve(host, false)
+                .await
+                .map_err(map_io_error)?
+                .ok_or_else(|| io::Error::other("no dns result"))?,
+        };
         let device = self.get_device().await?;
         let s = device
             .tcp_connect((remote_ip, sess.destination.port()).into())
@@ -317,26 +356,40 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let device = self.get_device().await?;
-        let local_ip: std::net::IpAddr = if sess.source.is_ipv4() {
-            device
-                .ipv4_addr()
-                .await
-                .map_err(|e| {
-                    io::Error::other(format!(
-                        "failed to fetch tailscale ipv4 address: {e}"
-                    ))
-                })?
-                .into()
-        } else {
-            device
-                .ipv6_addr()
-                .await
-                .map_err(|e| {
-                    io::Error::other(format!(
-                        "failed to fetch tailscale ipv6 address: {e}"
-                    ))
-                })?
-                .into()
+        // Issue 2: pick the local address family from the destination, not
+        // the inbound source. For IP destinations mirror the family; for
+        // domain destinations prefer v4 with a v6 fallback.
+        let local_ip: std::net::IpAddr = match &sess.destination {
+            SocksAddr::Ip(addr) if addr.is_ipv6() => {
+                match device.ipv6_addr().await {
+                    Ok(ip) => std::net::IpAddr::V6(ip),
+                    Err(_) => {
+                        device.ipv4_addr().await.map(std::net::IpAddr::V4).map_err(
+                            |e| {
+                                io::Error::other(format!(
+                                    "failed to fetch tailscale address for ipv6 \
+                                     destination: {e}"
+                                ))
+                            },
+                        )?
+                    }
+                }
+            }
+            _ => {
+                // Domain or IPv4 destination: prefer v4, fall back to v6.
+                match device.ipv4_addr().await {
+                    Ok(ip) => std::net::IpAddr::V4(ip),
+                    Err(_) => {
+                        device.ipv6_addr().await.map(std::net::IpAddr::V6).map_err(
+                            |e| {
+                                io::Error::other(format!(
+                                    "failed to fetch tailscale address: {e}"
+                                ))
+                            },
+                        )?
+                    }
+                }
+            }
         };
         let udp = device.udp_bind((local_ip, 0).into()).await.map_err(|e| {
             io::Error::other(format!(
@@ -474,14 +527,15 @@ mod tests {
         let udp_query_name =
             env_or_default("TS_TEST_UDP_QUERY_NAME", "login.tailscale.com");
 
-        let state_dir = tempfile::tempdir().expect("temp state dir");
+        // Issue 5: use ephemeral=true so the node is not persisted after the
+        // test and no state directory is needed.
         let h = Handler::new(HandlerOptions {
             name: "ts-live-auth".to_owned(),
-            state_dir: Some(state_dir.path().to_string_lossy().into_owned()),
+            state_dir: None,
             auth_key: Some(auth_key),
             hostname: None,
             control_url: None,
-            ephemeral: false,
+            ephemeral: true,
         });
 
         let device = h
