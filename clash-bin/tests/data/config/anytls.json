@@ -5,13 +5,14 @@
             "listen": "0.0.0.0",
             "protocol": "anytls",
             "settings": {
-                "users": [
+                "accounts": [
                     {
                         "password": "example"
                     }
                 ]
             },
             "streamSettings": {
+                "network": "tcp",
                 "security": "tls",
                 "tlsSettings": {
                     "certificates": [
@@ -26,10 +27,8 @@
     ],
     "outbounds": [
         {
-            "protocol": "freedom"
+            "protocol": "freedom",
+            "settings": {}
         }
-    ],
-    "log": {
-        "loglevel": "debug"
-    }
+    ]
 }
