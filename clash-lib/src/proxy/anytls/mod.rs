@@ -2,7 +2,7 @@ use erased_serde::Serialize as ErasedSerialize;
 use std::{collections::HashMap, io, sync::Arc};
 
 use async_trait::async_trait;
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::{debug, warn};
@@ -10,8 +10,8 @@ use tracing::{debug, warn};
 use crate::{
     app::{
         dispatcher::{
-            BoxedChainedDatagram, BoxedChainedStream, ChainedStream,
-            ChainedStreamWrapper,
+            BoxedChainedDatagram, BoxedChainedStream, ChainedDatagram,
+            ChainedStream, ChainedStreamWrapper,
         },
         dns::ThreadSafeDNSResolver,
     },
@@ -25,6 +25,8 @@ use super::{
     OutboundHandler, OutboundType, PlainProxyAPIResponse,
     utils::{GLOBAL_DIRECT_CONNECTOR, RemoteConnector},
 };
+mod datagram;
+use datagram::OutboundDatagramAnytls;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -56,6 +58,7 @@ impl std::fmt::Debug for Handler {
 impl Handler {
     const DUPLEX_BUFFER_SIZE: usize = 64 * 1024;
     const RELAY_BUFFER_SIZE: usize = 16 * 1024;
+    const UDP_OVER_TCP_V2_MAGIC_ADDR: &str = "sp.v2.udp-over-tcp.arpa";
 
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
@@ -236,6 +239,13 @@ impl Handler {
         }
         Ok((command, stream_id, data))
     }
+
+    fn encode_uot_connect_request(dst_addr: &crate::session::SocksAddr) -> BytesMut {
+        let mut request = BytesMut::new();
+        request.put_u8(1); // isConnect = true (UoT v2 connect mode)
+        dst_addr.write_buf(&mut request);
+        request
+    }
 }
 
 #[async_trait]
@@ -249,7 +259,7 @@ impl OutboundHandler for Handler {
     }
 
     async fn support_udp(&self) -> bool {
-        false
+        self.opts.udp
     }
 
     async fn connect_stream(
@@ -329,15 +339,56 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
-        let _ = (sess, resolver, connector);
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "anytls UDP outbound is not implemented",
-        ))
+        let stream = connector
+            .connect_stream(
+                resolver,
+                self.opts.server.as_str(),
+                self.opts.port,
+                sess.iface.as_ref(),
+                #[cfg(target_os = "linux")]
+                sess.so_mark,
+            )
+            .await?;
+
+        // AnyTLS UDP follows udp-over-tcp v2:
+        // 1) open stream to sp.v2.udp-over-tcp.arpa
+        // 2) send connect request (isConnect + real udp destination)
+        // 3) exchange length-prefixed udp payloads.
+        let mut proxy_sess = sess.clone();
+        proxy_sess.destination = crate::session::SocksAddr::try_from((
+            Self::UDP_OVER_TCP_V2_MAGIC_ADDR.to_owned(),
+            0,
+        ))?;
+
+        let mut stream = self.inner_proxy_stream(stream, &proxy_sess).await?;
+        let request = Self::encode_uot_connect_request(&sess.destination);
+        stream.write_all(&request).await?;
+        stream.flush().await?;
+
+        let datagram = OutboundDatagramAnytls::new(stream, sess.destination.clone());
+        let chained = crate::app::dispatcher::ChainedDatagramWrapper::new(datagram);
+        chained.append_to_chain(self.name()).await;
+        Ok(Box::new(chained))
     }
 
     fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
         Some(self as _)
+    }
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::Handler;
+    use crate::session::SocksAddr;
+
+    #[test]
+    fn test_encode_uot_connect_request() {
+        let dst = SocksAddr::try_from(("1.1.1.1".to_owned(), 53)).unwrap();
+        let req = Handler::encode_uot_connect_request(&dst);
+
+        assert_eq!(req[0], 1);
+        let parsed = SocksAddr::try_from(&req[1..]).unwrap();
+        assert_eq!(parsed, dst);
     }
 }
 
@@ -401,7 +452,8 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    #[ignore = "requires an AnyTLS server image; current xray image lacks anytls inbound"]
+    #[ignore = "requires an AnyTLS server image; current xray image lacks anytls \
+                inbound"]
     async fn test_anytls_tcp() -> anyhow::Result<()> {
         initialize();
 

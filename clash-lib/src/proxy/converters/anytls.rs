@@ -45,13 +45,6 @@ impl TryFrom<&OutboundAnytls> for Handler {
                 s.common_opts.name
             );
         }
-        if s.udp.unwrap_or_default() {
-            warn!(
-                "anytls UDP outbound is not implemented yet for {}",
-                s.common_opts.name
-            );
-        }
-
         Ok(Handler::new(HandlerOptions {
             name: s.common_opts.name.to_owned(),
             common_opts: HandlerCommonOptions {
