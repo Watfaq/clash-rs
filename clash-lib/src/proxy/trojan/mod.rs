@@ -33,7 +33,6 @@ mod datagram;
 
 pub struct HandlerOptions {
     pub name: String,
-    pub proto: OutboundType,
     pub common_opts: HandlerCommonOptions,
     pub server: String,
     pub port: u16,
@@ -109,7 +108,7 @@ impl OutboundHandler for Handler {
     }
 
     fn proto(&self) -> OutboundType {
-        self.opts.proto
+        OutboundType::Trojan
     }
 
     async fn support_udp(&self) -> bool {
@@ -300,7 +299,6 @@ mod tests {
 
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
-            proto: OutboundType::Trojan,
             common_opts: Default::default(),
             server: container.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
@@ -356,7 +354,6 @@ mod tests {
 
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
-            proto: OutboundType::Trojan,
             common_opts: Default::default(),
             server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,

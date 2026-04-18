@@ -101,7 +101,8 @@ impl Handler {
         stream.write_all(password.as_slice()).await?;
         stream.write_u16(0).await?;
 
-        let settings = format!("v=1\nclient=clash-rs/{}", env!("CARGO_PKG_VERSION"));
+        let settings =
+            format!("v=1\nclient=clash-rs/{}", env!("CLASH_VERSION_OVERRIDE"));
         Self::write_frame(&mut stream, CMD_SETTINGS, 0, settings.as_bytes()).await?;
         Self::write_frame(&mut stream, CMD_SYN, STREAM_ID, &[]).await?;
 
@@ -163,7 +164,7 @@ impl Handler {
                             debug!("anytls {} read frame failed: {}", name, err);
                             break;
                         }
-                };
+                    };
 
                 if stream_id != STREAM_ID {
                     debug!(
@@ -359,5 +360,73 @@ impl PlainProxyAPIResponse for Handler {
             m.insert("tls".to_owned(), Box::new(true) as _);
         }
         m
+    }
+}
+
+#[cfg(all(test, docker_test))]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        proxy::{
+            transport,
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                consts::{IMAGE_XRAY, LOCAL_ADDR},
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
+
+    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let conf = test_config_dir.join("anytls.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_anytls_tcp() -> anyhow::Result<()> {
+        initialize();
+
+        let tls = transport::TlsClient::new(
+            true,
+            "example.org".to_owned(),
+            Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
+            None,
+        );
+
+        let runner = get_runner().await?;
+
+        let opts = HandlerOptions {
+            name: "test-anytls".to_owned(),
+            common_opts: Default::default(),
+            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
+            port: 10002,
+            password: "example".to_owned(),
+            udp: false,
+            tls: Some(Box::new(tls)),
+            transport: None,
+        };
+        let handler = Arc::new(Handler::new(opts));
+        handler
+            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
+            .await;
+        run_test_suites_and_cleanup(handler, runner, Suite::tcp_tests()).await
     }
 }
