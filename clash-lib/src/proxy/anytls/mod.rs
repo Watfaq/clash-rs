@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::{
@@ -117,87 +118,110 @@ impl Handler {
         let (mut remote_read, mut remote_write) = tokio::io::split(stream);
         let (app_stream, relay_stream) = tokio::io::duplex(Self::DUPLEX_BUFFER_SIZE);
         let (mut relay_read, mut relay_write) = tokio::io::split(relay_stream);
-        let name = self.opts.name.clone();
+        let name_a = self.opts.name.clone();
+        let name_b = self.opts.name.clone();
+
+        let cancel = CancellationToken::new();
+        let cancel_a = cancel.clone();
+        let cancel_b = cancel;
 
         tokio::spawn(async move {
             let mut buf = vec![0u8; Self::RELAY_BUFFER_SIZE];
             loop {
-                let n = match relay_read.read(&mut buf).await {
-                    Ok(n) => n,
-                    Err(err) => {
-                        debug!("anytls {} relay read error: {}", name, err);
-                        break;
-                    }
-                };
+                tokio::select! {
+                    _ = cancel_a.cancelled() => break,
+                    result = relay_read.read(&mut buf) => {
+                        let n = match result {
+                            Ok(n) => n,
+                            Err(err) => {
+                                debug!("anytls {} relay read error: {}", name_a, err);
+                                cancel_a.cancel();
+                                break;
+                            }
+                        };
 
-                if n == 0 {
-                    if let Err(err) =
-                        Self::write_frame(&mut remote_write, CMD_FIN, STREAM_ID, &[])
-                            .await
-                    {
-                        debug!("anytls {} send FIN failed: {}", name, err);
-                    }
-                    if let Err(err) = remote_write.flush().await {
-                        debug!("anytls {} flush FIN failed: {}", name, err);
-                    }
-                    break;
-                }
+                        if n == 0 {
+                            if let Err(err) =
+                                Self::write_frame(&mut remote_write, CMD_FIN, STREAM_ID, &[])
+                                    .await
+                            {
+                                debug!("anytls {} send FIN failed: {}", name_a, err);
+                            }
+                            if let Err(err) = remote_write.flush().await {
+                                debug!("anytls {} flush FIN failed: {}", name_a, err);
+                            }
+                            cancel_a.cancel();
+                            break;
+                        }
 
-                if let Err(err) = Self::write_frame(
-                    &mut remote_write,
-                    CMD_PSH,
-                    STREAM_ID,
-                    &buf[..n],
-                )
-                .await
-                {
-                    debug!("anytls {} send PSH failed: {}", name, err);
-                    break;
+                        if let Err(err) = Self::write_frame(
+                            &mut remote_write,
+                            CMD_PSH,
+                            STREAM_ID,
+                            &buf[..n],
+                        )
+                        .await
+                        {
+                            debug!("anytls {} send PSH failed: {}", name_a, err);
+                            cancel_a.cancel();
+                            break;
+                        }
+                    }
                 }
             }
         });
 
-        let name = self.opts.name.clone();
         tokio::spawn(async move {
             loop {
-                let (cmd, stream_id, data) =
-                    match Self::read_frame(&mut remote_read).await {
-                        Ok(frame) => frame,
-                        Err(err) => {
-                            debug!("anytls {} read frame failed: {}", name, err);
-                            break;
-                        }
-                    };
+                tokio::select! {
+                    _ = cancel_b.cancelled() => break,
+                    result = Self::read_frame(&mut remote_read) => {
+                        let (cmd, stream_id, data) = match result {
+                            Ok(frame) => frame,
+                            Err(err) => {
+                                debug!("anytls {} read frame failed: {}", name_b, err);
+                                cancel_b.cancel();
+                                break;
+                            }
+                        };
 
-                if stream_id != STREAM_ID {
-                    debug!(
-                        "anytls {} ignores frame for unexpected stream id {}",
-                        name, stream_id
-                    );
-                    continue;
-                }
+                        if stream_id != STREAM_ID {
+                            debug!(
+                                "anytls {} ignores frame for unexpected stream id {}",
+                                name_b, stream_id
+                            );
+                            continue;
+                        }
 
-                match cmd {
-                    CMD_PSH => {
-                        if let Err(err) = relay_write.write_all(&data).await {
-                            debug!("anytls {} relay write failed: {}", name, err);
-                            break;
+                        match cmd {
+                            CMD_PSH => {
+                                if let Err(err) = relay_write.write_all(&data).await {
+                                    debug!("anytls {} relay write failed: {}", name_b, err);
+                                    cancel_b.cancel();
+                                    break;
+                                }
+                            }
+                            CMD_FIN => {
+                                if let Err(err) = relay_write.shutdown().await {
+                                    debug!(
+                                        "anytls {} relay shutdown failed: {}",
+                                        name_b, err
+                                    );
+                                }
+                                cancel_b.cancel();
+                                break;
+                            }
+                            CMD_ALERT => {
+                                let msg = String::from_utf8_lossy(&data);
+                                warn!("anytls {} alert: {}", name_b, msg);
+                                let _ = relay_write.shutdown().await;
+                                cancel_b.cancel();
+                                break;
+                            }
+                            CMD_WASTE | CMD_SYN | CMD_SETTINGS => {}
+                            _ => {}
                         }
                     }
-                    CMD_FIN => {
-                        if let Err(err) = relay_write.shutdown().await {
-                            debug!("anytls {} relay shutdown failed: {}", name, err);
-                        }
-                        break;
-                    }
-                    CMD_ALERT => {
-                        let msg = String::from_utf8_lossy(&data);
-                        warn!("anytls {} alert: {}", name, msg);
-                        let _ = relay_write.shutdown().await;
-                        break;
-                    }
-                    CMD_WASTE | CMD_SYN | CMD_SETTINGS => {}
-                    _ => {}
                 }
             }
         });

@@ -162,7 +162,7 @@ impl Stream for OutboundDatagramAnytls {
 
                         this.header_read += read;
                         if this.header_read < this.length_buf.len() {
-                            return Poll::Pending;
+                            continue; // keep looping; poll_read will register waker when it returns Pending
                         }
 
                         let packet_len =
