@@ -393,6 +393,8 @@ mod tests {
     use crate::proxy::{OutboundHandler, PlainProxyAPIResponse};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    const DNS_TEST_TXID: u16 = 0xBEEF;
+
     fn env_or_default(var: &str, default: &str) -> String {
         std::env::var(var)
             .ok()
@@ -528,7 +530,7 @@ mod tests {
         .await
         .expect("timed out creating udp socket over tailscale")
         .expect("failed to create udp socket over tailscale");
-        let txid = 0xBEEF;
+        let txid = DNS_TEST_TXID;
         let query = build_dns_query(&udp_query_name, txid);
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
