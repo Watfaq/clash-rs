@@ -356,40 +356,42 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let device = self.get_device().await?;
-        // Issue 2: pick the local address family from the destination, not
-        // the inbound source. For IP destinations mirror the family; for
-        // domain destinations prefer v4 with a v6 fallback.
         let local_ip: std::net::IpAddr = match &sess.destination {
-            SocksAddr::Ip(addr) if addr.is_ipv6() => {
-                match device.ipv6_addr().await {
-                    Ok(ip) => std::net::IpAddr::V6(ip),
-                    Err(_) => {
-                        device.ipv4_addr().await.map(std::net::IpAddr::V4).map_err(
-                            |e| {
-                                io::Error::other(format!(
-                                    "failed to fetch tailscale address for ipv6 \
-                                     destination: {e}"
-                                ))
-                            },
-                        )?
-                    }
+            // Strict: IP literal family must match — fail fast rather than binding
+            // wrong family
+            SocksAddr::Ip(addr) if addr.is_ipv6() => device
+                .ipv6_addr()
+                .await
+                .map(std::net::IpAddr::V6)
+                .map_err(|e| {
+                    io::Error::other(format!(
+                        "failed to fetch tailscale ipv6 address for ipv6 \
+                         destination: {e}"
+                    ))
+                })?,
+            SocksAddr::Ip(_) => device
+                .ipv4_addr()
+                .await
+                .map(std::net::IpAddr::V4)
+                .map_err(|e| {
+                io::Error::other(format!(
+                    "failed to fetch tailscale ipv4 address for ipv4 destination: \
+                     {e}"
+                ))
+            })?,
+            // Domain destination: v4-first with v6 fallback is appropriate
+            SocksAddr::Domain(..) => match device.ipv4_addr().await {
+                Ok(ip) => std::net::IpAddr::V4(ip),
+                Err(_) => {
+                    device.ipv6_addr().await.map(std::net::IpAddr::V6).map_err(
+                        |e| {
+                            io::Error::other(format!(
+                                "failed to fetch tailscale address: {e}"
+                            ))
+                        },
+                    )?
                 }
-            }
-            _ => {
-                // Domain or IPv4 destination: prefer v4, fall back to v6.
-                match device.ipv4_addr().await {
-                    Ok(ip) => std::net::IpAddr::V4(ip),
-                    Err(_) => {
-                        device.ipv6_addr().await.map(std::net::IpAddr::V6).map_err(
-                            |e| {
-                                io::Error::other(format!(
-                                    "failed to fetch tailscale address: {e}"
-                                ))
-                            },
-                        )?
-                    }
-                }
-            }
+            },
         };
         let udp = device.udp_bind((local_ip, 0).into()).await.map_err(|e| {
             io::Error::other(format!(
