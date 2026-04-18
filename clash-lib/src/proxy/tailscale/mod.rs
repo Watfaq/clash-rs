@@ -387,8 +387,36 @@ impl PlainProxyAPIResponse for Handler {
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+
     use super::{Handler, HandlerOptions};
     use crate::proxy::{OutboundHandler, PlainProxyAPIResponse};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn env_or_default(var: &str, default: &str) -> String {
+        std::env::var(var)
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| default.to_owned())
+    }
+
+    fn build_dns_query(host: &str, txid: u16) -> Vec<u8> {
+        let mut q = Vec::with_capacity(64);
+        q.extend_from_slice(&txid.to_be_bytes());
+        q.extend_from_slice(&0x0100u16.to_be_bytes());
+        q.extend_from_slice(&1u16.to_be_bytes());
+        q.extend_from_slice(&0u16.to_be_bytes());
+        q.extend_from_slice(&0u16.to_be_bytes());
+        q.extend_from_slice(&0u16.to_be_bytes());
+        for label in host.split('.') {
+            q.push(label.len() as u8);
+            q.extend_from_slice(label.as_bytes());
+        }
+        q.push(0);
+        q.extend_from_slice(&1u16.to_be_bytes());
+        q.extend_from_slice(&1u16.to_be_bytes());
+        q
+    }
 
     #[tokio::test]
     async fn tailscale_support_udp_is_enabled() {
@@ -426,11 +454,22 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires TS_AUTH_KEY for live tailscale auth"]
-    async fn tailscale_live_auth_key_can_initialize_device() {
+    async fn tailscale_live_auth_key_supports_real_tcp_and_udp_traffic() {
         let auth_key = match std::env::var("TS_AUTH_KEY") {
             Ok(v) if !v.is_empty() => v,
             _ => return,
         };
+
+        let tcp_addr: SocketAddr = env_or_default("TS_TEST_TCP_ADDR", "1.1.1.1:80")
+            .parse()
+            .expect("TS_TEST_TCP_ADDR should be a valid socket address");
+        let tcp_host = env_or_default("TS_TEST_TCP_HOST", "one.one.one.one");
+        let udp_addr: SocketAddr =
+            env_or_default("TS_TEST_UDP_ADDR", "100.100.100.100:53")
+                .parse()
+                .expect("TS_TEST_UDP_ADDR should be a valid socket address");
+        let udp_query_name =
+            env_or_default("TS_TEST_UDP_QUERY_NAME", "login.tailscale.com");
 
         let state_dir = tempfile::tempdir().expect("temp state dir");
         let h = Handler::new(HandlerOptions {
@@ -454,5 +493,62 @@ mod tests {
             !addr.is_unspecified(),
             "tailscale device returned an unspecified IPv4 address"
         );
+
+        let mut tcp_stream = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            device.tcp_connect(tcp_addr.into()),
+        )
+        .await
+        .expect("timed out connecting tcp over tailscale")
+        .expect("failed to connect tcp over tailscale");
+        let req = format!(
+            "HEAD / HTTP/1.1\r\nHost: {tcp_host}\r\nConnection: close\r\n\r\n"
+        );
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tcp_stream.write_all(req.as_bytes()),
+        )
+        .await
+        .expect("timed out sending tcp request over tailscale")
+        .expect("failed to send tcp request over tailscale");
+        let mut tcp_resp = [0u8; 256];
+        let n = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            tcp_stream.read(&mut tcp_resp),
+        )
+        .await
+        .expect("timed out receiving tcp response over tailscale")
+        .expect("failed to receive tcp response over tailscale");
+        assert!(n > 0, "expected non-empty tcp response over tailscale");
+
+        let udp_socket = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            device.udp_bind((addr, 0).into()),
+        )
+        .await
+        .expect("timed out creating udp socket over tailscale")
+        .expect("failed to create udp socket over tailscale");
+        let txid = 0xBEEF;
+        let query = build_dns_query(&udp_query_name, txid);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            udp_socket.send_to(udp_addr.into(), &query),
+        )
+        .await
+        .expect("timed out sending udp request over tailscale")
+        .expect("failed to send udp request over tailscale");
+        let (_, udp_resp) = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            udp_socket.recv_from_bytes(),
+        )
+        .await
+        .expect("timed out receiving udp response over tailscale")
+        .expect("failed to receive udp response over tailscale");
+        assert!(
+            udp_resp.len() >= 2,
+            "expected non-empty udp response over tailscale"
+        );
+        let resp_txid = u16::from_be_bytes([udp_resp[0], udp_resp[1]]);
+        assert_eq!(resp_txid, txid, "unexpected udp DNS transaction id");
     }
 }
