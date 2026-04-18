@@ -24,8 +24,7 @@ use crate::{
     },
     common::errors::{map_io_error, new_io_error},
     proxy::datagram::UdpPacket,
-    session::Session,
-    session::SocksAddr,
+    session::{Session, SocksAddr},
 };
 
 use super::{
@@ -160,13 +159,15 @@ impl TailscaleDatagramOutbound {
                                 Ok(Some(ip)) => ip,
                                 Ok(None) => {
                                     tracing::warn!(
-                                        "tailscale udp resolve returned no result for {domain}"
+                                        "tailscale udp resolve returned no result \
+                                         for {domain}"
                                     );
                                     continue;
                                 }
                                 Err(err) => {
                                     tracing::warn!(
-                                        "tailscale udp resolve failed for {domain}: {err}"
+                                        "tailscale udp resolve failed for \
+                                         {domain}: {err}"
                                     );
                                     continue;
                                 }
