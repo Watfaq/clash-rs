@@ -423,4 +423,37 @@ mod tests {
             "raw auth-key must not be present"
         );
     }
+
+    #[tokio::test]
+    #[ignore = "requires TS_AUTH_KEY and TS_RS_EXPERIMENT for live tailscale auth"]
+    async fn tailscale_live_auth_key_can_initialize_device() {
+        let auth_key = match std::env::var("TS_AUTH_KEY") {
+            Ok(v) if !v.is_empty() => v,
+            _ => return,
+        };
+        if std::env::var("TS_RS_EXPERIMENT").ok().as_deref()
+            != Some("this_is_unstable_software")
+        {
+            return;
+        }
+
+        let state_dir = tempfile::tempdir().expect("temp state dir");
+        let h = Handler::new(HandlerOptions {
+            name: "ts-live-auth".to_owned(),
+            state_dir: Some(state_dir.path().to_string_lossy().into_owned()),
+            auth_key: Some(auth_key),
+            hostname: None,
+            control_url: None,
+            ephemeral: false,
+        });
+
+        let device = h
+            .get_device()
+            .await
+            .expect("tailscale device should initialize with TS_AUTH_KEY");
+        let _ = device
+            .ipv4_addr()
+            .await
+            .expect("tailscale device should acquire an IPv4 address");
+    }
 }
