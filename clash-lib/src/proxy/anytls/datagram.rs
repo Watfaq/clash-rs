@@ -18,7 +18,7 @@ const MAX_PACKET_LENGTH: usize = u16::MAX as usize;
 
 pub struct OutboundDatagramAnytls {
     inner: AnyStream,
-    remote_addr: SocksAddr,
+    target_addr: SocksAddr,
 
     // Write state
     write_buf: BytesMut,
@@ -27,20 +27,24 @@ pub struct OutboundDatagramAnytls {
 
     // Read state
     read_buf: Vec<u8>,
-    remaining_bytes: usize,
+    header_read: usize,
+    packet_len: Option<usize>,
+    packet_buf: BytesMut,
     length_buf: [u8; 2],
 }
 
 impl OutboundDatagramAnytls {
-    pub fn new(inner: AnyStream, remote_addr: SocksAddr) -> Self {
+    pub fn new(inner: AnyStream, target_addr: SocksAddr) -> Self {
         Self {
             inner,
-            remote_addr,
+            target_addr,
             write_buf: BytesMut::new(),
             pending_packet: None,
             flushed: true,
             read_buf: vec![0u8; u16::MAX as usize],
-            remaining_bytes: 0,
+            header_read: 0,
+            packet_len: None,
+            packet_buf: BytesMut::new(),
             length_buf: [0; 2],
         }
     }
@@ -146,9 +150,49 @@ impl Stream for OutboundDatagramAnytls {
         let mut inner = Pin::new(&mut this.inner);
 
         loop {
-            if this.remaining_bytes > 0 {
-                let to_read =
-                    std::cmp::min(this.remaining_bytes, this.read_buf.len());
+            if this.packet_len.is_none() {
+                let mut length_read_buf =
+                    ReadBuf::new(&mut this.length_buf[this.header_read..]);
+                match ready!(inner.as_mut().poll_read(cx, &mut length_read_buf)) {
+                    Ok(()) => {
+                        let read = length_read_buf.filled().len();
+                        if read == 0 {
+                            return Poll::Ready(None);
+                        }
+
+                        this.header_read += read;
+                        if this.header_read < this.length_buf.len() {
+                            return Poll::Pending;
+                        }
+
+                        let packet_len =
+                            u16::from_be_bytes(this.length_buf) as usize;
+                        this.header_read = 0;
+                        if packet_len == 0 {
+                            continue;
+                        }
+                        if packet_len > MAX_PACKET_LENGTH {
+                            debug!(
+                                "invalid anytls udp packet length: {}",
+                                packet_len
+                            );
+                            return Poll::Ready(None);
+                        }
+
+                        this.packet_len = Some(packet_len);
+                        this.packet_buf.clear();
+                        this.packet_buf.reserve(packet_len);
+                    }
+                    Err(err) => {
+                        debug!("failed to read anytls udp length header: {}", err);
+                        return Poll::Ready(None);
+                    }
+                }
+            }
+
+            if let Some(packet_len) = this.packet_len {
+                let remaining = packet_len.saturating_sub(this.packet_buf.len());
+                let to_read = std::cmp::min(remaining, this.read_buf.len());
                 let mut read_buf = ReadBuf::new(&mut this.read_buf[..to_read]);
                 match ready!(inner.as_mut().poll_read(cx, &mut read_buf)) {
                     Ok(()) => {
@@ -156,49 +200,23 @@ impl Stream for OutboundDatagramAnytls {
                         if data.is_empty() {
                             return Poll::Ready(None);
                         }
-                        this.remaining_bytes -= data.len();
-                        return Poll::Ready(Some(UdpPacket {
-                            data: data.to_vec(),
-                            src_addr: this.remote_addr.clone(),
-                            dst_addr: this.remote_addr.clone(),
-                            inbound_user: None,
-                        }));
+                        this.packet_buf.put_slice(data);
+
+                        if this.packet_buf.len() == packet_len {
+                            let data = this.packet_buf.split_to(packet_len).to_vec();
+                            this.packet_len = None;
+                            return Poll::Ready(Some(UdpPacket {
+                                data,
+                                src_addr: this.target_addr.clone(),
+                                dst_addr: this.target_addr.clone(),
+                                inbound_user: None,
+                            }));
+                        }
                     }
                     Err(err) => {
                         debug!("failed to read anytls udp payload: {}", err);
                         return Poll::Ready(None);
                     }
-                }
-            }
-
-            let mut length_read_buf = ReadBuf::new(&mut this.length_buf);
-            match ready!(inner.as_mut().poll_read(cx, &mut length_read_buf)) {
-                Ok(()) => {
-                    let data = length_read_buf.filled();
-                    if data.is_empty() {
-                        return Poll::Ready(None);
-                    }
-                    if data.len() < 2 {
-                        debug!(
-                            "incomplete anytls udp length header: {} bytes",
-                            data.len()
-                        );
-                        return Poll::Ready(None);
-                    }
-
-                    let packet_len = u16::from_be_bytes([data[0], data[1]]) as usize;
-                    if packet_len == 0 {
-                        continue;
-                    }
-                    if packet_len > MAX_PACKET_LENGTH {
-                        debug!("invalid anytls udp packet length: {}", packet_len);
-                        return Poll::Ready(None);
-                    }
-                    this.remaining_bytes = packet_len;
-                }
-                Err(err) => {
-                    debug!("failed to read anytls udp length header: {}", err);
-                    return Poll::Ready(None);
                 }
             }
         }
