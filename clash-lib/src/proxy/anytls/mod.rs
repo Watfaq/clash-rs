@@ -476,7 +476,7 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
-    async fn test_anytls_tcp() -> anyhow::Result<()> {
+    async fn test_anytls() -> anyhow::Result<()> {
         initialize();
 
         let tls = transport::TlsClient::new(
@@ -490,37 +490,6 @@ mod tests {
 
         let opts = HandlerOptions {
             name: "test-anytls".to_owned(),
-            common_opts: Default::default(),
-            server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
-            port: 10002,
-            password: "example".to_owned(),
-            udp: false,
-            tls: Some(Box::new(tls)),
-            transport: None,
-        };
-        let handler = Arc::new(Handler::new(opts));
-        handler
-            .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
-            .await;
-        run_test_suites_and_cleanup(handler, runner, Suite::tcp_tests()).await
-    }
-
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn test_anytls_udp() -> anyhow::Result<()> {
-        initialize();
-
-        let tls = transport::TlsClient::new(
-            true,
-            "example.org".to_owned(),
-            Some(vec!["http/1.1".to_owned(), "h2".to_owned()]),
-            None,
-        );
-
-        let runner = get_runner().await?;
-
-        let opts = HandlerOptions {
-            name: "test-anytls-udp".to_owned(),
             common_opts: Default::default(),
             server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
             port: 10002,
