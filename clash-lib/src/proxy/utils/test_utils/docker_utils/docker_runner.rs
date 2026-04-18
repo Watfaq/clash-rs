@@ -341,6 +341,7 @@ impl MultiDockerTestRunner {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_with_runner(&mut self, runners: DockerTestRunner) {
         self.runners.push(runners);
     }
@@ -482,6 +483,7 @@ impl DockerTestRunnerBuilder {
     }
 
     #[cfg(docker_test)]
+    #[allow(dead_code)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self

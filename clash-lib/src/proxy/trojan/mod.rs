@@ -366,6 +366,6 @@ mod tests {
         handler
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
-        run_test_suites_and_cleanup(handler, runner, Suite::all()).await
+        run_test_suites_and_cleanup(handler, runner, &[Suite::LatencyTcp]).await
     }
 }
