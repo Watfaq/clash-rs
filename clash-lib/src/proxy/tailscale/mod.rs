@@ -133,6 +133,14 @@ impl Handler {
             std::env::set_var("TS_RS_EXPERIMENT", "this_is_unstable_software");
         }
 
+        // tailscale-rs uses rustls internally. When both aws-lc-rs and ring
+        // features are compiled in, rustls cannot auto-select a provider.
+        // Install the same provider clash-lib uses so tailscale-rs TLS works.
+        #[cfg(feature = "aws-lc-rs")]
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let device = Arc::new(
             ::tailscale::Device::new(&config, self.opts.auth_key.clone())
                 .await
@@ -435,7 +443,7 @@ mod tests {
         // UDP: DNS query via homelab resolver reachable via tailnet subnet router.
         let udp_socket = tokio::time::timeout(
             std::time::Duration::from_secs(20),
-            device.udp_bind((addr, 0).into()),
+            device.udp_bind((addr, 51820u16).into()),
         )
         .await
         .expect("timed out binding udp socket over tailscale")
