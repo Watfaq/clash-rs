@@ -124,6 +124,15 @@ impl Handler {
             })?;
         }
 
+        // tailscale-rs requires this env var as an acknowledgement that the
+        // crate is experimental.  Set it on behalf of the user so they don't
+        // need to configure it themselves.
+        // SAFETY: single-threaded point inside a Mutex-guarded lazy-init block;
+        // no other thread is reading or writing this variable concurrently.
+        unsafe {
+            std::env::set_var("TS_RS_EXPERIMENT", "this_is_unstable_software");
+        }
+
         let device = Arc::new(
             ::tailscale::Device::new(&config, self.opts.auth_key.clone())
                 .await
