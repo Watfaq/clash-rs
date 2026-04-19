@@ -52,6 +52,7 @@ jobs:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ startsWith(matrix.os, 'ubuntu') && 'true' || 'false' }}
           TS_AUTH_KEY: ${{ secrets.TS_AUTH_KEY }}
+          TS_RS_EXPERIMENT: this_is_unstable_software
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
