@@ -347,6 +347,9 @@ mod tests {
         );
     }
 
+    // tailscale-rs's userspace runtime works on Linux only in CI; the macOS
+    // GitHub Actions sandbox blocks the control-plane connections it needs.
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread")]
     async fn tailscale_live_auth_key_supports_real_tcp_and_udp_traffic() {
         let auth_key = match std::env::var("TS_AUTH_KEY") {
