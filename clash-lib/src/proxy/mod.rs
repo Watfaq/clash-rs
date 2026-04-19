@@ -37,6 +37,7 @@ pub mod redir;
 
 pub(crate) mod datagram;
 
+pub mod anytls;
 pub mod converters;
 pub mod hysteria2;
 #[cfg(feature = "shadowquic")]
@@ -119,12 +120,13 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum OutboundType {
     Shadowsocks,
     Vmess,
     Vless,
     Trojan,
+    Anytls,
     WireGuard,
     Tor,
     Tuic,
@@ -152,6 +154,7 @@ impl Display for OutboundType {
             OutboundType::Vmess => write!(f, "Vmess"),
             OutboundType::Vless => write!(f, "Vless"),
             OutboundType::Trojan => write!(f, "Trojan"),
+            OutboundType::Anytls => write!(f, "AnyTLS"),
             OutboundType::WireGuard => write!(f, "WireGuard"),
             OutboundType::Tor => write!(f, "Tor"),
             OutboundType::Tuic => write!(f, "Tuic"),

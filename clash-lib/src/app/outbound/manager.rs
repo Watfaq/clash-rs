@@ -33,7 +33,7 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        AnyOutboundHandler,
+        AnyOutboundHandler, anytls,
         direct::{self},
         fallback,
         group::smart,
@@ -327,6 +327,15 @@ impl OutboundManager {
                         })
                         .inspect_err(|e| {
                             error!("failed to load socks5 outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Anytls(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: anytls::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load anytls outbound {}: {}", name, e);
                         })
                         .ok()
                 }

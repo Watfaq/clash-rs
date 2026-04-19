@@ -58,6 +58,8 @@ pub enum OutboundProxyProtocol {
     Ss(OutboundShadowsocks),
     #[serde(rename = "socks5")]
     Socks5(OutboundSocks5),
+    #[serde(rename = "anytls")]
+    Anytls(OutboundAnytls),
     #[serde(rename = "trojan")]
     Trojan(OutboundTrojan),
     #[serde(rename = "vmess")]
@@ -91,6 +93,7 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.common_opts.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
+            OutboundProxyProtocol::Anytls(anytls) => &anytls.common_opts.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.common_opts.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.common_opts.name,
             OutboundProxyProtocol::Vless(vless) => &vless.common_opts.name,
@@ -133,6 +136,7 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
+            OutboundProxyProtocol::Anytls(_) => write!(f, "AnyTLS"),
             OutboundProxyProtocol::Direct(_) => write!(f, "{PROXY_DIRECT}"),
             OutboundProxyProtocol::Reject(_) => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
@@ -234,6 +238,28 @@ pub struct GrpcOpt {
 pub struct RealityOpt {
     pub public_key: String,
     pub short_id: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundAnytls {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub password: String,
+    pub alpn: Option<Vec<String>>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub fingerprint: Option<String>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub client_fingerprint: Option<String>,
+    pub udp: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub idle_session_check_interval: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub idle_session_timeout: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub min_idle_session: Option<u64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
@@ -745,5 +771,45 @@ mod tests {
         let config: OutboundWireguard = serde_yaml::from_str(yaml_no_psk)
             .expect("should parse without pre-shared-key");
         assert!(config.pre_shared_key.is_none());
+    }
+}
+
+#[cfg(test)]
+mod anytls_tests {
+    use super::{OutboundProxyProtocol, OutboundProxyProtocol::Anytls};
+
+    #[test]
+    fn test_anytls_deserialize() {
+        let yaml = r#"
+            name: anytls-test
+            type: anytls
+            server: example.com
+            port: 443
+            password: example-password
+            sni: sni.example.com
+            skip-cert-verify: true
+            udp: true
+            idle-session-check-interval: 30
+            idle-session-timeout: 300
+            min-idle-session: 2
+        "#;
+
+        let config: OutboundProxyProtocol =
+            serde_yaml::from_str(yaml).expect("should parse anytls");
+
+        let Anytls(config) = config else {
+            panic!("expected anytls config");
+        };
+
+        assert_eq!(config.common_opts.name, "anytls-test");
+        assert_eq!(config.common_opts.server, "example.com");
+        assert_eq!(config.common_opts.port, 443);
+        assert_eq!(config.password, "example-password");
+        assert_eq!(config.sni.as_deref(), Some("sni.example.com"));
+        assert_eq!(config.skip_cert_verify, Some(true));
+        assert_eq!(config.udp, Some(true));
+        assert_eq!(config.idle_session_check_interval, Some(30));
+        assert_eq!(config.idle_session_timeout, Some(300));
+        assert_eq!(config.min_idle_session, Some(2));
     }
 }

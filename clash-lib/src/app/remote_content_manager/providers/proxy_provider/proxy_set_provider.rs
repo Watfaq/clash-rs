@@ -21,7 +21,7 @@ use crate::{
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{
-        AnyOutboundHandler,
+        AnyOutboundHandler, anytls,
         direct::{self},
         hysteria2, reject, socks, trojan, vless, vmess,
     },
@@ -134,6 +134,10 @@ impl ProxySetProvider {
                                 OutboundProxyProtocol::Socks5(s) => {
                                     let h: socks::outbound::Handler =
                                         s.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                OutboundProxyProtocol::Anytls(anytls) => {
+                                    let h: anytls::Handler = anytls.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                                 OutboundProxyProtocol::Trojan(tr) => {
