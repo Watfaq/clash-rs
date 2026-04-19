@@ -293,12 +293,6 @@ mod tests {
 
     const DNS_TEST_TXID: u16 = 0xBEEF;
 
-    fn env_or_default(var: &str, default: &str) -> String {
-        std::env::var(var)
-            .ok()
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| default.to_owned())
-    }
 
     fn build_dns_query(host: &str, txid: u16) -> Vec<u8> {
         let mut q = Vec::with_capacity(64);
@@ -361,18 +355,9 @@ mod tests {
             _ => return,
         };
 
-        // Defaults point at homelab services reachable via tailnet subnet
-        // router.  Override with env vars if needed.
-        let tcp_addr: SocketAddr = env_or_default("TS_TEST_TCP_ADDR", "10.1.0.5:5380")
-            .parse()
-            .expect("TS_TEST_TCP_ADDR must be a valid socket address");
-        let tcp_host = env_or_default("TS_TEST_TCP_HOST", "10.1.0.5");
-        let udp_addr: SocketAddr =
-            env_or_default("TS_TEST_UDP_ADDR", "10.1.0.5:53")
-                .parse()
-                .expect("TS_TEST_UDP_ADDR must be a valid socket address");
-        let udp_query_name =
-            env_or_default("TS_TEST_UDP_QUERY_NAME", "login.tailscale.com");
+        // Homelab services reachable via tailnet subnet router.
+        let tcp_addr: SocketAddr = "10.1.0.5:5380".parse().unwrap();
+        let udp_addr: SocketAddr = "10.1.0.5:53".parse().unwrap();
 
         let h = Handler::new(HandlerOptions {
             name: "ts-live-auth".to_owned(),
@@ -406,7 +391,7 @@ mod tests {
         .expect("timed out connecting tcp over tailscale")
         .expect("failed to connect tcp over tailscale");
         let req = format!(
-            "HEAD / HTTP/1.1\r\nHost: {tcp_host}\r\nConnection: close\r\n\r\n"
+            "HEAD / HTTP/1.1\r\nHost: 10.1.0.5\r\nConnection: close\r\n\r\n"
         );
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
@@ -435,7 +420,7 @@ mod tests {
         .expect("timed out creating udp socket over tailscale")
         .expect("failed to create udp socket over tailscale");
         let txid = DNS_TEST_TXID;
-        let query = build_dns_query(&udp_query_name, txid);
+        let query = build_dns_query("login.tailscale.com", txid);
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
             udp_socket.send_to(udp_addr, &query),
