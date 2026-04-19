@@ -389,7 +389,7 @@ mod tests {
 
         let mut tcp_stream = tokio::time::timeout(
             std::time::Duration::from_secs(20),
-            device.tcp_connect(tcp_addr.into()),
+            device.tcp_connect(tcp_addr),
         )
         .await
         .expect("timed out connecting tcp over tailscale")
@@ -425,7 +425,7 @@ mod tests {
         let query = build_dns_query(&udp_query_name, txid);
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            udp_socket.send_to(udp_addr.into(), &query),
+            udp_socket.send_to(udp_addr, &query),
         )
         .await
         .expect("timed out sending udp request over tailscale")
