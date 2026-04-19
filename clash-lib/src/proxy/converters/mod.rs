@@ -7,6 +7,8 @@ pub mod shadowsocks;
 pub mod socks5;
 #[cfg(feature = "ssh")]
 pub mod ssh;
+#[cfg(feature = "tailscale")]
+pub mod tailscale;
 #[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;

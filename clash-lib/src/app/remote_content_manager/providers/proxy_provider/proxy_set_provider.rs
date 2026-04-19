@@ -3,6 +3,8 @@ use super::ProxyProvider;
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
 use crate::proxy::ssh;
+#[cfg(feature = "tailscale")]
+use crate::proxy::tailscale;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -180,6 +182,11 @@ impl ProxySetProvider {
                                 OutboundProxyProtocol::ShadowQuic(sq) => {
                                     let h: crate::proxy::shadowquic::Handler =
                                         sq.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                #[cfg(feature = "tailscale")]
+                                OutboundProxyProtocol::Tailscale(tscfg) => {
+                                    let h: tailscale::Handler = tscfg.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                             })

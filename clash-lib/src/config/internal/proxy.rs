@@ -83,6 +83,9 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "shadowquic")]
     #[cfg(feature = "shadowquic")]
     ShadowQuic(OutboundShadowQuic),
+    #[serde(rename = "tailscale")]
+    #[cfg(feature = "tailscale")]
+    Tailscale(OutboundTailscale),
 }
 
 impl OutboundProxyProtocol {
@@ -110,6 +113,8 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(sq) => &sq.common_opts.name,
+            #[cfg(feature = "tailscale")]
+            OutboundProxyProtocol::Tailscale(ts) => &ts.name,
         }
     }
 }
@@ -153,6 +158,8 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(_) => write!(f, "ShadowQUIC"),
+            #[cfg(feature = "tailscale")]
+            OutboundProxyProtocol::Tailscale(_) => write!(f, "Tailscale"),
         }
     }
 }
@@ -431,6 +438,20 @@ pub struct OutboundSsh {
     pub totp_opt: Option<TotpOption>,
 }
 
+#[cfg(feature = "tailscale")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTailscale {
+    pub name: String,
+    pub state_dir: Option<String>,
+    pub auth_key: Option<String>,
+    pub hostname: Option<String>,
+    pub control_url: Option<String>,
+    pub client_name: Option<String>,
+    #[serde(default)]
+    pub ephemeral: bool,
+}
+
 #[cfg(feature = "ssh")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -702,6 +723,57 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
             mapping.into_iter(),
         ))
         .map_err(map_serde_error(name))
+    }
+}
+
+#[cfg(all(test, feature = "tailscale"))]
+mod tailscale_tests {
+    use super::{OutboundProxyProtocol, OutboundTailscale};
+    use serde_yaml::Value;
+    use std::collections::HashMap;
+
+    #[test]
+    fn parse_tailscale_outbound_proxy_protocol() {
+        let mapping = HashMap::from([
+            ("name".to_owned(), Value::String("ts-out".to_owned())),
+            ("type".to_owned(), Value::String("tailscale".to_owned())),
+            ("state-dir".to_owned(), Value::String("/tmp/ts".to_owned())),
+            (
+                "auth-key".to_owned(),
+                Value::String("tskey-auth-xxxx".to_owned()),
+            ),
+            ("hostname".to_owned(), Value::String("clash-rs".to_owned())),
+            (
+                "control-url".to_owned(),
+                Value::String("https://controlplane.tailscale.com".to_owned()),
+            ),
+            ("ephemeral".to_owned(), Value::Bool(true)),
+        ]);
+
+        let protocol = OutboundProxyProtocol::try_from(mapping)
+            .expect("tailscale proxy should parse");
+        let OutboundProxyProtocol::Tailscale(OutboundTailscale {
+            name,
+            state_dir,
+            auth_key,
+            hostname,
+            control_url,
+            client_name: _,
+            ephemeral,
+        }) = protocol
+        else {
+            panic!("expected tailscale variant")
+        };
+
+        assert_eq!(name, "ts-out");
+        assert_eq!(state_dir.as_deref(), Some("/tmp/ts"));
+        assert_eq!(auth_key.as_deref(), Some("tskey-auth-xxxx"));
+        assert_eq!(hostname.as_deref(), Some("clash-rs"));
+        assert_eq!(
+            control_url.as_deref(),
+            Some("https://controlplane.tailscale.com")
+        );
+        assert!(ephemeral);
     }
 }
 
