@@ -13,6 +13,7 @@ impl TryFrom<OutboundTailscale> for Handler {
             auth_key: value.auth_key,
             hostname: value.hostname,
             control_url: value.control_url,
+            client_name: value.client_name,
             ephemeral: value.ephemeral,
         }))
     }
@@ -28,6 +29,7 @@ mod tests {
         let result = Handler::try_from(OutboundTailscale {
             name: "ts".to_owned(),
             auth_key: Some("tskey-auth-xxxx".to_owned()),
+            client_name: Some("my-app".to_owned()),
             ..Default::default()
         });
 

@@ -421,6 +421,7 @@ pub struct OutboundTailscale {
     pub auth_key: Option<String>,
     pub hostname: Option<String>,
     pub control_url: Option<String>,
+    pub client_name: Option<String>,
     #[serde(default)]
     pub ephemeral: bool,
 }
@@ -731,6 +732,7 @@ mod tailscale_tests {
             auth_key,
             hostname,
             control_url,
+            client_name: _,
             ephemeral,
         }) = protocol
         else {

@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     io,
+    net::IpAddr,
     path::PathBuf,
     pin::Pin,
     sync::Arc,
@@ -42,6 +43,7 @@ pub struct HandlerOptions {
     pub auth_key: Option<String>,
     pub hostname: Option<String>,
     pub control_url: Option<String>,
+    pub client_name: Option<String>,
     pub ephemeral: bool,
 }
 
@@ -95,7 +97,13 @@ impl Handler {
             key_state,
             ..Default::default()
         };
-        config.client_name = Some(TAILSCALE_CLIENT_NAME.to_owned());
+        config.client_name = Some(
+            self.opts
+                .client_name
+                .as_deref()
+                .unwrap_or(TAILSCALE_CLIENT_NAME)
+                .to_owned(),
+        );
         config.requested_hostname = self.opts.hostname.clone();
 
         if let Some(control_url) = self.opts.control_url.as_ref() {
@@ -161,30 +169,28 @@ impl TailscaleDatagramOutbound {
                                 .await
                                 .map_err(map_io_error)
                             {
-                                Ok(Some(ip)) => std::net::IpAddr::V4(ip),
-                                _ => {
-                                    match resolver
-                                        .resolve_v6(&domain, false)
-                                        .await
-                                        .map_err(map_io_error)
-                                    {
-                                        Ok(Some(ip)) => std::net::IpAddr::V6(ip),
-                                        Ok(None) => {
-                                            tracing::warn!(
-                                                "tailscale udp resolve returned no \
-                                                 result for {domain}"
-                                            );
-                                            continue;
-                                        }
-                                        Err(err) => {
-                                            tracing::warn!(
-                                                "tailscale udp resolve failed for \
-                                                 {domain}: {err}"
-                                            );
-                                            continue;
-                                        }
+                                Ok(Some(ip)) => IpAddr::V4(ip),
+                                _ => match resolver
+                                    .resolve_v6(&domain, false)
+                                    .await
+                                    .map_err(map_io_error)
+                                {
+                                    Ok(Some(ip)) => IpAddr::V6(ip),
+                                    Ok(None) => {
+                                        tracing::warn!(
+                                            "tailscale udp resolve returned no \
+                                             result for {domain}"
+                                        );
+                                        continue;
                                     }
-                                }
+                                    Err(err) => {
+                                        tracing::warn!(
+                                            "tailscale udp resolve failed for \
+                                             {domain}: {err}"
+                                        );
+                                        continue;
+                                    }
+                                },
                             };
                             (ip, port).into()
                         }
@@ -194,8 +200,6 @@ impl TailscaleDatagramOutbound {
                         tracing::warn!(
                             "tailscale udp send_to failed for {dst}: {err}"
                         );
-                        // Issue 3: continue instead of break so a single
-                        // failed send does not tear down the whole loop.
                         continue;
                     }
                 }
@@ -323,8 +327,6 @@ impl OutboundHandler for Handler {
         sess: &Session,
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedStream> {
-        // Issue 1: avoid calling the resolver for IP-literal destinations;
-        // some resolvers reject plain IP addresses.
         let remote_ip = match &sess.destination {
             SocksAddr::Ip(addr) => addr.ip(),
             SocksAddr::Domain(host, _) => resolver
@@ -356,41 +358,33 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
     ) -> std::io::Result<BoxedChainedDatagram> {
         let device = self.get_device().await?;
-        let local_ip: std::net::IpAddr = match &sess.destination {
+        let local_ip: IpAddr = match &sess.destination {
             // Strict: IP literal family must match — fail fast rather than binding
             // wrong family
-            SocksAddr::Ip(addr) if addr.is_ipv6() => device
-                .ipv6_addr()
-                .await
-                .map(std::net::IpAddr::V6)
-                .map_err(|e| {
+            SocksAddr::Ip(addr) if addr.is_ipv6() => {
+                device.ipv6_addr().await.map(IpAddr::V6).map_err(|e| {
                     io::Error::other(format!(
                         "failed to fetch tailscale ipv6 address for ipv6 \
                          destination: {e}"
                     ))
-                })?,
-            SocksAddr::Ip(_) => device
-                .ipv4_addr()
-                .await
-                .map(std::net::IpAddr::V4)
-                .map_err(|e| {
-                io::Error::other(format!(
-                    "failed to fetch tailscale ipv4 address for ipv4 destination: \
-                     {e}"
-                ))
-            })?,
+                })?
+            }
+            SocksAddr::Ip(_) => {
+                device.ipv4_addr().await.map(IpAddr::V4).map_err(|e| {
+                    io::Error::other(format!(
+                        "failed to fetch tailscale ipv4 address for ipv4 \
+                         destination: {e}"
+                    ))
+                })?
+            }
             // Domain destination: v4-first with v6 fallback is appropriate
             SocksAddr::Domain(..) => match device.ipv4_addr().await {
-                Ok(ip) => std::net::IpAddr::V4(ip),
-                Err(_) => {
-                    device.ipv6_addr().await.map(std::net::IpAddr::V6).map_err(
-                        |e| {
-                            io::Error::other(format!(
-                                "failed to fetch tailscale address: {e}"
-                            ))
-                        },
-                    )?
-                }
+                Ok(ip) => IpAddr::V4(ip),
+                Err(_) => device.ipv6_addr().await.map(IpAddr::V6).map_err(|e| {
+                    io::Error::other(format!(
+                        "failed to fetch tailscale address: {e}"
+                    ))
+                })?,
             },
         };
         let udp = device.udp_bind((local_ip, 0).into()).await.map_err(|e| {
@@ -420,17 +414,24 @@ impl PlainProxyAPIResponse for Handler {
         let mut m = HashMap::new();
         m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
         m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        if let Some(state_dir) = &self.opts.state_dir {
+            m.insert("state-dir".to_owned(), Box::new(state_dir.clone()) as _);
+        }
+        if let Some(hostname) = &self.opts.hostname {
+            m.insert("hostname".to_owned(), Box::new(hostname.clone()) as _);
+        }
+        if let Some(control_url) = &self.opts.control_url {
+            m.insert("control-url".to_owned(), Box::new(control_url.clone()) as _);
+        }
         m.insert(
-            "state-dir".to_owned(),
-            Box::new(self.opts.state_dir.clone()) as _,
-        );
-        m.insert(
-            "hostname".to_owned(),
-            Box::new(self.opts.hostname.clone()) as _,
-        );
-        m.insert(
-            "control-url".to_owned(),
-            Box::new(self.opts.control_url.clone()) as _,
+            "client-name".to_owned(),
+            Box::new(
+                self.opts
+                    .client_name
+                    .as_deref()
+                    .unwrap_or(TAILSCALE_CLIENT_NAME)
+                    .to_owned(),
+            ) as _,
         );
         m.insert("ephemeral".to_owned(), Box::new(self.opts.ephemeral) as _);
         m.insert(
@@ -484,6 +485,7 @@ mod tests {
             auth_key: None,
             hostname: None,
             control_url: None,
+            client_name: None,
             ephemeral: false,
         });
         assert!(h.support_udp().await);
@@ -497,6 +499,7 @@ mod tests {
             auth_key: Some("tskey-auth-xxxx".to_owned()),
             hostname: None,
             control_url: None,
+            client_name: None,
             ephemeral: false,
         });
         let map = h.as_map().await;
@@ -529,14 +532,13 @@ mod tests {
         let udp_query_name =
             env_or_default("TS_TEST_UDP_QUERY_NAME", "login.tailscale.com");
 
-        // Issue 5: use ephemeral=true so the node is not persisted after the
-        // test and no state directory is needed.
         let h = Handler::new(HandlerOptions {
             name: "ts-live-auth".to_owned(),
             state_dir: None,
             auth_key: Some(auth_key),
             hostname: None,
             control_url: None,
+            client_name: None,
             ephemeral: true,
         });
 
