@@ -346,7 +346,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires TS_AUTH_KEY for live tailscale auth"]
     async fn tailscale_live_auth_key_supports_real_tcp_and_udp_traffic() {
         let auth_key = match std::env::var("TS_AUTH_KEY") {
             Ok(v) if !v.is_empty() => v,
