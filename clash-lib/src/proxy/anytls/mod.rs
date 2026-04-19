@@ -111,21 +111,32 @@ impl Handler {
         mut stream: AnyStream,
         sess: &Session,
     ) -> io::Result<AnyStream> {
+        // Build the ENTIRE handshake in one buffer so it is sent as a single
+        // TLS application-data record.  sing-box reads the first record as a
+        // complete auth packet; splitting the write across multiple records
+        // causes it to get EOF while reading the padding-length field.
         let password = Sha256::digest(self.opts.password.as_bytes());
-        stream.write_all(password.as_slice()).await?;
-        stream.write_u16(0).await?;
-
         let settings = format!(
             "v=2\nclient=clash-rs/{}\npadding-md5={}",
             env!("CLASH_VERSION_OVERRIDE"),
             CLIENT_PADDING_SCHEME_MD5
         );
-        Self::write_frame(&mut stream, CMD_SETTINGS, 0, settings.as_bytes()).await?;
-        Self::write_frame(&mut stream, CMD_SYN, STREAM_ID, &[]).await?;
-
         let mut addr_buf = BytesMut::new();
         sess.destination.write_buf(&mut addr_buf);
-        Self::write_frame(&mut stream, CMD_PSH, STREAM_ID, &addr_buf).await?;
+
+        let mut handshake = BytesMut::new();
+        handshake.put_slice(password.as_slice()); // sha256(password) – 32 B
+        handshake.put_u16(0); // padding0 length = 0 (no padding)
+        handshake.extend_from_slice(&Self::encode_frame(
+            CMD_SETTINGS,
+            0,
+            settings.as_bytes(),
+        )?);
+        handshake.extend_from_slice(&Self::encode_frame(CMD_SYN, STREAM_ID, &[])?);
+        handshake
+            .extend_from_slice(&Self::encode_frame(CMD_PSH, STREAM_ID, &addr_buf)?);
+
+        stream.write_all(&handshake).await?;
         stream.flush().await?;
 
         let (mut remote_read, mut remote_write) = tokio::io::split(stream);
@@ -245,6 +256,26 @@ impl Handler {
         });
 
         Ok(Box::new(app_stream))
+    }
+
+    /// Encodes a frame into a `BytesMut` without any I/O.
+    fn encode_frame(
+        command: u8,
+        stream_id: u32,
+        data: &[u8],
+    ) -> io::Result<BytesMut> {
+        if data.len() > u16::MAX as usize {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "anytls frame payload exceeds 65535 bytes",
+            ));
+        }
+        let mut buf = BytesMut::with_capacity(7 + data.len());
+        buf.put_u8(command);
+        buf.put_u32(stream_id);
+        buf.put_u16(data.len() as u16);
+        buf.put_slice(data);
+        Ok(buf)
     }
 
     async fn write_frame(
