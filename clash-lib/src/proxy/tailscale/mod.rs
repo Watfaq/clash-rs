@@ -228,11 +228,15 @@ impl OutboundHandler for Handler {
                 })?,
             },
         };
-        let udp = device.udp_bind((local_ip, 0).into()).await.map_err(|e| {
-            io::Error::other(format!(
-                "failed to bind tailscale udp socket on {local_ip}: {e}"
-            ))
-        })?;
+        let port = rand::random_range(49152u16..=u16::MAX);
+        let udp = device
+            .udp_bind((local_ip, port).into())
+            .await
+            .map_err(|e| {
+                io::Error::other(format!(
+                    "failed to bind tailscale udp socket on {local_ip}: {e}"
+                ))
+            })?;
 
         let d = TailscaleDatagramOutbound::new(udp, resolver);
         let d = ChainedDatagramWrapper::new(d);
@@ -292,6 +296,11 @@ mod tests {
     use std::net::SocketAddr;
     #[cfg(target_os = "linux")]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[cfg(target_os = "linux")]
+    use {
+        crate::{proxy::datagram::UdpPacket, session::SocksAddr},
+        futures::{SinkExt, StreamExt},
+    };
 
     #[cfg(target_os = "linux")]
     const DNS_TEST_TXID: u16 = 0xBEEF;
@@ -441,39 +450,48 @@ mod tests {
 
         assert!(n > 0, "expected non-empty tcp response over tailscale");
 
-        // UDP: DNS query via homelab resolver reachable via tailnet subnet router.
-        let udp_socket = tokio::time::timeout(
-            std::time::Duration::from_secs(20),
-            device.udp_bind((addr, 51820u16).into()),
-        )
-        .await
-        .expect("timed out binding udp socket over tailscale")
-        .expect("udp bind over tailscale failed");
-
-        let txid = DNS_TEST_TXID;
-        let query = build_dns_query("login.tailscale.com", txid);
-
-        tokio::time::timeout(
+        // UDP via TailscaleDatagramOutbound: exercise connect_datagram and the
+        // Sink/Stream wrappers by sending a real DNS query to the homelab.
+        let resolver =
+            std::sync::Arc::new(crate::proxy::utils::test_utils::noop::NoopResolver);
+        let sess = crate::session::Session {
+            destination: SocksAddr::Ip(udp_addr),
+            ..Default::default()
+        };
+        let mut dgram = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            udp_socket.send_to(udp_addr, &query),
+            h.connect_datagram(&sess, resolver),
         )
         .await
-        .expect("timed out sending udp request over tailscale")
-        .expect("udp send over tailscale failed");
+        .expect("timed out creating tailscale datagram outbound")
+        .expect("connect_datagram over tailscale failed");
 
-        let (_, udp_resp) = tokio::time::timeout(
-            std::time::Duration::from_secs(20),
-            udp_socket.recv_from_bytes(),
-        )
-        .await
-        .expect("timed out receiving udp response over tailscale")
-        .expect("udp recv over tailscale failed");
+        let query = build_dns_query("login.tailscale.com", DNS_TEST_TXID);
+        let pkt = UdpPacket {
+            data: query.into(),
+            src_addr: SocksAddr::Ip(std::net::SocketAddr::new(addr.into(), 0)),
+            dst_addr: SocksAddr::Ip(udp_addr),
+            inbound_user: None,
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(10), dgram.send(pkt))
+            .await
+            .expect("timed out sending datagram over tailscale")
+            .expect("datagram send over tailscale failed");
+
+        let resp =
+            tokio::time::timeout(std::time::Duration::from_secs(20), dgram.next())
+                .await
+                .expect("timed out receiving datagram over tailscale")
+                .expect("datagram stream ended without a response");
 
         assert!(
-            udp_resp.len() >= 2,
-            "expected non-empty udp response over tailscale"
+            resp.data.len() >= 2,
+            "expected non-empty datagram response over tailscale"
         );
-        let resp_txid = u16::from_be_bytes([udp_resp[0], udp_resp[1]]);
-        assert_eq!(resp_txid, txid, "unexpected udp DNS transaction id");
+        let resp_txid = u16::from_be_bytes([resp.data[0], resp.data[1]]);
+        assert_eq!(
+            resp_txid, DNS_TEST_TXID,
+            "unexpected DNS transaction id in datagram response"
+        );
     }
 }
