@@ -28,7 +28,16 @@
     "outbounds": [
         {
             "protocol": "freedom",
-            "settings": {}
+            "tag": "direct"
         }
-    ]
+    ],
+    "routing": {
+        "rules": [
+            {
+                "type": "field",
+                "ip": ["geoip:private"],
+                "outboundTag": "direct"
+            }
+        ]
+    }
 }

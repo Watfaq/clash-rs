@@ -406,8 +406,34 @@ impl OutboundHandler for Handler {
 
 #[cfg(test)]
 mod unit_tests {
-    use super::Handler;
-    use crate::session::SocksAddr;
+    use futures::{SinkExt, StreamExt};
+    use tokio::io::{AsyncReadExt, duplex};
+
+    use super::*;
+    use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
+
+    fn make_handler(udp: bool, with_tls: bool) -> Handler {
+        use crate::proxy::transport::TlsClient;
+        Handler::new(HandlerOptions {
+            name: "test".to_owned(),
+            common_opts: Default::default(),
+            server: "127.0.0.1".to_owned(),
+            port: 10002,
+            password: "secret".to_owned(),
+            udp,
+            tls: if with_tls {
+                Some(Box::new(TlsClient::new(
+                    true,
+                    "example.org".to_owned(),
+                    None,
+                    None,
+                )))
+            } else {
+                None
+            },
+            transport: None,
+        })
+    }
 
     #[test]
     fn test_encode_uot_connect_request() {
@@ -417,6 +443,125 @@ mod unit_tests {
         assert_eq!(req[0], 1);
         let parsed = SocksAddr::try_from(&req[1..]).unwrap();
         assert_eq!(parsed, dst);
+    }
+
+    #[test]
+    fn test_encode_uot_connect_request_domain() {
+        let dst = SocksAddr::try_from(("example.com".to_owned(), 80)).unwrap();
+        let req = Handler::encode_uot_connect_request(&dst);
+
+        assert_eq!(req[0], 1);
+        let parsed = SocksAddr::try_from(&req[1..]).unwrap();
+        assert_eq!(parsed, dst);
+    }
+
+    #[tokio::test]
+    async fn test_handler_proto() {
+        let h = make_handler(false, false);
+        assert!(matches!(h.proto(), OutboundType::Anytls));
+        assert_eq!(h.name(), "test");
+    }
+
+    #[tokio::test]
+    async fn test_handler_support_udp_true() {
+        let h = make_handler(true, false);
+        assert!(h.support_udp().await);
+    }
+
+    #[tokio::test]
+    async fn test_handler_support_udp_false() {
+        let h = make_handler(false, false);
+        assert!(!h.support_udp().await);
+    }
+
+    #[tokio::test]
+    async fn test_as_map_required_fields() {
+        let h = make_handler(false, false);
+        let map = h.as_map().await;
+        assert!(map.contains_key("name"));
+        assert!(map.contains_key("type"));
+        assert!(map.contains_key("server"));
+        assert!(map.contains_key("port"));
+        assert!(map.contains_key("password"));
+        assert!(!map.contains_key("udp"), "udp absent when false");
+        assert!(!map.contains_key("tls"), "tls absent when None");
+    }
+
+    #[tokio::test]
+    async fn test_as_map_optional_flags() {
+        let h = make_handler(true, true);
+        let map = h.as_map().await;
+        assert!(map.contains_key("udp"), "udp present when true");
+        assert!(map.contains_key("tls"), "tls present when Some");
+    }
+
+    // ---- datagram framing tests ----
+
+    #[tokio::test]
+    async fn test_datagram_write_length_prefix() {
+        let target = SocksAddr::try_from(("1.1.1.1".to_owned(), 53)).unwrap();
+        let (client, mut server) = duplex(4096);
+        let mut dg = datagram::OutboundDatagramAnytls::new(Box::new(client), target);
+
+        let payload = b"hello world";
+        dg.send(UdpPacket {
+            data: payload.to_vec(),
+            src_addr: SocksAddr::any_ipv4(),
+            dst_addr: SocksAddr::any_ipv4(),
+            inbound_user: None,
+        })
+        .await
+        .unwrap();
+
+        // The wire format is: 2-byte big-endian length followed by payload.
+        let mut raw = vec![0u8; 2 + payload.len()];
+        server.read_exact(&mut raw).await.unwrap();
+        assert_eq!(u16::from_be_bytes([raw[0], raw[1]]) as usize, payload.len());
+        assert_eq!(&raw[2..], payload);
+    }
+
+    #[tokio::test]
+    async fn test_datagram_roundtrip() {
+        let target = SocksAddr::try_from(("1.1.1.1".to_owned(), 53)).unwrap();
+        let payload = b"roundtrip payload";
+
+        // Build a raw response (length-prefixed) that the server "sends back".
+        let mut wire = Vec::new();
+        wire.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+        wire.extend_from_slice(payload);
+
+        let (client, mut server) = duplex(4096);
+        let mut dg =
+            datagram::OutboundDatagramAnytls::new(Box::new(client), target.clone());
+
+        // Write the wire bytes from the server side so poll_next can read them.
+        use tokio::io::AsyncWriteExt;
+        server.write_all(&wire).await.unwrap();
+
+        let pkt = dg.next().await.expect("should receive a packet");
+        assert_eq!(pkt.data, payload);
+        assert_eq!(pkt.src_addr, target);
+    }
+
+    #[tokio::test]
+    async fn test_datagram_oversized_packet_rejected() {
+        let target = SocksAddr::try_from(("1.1.1.1".to_owned(), 53)).unwrap();
+        let (client, _server) = duplex(4096);
+        let mut dg = datagram::OutboundDatagramAnytls::new(Box::new(client), target);
+
+        let oversized = vec![0u8; u16::MAX as usize + 1];
+        let result = dg
+            .send(UdpPacket {
+                data: oversized,
+                src_addr: SocksAddr::any_ipv4(),
+                dst_addr: SocksAddr::any_ipv4(),
+                inbound_user: None,
+            })
+            .await;
+        assert!(
+            result.is_err(),
+            "sending oversized packet should return an error"
+        );
     }
 }
 
