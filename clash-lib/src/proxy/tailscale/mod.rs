@@ -291,8 +291,10 @@ mod tests {
     use crate::proxy::{OutboundHandler, PlainProxyAPIResponse};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    #[cfg(target_os = "linux")]
     const DNS_TEST_TXID: u16 = 0xBEEF;
 
+    #[cfg(target_os = "linux")]
     fn build_dns_query(host: &str, txid: u16) -> Vec<u8> {
         let mut q = Vec::with_capacity(64);
         q.extend_from_slice(&txid.to_be_bytes());
