@@ -29,6 +29,16 @@ use super::{
 mod datagram;
 use datagram::OutboundDatagramAnytls;
 
+// AnyTLS frame command bytes (see the anytls protocol spec).
+const CMD_WASTE: u8 = 0;
+const CMD_SYN: u8 = 1;
+const CMD_PSH: u8 = 2;
+const CMD_FIN: u8 = 3;
+const CMD_SETTINGS: u8 = 4;
+const CMD_ALERT: u8 = 5;
+/// Stream ID used for our single-stream multiplexing.
+const STREAM_ID: u32 = 1;
+
 pub struct HandlerOptions {
     pub name: String,
     pub common_opts: HandlerCommonOptions,
@@ -93,14 +103,6 @@ impl Handler {
         mut stream: AnyStream,
         sess: &Session,
     ) -> io::Result<AnyStream> {
-        const CMD_WASTE: u8 = 0;
-        const CMD_SYN: u8 = 1;
-        const CMD_PSH: u8 = 2;
-        const CMD_FIN: u8 = 3;
-        const CMD_SETTINGS: u8 = 4;
-        const CMD_ALERT: u8 = 5;
-        const STREAM_ID: u32 = 1;
-
         let password = Sha256::digest(self.opts.password.as_bytes());
         stream.write_all(password.as_slice()).await?;
         stream.write_u16(0).await?;
@@ -129,6 +131,7 @@ impl Handler {
             let mut buf = vec![0u8; Self::RELAY_BUFFER_SIZE];
             loop {
                 tokio::select! {
+                    biased;
                     _ = cancel_a.cancelled() => break,
                     result = relay_read.read(&mut buf) => {
                         let n = match result {
@@ -174,6 +177,7 @@ impl Handler {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
+                    biased;
                     _ = cancel_b.cancelled() => break,
                     result = Self::read_frame(&mut remote_read) => {
                         let (cmd, stream_id, data) = match result {

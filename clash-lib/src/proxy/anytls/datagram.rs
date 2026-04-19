@@ -26,7 +26,6 @@ pub struct OutboundDatagramAnytls {
     flushed: bool,
 
     // Read state
-    read_buf: Vec<u8>,
     header_read: usize,
     packet_len: Option<usize>,
     packet_buf: BytesMut,
@@ -41,7 +40,6 @@ impl OutboundDatagramAnytls {
             write_buf: BytesMut::new(),
             pending_packet: None,
             flushed: true,
-            read_buf: vec![0u8; u16::MAX as usize],
             header_read: 0,
             packet_len: None,
             packet_buf: BytesMut::new(),
@@ -191,32 +189,37 @@ impl Stream for OutboundDatagramAnytls {
             }
 
             if let Some(packet_len) = this.packet_len {
-                let remaining = packet_len.saturating_sub(this.packet_buf.len());
-                let to_read = std::cmp::min(remaining, this.read_buf.len());
-                let mut read_buf = ReadBuf::new(&mut this.read_buf[..to_read]);
-                match ready!(inner.as_mut().poll_read(cx, &mut read_buf)) {
-                    Ok(()) => {
-                        let data = read_buf.filled();
-                        if data.is_empty() {
+                let remaining = packet_len - this.packet_buf.len();
+                // Read directly into packet_buf's spare capacity: avoids an
+                // intermediate copy through a scratch buffer.
+                let n = {
+                    let spare = this.packet_buf.spare_capacity_mut();
+                    let mut read_buf = ReadBuf::uninit(&mut spare[..remaining]);
+                    match inner.as_mut().poll_read(cx, &mut read_buf) {
+                        Poll::Pending => return Poll::Pending,
+                        Poll::Ready(Err(err)) => {
+                            debug!("failed to read anytls udp payload: {}", err);
                             return Poll::Ready(None);
                         }
-                        this.packet_buf.put_slice(data);
+                        Poll::Ready(Ok(())) => read_buf.filled().len(),
+                    }
+                };
+                if n == 0 {
+                    return Poll::Ready(None);
+                }
+                // SAFETY: poll_read initialized exactly `n` bytes starting at
+                // spare_capacity_mut()[0]; advance_mut exposes them as initialized.
+                unsafe { this.packet_buf.advance_mut(n) };
 
-                        if this.packet_buf.len() == packet_len {
-                            let data = this.packet_buf.split_to(packet_len).to_vec();
-                            this.packet_len = None;
-                            return Poll::Ready(Some(UdpPacket {
-                                data,
-                                src_addr: this.target_addr.clone(),
-                                dst_addr: this.target_addr.clone(),
-                                inbound_user: None,
-                            }));
-                        }
-                    }
-                    Err(err) => {
-                        debug!("failed to read anytls udp payload: {}", err);
-                        return Poll::Ready(None);
-                    }
+                if this.packet_buf.len() == packet_len {
+                    let data = this.packet_buf.split_to(packet_len).to_vec();
+                    this.packet_len = None;
+                    return Poll::Ready(Some(UdpPacket {
+                        data,
+                        src_addr: this.target_addr.clone(),
+                        dst_addr: this.target_addr.clone(),
+                        inbound_user: None,
+                    }));
                 }
             }
         }

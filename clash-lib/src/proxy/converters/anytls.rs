@@ -59,16 +59,11 @@ impl TryFrom<&OutboundAnytls> for Handler {
                 let client = TlsClient::new(
                     skip_cert_verify,
                     s.sni
-                        .as_ref()
-                        .map(|x| x.to_owned())
-                        .unwrap_or(s.common_opts.server.to_owned()),
-                    s.alpn.clone().or(Some(
-                        DEFAULT_ALPN
-                            .iter()
-                            .copied()
-                            .map(|x| x.to_owned())
-                            .collect::<Vec<String>>(),
-                    )),
+                        .clone()
+                        .unwrap_or_else(|| s.common_opts.server.clone()),
+                    s.alpn
+                        .clone()
+                        .or(Some(DEFAULT_ALPN.map(str::to_owned).to_vec())),
                     None,
                 );
                 Some(Box::new(client))
