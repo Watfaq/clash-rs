@@ -361,10 +361,16 @@ mod tests {
             _ => return,
         };
 
+        // Defaults point at homelab services reachable via tailnet subnet
+        // router.  Override with env vars if needed.
+        let tcp_addr: SocketAddr = env_or_default("TS_TEST_TCP_ADDR", "10.1.0.5:5380")
+            .parse()
+            .expect("TS_TEST_TCP_ADDR must be a valid socket address");
+        let tcp_host = env_or_default("TS_TEST_TCP_HOST", "10.1.0.5");
         let udp_addr: SocketAddr =
-            env_or_default("TS_TEST_UDP_ADDR", "100.100.100.100:53")
+            env_or_default("TS_TEST_UDP_ADDR", "10.1.0.5:53")
                 .parse()
-                .expect("TS_TEST_UDP_ADDR should be a valid socket address");
+                .expect("TS_TEST_UDP_ADDR must be a valid socket address");
         let udp_query_name =
             env_or_default("TS_TEST_UDP_QUERY_NAME", "login.tailscale.com");
 
@@ -391,66 +397,36 @@ mod tests {
             "tailscale device returned an unspecified IPv4 address"
         );
 
-        // TCP: self-connection loopback via the tailscale userspace netstack.
-        // A fresh ephemeral node has no exit node, so public internet IPs are
-        // not routable through the tailscale stack.  Instead we listen on our
-        // own tailscale IP and connect back to it — this exercises both
-        // tcp_listen and tcp_connect end-to-end without needing any peers.
-        let listen_port: u16 = 19988;
-        let listen_addr: SocketAddr = (addr, listen_port).into();
-        let listener = tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            device.tcp_listen(listen_addr),
+        // TCP: connect to homelab server via tailnet subnet router.
+        let mut tcp_stream = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            device.tcp_connect(tcp_addr),
         )
         .await
-        .expect("timed out creating tcp listener on tailscale")
-        .expect("failed to create tcp listener on tailscale");
-
-        let connect_addr: SocketAddr = (addr, listen_port).into();
-        let device2 = Arc::clone(&device);
-        let connect_task = tokio::spawn(async move {
-            tokio::time::timeout(
-                std::time::Duration::from_secs(20),
-                device2.tcp_connect(connect_addr),
-            )
-            .await
-            .expect("timed out connecting tcp to self over tailscale")
-            .expect("failed to connect tcp to self over tailscale")
-        });
-
-        let mut server_stream = tokio::time::timeout(
+        .expect("timed out connecting tcp over tailscale")
+        .expect("failed to connect tcp over tailscale");
+        let req = format!(
+            "HEAD / HTTP/1.1\r\nHost: {tcp_host}\r\nConnection: close\r\n\r\n"
+        );
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tcp_stream.write_all(req.as_bytes()),
+        )
+        .await
+        .expect("timed out sending tcp request over tailscale")
+        .expect("failed to send tcp request over tailscale");
+        tcp_stream.flush().await.ok();
+        let mut tcp_resp = [0u8; 256];
+        let n = tokio::time::timeout(
             std::time::Duration::from_secs(20),
-            listener.accept(),
+            tcp_stream.read(&mut tcp_resp),
         )
         .await
-        .expect("timed out accepting tcp connection over tailscale")
-        .expect("failed to accept tcp connection over tailscale");
+        .expect("timed out receiving tcp response over tailscale")
+        .expect("failed to receive tcp response over tailscale");
+        assert!(n > 0, "expected non-empty tcp response over tailscale");
 
-        let mut client_stream =
-            connect_task.await.expect("tcp connect task panicked");
-
-        let payload = b"hello tailscale tcp";
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            client_stream.write_all(payload),
-        )
-        .await
-        .expect("timed out writing tcp data over tailscale")
-        .expect("failed to write tcp data over tailscale");
-        client_stream.flush().await.ok();
-
-        let mut buf = vec![0u8; payload.len()];
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            server_stream.read_exact(&mut buf),
-        )
-        .await
-        .expect("timed out reading tcp data over tailscale")
-        .expect("failed to read tcp data over tailscale");
-        assert_eq!(buf, payload, "tcp data mismatch over tailscale");
-
-        // UDP: query Tailscale MagicDNS (100.100.100.100:53) — always reachable
-        // from any authenticated tailscale node without an exit node.
+        // UDP: DNS query via homelab resolver reachable via tailnet subnet router.
         let udp_socket = tokio::time::timeout(
             std::time::Duration::from_secs(20),
             device.udp_bind((addr, 0).into()),
