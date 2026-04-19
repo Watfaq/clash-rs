@@ -36,8 +36,16 @@ const CMD_PSH: u8 = 2;
 const CMD_FIN: u8 = 3;
 const CMD_SETTINGS: u8 = 4;
 const CMD_ALERT: u8 = 5;
+const CMD_UPDATE_PADDING_SCHEME: u8 = 6;
+const CMD_SERVER_SETTINGS: u8 = 10;
 /// Stream ID used for our single-stream multiplexing.
 const STREAM_ID: u32 = 1;
+
+/// Padding scheme advertised by this client: no padding on any packet.
+///
+/// The MD5 is pre-computed over the literal string "stop=0" (no trailing
+/// newline), matching how anytls-go serialises a single-entry scheme.
+const CLIENT_PADDING_SCHEME_MD5: &str = "47edb1f4ed8a99480bf416d178311f10";
 
 pub struct HandlerOptions {
     pub name: String,
@@ -107,8 +115,11 @@ impl Handler {
         stream.write_all(password.as_slice()).await?;
         stream.write_u16(0).await?;
 
-        let settings =
-            format!("v=1\nclient=clash-rs/{}", env!("CLASH_VERSION_OVERRIDE"));
+        let settings = format!(
+            "v=2\nclient=clash-rs/{}\npadding-md5={}",
+            env!("CLASH_VERSION_OVERRIDE"),
+            CLIENT_PADDING_SCHEME_MD5
+        );
         Self::write_frame(&mut stream, CMD_SETTINGS, 0, settings.as_bytes()).await?;
         Self::write_frame(&mut stream, CMD_SYN, STREAM_ID, &[]).await?;
 
@@ -222,6 +233,9 @@ impl Handler {
                                 cancel_b.cancel();
                                 break;
                             }
+                            // v2: server settings / padding-scheme update — read
+                            // and discard; we use a fixed no-padding scheme.
+                            CMD_SERVER_SETTINGS | CMD_UPDATE_PADDING_SCHEME => {}
                             CMD_WASTE | CMD_SYN | CMD_SETTINGS => {}
                             _ => {}
                         }
@@ -608,11 +622,20 @@ mod tests {
         // Reserved u16(0)
         assert_eq!(server.read_u16().await.unwrap(), 0);
 
-        // SETTINGS frame (stream_id = 0)
+        // SETTINGS frame (stream_id = 0) — v2 protocol with padding-md5
         let (cmd, sid, data) = read_frame_raw(&mut server).await;
         assert_eq!(cmd, CMD_SETTINGS);
         assert_eq!(sid, 0);
-        assert!(String::from_utf8(data).unwrap().starts_with("v=1"));
+        let settings_str = String::from_utf8(data).unwrap();
+        assert!(settings_str.starts_with("v=2"), "settings must use v=2");
+        assert!(
+            settings_str.contains("padding-md5="),
+            "settings must include padding-md5"
+        );
+        assert!(
+            settings_str.contains(CLIENT_PADDING_SCHEME_MD5),
+            "padding-md5 must match our scheme"
+        );
 
         // SYN frame
         let (cmd, sid, data) = read_frame_raw(&mut server).await;
