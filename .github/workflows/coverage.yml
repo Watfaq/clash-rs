@@ -52,6 +52,7 @@ jobs:
           CROSS_CONTAINER_OPTS: "--network host"
           CLASH_DOCKER_TEST: ${{ startsWith(matrix.os, 'ubuntu') && 'true' || 'false' }}
           TS_AUTH_KEY: ${{ secrets.TS_AUTH_KEY }}
+          RUST_LOG: ts_control=debug,ts_runtime=debug,tailscale=debug
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6

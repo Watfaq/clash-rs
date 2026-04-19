@@ -356,6 +356,17 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread")]
     async fn tailscale_live_auth_key_supports_real_tcp_and_udp_traffic() {
+        // Surface tailscale-rs internal logs so CI can show exactly why
+        // the control actor fails if the test does not pass.
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| {
+                        "ts_control=debug,ts_runtime=debug".parse().unwrap()
+                    }),
+            )
+            .try_init();
+
         let auth_key = match std::env::var("TS_AUTH_KEY") {
             Ok(v) if !v.is_empty() => v,
             _ => return,
@@ -375,135 +386,80 @@ mod tests {
             ephemeral: true,
         });
 
-        // All network operations below may fail when the tailscale control
-        // plane is unreachable from the CI environment (e.g. RuntimeDegraded).
-        // Treat any such failure as a graceful skip so the test never turns
-        // into a hard failure due to infrastructure conditions outside our
-        // control.  Assertions are only made when connectivity is confirmed.
-        let device = match h.get_device().await {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("tailscale live test: skipping – device init failed: {e}");
-                return;
-            }
-        };
-        let addr = match device.ipv4_addr().await {
-            Ok(a) => a,
-            Err(e) => {
-                eprintln!("tailscale live test: skipping – no IPv4 address: {e}");
-                return;
-            }
-        };
+        let device = h.get_device().await.expect("tailscale device init failed");
+
+        let addr = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            device.ipv4_addr(),
+        )
+        .await
+        .expect("timed out waiting for tailscale IPv4 address")
+        .expect("tailscale device failed to acquire IPv4 address");
+
         assert!(
             !addr.is_unspecified(),
             "tailscale device returned an unspecified IPv4 address"
         );
 
         // TCP: connect to homelab server via tailnet subnet router.
-        let tcp_result = tokio::time::timeout(
+        let mut tcp_stream = tokio::time::timeout(
             std::time::Duration::from_secs(30),
             device.tcp_connect(tcp_addr),
         )
-        .await;
-        let mut tcp_stream = match tcp_result {
-            Ok(Ok(s)) => s,
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – tcp connect failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – tcp connect timed out");
-                return;
-            }
-        };
+        .await
+        .expect("timed out connecting tcp over tailscale")
+        .expect("tcp connect over tailscale failed");
+
         let req = "HEAD / HTTP/1.1\r\nHost: 10.1.0.5\r\nConnection: close\r\n\r\n";
-        let write_result = tokio::time::timeout(
+        tokio::time::timeout(
             std::time::Duration::from_secs(10),
             tcp_stream.write_all(req.as_bytes()),
         )
-        .await;
-        match write_result {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – tcp write failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – tcp write timed out");
-                return;
-            }
-        }
+        .await
+        .expect("timed out writing tcp request over tailscale")
+        .expect("tcp write over tailscale failed");
+
         tcp_stream.flush().await.ok();
+
         let mut tcp_resp = [0u8; 256];
-        let read_result = tokio::time::timeout(
+        let n = tokio::time::timeout(
             std::time::Duration::from_secs(20),
             tcp_stream.read(&mut tcp_resp),
         )
-        .await;
-        let n = match read_result {
-            Ok(Ok(n)) => n,
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – tcp read failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – tcp read timed out");
-                return;
-            }
-        };
+        .await
+        .expect("timed out reading tcp response over tailscale")
+        .expect("tcp read over tailscale failed");
+
         assert!(n > 0, "expected non-empty tcp response over tailscale");
 
         // UDP: DNS query via homelab resolver reachable via tailnet subnet router.
-        let udp_bind_result = tokio::time::timeout(
+        let udp_socket = tokio::time::timeout(
             std::time::Duration::from_secs(20),
             device.udp_bind((addr, 0).into()),
         )
-        .await;
-        let udp_socket = match udp_bind_result {
-            Ok(Ok(s)) => s,
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – udp bind failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – udp bind timed out");
-                return;
-            }
-        };
+        .await
+        .expect("timed out binding udp socket over tailscale")
+        .expect("udp bind over tailscale failed");
+
         let txid = DNS_TEST_TXID;
         let query = build_dns_query("login.tailscale.com", txid);
-        let send_result = tokio::time::timeout(
+
+        tokio::time::timeout(
             std::time::Duration::from_secs(10),
             udp_socket.send_to(udp_addr, &query),
         )
-        .await;
-        match send_result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – udp send failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – udp send timed out");
-                return;
-            }
-        }
-        let recv_result = tokio::time::timeout(
+        .await
+        .expect("timed out sending udp request over tailscale")
+        .expect("udp send over tailscale failed");
+
+        let (_, udp_resp) = tokio::time::timeout(
             std::time::Duration::from_secs(20),
             udp_socket.recv_from_bytes(),
         )
-        .await;
-        let (_, udp_resp) = match recv_result {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => {
-                eprintln!("tailscale live test: skipping – udp recv failed: {e}");
-                return;
-            }
-            Err(_) => {
-                eprintln!("tailscale live test: skipping – udp recv timed out");
-                return;
-            }
-        };
+        .await
+        .expect("timed out receiving udp response over tailscale")
+        .expect("udp recv over tailscale failed");
+
         assert!(
             udp_resp.len() >= 2,
             "expected non-empty udp response over tailscale"
