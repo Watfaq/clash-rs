@@ -133,13 +133,11 @@ impl Handler {
             std::env::set_var("TS_RS_EXPERIMENT", "this_is_unstable_software");
         }
 
-        // tailscale-rs uses rustls internally. When both aws-lc-rs and ring
-        // features are compiled in, rustls cannot auto-select a provider.
-        // Install the same provider clash-lib uses so tailscale-rs TLS works.
-        #[cfg(feature = "aws-lc-rs")]
-        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        // In tests the binary entrypoint that calls setup_default_crypto_provider
+        // is never run, so tailscale-rs's rustls would panic when both aws-lc-rs
+        // and ring are compiled in.
+        #[cfg(test)]
+        crate::setup_default_crypto_provider();
 
         let device = Arc::new(
             ::tailscale::Device::new(&config, self.opts.auth_key.clone())
