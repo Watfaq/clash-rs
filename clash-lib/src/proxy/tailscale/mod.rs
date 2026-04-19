@@ -62,6 +62,13 @@ impl Handler {
         }
     }
 
+    /// Lazily initialise and return the shared [`tailscale::Device`].
+    ///
+    /// **State persistence**: when `state_dir` is set the device identity is
+    /// loaded from (and automatically written back to) a JSON file so it
+    /// survives process restarts.  When `state_dir` is `None` the identity is
+    /// held in memory only; the device will register a fresh node on every
+    /// startup unless `ephemeral: true` is also set.
     async fn get_device(&self) -> io::Result<Arc<::tailscale::Device>> {
         let mut guard = self.device.lock().await;
         if let Some(device) = guard.as_ref() {
@@ -71,6 +78,10 @@ impl Handler {
         let key_state = if self.opts.ephemeral {
             Default::default()
         } else if let Some(state_dir) = self.opts.state_dir.as_ref() {
+            // load_key_file reads persisted key material so the device keeps
+            // the same Tailscale identity across restarts.  The tailscale-rs
+            // crate writes updated state back to the file automatically while
+            // the Device is alive; no explicit save step is required.
             let state_file =
                 PathBuf::from(state_dir).join(TAILSCALE_STATE_FILE_NAME);
             ::tailscale::load_key_file(
@@ -84,6 +95,13 @@ impl Handler {
                 ))
             })?
         } else {
+            // ephemeral: false but no state_dir — identity is in-memory only
+            // and will be lost when the process exits.  Log so users are aware.
+            tracing::warn!(
+                name = %self.opts.name,
+                "tailscale: ephemeral is false but no state-dir is configured; \
+                 device identity will not be persisted across restarts"
+            );
             Default::default()
         };
 
