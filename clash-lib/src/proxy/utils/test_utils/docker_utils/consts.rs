@@ -21,3 +21,4 @@ pub const IMAGE_HYSTERIA: &str = "tobyxdd/hysteria:latest";
 pub const IMAGE_TUIC: &str = "ghcr.io/itsusinn/tuic-server:latest";
 #[cfg(feature = "shadowquic")]
 pub const IMAGE_SHADOWQUIC: &str = "ghcr.io/spongebob888/shadowquic:latest";
+pub const IMAGE_SINGBOX: &str = "ghcr.io/sagernet/sing-box:v1.13.8";

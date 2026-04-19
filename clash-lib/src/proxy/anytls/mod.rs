@@ -404,13 +404,55 @@ impl OutboundHandler for Handler {
     }
 }
 
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
+        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "password".to_owned(),
+            Box::new(self.opts.password.clone()) as _,
+        );
+        if self.opts.udp {
+            m.insert("udp".to_owned(), Box::new(true) as _);
+        }
+        if self.opts.tls.is_some() {
+            m.insert("tls".to_owned(), Box::new(true) as _);
+        }
+        m
+    }
+}
+
 #[cfg(test)]
-mod unit_tests {
+mod tests {
+    use bytes::BytesMut;
     use futures::{SinkExt, StreamExt};
-    use tokio::io::{AsyncReadExt, duplex};
+    use sha2::{Digest, Sha256};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
 
     use super::*;
-    use crate::{proxy::datagram::UdpPacket, session::SocksAddr};
+    use crate::{
+        proxy::datagram::UdpPacket,
+        session::{Session, SocksAddr},
+    };
+
+    #[cfg(docker_test)]
+    use crate::{
+        proxy::{
+            transport,
+            utils::test_utils::{
+                Suite,
+                config_helper::test_config_base_dir,
+                consts::{IMAGE_SINGBOX, LOCAL_ADDR},
+                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                run_test_suites_and_cleanup,
+            },
+        },
+        tests::initialize,
+    };
 
     fn make_handler(udp: bool, with_tls: bool) -> Handler {
         use crate::proxy::transport::TlsClient;
@@ -433,6 +475,19 @@ mod unit_tests {
             },
             transport: None,
         })
+    }
+
+    async fn read_frame_raw(
+        r: &mut (impl AsyncReadExt + Unpin),
+    ) -> (u8, u32, Vec<u8>) {
+        let cmd = r.read_u8().await.unwrap();
+        let sid = r.read_u32().await.unwrap();
+        let len = r.read_u16().await.unwrap() as usize;
+        let mut data = vec![0u8; len];
+        if len > 0 {
+            r.read_exact(&mut data).await.unwrap();
+        }
+        (cmd, sid, data)
     }
 
     #[test]
@@ -495,6 +550,135 @@ mod unit_tests {
         assert!(map.contains_key("tls"), "tls present when Some");
     }
 
+    // ---- write_frame / read_frame tests ----
+
+    #[tokio::test]
+    async fn test_write_read_frame_roundtrip() {
+        let (mut a, mut b) = duplex(4096);
+        Handler::write_frame(&mut a, CMD_PSH, STREAM_ID, b"hello")
+            .await
+            .unwrap();
+        let (cmd, sid, data) = Handler::read_frame(&mut b).await.unwrap();
+        assert_eq!(cmd, CMD_PSH);
+        assert_eq!(sid, STREAM_ID);
+        assert_eq!(data, b"hello");
+    }
+
+    #[tokio::test]
+    async fn test_write_frame_empty_payload() {
+        let (mut a, mut b) = duplex(4096);
+        Handler::write_frame(&mut a, CMD_SYN, STREAM_ID, &[])
+            .await
+            .unwrap();
+        let (cmd, sid, data) = Handler::read_frame(&mut b).await.unwrap();
+        assert_eq!(cmd, CMD_SYN);
+        assert_eq!(sid, STREAM_ID);
+        assert!(data.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_write_frame_rejects_oversized_payload() {
+        let (mut a, _b) = duplex(4096);
+        let oversized = vec![0u8; u16::MAX as usize + 1];
+        let err = Handler::write_frame(&mut a, CMD_PSH, STREAM_ID, &oversized)
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    // ---- open_anytls_stream tests ----
+
+    #[tokio::test]
+    async fn test_open_anytls_stream_sends_handshake() {
+        let h = make_handler(false, false);
+        let dst = SocksAddr::try_from(("1.2.3.4".to_owned(), 80)).unwrap();
+        let sess = Session {
+            destination: dst.clone(),
+            ..Default::default()
+        };
+        let (client, mut server) = duplex(65536);
+
+        let _app = h.open_anytls_stream(Box::new(client), &sess).await.unwrap();
+
+        // Password SHA256 hash
+        let mut hash_buf = [0u8; 32];
+        server.read_exact(&mut hash_buf).await.unwrap();
+        assert_eq!(&hash_buf, Sha256::digest(b"secret").as_slice());
+
+        // Reserved u16(0)
+        assert_eq!(server.read_u16().await.unwrap(), 0);
+
+        // SETTINGS frame (stream_id = 0)
+        let (cmd, sid, data) = read_frame_raw(&mut server).await;
+        assert_eq!(cmd, CMD_SETTINGS);
+        assert_eq!(sid, 0);
+        assert!(String::from_utf8(data).unwrap().starts_with("v=1"));
+
+        // SYN frame
+        let (cmd, sid, data) = read_frame_raw(&mut server).await;
+        assert_eq!(cmd, CMD_SYN);
+        assert_eq!(sid, STREAM_ID);
+        assert!(data.is_empty());
+
+        // PSH frame carries the destination address
+        let (cmd, sid, data) = read_frame_raw(&mut server).await;
+        assert_eq!(cmd, CMD_PSH);
+        assert_eq!(sid, STREAM_ID);
+        let mut expected = BytesMut::new();
+        dst.write_buf(&mut expected);
+        assert_eq!(data, expected.to_vec());
+    }
+
+    #[tokio::test]
+    async fn test_open_anytls_stream_relays_data() {
+        let h = make_handler(false, false);
+        let sess = Session {
+            destination: SocksAddr::try_from(("1.2.3.4".to_owned(), 80)).unwrap(),
+            ..Default::default()
+        };
+        let (client, mut server) = duplex(65536);
+
+        let mut app = h.open_anytls_stream(Box::new(client), &sess).await.unwrap();
+
+        // Drain the initial handshake bytes from server side.
+        let mut hash_buf = [0u8; 32];
+        server.read_exact(&mut hash_buf).await.unwrap();
+        server.read_u16().await.unwrap();
+        read_frame_raw(&mut server).await; // SETTINGS
+        read_frame_raw(&mut server).await; // SYN
+        read_frame_raw(&mut server).await; // PSH (dest)
+
+        // Send a PSH frame from server → client; verify app stream receives it.
+        let payload = b"response data";
+        Handler::write_frame(&mut server, CMD_PSH, STREAM_ID, payload)
+            .await
+            .unwrap();
+
+        let mut recv_buf = vec![0u8; payload.len()];
+        app.read_exact(&mut recv_buf).await.unwrap();
+        assert_eq!(recv_buf, payload);
+    }
+
+    #[tokio::test]
+    async fn test_inner_proxy_stream_sends_handshake() {
+        // Tests inner_proxy_stream with no TLS and no transport — exercises
+        // the full code path through inner_proxy_stream → open_anytls_stream.
+        let h = make_handler(false, false);
+        let dst = SocksAddr::try_from(("1.2.3.4".to_owned(), 80)).unwrap();
+        let sess = Session {
+            destination: dst,
+            ..Default::default()
+        };
+        let (client, mut server) = duplex(65536);
+
+        let _app = h.inner_proxy_stream(Box::new(client), &sess).await.unwrap();
+
+        // Verify the password hash is the first thing written.
+        let mut hash_buf = [0u8; 32];
+        server.read_exact(&mut hash_buf).await.unwrap();
+        assert_eq!(&hash_buf, Sha256::digest(b"secret").as_slice());
+    }
+
     // ---- datagram framing tests ----
 
     #[tokio::test]
@@ -534,8 +718,6 @@ mod unit_tests {
         let mut dg =
             datagram::OutboundDatagramAnytls::new(Box::new(client), target.clone());
 
-        // Write the wire bytes from the server side so poll_next can read them.
-        use tokio::io::AsyncWriteExt;
         server.write_all(&wire).await.unwrap();
 
         let pkt = dg.next().await.expect("should receive a packet");
@@ -563,49 +745,10 @@ mod unit_tests {
             "sending oversized packet should return an error"
         );
     }
-}
 
-#[async_trait]
-impl PlainProxyAPIResponse for Handler {
-    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
-        let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
-        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
-        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
-        m.insert(
-            "password".to_owned(),
-            Box::new(self.opts.password.clone()) as _,
-        );
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
-        }
-        if self.opts.tls.is_some() {
-            m.insert("tls".to_owned(), Box::new(true) as _);
-        }
-        m
-    }
-}
+    // ---- docker integration tests ----
 
-#[cfg(all(test, docker_test))]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::{
-        proxy::{
-            transport,
-            utils::test_utils::{
-                Suite,
-                config_helper::test_config_base_dir,
-                consts::{IMAGE_XRAY, LOCAL_ADDR},
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
-                run_test_suites_and_cleanup,
-            },
-        },
-        tests::initialize,
-    };
-
+    #[cfg(docker_test)]
     async fn get_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let conf = test_config_dir.join("anytls.json");
@@ -613,9 +756,9 @@ mod tests {
         let key = test_config_dir.join("example.org-key.pem");
 
         DockerTestRunnerBuilder::new()
-            .image(IMAGE_XRAY)
+            .image(IMAGE_SINGBOX)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (conf.to_str().unwrap(), "/etc/sing-box/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
@@ -623,6 +766,7 @@ mod tests {
             .await
     }
 
+    #[cfg(docker_test)]
     #[tokio::test]
     #[serial_test::serial]
     async fn test_anytls() -> anyhow::Result<()> {
