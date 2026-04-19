@@ -403,6 +403,13 @@ mod tests {
             "tailscale device returned an unspecified IPv4 address"
         );
 
+        // Wait for subnet routes from the netmap to propagate into the
+        // smoltcp routing table. ipv4_addr() resolves as soon as self_node
+        // is set, but the RouteUpdater processes routes asynchronously from
+        // the same StateUpdate message, so a brief pause is required before
+        // packets to subnet IPs (10.1.0.0/24 via the subnet router) can route.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
         // TCP: connect to homelab server via tailnet subnet router.
         let mut tcp_stream = tokio::time::timeout(
             std::time::Duration::from_secs(30),
