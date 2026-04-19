@@ -285,10 +285,12 @@ impl PlainProxyAPIResponse for Handler {
 
 #[cfg(test)]
 mod tests {
-    use std::net::SocketAddr;
-
     use super::{Handler, HandlerOptions};
     use crate::proxy::{OutboundHandler, PlainProxyAPIResponse};
+
+    #[cfg(target_os = "linux")]
+    use std::net::SocketAddr;
+    #[cfg(target_os = "linux")]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[cfg(target_os = "linux")]
