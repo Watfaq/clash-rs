@@ -757,6 +757,7 @@ mod tests {
 
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SINGBOX)
+            .cmd(&["run", "-c", "/etc/sing-box/config.json"])
             .mounts(&[
                 (conf.to_str().unwrap(), "/etc/sing-box/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
