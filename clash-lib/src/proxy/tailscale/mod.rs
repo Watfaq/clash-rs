@@ -133,12 +133,6 @@ impl Handler {
             std::env::set_var("TS_RS_EXPERIMENT", "this_is_unstable_software");
         }
 
-        // In tests the binary entrypoint that calls setup_default_crypto_provider
-        // is never run, so tailscale-rs's rustls would panic when both aws-lc-rs
-        // and ring are compiled in.
-        #[cfg(test)]
-        crate::setup_default_crypto_provider();
-
         let device = Arc::new(
             ::tailscale::Device::new(&config, self.opts.auth_key.clone())
                 .await
@@ -362,6 +356,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread")]
     async fn tailscale_live_auth_key_supports_real_tcp_and_udp_traffic() {
+        crate::setup_default_crypto_provider();
+
         // Surface tailscale-rs internal logs so CI can show exactly why
         // the control actor fails if the test does not pass.
         let _ = tracing_subscriber::fmt()
