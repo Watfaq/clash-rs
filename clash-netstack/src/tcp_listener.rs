@@ -252,6 +252,10 @@ impl TcpListener {
                         continue;
                     }
 
+                    if syn_tracker.len() >= SYN_TRACK_MAX {
+                        continue;
+                    }
+
                     let mut socket = tcp::Socket::new(
                         tcp::SocketBuffer::new(vec![
                             0u8;
@@ -283,9 +287,6 @@ impl TcpListener {
 
                     // Track after listen() succeeds so a failed listen
                     // doesn't block future SYNs for the same tuple.
-                    if syn_tracker.len() >= SYN_TRACK_MAX {
-                        continue;
-                    }
                     syn_tracker.insert(conn_tuple, now);
 
                     trace!("created TCP connection for {src_addr} <-> {dst_addr}");
