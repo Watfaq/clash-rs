@@ -263,8 +263,6 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         if let Some(username) = self.opts.user.as_ref() {
@@ -272,9 +270,6 @@ impl PlainProxyAPIResponse for Handler {
         }
         if let Some(password) = self.opts.password.as_ref() {
             m.insert("password".to_owned(), Box::new(password.clone()) as _);
-        }
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
         }
         if self.opts.tls_client.is_some() {
             m.insert("tls".to_owned(), Box::new(true) as _);

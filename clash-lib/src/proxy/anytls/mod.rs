@@ -453,17 +453,12 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         m.insert(
             "password".to_owned(),
             Box::new(self.opts.password.clone()) as _,
         );
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
-        }
         if self.opts.tls.is_some() {
             m.insert("tls".to_owned(), Box::new(true) as _);
         }
@@ -578,12 +573,9 @@ mod tests {
     async fn test_as_map_required_fields() {
         let h = make_handler(false, false);
         let map = h.as_map().await;
-        assert!(map.contains_key("name"));
-        assert!(map.contains_key("type"));
         assert!(map.contains_key("server"));
         assert!(map.contains_key("port"));
         assert!(map.contains_key("password"));
-        assert!(!map.contains_key("udp"), "udp absent when false");
         assert!(!map.contains_key("tls"), "tls absent when None");
     }
 
@@ -591,7 +583,6 @@ mod tests {
     async fn test_as_map_optional_flags() {
         let h = make_handler(true, true);
         let map = h.as_map().await;
-        assert!(map.contains_key("udp"), "udp present when true");
         assert!(map.contains_key("tls"), "tls present when Some");
     }
 
