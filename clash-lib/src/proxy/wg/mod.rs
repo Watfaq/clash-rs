@@ -154,14 +154,10 @@ impl Handler {
                         keepalive_seconds: Some(10),
                         allowed_ips,
                         reserved_bits: match &self.opts.reserved_bits {
-                            Some(bits) => {
-                                if bits.len() >= 3 {
-                                    [bits[0], bits[1], bits[2]]
-                                } else {
-                                    [0, 0, 0]
-                                }
+                            Some(bits) if bits.len() >= 3 => {
+                                [bits[0], bits[1], bits[2]]
                             }
-                            None => [0, 0, 0],
+                            _ => [0, 0, 0],
                         },
                     },
                     recv_pair.0,

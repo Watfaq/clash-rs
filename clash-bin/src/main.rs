@@ -186,8 +186,12 @@ fn main() -> anyhow::Result<()> {
         if let Some(dir) = &cli.directory {
             std::env::set_current_dir(dir)?;
         }
-        config.general.mmdb = Some("Country.mmdb".to_string());
-        config.general.geosite = Some("geosite.dat".to_string());
+        if config.general.mmdb.is_none() {
+            config.general.mmdb = Some("Country.mmdb".to_string());
+        }
+        if config.general.geosite.is_none() {
+            config.general.geosite = Some("geosite.dat".to_string());
+        }
     }
 
     clash::start_scaffold(clash::Options {

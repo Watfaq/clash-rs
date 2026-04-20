@@ -5,6 +5,8 @@ use crate::proxy::shadowquic;
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
 use crate::proxy::ssh;
+#[cfg(feature = "tailscale")]
+use crate::proxy::tailscale;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -33,7 +35,7 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        AnyOutboundHandler,
+        AnyOutboundHandler, anytls,
         direct::{self},
         fallback,
         group::smart,
@@ -330,6 +332,15 @@ impl OutboundManager {
                         })
                         .ok()
                 }
+                OutboundProxyProtocol::Anytls(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: anytls::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load anytls outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
                 OutboundProxyProtocol::Vmess(v) => {
                     let name = v.common_opts.name.clone();
                     v.try_into()
@@ -423,6 +434,22 @@ impl OutboundManager {
                         .inspect_err(|e| {
                             error!(
                                 "failed to load shadowquic outbound {}: {}",
+                                name, e
+                            );
+                        })
+                        .ok()
+                }
+                #[cfg(feature = "tailscale")]
+                OutboundProxyProtocol::Tailscale(tscfg) => {
+                    let name = tscfg.name.clone();
+                    tscfg
+                        .try_into()
+                        .map(|x: tailscale::Handler| {
+                            Arc::new(x) as AnyOutboundHandler
+                        })
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load tailscale outbound {}: {}",
                                 name, e
                             );
                         })
