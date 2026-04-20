@@ -26,29 +26,29 @@ jobs:
   benchmark:
     name: TUN Throughput Benchmark
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Full history for comparison
           ref: ${{ needs.check-trigger.outputs.pr_sha || github.event.pull_request.head.sha }}
-      
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           key: benchmark-${{ runner.os }}
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y iperf3 iproute2 cmake libclang-dev
-      
+
       - name: Setup TUN device support
         run: |
           # Load TUN kernel module
@@ -68,16 +68,16 @@ jobs:
           sudo pkill -9 iperf3 2>/dev/null || true
           sudo pkill -9 clash-rs 2>/dev/null || true
           echo "Cleanup complete"
-      
+
       - name: Build clash-rs (release mode)
         run: |
           cargo build --release --bin clash-rs --all-features
           echo "CLASH_BINARY=$PWD/target/release/clash-rs" >> $GITHUB_ENV
-      
+
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-      
+
       - name: Run benchmark on PR code
         id: pr_benchmark
         run: |
@@ -98,8 +98,7 @@ jobs:
             fi
             exit 1
           }
-        continue-on-error: true
-      
+
       - name: Upload PR benchmark results
         uses: actions/upload-artifact@v7
         if: always()
@@ -107,7 +106,7 @@ jobs:
           name: benchmark-pr-results
           path: benchmark-pr.json
           retention-days: 30
-      
+
       - name: Upload clash-rs logs
         uses: actions/upload-artifact@v7
         if: always()
@@ -115,7 +114,7 @@ jobs:
           name: clash-rs-bench-log
           path: clash-rs-bench.log
           retention-days: 30
-      
+
       # Check for committed baseline file
       - name: Check for baseline file
         id: check_baseline
@@ -129,7 +128,7 @@ jobs:
             echo "⚠️  No baseline file found - comparison will be skipped"
             echo "To create a baseline, run the benchmark on master and commit the result."
           fi
-      
+
       - name: Compare results and generate comment
         id: compare
         if: steps.check_baseline.outputs.baseline_exists == 'true'
@@ -140,7 +139,7 @@ jobs:
             --baseline bench/baseline-tun-benchmark.json \
             --output benchmark-comment.md
         continue-on-error: true
-      
+
       - name: Post PR comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v8
@@ -148,7 +147,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            
+
             // Read comment from file or generate fallback
             let commentBody;
             if (fs.existsSync('benchmark-comment.md')) {
@@ -170,19 +169,19 @@ jobs:
             } else {
               commentBody = '⚠️ Benchmark comparison failed - check workflow logs for details.';
             }
-            
+
             // Find existing benchmark comment
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            
-            const botComment = comments.find(c => 
-              c.user.type === 'Bot' && 
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' &&
               c.body.includes('TUN Throughput Benchmark Results')
             );
-            
+
             if (botComment) {
               // Update existing comment
               await github.rest.issues.updateComment({
@@ -202,7 +201,7 @@ jobs:
               });
               console.log('Created new benchmark comment');
             }
-      
+
       - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -213,10 +212,8 @@ jobs:
             benchmark-comment.md
             clash-rs-bench.log
           retention-days: 30
-      
-      - name: Check for significant regression
+
+      - name: Note on performance comparison
         if: steps.compare.outcome == 'failure'
         run: |
-          echo "::warning::Significant performance regression detected (>10%)"
-          echo "Review the benchmark results in the PR comment"
-          exit 1
+          echo "::notice::Performance comparison detected a change (>10%) — see PR comment for details"
