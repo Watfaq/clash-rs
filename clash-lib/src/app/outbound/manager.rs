@@ -196,10 +196,12 @@ impl OutboundManager {
 
             let alive = proxy_manager.alive(&k).await;
             let history = proxy_manager.delay_history(&k).await;
+            let support_udp = v.support_udp().await;
 
             m.insert("history".to_string(), Box::new(history));
             m.insert("alive".to_string(), Box::new(alive));
             m.insert("name".to_string(), Box::new(k.to_owned()));
+            m.insert("udp".to_string(), Box::new(support_udp));
             m.insert("uot".to_string(), Box::new(false));
             m.insert("xudp".to_string(), Box::new(false));
             m.insert("tfo".to_string(), Box::new(false));
@@ -233,10 +235,12 @@ impl OutboundManager {
 
         let alive = proxy_manager.alive(proxy.name()).await;
         let history = proxy_manager.delay_history(proxy.name()).await;
+        let support_udp = proxy.support_udp().await;
 
         r.insert("history".to_string(), Box::new(history));
         r.insert("alive".to_string(), Box::new(alive));
         r.insert("name".to_string(), Box::new(proxy.name().to_owned()));
+        r.insert("udp".to_string(), Box::new(support_udp));
         r.insert("uot".to_string(), Box::new(false));
         r.insert("xudp".to_string(), Box::new(false));
         r.insert("tfo".to_string(), Box::new(false));

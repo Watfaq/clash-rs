@@ -556,10 +556,38 @@ async fn test_plain_proxy_api_response_direct_reject() {
     let direct = get_proxy_info(9090, "DIRECT").await;
     assert_eq!(direct["name"], "DIRECT");
     assert_eq!(direct["type"], "Direct");
+    assert_eq!(direct["udp"], true);
 
     let reject = get_proxy_info(9090, "REJECT").await;
     assert_eq!(reject["name"], "REJECT");
     assert_eq!(reject["type"], "Reject");
+    assert_eq!(reject["udp"], false);
+
+    let proxies_url = "http://127.0.0.1:9090/proxies";
+    let req = hyper::Request::builder()
+        .uri(proxies_url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(proxies_url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    assert_eq!(json["proxies"]["DIRECT"]["udp"], true);
+    assert_eq!(json["proxies"]["REJECT"]["udp"], false);
 }
 
 /// `/user-stats` should return an empty JSON object when the server has started
