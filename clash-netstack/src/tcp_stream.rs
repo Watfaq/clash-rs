@@ -24,6 +24,8 @@ impl Drop for TcpStream {
             self.local_addr, self.remote_addr
         );
 
+        // socket_dropped tells poll_sockets to drain send_buffer and issue FIN.
+        // read_closed / write_closed unblock any concurrent poll_read / poll_write.
         self.handle.socket_dropped.store(true, Ordering::Release);
         self.handle.read_closed.store(true, Ordering::Release);
         self.handle.write_closed.store(true, Ordering::Release);
@@ -72,22 +74,27 @@ impl tokio::io::AsyncRead for TcpStream {
         let read_buf = &self.handle.recv_buffer;
 
         if read_buf.is_empty() {
-            if self.handle.read_closed.load(Ordering::Acquire) {
-                trace!("TcpStream::poll_read: returning EOF");
-                return Poll::Ready(Ok(()));
-            }
-
-            trace!("TcpStream::poll_read: recv buffer is empty, waiting for data");
+            // Register waker FIRST, then re-check to close the TOCTOU window.
+            // If poll_sockets enqueues data between is_empty() and register(),
+            // wake() is a no-op (no waker stored). The re-check below detects
+            // the buffer is now non-empty and falls through to read it.
             self.handle.recv_waker.register(cx.waker());
-
-            if self.handle.read_closed.load(Ordering::Acquire) {
-                trace!("TcpStream::poll_read: peer closed while registering waker");
-                return Poll::Ready(Ok(()));
-            }
-
-            // Re-check buffer after registering waker to avoid missed wakeups.
             if read_buf.is_empty() {
-                return Poll::Pending;
+                // Return EOF when smoltcp is done (socket removed) OR when the
+                // read half was explicitly closed (peer FIN / local drop).
+                if self
+                    .handle
+                    .socket_closed
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    || self.handle.read_closed.load(Ordering::Acquire)
+                {
+                    trace!("TcpStream::poll_read: socket closed, returning EOF");
+                    return std::task::Poll::Ready(Ok(()));
+                }
+                trace!(
+                    "TcpStream::poll_read: recv buffer is empty, waiting for data"
+                );
+                return std::task::Poll::Pending;
             }
         }
 
@@ -127,24 +134,19 @@ impl tokio::io::AsyncWrite for TcpStream {
         let send_buf = &self.handle.send_buffer;
 
         if send_buf.is_full() {
-            trace!("TcpStream::poll_write: send buffer is full, waiting for space");
+            // Register waker FIRST, then re-check to close the TOCTOU window.
+            // If poll_sockets drains the buffer between is_full() and register(),
+            // wake() is a no-op (no waker stored). The re-check below detects
+            // the buffer is now non-full and falls through to enqueue data.
             self.handle.send_waker.register(cx.waker());
-            self.stack_notifier
-                .send(IfaceEvent::TcpSocketReady)
-                .expect("Failed to notify TCP socket ready");
-
-            if self.handle.write_closed.load(Ordering::Acquire)
-                || self.handle.write_shutdown.load(Ordering::Acquire)
-            {
-                return Poll::Ready(Err(Error::new(
-                    ErrorKind::BrokenPipe,
-                    "TCP stream write half closed",
-                )));
-            }
-
-            // Re-check fullness after registering the waker to avoid missing a wake
             if send_buf.is_full() {
-                return Poll::Pending;
+                trace!(
+                    "TcpStream::poll_write: send buffer is full, waiting for space"
+                );
+                self.stack_notifier
+                    .send(IfaceEvent::TcpSocketReady)
+                    .expect("Failed to notify TCP socket ready");
+                return std::task::Poll::Pending;
             }
         }
 
