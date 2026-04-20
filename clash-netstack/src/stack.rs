@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-
+use futures::Stream;
 use log::debug;
 use smoltcp::wire::IpProtocol;
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -12,6 +16,20 @@ use crate::{
     packet::IpPacket,
     tcp_listener::{TcpListener, TcpStreamHandle},
 };
+
+/// Thin `Stream` wrapper around a bounded `mpsc::Receiver`.
+struct ReceiverStream(mpsc::Receiver<Packet>);
+
+impl Stream for ReceiverStream {
+    type Item = Packet;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.0.poll_recv(cx)
+    }
+}
 
 pub(crate) enum IfaceEvent<'a> {
     Icmp, // ICMP packet received
@@ -218,8 +236,7 @@ impl futures::Sink<Packet> for StackSplitSink {
 }
 
 pub struct StackSplitStream {
-    tcp_outbound: mpsc::Receiver<Packet>,
-    udp_outbound: mpsc::Receiver<Packet>,
+    inner: futures::stream::Select<ReceiverStream, ReceiverStream>,
 }
 impl StackSplitStream {
     pub fn new(
@@ -227,8 +244,10 @@ impl StackSplitStream {
         udp_outbound: mpsc::Receiver<Packet>,
     ) -> Self {
         Self {
-            tcp_outbound,
-            udp_outbound,
+            inner: futures::stream::select(
+                ReceiverStream(tcp_outbound),
+                ReceiverStream(udp_outbound),
+            ),
         }
     }
 }
@@ -239,35 +258,12 @@ impl futures::Stream for StackSplitStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        // Poll UDP first: UDP packets are latency-sensitive (latency probes,
-        // DNS, etc.) and low-volume, so prioritising them does not starve TCP.
-        // Each channel registers the waker independently, so whichever channel
-        // becomes ready next will wake this future.
-        if let std::task::Poll::Ready(result) = self.udp_outbound.poll_recv(cx) {
-            return match result {
-                Some(packet) => {
-                    trace_ip_packet("tun reply packet (udp)", packet.data());
-                    std::task::Poll::Ready(Some(Ok(packet)))
-                }
-                None => std::task::Poll::Ready(Some(Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "Tun UDP stream closed",
-                )))),
-            };
-        }
-
-        match self.tcp_outbound.poll_recv(cx) {
-            std::task::Poll::Ready(Some(packet)) => {
-                trace_ip_packet("tun reply packet (tcp)", packet.data());
-                std::task::Poll::Ready(Some(Ok(packet)))
-            }
-            std::task::Poll::Ready(None) => {
-                std::task::Poll::Ready(Some(Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "Tun TCP stream closed",
-                ))))
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
+        use futures::StreamExt;
+        self.inner.poll_next_unpin(cx).map(|opt| {
+            opt.map(|packet| {
+                trace_ip_packet("tun reply packet", packet.data());
+                Ok(packet)
+            })
+        })
     }
 }

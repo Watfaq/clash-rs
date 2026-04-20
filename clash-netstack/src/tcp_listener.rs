@@ -26,6 +26,9 @@ const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 256 * 1024; // 256 KiB
 /// Time-to-live for SYN tracker entries. Duplicates within this window are
 /// suppressed to prevent the same SYN from creating multiple smoltcp sockets.
 const SYN_TRACK_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+/// Maximum tracked half-open SYN entries. Bounds memory under a SYN flood
+/// (~100 bytes/entry → ~1 MiB at 10 000).
+const SYN_TRACK_MAX: usize = 10_000;
 
 pub(crate) struct TcpStreamHandle {
     pub(crate) recv_buffer: LockFreeRingBuffer,
@@ -280,6 +283,9 @@ impl TcpListener {
 
                     // Track after listen() succeeds so a failed listen
                     // doesn't block future SYNs for the same tuple.
+                    if syn_tracker.len() >= SYN_TRACK_MAX {
+                        continue;
+                    }
                     syn_tracker.insert(conn_tuple, now);
 
                     trace!("created TCP connection for {src_addr} <-> {dst_addr}");
@@ -599,7 +605,12 @@ impl futures::Stream for TcpListener {
                     self.socket_stream_waker.register(cx.waker());
                     match self.socket_stream.try_recv() {
                         Ok(stream) => std::task::Poll::Ready(Some(stream)),
-                        Err(_) => std::task::Poll::Pending,
+                        Err(mpsc::error::TryRecvError::Empty) => {
+                            std::task::Poll::Pending
+                        }
+                        Err(mpsc::error::TryRecvError::Disconnected) => {
+                            std::task::Poll::Ready(None)
+                        }
                     }
                 }
                 mpsc::error::TryRecvError::Disconnected => {
