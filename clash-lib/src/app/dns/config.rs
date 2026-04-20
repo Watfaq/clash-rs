@@ -425,7 +425,7 @@ impl TryFrom<&crate::config::def::Config> for Config {
             fake_ip_filter: dc.fake_ip_filter.clone(),
             store_fake_ip: c.profile.store_fake_ip,
             store_smart_stats: c.profile.store_smart_stats,
-            hosts: if dc.user_hosts && !c.hosts.is_empty() {
+            hosts: if dc.use_hosts && !c.hosts.is_empty() {
                 Config::parse_hosts(&c.hosts).ok()
             } else {
                 let mut tree = trie::StringTrie::new();

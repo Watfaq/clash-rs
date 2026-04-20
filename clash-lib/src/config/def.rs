@@ -551,9 +551,9 @@ pub struct DNS {
     pub enable: bool,
     /// When false, response to AAAA questions will be empty
     pub ipv6: bool,
-    /// Whether to `Config::hosts` as when resolving hostnames
+    /// Whether to use `Config::hosts` when resolving hostnames
     #[educe(Default = true)]
-    pub user_hosts: bool,
+    pub use_hosts: bool,
     /// DNS servers
     pub nameserver: Vec<String>,
     /// Fallback DNS servers
