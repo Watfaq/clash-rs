@@ -3,6 +3,8 @@ use super::ProxyProvider;
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
 use crate::proxy::ssh;
+#[cfg(feature = "tailscale")]
+use crate::proxy::tailscale;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -21,7 +23,7 @@ use crate::{
     common::errors::map_io_error,
     config::internal::proxy::OutboundProxyProtocol,
     proxy::{
-        AnyOutboundHandler,
+        AnyOutboundHandler, anytls,
         direct::{self},
         hysteria2, reject, socks, trojan, vless, vmess,
     },
@@ -136,6 +138,10 @@ impl ProxySetProvider {
                                         s.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
+                                OutboundProxyProtocol::Anytls(anytls) => {
+                                    let h: anytls::Handler = anytls.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
                                 OutboundProxyProtocol::Trojan(tr) => {
                                     let h: trojan::Handler = tr.try_into()?;
                                     Ok(Arc::new(h) as _)
@@ -176,6 +182,11 @@ impl ProxySetProvider {
                                 OutboundProxyProtocol::ShadowQuic(sq) => {
                                     let h: crate::proxy::shadowquic::Handler =
                                         sq.try_into()?;
+                                    Ok(Arc::new(h) as _)
+                                }
+                                #[cfg(feature = "tailscale")]
+                                OutboundProxyProtocol::Tailscale(tscfg) => {
+                                    let h: tailscale::Handler = tscfg.try_into()?;
                                     Ok(Arc::new(h) as _)
                                 }
                             })
@@ -291,12 +302,10 @@ mod tests {
         mock_vehicle.expect_read().returning(|| {
             Ok(r#"
 proxies:
-  - name: "ss"
-    type: ss
+  - name: "socks5"
+    type: socks5
     server: localhost
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
+    port: 1080
     udp: true
 "#
             .as_bytes()

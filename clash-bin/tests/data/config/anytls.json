@@ -1,0 +1,31 @@
+{
+    "log": {
+        "level": "info"
+    },
+    "inbounds": [
+        {
+            "type": "anytls",
+            "tag": "anytls-in",
+            "listen": "0.0.0.0",
+            "listen_port": 10002,
+            "users": [
+                {
+                    "name": "user",
+                    "password": "example"
+                }
+            ],
+            "padding_scheme": ["stop=0"],
+            "tls": {
+                "enabled": true,
+                "certificate_path": "/etc/ssl/v2ray/fullchain.pem",
+                "key_path": "/etc/ssl/v2ray/privkey.pem"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "direct",
+            "tag": "direct"
+        }
+    ]
+}

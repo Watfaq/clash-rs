@@ -17,7 +17,12 @@ use crate::{
 
 use self::stream::StreamWrapper;
 
-use super::{ConnectorType, DialWithConnector, OutboundHandler, OutboundType};
+use super::{
+    ConnectorType, DialWithConnector, OutboundHandler, OutboundType,
+    PlainProxyAPIResponse,
+};
+use erased_serde::Serialize as ErasedSerialize;
+use std::collections::HashMap;
 
 pub struct HandlerOptions {
     pub name: String,
@@ -99,5 +104,16 @@ impl OutboundHandler for Handler {
 
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
+    }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        HashMap::new()
     }
 }

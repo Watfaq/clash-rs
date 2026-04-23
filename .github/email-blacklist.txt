@@ -1,9 +1,0 @@
-*@qq.com
-*@foxmail.com
-*@126.com
-*@163.com
-*@sina.com
-MX-RECORD,mxbiz1.qq.com
-MX-RECORD,mx1.qiye.aliyun.com
-MX-RECORD,mx.ym.163.com
-MX-RECORD,mx.huaweicloud.com

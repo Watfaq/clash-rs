@@ -4,6 +4,7 @@ use erased_serde::Serialize;
 
 use crate::session::Session;
 
+pub mod composite;
 pub mod domain;
 pub mod domain_keyword;
 pub mod domain_regex;
@@ -34,11 +35,16 @@ pub trait RuleMatcher: Send + Sync + Unpin + Display {
         false
     }
 
+    fn size(&self) -> u16 {
+        0
+    }
+
     fn as_map(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut m: HashMap<String, Box<dyn Serialize + Send>> = HashMap::new();
         m.insert("type".to_string(), Box::new(self.type_name().to_owned()));
         m.insert("proxy".to_string(), Box::new(self.target().to_owned()));
-        m.insert("payload".to_string(), Box::new(self.payload().to_owned()));
+        m.insert("payload".to_string(), Box::new(self.payload()));
+        m.insert("size".to_string(), Box::new(self.size()));
         m
     }
 }

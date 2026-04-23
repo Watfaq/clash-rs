@@ -34,7 +34,12 @@ pub struct Router {
     asn_mmdb: Option<MmdbLookup>,
 }
 
-pub type ThreadSafeRouter = Arc<Router>;
+pub type ArcRouter = Arc<Router>;
+
+#[deprecated(
+    note = "ThreadSafeRouter has been renamed to ArcRouter; use ArcRouter instead"
+)]
+pub type ThreadSafeRouter = ArcRouter;
 
 const MATCH: &str = "MATCH";
 
@@ -350,10 +355,36 @@ pub fn map_rule_type(
                 unreachable!("you shouldn't nest rule-set within another rule-set")
             }
         },
-        RuleType::Match { target } => Box::new(Final { target }),
         RuleType::Network { network, target } => {
             Box::new(rules::network::NetworkRule { network, target })
         }
+        RuleType::Composite {
+            operator,
+            expression,
+            target,
+        } => {
+            match rules::composite::CompositeRule::new(
+                &operator,
+                &expression,
+                &target,
+                mmdb,
+                geodata,
+                rule_provider_registry,
+            ) {
+                Ok(rule) => Box::new(rule),
+                Err(e) => {
+                    error!(
+                        "failed to create composite rule: {}, expression: {}. \
+                         Using REJECT as fallback.",
+                        e, expression
+                    );
+                    Box::new(Final {
+                        target: "REJECT".to_string(),
+                    })
+                }
+            }
+        }
+        RuleType::Match { target } => Box::new(Final { target }),
     }
 }
 

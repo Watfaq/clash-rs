@@ -3,13 +3,12 @@ use crate::{
         Client, EnhancedResolver, ThreadSafeDNSClient, dns_client::DNSNetMode,
         helper::make_clients,
     },
-    proxy::utils::new_udp_socket,
+    proxy::utils::{direct_only_registry, new_udp_socket},
 };
 use async_trait::async_trait;
 use dhcproto::{Decodable, Encodable};
 use futures::FutureExt;
 use std::{
-    collections::HashMap,
     env,
     fmt::{Debug, Formatter},
     io,
@@ -98,13 +97,14 @@ impl DhcpClient {
                 dns.into_iter()
                     .map(|s| NameServer {
                         net: DNSNetMode::Udp,
-                        address: format!("{s}:53"),
+                        host: url::Host::Ipv4(s),
+                        port: 53,
                         interface: None,
                         proxy: None,
                     })
                     .collect(),
                 None,
-                HashMap::new(),
+                direct_only_registry(),
                 None,
                 self.fw_mark,
             )

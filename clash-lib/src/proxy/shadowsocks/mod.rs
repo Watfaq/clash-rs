@@ -9,6 +9,7 @@ pub(crate) fn map_cipher(cipher: &str) -> std::io::Result<CipherKind> {
         "aes-128-gcm" => Ok(CipherKind::AES_128_GCM),
         "aes-256-gcm" => Ok(CipherKind::AES_256_GCM),
         "chacha20-ietf-poly1305" => Ok(CipherKind::CHACHA20_POLY1305),
+        "xchacha20-ietf-poly1305" => Ok(CipherKind::XCHACHA20_POLY1305),
 
         "2022-blake3-aes-128-gcm" => Ok(CipherKind::AEAD2022_BLAKE3_AES_128_GCM),
         "2022-blake3-aes-256-gcm" => Ok(CipherKind::AEAD2022_BLAKE3_AES_256_GCM),

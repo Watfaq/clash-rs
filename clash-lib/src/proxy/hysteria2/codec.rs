@@ -129,7 +129,6 @@ pub fn var_size(var: VarInt) -> usize {
 /// [bytes] Address string (host:port)
 /// [bytes] Payload
 /// ```
-#[allow(unused)]
 #[derive(Clone)]
 pub struct HysUdpPacket {
     pub session_id: u32,

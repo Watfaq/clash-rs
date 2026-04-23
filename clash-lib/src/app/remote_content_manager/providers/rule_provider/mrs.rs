@@ -615,7 +615,7 @@ mod tests {
         ];
 
         for (remaining_ips, expected_bits) in test_cases {
-            let calculated_bits = 31 - (remaining_ips.leading_zeros() as u32);
+            let calculated_bits = 31 - remaining_ips.leading_zeros();
             assert_eq!(
                 calculated_bits, expected_bits,
                 "For remaining_ips={}, expected {} bits but got {}",

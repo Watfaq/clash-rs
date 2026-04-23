@@ -1,7 +1,7 @@
 use super::{ClashResolver, Client, EdnsClientSubnet, runtime::DnsRuntimeProvider};
 use std::{
     fmt::{Debug, Display, Formatter},
-    net,
+    net::{self, IpAddr},
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -83,7 +83,7 @@ mod tests {
             })),
             cfg: DnsConfig::Udp(addr, None, proxy.clone(), None),
             proxy,
-            host: "example.org".to_string(),
+            host: url::Host::Domain("example.org".to_string()),
             port: 53,
             net: DNSNetMode::Udp,
             iface: None,
@@ -207,8 +207,8 @@ impl FromStr for DNSNetMode {
 
 #[derive(Clone)]
 pub struct Opts {
-    pub r: Option<Arc<dyn ClashResolver>>,
-    pub host: String,
+    pub father: Option<Arc<dyn ClashResolver>>,
+    pub host: url::Host<String>,
     pub port: u16,
     pub net: DNSNetMode,
     pub iface: Option<OutboundInterface>,
@@ -234,14 +234,14 @@ enum DnsConfig {
     ),
     Tls(
         net::SocketAddr,
-        String,
+        url::Host<String>,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
         FwMark,
     ),
     Https(
         net::SocketAddr,
-        String,
+        url::Host<String>,
         Option<OutboundInterface>,
         Arc<dyn OutboundHandler>,
         FwMark,
@@ -300,7 +300,7 @@ pub struct DnsClient {
     proxy: Arc<dyn OutboundHandler>,
 
     // debug purpose
-    host: String,
+    host: url::Host<String>,
     port: u16,
     net: DNSNetMode,
     iface: Option<OutboundInterface>,
@@ -310,134 +310,145 @@ pub struct DnsClient {
 impl DnsClient {
     pub async fn new_client(opts: Opts) -> anyhow::Result<ThreadSafeDNSClient> {
         // TODO: use proxy to connect?
-        match &opts.net {
-            DNSNetMode::Dhcp => {
-                Ok(Arc::new(DhcpClient::new(&opts.host, opts.fw_mark).await))
-            }
 
-            other => {
-                let ip = match opts.r {
-                    Some(r) => {
-                        match r.resolve(&opts.host, false).await.map_err(|x| {
-                            anyhow!("resolve hostname failure: {}", x)
-                        })? {
-                            Some(ip) => ip,
-                            _ => {
-                                return Err(Error::InvalidConfig(format!(
-                                    "can't resolve default DNS: {}",
-                                    opts.host
-                                ))
-                                .into());
-                            }
-                        }
-                    }
-                    _ => opts.host.parse::<net::IpAddr>().map_err(|x| {
-                        Error::DNSError(format!(
-                            "resolve DNS hostname error: {}, {}",
-                            x, opts.host
+        if matches!(opts.net, DNSNetMode::Dhcp) {
+            let host = opts.host.to_string();
+            return Ok(Arc::new(DhcpClient::new(&host, opts.fw_mark).await));
+        }
+
+        let mut ip: Option<IpAddr> = None;
+        let need_resolve = match &opts.host {
+            url::Host::Domain(v) => Some(v),
+            url::Host::Ipv4(v) => {
+                ip = Some(net::IpAddr::V4(*v));
+                None
+            }
+            url::Host::Ipv6(v) => {
+                ip = Some(net::IpAddr::V6(*v));
+                None
+            }
+        };
+
+        let resolved_ip = match need_resolve {
+            Some(domain) => match opts.father {
+                Some(father) => match father.resolve(domain, false).await? {
+                    Some(ip) => Some(ip),
+                    _ => {
+                        return Err(Error::InvalidConfig(format!(
+                            "can't resolve default DNS: {}",
+                            domain
                         ))
-                    })?,
-                };
-
-                match other {
-                    DNSNetMode::Udp => {
-                        let cfg = DnsConfig::Udp(
-                            net::SocketAddr::new(ip, opts.port),
-                            opts.iface.clone(),
-                            opts.proxy.clone(),
-                            opts.fw_mark,
-                        );
-
-                        Ok(Arc::new(Self {
-                            inner: Arc::new(RwLock::new(Inner {
-                                c: None,
-                                bg_handle: None,
-                            })),
-
-                            cfg,
-                            proxy: opts.proxy,
-
-                            host: opts.host,
-                            port: opts.port,
-                            net: opts.net,
-                            iface: opts.iface,
-                            ecs: opts.ecs.clone(),
-                        }))
+                        .into());
                     }
-                    DNSNetMode::Tcp => {
-                        let cfg = DnsConfig::Tcp(
-                            net::SocketAddr::new(ip, opts.port),
-                            opts.iface.clone(),
-                            opts.proxy.clone(),
-                            opts.fw_mark,
-                        );
-
-                        Ok(Arc::new(Self {
-                            inner: Arc::new(RwLock::new(Inner {
-                                c: None,
-                                bg_handle: None,
-                            })),
-
-                            cfg,
-                            proxy: opts.proxy,
-                            host: opts.host,
-                            port: opts.port,
-                            net: opts.net,
-                            iface: opts.iface,
-                            ecs: opts.ecs.clone(),
-                        }))
-                    }
-                    DNSNetMode::DoT => {
-                        let cfg = DnsConfig::Tls(
-                            net::SocketAddr::new(ip, opts.port),
-                            opts.host.clone(),
-                            opts.iface.clone(),
-                            opts.proxy.clone(),
-                            opts.fw_mark,
-                        );
-
-                        Ok(Arc::new(Self {
-                            inner: Arc::new(RwLock::new(Inner {
-                                c: None,
-                                bg_handle: None,
-                            })),
-
-                            cfg,
-                            proxy: opts.proxy,
-                            host: opts.host,
-                            port: opts.port,
-                            net: opts.net,
-                            iface: opts.iface,
-                            ecs: opts.ecs.clone(),
-                        }))
-                    }
-                    DNSNetMode::DoH => {
-                        let cfg = DnsConfig::Https(
-                            net::SocketAddr::new(ip, opts.port),
-                            opts.host.clone(),
-                            opts.iface.clone(),
-                            opts.proxy.clone(),
-                            opts.fw_mark,
-                        );
-
-                        Ok(Arc::new(Self {
-                            inner: Arc::new(RwLock::new(Inner {
-                                c: None,
-                                bg_handle: None,
-                            })),
-
-                            cfg,
-                            proxy: opts.proxy,
-                            host: opts.host,
-                            port: opts.port,
-                            net: opts.net,
-                            iface: opts.iface,
-                            ecs: opts.ecs.clone(),
-                        }))
-                    }
-                    _ => unreachable!("."),
+                },
+                _ => {
+                    return Err(Error::DNSError(format!(
+                        "unable to resolve DNS hostname {} without a default \
+                         resolver",
+                        domain
+                    ))
+                    .into());
                 }
+            },
+            None => None,
+        };
+        let ip = ip.or(resolved_ip).ok_or_else(|| {
+            anyhow!(
+                "invalid DNS host: {}, unable to parse as IP and no default \
+                 resolver",
+                opts.host
+            )
+        })?;
+        match opts.net {
+            DNSNetMode::Udp => {
+                let cfg = DnsConfig::Udp(
+                    net::SocketAddr::new(ip, opts.port),
+                    opts.iface.clone(),
+                    opts.proxy.clone(),
+                    opts.fw_mark,
+                );
+                Ok(Arc::new(Self {
+                    inner: Arc::new(RwLock::new(Inner {
+                        c: None,
+                        bg_handle: None,
+                    })),
+                    cfg,
+                    proxy: opts.proxy,
+                    host: opts.host,
+                    port: opts.port,
+                    net: opts.net,
+                    iface: opts.iface,
+                    ecs: opts.ecs.clone(),
+                }))
             }
+            DNSNetMode::Tcp => {
+                let cfg = DnsConfig::Tcp(
+                    net::SocketAddr::new(ip, opts.port),
+                    opts.iface.clone(),
+                    opts.proxy.clone(),
+                    opts.fw_mark,
+                );
+                Ok(Arc::new(Self {
+                    inner: Arc::new(RwLock::new(Inner {
+                        c: None,
+                        bg_handle: None,
+                    })),
+
+                    cfg,
+                    proxy: opts.proxy,
+                    host: opts.host,
+                    port: opts.port,
+                    net: opts.net,
+                    iface: opts.iface,
+                    ecs: opts.ecs.clone(),
+                }))
+            }
+            DNSNetMode::DoT => {
+                let cfg = DnsConfig::Tls(
+                    net::SocketAddr::new(ip, opts.port),
+                    opts.host.clone(),
+                    opts.iface.clone(),
+                    opts.proxy.clone(),
+                    opts.fw_mark,
+                );
+                Ok(Arc::new(Self {
+                    inner: Arc::new(RwLock::new(Inner {
+                        c: None,
+                        bg_handle: None,
+                    })),
+                    cfg,
+                    proxy: opts.proxy,
+                    host: opts.host,
+                    port: opts.port,
+                    net: opts.net,
+                    iface: opts.iface,
+                    ecs: opts.ecs.clone(),
+                }))
+            }
+            DNSNetMode::DoH => {
+                let cfg = DnsConfig::Https(
+                    net::SocketAddr::new(ip, opts.port),
+                    opts.host.clone(),
+                    opts.iface.clone(),
+                    opts.proxy.clone(),
+                    opts.fw_mark,
+                );
+                Ok(Arc::new(Self {
+                    inner: Arc::new(RwLock::new(Inner {
+                        c: None,
+                        bg_handle: None,
+                    })),
+
+                    cfg,
+                    proxy: opts.proxy,
+                    host: opts.host,
+                    port: opts.port,
+                    net: opts.net,
+                    iface: opts.iface,
+                    ecs: opts.ecs.clone(),
+                }))
+            }
+            DNSNetMode::Dhcp => unreachable!("."),
         }
     }
 
@@ -623,7 +634,7 @@ async fn dns_stream_builder(
             let iface = iface.clone();
             let (stream, sender) = tls_client_connect(
                 addr,
-                host,
+                host.to_string(),
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(
                     proxy.clone(),
@@ -649,12 +660,16 @@ async fn dns_stream_builder(
                 .with_no_client_auth();
             tls_config.alpn_protocols = vec!["h2".into()];
 
-            if host == &addr.ip().to_string() {
+            let host_ip = match host {
+                url::Host::Ipv4(ip) => Some(IpAddr::V4(*ip)),
+                url::Host::Ipv6(ip) => Some(IpAddr::V6(*ip)),
+                _ => None,
+            };
+            if host_ip == Some(addr.ip()) {
                 tls_config.dangerous().set_certificate_verifier(Arc::new(
                     tls::NoHostnameTlsVerifier::new(),
                 ));
             }
-
             let stream = HttpsClientStreamBuilder::with_client_config(
                 Arc::new(tls_config),
                 DnsRuntimeProvider::new(
@@ -664,7 +679,7 @@ async fn dns_stream_builder(
                     *fw_mark,
                 ),
             )
-            .build(*addr, host.to_owned(), "/dns-query".to_string());
+            .build(*addr, host.to_string(), "/dns-query".to_string());
 
             client::Client::connect(stream)
                 .await

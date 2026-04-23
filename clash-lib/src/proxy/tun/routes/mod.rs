@@ -38,8 +38,12 @@ pub fn maybe_add_routes(cfg: &TunConfig, tun_name: &str) -> std::io::Result<()> 
         #[cfg(target_os = "linux")]
         linux::check_ip_command_installed()?;
 
-        let tun_iface =
-            get_interface_by_name(tun_name).expect("tun interface not found");
+        let tun_iface = get_interface_by_name(tun_name).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("tun interface {} not found", tun_name),
+            )
+        })?;
 
         if cfg.route_all {
             warn!(

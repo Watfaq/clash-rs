@@ -104,7 +104,7 @@ impl OutboundHandler for NoopOutboundHandler {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedStream> {
-        Err(io::Error::new(io::ErrorKind::Other, "noop"))
+        Err(io::Error::other("noop"))
     }
 
     async fn connect_datagram(
@@ -112,7 +112,7 @@ impl OutboundHandler for NoopOutboundHandler {
         _sess: &Session,
         _resolver: ThreadSafeDNSResolver,
     ) -> io::Result<BoxedChainedDatagram> {
-        Err(io::Error::new(io::ErrorKind::Other, "noop"))
+        Err(io::Error::other("noop"))
     }
 
     async fn support_connector(&self) -> ConnectorType {

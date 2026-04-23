@@ -295,6 +295,7 @@ async fn handle_inbound_datagram(
                             data: chunk.to_vec(),
                             src_addr: meta.addr.to_canonical().into(),
                             dst_addr: orig_dst.to_canonical().into(),
+                            inbound_user: None,
                         };
                         trace!("tproxy -> dispatcher: {:?}", pkt);
                         match d_tx.send(pkt).await {

@@ -3,14 +3,16 @@ use crate::{
         dispatcher::tracked::{TrackedDatagram, TrackedStream},
         dns::ClashResolver,
         outbound::manager::ThreadSafeOutboundManager,
-        router::ThreadSafeRouter,
+        router::ArcRouter,
     },
     common::io::copy_bidirectional,
     config::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
+    proxy::{
+        AnyInboundDatagram, ClientStream, datagram::UdpPacket, utils::ToCanonical,
+    },
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -32,7 +34,7 @@ const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
-    router: ThreadSafeRouter,
+    router: ArcRouter,
     resolver: ThreadSafeDNSResolver,
     mode: Arc<RwLock<RunMode>>,
     manager: Arc<Manager>,
@@ -48,7 +50,7 @@ impl Debug for Dispatcher {
 impl Dispatcher {
     pub fn new(
         outbound_manager: ThreadSafeOutboundManager,
-        router: ThreadSafeRouter,
+        router: ArcRouter,
         resolver: ThreadSafeDNSResolver,
         mode: RunMode,
         statistics_manager: Arc<Manager>,
@@ -101,10 +103,13 @@ impl Dispatcher {
         debug!("dispatching {} to {}[{}]", sess, outbound_name, mode);
 
         let mgr = self.outbound_manager.clone();
-        let handler = mgr.get_outbound(outbound_name).unwrap_or_else(|| {
-            debug!("unknown rule: {}, fallback to direct", outbound_name);
-            mgr.get_outbound(PROXY_DIRECT).unwrap()
-        });
+        let handler = match mgr.get_outbound(outbound_name).await {
+            Some(h) => h,
+            None => {
+                debug!("unknown rule: {}, fallback to direct", outbound_name);
+                mgr.get_outbound(PROXY_DIRECT).await.unwrap()
+            }
+        };
 
         match handler
             .connect_stream(&sess, self.resolver.clone())
@@ -254,6 +259,17 @@ impl Dispatcher {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
 
+                // Canonicalize IPv4-mapped IPv6 destination addresses to plain
+                // IPv4 (e.g. SS2022 inbound on a dual-stack socket may produce
+                // ::ffff:x.x.x.x for an IPv4 target), then preserve the IP for
+                // family_hint_for_session before reverse_lookup may replace it
+                // with a domain name.  Without canonicalization, new_udp_socket
+                // picks AF_INET6 while bind_addr is 0.0.0.0, causing EINVAL.
+                if let crate::session::SocksAddr::Ip(addr) = &mut packet.dst_addr {
+                    *addr = addr.to_canonical();
+                    sess.resolved_ip = Some(addr.ip());
+                }
+
                 let dest = match reverse_lookup(&resolver, &packet.dst_addr).await {
                     Some(dest) => dest,
                     None => {
@@ -266,6 +282,7 @@ impl Dispatcher {
                 let orig_dest = packet.dst_addr.clone();
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = dest.clone();
+                sess.inbound_user = packet.inbound_user.clone();
 
                 // mutate packet for fake ip
                 // resolve is done in OutboundDatagramImpl so it's fine to have
@@ -288,14 +305,16 @@ impl Dispatcher {
                 let remote_receiver_w = remote_receiver_w.clone();
 
                 let mgr = outbound_manager.clone();
-                let handler =
-                    mgr.get_outbound(&outbound_name).unwrap_or_else(|| {
+                let handler = match mgr.get_outbound(&outbound_name).await {
+                    Some(h) => h,
+                    None => {
                         debug!(
                             "unknown rule: {}, fallback to direct",
                             outbound_name
                         );
-                        mgr.get_outbound(PROXY_DIRECT).unwrap()
-                    });
+                        mgr.get_outbound(PROXY_DIRECT).await.unwrap()
+                    }
+                };
 
                 let outbound_name =
                     if let Some(group) = handler.try_as_group_handler() {

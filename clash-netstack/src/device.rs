@@ -48,18 +48,19 @@ impl Device for NetstackDevice {
         &mut self,
         _timestamp: Instant,
     ) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-        if let (Ok(packet), Ok(permit)) =
-            (self.rx_queue.try_recv(), self.tx_sender.try_reserve())
-        {
-            let rx_token = RxTokenImpl { packet };
-            let tx_token = TxTokenImpl { tx_sender: permit };
-            self.iface_notifier
-                .send(IfaceEvent::DeviceReady)
-                .expect("Failed to notify iface event");
-            return Some((rx_token, tx_token));
-        }
+        // Reserve a tx slot FIRST before touching rx_queue.
+        // If we checked rx_queue first, a successful try_recv() would consume
+        // the inbound packet even when try_reserve() subsequently fails, silently
+        // dropping ACKs and preventing smoltcp from advancing its send window.
+        let permit = self.tx_sender.try_reserve().ok()?;
+        let packet = self.rx_queue.try_recv().ok()?;
 
-        None
+        let rx_token = RxTokenImpl { packet };
+        let tx_token = TxTokenImpl { tx_sender: permit };
+        self.iface_notifier
+            .send(IfaceEvent::DeviceReady)
+            .expect("Failed to notify iface event");
+        Some((rx_token, tx_token))
     }
 
     fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
@@ -71,6 +72,66 @@ impl Device for NetstackDevice {
 
     fn capabilities(&self) -> DeviceCapabilities {
         self.capabilities.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use smoltcp::phy::Device;
+
+    /// Reproduces the ACK-drop bug: when the outbound tx channel is full
+    /// (simulating a slow consumer), `receive()` calls `try_recv()`
+    /// unconditionally, consuming the inbound ACK from the queue, then
+    /// `try_reserve()` fails because the tx channel is at capacity → the ACK
+    /// is silently dropped.
+    ///
+    /// Without ACKs, smoltcp never advances its send window and the download
+    /// stalls.
+    #[tokio::test]
+    async fn test_receive_drops_inbound_packet_when_tx_channel_full() {
+        let (tx_sender, mut tx_receiver) = tokio::sync::mpsc::channel::<Packet>(1);
+        let (iface_notifier, _iface_rx) =
+            tokio::sync::mpsc::unbounded_channel::<IfaceEvent<'static>>();
+        let mut device = NetstackDevice::new(tx_sender, iface_notifier);
+        let injector = device.create_injector();
+
+        // Fill the tx channel to its capacity of 1
+        device
+            .tx_sender
+            .try_send(Packet::new(vec![0u8; 60]))
+            .expect("should fit in empty channel");
+        // tx channel: FULL (capacity = 1)
+
+        // Simulate an inbound ACK entering rx_queue
+        injector
+            .send(Packet::new(vec![0u8; 60]))
+            .expect("unbounded, should not fail");
+        // rx_queue: [ack_packet]
+
+        // Call receive() while tx is full.
+        // Due to the bug: try_recv() pops the ACK, then try_reserve() fails,
+        // and the ACK is dropped (never returned, never processed by smoltcp).
+        {
+            let result = device.receive(smoltcp::time::Instant::now());
+            assert!(
+                result.is_none(),
+                "receive() must return None when tx channel is full"
+            );
+        } // result dropped here — releasing the borrow on device
+
+        // Drain the tx channel to make space
+        tx_receiver.recv().await.expect("should have a packet");
+
+        // Now try to receive again — with the bug the ACK is gone forever.
+        // After the fix (check try_reserve first), the packet stays in rx_queue
+        // and receive() can process it once tx space is available.
+        let result2 = device.receive(smoltcp::time::Instant::now());
+        assert!(
+            result2.is_some(),
+            "BUG: inbound ACK was silently dropped when tx channel was full; \
+             smoltcp will never advance its send window → download stalls to 0"
+        );
     }
 }
 

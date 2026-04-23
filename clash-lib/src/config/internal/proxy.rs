@@ -58,6 +58,8 @@ pub enum OutboundProxyProtocol {
     Ss(OutboundShadowsocks),
     #[serde(rename = "socks5")]
     Socks5(OutboundSocks5),
+    #[serde(rename = "anytls")]
+    Anytls(OutboundAnytls),
     #[serde(rename = "trojan")]
     Trojan(OutboundTrojan),
     #[serde(rename = "vmess")]
@@ -81,6 +83,9 @@ pub enum OutboundProxyProtocol {
     #[serde(rename = "shadowquic")]
     #[cfg(feature = "shadowquic")]
     ShadowQuic(OutboundShadowQuic),
+    #[serde(rename = "tailscale")]
+    #[cfg(feature = "tailscale")]
+    Tailscale(OutboundTailscale),
 }
 
 impl OutboundProxyProtocol {
@@ -91,6 +96,7 @@ impl OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(ss) => &ss.common_opts.name,
             OutboundProxyProtocol::Socks5(socks5) => &socks5.common_opts.name,
+            OutboundProxyProtocol::Anytls(anytls) => &anytls.common_opts.name,
             OutboundProxyProtocol::Trojan(trojan) => &trojan.common_opts.name,
             OutboundProxyProtocol::Vmess(vmess) => &vmess.common_opts.name,
             OutboundProxyProtocol::Vless(vless) => &vless.common_opts.name,
@@ -107,6 +113,8 @@ impl OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(ssh) => &ssh.common_opts.name,
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(sq) => &sq.common_opts.name,
+            #[cfg(feature = "tailscale")]
+            OutboundProxyProtocol::Tailscale(ts) => &ts.name,
         }
     }
 }
@@ -133,6 +141,7 @@ impl Display for OutboundProxyProtocol {
             #[cfg(feature = "shadowsocks")]
             OutboundProxyProtocol::Ss(_) => write!(f, "Shadowsocks"),
             OutboundProxyProtocol::Socks5(_) => write!(f, "Socks5"),
+            OutboundProxyProtocol::Anytls(_) => write!(f, "AnyTLS"),
             OutboundProxyProtocol::Direct(_) => write!(f, "{PROXY_DIRECT}"),
             OutboundProxyProtocol::Reject(_) => write!(f, "{PROXY_REJECT}"),
             OutboundProxyProtocol::Trojan(_) => write!(f, "Trojan"),
@@ -149,6 +158,8 @@ impl Display for OutboundProxyProtocol {
             OutboundProxyProtocol::Ssh(_) => write!(f, "Ssh"),
             #[cfg(feature = "shadowquic")]
             OutboundProxyProtocol::ShadowQuic(_) => write!(f, "ShadowQUIC"),
+            #[cfg(feature = "tailscale")]
+            OutboundProxyProtocol::Tailscale(_) => write!(f, "Tailscale"),
         }
     }
 }
@@ -231,6 +242,35 @@ pub struct GrpcOpt {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
+pub struct RealityOpt {
+    pub public_key: String,
+    pub short_id: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundAnytls {
+    #[serde(flatten)]
+    pub common_opts: CommonConfigOptions,
+    pub password: String,
+    pub alpn: Option<Vec<String>>,
+    pub sni: Option<String>,
+    pub skip_cert_verify: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub fingerprint: Option<String>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub client_fingerprint: Option<String>,
+    pub udp: Option<bool>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub idle_session_check_interval: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub idle_session_timeout: Option<u64>,
+    /// Parsed for config compatibility; currently not applied by the runtime.
+    pub min_idle_session: Option<u64>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct OutboundTrojan {
     #[serde(flatten)]
     pub common_opts: CommonConfigOptions,
@@ -279,6 +319,9 @@ pub struct OutboundVless {
     pub ws_opts: Option<WsOpt>,
     pub h2_opts: Option<H2Opt>,
     pub grpc_opts: Option<GrpcOpt>,
+    pub reality_opts: Option<RealityOpt>,
+    pub flow: Option<String>,
+    pub client_fingerprint: Option<String>,
 }
 
 #[cfg(feature = "wireguard")]
@@ -371,6 +414,13 @@ pub struct OutboundShadowQuic {
     /// keep alive interval in milliseconds
     /// 0 means disable keep alive, should be smaller than 30_000(idle time)
     pub keep_alive_interval: Option<u32>,
+    /// Generalized Segmentation Offload for QUIC udp connection, default to
+    /// true.
+    pub gso: Option<bool>,
+    /// MTU discovery for QUIC connection, default to true. If false, will use
+    /// initial mtu as fixed mtu. This is useful for network with stable MTU
+    /// and high packet loss.
+    pub mtu_discovery: Option<bool>,
 }
 
 #[cfg(feature = "ssh")]
@@ -386,6 +436,20 @@ pub struct OutboundSsh {
     pub host_key: Option<Vec<String>>,
     pub host_key_algorithms: Option<Vec<String>>,
     pub totp_opt: Option<TotpOption>,
+}
+
+#[cfg(feature = "tailscale")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub struct OutboundTailscale {
+    pub name: String,
+    pub state_dir: Option<String>,
+    pub auth_key: Option<String>,
+    pub hostname: Option<String>,
+    pub control_url: Option<String>,
+    pub client_name: Option<String>,
+    #[serde(default)]
+    pub ephemeral: bool,
 }
 
 #[cfg(feature = "ssh")]
@@ -662,6 +726,57 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
     }
 }
 
+#[cfg(all(test, feature = "tailscale"))]
+mod tailscale_tests {
+    use super::{OutboundProxyProtocol, OutboundTailscale};
+    use serde_yaml::Value;
+    use std::collections::HashMap;
+
+    #[test]
+    fn parse_tailscale_outbound_proxy_protocol() {
+        let mapping = HashMap::from([
+            ("name".to_owned(), Value::String("ts-out".to_owned())),
+            ("type".to_owned(), Value::String("tailscale".to_owned())),
+            ("state-dir".to_owned(), Value::String("/tmp/ts".to_owned())),
+            (
+                "auth-key".to_owned(),
+                Value::String("tskey-auth-xxxx".to_owned()),
+            ),
+            ("hostname".to_owned(), Value::String("clash-rs".to_owned())),
+            (
+                "control-url".to_owned(),
+                Value::String("https://controlplane.tailscale.com".to_owned()),
+            ),
+            ("ephemeral".to_owned(), Value::Bool(true)),
+        ]);
+
+        let protocol = OutboundProxyProtocol::try_from(mapping)
+            .expect("tailscale proxy should parse");
+        let OutboundProxyProtocol::Tailscale(OutboundTailscale {
+            name,
+            state_dir,
+            auth_key,
+            hostname,
+            control_url,
+            client_name: _,
+            ephemeral,
+        }) = protocol
+        else {
+            panic!("expected tailscale variant")
+        };
+
+        assert_eq!(name, "ts-out");
+        assert_eq!(state_dir.as_deref(), Some("/tmp/ts"));
+        assert_eq!(auth_key.as_deref(), Some("tskey-auth-xxxx"));
+        assert_eq!(hostname.as_deref(), Some("clash-rs"));
+        assert_eq!(
+            control_url.as_deref(),
+            Some("https://controlplane.tailscale.com")
+        );
+        assert!(ephemeral);
+    }
+}
+
 #[cfg(all(test, feature = "wireguard"))]
 mod tests {
     use super::*;
@@ -728,5 +843,45 @@ mod tests {
         let config: OutboundWireguard = serde_yaml::from_str(yaml_no_psk)
             .expect("should parse without pre-shared-key");
         assert!(config.pre_shared_key.is_none());
+    }
+}
+
+#[cfg(test)]
+mod anytls_tests {
+    use super::{OutboundProxyProtocol, OutboundProxyProtocol::Anytls};
+
+    #[test]
+    fn test_anytls_deserialize() {
+        let yaml = r#"
+            name: anytls-test
+            type: anytls
+            server: example.com
+            port: 443
+            password: example-password
+            sni: sni.example.com
+            skip-cert-verify: true
+            udp: true
+            idle-session-check-interval: 30
+            idle-session-timeout: 300
+            min-idle-session: 2
+        "#;
+
+        let config: OutboundProxyProtocol =
+            serde_yaml::from_str(yaml).expect("should parse anytls");
+
+        let Anytls(config) = config else {
+            panic!("expected anytls config");
+        };
+
+        assert_eq!(config.common_opts.name, "anytls-test");
+        assert_eq!(config.common_opts.server, "example.com");
+        assert_eq!(config.common_opts.port, 443);
+        assert_eq!(config.password, "example-password");
+        assert_eq!(config.sni.as_deref(), Some("sni.example.com"));
+        assert_eq!(config.skip_cert_verify, Some(true));
+        assert_eq!(config.udp, Some(true));
+        assert_eq!(config.idle_session_check_interval, Some(30));
+        assert_eq!(config.idle_session_timeout, Some(300));
+        assert_eq!(config.min_idle_session, Some(2));
     }
 }

@@ -147,6 +147,23 @@ pub async fn new_udp_socket(
                 trace!(src = ?src, "udp socket bound: {socket:?}");
             }
             (None, None) => {
+                // On Windows, UDP sockets must be bound to get a valid local_addr
+                // which is required for some operations (e.g., quinn/QUIC)
+                #[cfg(target_os = "windows")]
+                {
+                    let bind_addr = match family {
+                        socket2::Domain::IPV4 => {
+                            "0.0.0.0:0".parse::<SocketAddr>().unwrap()
+                        }
+                        socket2::Domain::IPV6 => {
+                            "[::]:0".parse::<SocketAddr>().unwrap()
+                        }
+                        _ => "0.0.0.0:0".parse::<SocketAddr>().unwrap(),
+                    };
+                    socket.bind(&socket2::SockAddr::from(bind_addr))?;
+                    trace!(addr = ?bind_addr, "udp socket bound to default address on Windows: {socket:?}");
+                }
+                #[cfg(not(target_os = "windows"))]
                 trace!("udp socket not bound to any specific address: {socket:?}");
             }
         }

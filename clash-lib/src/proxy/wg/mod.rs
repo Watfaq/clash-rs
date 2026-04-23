@@ -1,7 +1,7 @@
 use self::{keys::KeyBytes, wireguard::Config};
 use super::{
     ConnectorType, DialWithConnector, HandlerCommonOptions, OutboundHandler,
-    OutboundType, utils::RemoteConnector,
+    OutboundType, PlainProxyAPIResponse, utils::RemoteConnector,
 };
 use crate::{
     Error,
@@ -17,10 +17,12 @@ use crate::{
     session::Session,
 };
 use async_trait::async_trait;
+use erased_serde::Serialize as ErasedSerialize;
 use futures::TryFutureExt;
 use ipnet::IpNet;
 use rand::seq::IndexedRandom;
 use std::{
+    collections::HashMap,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Arc,
@@ -152,14 +154,10 @@ impl Handler {
                         keepalive_seconds: Some(10),
                         allowed_ips,
                         reserved_bits: match &self.opts.reserved_bits {
-                            Some(bits) => {
-                                if bits.len() >= 3 {
-                                    [bits[0], bits[1], bits[2]]
-                                } else {
-                                    [0, 0, 0]
-                                }
+                            Some(bits) if bits.len() >= 3 => {
+                                [bits[0], bits[1], bits[2]]
                             }
-                            None => [0, 0, 0],
+                            _ => [0, 0, 0],
                         },
                     },
                     recv_pair.0,
@@ -227,6 +225,10 @@ impl Handler {
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
+    }
+
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
     }
 
     fn proto(&self) -> OutboundType {
@@ -304,6 +306,24 @@ impl OutboundHandler for Handler {
     async fn support_connector(&self) -> ConnectorType {
         ConnectorType::None
     }
+
+    fn try_as_plain_handler(&self) -> Option<&dyn PlainProxyAPIResponse> {
+        Some(self as _)
+    }
+}
+
+#[async_trait]
+impl PlainProxyAPIResponse for Handler {
+    async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
+        let mut m = HashMap::new();
+        m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
+        m.insert("port".to_owned(), Box::new(self.opts.port) as _);
+        m.insert(
+            "public-key".to_owned(),
+            Box::new(self.opts.public_key.clone()) as _,
+        );
+        m
+    }
 }
 
 #[cfg(all(test, docker_test))]
@@ -317,12 +337,13 @@ mod tests {
         },
     };
 
-    use super::super::utils::test_utils::{
-        consts::*, docker_runner::DockerTestRunner,
+    use super::{
+        super::utils::test_utils::{consts::*, docker_runner::DockerTestRunner},
+        *,
     };
-    use crate::proxy::utils::test_utils::run_test_suites_and_cleanup;
-
-    use super::*;
+    use crate::{
+        proxy::utils::test_utils::run_test_suites_and_cleanup, tests::initialize,
+    };
 
     // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
     // we shouldn't run the wireguard server with host mode, or
@@ -356,10 +377,14 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn test_wg() -> anyhow::Result<()> {
+        initialize();
+
+        let runner = get_runner().await?;
+
         let opts = HandlerOptions {
             name: "wg".to_owned(),
             common_opts: Default::default(),
-            server: "127.0.0.1".to_owned(),
+            server: runner.container_ip().unwrap_or("127.0.0.1".to_owned()),
             port: 10002,
             ip: Ipv4Addr::new(10, 13, 13, 2),
             ipv6: None,
@@ -384,7 +409,7 @@ mod tests {
         // on bridge network mode and the `net.ipv4.conf.all.
         // src_valid_mark` is not supported in the host network mode the
         // latency test should be enough
-        let runner = get_runner().await?;
+
         // FIXME: wait for the startup of the test runner in a more elegant way
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         run_test_suites_and_cleanup(

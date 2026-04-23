@@ -21,8 +21,70 @@ pub fn wait_port_ready(port: u16) -> Result<(), clash_lib::Error> {
     }
     Err(clash_lib::Error::Io(std::io::Error::new(
         std::io::ErrorKind::TimedOut,
-        format!("Port {} is not ready after 10 attempts", port),
+        format!("Port {} is not ready after 30 attempts", port),
     )))
+}
+
+#[allow(dead_code)]
+fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
+    let addr = format!("127.0.0.1:{}", port);
+    let mut attempts = 0;
+    while attempts < 30 {
+        if TcpStream::connect(&addr).is_err() {
+            return Ok(());
+        }
+        attempts += 1;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    Err(clash_lib::Error::Io(std::io::Error::new(
+        std::io::ErrorKind::TimedOut,
+        format!("Port {} is still open after 15 seconds", port),
+    )))
+}
+
+/// RAII guard for Clash instance that ensures proper cleanup
+#[allow(dead_code)]
+pub struct ClashInstance {
+    ports: Vec<u16>,
+}
+
+impl ClashInstance {
+    #[allow(dead_code)]
+    pub fn start(
+        options: clash_lib::Options,
+        ports: Vec<u16>,
+    ) -> Result<Self, clash_lib::Error> {
+        std::thread::spawn(move || {
+            start_clash(options).expect("Failed to start clash");
+        });
+
+        // Wait for the main port (usually API port) to be ready
+        if let Some(&main_port) = ports.first() {
+            wait_port_ready(main_port)?;
+        }
+
+        Ok(Self { ports })
+    }
+}
+
+impl Drop for ClashInstance {
+    fn drop(&mut self) {
+        // Trigger shutdown
+        clash_lib::shutdown();
+
+        // Wait for all ports to be released
+        for &port in &self.ports {
+            if let Err(e) = wait_port_closed(port) {
+                eprintln!(
+                    "Warning: Failed to wait for port {} to close: {}",
+                    port, e
+                );
+            }
+        }
+
+        // Give a bit more time for full cleanup
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
 }
 
 /// Sends an HTTP request to the specified URL using a TCP connection.
@@ -47,10 +109,7 @@ where
     let io = TokioIo::new(stream);
     let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
         .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to establish connection: {}", e),
-            )
+            std::io::Error::other(format!("Failed to establish connection: {}", e))
         })
         .await?;
 
@@ -62,12 +121,7 @@ where
 
     let res = sender
         .send_request(req)
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to send request: {}", e),
-            )
-        })
+        .map_err(|e| std::io::Error::other(format!("Failed to send request: {}", e)))
         .await?;
 
     Ok(res)

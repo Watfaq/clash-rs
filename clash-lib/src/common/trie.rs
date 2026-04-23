@@ -75,7 +75,7 @@ impl<T> StringTrie<T> {
             p if p == COMPLEX_WILDCARD => {
                 self.insert_inner(&parts[1..], data.clone());
                 parts[0] = DOT_WILDCARD;
-                self.insert_inner(&parts, data.clone());
+                self.insert_inner(&parts, data);
             }
             _ => self.insert_inner(&parts, data),
         }

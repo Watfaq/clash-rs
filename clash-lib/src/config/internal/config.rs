@@ -22,7 +22,10 @@ use std::{
     str::FromStr,
 };
 
-use super::{listener::InboundOpts, proxy::OutboundProxyProviderDef};
+use super::{
+    listener::{InboundOpts, InboundProviderDef},
+    proxy::OutboundProxyProviderDef,
+};
 
 pub struct Config {
     pub general: General,
@@ -39,6 +42,7 @@ pub struct Config {
     pub proxy_groups: HashMap<String, OutboundProxy>,
     pub proxy_providers: HashMap<String, OutboundProxyProviderDef>,
     pub listeners: HashSet<InboundOpts>,
+    pub inbound_providers: HashMap<String, InboundProviderDef>,
 }
 
 impl Config {
@@ -82,7 +86,7 @@ pub struct Profile {
     // store_fake_ip: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TunConfig {
     pub enable: bool,
     pub device_id: String,
@@ -172,6 +176,7 @@ pub struct Controller {
     pub external_controller: Option<String>,
     pub external_controller_ipc: Option<String>,
     pub external_ui: Option<String>,
+    pub external_ui_download_url: Option<String>,
     pub secret: Option<String>,
     pub cors_allow_origins: Option<Vec<String>>,
 }
