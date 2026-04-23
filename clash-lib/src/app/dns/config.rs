@@ -59,7 +59,7 @@ pub struct Config {
     pub listen: DNSListenAddr,
     pub enhance_mode: DNSMode,
     pub default_nameserver: Vec<NameServer>,
-    pub proxy_server_nameserver: Vec<NameServer>,
+    pub proxy_server_nameserver: Option<Vec<NameServer>>,
     pub fake_ip_range: ipnet::IpNet,
     pub fake_ip_filter: Vec<String>,
     pub store_fake_ip: bool,
@@ -323,9 +323,9 @@ impl TryFrom<&crate::config::def::Config> for Config {
                     )));
                 }
             }
-            ns
+            Some(ns)
         } else {
-            default_nameserver.clone()
+            None
         };
 
         let edns_client_subnet = dc

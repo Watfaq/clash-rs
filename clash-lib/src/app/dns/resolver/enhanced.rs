@@ -2,7 +2,7 @@ use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
     common::trie,
-    config::def::DNSMode,
+    config::{def::DNSMode, internal::proxy::OutboundProxyProtocol},
     dns::{
         ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
         fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
@@ -105,7 +105,7 @@ impl EnhancedResolver {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
 
         // Build proxy server domains trie for proxy-server-nameserver resolution
-        let proxy_server_domains_trie = if !cfg.proxy_server_nameserver.is_empty()
+        let proxy_server_domains_trie = if cfg.proxy_server_nameserver.is_some()
             && !proxy_server_domains.is_empty()
         {
             let mut domains = trie::StringTrie::new();
@@ -143,12 +143,12 @@ impl EnhancedResolver {
             reverse_lookup_cache: None,
         });
 
-        let proxy_resolver = if !cfg.proxy_server_nameserver.is_empty() {
+        let proxy_resolver = if cfg.proxy_server_nameserver.is_some() {
             Some(Arc::new(EnhancedResolver {
                 ipv6: AtomicBool::new(false),
                 hosts: None,
                 main: make_clients(
-                    cfg.proxy_server_nameserver.clone(),
+                    cfg.proxy_server_nameserver.clone().unwrap_or_default(),
                     None,
                     Arc::new(RwLock::new(std::collections::HashMap::new())),
                     edns_client_subnet.clone(),
@@ -748,6 +748,55 @@ impl ClashResolver for EnhancedResolver {
     }
 }
 
+impl EnhancedResolver {
+    pub fn extract_proxy_server_domains(
+        outbounds: &[&OutboundProxyProtocol],
+    ) -> Vec<String> {
+        outbounds
+            .iter()
+            .filter_map(|outbound| match outbound {
+                OutboundProxyProtocol::Direct(_) => None,
+                OutboundProxyProtocol::Reject(_) => None,
+                #[cfg(feature = "shadowsocks")]
+                OutboundProxyProtocol::Ss(s) => Some(s.common_opts.server.clone()),
+                OutboundProxyProtocol::Socks5(s) => {
+                    Some(s.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Vmess(v) => {
+                    Some(v.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Vless(v) => {
+                    Some(v.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Trojan(t) => {
+                    Some(t.common_opts.server.clone())
+                }
+                OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
+                OutboundProxyProtocol::Anytls(a) => Some(a.common_opts.server.clone()),
+                #[cfg(feature = "wireguard")]
+                OutboundProxyProtocol::Wireguard(wg) => {
+                    Some(wg.common_opts.server.clone())
+                }
+                #[cfg(feature = "ssh")]
+                OutboundProxyProtocol::Ssh(ssh) => {
+                    Some(ssh.common_opts.server.clone())
+                }
+                #[cfg(feature = "onion")]
+                OutboundProxyProtocol::Tor(_) => None,
+                #[cfg(feature = "tuic")]
+                OutboundProxyProtocol::Tuic(tuic) => {
+                    Some(tuic.common_opts.server.clone())
+                }
+                #[cfg(feature = "shadowquic")]
+                OutboundProxyProtocol::ShadowQuic(sq) => {
+                    Some(sq.common_opts.server.clone())
+                }
+            })
+            .filter(|s| s.parse::<std::net::IpAddr>().is_err())
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -766,6 +815,7 @@ mod tests {
             resolver::enhanced::EnhancedResolver,
             runtime::DnsRuntimeProvider,
         },
+        config::internal::proxy::OutboundProxyProtocol,
         proxy,
     };
 
@@ -1030,12 +1080,12 @@ mod tests {
         config.ipv6 = false;
 
         // Set up proxy server nameserver
-        config.proxy_server_nameserver = vec![NameServer {
+        config.proxy_server_nameserver = Some(vec![NameServer {
             net: DNSNetMode::Udp,
             address: "8.8.8.8:53".to_string(),
             interface: None,
             proxy: None,
-        }];
+        }]);
 
         config.default_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
@@ -1098,7 +1148,7 @@ mod tests {
         config.ipv6 = false;
 
         // No proxy server nameserver configured
-        config.proxy_server_nameserver = vec![];
+        config.proxy_server_nameserver = None;
 
         config.default_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
@@ -1128,5 +1178,107 @@ mod tests {
         // Should not have proxy_resolver when proxy_server_nameserver is empty
         assert!(resolver.proxy_resolver.is_none());
         assert!(resolver.proxy_server_domains.is_none());
+    }
+
+    #[test]
+    fn test_extract_proxy_server_domains() {
+        use crate::config::internal::proxy::{
+            CommonConfigOptions, OutboundSocks5, OutboundTrojan, OutboundVmess,
+        };
+
+        let vmess = OutboundProxyProtocol::Vmess(OutboundVmess {
+            common_opts: CommonConfigOptions {
+                name: "vmess-proxy".to_string(),
+                server: "proxy.example.com".to_string(),
+                port: 443,
+                connect_via: None,
+            },
+            uuid: "test-uuid".to_string(),
+            alter_id: 0,
+            cipher: None,
+            udp: None,
+            tls: None,
+            skip_cert_verify: None,
+            server_name: None,
+            network: None,
+            ws_opts: None,
+            h2_opts: None,
+            grpc_opts: None,
+        });
+
+        let socks5 = OutboundProxyProtocol::Socks5(OutboundSocks5 {
+            common_opts: CommonConfigOptions {
+                name: "socks5-proxy".to_string(),
+                server: "socks.example.com".to_string(),
+                port: 1080,
+                connect_via: None,
+            },
+            username: None,
+            password: None,
+            tls: false,
+            sni: None,
+            skip_cert_verify: false,
+            udp: true,
+        });
+
+        let trojan_ip = OutboundProxyProtocol::Trojan(OutboundTrojan {
+            common_opts: CommonConfigOptions {
+                name: "trojan-ip".to_string(),
+                server: "1.2.3.4".to_string(), // IP address
+                port: 443,
+                connect_via: None,
+            },
+            password: "password".to_string(),
+            alpn: None,
+            sni: None,
+            skip_cert_verify: None,
+            udp: None,
+            network: None,
+            grpc_opts: None,
+            ws_opts: None,
+        });
+
+        let proxies = vec![&vmess, &socks5, &trojan_ip];
+        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
+
+        // Should only contain domain names, not IP addresses
+        assert_eq!(domains.len(), 2);
+        assert!(domains.contains(&"proxy.example.com".to_string()));
+        assert!(domains.contains(&"socks.example.com".to_string()));
+        assert!(!domains.contains(&"1.2.3.4".to_string()));
+    }
+
+    #[test]
+    fn test_extract_proxy_server_domains_empty() {
+        use crate::config::internal::proxy::OutboundProxyProtocol;
+        let proxies: Vec<&OutboundProxyProtocol> = vec![];
+        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
+        assert!(domains.is_empty());
+    }
+
+    #[test]
+    fn test_extract_proxy_server_domains_only_ips() {
+        use crate::config::internal::proxy::{CommonConfigOptions, OutboundSocks5};
+
+        let socks5_ip = OutboundProxyProtocol::Socks5(OutboundSocks5 {
+            common_opts: CommonConfigOptions {
+                name: "socks5-ip".to_string(),
+                server: "127.0.0.1".to_string(),
+                port: 1080,
+                connect_via: None,
+            },
+            username: None,
+            password: None,
+            tls: false,
+            sni: None,
+            skip_cert_verify: false,
+            udp: true,
+        });
+
+        let proxies = vec![&socks5_ip];
+        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
+
+        // Should be empty since only IP addresses
+        assert!(domains.is_empty());
     }
 }
