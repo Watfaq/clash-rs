@@ -147,8 +147,8 @@ impl EnhancedResolver {
         // Build proxy server domains trie for proxy-server-nameserver resolution.
         // This happens before the OutboundManager is fully initialized, so we can
         // only extract domains from plain outbounds.
-        let plain_outobunds = outbounds.read().await;
-        let proxy_server_domains = plain_outobunds
+        let plain_outbounds = outbounds.read().await;
+        let proxy_server_domains = plain_outbounds
             .values()
             .filter_map(|x| x.server_name())
             .collect::<Vec<_>>();
