@@ -140,20 +140,35 @@ async fn get_proxy_delay(
 
     let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
         let latency_test_url = group.get_latency_test_url();
-        
-        let proxies = match group.get_active_proxy().await {
-            Some(v) => vec![v],
-            None => group.get_proxies().await,
-        };
-        
+
+        let proxies = group.get_proxies().await;
+        let active_proxy = group.get_active_proxy().await;
+        let active_idx = active_proxy.as_ref().and_then(|active| {
+            proxies.iter().position(|p| p.name() == active.name())
+        });
+
         let results = outbound_manager
             .url_test(
-                &proxies,
+                &[vec![proxy], proxies].concat(),
                 &latency_test_url.unwrap_or(q.url),
                 timeout,
             )
             .await;
-        match results.first().unwrap() {
+
+        // if found active proxy, return the latency of the active proxy, otherwise
+        // return the latency of the first proxy (which is usually the main proxy in
+        // the group).
+        let result = if let Some(idx) = active_idx {
+            results
+                .get(idx + 1)
+                .expect("active proxy index must be within the range of proxies")
+        } else {
+            results
+                .first()
+                .expect("there must be at least one proxy in the group")
+        };
+
+        match result {
             Ok(latency) => *latency,
             Err(err) => {
                 return (
@@ -168,7 +183,7 @@ async fn get_proxy_delay(
         let result = outbound_manager
             .url_test(&vec![proxy], &q.url, timeout)
             .await;
-        match result.first().unwrap() {
+        match result.first().expect("there must be at least one proxy") {
             Ok(latency) => *latency,
             Err(err) => {
                 return (
