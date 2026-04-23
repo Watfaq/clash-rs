@@ -758,7 +758,6 @@ mod tests {
             resolver::enhanced::EnhancedResolver,
             runtime::DnsRuntimeProvider,
         },
-        config::internal::proxy::OutboundProxyProtocol,
         proxy,
     };
 
@@ -983,23 +982,6 @@ mod tests {
         Arc::new(proxy::direct::Handler::new("default_direct"))
     }
 
-    #[test]
-    fn test_proxy_server_domains_trie() {
-        use crate::common::trie::StringTrie;
-
-        let mut domains = StringTrie::new();
-        domains.insert("proxy.example.com", Arc::new(true));
-        domains.insert("vpn.example.net", Arc::new(true));
-
-        // Should match exact domains
-        assert!(domains.search("proxy.example.com").is_some());
-        assert!(domains.search("vpn.example.net").is_some());
-
-        // Should not match non-existent domains
-        assert!(domains.search("other.example.com").is_none());
-        assert!(domains.search("example.com").is_none());
-    }
-
     #[tokio::test]
     async fn test_proxy_server_nameserver_initialization() {
         use crate::app::{
@@ -1047,11 +1029,6 @@ mod tests {
             proxy: None,
         }];
 
-        let proxy_domains = vec![
-            "proxy.example.com".to_string(),
-            "vpn.example.net".to_string(),
-        ];
-
         let resolver = EnhancedResolver::new(
             config,
             cache_store,
@@ -1060,14 +1037,10 @@ mod tests {
         )
         .await;
 
-        // Should have proxy_resolver initialized
+        // proxy_resolver is set from config; proxy_server_domains is None because
+        // no outbound handlers are registered (domains come from server_name()).
         assert!(resolver.proxy_resolver.is_some());
-        assert!(resolver.proxy_server_domains.is_some());
-
-        // Check proxy domains are registered
-        let domains = resolver.proxy_server_domains.as_ref().unwrap();
-        assert!(domains.search("proxy.example.com").is_some());
-        assert!(domains.search("vpn.example.net").is_some());
+        assert!(resolver.proxy_server_domains.is_none());
     }
 
     #[tokio::test]
@@ -1122,107 +1095,5 @@ mod tests {
         // Should not have proxy_resolver when proxy_server_nameserver is empty
         assert!(resolver.proxy_resolver.is_none());
         assert!(resolver.proxy_server_domains.is_none());
-    }
-
-    #[test]
-    fn test_extract_proxy_server_domains() {
-        use crate::config::internal::proxy::{
-            CommonConfigOptions, OutboundSocks5, OutboundTrojan, OutboundVmess,
-        };
-
-        let vmess = OutboundProxyProtocol::Vmess(OutboundVmess {
-            common_opts: CommonConfigOptions {
-                name: "vmess-proxy".to_string(),
-                server: "proxy.example.com".to_string(),
-                port: 443,
-                connect_via: None,
-            },
-            uuid: "test-uuid".to_string(),
-            alter_id: 0,
-            cipher: None,
-            udp: None,
-            tls: None,
-            skip_cert_verify: None,
-            server_name: None,
-            network: None,
-            ws_opts: None,
-            h2_opts: None,
-            grpc_opts: None,
-        });
-
-        let socks5 = OutboundProxyProtocol::Socks5(OutboundSocks5 {
-            common_opts: CommonConfigOptions {
-                name: "socks5-proxy".to_string(),
-                server: "socks.example.com".to_string(),
-                port: 1080,
-                connect_via: None,
-            },
-            username: None,
-            password: None,
-            tls: false,
-            sni: None,
-            skip_cert_verify: false,
-            udp: true,
-        });
-
-        let trojan_ip = OutboundProxyProtocol::Trojan(OutboundTrojan {
-            common_opts: CommonConfigOptions {
-                name: "trojan-ip".to_string(),
-                server: "1.2.3.4".to_string(), // IP address
-                port: 443,
-                connect_via: None,
-            },
-            password: "password".to_string(),
-            alpn: None,
-            sni: None,
-            skip_cert_verify: None,
-            udp: None,
-            network: None,
-            grpc_opts: None,
-            ws_opts: None,
-        });
-
-        let proxies = vec![&vmess, &socks5, &trojan_ip];
-        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
-
-        // Should only contain domain names, not IP addresses
-        assert_eq!(domains.len(), 2);
-        assert!(domains.contains(&"proxy.example.com".to_string()));
-        assert!(domains.contains(&"socks.example.com".to_string()));
-        assert!(!domains.contains(&"1.2.3.4".to_string()));
-    }
-
-    #[test]
-    fn test_extract_proxy_server_domains_empty() {
-        use crate::config::internal::proxy::OutboundProxyProtocol;
-        let proxies: Vec<&OutboundProxyProtocol> = vec![];
-        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
-        assert!(domains.is_empty());
-    }
-
-    #[test]
-    fn test_extract_proxy_server_domains_only_ips() {
-        use crate::config::internal::proxy::{CommonConfigOptions, OutboundSocks5};
-
-        let socks5_ip = OutboundProxyProtocol::Socks5(OutboundSocks5 {
-            common_opts: CommonConfigOptions {
-                name: "socks5-ip".to_string(),
-                server: "127.0.0.1".to_string(),
-                port: 1080,
-                connect_via: None,
-            },
-            username: None,
-            password: None,
-            tls: false,
-            sni: None,
-            skip_cert_verify: false,
-            udp: true,
-        });
-
-        let proxies = vec![&socks5_ip];
-        let domains = EnhancedResolver::extract_proxy_server_domains(&proxies);
-
-        // Should be empty since only IP addresses
-        assert!(domains.is_empty());
     }
 }

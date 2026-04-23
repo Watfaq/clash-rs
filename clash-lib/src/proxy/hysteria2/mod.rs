@@ -369,6 +369,10 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        self.opts.addr.domain()
+    }
+
     fn proto(&self) -> OutboundType {
         OutboundType::Hysteria2
     }
