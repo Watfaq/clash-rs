@@ -42,7 +42,7 @@ pub struct EnhancedResolver {
     lru_cache: Option<Arc<RwLock<hickory_resolver::dns_lru::DnsLru>>>,
     policy: Option<trie::StringTrie<Vec<ThreadSafeDNSClient>>>,
 
-    proxy_resolver: Option<Arc<EnhancedResolver>>,
+    proxy_resolver: Option<Vec<ThreadSafeDNSClient>>,
     proxy_server_domains: Option<trie::StringTrie<bool>>,
 
     fake_dns: Option<ThreadSafeFakeDns>,
@@ -104,20 +104,6 @@ impl EnhancedResolver {
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
 
-        // Build proxy server domains trie for proxy-server-nameserver resolution
-        let proxy_server_domains_trie = if cfg.proxy_server_nameserver.is_some()
-            && !proxy_server_domains.is_empty()
-        {
-            let mut domains = trie::StringTrie::new();
-            for server in proxy_server_domains {
-                domains.insert(server.as_str(), Arc::new(true));
-                debug!("added proxy server domain: {}", server);
-            }
-            Some(domains)
-        } else {
-            None
-        };
-
         let default_resolver = Arc::new(EnhancedResolver {
             ipv6: AtomicBool::new(false),
             hosts: None,
@@ -143,34 +129,34 @@ impl EnhancedResolver {
             reverse_lookup_cache: None,
         });
 
-        let proxy_resolver = if cfg.proxy_server_nameserver.is_some() {
-            Some(Arc::new(EnhancedResolver {
-                ipv6: AtomicBool::new(false),
-                hosts: None,
-                main: make_clients(
-                    cfg.proxy_server_nameserver.clone().unwrap_or_default(),
-                    None,
-                    Arc::new(RwLock::new(std::collections::HashMap::new())),
-                    edns_client_subnet.clone(),
-                    cfg.fw_mark,
+        let proxy_resolver =
+            if let Some(proxy_resolver) = cfg.proxy_server_nameserver {
+                Some(
+                    make_clients(
+                        proxy_resolver,
+                        None,
+                        Arc::new(RwLock::new(std::collections::HashMap::new())),
+                        edns_client_subnet.clone(),
+                        cfg.fw_mark,
+                    )
+                    .await,
                 )
-                .await,
-                fallback: None,
-                fallback_domain_filters: None,
-                fallback_ip_filters: None,
-                lru_cache: None,
-                policy: None,
+            } else {
+                None
+            };
 
-                proxy_resolver: None,
-                proxy_server_domains: None,
-
-                fake_dns: None,
-
-                reverse_lookup_cache: None,
-            }))
-        } else {
-            None
-        };
+        // Build proxy server domains trie for proxy-server-nameserver resolution
+        let proxy_server_domains_trie =
+            if proxy_resolver.is_some() && !proxy_server_domains.is_empty() {
+                let mut domains = trie::StringTrie::new();
+                for server in proxy_server_domains {
+                    domains.insert(server.as_str(), Arc::new(true));
+                    debug!("added proxy server domain: {}", server);
+                }
+                Some(domains)
+            } else {
+                None
+            };
 
         Self {
             ipv6: AtomicBool::new(cfg.ipv6),
@@ -473,8 +459,7 @@ impl EnhancedResolver {
                 "using proxy-server-nameserver for proxy server domain: {}",
                 domain
             );
-            return EnhancedResolver::batch_exchange(&proxy_resolver.main, message)
-                .await;
+            return EnhancedResolver::batch_exchange(proxy_resolver, message).await;
         }
 
         if let Some(matched) = self.match_policy(message) {
@@ -772,7 +757,9 @@ impl EnhancedResolver {
                     Some(t.common_opts.server.clone())
                 }
                 OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
-                OutboundProxyProtocol::Anytls(a) => Some(a.common_opts.server.clone()),
+                OutboundProxyProtocol::Anytls(a) => {
+                    Some(a.common_opts.server.clone())
+                }
                 #[cfg(feature = "wireguard")]
                 OutboundProxyProtocol::Wireguard(wg) => {
                     Some(wg.common_opts.server.clone())
@@ -791,6 +778,8 @@ impl EnhancedResolver {
                 OutboundProxyProtocol::ShadowQuic(sq) => {
                     Some(sq.common_opts.server.clone())
                 }
+                #[cfg(feature = "tailscale")]
+                OutboundProxyProtocol::Tailscale(_) => None,
             })
             .filter(|s| s.parse::<std::net::IpAddr>().is_err())
             .collect()
@@ -1082,21 +1071,24 @@ mod tests {
         // Set up proxy server nameserver
         config.proxy_server_nameserver = Some(vec![NameServer {
             net: DNSNetMode::Udp,
-            address: "8.8.8.8:53".to_string(),
+            host: url::Host::Ipv4("8.8.8.8".parse().unwrap()),
+            port: 53,
             interface: None,
             proxy: None,
         }]);
 
         config.default_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
-            address: "114.114.114.114:53".to_string(),
+            host: url::Host::Ipv4("114.114.114.114".parse().unwrap()),
+            port: 53,
             interface: None,
             proxy: None,
         }];
 
         config.nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
-            address: "223.5.5.5:53".to_string(),
+            host: url::Host::Ipv4("223.5.5.5".parse().unwrap()),
+            port: 53,
             interface: None,
             proxy: None,
         }];
@@ -1110,7 +1102,7 @@ mod tests {
             config,
             cache_store,
             None,
-            HashMap::new(),
+            Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             proxy_domains,
         )
         .await;
@@ -1152,14 +1144,16 @@ mod tests {
 
         config.default_nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
-            address: "114.114.114.114:53".to_string(),
+            host: url::Host::Ipv4("114.114.114.114".parse().unwrap()),
+            port: 53,
             interface: None,
             proxy: None,
         }];
 
         config.nameserver = vec![NameServer {
             net: DNSNetMode::Udp,
-            address: "223.5.5.5:53".to_string(),
+            host: url::Host::Ipv4("223.5.5.5".parse().unwrap()),
+            port: 53,
             interface: None,
             proxy: None,
         }];
@@ -1170,7 +1164,7 @@ mod tests {
             config,
             cache_store,
             None,
-            HashMap::new(),
+            Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             proxy_domains,
         )
         .await;
