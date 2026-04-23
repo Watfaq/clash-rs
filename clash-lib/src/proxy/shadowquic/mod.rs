@@ -142,6 +142,10 @@ impl OutboundHandler for Handler {
         &self.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.addr)
+    }
+
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
     fn proto(&self) -> OutboundType {

@@ -2,7 +2,7 @@ use crate::{
     Error,
     app::{dns::helper::build_dns_response_message, profile::ThreadSafeCacheFile},
     common::trie,
-    config::{def::DNSMode, internal::proxy::OutboundProxyProtocol},
+    config::def::DNSMode,
     dns::{
         ClashResolver, Config, ResolverKind, ThreadSafeDNSClient,
         fakeip::{self, FileStore, InMemStore, ThreadSafeFakeDns},
@@ -100,7 +100,6 @@ impl EnhancedResolver {
         store: ThreadSafeCacheFile,
         mmdb: Option<PendingMmdb>,
         outbounds: crate::proxy::utils::OutboundHandlerRegistry,
-        proxy_server_domains: Vec<String>,
     ) -> Self {
         let edns_client_subnet = cfg.edns_client_subnet.clone();
 
@@ -145,12 +144,20 @@ impl EnhancedResolver {
                 None
             };
 
-        // Build proxy server domains trie for proxy-server-nameserver resolution
+        // Build proxy server domains trie for proxy-server-nameserver resolution.
+        // This happens before the OutboundManager is fully initialized, so we can only extract domains
+        // from plain outbounds.
+        let plain_outobunds = outbounds.read().await;
+        let proxy_server_domains = plain_outobunds
+            .values()
+            .filter_map(|x| x.server_name())
+            .collect::<Vec<_>>();
+
         let proxy_server_domains_trie =
             if proxy_resolver.is_some() && !proxy_server_domains.is_empty() {
                 let mut domains = trie::StringTrie::new();
                 for server in proxy_server_domains {
-                    domains.insert(server.as_str(), Arc::new(true));
+                    domains.insert(server, Arc::new(true));
                     debug!("added proxy server domain: {}", server);
                 }
                 Some(domains)
@@ -733,59 +740,6 @@ impl ClashResolver for EnhancedResolver {
     }
 }
 
-impl EnhancedResolver {
-    pub fn extract_proxy_server_domains(
-        outbounds: &[&OutboundProxyProtocol],
-    ) -> Vec<String> {
-        outbounds
-            .iter()
-            .filter_map(|outbound| match outbound {
-                OutboundProxyProtocol::Direct(_) => None,
-                OutboundProxyProtocol::Reject(_) => None,
-                #[cfg(feature = "shadowsocks")]
-                OutboundProxyProtocol::Ss(s) => Some(s.common_opts.server.clone()),
-                OutboundProxyProtocol::Socks5(s) => {
-                    Some(s.common_opts.server.clone())
-                }
-                OutboundProxyProtocol::Vmess(v) => {
-                    Some(v.common_opts.server.clone())
-                }
-                OutboundProxyProtocol::Vless(v) => {
-                    Some(v.common_opts.server.clone())
-                }
-                OutboundProxyProtocol::Trojan(t) => {
-                    Some(t.common_opts.server.clone())
-                }
-                OutboundProxyProtocol::Hysteria2(h) => Some(h.server.clone()),
-                OutboundProxyProtocol::Anytls(a) => {
-                    Some(a.common_opts.server.clone())
-                }
-                #[cfg(feature = "wireguard")]
-                OutboundProxyProtocol::Wireguard(wg) => {
-                    Some(wg.common_opts.server.clone())
-                }
-                #[cfg(feature = "ssh")]
-                OutboundProxyProtocol::Ssh(ssh) => {
-                    Some(ssh.common_opts.server.clone())
-                }
-                #[cfg(feature = "onion")]
-                OutboundProxyProtocol::Tor(_) => None,
-                #[cfg(feature = "tuic")]
-                OutboundProxyProtocol::Tuic(tuic) => {
-                    Some(tuic.common_opts.server.clone())
-                }
-                #[cfg(feature = "shadowquic")]
-                OutboundProxyProtocol::ShadowQuic(sq) => {
-                    Some(sq.common_opts.server.clone())
-                }
-                #[cfg(feature = "tailscale")]
-                OutboundProxyProtocol::Tailscale(_) => None,
-            })
-            .filter(|s| s.parse::<std::net::IpAddr>().is_err())
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -1103,7 +1057,6 @@ mod tests {
             cache_store,
             None,
             Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            proxy_domains,
         )
         .await;
 
@@ -1158,14 +1111,11 @@ mod tests {
             proxy: None,
         }];
 
-        let proxy_domains = vec!["proxy.example.com".to_string()];
-
         let resolver = EnhancedResolver::new(
             config,
             cache_store,
             None,
             Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            proxy_domains,
         )
         .await;
 

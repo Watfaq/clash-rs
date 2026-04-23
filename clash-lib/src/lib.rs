@@ -30,7 +30,7 @@ use crate::{
     config::{
         InternalConfig,
         def::{self, LogLevel},
-        internal::proxy::{OutboundProxy, OutboundProxyProtocol},
+        internal::proxy::OutboundProxy,
     },
     runner::Runner,
 };
@@ -382,19 +382,6 @@ async fn create_components(
 
     debug!("initializing bootstrap outbounds");
 
-    // Extract proxy server domains for proxy-server-nameserver resolution before
-    // consuming config.proxies
-    let proxy_protocols: Vec<&OutboundProxyProtocol> = config
-        .proxies
-        .values()
-        .filter_map(|x| match x {
-            OutboundProxy::ProxyServer(s) => Some(s),
-            _ => None,
-        })
-        .collect();
-    let proxy_server_domains =
-        dns::EnhancedResolver::extract_proxy_server_domains(&proxy_protocols);
-
     let plain_outbounds = OutboundManager::load_plain_outbounds(
         config
             .proxies
@@ -410,13 +397,12 @@ async fn create_components(
     // After OutboundManager is initialized it will be extended with all
     // handlers (plain + proxy groups + provider proxies), so DNS clients
     // and the HTTP client can use any of them for bootstrap traffic.
-    let outbound_registry: crate::proxy::utils::OutboundHandlerRegistry =
-        Arc::new(tokio::sync::RwLock::new(
-            plain_outbounds
-                .iter()
-                .map(|x| (x.name().to_string(), x.clone()))
-                .collect(),
-        ));
+    let outbound_registry = Arc::new(tokio::sync::RwLock::new(
+        plain_outbounds
+            .iter()
+            .map(|x| (x.name().to_string(), x.clone()))
+            .collect(),
+    ));
 
     let client =
         new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))
@@ -461,7 +447,6 @@ async fn create_components(
         Some(cache_store.clone()),
         pending_country_mmdb.clone(),
         outbound_registry.clone(),
-        proxy_server_domains,
     )
     .await;
 

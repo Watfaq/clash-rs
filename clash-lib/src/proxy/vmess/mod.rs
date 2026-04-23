@@ -97,6 +97,10 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
+    }
+
     /// The protocol of the outbound handler
     fn proto(&self) -> OutboundType {
         OutboundType::Vmess
