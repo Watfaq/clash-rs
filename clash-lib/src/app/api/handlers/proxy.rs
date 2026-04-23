@@ -156,8 +156,7 @@ async fn get_proxy_delay(
             .await;
 
         // if found active proxy, return the latency of the active proxy, otherwise
-        // return the latency of the first proxy (which is usually the main proxy in
-        // the group).
+        // return the latency of the first proxy (which is the latency of the group).
         let result = if let Some(idx) = active_idx {
             results
                 .get(idx + 1)
