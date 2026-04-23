@@ -191,7 +191,8 @@ pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// The name of the outbound handler
     fn name(&self) -> &str;
 
-    /// The server name of the outbound handler, used for proxy-server-nameserver resolution
+    /// The server name of the outbound handler, used for
+    /// proxy-server-nameserver resolution
     fn server_name(&self) -> Option<&str> {
         None
     }

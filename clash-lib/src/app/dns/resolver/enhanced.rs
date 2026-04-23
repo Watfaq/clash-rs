@@ -145,8 +145,8 @@ impl EnhancedResolver {
             };
 
         // Build proxy server domains trie for proxy-server-nameserver resolution.
-        // This happens before the OutboundManager is fully initialized, so we can only extract domains
-        // from plain outbounds.
+        // This happens before the OutboundManager is fully initialized, so we can
+        // only extract domains from plain outbounds.
         let plain_outobunds = outbounds.read().await;
         let proxy_server_domains = plain_outobunds
             .values()
@@ -754,6 +754,7 @@ mod tests {
     use crate::{
         app::dns::{
             ClashResolver, ThreadSafeDNSClient,
+            config::{Config, NameServer},
             dns_client::{DNSNetMode, DnsClient, Opts},
             resolver::enhanced::EnhancedResolver,
             runtime::DnsRuntimeProvider,
@@ -1101,11 +1102,19 @@ mod tests {
     /// server fields are the given (name, server) pairs.
     fn make_outbound_registry(
         entries: &[(&str, &str)],
-    ) -> Arc<tokio::sync::RwLock<std::collections::HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>>>
-    {
+    ) -> Arc<
+        tokio::sync::RwLock<
+            std::collections::HashMap<
+                String,
+                Arc<dyn crate::proxy::OutboundHandler>,
+            >,
+        >,
+    > {
         use crate::proxy::{
             HandlerCommonOptions,
-            socks::outbound::{Handler as SocksHandler, HandlerOptions as SocksHandlerOptions},
+            socks::outbound::{
+                Handler as SocksHandler, HandlerOptions as SocksHandlerOptions,
+            },
         };
         let mut map = std::collections::HashMap::new();
         for (name, server) in entries {
@@ -1129,7 +1138,6 @@ mod tests {
         crate::app::dns::config::Config,
         crate::app::dns::config::NameServer,
     ) {
-        use crate::app::dns::{config::{Config, NameServer}, dns_client::DNSNetMode};
         let ns = NameServer {
             net: DNSNetMode::Udp,
             host: url::Host::Ipv4("8.8.8.8".parse().unwrap()),
@@ -1175,11 +1183,13 @@ mod tests {
             ("proxy-ip", "1.2.3.4"),
         ]);
 
-        let resolver = EnhancedResolver::new(config, cache_store, None, outbounds).await;
+        let resolver =
+            EnhancedResolver::new(config, cache_store, None, outbounds).await;
 
         assert!(resolver.proxy_resolver.is_some());
-        let domains = resolver.proxy_server_domains.as_ref()
-            .expect("proxy_server_domains should be Some when domain-named outbounds exist");
+        let domains = resolver.proxy_server_domains.as_ref().expect(
+            "proxy_server_domains should be Some when domain-named outbounds exist",
+        );
         assert!(domains.search("proxy.example.com").is_some());
         assert!(domains.search("vpn.example.net").is_some());
         // IP entries are inserted but DNS queries will never match them
@@ -1200,15 +1210,24 @@ mod tests {
         // Register "one.one.one.one" as a proxy server domain.
         let outbounds = make_outbound_registry(&[("cf-proxy", "one.one.one.one")]);
 
-        let resolver = EnhancedResolver::new(config, cache_store, None, outbounds).await;
+        let resolver =
+            EnhancedResolver::new(config, cache_store, None, outbounds).await;
 
         // Sanity: the trie was built
         assert!(resolver.proxy_server_domains.is_some());
-        assert!(resolver.proxy_server_domains.as_ref().unwrap()
-            .search("one.one.one.one").is_some());
+        assert!(
+            resolver
+                .proxy_server_domains
+                .as_ref()
+                .unwrap()
+                .search("one.one.one.one")
+                .is_some()
+        );
 
         // The domain should resolve successfully through the proxy nameserver path.
-        let ip = resolver.resolve("one.one.one.one", false).await
+        let ip = resolver
+            .resolve("one.one.one.one", false)
+            .await
             .expect("should resolve one.one.one.one")
             .expect("should return an IP for one.one.one.one");
         // one.one.one.one always resolves to 1.1.1.1 or 1.0.0.1

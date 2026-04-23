@@ -986,5 +986,3 @@ impl OutboundManager {
         Ok(())
     }
 }
-
-
