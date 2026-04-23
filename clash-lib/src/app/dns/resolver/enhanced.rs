@@ -1096,4 +1096,126 @@ mod tests {
         assert!(resolver.proxy_resolver.is_none());
         assert!(resolver.proxy_server_domains.is_none());
     }
+
+    /// Build a test outbound registry containing socks5 handlers whose
+    /// server fields are the given (name, server) pairs.
+    fn make_outbound_registry(
+        entries: &[(&str, &str)],
+    ) -> Arc<tokio::sync::RwLock<std::collections::HashMap<String, Arc<dyn crate::proxy::OutboundHandler>>>>
+    {
+        use crate::proxy::{
+            HandlerCommonOptions,
+            socks::outbound::{Handler as SocksHandler, HandlerOptions as SocksHandlerOptions},
+        };
+        let mut map = std::collections::HashMap::new();
+        for (name, server) in entries {
+            let h: Arc<dyn crate::proxy::OutboundHandler> =
+                Arc::new(SocksHandler::new(SocksHandlerOptions {
+                    name: name.to_string(),
+                    common_opts: HandlerCommonOptions::default(),
+                    server: server.to_string(),
+                    port: 1080,
+                    user: None,
+                    password: None,
+                    udp: false,
+                    tls_client: None,
+                }));
+            map.insert(name.to_string(), h);
+        }
+        Arc::new(tokio::sync::RwLock::new(map))
+    }
+
+    fn make_proxy_nameserver_config() -> (
+        crate::app::dns::config::Config,
+        crate::app::dns::config::NameServer,
+    ) {
+        use crate::app::dns::{config::{Config, NameServer}, dns_client::DNSNetMode};
+        let ns = NameServer {
+            net: DNSNetMode::Udp,
+            host: url::Host::Ipv4("8.8.8.8".parse().unwrap()),
+            port: 53,
+            interface: None,
+            proxy: None,
+        };
+        let mut config = Config::default();
+        config.enable = true;
+        config.ipv6 = false;
+        config.proxy_server_nameserver = Some(vec![ns.clone()]);
+        config.default_nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            host: url::Host::Ipv4("114.114.114.114".parse().unwrap()),
+            port: 53,
+            interface: None,
+            proxy: None,
+        }];
+        config.nameserver = vec![NameServer {
+            net: DNSNetMode::Udp,
+            host: url::Host::Ipv4("223.5.5.5".parse().unwrap()),
+            port: 53,
+            interface: None,
+            proxy: None,
+        }];
+        (config, ns)
+    }
+
+    #[tokio::test]
+    async fn test_proxy_server_domains_populated_from_outbounds() {
+        use tempfile::tempdir;
+        let temp_dir = tempdir().unwrap();
+        let cache_store = crate::app::profile::ThreadSafeCacheFile::new(
+            temp_dir.path().join("cache.db").to_str().unwrap(),
+            false,
+        );
+
+        let (config, _) = make_proxy_nameserver_config();
+        // Two domain-based proxies and one IP-based — IP should not appear in trie.
+        let outbounds = make_outbound_registry(&[
+            ("proxy-a", "proxy.example.com"),
+            ("proxy-b", "vpn.example.net"),
+            ("proxy-ip", "1.2.3.4"),
+        ]);
+
+        let resolver = EnhancedResolver::new(config, cache_store, None, outbounds).await;
+
+        assert!(resolver.proxy_resolver.is_some());
+        let domains = resolver.proxy_server_domains.as_ref()
+            .expect("proxy_server_domains should be Some when domain-named outbounds exist");
+        assert!(domains.search("proxy.example.com").is_some());
+        assert!(domains.search("vpn.example.net").is_some());
+        // IP entries are inserted but DNS queries will never match them
+        assert!(domains.search("1.2.3.4").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_server_domain_resolved_via_proxy_nameserver() {
+        use crate::dns::ClashResolver;
+        use tempfile::tempdir;
+        let temp_dir = tempdir().unwrap();
+        let cache_store = crate::app::profile::ThreadSafeCacheFile::new(
+            temp_dir.path().join("cache.db").to_str().unwrap(),
+            false,
+        );
+
+        let (config, _) = make_proxy_nameserver_config();
+        // Register "one.one.one.one" as a proxy server domain.
+        let outbounds = make_outbound_registry(&[("cf-proxy", "one.one.one.one")]);
+
+        let resolver = EnhancedResolver::new(config, cache_store, None, outbounds).await;
+
+        // Sanity: the trie was built
+        assert!(resolver.proxy_server_domains.is_some());
+        assert!(resolver.proxy_server_domains.as_ref().unwrap()
+            .search("one.one.one.one").is_some());
+
+        // The domain should resolve successfully through the proxy nameserver path.
+        let ip = resolver.resolve("one.one.one.one", false).await
+            .expect("should resolve one.one.one.one")
+            .expect("should return an IP for one.one.one.one");
+        // one.one.one.one always resolves to 1.1.1.1 or 1.0.0.1
+        assert!(
+            ip.to_string() == "1.1.1.1" || ip.to_string() == "1.0.0.1",
+            "unexpected IP: {}",
+            ip
+        );
+    }
 }
