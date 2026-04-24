@@ -681,3 +681,371 @@ async fn test_plain_proxy_api_response_shadowsocks() {
     );
     assert_eq!(proxy["udp"], true);
 }
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_hello_endpoint() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    assert_eq!(json["hello"], "clash-rs");
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_version_endpoint() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/version";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    assert!(
+        json.get("version").and_then(|v| v.as_str()).is_some(),
+        "'version' field should be a string"
+    );
+    assert_eq!(
+        json.get("meta").and_then(|v| v.as_bool()),
+        Some(false),
+        "'meta' field should be false"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_memory_endpoint() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/memory";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    assert!(
+        json.get("inuse").and_then(|v| v.as_u64()).is_some(),
+        "'inuse' field should be a u64"
+    );
+    assert_eq!(
+        json.get("oslimit").and_then(|v| v.as_u64()),
+        Some(0),
+        "'oslimit' field should be 0"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_rules_endpoint() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/rules";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    let rules = json
+        .get("rules")
+        .and_then(|v| v.as_array())
+        .expect("'rules' should be an array");
+    assert!(!rules.is_empty(), "rules array should not be empty");
+
+    for rule in rules {
+        assert!(
+            rule.get("type").is_some(),
+            "each rule should have a 'type' field"
+        );
+        assert!(
+            rule.get("payload").is_some(),
+            "each rule should have a 'payload' field"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_auth_required() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(
+        response.status(),
+        http::StatusCode::UNAUTHORIZED,
+        "request without Authorization header should return 401"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_delete_all_connections() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/connections";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::DELETE)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "DELETE /connections should return 200"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_providers_endpoint() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    let url = "http://127.0.0.1:9090/providers/proxies";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), http::StatusCode::OK);
+
+    let json: serde_json::Value = serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON");
+
+    assert!(
+        json.get("providers").is_some(),
+        "'providers' field should be present"
+    );
+    assert!(
+        json["providers"].is_object(),
+        "'providers' should be an object"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_update_proxy_selector() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+
+    let _clash = ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash");
+
+    // "test 🌏" URL-encoded is "test%20%F0%9F%8C%8F"
+    let url = "http://127.0.0.1:9090/proxies/test%20%F0%9F%8C%8F";
+    let body = r#"{"name": "url-test"}"#.to_string();
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body(body)
+        .expect("Failed to build request");
+
+    let response = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send request");
+    assert_eq!(
+        response.status(),
+        http::StatusCode::ACCEPTED,
+        "PUT /proxies/test 🌏 should return 202"
+    );
+}

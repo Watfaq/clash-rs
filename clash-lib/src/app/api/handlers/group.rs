@@ -89,7 +89,7 @@ async fn get_group_delay(
         let mut res = HashMap::new();
 
         for (i, name) in names.iter().enumerate() {
-            if let Some(Ok(latency)) = results.get(i) {
+            if let Some(Ok(latency)) = results.get(i + 1) {
                 res.insert(name.to_owned(), latency.0.as_millis());
             } else {
                 res.insert(name.to_owned(), 0);

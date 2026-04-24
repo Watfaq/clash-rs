@@ -187,8 +187,8 @@ async fn get_proxy_delay(
     match result.first().unwrap() {
         Ok((actual, overall)) => {
             let mut r = HashMap::new();
-            r.insert("delay".to_owned(), actual);
-            r.insert("overall".to_owned(), overall);
+            r.insert("delay".to_owned(), actual.as_millis());
+            r.insert("overall".to_owned(), overall.as_millis());
             axum::response::Json(r).into_response()
         }
         Err(err) => (
