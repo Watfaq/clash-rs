@@ -37,8 +37,8 @@ pub async fn group_url_test(
 
     let results = outbound_manager
         .url_test(
-            &vec![vec![proxy], members].concat(),
-            &latency_test_url.as_deref().unwrap_or(fallback_url),
+            &[vec![proxy], members].concat(),
+            latency_test_url.as_deref().unwrap_or(fallback_url),
             timeout,
         )
         .await;
@@ -58,7 +58,7 @@ pub async fn group_url_test(
     match result {
         Ok(latency) => Ok(*latency),
         Err(err) => {
-            return Err(io::Error::new(io::ErrorKind::Other, err.to_string()));
+            Err(io::Error::other(err.to_string()))
         }
     }
 }
