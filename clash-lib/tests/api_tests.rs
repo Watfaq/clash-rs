@@ -1362,21 +1362,36 @@ async fn test_get_proxy_from_provider() {
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 async fn test_provider_proxy_healthcheck() {
+    // Start a local mock HTTP server so the test does not rely on external
+    // network access and always completes within the timeout.
+    let mock_server = httpmock::MockServer::start();
+    mock_server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/");
+        then.status(200).body("ok");
+    });
+
     let _clash = start_client_clash();
 
-    let url = "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
-         ?url=http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=2000";
-    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+    // URL-encode the mock server URL for use in the query string.
+    let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
+    let url = format!(
+        "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
+         ?url={encoded_url}&timeout=5000"
+    );
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/url-test/DIRECT/healthcheck");
 
-    // The endpoint returns 200 on success or 400 on timeout/failure; both are
-    // acceptable here since network may not be available in CI.
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET provider proxy healthcheck should return 200 when the target URL is reachable"
+    );
+
+    let json = parse_json(response).await;
     assert!(
-        response.status() == http::StatusCode::OK
-            || response.status() == http::StatusCode::BAD_REQUEST,
-        "GET provider proxy healthcheck should return 200 or 400, got {}",
-        response.status()
+        json.get("delay").and_then(|v| v.as_u64()).is_some(),
+        "healthcheck response should have a numeric 'delay' field"
     );
 }
 
@@ -1646,5 +1661,91 @@ async fn test_patch_mode_and_log_level_together() {
     assert_eq!(
         after, "global",
         "mode should be 'global' after combined PATCH"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /proxies/{name}/delay  – measures latency of a single proxy
+// ---------------------------------------------------------------------------
+
+/// Test `GET /proxies/DIRECT/delay` using a local mock HTTP server as the
+/// target so the result is deterministic and independent of external network.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_proxy_delay_direct() {
+    let mock_server = httpmock::MockServer::start();
+    mock_server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/");
+        then.status(200).body("ok");
+    });
+
+    let _clash = start_client_clash();
+
+    // URL-encode the mock server URL for the query string:
+    // `http://127.0.0.1:PORT/` → `http%3A%2F%2F127.0.0.1%3APORT%2F`
+    let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
+    let url = format!(
+        "http://127.0.0.1:9090/proxies/DIRECT/delay?url={encoded_url}&timeout=5000"
+    );
+
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
+        .await
+        .expect("Failed to send GET /proxies/DIRECT/delay");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET /proxies/DIRECT/delay should return 200 when target is reachable"
+    );
+
+    let json = parse_json(response).await;
+    assert!(
+        json.get("delay").and_then(|v| v.as_u64()).is_some(),
+        "response should have a numeric 'delay' field"
+    );
+    assert!(
+        json.get("overall").and_then(|v| v.as_u64()).is_some(),
+        "response should have a numeric 'overall' field"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /group/{name}/delay  – measures latency for a proxy group
+// ---------------------------------------------------------------------------
+
+/// Test `GET /group/url-test/delay` using a local mock HTTP server as the
+/// target.  The url-test group has DIRECT as its sole member, which makes a
+/// direct connection to the mock server – no external network needed.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_group_delay_url_test() {
+    let mock_server = httpmock::MockServer::start();
+    mock_server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/");
+        then.status(200).body("ok");
+    });
+
+    let _clash = start_client_clash();
+
+    let encoded_url = mock_server.url("/").replace(':', "%3A").replace('/', "%2F");
+    let url = format!(
+        "http://127.0.0.1:9090/group/url-test/delay?url={encoded_url}&timeout=5000"
+    );
+
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
+        .await
+        .expect("Failed to send GET /group/url-test/delay");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET /group/url-test/delay should return 200 when target is reachable"
+    );
+
+    let json = parse_json(response).await;
+    // The handler returns `{ "<group-name>": <delay_ms> }`.
+    assert!(
+        json.get("url-test").and_then(|v| v.as_u64()).is_some(),
+        "response should have a numeric 'url-test' delay field"
     );
 }
