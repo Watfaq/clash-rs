@@ -527,7 +527,8 @@ impl InboundManager {
         *guard = new_map;
     }
 
-    pub async fn change_ports(&self, ports: Ports) {
+    // returns true if any listener ports were changed (i.e. a restart is needed)
+    pub async fn change_ports(&self, ports: Ports) -> bool {
         let mut guard = self.inbound_handlers.write().await;
 
         let listeners: HashMap<InboundOpts, Option<_>> = guard
@@ -557,29 +558,47 @@ impl InboundManager {
             })
             .collect();
 
+        let changed = !listeners.is_empty();
+
         for (mut opts, handle) in listeners {
             opts.common_opts_mut().port = match &opts {
-                InboundOpts::Http { common_opts } => {
-                    ports.port.unwrap_or(common_opts.port)
+                InboundOpts::Http { common_opts } if let Some(port) = ports.port => {
+                    port
                 }
-                InboundOpts::Socks { common_opts, .. } => {
-                    ports.socks_port.unwrap_or(common_opts.port)
+                InboundOpts::Socks { common_opts, .. }
+                    if let Some(port) = ports.socks_port =>
+                {
+                    port
                 }
-                InboundOpts::Mixed { common_opts, .. } => {
-                    ports.mixed_port.unwrap_or(common_opts.port)
+                InboundOpts::Mixed { common_opts, .. }
+                    if let Some(port) = ports.mixed_port =>
+                {
+                    port
                 }
                 #[cfg(feature = "tproxy")]
-                InboundOpts::TProxy { common_opts, .. } => {
-                    ports.tproxy_port.unwrap_or(common_opts.port)
+                InboundOpts::TProxy { common_opts, .. }
+                    if let Some(port) = ports.tproxy_port =>
+                {
+                    port
                 }
                 #[cfg(feature = "redir")]
-                InboundOpts::Redir { common_opts } => {
-                    ports.redir_port.unwrap_or(common_opts.port)
+                InboundOpts::Redir { common_opts }
+                    if let Some(port) = ports.redir_port =>
+                {
+                    port
                 }
-                _ => continue,
+                _ => {
+                    warn!(
+                        "Port for listener '{}' is not changed",
+                        opts.common_opts().name
+                    );
+                    continue;
+                }
             };
 
             guard.insert(opts, handle);
         }
+
+        changed
     }
 }

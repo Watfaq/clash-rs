@@ -285,15 +285,16 @@ async fn patch_configs(
             tproxy_port: payload.tproxy_port,
             mixed_port: payload.mixed_port,
         };
-        inbound_manager.change_ports(ports).await;
-        need_restart = true;
+        let changed = inbound_manager.change_ports(ports).await;
+        need_restart |= changed;
     }
 
     if let Some(allow_lan) = payload.allow_lan
         && allow_lan != inbound_manager.get_allow_lan().await
     {
         inbound_manager.set_allow_lan(allow_lan).await;
-        // TODO: can be done with AtomicBool, but requires more changes
+        // TODO: can be done with AtomicBool in each inbound manager, but requires
+        // more changes
         need_restart = true;
     }
 
