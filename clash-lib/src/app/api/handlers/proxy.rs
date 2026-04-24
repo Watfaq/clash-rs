@@ -137,13 +137,8 @@ async fn get_proxy_delay(
     let mut headers = HeaderMap::new();
     headers.insert(header::CONNECTION, "close".parse().unwrap());
 
-    let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
-        // Fetch the active proxy while `group` borrows `proxy`.  NLL ends
-        // the borrow after this block, allowing `proxy` to be moved into
-        // `group_url_test` below.
-        let active_proxy = group.get_active_proxy().await;
-
-        let (members, results) =
+    let (actual, overall) = if proxy.try_as_group_handler().is_some() {
+        let (members, results, active_proxy) =
             group_url_test(&outbound_manager, proxy, &q.url, timeout).await;
 
         let active_idx = active_proxy.as_ref().and_then(|active| {
