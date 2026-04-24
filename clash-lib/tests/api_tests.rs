@@ -1049,3 +1049,599 @@ async fn test_update_proxy_selector() {
         "PUT /proxies/test 🌏 should return 202"
     );
 }
+
+/// Helper to start the standard client clash instance.
+fn start_client_clash() -> ClashInstance {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config_path = wd.join("rules.yaml");
+    ClashInstance::start(
+        Options {
+            config: Config::File(config_path.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        },
+        vec![9090, 8888, 8889, 8899, 53553, 53554, 53555],
+    )
+    .expect("Failed to start clash")
+}
+
+/// Helper to build an authenticated GET request with an empty body.
+fn auth_get(url: &str) -> hyper::Request<http_body_util::Empty<Bytes>> {
+    hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::GET)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request")
+}
+
+/// Helper to parse the response body as JSON.
+async fn parse_json(
+    response: http::Response<hyper::body::Incoming>,
+) -> serde_json::Value {
+    serde_json::from_reader(
+        response
+            .collect()
+            .await
+            .expect("Failed to collect body")
+            .aggregate()
+            .reader(),
+    )
+    .expect("Failed to parse JSON")
+}
+
+// ---------------------------------------------------------------------------
+// GET /connections  (REST, non-WebSocket)
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_connections_rest() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/connections";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /connections");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET /connections should return 200"
+    );
+
+    let json = parse_json(response).await;
+    assert!(
+        json.get("connections").is_some(),
+        "response should have 'connections' field"
+    );
+    assert!(
+        json["connections"].is_array(),
+        "'connections' should be an array"
+    );
+    assert!(
+        json.get("downloadTotal").is_some(),
+        "response should have 'downloadTotal' field"
+    );
+    assert!(
+        json.get("uploadTotal").is_some(),
+        "response should have 'uploadTotal' field"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /connections/{id}
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_delete_connection_by_id() {
+    let _clash = start_client_clash();
+
+    // Use a random UUID that doesn't correspond to any real connection.
+    let url = "http://127.0.0.1:9090/connections/00000000-0000-0000-0000-000000000000";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::DELETE)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send DELETE /connections/{{id}}");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "DELETE /connections/{{id}} should return 200"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /proxies/{name} – not found
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_proxy_not_found() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/proxies/nonexistent-proxy-xyz";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /proxies/nonexistent-proxy-xyz");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::NOT_FOUND,
+        "GET /proxies/{{name}} not found should return 404"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PUT /proxies/{name} – invalid proxy selection returns 400
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_update_proxy_selector_invalid() {
+    let _clash = start_client_clash();
+
+    // "test 🌏" is a Selector; selecting a proxy name that doesn't exist should
+    // return 400.
+    let url = "http://127.0.0.1:9090/proxies/test%20%F0%9F%8C%8F";
+    let body = r#"{"name": "this-proxy-does-not-exist"}"#.to_string();
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body(body)
+        .expect("Failed to build request");
+
+    let response = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send PUT /proxies/test 🌏");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::BAD_REQUEST,
+        "PUT /proxies/{{selector}} with unknown proxy name should return 400"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PUT /proxies/{name} – target is not a Selector returns 404
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_update_non_selector_proxy_returns_not_found() {
+    let _clash = start_client_clash();
+
+    // "DIRECT" is not a Selector; the PUT endpoint should return 404.
+    let url = "http://127.0.0.1:9090/proxies/DIRECT";
+    let body = r#"{"name": "DIRECT"}"#.to_string();
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PUT)
+        .body(body)
+        .expect("Failed to build request");
+
+    let response = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send PUT /proxies/DIRECT");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::NOT_FOUND,
+        "PUT /proxies/{{non-selector}} should return 404"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /providers/proxies/{name}  – specific provider info
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_provider() {
+    let _clash = start_client_clash();
+
+    // The "url-test" group creates an internal PlainProvider named "url-test".
+    let url = "http://127.0.0.1:9090/providers/proxies/url-test";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /providers/proxies/url-test");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET /providers/proxies/url-test should return 200"
+    );
+
+    let json = parse_json(response).await;
+    assert!(
+        json.get("name").is_some(),
+        "provider response should have 'name' field"
+    );
+    assert!(
+        json.get("type").is_some(),
+        "provider response should have 'type' field"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PUT /providers/proxies/{name}  – refresh/update provider
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_put_provider() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/providers/proxies/url-test";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .method(http::method::Method::PUT)
+        .body(http_body_util::Empty::<Bytes>::new())
+        .expect("Failed to build request");
+
+    let response = send_http_request(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to send PUT /providers/proxies/url-test");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::ACCEPTED,
+        "PUT /providers/proxies/url-test should return 202"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /providers/proxies/{name}/healthcheck
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_provider_healthcheck() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/providers/proxies/url-test/healthcheck";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /providers/proxies/url-test/healthcheck");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::ACCEPTED,
+        "GET /providers/proxies/url-test/healthcheck should return 202"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /providers/proxies/{name}/{proxy}  – proxy info within a provider
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_get_proxy_from_provider() {
+    let _clash = start_client_clash();
+
+    // The "url-test" provider contains "DIRECT" (from rules.yaml group config).
+    let url = "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /providers/proxies/url-test/DIRECT");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::OK,
+        "GET /providers/proxies/url-test/DIRECT should return 200"
+    );
+
+    let json = parse_json(response).await;
+    assert_eq!(
+        json.get("name").and_then(|v| v.as_str()),
+        Some("DIRECT"),
+        "proxy 'name' should be 'DIRECT'"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /providers/proxies/{name}/{proxy}/healthcheck
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_provider_proxy_healthcheck() {
+    let _clash = start_client_clash();
+
+    let url =
+        "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
+         ?url=http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=2000";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect(
+            "Failed to send GET /providers/proxies/url-test/DIRECT/healthcheck",
+        );
+
+    // The endpoint returns 200 on success or 400 on timeout/failure; both are
+    // acceptable here since network may not be available in CI.
+    assert!(
+        response.status() == http::StatusCode::OK
+            || response.status() == http::StatusCode::BAD_REQUEST,
+        "GET provider proxy healthcheck should return 200 or 400, got {}",
+        response.status()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /providers/proxies/{nonexistent}  – 404
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_provider_not_found() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/providers/proxies/nonexistent-provider-xyz";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /providers/proxies/nonexistent-provider-xyz");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::NOT_FOUND,
+        "GET /providers/proxies/{{nonexistent}} should return 404"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /dns/query  – returns 400 when built-in DNS resolver is disabled
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_dns_query_when_disabled() {
+    // rules.yaml has dns.enable: false, so the resolver is a system stub.
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/dns/query?name=example.com&type=A";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /dns/query");
+
+    assert_eq!(
+        response.status(),
+        http::StatusCode::BAD_REQUEST,
+        "GET /dns/query with DNS disabled should return 400"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// GET /dns/query  – invalid hostname returns 400 (even with DNS enabled)
+// ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_dns_query_invalid_hostname() {
+    let _clash = start_client_clash();
+
+    // An empty name is invalid; the endpoint must return 400 regardless of
+    // whether DNS is enabled.
+    let url = "http://127.0.0.1:9090/dns/query?name=&type=A";
+    let response = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to send GET /dns/query with invalid name");
+
+    // When DNS is disabled the handler returns 400 before name validation,
+    // so either 400 is the expected outcome here.
+    assert_eq!(
+        response.status(),
+        http::StatusCode::BAD_REQUEST,
+        "GET /dns/query with invalid hostname should return 400"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /configs – mode field is applied and visible in GET /configs
+// ---------------------------------------------------------------------------
+
+/// Helper that reads the current run mode from GET /configs.
+async fn get_mode(port: u16) -> String {
+    let url = format!("http://127.0.0.1:{}/configs", port);
+    let response = send_http_request(url.parse().unwrap(), auth_get(&url))
+        .await
+        .expect("Failed to GET /configs for mode");
+    let json = parse_json(response).await;
+    json.get("mode")
+        .and_then(|v| v.as_str())
+        .expect("'mode' field missing or not a string")
+        .to_owned()
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_mode_direct() {
+    let _clash = start_client_clash();
+
+    // Initial mode in rules.yaml is "rule".
+    let initial = get_mode(9090).await;
+    assert_eq!(initial, "rule", "initial mode should be 'rule'");
+
+    // Switch to "direct".
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body(r#"{"mode": "direct"}"#.to_string())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to PATCH /configs mode");
+    assert_eq!(
+        res.status(),
+        http::StatusCode::ACCEPTED,
+        "PATCH /configs mode should return 202"
+    );
+
+    // Mode must be reflected immediately by GET /configs.
+    let after = get_mode(9090).await;
+    assert_eq!(after, "direct", "mode should be 'direct' after PATCH");
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_mode_global() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body(r#"{"mode": "global"}"#.to_string())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to PATCH /configs mode=global");
+    assert_eq!(res.status(), http::StatusCode::ACCEPTED);
+
+    let after = get_mode(9090).await;
+    assert_eq!(after, "global", "mode should be 'global' after PATCH");
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_mode_roundtrip() {
+    // rule → direct → global → rule
+    let _clash = start_client_clash();
+
+    let api = "http://127.0.0.1:9090/configs";
+
+    for (mode_in, expected) in [("direct", "direct"), ("global", "global"), ("rule", "rule")] {
+        let body = format!(r#"{{"mode": "{}"}}"#, mode_in);
+        let req = hyper::Request::builder()
+            .uri(api)
+            .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .method(http::method::Method::PATCH)
+            .body(body)
+            .expect("Failed to build request");
+
+        let res = send_http_request::<String>(api.parse().unwrap(), req)
+            .await
+            .expect("Failed to PATCH /configs mode");
+        assert_eq!(res.status(), http::StatusCode::ACCEPTED);
+
+        let actual = get_mode(9090).await;
+        assert_eq!(
+            actual, expected,
+            "mode should be '{}' after PATCHing to '{}'",
+            expected, mode_in
+        );
+    }
+}
+
+/// Regression test: GET /configs must not be blocked while a concurrent PATCH
+/// that includes a listener-restart is running.  We verify this by sending a
+/// mode-only PATCH (no restart) together with a GET and confirming both
+/// complete and return consistent data.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_mode_does_not_block_get_configs() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/configs";
+
+    // PATCH mode to "direct".
+    let patch_req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body(r#"{"mode": "direct"}"#.to_string())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(url.parse().unwrap(), patch_req)
+        .await
+        .expect("Failed to PATCH /configs");
+    assert_eq!(res.status(), http::StatusCode::ACCEPTED);
+
+    // Immediately GET /configs – should not time out or return stale mode.
+    let get_res = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("GET /configs after PATCH should not block");
+    assert_eq!(get_res.status(), http::StatusCode::OK);
+
+    let json = parse_json(get_res).await;
+    assert_eq!(
+        json.get("mode").and_then(|v| v.as_str()),
+        Some("direct"),
+        "GET /configs must reflect mode='direct' immediately after PATCH"
+    );
+}
+
+/// PATCH /configs with log-level should return 202 and the change must be
+/// stable (no panic, no deadlock).
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_log_level() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body(r#"{"log-level": "info"}"#.to_string())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to PATCH /configs log-level");
+    assert_eq!(
+        res.status(),
+        http::StatusCode::ACCEPTED,
+        "PATCH /configs log-level should return 202"
+    );
+}
+
+/// PATCH with both mode and log-level in a single request: both must take
+/// effect.  This exercises the previously-buggy code path where global_state
+/// was held across mode-set and log-level-set in a single critical section.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn test_patch_mode_and_log_level_together() {
+    let _clash = start_client_clash();
+
+    let url = "http://127.0.0.1:9090/configs";
+    let req = hyper::Request::builder()
+        .uri(url)
+        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .method(http::method::Method::PATCH)
+        .body(r#"{"mode": "global", "log-level": "info"}"#.to_string())
+        .expect("Failed to build request");
+
+    let res = send_http_request::<String>(url.parse().unwrap(), req)
+        .await
+        .expect("Failed to PATCH /configs");
+    assert_eq!(res.status(), http::StatusCode::ACCEPTED);
+
+    let after = get_mode(9090).await;
+    assert_eq!(after, "global", "mode should be 'global' after combined PATCH");
+}

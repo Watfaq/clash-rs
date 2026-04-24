@@ -277,8 +277,6 @@ async fn patch_configs(
         }
     }
 
-    let mut global_state = state.global_state.lock().await;
-
     if payload.rebuild_listeners() {
         let ports = Ports {
             port: payload.port,
@@ -299,20 +297,26 @@ async fn patch_configs(
         need_restart = true;
     }
 
-    if need_restart {
-        let _ = inbound_manager.restart().await;
-    }
-
+    // Apply mode change before restarting listeners so that new connections
+    // established after the restart immediately use the updated mode.
     if let Some(mode) = payload.mode {
         state.dispatcher.set_mode(mode).await;
     }
 
-    if let Some(log_level) = payload.log_level {
-        global_state.log_level = log_level;
+    if need_restart {
+        let _ = inbound_manager.restart().await;
     }
 
     if let Some(ipv6) = payload.ipv6 {
         state.dns_resolver.set_ipv6(ipv6);
+    }
+
+    // Only lock global_state for the small section that actually needs it.
+    // Holding it across inbound_manager.restart() (which can be slow) was
+    // blocking concurrent GET /configs requests unnecessarily.
+    if let Some(log_level) = payload.log_level {
+        let mut global_state = state.global_state.lock().await;
+        global_state.log_level = log_level;
     }
 
     StatusCode::ACCEPTED.into_response()
