@@ -69,31 +69,19 @@ async fn get_group_delay(
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
+    let name = proxy.name().to_owned();
 
     if proxy.try_as_group_handler().is_some() {
-        let (members, results, active_proxy) =
-            group_url_test(&outbound_manager, proxy, &q.url, timeout).await;
-
-        let active_idx = active_proxy.as_ref().and_then(|active| {
-            members.iter().position(|p| p.name() == active.name())
-        });
-
-        let mut res = HashMap::new();
-        for (i, member) in members.iter().enumerate() {
-            // results[0] is for the group itself; results[i+1] is for members[i].
-            // If an active proxy is known and this member is it, fall back to the
-            // group's own latency (results[0]) when the member's result failed —
-            // the same fallback logic used in get_proxy_delay.
-            let ms = match results.get(i + 1) {
-                Some(Ok((actual, _overall))) => actual.as_millis(),
-                _ if active_idx == Some(i) => match results.first() {
-                    Some(Ok((actual, _overall))) => actual.as_millis(),
-                    _ => 0,
-                },
-                _ => 0,
+        let (actual, _) =
+            match group_url_test(&outbound_manager, proxy, &q.url, timeout).await {
+                Ok(result) => result,
+                Err(err) => {
+                    return (StatusCode::BAD_REQUEST, err.to_string())
+                        .into_response();
+                }
             };
-            res.insert(member.name().to_owned(), ms);
-        }
+        let mut res = HashMap::new();
+        res.insert(name, actual.as_millis());
         Json(res).into_response()
     } else {
         (

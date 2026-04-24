@@ -4,8 +4,7 @@ use http::{HeaderMap, header};
 use serde::Deserialize;
 
 use crate::{
-    app::outbound::manager::ThreadSafeOutboundManager,
-    proxy::AnyOutboundHandler,
+    app::outbound::manager::ThreadSafeOutboundManager, proxy::AnyOutboundHandler,
 };
 
 /// Shared query-string parameters for all latency-test endpoints.
@@ -15,42 +14,53 @@ pub struct DelayRequest {
     pub timeout: u16,
 }
 
-/// Run `url_test` over a group proxy and all its members, and return
-/// the active proxy alongside the results.
-///
-/// The caller must ensure `proxy.try_as_group_handler()` returns `Some`.
-///
-/// Returns `(members, results, active_proxy)` where:
-/// - `members[i]`   is the i-th member proxy handler.
-/// - `results[0]`   is for the group proxy itself.
-/// - `results[i+1]` is for `members[i]`.
-/// - `active_proxy` is the currently selected proxy for the group (if any).
+/// Run `url_test` over a group proxy and all its members, and if the group has
+/// a latency test URL, use it as the test URL; otherwise, use the provided
+/// fallback URL.
+/// Returns the latency of the group active proxy if found, otherwise the
+/// latency of the group itself.
 pub async fn group_url_test(
     outbound_manager: &ThreadSafeOutboundManager,
     proxy: AnyOutboundHandler,
     fallback_url: &str,
     timeout: Duration,
-) -> (
-    Vec<AnyOutboundHandler>,
-    Vec<io::Result<(Duration, Duration)>>,
-    Option<AnyOutboundHandler>,
-) {
+) -> std::io::Result<(Duration, Duration)> {
     let group = proxy
         .try_as_group_handler()
         .expect("caller must ensure proxy is a group");
     let latency_test_url = group.get_latency_test_url();
     let members = group.get_proxies().await;
     let active_proxy = group.get_active_proxy().await;
-    // `group` is not used after this point; NLL ends the borrow on `proxy`,
-    // allowing it to be moved into the url_test call below.
+    let active_idx = active_proxy
+        .as_ref()
+        .and_then(|active| members.iter().position(|p| p.name() == active.name()));
+
     let results = outbound_manager
         .url_test(
-            &[vec![proxy], members.clone()].concat(),
-            &latency_test_url.unwrap_or_else(|| fallback_url.to_owned()),
+            &vec![vec![proxy], members].concat(),
+            &latency_test_url.as_deref().unwrap_or(fallback_url),
             timeout,
         )
         .await;
-    (members, results, active_proxy)
+
+    // if found active proxy, return the latency of the active proxy, otherwise
+    // return the latency of the first proxy (which is the latency of the group).
+    let result = if let Some(idx) = active_idx {
+        results
+            .get(idx + 1)
+            .expect("active proxy index must be within the range of proxies")
+    } else {
+        results
+            .first()
+            .expect("there must be at least one proxy in the group")
+    };
+
+    match result {
+        Ok(latency) => Ok(*latency),
+        Err(err) => {
+            return Err(io::Error::new(io::ErrorKind::Other, err.to_string()));
+        }
+    }
 }
 
 pub fn is_request_websocket(header: &HeaderMap) -> bool {

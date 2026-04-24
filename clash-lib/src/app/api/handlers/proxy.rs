@@ -138,27 +138,8 @@ async fn get_proxy_delay(
     headers.insert(header::CONNECTION, "close".parse().unwrap());
 
     let (actual, overall) = if proxy.try_as_group_handler().is_some() {
-        let (members, results, active_proxy) =
-            group_url_test(&outbound_manager, proxy, &q.url, timeout).await;
-
-        let active_idx = active_proxy.as_ref().and_then(|active| {
-            members.iter().position(|p| p.name() == active.name())
-        });
-
-        // If an active proxy is known, return its latency; otherwise return
-        // the group's own latency (results[0]).
-        let result = if let Some(idx) = active_idx {
-            results
-                .get(idx + 1)
-                .expect("active proxy index must be within the range of proxies")
-        } else {
-            results
-                .first()
-                .expect("there must be at least one proxy in the group")
-        };
-
-        match result {
-            Ok(latency) => *latency,
+        match group_url_test(&outbound_manager, proxy, &q.url, timeout).await {
+            Ok(latency) => latency,
             Err(err) => {
                 return (
                     StatusCode::BAD_REQUEST,
