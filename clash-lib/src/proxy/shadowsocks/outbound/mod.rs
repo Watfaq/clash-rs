@@ -47,7 +47,7 @@ pub struct HandlerOptions {
 
 pub struct Handler {
     opts: HandlerOptions,
-
+    ctx: Arc<shadowsocks::context::Context>,
     connector: tokio::sync::RwLock<Option<Arc<dyn RemoteConnector>>>,
 }
 
@@ -65,6 +65,7 @@ impl Handler {
     pub fn new(opts: HandlerOptions) -> Self {
         Self {
             opts,
+            ctx: Context::new_shared(ServerType::Local),
             connector: tokio::sync::RwLock::new(None),
         }
     }
@@ -80,11 +81,10 @@ impl Handler {
             None => s,
         };
 
-        let ctx = Context::new_shared(ServerType::Local);
         let cfg = self.server_config()?;
 
         let stream = ProxyClientStream::from_stream(
-            ctx,
+            self.ctx.clone(),
             stream,
             &cfg,
             (sess.destination.host(), sess.destination.port()),
@@ -198,7 +198,6 @@ impl OutboundHandler for Handler {
         resolver: ThreadSafeDNSResolver,
         connector: &dyn RemoteConnector,
     ) -> io::Result<BoxedChainedDatagram> {
-        let ctx = Context::new_shared(ServerType::Local);
         let cfg = self.server_config()?;
 
         let socket = connector
@@ -214,7 +213,7 @@ impl OutboundHandler for Handler {
 
         let socket = ProxySocket::from_socket(
             UdpSocketType::Client,
-            ctx,
+            self.ctx.clone(),
             &cfg,
             ShadowsocksUdpIo::new(socket),
         );

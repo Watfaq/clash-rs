@@ -30,7 +30,11 @@ use crate::app::dns::ThreadSafeDNSResolver;
 
 use super::statistics_manager::Manager;
 
-const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
+// SS2022 (AEAD-2022) MAX_PACKET_SIZE is 0xFFFF (65535 bytes). Using a relay
+// buffer smaller than that forces the cipher to split every full packet into
+// multiple smaller encrypted chunks, multiplying encrypt/decrypt overhead.
+// Classic AEAD ciphers cap at 0x3FFF (16383 bytes) so they are unaffected.
+const DEFAULT_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
@@ -251,7 +255,7 @@ impl Dispatcher {
          */
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) =
-            tokio::sync::mpsc::channel(32);
+            tokio::sync::mpsc::channel(256);
 
         let s = sess.clone();
         let ss = sess.clone();
@@ -363,7 +367,7 @@ impl Dispatcher {
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =
-                            tokio::sync::mpsc::channel::<UdpPacket>(32);
+                            tokio::sync::mpsc::channel::<UdpPacket>(256);
 
                         // remote -> local
                         let r_handle = tokio::spawn(async move {

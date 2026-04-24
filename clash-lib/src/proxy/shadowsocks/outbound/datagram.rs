@@ -2,6 +2,7 @@ use std::{
     io,
     net::SocketAddr,
     pin::Pin,
+    sync::Mutex,
     task::{Context, Poll},
 };
 
@@ -200,16 +201,16 @@ where
 
 /// Shadowsocks UDP I/O that ProxySocket required
 pub(crate) struct ShadowsocksUdpIo {
-    w: tokio::sync::Mutex<SplitSink<AnyOutboundDatagram, UdpPacket>>,
-    r: tokio::sync::Mutex<(SplitStream<AnyOutboundDatagram>, BytesMut)>,
+    w: Mutex<SplitSink<AnyOutboundDatagram, UdpPacket>>,
+    r: Mutex<(SplitStream<AnyOutboundDatagram>, BytesMut)>,
 }
 
 impl ShadowsocksUdpIo {
     pub fn new(inner: AnyOutboundDatagram) -> Self {
         let (w, r) = inner.split();
         Self {
-            w: tokio::sync::Mutex::new(w),
-            r: tokio::sync::Mutex::new((r, BytesMut::new())),
+            w: Mutex::new(w),
+            r: Mutex::new((r, BytesMut::new())),
         }
     }
 }
@@ -225,7 +226,7 @@ impl DatagramSend for ShadowsocksUdpIo {
         buf: &[u8],
         target: std::net::SocketAddr,
     ) -> Poll<io::Result<usize>> {
-        let mut w = self.w.try_lock().expect("must acquire");
+        let mut w = self.w.lock().unwrap();
         match w.start_send_unpin(UdpPacket {
             data: buf.to_vec(),
             src_addr: SocksAddr::any_ipv4(),
@@ -243,7 +244,7 @@ impl DatagramSend for ShadowsocksUdpIo {
     }
 
     fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let mut w = self.w.try_lock().expect("must acquire");
+        let mut w = self.w.lock().unwrap();
         w.poll_ready_unpin(cx)
             .map_err(|e| new_io_error(e.to_string()))
     }
@@ -255,7 +256,7 @@ impl DatagramReceive for ShadowsocksUdpIo {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        let mut g = self.r.try_lock().expect("must acquire");
+        let mut g = self.r.lock().unwrap();
         let (r, remained) = &mut *g;
 
         if !remained.is_empty() {

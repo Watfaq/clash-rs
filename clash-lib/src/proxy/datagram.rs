@@ -73,6 +73,9 @@ pub struct OutboundDatagramImpl {
     resolver: ThreadSafeDNSResolver,
     flushed: bool,
     pkt: Option<UdpPacket>,
+    // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
+    // every poll_next call.
+    recv_buf: Vec<u8>,
 }
 
 impl OutboundDatagramImpl {
@@ -82,6 +85,7 @@ impl OutboundDatagramImpl {
             resolver,
             flushed: true,
             pkt: None,
+            recv_buf: vec![0u8; 65535],
         }
     }
 }
@@ -190,9 +194,12 @@ impl Stream for OutboundDatagramImpl {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let Self { ref mut inner, .. } = *self;
-        let mut mem = vec![0u8; 65535];
-        let mut buf = ReadBuf::new(&mut mem);
+        let Self {
+            ref mut inner,
+            ref mut recv_buf,
+            ..
+        } = *self;
+        let mut buf = ReadBuf::new(recv_buf.as_mut_slice());
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
