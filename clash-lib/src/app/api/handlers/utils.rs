@@ -57,9 +57,7 @@ pub async fn group_url_test(
 
     match result {
         Ok(latency) => Ok(*latency),
-        Err(err) => {
-            Err(io::Error::other(err.to_string()))
-        }
+        Err(err) => Err(io::Error::other(err.to_string())),
     }
 }
 
