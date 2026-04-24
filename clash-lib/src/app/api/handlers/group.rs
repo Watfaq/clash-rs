@@ -10,11 +10,16 @@ use axum::{
 };
 
 use http::StatusCode;
-use serde::Deserialize;
 use tracing::instrument;
 
 use crate::{
-    app::{api::AppState, outbound::manager::ThreadSafeOutboundManager},
+    app::{
+        api::{
+            AppState,
+            handlers::utils::{DelayRequest, group_url_test},
+        },
+        outbound::manager::ThreadSafeOutboundManager,
+    },
     proxy::AnyOutboundHandler,
 };
 
@@ -56,12 +61,6 @@ async fn find_group_by_name(
     }
 }
 
-#[derive(Deserialize)]
-struct DelayRequest {
-    url: String,
-    timeout: u16,
-}
-
 #[instrument(skip_all, fields(name = %proxy.name()))]
 async fn get_group_delay(
     State(state): State<GroupState>,
@@ -71,28 +70,17 @@ async fn get_group_delay(
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
 
-    if let Some(group) = proxy.try_as_group_handler() {
-        let latency_test_url = group.get_latency_test_url();
-        let proxies = group.get_proxies().await;
-        let names = proxies
-            .iter()
-            .map(|p| p.name().to_owned())
-            .collect::<Vec<_>>();
-        let results = outbound_manager
-            .url_test(
-                &[vec![proxy], proxies].concat(),
-                &latency_test_url.unwrap_or(q.url),
-                timeout,
-            )
-            .await;
+    if proxy.try_as_group_handler().is_some() {
+        let (members, results) =
+            group_url_test(&outbound_manager, proxy, &q.url, timeout).await;
 
         let mut res = HashMap::new();
-
-        for (i, name) in names.iter().enumerate() {
-            if let Some(Ok(latency)) = results.get(i + 1) {
-                res.insert(name.to_owned(), latency.0.as_millis());
+        for (i, member) in members.iter().enumerate() {
+            // results[0] is for the group itself; results[i+1] is for members[i].
+            if let Some(Ok((actual, _overall))) = results.get(i + 1) {
+                res.insert(member.name().to_owned(), actual.as_millis());
             } else {
-                res.insert(name.to_owned(), 0);
+                res.insert(member.name().to_owned(), 0);
             }
         }
         Json(res).into_response()

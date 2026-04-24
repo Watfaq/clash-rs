@@ -1141,7 +1141,8 @@ async fn test_delete_connection_by_id() {
     let _clash = start_client_clash();
 
     // Use a random UUID that doesn't correspond to any real connection.
-    let url = "http://127.0.0.1:9090/connections/00000000-0000-0000-0000-000000000000";
+    let url =
+        "http://127.0.0.1:9090/connections/00000000-0000-0000-0000-000000000000";
     let req = hyper::Request::builder()
         .uri(url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
@@ -1363,14 +1364,11 @@ async fn test_get_proxy_from_provider() {
 async fn test_provider_proxy_healthcheck() {
     let _clash = start_client_clash();
 
-    let url =
-        "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
+    let url = "http://127.0.0.1:9090/providers/proxies/url-test/DIRECT/healthcheck\
          ?url=http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=2000";
     let response = send_http_request(url.parse().unwrap(), auth_get(url))
         .await
-        .expect(
-            "Failed to send GET /providers/proxies/url-test/DIRECT/healthcheck",
-        );
+        .expect("Failed to send GET /providers/proxies/url-test/DIRECT/healthcheck");
 
     // The endpoint returns 200 on success or 400 on timeout/failure; both are
     // acceptable here since network may not be available in CI.
@@ -1531,7 +1529,9 @@ async fn test_patch_mode_roundtrip() {
 
     let api = "http://127.0.0.1:9090/configs";
 
-    for (mode_in, expected) in [("direct", "direct"), ("global", "global"), ("rule", "rule")] {
+    for (mode_in, expected) in
+        [("direct", "direct"), ("global", "global"), ("rule", "rule")]
+    {
         let body = format!(r#"{{"mode": "{}"}}"#, mode_in);
         let req = hyper::Request::builder()
             .uri(api)
@@ -1643,5 +1643,8 @@ async fn test_patch_mode_and_log_level_together() {
     assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
     let after = get_mode(9090).await;
-    assert_eq!(after, "global", "mode should be 'global' after combined PATCH");
+    assert_eq!(
+        after, "global",
+        "mode should be 'global' after combined PATCH"
+    );
 }
