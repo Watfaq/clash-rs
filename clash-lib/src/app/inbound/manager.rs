@@ -561,32 +561,17 @@ impl InboundManager {
         let changed = !listeners.is_empty();
 
         for (mut opts, handle) in listeners {
-            opts.common_opts_mut().port = match &opts {
-                InboundOpts::Http { common_opts } if let Some(port) = ports.port => {
-                    port
-                }
-                InboundOpts::Socks { common_opts, .. }
-                    if let Some(port) = ports.socks_port =>
-                {
-                    port
-                }
-                InboundOpts::Mixed { common_opts, .. }
-                    if let Some(port) = ports.mixed_port =>
-                {
-                    port
-                }
+            // extract_if already guarantees the matching port field is Some.
+            // Use a plain match + if-let (stable) rather than if-let guards
+            // in match arms (which require the nightly `if_let_guard` feature).
+            let new_port = match &opts {
+                InboundOpts::Http { .. } => ports.port,
+                InboundOpts::Socks { .. } => ports.socks_port,
+                InboundOpts::Mixed { .. } => ports.mixed_port,
                 #[cfg(feature = "tproxy")]
-                InboundOpts::TProxy { common_opts, .. }
-                    if let Some(port) = ports.tproxy_port =>
-                {
-                    port
-                }
+                InboundOpts::TProxy { .. } => ports.tproxy_port,
                 #[cfg(feature = "redir")]
-                InboundOpts::Redir { common_opts }
-                    if let Some(port) = ports.redir_port =>
-                {
-                    port
-                }
+                InboundOpts::Redir { .. } => ports.redir_port,
                 _ => {
                     warn!(
                         "Port for listener '{}' is not changed",
@@ -595,7 +580,14 @@ impl InboundManager {
                     continue;
                 }
             };
-
+            let Some(port) = new_port else {
+                warn!(
+                    "Port for listener '{}' is not changed",
+                    opts.common_opts().name
+                );
+                continue;
+            };
+            opts.common_opts_mut().port = port;
             guard.insert(opts, handle);
         }
 
