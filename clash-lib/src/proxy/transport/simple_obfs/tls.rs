@@ -44,9 +44,21 @@ impl Transport for Client {
 // inner stream. (The previous implementation used `read_exact` with local
 // buffers pinned on the stack; dropping the future on Pending lost those bytes,
 // desynchronising the frame parser and causing AEAD tag failures.)
+
+// Maximum header size to discard: 105 bytes for the first response preamble;
+// 3 bytes (type + version) for every subsequent record.
+const MAX_SKIP: usize = 105;
+
 enum ReadState {
-    SkippingHeader(Vec<u8>, usize), // (discard buffer, bytes already consumed)
-    ReadingLength([u8; 2], usize),  // (length buffer, bytes already consumed)
+    // Fixed-size scratch buffer avoids a heap allocation on every record boundary.
+    // `target` is 105 for the initial handshake preamble, 3 for all subsequent
+    // records.
+    SkippingHeader {
+        buf: [u8; MAX_SKIP],
+        target: usize,
+        filled: usize,
+    },
+    ReadingLength([u8; 2], usize), // (length buffer, bytes already consumed)
 }
 
 pub struct TLSObfs {
@@ -183,10 +195,13 @@ impl AsyncRead for TLSObfs {
             // Both states persist their partial buffers in `this.read_state` so
             // that a Poll::Pending return never loses already-consumed bytes.
             let to_reading_length = match &mut this.read_state {
-                ReadState::SkippingHeader(skip_buf, filled) => {
-                    let total = skip_buf.len();
-                    while *filled < total {
-                        let mut rb = ReadBuf::new(&mut skip_buf[*filled..]);
+                ReadState::SkippingHeader {
+                    buf: skip_buf,
+                    target,
+                    filled,
+                } => {
+                    while *filled < *target {
+                        let mut rb = ReadBuf::new(&mut skip_buf[*filled..*target]);
                         ready!(inner.as_mut().poll_read(cx, &mut rb))?;
                         let n = rb.filled().len();
                         if n == 0 {
@@ -226,7 +241,11 @@ impl AsyncRead for TLSObfs {
                 };
                 this.remain = length;
                 // Subsequent records have a 3-byte header (type + version).
-                this.read_state = ReadState::SkippingHeader(vec![0u8; 3], 0);
+                this.read_state = ReadState::SkippingHeader {
+                    buf: [0u8; MAX_SKIP],
+                    target: 3,
+                    filled: 0,
+                };
                 // Loop back to Phase 1 to deliver payload bytes immediately.
             }
         }
@@ -328,7 +347,11 @@ impl TLSObfs {
             write_committed: 0,
             // First response: skip 105-byte TLS handshake preamble
             // (ServerHello 96 B + ChangeCipherSpec 6 B + type/version 3 B).
-            read_state: ReadState::SkippingHeader(vec![0u8; 105], 0),
+            read_state: ReadState::SkippingHeader {
+                buf: [0u8; MAX_SKIP],
+                target: MAX_SKIP,
+                filled: 0,
+            },
         }
     }
 }
