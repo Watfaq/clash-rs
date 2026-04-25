@@ -471,6 +471,18 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    /// Do not bind any host port.  Use this when the container is accessed
+    /// exclusively via its internal docker network IP (e.g. e2e tests that
+    /// spawn a clash-rs subprocess which connects via container IP).  Avoids
+    /// EADDRINUSE errors that occur when Docker tries to bind a host port in
+    /// the OS ephemeral range.
+    #[allow(dead_code)]
+    pub fn no_port(mut self) -> Self {
+        self.exposed_ports = vec![];
+        self.host_config.port_bindings = Some(HashMap::new());
+        self
+    }
+
     pub fn cmd(mut self, cmd: &[&str]) -> Self {
         self.cmd = Some(cmd.iter().map(|x| x.to_string()).collect());
         self

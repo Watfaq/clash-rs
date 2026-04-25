@@ -583,7 +583,7 @@ mod e2e {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
-            .port(port)
+            .no_port()
             .entrypoint(&["ssserver"])
             .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
             .build()
@@ -600,7 +600,7 @@ mod e2e {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
-            .port(port)
+            .no_port()
             .entrypoint(&["ssserver"])
             .cmd(&[
                 "-s",
@@ -644,7 +644,7 @@ mod e2e {
         let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOW_TLS)
-            .port(stls_port)
+            .no_port()
             .env(&[
                 "MODE=server",
                 &listen_env,
@@ -675,7 +675,7 @@ mod e2e {
         };
         DockerTestRunnerBuilder::new()
             .image(IMAGE_OBFS)
-            .port(obfs_port)
+            .no_port()
             .cmd(&[
                 "obfs-server",
                 "-p",
