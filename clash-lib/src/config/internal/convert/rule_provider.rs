@@ -10,8 +10,8 @@ use crate::{
 
 pub(super) fn convert(
     before: Option<HashMap<String, HashMap<String, serde_yaml::Value>>>,
-) -> HashMap<String, RuleProviderDef> {
-    before
+) -> Result<HashMap<String, RuleProviderDef>, Error> {
+    Ok(before
         .map(|m| {
             m.into_iter()
                 .try_fold(HashMap::new(), |mut rv, (name, mut body)| {
@@ -49,9 +49,9 @@ pub(super) fn convert(
                     rv.insert(name, provider);
                     Ok::<HashMap<std::string::String, RuleProviderDef>, Error>(rv)
                 })
-                .expect("proxy provider parse error")
         })
-        .unwrap_or_default()
+        .transpose()?
+        .unwrap_or_default())
 }
 
 impl TryFrom<HashMap<String, serde_yaml::Value>> for RuleProviderDef {

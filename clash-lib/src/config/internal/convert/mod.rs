@@ -74,7 +74,7 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                     .map_err(|x| Error::InvalidConfig(x.to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?,
-        rule_providers: rule_provider::convert(c.rule_provider.take()),
+        rule_providers: rule_provider::convert(c.rule_provider.take())?,
         users: c
             .authentication
             .clone()
@@ -143,8 +143,8 @@ pub(super) fn convert(mut c: def::Config) -> Result<config::Config, crate::Error
                             Error,
                         >(rv)
                     })
-                    .expect("proxy provider parse error")
             })
+            .transpose()?
             .unwrap_or_default(),
         listeners: listener::convert(c.listeners.take(), &c)?,
         inbound_providers: c

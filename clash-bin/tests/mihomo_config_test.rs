@@ -132,6 +132,43 @@ fn file_failure_logs_error_then_summary_on_stdout() {
 }
 
 #[test]
+fn proxy_provider_without_health_check_is_accepted() {
+    let temp = tempdir().expect("create temp dir");
+    let config = temp.path().join("provider.yaml");
+    fs::write(
+        &config,
+        r#"mixed-port: 8899
+proxy-providers:
+  0.LocalProxyNode:
+    type: file
+    path: ./providers.yaml
+"#,
+    )
+    .expect("write config");
+
+    let output = clash_cmd()
+        .args(["-t", "-f"])
+        .arg(&config)
+        .output()
+        .expect("run clash-rs");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        stdout(&output),
+        stderr(&output)
+    );
+    assert_eq!(stderr(&output), "");
+    assert_eq!(
+        stdout(&output),
+        format!(
+            "configuration file {} test is successful\n",
+            path_display(&config)
+        )
+    );
+}
+
+#[test]
 fn stdin_success_uses_bytes_summary_and_does_not_create_default_config() {
     let temp = tempdir().expect("create temp dir");
     let mut command = clash_cmd();

@@ -909,6 +909,9 @@ impl OutboundManager {
         for (name, provider) in proxy_providers.into_iter() {
             match provider {
                 OutboundProxyProviderDef::Http(http) => {
+                    let health_check_interval =
+                        http.health_check.effective_interval();
+                    let health_check_lazy = http.health_check.effective_lazy();
                     let vehicle = http_vehicle::Vehicle::new(
                         http.url.parse::<Uri>().unwrap_or_else(|_| {
                             print_and_exit!("invalid provider url: {}", http.url);
@@ -920,8 +923,8 @@ impl OutboundManager {
                     let hc = HealthCheck::new(
                         vec![],
                         http.health_check.url,
-                        http.health_check.interval,
-                        http.health_check.lazy.unwrap_or_default(),
+                        health_check_interval,
+                        health_check_lazy,
                         proxy_manager.clone(),
                     );
 
@@ -938,6 +941,9 @@ impl OutboundManager {
                     provider_registry.insert(name, Arc::new(RwLock::new(provider)));
                 }
                 OutboundProxyProviderDef::File(file) => {
+                    let health_check_interval =
+                        file.health_check.effective_interval();
+                    let health_check_lazy = file.health_check.effective_lazy();
                     let vehicle = file_vehicle::Vehicle::new(
                         PathBuf::from(cwd.clone())
                             .join(&file.path)
@@ -947,8 +953,8 @@ impl OutboundManager {
                     let hc = HealthCheck::new(
                         vec![],
                         file.health_check.url,
-                        file.health_check.interval,
-                        file.health_check.lazy.unwrap_or_default(),
+                        health_check_interval,
+                        health_check_lazy,
                         proxy_manager.clone(),
                     );
 

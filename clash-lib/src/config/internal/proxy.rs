@@ -687,6 +687,7 @@ pub struct OutboundHttpProvider {
     pub url: String,
     pub interval: u64,
     pub path: String,
+    #[serde(default = "default_provider_health_check")]
     pub health_check: HealthCheck,
 }
 
@@ -697,15 +698,50 @@ pub struct OutboundFileProvider {
     pub name: String,
     pub path: String,
     pub interval: Option<u64>,
+    #[serde(default = "default_provider_health_check")]
     pub health_check: HealthCheck,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct HealthCheck {
+    #[serde(default)]
     pub enable: bool,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub interval: u64,
+    #[serde(default = "default_provider_health_check_lazy")]
     pub lazy: Option<bool>,
+}
+
+impl HealthCheck {
+    pub fn effective_interval(&self) -> u64 {
+        if !self.enable {
+            return 0;
+        }
+        if self.interval == 0 {
+            300
+        } else {
+            self.interval
+        }
+    }
+
+    pub fn effective_lazy(&self) -> bool {
+        self.lazy.unwrap_or(true)
+    }
+}
+
+fn default_provider_health_check() -> HealthCheck {
+    HealthCheck {
+        enable: false,
+        url: String::new(),
+        interval: 0,
+        lazy: Some(true),
+    }
+}
+
+fn default_provider_health_check_lazy() -> Option<bool> {
+    Some(true)
 }
 
 impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
@@ -723,6 +759,56 @@ impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
             mapping.into_iter(),
         ))
         .map_err(map_serde_error(name))
+    }
+}
+
+#[cfg(test)]
+mod proxy_provider_tests {
+    use super::OutboundProxyProviderDef;
+    use serde_yaml::Value;
+    use std::collections::HashMap;
+
+    fn value(input: &str) -> Value {
+        Value::String(input.to_owned())
+    }
+
+    #[test]
+    fn missing_health_check_uses_mihomo_defaults() {
+        let provider = OutboundProxyProviderDef::try_from(HashMap::from([
+            ("name".to_owned(), value("provider")),
+            ("type".to_owned(), value("file")),
+            ("path".to_owned(), value("./provider.yaml")),
+        ]))
+        .expect("parse provider");
+
+        let OutboundProxyProviderDef::File(provider) = provider else {
+            panic!("expected file provider");
+        };
+        assert!(!provider.health_check.enable);
+        assert_eq!(provider.health_check.url, "");
+        assert_eq!(provider.health_check.effective_interval(), 0);
+        assert!(provider.health_check.effective_lazy());
+    }
+
+    #[test]
+    fn enabled_health_check_defaults_interval_to_300() {
+        let provider = OutboundProxyProviderDef::try_from(HashMap::from([
+            ("name".to_owned(), value("provider")),
+            ("type".to_owned(), value("file")),
+            ("path".to_owned(), value("./provider.yaml")),
+            (
+                "health-check".to_owned(),
+                serde_yaml::from_str("enable: true").expect("parse health check"),
+            ),
+        ]))
+        .expect("parse provider");
+
+        let OutboundProxyProviderDef::File(provider) = provider else {
+            panic!("expected file provider");
+        };
+        assert!(provider.health_check.enable);
+        assert_eq!(provider.health_check.effective_interval(), 300);
+        assert!(provider.health_check.effective_lazy());
     }
 }
 
