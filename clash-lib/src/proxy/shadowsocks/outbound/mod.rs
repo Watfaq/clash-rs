@@ -706,6 +706,11 @@ mod e2e {
 socks-port: {socks_port}
 bind-address: 127.0.0.1
 mmdb: "{mmdb}"
+# Clash-rs defaults geosite to "geosite.dat" in compatibility mode (which is
+# on by default) and downloads it if missing.  Point to /dev/null instead:
+# an empty file is a valid protobuf GeoSiteList, so no download occurs and
+# our geo-free rules still work.
+geosite: /dev/null
 mode: global
 log-level: error
 proxies:

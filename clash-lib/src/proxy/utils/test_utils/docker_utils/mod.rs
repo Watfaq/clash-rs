@@ -9,8 +9,6 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use futures::{SinkExt, StreamExt, future::select_all};
-#[cfg(throughput_test)]
-use std::sync::atomic::{AtomicU16, Ordering};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -24,14 +22,19 @@ use tracing::{debug, info, trace};
 
 // ── Port allocator
 // ────────────────────────────────────────────────────────────
-/// Global port counter starting at 52000. Each call returns a unique port so
-/// parallel tests never collide.
-#[cfg(throughput_test)]
-static NEXT_PORT: AtomicU16 = AtomicU16::new(52000);
-
+/// Allocate a free port by asking the OS for one. Each call returns a unique
+/// port so parallel tests never collide with each other or with ephemeral
+/// ports.
 #[cfg(throughput_test)]
 pub fn alloc_port() -> u16 {
-    NEXT_PORT.fetch_add(1, Ordering::Relaxed)
+    // Bind port 0 to let the OS pick a free port, then release it.
+    // TOCTOU race is acceptable in test environments.
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("alloc_port: bind failed");
+    listener
+        .local_addr()
+        .expect("alloc_port: local_addr")
+        .port()
 }
 
 // ── ThroughputResult
@@ -73,14 +76,23 @@ fn write_throughput_result(result: &ThroughputResult) {
 #[cfg(throughput_test)]
 pub fn find_clash_rs_binary() -> std::path::PathBuf {
     let root = config_helper::root_dir();
-    let debug = root.join("target/debug/clash-rs");
+    // Prefer the release binary: it's faster (important for throughput tests)
+    // and avoids the `telemetry` feature deadlock that occurs when
+    // `cargo build --all-features` is used (console_subscriber + OpenTelemetry
+    // threads compete with the main thread over a mutex during crypto init).
+    // Build with: cargo build --release --bin clash-rs
     let release = root.join("target/release/clash-rs");
-    if debug.exists() {
-        debug
-    } else if release.exists() {
+    let debug = root.join("target/debug/clash-rs");
+    if release.exists() {
         release
+    } else if debug.exists() {
+        debug
     } else {
-        panic!("clash-rs binary not found — run `cargo build -p clash-rs` first")
+        panic!(
+            "clash-rs binary not found — run `cargo build --release --bin \
+             clash-rs` first (do NOT use --all-features: the telemetry feature \
+             causes startup deadlocks when multiple instances run concurrently)"
+        )
     }
 }
 
@@ -727,18 +739,28 @@ pub async fn clash_process_e2e_throughput(
 ) -> anyhow::Result<ThroughputResult> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    // --- write config to a temp file ---
-    let mut cfg_file = tempfile::NamedTempFile::new()?;
-    std::io::Write::write_all(&mut cfg_file, config_yaml.as_bytes())?;
-    let cfg_path = cfg_file.path().to_owned();
+    // Each clash-rs instance gets its own temp directory so that concurrent
+    // runs never share the same `cache.db` or other working-dir files.
+    let work_dir = tempfile::TempDir::new()?;
+
+    // Write config inside the per-instance work dir so the path stays valid
+    // for the duration of the clash-rs process.
+    let cfg_path = work_dir.path().join("config.yaml");
+    std::fs::write(&cfg_path, config_yaml.as_bytes())?;
 
     // --- spawn clash-rs subprocess ---
+    // Log to a per-instance file so output from concurrent runs never interleave
+    // or get lost in pipe buffering.
+    let log_path = work_dir.path().join("clash-rs.log");
+    let log_file = std::fs::File::create(&log_path)?;
+    let log_file2 = log_file.try_clone()?;
     let mut child = tokio::process::Command::new(binary)
         .arg("-c")
         .arg(&cfg_path)
+        .current_dir(work_dir.path())
         .kill_on_drop(true)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
+        .stdout(log_file)
+        .stderr(log_file2)
         .spawn()
         .map_err(|e| anyhow::anyhow!("failed to spawn clash-rs: {e}"))?;
 
@@ -773,8 +795,24 @@ pub async fn clash_process_e2e_throughput(
     });
 
     // --- wait for SOCKS5 inbound to be ready ---
+    // First, give the process a moment and check it hasn't crashed immediately.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    if let Ok(Some(status)) = child.try_wait() {
+        let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
+        anyhow::bail!(
+            "clash-rs [{label}] exited immediately with status: {:?}\n--- log \
+             ---\n{}",
+            status,
+            log_content
+        );
+    }
     wait_for_port(socks_port, 60).await.map_err(|e| {
         child.start_kill().ok();
+        let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
+        eprintln!(
+            "--- clash-rs [{label}] log (port not ready) ---\n{}",
+            log_content
+        );
         e
     })?;
 
