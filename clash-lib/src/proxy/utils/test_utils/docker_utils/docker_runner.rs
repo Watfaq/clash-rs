@@ -15,7 +15,7 @@ use bytes::Bytes;
 use futures::{Future, StreamExt, TryStreamExt};
 use tar;
 
-const TIMEOUT_DURATION: u64 = 30;
+const TIMEOUT_DURATION: u64 = 120;
 
 /// Creates a tar archive from a source path with the given target path.
 /// This is a blocking operation and should be called from `spawn_blocking`.

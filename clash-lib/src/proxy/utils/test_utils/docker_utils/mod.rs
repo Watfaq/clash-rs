@@ -737,8 +737,8 @@ pub async fn clash_process_e2e_throughput(
         .arg("-c")
         .arg(&cfg_path)
         .kill_on_drop(true)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .map_err(|e| anyhow::anyhow!("failed to spawn clash-rs: {e}"))?;
 
@@ -773,7 +773,7 @@ pub async fn clash_process_e2e_throughput(
     });
 
     // --- wait for SOCKS5 inbound to be ready ---
-    wait_for_port(socks_port, 30).await.map_err(|e| {
+    wait_for_port(socks_port, 60).await.map_err(|e| {
         child.start_kill().ok();
         e
     })?;

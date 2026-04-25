@@ -63,11 +63,11 @@ jobs:
           RUST_LOG: ${{ env.RUST_LOG }}
           CLASH_RS_CI: "true"
         run: |
+          set -o pipefail
           RUSTFLAGS="--cfg docker_test --cfg throughput_test" \
           cargo test -p clash-lib --release --all-features \
             e2e_throughput \
             -- --test-threads=8 --nocapture 2>&1 | tee throughput-test.log
-        continue-on-error: true
 
       - name: Format results as Markdown
         if: always()
@@ -99,7 +99,7 @@ jobs:
           retention-days: 90
 
       - name: Post PR comment
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
