@@ -51,7 +51,7 @@ fn path_display(path: &Path) -> String {
 }
 
 #[test]
-fn file_success_outputs_mihomo_summary_on_stdout() {
+fn file_success_outputs_summary_on_stdout() {
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("ok.yaml");
     fs::write(&config, VALID_CONFIG).expect("write config");
@@ -234,7 +234,7 @@ fn base64_decode_failure_is_stdout_fatal() {
 }
 
 #[test]
-fn missing_file_mode_creates_mihomo_default_config() {
+fn missing_file_mode_creates_default_config() {
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("home").join("config.yaml");
 
@@ -265,7 +265,7 @@ fn missing_file_mode_creates_mihomo_default_config() {
 }
 
 #[test]
-fn empty_file_reports_mihomo_empty_file_error() {
+fn empty_file_reports_empty_file_error() {
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("empty.yaml");
     fs::write(&config, "").expect("write empty config");

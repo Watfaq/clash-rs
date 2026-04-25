@@ -44,10 +44,8 @@ struct Cli {
         help = "Specify configuration file"
     )]
     config: Option<PathBuf>,
-    #[clap(long = "mihomo-file", hide = true, value_parser, value_name = "FILE")]
-    mihomo_file: Option<PathBuf>,
-    #[clap(long = "mihomo-config", hide = true, value_name = "BASE64")]
-    mihomo_config: Option<String>,
+    #[clap(long = "config-string", hide = true, value_name = "BASE64")]
+    config_string: Option<String>,
     #[clap(
         short = 't',
         long,
@@ -217,19 +215,11 @@ enum ConfigInput {
 
 impl ConfigInput {
     fn resolve(cli: &Cli) -> anyhow::Result<Self> {
-        if let Some(config) = cli.mihomo_config.as_deref() {
+        if let Some(config) = cli.config_string.as_deref() {
             return decode_config(config);
         }
         if let Ok(config) = std::env::var("CLASH_CONFIG_STRING") {
             return decode_config(&config);
-        }
-
-        if let Some(file) = cli.mihomo_file.as_ref() {
-            return resolve_config_file(file);
-        }
-
-        if let Some(file) = std::env::var_os("CLASH_CONFIG_FILE") {
-            return resolve_config_file(&PathBuf::from(file));
         }
 
         let current_dir =
@@ -243,17 +233,16 @@ impl ConfigInput {
             Some(directory) => current_dir.join(directory),
             None => current_dir,
         };
-        let config = cli
-            .config
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_CONFIG_FILE));
-        let path = if config.is_absolute() {
-            config
-        } else {
-            directory.join(config)
-        };
-        Ok(Self::from_file_path(path))
+
+        if let Some(config) = cli.config.as_ref() {
+            return resolve_config_path(config, &directory);
+        }
+
+        if let Some(file) = std::env::var_os("CLASH_CONFIG_FILE") {
+            return resolve_config_file(&PathBuf::from(file));
+        }
+
+        Ok(Self::from_file_path(directory.join(DEFAULT_CONFIG_FILE)))
     }
 
     fn from_file_path(path: PathBuf) -> Self {
@@ -315,14 +304,14 @@ fn preprocess_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
         .map(|arg| match arg.as_str() {
             "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
             "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
-            "-config" => "--mihomo-config".to_string(),
-            "-f" => "--mihomo-file".to_string(),
+            "-config" => "--config-string".to_string(),
+            "-f" => "--config".to_string(),
             _ if arg.starts_with("-config=") => {
-                arg.replacen("-config=", "--mihomo-config=", 1)
+                arg.replacen("-config=", "--config-string=", 1)
             }
-            _ if arg.starts_with("-f=") => arg.replacen("-f=", "--mihomo-file=", 1),
+            _ if arg.starts_with("-f=") => arg.replacen("-f=", "--config=", 1),
             _ if arg.starts_with("-f") && arg.len() > 2 => {
-                format!("--mihomo-file={}", &arg[2..])
+                format!("--config={}", &arg[2..])
             }
             _ => arg,
         })
@@ -335,6 +324,20 @@ fn decode_config(config: &str) -> anyhow::Result<ConfigInput> {
         .map_err(|err| anyhow!("decode config: {err}"))?;
     let content = String::from_utf8_lossy(&content).into_owned();
     Ok(ConfigInput::Bytes { content })
+}
+
+fn resolve_config_path(
+    config: &Path,
+    directory: &Path,
+) -> anyhow::Result<ConfigInput> {
+    if config == Path::new("-") {
+        return resolve_config_file(config);
+    }
+    if config.is_absolute() {
+        Ok(ConfigInput::from_file_path(config.to_path_buf()))
+    } else {
+        Ok(ConfigInput::from_file_path(directory.join(config)))
+    }
 }
 
 fn resolve_config_file(file: &Path) -> anyhow::Result<ConfigInput> {

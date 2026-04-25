@@ -771,7 +771,7 @@ mod proxy_provider_tests {
     }
 
     #[test]
-    fn missing_health_check_uses_mihomo_defaults() {
+    fn missing_health_check_uses_default_values() {
         let provider = OutboundProxyProviderDef::try_from(HashMap::from([
             ("name".to_owned(), value("provider")),
             ("type".to_owned(), value("file")),
