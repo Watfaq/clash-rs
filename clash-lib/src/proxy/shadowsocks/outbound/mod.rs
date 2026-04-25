@@ -644,6 +644,7 @@ mod e2e {
         let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOW_TLS)
+            .port(stls_port)
             .env(&[
                 "MODE=server",
                 &listen_env,
@@ -674,6 +675,7 @@ mod e2e {
         };
         DockerTestRunnerBuilder::new()
             .image(IMAGE_OBFS)
+            .port(obfs_port)
             .cmd(&[
                 "obfs-server",
                 "-p",
@@ -767,13 +769,17 @@ rules:
         let echo_port = alloc_port();
 
         let c1 = get_ss_runner(ss_port).await?;
-        let c2 = get_obfs_runner(
-            c1.container_ip(),
-            ss_port,
-            obfs_port,
-            SimpleOBFSMode::Http,
-        )
-        .await?;
+        let c1_ip = c1.container_ip();
+        let c2 =
+            match get_obfs_runner(c1_ip, ss_port, obfs_port, SimpleOBFSMode::Http)
+                .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    c1.cleanup().await.ok();
+                    return Err(e);
+                }
+            };
         let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
         let gateway_ip = c2.docker_gateway_ip();
 
@@ -813,13 +819,17 @@ rules:
         let echo_port = alloc_port();
 
         let c1 = get_ss_runner(ss_port).await?;
-        let c2 = get_obfs_runner(
-            c1.container_ip(),
-            ss_port,
-            obfs_port,
-            SimpleOBFSMode::Tls,
-        )
-        .await?;
+        let c1_ip = c1.container_ip();
+        let c2 =
+            match get_obfs_runner(c1_ip, ss_port, obfs_port, SimpleOBFSMode::Tls)
+                .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    c1.cleanup().await.ok();
+                    return Err(e);
+                }
+            };
         let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
         let gateway_ip = c2.docker_gateway_ip();
 
@@ -897,7 +907,14 @@ rules:
         let echo_port = alloc_port();
 
         let c1 = get_ss_runner(ss_port).await?;
-        let c2 = get_shadowtls_runner(c1.container_ip(), ss_port, stls_port).await?;
+        let c1_ip = c1.container_ip();
+        let c2 = match get_shadowtls_runner(c1_ip, ss_port, stls_port).await {
+            Ok(c) => c,
+            Err(e) => {
+                c1.cleanup().await.ok();
+                return Err(e);
+            }
+        };
         let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
         let gateway_ip = c2.docker_gateway_ip();
 
