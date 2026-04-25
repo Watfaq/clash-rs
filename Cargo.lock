@@ -1432,12 +1432,15 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
+ "base64 0.22.1",
  "clap",
  "clash-lib",
  "dhat",
  "human-panic",
  "sentry",
+ "tempfile",
  "tikv-jemallocator",
+ "time",
 ]
 
 [[package]]

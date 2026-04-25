@@ -38,6 +38,8 @@ ring = ["clash-lib/ring"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+base64 = "0.22"
+time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }
 
 clash-lib = { path = "../clash-lib", default-features = false }
 
@@ -49,3 +51,6 @@ human-panic = "2.0"
 
 
 aws-lc-rs = { version = "1.16", optional = true, default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
