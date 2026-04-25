@@ -117,13 +117,13 @@ fn main() -> anyhow::Result<()> {
     let config_input = match ConfigInput::resolve(&cli) {
         Ok(config_input) => config_input,
         Err(err) => {
-            print_mihomo_log("fatal", &err.to_string());
+            print_cli_log("fatal", &err.to_string());
             exit(1);
         }
     };
 
     if let Err(err) = config_input.ensure_file() {
-        print_mihomo_log("fatal", &err.to_string());
+        print_cli_log("fatal", &err.to_string());
         exit(1);
     }
 
@@ -134,7 +134,7 @@ fn main() -> anyhow::Result<()> {
                 exit(0);
             }
             Err(e) => {
-                print_mihomo_log("error", &e.to_string());
+                print_cli_log("error", &e.to_string());
                 print_test_failure(&config_input);
                 exit(1);
             }
@@ -225,11 +225,11 @@ impl ConfigInput {
         }
 
         if let Some(file) = cli.mihomo_file.as_ref() {
-            return resolve_mihomo_file(file);
+            return resolve_config_file(file);
         }
 
         if let Some(file) = std::env::var_os("CLASH_CONFIG_FILE") {
-            return resolve_mihomo_file(&PathBuf::from(file));
+            return resolve_config_file(&PathBuf::from(file));
         }
 
         let current_dir =
@@ -337,7 +337,7 @@ fn decode_config(config: &str) -> anyhow::Result<ConfigInput> {
     Ok(ConfigInput::Bytes { content })
 }
 
-fn resolve_mihomo_file(file: &Path) -> anyhow::Result<ConfigInput> {
+fn resolve_config_file(file: &Path) -> anyhow::Result<ConfigInput> {
     if file == Path::new("-") {
         let mut content = String::new();
         std::io::stdin()
@@ -385,7 +385,7 @@ fn print_test_failure(input: &ConfigInput) {
     }
 }
 
-fn print_mihomo_log(level: &str, msg: &str) {
+fn print_cli_log(level: &str, msg: &str) {
     let format = format_description!(
         "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond \
          digits:9][offset_hour sign:mandatory]:[offset_minute]"
