@@ -687,7 +687,7 @@ pub struct OutboundHttpProvider {
     pub url: String,
     pub interval: u64,
     pub path: String,
-    #[serde(default = "default_provider_health_check")]
+    #[serde(default)]
     pub health_check: HealthCheck,
 }
 
@@ -698,7 +698,7 @@ pub struct OutboundFileProvider {
     pub name: String,
     pub path: String,
     pub interval: Option<u64>,
-    #[serde(default = "default_provider_health_check")]
+    #[serde(default)]
     pub health_check: HealthCheck,
 }
 
@@ -710,8 +710,19 @@ pub struct HealthCheck {
     pub url: String,
     #[serde(default)]
     pub interval: u64,
-    #[serde(default = "default_provider_health_check_lazy")]
+    #[serde(default)]
     pub lazy: Option<bool>,
+}
+
+impl Default for HealthCheck {
+    fn default() -> Self {
+        HealthCheck {
+            enable: false,
+            url: String::new(),
+            interval: 0,
+            lazy: Some(true),
+        }
+    }
 }
 
 impl HealthCheck {
@@ -729,19 +740,6 @@ impl HealthCheck {
     pub fn effective_lazy(&self) -> bool {
         self.lazy.unwrap_or(true)
     }
-}
-
-fn default_provider_health_check() -> HealthCheck {
-    HealthCheck {
-        enable: false,
-        url: String::new(),
-        interval: 0,
-        lazy: Some(true),
-    }
-}
-
-fn default_provider_health_check_lazy() -> Option<bool> {
-    Some(true)
 }
 
 impl TryFrom<HashMap<String, Value>> for OutboundProxyProviderDef {
