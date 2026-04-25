@@ -25,9 +25,9 @@ pub async fn group_url_test(
     fallback_url: &str,
     timeout: Duration,
 ) -> std::io::Result<(Duration, Duration)> {
-    let group = proxy
-        .try_as_group_handler()
-        .expect("caller must ensure proxy is a group");
+    let group = proxy.try_as_group_handler().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "proxy is not a group")
+    })?;
     let latency_test_url = group.get_latency_test_url();
     let members = group.get_proxies().await;
     let active_proxy = group.get_active_proxy().await;
@@ -48,11 +48,14 @@ pub async fn group_url_test(
     let result = if let Some(idx) = active_idx {
         results
             .get(idx + 1)
-            .expect("active proxy index must be within the range of proxies")
+            .or_else(|| results.first())
+            .ok_or_else(|| {
+                io::Error::other("missing latency result for active proxy")
+            })?
     } else {
         results
             .first()
-            .expect("there must be at least one proxy in the group")
+            .ok_or_else(|| io::Error::other("no proxies in group"))?
     };
 
     match result {

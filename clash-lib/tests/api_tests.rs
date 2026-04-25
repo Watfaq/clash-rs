@@ -1385,7 +1385,8 @@ async fn test_provider_proxy_healthcheck() {
     assert_eq!(
         response.status(),
         http::StatusCode::OK,
-        "GET provider proxy healthcheck should return 200 when the target URL is reachable"
+        "GET provider proxy healthcheck should return 200 when the target URL is \
+         reachable"
     );
 
     let json = parse_json(response).await;
@@ -1571,9 +1572,8 @@ async fn test_patch_mode_roundtrip() {
 }
 
 /// Regression test: GET /configs must not be blocked while a concurrent PATCH
-/// that includes a listener-restart is running.  We verify this by sending a
-/// mode-only PATCH (no restart) together with a GET and confirming both
-/// complete and return consistent data.
+/// is running.  We issue PATCH and GET concurrently via `tokio::join!` and
+/// confirm both complete and return consistent data.
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 async fn test_patch_mode_does_not_block_get_configs() {
@@ -1581,7 +1581,7 @@ async fn test_patch_mode_does_not_block_get_configs() {
 
     let url = "http://127.0.0.1:9090/configs";
 
-    // PATCH mode to "direct".
+    // Build PATCH and GET requests upfront.
     let patch_req = hyper::Request::builder()
         .uri(url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
@@ -1590,22 +1590,24 @@ async fn test_patch_mode_does_not_block_get_configs() {
         .body(r#"{"mode": "direct"}"#.to_string())
         .expect("Failed to build request");
 
-    let res = send_http_request::<String>(url.parse().unwrap(), patch_req)
-        .await
-        .expect("Failed to PATCH /configs");
-    assert_eq!(res.status(), http::StatusCode::ACCEPTED);
+    // Issue both requests concurrently so the GET races against the PATCH.
+    let (patch_res, get_res) = tokio::join!(
+        send_http_request::<String>(url.parse().unwrap(), patch_req),
+        send_http_request(url.parse().unwrap(), auth_get(url)),
+    );
 
-    // Immediately GET /configs – should not time out or return stale mode.
-    let get_res = send_http_request(url.parse().unwrap(), auth_get(url))
-        .await
-        .expect("GET /configs after PATCH should not block");
-    assert_eq!(get_res.status(), http::StatusCode::OK);
-
-    let json = parse_json(get_res).await;
+    let patch_res = patch_res.expect("PATCH /configs should not fail");
     assert_eq!(
-        json.get("mode").and_then(|v| v.as_str()),
-        Some("direct"),
-        "GET /configs must reflect mode='direct' immediately after PATCH"
+        patch_res.status(),
+        http::StatusCode::ACCEPTED,
+        "PATCH /configs must return 202"
+    );
+
+    let get_res = get_res.expect("GET /configs should not block or fail");
+    assert_eq!(
+        get_res.status(),
+        http::StatusCode::OK,
+        "GET /configs must return 200 even while PATCH is in flight"
     );
 }
 
@@ -1633,6 +1635,16 @@ async fn test_patch_log_level() {
         http::StatusCode::ACCEPTED,
         "PATCH /configs log-level should return 202"
     );
+
+    let get_res = send_http_request(url.parse().unwrap(), auth_get(url))
+        .await
+        .expect("Failed to GET /configs after log-level PATCH");
+    let json = parse_json(get_res).await;
+    assert_eq!(
+        json.get("log-level").and_then(|v| v.as_str()),
+        Some("info"),
+        "log-level should be 'info' after PATCH"
+    );
 }
 
 /// PATCH with both mode and log-level in a single request: both must take
@@ -1657,10 +1669,21 @@ async fn test_patch_mode_and_log_level_together() {
         .expect("Failed to PATCH /configs");
     assert_eq!(res.status(), http::StatusCode::ACCEPTED);
 
-    let after = get_mode(9090).await;
+    let after_json = parse_json(
+        send_http_request(url.parse().unwrap(), auth_get(url))
+            .await
+            .expect("Failed to GET /configs after combined PATCH"),
+    )
+    .await;
     assert_eq!(
-        after, "global",
+        after_json.get("mode").and_then(|v| v.as_str()),
+        Some("global"),
         "mode should be 'global' after combined PATCH"
+    );
+    assert_eq!(
+        after_json.get("log-level").and_then(|v| v.as_str()),
+        Some("info"),
+        "log-level should be 'info' after combined PATCH"
     );
 }
 
