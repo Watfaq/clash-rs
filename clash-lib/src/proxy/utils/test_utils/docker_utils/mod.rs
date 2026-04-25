@@ -9,11 +9,10 @@ use crate::{
 };
 use anyhow::{anyhow, bail};
 use futures::{SinkExt, StreamExt, future::select_all};
+#[cfg(throughput_test)]
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicU16, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 use sysinfo::Networks;
@@ -27,14 +26,17 @@ use tracing::{debug, info, trace};
 // ────────────────────────────────────────────────────────────
 /// Global port counter starting at 52000. Each call returns a unique port so
 /// parallel tests never collide.
+#[cfg(throughput_test)]
 static NEXT_PORT: AtomicU16 = AtomicU16::new(52000);
 
+#[cfg(throughput_test)]
 pub fn alloc_port() -> u16 {
     NEXT_PORT.fetch_add(1, Ordering::Relaxed)
 }
 
 // ── ThroughputResult
 // ──────────────────────────────────────────────────────────
+#[cfg(throughput_test)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ThroughputResult {
     pub label: String,
@@ -68,6 +70,7 @@ fn write_throughput_result(result: &ThroughputResult) {
 // ──────────────────────────────────────────────────────
 /// Locate the clash-rs binary.  Prefers the debug build (faster iteration) and
 /// falls back to the release build.  Panics if neither exists.
+#[cfg(throughput_test)]
 pub fn find_clash_rs_binary() -> std::path::PathBuf {
     let root = config_helper::root_dir();
     let debug = root.join("target/debug/clash-rs");
@@ -804,26 +807,50 @@ pub async fn clash_process_e2e_throughput(
         let upload_data = vec![0x42u8; chunk_size];
         let mut read_buf = vec![0u8; chunk_size];
 
-        // Upload
+        // Upload — any error means this destination is unusable; try the next
         let upload_start = std::time::Instant::now();
         let mut sent = 0usize;
+        let mut transfer_ok = true;
         while sent < payload_bytes {
             let to_send = chunk_size.min(payload_bytes - sent);
-            conn.write_all(&upload_data[..to_send]).await?;
-            sent += to_send;
+            match conn.write_all(&upload_data[..to_send]).await {
+                Ok(()) => sent += to_send,
+                Err(e) => {
+                    last_err = e.into();
+                    transfer_ok = false;
+                    break;
+                }
+            }
         }
-        conn.flush().await?;
+        if !transfer_ok {
+            continue 'dest;
+        }
+        if let Err(e) = conn.flush().await {
+            last_err = e.into();
+            continue 'dest;
+        }
         let upload_elapsed = upload_start.elapsed();
 
         // Download
         let download_start = std::time::Instant::now();
         let mut received = 0usize;
         while received < payload_bytes {
-            let n = conn.read(&mut read_buf).await?;
-            if n == 0 {
-                anyhow::bail!("premature EOF on download");
+            match conn.read(&mut read_buf).await {
+                Ok(0) => {
+                    last_err = anyhow::anyhow!("premature EOF on download");
+                    transfer_ok = false;
+                    break;
+                }
+                Ok(n) => received += n,
+                Err(e) => {
+                    last_err = e.into();
+                    transfer_ok = false;
+                    break;
+                }
             }
-            received += n;
+        }
+        if !transfer_ok {
+            continue 'dest;
         }
         let download_elapsed = download_start.elapsed();
 
