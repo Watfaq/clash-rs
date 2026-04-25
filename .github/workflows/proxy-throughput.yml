@@ -57,6 +57,13 @@ jobs:
           docker pull gists/simple-obfs:latest
           docker pull ghcr.io/ihciah/shadow-tls:latest
 
+      # Download once so parallel clash-rs instances don't race to fetch it
+      - name: Download Country.mmdb
+        run: |
+          mmdb_path="clash-bin/tests/data/config/Country.mmdb"
+          curl -fL https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb \
+            -o "$mmdb_path"
+
       - name: Run throughput tests
         env:
           THROUGHPUT_RESULTS_FILE: ${{ env.THROUGHPUT_RESULTS_FILE }}
