@@ -387,7 +387,8 @@ fn print_test_failure(input: &ConfigInput) {
 
 fn print_mihomo_log(level: &str, msg: &str) {
     let format = format_description!(
-        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:9][offset_hour sign:mandatory]:[offset_minute]"
+        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond \
+         digits:9][offset_hour sign:mandatory]:[offset_minute]"
     );
     let timestamp = OffsetDateTime::now_local()
         .unwrap_or_else(|_| OffsetDateTime::now_utc())
