@@ -68,7 +68,7 @@ external-ui: public
 
 # ── Outbound Interface ────────────────────────────────────────────────────────
 # Bind outbound connections to a specific network interface (not yet implemented)
-# interface-name: en0
+# interface: en0
 
 # fwmark for outbound packets on Linux — use in iptables to avoid routing loops
 # routing-mark: 6666
@@ -116,7 +116,7 @@ dns:
       addr: 127.0.0.1:853
       ca-cert: dns.crt        # TLS certificate file (path relative to CWD)
       ca-key: dns.key         # TLS private key file
-      hostname: dns.clash     # SNI hostname for DoT clients
+      # Note: DoT does not support a virtual hostname — use addr for the listen address
     doh:
       addr: 127.0.0.1:443
       ca-cert: dns.crt
@@ -249,6 +249,8 @@ listeners:
     type: http
     listen: 127.0.0.1
     port: 7890
+    # allow-lan: false              # Accept connections beyond loopback (overrides global allow-lan)
+    # fw-mark: 0                    # fwmark for accepted packets on Linux (CAP_NET_ADMIN)
 
   - name: socks-in                  # SOCKS5 proxy
     type: socks
