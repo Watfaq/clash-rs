@@ -414,6 +414,7 @@ mod e2e {
 
     // The vless-ws-tls.json config listens on port 8443 for the outer TLS inbound
     const CONTAINER_PORT: u16 = 8443;
+    const CONTAINER_PORT_XRAY: u16 = 10002;
     const UUID: &str = "b831381d-6324-4d53-ad4f-8cda48b30811";
     const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
 
@@ -427,6 +428,40 @@ mod e2e {
             .no_port()
             .mounts(&[
                 (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("vless-grpc.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("vless-h2.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
@@ -487,6 +522,191 @@ rules:
                     &binary,
                     &config,
                     "vless-ws",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vless_tcp() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ws_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: vless
+    server: {server}
+    port: {port}
+    uuid: {uuid}
+    udp: false
+    tls: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+            uuid = UUID,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vless-tcp",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vless_grpc() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_grpc_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: vless
+    server: {server}
+    port: {port}
+    uuid: {uuid}
+    udp: false
+    tls: true
+    skip-cert-verify: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: grpc
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT_XRAY,
+            uuid = UUID,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vless-grpc",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vless_h2() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_h2_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: vless
+    server: {server}
+    port: {port}
+    uuid: {uuid}
+    udp: false
+    tls: true
+    skip-cert-verify: true
+    network: h2
+    h2-opts:
+      host:
+        - example.org
+      path: /
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT_XRAY,
+            uuid = UUID,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vless-h2",
                     socks_port,
                     echo_port,
                     gateway_ip,
