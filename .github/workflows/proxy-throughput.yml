@@ -20,7 +20,7 @@ concurrency:
 env:
   RUST_LOG: "clash_lib=info"
   RUST_TOOLCHAIN: "stable"
-  RESULTS_FILE_NAME: throughput-results.json
+  THROUGHPUT_RESULTS_FILE: ${{ github.workspace }}/throughput-results.json
 
 jobs:
   throughput:
@@ -68,7 +68,7 @@ jobs:
           rustc --version
           cargo --version
           echo "=== Results file will be written to ==="
-          echo "  ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}"
+          echo "  ${{ env.THROUGHPUT_RESULTS_FILE }}"
 
       # Pull docker images in advance so test startup is faster
       - name: Pull docker images
@@ -88,8 +88,8 @@ jobs:
         env:
           # Absolute path: cargo test -p clash-lib sets the test binary's CWD
           # to clash-lib/, so a relative path would land there instead of the
-          # workspace root.  Using an absolute path avoids this ambiguity.
-          THROUGHPUT_RESULTS_FILE: ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}
+          # workspace root.  The workflow-level env sets an absolute path.
+          THROUGHPUT_RESULTS_FILE: ${{ env.THROUGHPUT_RESULTS_FILE }}
           RUST_LOG: ${{ env.RUST_LOG }}
           CLASH_RS_CI: "true"
         run: |
@@ -103,7 +103,7 @@ jobs:
       - name: Format results as Markdown
         if: always()
         run: |
-          results_file="${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}"
+          results_file="${{ env.THROUGHPUT_RESULTS_FILE }}"
           if [ -f "$results_file" ]; then
             python3 bench/format_throughput.py \
               "$results_file" \
@@ -125,7 +125,7 @@ jobs:
         with:
           name: throughput-results
           path: |
-            ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}
+            ${{ env.THROUGHPUT_RESULTS_FILE }}
             throughput-comment.md
             throughput-test.log
           retention-days: 90
