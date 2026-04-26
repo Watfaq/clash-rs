@@ -79,6 +79,11 @@ jobs:
           docker pull v2fly/v2fly-core:v4.45.2
           docker pull p4gefau1t/trojan-go:latest
           docker pull teddysun/xray:26.3.27
+          docker pull ghcr.io/sagernet/sing-box:v1.13.8
+          docker pull tobyxdd/hysteria:latest
+          docker pull ghcr.io/itsusinn/tuic-server:latest
+          docker pull ghcr.io/spongebob888/shadowquic:latest
+          docker pull docker.io/linuxserver/openssh-server:latest
 
       # Download once so parallel clash-rs instances don't race to fetch it
       - name: Download Country.mmdb

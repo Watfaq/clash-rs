@@ -810,3 +810,128 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    // Inlined from hysteria.json — obfs salamander, auth password "passwd"
+    const HYSTERIA2_SERVER_CONFIG: &str = r#"{
+    "listen": ":10002",
+    "tls": {
+        "cert": "/home/ubuntu/my.crt",
+        "key": "/home/ubuntu/my.key"
+    },
+    "obfs": {
+        "type": "salamander",
+        "salamander": {
+            "password": "beauty will save the world"
+        }
+    },
+    "up_mbps": 100,
+    "down_mbps": 100,
+    "auth": {
+        "type": "password",
+        "password": "passwd"
+    }
+}"#;
+
+    async fn get_hysteria2_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(HYSTERIA2_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_HYSTERIA)
+            .cmd(&["server"])
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/config.json"),
+                (cert.to_str().unwrap(), "/home/ubuntu/my.crt"),
+                (key.to_str().unwrap(), "/home/ubuntu/my.key"),
+            ])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_hysteria2_plain() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_hysteria2_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: hysteria2
+    server: {server}
+    port: {port}
+    password: passwd
+    obfs: salamander
+    obfs-password: "beauty will save the world"
+    sni: example.org
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "hysteria2-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}

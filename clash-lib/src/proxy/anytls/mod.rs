@@ -891,3 +891,124 @@ mod tests {
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    const ANYTLS_SERVER_CONFIG: &str = r#"{
+    "log": {"level": "info"},
+    "inbounds": [{
+        "type": "anytls",
+        "tag": "anytls-in",
+        "listen": "0.0.0.0",
+        "listen_port": 10002,
+        "users": [{"name": "user", "password": "example"}],
+        "padding_scheme": ["stop=0"],
+        "tls": {
+            "enabled": true,
+            "certificate_path": "/etc/ssl/v2ray/fullchain.pem",
+            "key_path": "/etc/ssl/v2ray/privkey.pem"
+        }
+    }],
+    "outbounds": [{"type": "direct", "tag": "direct"}]
+}"#;
+
+    async fn get_anytls_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(ANYTLS_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SINGBOX)
+            .cmd(&["run", "-c", "/etc/sing-box/config.json"])
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/sing-box/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_anytls_tls() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_anytls_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: anytls
+    server: {server}
+    port: {port}
+    password: example
+    skip-cert-verify: true
+    sni: example.org
+    udp: false
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "anytls-tls",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}

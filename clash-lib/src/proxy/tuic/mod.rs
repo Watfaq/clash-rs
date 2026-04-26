@@ -554,3 +554,134 @@ ip_mode = "auto"
         Ok(())
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    // Inlined from tuic.toml — UUID/password auth, BBR, h3 ALPN
+    const TUIC_SERVER_CONFIG: &str = r#"server = "0.0.0.0:10002"
+
+data_dir = ""
+zero_rtt_handshake = false
+dual_stack = false
+
+acl = '''
+direct 0.0.0.0/0
+direct ::/0
+'''
+
+[users]
+00000000-0000-0000-0000-000000000001 = "passwd"
+
+[tls]
+certificate = "/opt/tuic/fullchain.pem"
+private_key = "/opt/tuic/privkey.pem"
+alpn = ["h3"]
+
+[outbound.default]
+type = "direct"
+ip_mode = "auto"
+"#;
+
+    async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TUIC_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TUIC)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/tuic/config.json"),
+                (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
+                (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
+            ])
+            .env(&["TUIC_FORCE_TOML=1"])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_tuic_bbr() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tuic_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: tuic
+    server: {server}
+    port: {port}
+    uuid: 00000000-0000-0000-0000-000000000001
+    password: passwd
+    alpn:
+      - h3
+    congestion-controller: bbr
+    disable-sni: true
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "tuic-bbr",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}
