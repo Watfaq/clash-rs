@@ -373,7 +373,7 @@ proxies:
     udp: true
     tls: true
     skip-cert-verify: false
-    servername: example.com         # SNI (alias: server-name)
+    server-name: example.com        # SNI (alias: servername)
 
   - name: vmess-ws
     type: vmess
@@ -423,7 +423,7 @@ proxies:
     port: 443
     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
     tls: true
-    servername: example.com         # SNI (alias: server-name)
+    server-name: example.com        # SNI (alias: servername)
     network: ws
     ws-opts:
       path: /ws
@@ -438,7 +438,7 @@ proxies:
     port: 443
     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
     tls: true
-    servername: example.com
+    server-name: example.com
     network: grpc
     grpc-opts:
       grpc-service-name: GunService
@@ -450,7 +450,7 @@ proxies:
     port: 443
     uuid: b831381d-6324-4d53-ad4f-8cda48b30811
     tls: true
-    servername: www.icloud.com      # SNI must match the REALITY target domain
+    server-name: www.icloud.com     # SNI must match the REALITY target domain
     network: tcp
     flow: xtls-rprx-vision          # XTLS Vision flow control (required for REALITY)
     client-fingerprint: chrome      # TLS fingerprint: chrome | firefox | safari | ios | android | edge | 360 | qq | random
@@ -726,7 +726,6 @@ proxy-providers:
       url: "http://www.gstatic.com/generate_204"
       interval: 300
       lazy: true
-      timeout: 5000                 # ms
 
   remote-proxies:
     type: http
@@ -747,6 +746,7 @@ rule-providers:
     path: ./rule-set.yaml
     interval: 86400
     behavior: domain
+    format: yaml                    # yaml (default) | text | mrs
 
   remote-rules:
     type: http
@@ -754,6 +754,7 @@ rule-providers:
     path: ./ruleset/remote-rules.yaml
     interval: 86400
     behavior: classical
+    # format: yaml                  # yaml (default) | text | mrs
 
 # ── Rules ─────────────────────────────────────────────────────────────────────
 # Evaluated top-to-bottom; first match wins.
@@ -767,7 +768,8 @@ rules:
   - DOMAIN-REGEX,^www\.google\.com$,Auto         # full regex match
 
   # ── IP-based rules ──────────────────────────────────────────────────────────
-  - IP-CIDR,1.1.1.1/32,DIRECT                    # IPv4 CIDR (IP-CIDR6 for IPv6)
+  - IP-CIDR,1.1.1.1/32,DIRECT                    # IPv4 CIDR
+  - IP-CIDR6,2606:4700:4700::1111/128,DIRECT    # IPv6 CIDR (alias for IP-CIDR, same behavior)
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve     # skip DNS for private ranges
   - SRC-IP-CIDR,192.168.1.0/24,DIRECT            # match on source IP
 
