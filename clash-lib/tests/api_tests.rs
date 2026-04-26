@@ -204,6 +204,11 @@ async fn test_connections_returns_proxy_chain_names() {
     )
     .expect("Failed to start client");
 
+    // Also wait for the SOCKS5 port used by the request task —
+    // ClashInstance::start() only waits for the API port (first in the list)
+    // and the proxy listeners may bind slightly later.
+    wait_port_ready(8899).expect("SOCKS5 port 8899 not ready");
+
     let request_handle = tokio::spawn(async {
         let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:8899")
             .expect("Failed to create proxy");
@@ -225,40 +230,55 @@ async fn test_connections_returns_proxy_chain_names() {
             "Request failed with status: {}",
             response.status()
         );
+
+        // Read the full response body — this keeps the connection open for the
+        // ~3-second drip, giving the polling loop time to observe it in
+        // /connections. Without this, the connection closes immediately after
+        // headers arrive.
+        let _body = response
+            .bytes()
+            .await
+            .expect("Failed to read response body");
     });
 
-    // Yield to allow the spawned task to start, then wait for connection to
-    // establish
+    // Poll the connections API until at least one connection appears (or 10s
+    // timeout). A fixed sleep is flaky under load; polling is robust.
     tokio::task::yield_now().await;
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-
     let connections_url = "http://127.0.0.1:9090/connections";
-
-    let req = hyper::Request::builder()
-        .uri(connections_url)
-        .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
-        .method(http::method::Method::GET)
-        .body(http_body_util::Empty::<Bytes>::new())
-        .expect("Failed to build request");
-    let response = send_http_request(connections_url.parse().unwrap(), req);
-    let response = response
-        .await
-        .expect("Failed to send request")
-        .collect()
-        .await
-        .expect("Failed to collect response body")
-        .aggregate()
-        .reader();
-
-    let json: serde_json::Value =
-        serde_json::from_reader(response).expect("Failed to parse JSON response");
-    let connections = json
-        .get("connections")
-        .expect("No 'connections' field in response");
-    assert!(connections.is_array(), "Connections field is not an array");
-    let first_connection = connections
-        .get(0)
-        .expect("No connections found in response");
+    let first_connection = {
+        let mut found = None;
+        for _ in 0..20 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let req = hyper::Request::builder()
+                .uri(connections_url)
+                .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
+                .method(http::method::Method::GET)
+                .body(http_body_util::Empty::<Bytes>::new())
+                .expect("Failed to build request");
+            let Ok(response) =
+                send_http_request(connections_url.parse().unwrap(), req).await
+            else {
+                continue;
+            };
+            let Ok(body) = response.collect().await else {
+                continue;
+            };
+            let json: serde_json::Value =
+                match serde_json::from_reader(body.aggregate().reader()) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+            if let Some(conn) = json
+                .get("connections")
+                .and_then(|c| c.as_array())
+                .and_then(|a| a.first())
+            {
+                found = Some(conn.clone());
+                break;
+            }
+        }
+        found.expect("No active connection found after 10s")
+    };
 
     let chains = first_connection
         .get("chains")
