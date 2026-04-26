@@ -153,17 +153,30 @@ dns:
 
   # Primary nameservers for all DNS queries.
   # Supported URI schemes: plain IP, tls://, https://, dhcp://
-  # Append #<iface> to bind to a specific interface, e.g. tls://1.1.1.1:853#en0
+  #
+  # URL fragment parameters (appended after #, combined with &):
+  #   interface=<name>   bind this query to a specific network interface
+  #   proxy=<name>       route this nameserver's queries through a named outbound
+  #                      proxy (any proxy type: ss, vmess, trojan, socks5, …)
+  #   <name>             shorthand: a bare fragment with no = is treated as proxy=
+  #
+  # Examples:
+  #   tls://1.1.1.1:853#en0                    ← bind to interface en0
+  #   https://8.8.8.8/dns-query#proxy=MyProxy  ← DNS-over-HTTPS via proxy "MyProxy"
+  #   tls://1.1.1.1:853#auto                   ← proxy named "auto"
+  #   8.8.8.8#interface=eth0&proxy=MyProxy      ← both options combined
   nameserver:
     - 114.114.114.114
     - 8.8.8.8
-    - tls://1.1.1.1:853            # DNS-over-TLS
-    - https://1.1.1.1/dns-query    # DNS-over-HTTPS
-    # - dhcp://en0                 # Use DHCP-assigned DNS for interface en0
+    - tls://1.1.1.1:853                        # DNS-over-TLS (direct)
+    - https://1.1.1.1/dns-query                # DNS-over-HTTPS (direct)
+    - https://8.8.8.8/dns-query#proxy=MyProxy  # DNS-over-HTTPS routed through a proxy
+    # - dhcp://en0                             # Use DHCP-assigned DNS for interface en0
 
   # Fallback nameservers — queried concurrently with primary nameservers.
   # Answers from fallback are used when the resolved IP's GEOIP is not in the
   # allowed set (see fallback-filter below). Useful for anti-DNS-spoofing.
+  # Same fragment parameters (proxy=, interface=) apply here.
   fallback:
     - tls://8.8.8.8:853
     - https://8.8.4.4/dns-query
@@ -178,12 +191,14 @@ dns:
       - "+.google.com"
       - "+.facebook.com"
 
-  # Route specific domain lookups to specific nameservers
+  # Route specific domain lookups to specific nameservers.
+  # Same fragment parameters (proxy=, interface=) apply to values here too.
   nameserver-policy:
     "+.internal.corp.com": "10.0.0.1"
     "www.baidu.com": "114.114.114.114"
 
-  # Nameservers used only for resolving proxy server hostnames
+  # Nameservers used only for resolving proxy server hostnames (must be IPs).
+  # These also support the proxy= fragment to route through an outbound.
   proxy-server-nameserver:
     - 8.8.8.8
     - tls://1.1.1.1:853
