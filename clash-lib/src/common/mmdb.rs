@@ -119,8 +119,9 @@ impl Mmdb {
                     e.to_string()
                 );
 
-                // try to download again
-                fs::remove_file(&mmdb_file)?;
+                // try to download again; ignore ENOENT — another concurrent
+                // caller may have already removed the file
+                let _ = fs::remove_file(&mmdb_file);
 
                 info!(
                     "mmdb {:?} corrupt, re-downloading mmdb from {download_url}",
