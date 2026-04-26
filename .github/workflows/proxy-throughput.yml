@@ -20,7 +20,7 @@ concurrency:
 env:
   RUST_LOG: "clash_lib=info"
   RUST_TOOLCHAIN: "stable"
-  THROUGHPUT_RESULTS_FILE: throughput-results.json
+  RESULTS_FILE_NAME: throughput-results.json
 
 jobs:
   throughput:
@@ -71,7 +71,10 @@ jobs:
 
       - name: Run throughput tests
         env:
-          THROUGHPUT_RESULTS_FILE: ${{ env.THROUGHPUT_RESULTS_FILE }}
+          # Use an absolute path so the file lands at a known location
+          # regardless of which directory cargo test sets as the CWD for
+          # the test binary (cargo test -p clash-lib uses clash-lib/ as CWD).
+          THROUGHPUT_RESULTS_FILE: ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}
           RUST_LOG: ${{ env.RUST_LOG }}
           CLASH_RS_CI: "true"
         run: |
@@ -84,9 +87,10 @@ jobs:
       - name: Format results as Markdown
         if: always()
         run: |
-          if [ -f "${{ env.THROUGHPUT_RESULTS_FILE }}" ]; then
+          results_file="${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}"
+          if [ -f "$results_file" ]; then
             python3 bench/format_throughput.py \
-              "${{ env.THROUGHPUT_RESULTS_FILE }}" \
+              "$results_file" \
               --output throughput-comment.md
             # Also write to GitHub step summary
             cat throughput-comment.md >> $GITHUB_STEP_SUMMARY
@@ -105,7 +109,7 @@ jobs:
         with:
           name: throughput-results
           path: |
-            throughput-results.json
+            ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}
             throughput-comment.md
             throughput-test.log
           retention-days: 90

@@ -646,6 +646,7 @@ impl Suite {
 /// Connect to a SOCKS5 proxy at `proxy_addr` and issue a CONNECT to
 /// `target_host:target_port`.  Returns a `TcpStream` ready for data.
 #[cfg(all(docker_test, throughput_test))]
+#[allow(dead_code)]
 async fn socks5_connect(
     proxy_addr: std::net::SocketAddr,
     target_host: &str,
@@ -699,6 +700,7 @@ async fn socks5_connect(
 
 /// Wait until a TCP port accepts connections, or until `timeout_secs` elapses.
 #[cfg(all(docker_test, throughput_test))]
+#[allow(dead_code)]
 async fn wait_for_port(port: u16, timeout_secs: u64) -> anyhow::Result<()> {
     let deadline =
         tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
