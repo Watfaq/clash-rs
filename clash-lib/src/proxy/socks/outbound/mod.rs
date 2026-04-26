@@ -500,7 +500,9 @@ mod e2e {
         let echo_port = alloc_port();
 
         let container = get_socks5_noauth_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("socks5 container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -555,7 +557,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_socks5_auth_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("socks5 container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()

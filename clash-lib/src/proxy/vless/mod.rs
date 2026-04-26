@@ -421,8 +421,8 @@ mod e2e {
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
         let conf = test_config_dir.join("vless-ws-tls.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
             .no_port()
@@ -438,8 +438,8 @@ mod e2e {
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
         let conf = test_config_dir.join("vless-grpc.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .no_port()
@@ -455,8 +455,8 @@ mod e2e {
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
         let conf = test_config_dir.join("vless-h2.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .no_port()
@@ -476,7 +476,9 @@ mod e2e {
         let echo_port = alloc_port();
 
         let container = get_ws_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("vless container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -540,7 +542,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_ws_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("vless container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -599,7 +603,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_grpc_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("vless container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -661,7 +667,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_h2_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("vless container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()

@@ -872,8 +872,8 @@ mod e2e {
         server_config: &str,
     ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
         let mut tmp = tempfile::NamedTempFile::new()?;
         tmp.write_all(server_config.as_bytes())?;

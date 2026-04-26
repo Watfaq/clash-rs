@@ -603,8 +603,8 @@ ip_mode = "auto"
 
     async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
         let mut tmp = tempfile::NamedTempFile::new()?;
         tmp.write_all(TUIC_SERVER_CONFIG.as_bytes())?;
@@ -631,7 +631,9 @@ ip_mode = "auto"
         let echo_port = alloc_port();
 
         let container = get_tuic_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -693,7 +695,9 @@ rules:
 
         let container = get_tuic_runner().await?;
         container.apply_netem(50, 1.0).await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -754,7 +758,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_tuic_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()
@@ -815,7 +821,9 @@ rules:
         let echo_port = alloc_port();
 
         let container = get_tuic_runner().await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("tuic container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = config_helper::test_config_base_dir()

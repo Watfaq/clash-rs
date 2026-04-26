@@ -304,7 +304,7 @@ impl DockerTestRunner {
             host_config: Some(HostConfig {
                 network_mode: Some(network_mode),
                 cap_add: Some(vec!["NET_ADMIN".to_owned()]),
-                auto_remove: Some(true),
+                auto_remove: Some(false),
                 ..Default::default()
             }),
             ..Default::default()
@@ -335,6 +335,17 @@ impl DockerTestRunner {
             match result {
                 Ok(status) => {
                     if status.status_code != 0 {
+                        // Explicit cleanup before bailing
+                        self.instance
+                            .remove_container(
+                                &sidecar.id,
+                                Some(RemoveContainerOptions {
+                                    force: true,
+                                    ..Default::default()
+                                }),
+                            )
+                            .await
+                            .ok();
                         anyhow::bail!(
                             "netem sidecar exited with code {}: {:?}",
                             status.status_code,
@@ -343,17 +354,22 @@ impl DockerTestRunner {
                     }
                 }
                 Err(e) => {
-                    // Container already removed (auto_remove=true) — treat as
-                    // success if we got at least one status or the error is a
-                    // 404 Not Found.
-                    let msg = e.to_string();
-                    if msg.contains("404") || msg.contains("No such container") {
-                        break;
-                    }
                     return Err(e.into());
                 }
             }
         }
+
+        // Explicitly remove the sidecar now that we have verified the exit code
+        self.instance
+            .remove_container(
+                &sidecar.id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .ok();
 
         Ok(())
     }

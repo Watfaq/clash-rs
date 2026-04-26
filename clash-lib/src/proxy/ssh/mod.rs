@@ -743,7 +743,9 @@ mod e2e {
         let ssh_config_tmp_path = temp_dir.path().join("ssh");
 
         let container = get_ssh_runner(ssh_config_tmp_path).await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("ssh container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = test_config_dir
@@ -813,7 +815,9 @@ rules:
             .to_owned();
 
         let container = get_ssh_runner(ssh_config_tmp_path).await?;
-        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("ssh container has no IP"))?;
         let gateway_ip = container.docker_gateway_ip();
 
         let mmdb = test_config_dir

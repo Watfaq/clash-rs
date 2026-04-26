@@ -37,6 +37,31 @@ PROTOCOL_META = {
     "ssh":         ("SSH",         9),
 }
 
+# Canonical sort order for transport variants within each protocol group.
+# Transports not listed here sort last (key 99), then alphabetically.
+TRANSPORT_ORDER = {
+    "tcp":          0,
+    "tcp-tls":      1,
+    "ws":           2,
+    "ws-tls":       3,
+    "h2":           4,
+    "h2-tls":       5,
+    "grpc":         6,
+    "grpc-tls":     7,
+    "plain":        8,
+    "obfs-http":    9,
+    "obfs-tls":    10,
+    "v2ray-ws":    11,
+    "v2ray-tls":   12,
+    "salamander":  13,
+    "over-stream": 14,
+    "bbr":         15,
+    "cubic":       16,
+    "new_reno":    17,
+    "password":    18,
+    "ed25519":     19,
+}
+
 
 def split_label(label: str) -> tuple[str, str]:
     """Split 'proto-transport' into (proto, transport). Unknown protos kept as-is."""
@@ -115,7 +140,7 @@ def main() -> None:
         total = 0
         for proto in sorted(groups, key=proto_sort_key):
             display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
-            proto_rows = sorted(groups[proto], key=lambda r: split_label(r.get("label", ""))[1])
+            proto_rows = sorted(groups[proto], key=lambda r: (TRANSPORT_ORDER.get(split_label(r.get("label", ""))[1], 99), split_label(r.get("label", ""))[1]))
             total += len(proto_rows)
 
             lines += [f"### {display_name}", ""]
@@ -130,7 +155,7 @@ def main() -> None:
             netem_groups = group_by_proto(netem_rows)
             for proto in sorted(netem_groups, key=proto_sort_key):
                 display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
-                proto_rows = sorted(netem_groups[proto], key=lambda r: split_label(r.get("label", ""))[1])
+                proto_rows = sorted(netem_groups[proto], key=lambda r: (TRANSPORT_ORDER.get(split_label(r.get("label", ""))[1], 99), split_label(r.get("label", ""))[1]))
                 total += len(proto_rows)
                 lines += [f"#### {display_name}", ""]
                 render_table(proto_rows, lines)
@@ -140,11 +165,10 @@ def main() -> None:
         )
         lines.append("")
 
-        if args.run_url:
-            lines.append(f"[📎 View full workflow run and download artifacts]({args.run_url})")
-            lines.append("")
-
         md = "\n".join(lines)
+
+    if args.run_url:
+        md = md.rstrip("\n") + f"\n\n[📎 View full workflow run and download artifacts]({args.run_url})\n"
 
     if args.output:
         with open(args.output, "w") as f:

@@ -806,9 +806,15 @@ pub async fn clash_process_e2e_throughput(
                     }
                     received += n;
                 }
-                // Sync barrier
+                // Sync barrier: send marker byte, then wait for client ACK
+                // before starting phase 2 — prevents TCP from coalescing the
+                // marker with the first download bytes, which would bias the
+                // download timer.
                 stream.write_all(&[0xACu8]).await?;
                 stream.flush().await?;
+                // Wait for client ACK
+                let mut ack = [0u8; 1];
+                stream.read_exact(&mut ack).await?;
                 // Phase 2: send payload back
                 let data = vec![0x42u8; chunk_size];
                 let mut sent = 0usize;
@@ -879,6 +885,21 @@ pub async fn clash_process_e2e_throughput(
                 break;
             }
             let upload_elapsed = upload_start.elapsed();
+
+            // Send ACK to echo server so it can start the download phase
+            // without buffering the marker + first download bytes together.
+            if let Err(e) = conn.write_all(&[0xACu8]).await {
+                last_err = e.into();
+                echo_task.abort();
+                dest_ok = false;
+                break;
+            }
+            if let Err(e) = conn.flush().await {
+                last_err = e.into();
+                echo_task.abort();
+                dest_ok = false;
+                break;
+            }
 
             // Download
             let mut read_buf = vec![0u8; chunk_size];
