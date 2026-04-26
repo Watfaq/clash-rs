@@ -760,6 +760,13 @@ pub async fn clash_process_e2e_throughput(
             }
             received += n;
         }
+        // Sync barrier: signal to the client that all upload bytes have
+        // arrived at the echo server. The client reads this byte before
+        // starting the download timer, so download_elapsed measures only
+        // the reverse data path and is not inflated by in-flight upload
+        // bytes still traversing the proxy pipeline.
+        stream.write_all(&[0xACu8]).await?;
+        stream.flush().await?;
         // Phase 2: send payload_bytes back
         let data = vec![0x42u8; chunk_size];
         let mut sent = 0usize;
@@ -826,6 +833,17 @@ pub async fn clash_process_e2e_throughput(
             continue 'dest;
         }
         if let Err(e) = conn.flush().await {
+            last_err = e.into();
+            continue 'dest;
+        }
+        // Read sync byte: echo server sends 0xAC after receiving all upload
+        // bytes. This is the true E2E upload delivery barrier — upload_elapsed
+        // now measures time-to-delivery at the echo server, not just time-to-
+        // kernel-buffer. Without this, fast protocols (plain SS) look slower
+        // on download because more data is still in-flight when the timer
+        // starts.
+        let mut sync = [0u8; 1];
+        if let Err(e) = conn.read_exact(&mut sync).await {
             last_err = e.into();
             continue 'dest;
         }
