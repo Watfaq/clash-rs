@@ -14,17 +14,17 @@ dns:
     tcp: 127.0.0.1:53553
     dot:
       addr: 127.0.0.1:53554
-      ca-cert: ../../../../../clash-bin/tests/data/config/dns.crt
-      ca-key: ../../../../../clash-bin/tests/data/config/dns.key
+      ca-cert: ../../../../../clash-bin/tests/data/config/certs/dns.crt
+      ca-key: ../../../../../clash-bin/tests/data/config/certs/dns.key
     doh:
       addr: 127.0.0.1:53555
-      ca-cert: ../../../../../clash-bin/tests/data/config/dns.crt
-      ca-key: ../../../../../clash-bin/tests/data/config/dns.key
+      ca-cert: ../../../../../clash-bin/tests/data/config/certs/dns.crt
+      ca-key: ../../../../../clash-bin/tests/data/config/certs/dns.key
       hostname: dns.example.com
     doh3:
       addr: 127.0.0.1:53555
-      ca-cert: ../../../../../clash-bin/tests/data/config/dns.crt
-      ca-key: ../../../../../clash-bin/tests/data/config/dns.key
+      ca-cert: ../../../../../clash-bin/tests/data/config/certs/dns.crt
+      ca-key: ../../../../../clash-bin/tests/data/config/certs/dns.key
       hostname: dns.example.com
 
   # ipv6: false # when the false, response to AAAA questions will be empty
