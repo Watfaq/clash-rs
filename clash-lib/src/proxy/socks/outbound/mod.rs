@@ -295,7 +295,9 @@ mod tests {
                 test_utils::{
                     Suite,
                     consts::{IMAGE_SOCKS5, LOCAL_ADDR},
-                    docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                    docker_runner::{
+                        DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                    },
                     run_test_suites_and_cleanup,
                 },
             },
@@ -308,7 +310,10 @@ mod tests {
     const USER: &str = "user";
     const PASSWORD: &str = "password";
 
-    async fn get_socks5_runner(auth: bool) -> anyhow::Result<DockerTestRunner> {
+    async fn get_socks5_runner(
+        auth: bool,
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let conf = if auth {
             test_config_dir.join("socks5-auth.json")
@@ -319,6 +324,7 @@ mod tests {
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SOCKS5)
             .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .host_port(host_port, 10002)
             .build()
             .await
     }
@@ -328,11 +334,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
-        let runner = get_socks5_runner(false).await?;
+        let host_port = alloc_docker_port();
+        let port = 10002_u16;
+        let runner = get_socks5_runner(false, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
@@ -348,12 +354,12 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_socks5_auth() -> anyhow::Result<()> {
         use crate::proxy::DialWithConnector;
         initialize();
-        let port = 10002;
-        let runner = get_socks5_runner(true).await?;
+        let host_port = alloc_docker_port();
+        let port = 10002_u16;
+        let runner = get_socks5_runner(true, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-auth".to_owned(),
             common_opts: Default::default(),

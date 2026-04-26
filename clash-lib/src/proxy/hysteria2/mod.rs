@@ -702,8 +702,10 @@ mod tests {
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite, config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+                config_helper::test_config_base_dir,
+                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
@@ -711,7 +713,9 @@ mod tests {
 
     use super::*;
 
-    async fn get_hysteria_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_hysteria_runner(
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let conf = test_config_dir.join("hysteria.json");
         let cert = test_config_dir.join("example.org.pem");
@@ -725,16 +729,17 @@ mod tests {
                 (key.to_str().unwrap(), "/home/ubuntu/my.key"),
             ])
             .cmd(&["server"])
+            .host_port(host_port, 10002)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_hysteria() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_hysteria_runner().await?;
+        let container = get_hysteria_runner(host_port).await?;
 
         let container_ip =
             container.container_ip().unwrap_or("127.0.0.1".to_owned());

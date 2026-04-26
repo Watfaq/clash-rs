@@ -181,11 +181,15 @@ pub fn setup_default_crypto_provider() {
     CRYPTO_PROVIDER_LOCK.get_or_init(|| {
         #[cfg(feature = "aws-lc-rs")]
         {
-            _ = rustls::crypto::aws_lc_rs::default_provider().install_default()
+            _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+            // watfaq-rustls is a separate crate fork with its own provider state.
+            _ = watfaq_rustls::crypto::aws_lc_rs::default_provider()
+                .install_default();
         }
-        #[cfg(feature = "ring")]
+        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
         {
-            _ = rustls::crypto::ring::default_provider().install_default()
+            _ = rustls::crypto::ring::default_provider().install_default();
+            _ = watfaq_rustls::crypto::ring::default_provider().install_default();
         }
     });
 }

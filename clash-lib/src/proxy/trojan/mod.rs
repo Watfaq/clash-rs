@@ -251,14 +251,16 @@ mod tests {
                 Suite,
                 config_helper::test_config_base_dir,
                 consts::*,
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
 
-    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let trojan_conf = test_config_dir.join("trojan-ws.json");
         let trojan_cert = test_config_dir.join("example.org.pem");
@@ -271,15 +273,16 @@ mod tests {
                 (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
                 (trojan_key.to_str().unwrap(), "/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
+        let host_port = alloc_docker_port();
         let transport = transport::WsClient::new(
             "".to_owned(),
             10002,
@@ -294,7 +297,7 @@ mod tests {
         let tls =
             transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
-        let container = get_ws_runner().await?;
+        let container = get_ws_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
@@ -314,7 +317,7 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
-    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_grpc_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let conf = test_config_dir.join("trojan-grpc.json");
         let cert = test_config_dir.join("example.org.pem");
@@ -327,14 +330,15 @@ mod tests {
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         let transport = transport::GrpcClient::new(
             "example.org".to_owned(),
             "example"
@@ -349,7 +353,7 @@ mod tests {
             None,
         );
 
-        let runner = get_grpc_runner().await?;
+        let runner = get_grpc_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),

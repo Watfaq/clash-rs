@@ -22,19 +22,14 @@ use tracing::{debug, info, trace};
 
 // ── Port allocator
 // ────────────────────────────────────────────────────────────
-/// Allocate a free port by asking the OS for one. Each call returns a unique
-/// port so parallel tests never collide with each other or with ephemeral
-/// ports.
+/// Allocate a free TCP port by asking the OS. The listener is immediately
+/// dropped so the caller can bind the same port. Used by throughput tests
+/// where multiple ports must be reserved up-front.
 #[cfg(throughput_test)]
 pub fn alloc_port() -> u16 {
-    // Bind port 0 to let the OS pick a free port, then release it.
-    // TOCTOU race is acceptable in test environments.
-    let listener =
-        std::net::TcpListener::bind("127.0.0.1:0").expect("alloc_port: bind failed");
-    listener
-        .local_addr()
-        .expect("alloc_port: local_addr")
-        .port()
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("failed to allocate a free port");
+    listener.local_addr().unwrap().port()
 }
 
 // ── ThroughputResult
@@ -76,23 +71,14 @@ fn write_throughput_result(result: &ThroughputResult) {
 #[cfg(throughput_test)]
 pub fn find_clash_rs_binary() -> std::path::PathBuf {
     let root = config_helper::root_dir();
-    // Prefer the release binary: it's faster (important for throughput tests)
-    // and avoids the `telemetry` feature deadlock that occurs when
-    // `cargo build --all-features` is used (console_subscriber + OpenTelemetry
-    // threads compete with the main thread over a mutex during crypto init).
-    // Build with: cargo build --release --bin clash-rs
-    let release = root.join("target/release/clash-rs");
     let debug = root.join("target/debug/clash-rs");
-    if release.exists() {
-        release
-    } else if debug.exists() {
+    let release = root.join("target/release/clash-rs");
+    if debug.exists() {
         debug
+    } else if release.exists() {
+        release
     } else {
-        panic!(
-            "clash-rs binary not found — run `cargo build --release --bin \
-             clash-rs` first (do NOT use --all-features: the telemetry feature \
-             causes startup deadlocks when multiple instances run concurrently)"
-        )
+        panic!("clash-rs binary not found — run `cargo build -p clash-rs` first")
     }
 }
 
@@ -154,7 +140,6 @@ fn destination_list(gateway_ip: Option<String>) -> Vec<String> {
 pub async fn ping_pong_test(
     handler: Arc<dyn OutboundHandler>,
     gateway_ip: Option<String>,
-    port: u16,
 ) -> anyhow::Result<()> {
     // PATH: our proxy handler -> proxy-server(container) -> target local
     // server(127.0.0.1:port)
@@ -163,7 +148,9 @@ pub async fn ping_pong_test(
 
     let resolver = config_helper::build_dns_resolver().await?;
 
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port).as_str()).await?;
+    // Bind to port 0: OS assigns a free port atomically, no TOCTOU window.
+    let listener = TcpListener::bind("0.0.0.0:0").await?;
+    let port = listener.local_addr()?.port();
 
     info!("target local server started at: {}", listener.local_addr()?);
 
@@ -365,7 +352,6 @@ pub async fn ping_pong_test(
 pub async fn ping_pong_udp_test(
     handler: Arc<dyn OutboundHandler>,
     gateway_ip: Option<String>,
-    port: u16,
 ) -> anyhow::Result<()> {
     // PATH: our proxy handler -> proxy-server(container) -> target local
     // server(127.0.0.1:port)
@@ -374,7 +360,9 @@ pub async fn ping_pong_udp_test(
 
     let resolver = config_helper::build_dns_resolver().await?;
 
-    let listener = UdpSocket::bind(format!("0.0.0.0:{}", port).as_str()).await?;
+    // Bind to port 0: OS assigns a free port atomically, no TOCTOU window.
+    let listener = UdpSocket::bind("0.0.0.0:0").await?;
+    let port = listener.local_addr()?.port();
     info!("target local server started at: {}", listener.local_addr()?);
 
     async fn destination_fn(
@@ -646,7 +634,6 @@ impl Suite {
 /// Connect to a SOCKS5 proxy at `proxy_addr` and issue a CONNECT to
 /// `target_host:target_port`.  Returns a `TcpStream` ready for data.
 #[cfg(all(docker_test, throughput_test))]
-#[allow(dead_code)]
 async fn socks5_connect(
     proxy_addr: std::net::SocketAddr,
     target_host: &str,
@@ -700,7 +687,6 @@ async fn socks5_connect(
 
 /// Wait until a TCP port accepts connections, or until `timeout_secs` elapses.
 #[cfg(all(docker_test, throughput_test))]
-#[allow(dead_code)]
 async fn wait_for_port(port: u16, timeout_secs: u64) -> anyhow::Result<()> {
     let deadline =
         tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
@@ -741,28 +727,18 @@ pub async fn clash_process_e2e_throughput(
 ) -> anyhow::Result<ThroughputResult> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    // Each clash-rs instance gets its own temp directory so that concurrent
-    // runs never share the same `cache.db` or other working-dir files.
-    let work_dir = tempfile::TempDir::new()?;
-
-    // Write config inside the per-instance work dir so the path stays valid
-    // for the duration of the clash-rs process.
-    let cfg_path = work_dir.path().join("config.yaml");
-    std::fs::write(&cfg_path, config_yaml.as_bytes())?;
+    // --- write config to a temp file ---
+    let mut cfg_file = tempfile::NamedTempFile::new()?;
+    std::io::Write::write_all(&mut cfg_file, config_yaml.as_bytes())?;
+    let cfg_path = cfg_file.path().to_owned();
 
     // --- spawn clash-rs subprocess ---
-    // Log to a per-instance file so output from concurrent runs never interleave
-    // or get lost in pipe buffering.
-    let log_path = work_dir.path().join("clash-rs.log");
-    let log_file = std::fs::File::create(&log_path)?;
-    let log_file2 = log_file.try_clone()?;
     let mut child = tokio::process::Command::new(binary)
         .arg("-c")
         .arg(&cfg_path)
-        .current_dir(work_dir.path())
         .kill_on_drop(true)
-        .stdout(log_file)
-        .stderr(log_file2)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .map_err(|e| anyhow::anyhow!("failed to spawn clash-rs: {e}"))?;
 
@@ -797,24 +773,8 @@ pub async fn clash_process_e2e_throughput(
     });
 
     // --- wait for SOCKS5 inbound to be ready ---
-    // First, give the process a moment and check it hasn't crashed immediately.
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    if let Ok(Some(status)) = child.try_wait() {
-        let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
-        anyhow::bail!(
-            "clash-rs [{label}] exited immediately with status: {:?}\n--- log \
-             ---\n{}",
-            status,
-            log_content
-        );
-    }
     wait_for_port(socks_port, 60).await.map_err(|e| {
         child.start_kill().ok();
-        let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
-        eprintln!(
-            "--- clash-rs [{label}] log (port not ready) ---\n{}",
-            log_content
-        );
         e
     })?;
 
@@ -937,12 +897,8 @@ pub async fn run_test_suites_and_cleanup(
             for suite in suites {
                 match suite {
                     Suite::PingPongTcp => {
-                        let rv = ping_pong_test(
-                            handler.clone(),
-                            gateway_ip.clone(),
-                            10001,
-                        )
-                        .await;
+                        let rv = ping_pong_test(handler.clone(), gateway_ip.clone())
+                            .await;
                         if rv.is_err() {
                             tracing::error!("ping_pong_test failed: {:?}", rv);
                             return rv;
@@ -951,12 +907,9 @@ pub async fn run_test_suites_and_cleanup(
                         }
                     }
                     Suite::PingPongUdp => {
-                        let rv = ping_pong_udp_test(
-                            handler.clone(),
-                            gateway_ip.clone(),
-                            10001,
-                        )
-                        .await;
+                        let rv =
+                            ping_pong_udp_test(handler.clone(), gateway_ip.clone())
+                                .await;
                         if rv.is_err() {
                             tracing::error!("ping_pong_udp_test failed: {:?}", rv);
                             return rv;

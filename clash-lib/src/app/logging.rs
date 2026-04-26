@@ -200,10 +200,10 @@ fn setup_logging_inner(
     let subscriber = tracing_subscriber::registry();
 
     // Collect and expose data about the Tokio runtime (tasks, threads, resources,
-    // etc.)
-    #[cfg(feature = "telemetry")]
+    // etc.) — requires RUSTFLAGS="--cfg tokio_unstable" at compile time.
+    #[cfg(all(feature = "telemetry", tokio_unstable))]
     let subscriber = subscriber.with(console_subscriber::spawn());
-    #[cfg(feature = "telemetry")]
+    #[cfg(all(feature = "telemetry", tokio_unstable))]
     let filter = filter
         .add_directive("tokio=trace".parse().unwrap())
         .add_directive("runtime=trace".parse().unwrap());

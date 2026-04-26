@@ -152,6 +152,10 @@ pub struct ClientInner {
 mod tests {
     use super::*;
 
+    fn setup() {
+        crate::setup_default_crypto_provider();
+    }
+
     fn make_stream() -> AnyStream {
         let (client, _server) = tokio::io::duplex(1024);
         Box::new(client)
@@ -168,6 +172,7 @@ mod tests {
     // short_id > 8 bytes → RealityConfig::new() fails → InvalidInput
     #[tokio::test]
     async fn test_short_id_too_long() {
+        setup();
         let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 9]);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
@@ -176,6 +181,7 @@ mod tests {
     // Invalid SNI → ServerName::try_from fails → InvalidInput
     #[tokio::test]
     async fn test_invalid_sni() {
+        setup();
         let c = Client::new("".to_string(), [0u8; 32], vec![0u8; 4]);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
@@ -184,6 +190,7 @@ mod tests {
     // Valid params, server side dropped → TLS handshake error (not InvalidInput)
     #[tokio::test]
     async fn test_handshake_error_on_closed_peer() {
+        setup();
         let c = Client::new("example.com".to_string(), [0u8; 32], vec![0u8; 4]);
         let err = c.proxy_stream(make_stream()).await.err().unwrap();
         assert_ne!(err.kind(), io::ErrorKind::InvalidInput);

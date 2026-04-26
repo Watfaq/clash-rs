@@ -28,7 +28,7 @@ panic = "abort"
 
 [workspace.lints.rust]
 warnings = "deny"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docker_test)', 'cfg(throughput_test)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docker_test)', 'cfg(throughput_test)', 'cfg(tokio_unstable)'] }
 
 [workspace.lints.clippy]
 redundant_clone = "deny"

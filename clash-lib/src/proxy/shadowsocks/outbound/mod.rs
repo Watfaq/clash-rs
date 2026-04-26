@@ -272,7 +272,8 @@ mod tests {
                 config_helper::test_config_base_dir,
                 consts::*,
                 docker_runner::{
-                    DockerTestRunner, DockerTestRunnerBuilder, MultiDockerTestRunner,
+                    DockerTestRunner, DockerTestRunnerBuilder,
+                    MultiDockerTestRunner, alloc_docker_port,
                 },
                 run_test_suites_and_cleanup,
             },
@@ -337,10 +338,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_plain() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
+        let port = alloc_docker_port();
         let container = get_ss_runner(port).await?;
 
         let opts = HandlerOptions {
@@ -388,19 +388,19 @@ mod tests {
                 "V3=1",
             ])
             // .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .port(stls_port)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowtls() -> anyhow::Result<()> {
         initialize();
         // the real port that used for communication
-        let shadow_tls_port = 10002;
+        let shadow_tls_port = alloc_docker_port();
         // not important, you can assign any port that is not conflict with
         // others
-        let ss_port = 10004;
+        let ss_port = alloc_docker_port();
 
         let container1 = get_ss_runner(ss_port).await?;
 
@@ -462,13 +462,14 @@ mod tests {
                 &ss_server_env,
                 "-vv",
             ])
+            .port(obfs_port)
             .build()
             .await
     }
 
     async fn test_ss_obfs_inner(mode: SimpleOBFSMode) -> anyhow::Result<()> {
-        let obfs_port = 10002;
-        let ss_port = 10004;
+        let obfs_port = alloc_docker_port();
+        let ss_port = alloc_docker_port();
 
         let container1 = get_ss_runner(ss_port).await?;
         let container2 =
@@ -501,24 +502,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Tls).await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_v2ray_plugin() -> anyhow::Result<()> {
         initialize();
-        let ss_port = 10004;
+        let ss_port = alloc_docker_port();
         let container = get_ss_runner_with_plugin(ss_port).await?;
         let host = "example.org".to_owned();
         let plugin = V2rayWsClient::try_new(
@@ -706,11 +704,6 @@ mod e2e {
 socks-port: {socks_port}
 bind-address: 127.0.0.1
 mmdb: "{mmdb}"
-# Clash-rs defaults geosite to "geosite.dat" in compatibility mode (which is
-# on by default) and downloads it if missing.  Point to /dev/null instead:
-# an empty file is a valid protobuf GeoSiteList, so no download occurs and
-# our geo-free rules still work.
-geosite: /dev/null
 mode: global
 log-level: error
 proxies:

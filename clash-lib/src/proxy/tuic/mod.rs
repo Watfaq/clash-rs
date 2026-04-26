@@ -419,15 +419,17 @@ mod tests {
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite, config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+                config_helper::test_config_base_dir,
+                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
 
     use super::*;
-    async fn get_tuic_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_tuic_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
         let conf = test_config_dir.join("tuic.toml");
         let cert = test_config_dir.join("example.org.pem");
@@ -441,20 +443,25 @@ mod tests {
                 (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
             ])
             .env(&["TUIC_FORCE_TOML=1"])
+            .host_port(host_port, 10002)
             .build()
             .await
     }
 
-    const PORT: u16 = 10002;
-
     fn gen_options(
         container_ip: Option<String>,
+        host_port: u16,
         skip_cert_verify: bool,
     ) -> anyhow::Result<HandlerOptions> {
+        let port = if container_ip.is_some() {
+            10002
+        } else {
+            host_port
+        };
         Ok(HandlerOptions {
             name: "test-tuic".to_owned(),
             server: container_ip.unwrap_or(LOCAL_ADDR.to_owned()),
-            port: PORT,
+            port,
             common_opts: Default::default(),
             uuid: "00000000-0000-0000-0000-000000000001".parse()?,
             password: "passwd".into(),
@@ -479,12 +486,12 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_tuic_skip_cert_verify() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_tuic_runner().await?;
-        let opts = gen_options(container.container_ip(), true)?;
+        let container = get_tuic_runner(host_port).await?;
+        let opts = gen_options(container.container_ip(), host_port, true)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler
@@ -494,13 +501,13 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_tuic_cert_verify_expect_fail() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_tuic_runner().await?;
+        let container = get_tuic_runner(host_port).await?;
 
-        let opts = gen_options(container.container_ip(), false)?;
+        let opts = gen_options(container.container_ip(), host_port, false)?;
 
         let handler = Arc::new(Handler::new(opts));
         handler

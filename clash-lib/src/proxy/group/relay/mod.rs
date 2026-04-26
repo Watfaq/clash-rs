@@ -215,7 +215,9 @@ mod tests {
             utils::test_utils::{
                 Suite,
                 consts::*,
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
@@ -229,6 +231,7 @@ mod tests {
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
+            .port(port)
             .entrypoint(&["ssserver"])
             .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U"])
             .build()
@@ -236,10 +239,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_relay_1() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
+        let port = alloc_docker_port();
         let container = get_ss_runner(port).await?;
 
         let container_ip = container.container_ip();
@@ -275,10 +277,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_relay_2() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
+        let port = alloc_docker_port();
         let container = get_ss_runner(port).await?;
 
         let container_ip = container.container_ip();

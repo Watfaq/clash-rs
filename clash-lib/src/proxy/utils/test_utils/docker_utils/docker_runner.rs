@@ -471,6 +471,40 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    /// Map a dynamic host port to a fixed container port.
+    /// Use when the container always listens on `container_port` (hardcoded in
+    /// its config file) but we need a unique host port to avoid EADDRINUSE
+    /// collisions between parallel tests.
+    #[allow(dead_code)]
+    pub fn host_port(mut self, host_port: u16, container_port: u16) -> Self {
+        self._server_port = host_port;
+        self.exposed_ports = vec![
+            format!("{}/tcp", container_port),
+            format!("{}/udp", container_port),
+        ];
+        let bindings: std::collections::HashMap<String, Option<Vec<PortBinding>>> =
+            [
+                (
+                    format!("{}/tcp", container_port),
+                    Some(vec![PortBinding {
+                        host_ip: Some("0.0.0.0".to_owned()),
+                        host_port: Some(format!("{}", host_port)),
+                    }]),
+                ),
+                (
+                    format!("{}/udp", container_port),
+                    Some(vec![PortBinding {
+                        host_ip: Some("0.0.0.0".to_owned()),
+                        host_port: Some(format!("{}", host_port)),
+                    }]),
+                ),
+            ]
+            .into_iter()
+            .collect();
+        self.host_config.port_bindings = Some(bindings);
+        self
+    }
+
     /// Do not bind any host port.  Use this when the container is accessed
     /// exclusively via its internal docker network IP (e.g. e2e tests that
     /// spawn a clash-rs subprocess which connects via container IP).  Avoids
@@ -566,6 +600,16 @@ impl DockerTestRunnerBuilder {
         .await
         .map_err(Into::into)
     }
+}
+
+/// Allocate a free TCP port by asking the OS. The listener is immediately
+/// dropped so Docker can bind the same port. The TOCTOU window is negligible
+/// in test environments.
+#[cfg(docker_test)]
+pub fn alloc_docker_port() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("failed to allocate a free port");
+    listener.local_addr().unwrap().port()
 }
 
 pub fn get_host_config(port: u16) -> HostConfig {
