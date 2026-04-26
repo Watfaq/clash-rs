@@ -832,8 +832,23 @@ mod e2e {
     const CONTAINER_PORT: u16 = 10002;
     const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
 
-    // Inlined from hysteria.json — obfs salamander, auth password "passwd"
+    // Plain hysteria2 server — no obfs, auth password "passwd"
     const HYSTERIA2_SERVER_CONFIG: &str = r#"{
+    "listen": ":10002",
+    "tls": {
+        "cert": "/home/ubuntu/my.crt",
+        "key": "/home/ubuntu/my.key"
+    },
+    "up_mbps": 100,
+    "down_mbps": 100,
+    "auth": {
+        "type": "password",
+        "password": "passwd"
+    }
+}"#;
+
+    // Hysteria2 server with obfs-salamander, auth password "passwd"
+    const HYSTERIA_SALAMANDER_SERVER_CONFIG: &str = r#"{
     "listen": ":10002",
     "tls": {
         "cert": "/home/ubuntu/my.crt",
@@ -842,7 +857,7 @@ mod e2e {
     "obfs": {
         "type": "salamander",
         "salamander": {
-            "password": "beauty will save the world"
+            "password": "salamander-password"
         }
     },
     "up_mbps": 100,
@@ -853,13 +868,15 @@ mod e2e {
     }
 }"#;
 
-    async fn get_hysteria2_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn build_hysteria2_runner(
+        server_config: &str,
+    ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
         let cert = test_config_dir.join("example.org.pem");
         let key = test_config_dir.join("example.org-key.pem");
 
         let mut tmp = tempfile::NamedTempFile::new()?;
-        tmp.write_all(HYSTERIA2_SERVER_CONFIG.as_bytes())?;
+        tmp.write_all(server_config.as_bytes())?;
 
         let runner = DockerTestRunnerBuilder::new()
             .image(IMAGE_HYSTERIA)
@@ -882,7 +899,65 @@ mod e2e {
         let socks_port = alloc_port();
         let echo_port = alloc_port();
 
-        let container = get_hysteria2_runner().await?;
+        let container = build_hysteria2_runner(HYSTERIA2_SERVER_CONFIG).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: hysteria2
+    server: {server}
+    port: {port}
+    password: passwd
+    sni: example.org
+    skip-cert-verify: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "hysteria2-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_hysteria2_salamander() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container =
+            build_hysteria2_runner(HYSTERIA_SALAMANDER_SERVER_CONFIG).await?;
         let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
         let gateway_ip = container.docker_gateway_ip();
 
@@ -905,7 +980,7 @@ proxies:
     port: {port}
     password: passwd
     obfs: salamander
-    obfs-password: "beauty will save the world"
+    obfs-password: salamander-password
     sni: example.org
     skip-cert-verify: true
 rules:
@@ -923,7 +998,7 @@ rules:
                 clash_process_e2e_throughput(
                     &binary,
                     &config,
-                    "hysteria2-plain",
+                    "hysteria2-salamander",
                     socks_port,
                     echo_port,
                     gateway_ip,

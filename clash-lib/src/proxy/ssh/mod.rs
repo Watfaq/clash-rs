@@ -795,4 +795,74 @@ rules:
         drop(temp_dir);
         result
     }
+
+    #[tokio::test]
+    async fn e2e_throughput_ssh_ed25519() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let test_config_dir = config_helper::test_config_base_dir();
+        let temp_dir = prepare_ssh_config_dir(&test_config_dir).await?;
+        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+        let private_key_path = ssh_config_tmp_path
+            .join(".ssh")
+            .join("test_ed25519")
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        let container = get_ssh_runner(ssh_config_tmp_path).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = test_config_dir
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: ssh
+    server: {server}
+    port: {port}
+    username: linuxserver.io
+    private-key: "{private_key_path}"
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = SSH_PORT,
+            private_key_path = private_key_path,
+        );
+        let binary = find_clash_rs_binary();
+
+        // Keep temp_dir alive until after the test
+        let result = container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ssh-ed25519",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await;
+        drop(temp_dir);
+        result
+    }
 }
