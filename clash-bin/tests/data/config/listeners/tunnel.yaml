@@ -1,3 +1,4 @@
+# Purpose: Tunnel listener forwarding to fixed target | Used by: reference, tunnel listener tests
 port: 8080
 socks-port: 8081
 log-level: trace

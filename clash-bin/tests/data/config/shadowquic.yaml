@@ -1,3 +1,6 @@
+# Purpose: ShadowQUIC server config for integration tests.
+# NOTE: This is NOT a clash-rs client config — it configures the shadowquic
+# server binary. Referenced by clash-lib/src/proxy/shadowquic/mod.rs.
 inbound:
     type: shadowquic
     bind-addr: 0.0.0.0:10002

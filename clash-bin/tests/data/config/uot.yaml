@@ -1,3 +1,7 @@
+# Purpose: Proxy-provider file (UDP-over-TCP proxies) used by server.yaml.
+# Referenced by server.yaml as proxy-provider `file-provider-uot`.
+# Contains VMess and Trojan proxies connecting to docker test servers.
+
 proxies:
   - name: plain-vmess
     type: vmess
@@ -30,7 +34,6 @@ proxies:
     port: 9443
     password: password1
     udp: true
-    # sni: example.com # aka server name
     alpn:
       - h2
       - http/1.1

@@ -1,3 +1,4 @@
+# Purpose: Proxy provider integration test with HTTP rule-sets | Used by: proxy provider tests
 proxy-providers:
   Tag:
     type: file

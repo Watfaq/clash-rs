@@ -1,3 +1,4 @@
+# Purpose: DNS feature showcase — UDP/TCP/DoT/DoH/DoH3 listeners | Used by: reference, DNS integration tests
 mixed-port: 7890
 mode: rule
 log-level: trace

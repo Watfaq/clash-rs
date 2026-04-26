@@ -1,3 +1,4 @@
+# Purpose: Comprehensive rules/proxy/group config — primary test config | Used by: api_tests, smoke_tests (client-side)
 ---
 port: 8888
 socks-port: "8889"
@@ -80,7 +81,7 @@ external-controller: :9090
 external-ui: "public"
 secret: "clash-rs"
 experimental:
-  ignore-resolve-fail: true
+  tcp-buffer-size: 65536
 
 profile:
   store-selected: true

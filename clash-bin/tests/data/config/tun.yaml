@@ -1,3 +1,4 @@
+# Purpose: TUN transparent proxy config with IPv4+IPv6 | Used by: reference, TUN integration tests
 ---
 port: 8888
 

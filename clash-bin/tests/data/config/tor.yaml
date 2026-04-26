@@ -1,4 +1,6 @@
----
+# Purpose: Tor proxy config. Routes all traffic through the embedded Tor client.
+# Requires the `onion` feature flag to be enabled at compile time.
+
 port: 8888
 socks-port: 8889
 mixed-port: 8899
@@ -7,18 +9,9 @@ mode: rule
 log-level: debug
 external-controller: 127.0.0.1:6170
 
-
 proxies:
   - name: "tor"
     type: tor
-  - name: "ss-02"
-    type: ss
-    server: 10.0.0.13
-    port: 8388
-    cipher: aes-256-gcm
-    password: "password"
-    udp: true
 
 rules:
   - MATCH, tor
-...

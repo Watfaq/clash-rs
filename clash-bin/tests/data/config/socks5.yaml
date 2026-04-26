@@ -1,4 +1,7 @@
----
+# Purpose: SOCKS5 proxy config for docker integration tests.
+# Tests no-auth, username/password auth, and TLS-wrapped SOCKS5.
+# Server configs: socks5-noauth.json, socks5-auth.json
+
 port: 8888
 socks-port: 8889
 mixed-port: 8899
@@ -6,7 +9,6 @@ mixed-port: 8899
 mode: rule
 log-level: debug
 external-controller: 127.0.0.1:6170
-
 
 proxies:
   - name: "socks5-noauth"
@@ -32,8 +34,6 @@ proxies:
     tls: true
     udp: true
     skip-cert-verify: true
+
 rules:
-# - MATCH, socks5-noauth
-# - MATCH, socks5-auth
   - MATCH, socks5-tls
-...

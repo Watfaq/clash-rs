@@ -1,3 +1,6 @@
+# Purpose: Full-featured server-side clash config used by smoke_tests.rs and api_tests.rs.
+# Demonstrates: listeners, vmess/trojan/ss/wireguard proxies, all group types,
+# proxy-providers, rule-providers, DoT/DoH/DoH3 DNS, TUN, MMDB download.
 ---
 listeners:
   - name: "ss"

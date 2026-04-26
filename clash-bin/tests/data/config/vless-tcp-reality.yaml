@@ -1,26 +1,14 @@
----
+# Purpose: VLESS with REALITY (TCP) client config for integration tests.
+# Demonstrates XTLS-Vision flow and REALITY public-key auth.
+# Also includes a plain TCP VLESS without REALITY for comparison.
+
 port: 8888
 socks-port: 8889
 mixed-port: 8899
 
-dns:
-  enable: true
-  listen: 127.0.0.1:53533
-  default-nameserver:
-    - 114.114.114.114
-    - 8.8.8.8
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  nameserver:
-    - 114.114.114.114
-    - 8.8.8.8
-
-allow-lan: true
 mode: rule
 log-level: debug
 external-controller: 127.0.0.1:6170
-experimental:
-  ignore-resolve-fail: true
 
 proxies:
   - name: "vless-tcp-reality"

@@ -1,4 +1,6 @@
----
+# Purpose: Transparent proxy (tproxy) config for Linux tproxy integration tests.
+# Requires CAP_NET_ADMIN / root and Linux kernel tproxy support.
+
 tproxy-port: 8900
 
 mode: rule
@@ -6,4 +8,3 @@ log-level: debug
 
 rules:
   - MATCH, DIRECT
-...
