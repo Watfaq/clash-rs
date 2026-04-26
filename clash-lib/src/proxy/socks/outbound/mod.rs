@@ -431,3 +431,89 @@ mod tests {
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    async fn get_socks5_noauth_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("socks5-noauth.json");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SOCKS5)
+            .no_port()
+            .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_socks5_noauth() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_socks5_noauth_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: socks5
+    server: {server}
+    port: {port}
+    udp: false
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "socks5-noauth",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}

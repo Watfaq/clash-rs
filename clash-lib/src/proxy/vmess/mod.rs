@@ -537,3 +537,219 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 }
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const UUID: &str = "b831381d-6324-4d53-ad4f-8cda48b30811";
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    fn base_config(server: &str, port: u16, socks_port: u16, extra: &str) -> String {
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: vmess
+    server: {server}
+    port: {port}
+    uuid: {uuid}
+    alterId: 0
+    cipher: auto
+    udp: false
+{extra}
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = port,
+            uuid = UUID,
+            extra = extra,
+        )
+    }
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("vmess-ws.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("vmess-grpc.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("vmess-http2.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_VMESS)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vmess_ws() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ws_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    skip-cert-verify: true
+    network: ws
+    ws-opts:
+      path: /
+      headers:
+        Host: example.org"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vmess-ws",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vmess_grpc() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_grpc_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    skip-cert-verify: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: "example!""#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vmess-grpc",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_vmess_h2() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_h2_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    skip-cert-verify: true
+    network: h2
+    h2-opts:
+      hosts:
+        - example.org
+      path: /test"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "vmess-h2",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+}

@@ -24,7 +24,7 @@ env:
 
 jobs:
   throughput:
-    name: SS E2E Throughput
+    name: Proxy E2E Throughput
     runs-on: ubuntu-latest
 
     steps:
@@ -76,6 +76,9 @@ jobs:
           docker pull teddysun/shadowsocks-rust:alpine-1.22.0
           docker pull gists/simple-obfs:latest
           docker pull ghcr.io/ihciah/shadow-tls:latest
+          docker pull v2fly/v2fly-core:v4.45.2
+          docker pull p4gefau1t/trojan-go:latest
+          docker pull teddysun/xray:26.3.27
 
       # Download once so parallel clash-rs instances don't race to fetch it
       - name: Download Country.mmdb
@@ -102,12 +105,15 @@ jobs:
 
       - name: Format results as Markdown
         if: always()
+        env:
+          WORKFLOW_RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
           results_file="${{ env.THROUGHPUT_RESULTS_FILE }}"
           if [ -f "$results_file" ]; then
             python3 bench/format_throughput.py \
               "$results_file" \
-              --output throughput-comment.md
+              --output throughput-comment.md \
+              --run-url "${WORKFLOW_RUN_URL}"
             # Also write to GitHub step summary
             cat throughput-comment.md >> $GITHUB_STEP_SUMMARY
           else
@@ -145,9 +151,10 @@ jobs:
               body = '## 📊 Proxy Throughput Results\n\n⚠️ No results produced — check workflow logs.';
             }
 
-            // Append a link to the full log artifact
+            // Append a link to the full log artifact and workflow run
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             body += '\n\n<details><summary>Full test log</summary>\n\n';
-            body += 'Download the `throughput-results` artifact for the full log.\n\n</details>';
+            body += `Download the \`throughput-results\` artifact from the [workflow run](${runUrl}) for the full log.\n\n</details>`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,

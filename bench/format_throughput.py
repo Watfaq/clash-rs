@@ -20,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("results", help="JSON-lines result file")
     parser.add_argument("--output", "-o", help="Write markdown to this file (default: stdout)")
+    parser.add_argument("--run-url", help="URL to the GitHub Actions workflow run (added as footer link)")
     args = parser.parse_args()
 
     rows = []
@@ -55,6 +56,9 @@ def main() -> None:
             f"_Tests ran {len(rows)} variant(s) in parallel; each direction transfers the full payload._",
             "",
         ]
+        if args.run_url:
+            lines.append(f"[📎 View full workflow run and download artifacts]({args.run_url})")
+            lines.append("")
         md = "\n".join(lines)
 
     if args.output:
