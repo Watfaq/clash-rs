@@ -45,6 +45,7 @@ redir = []
 zero_copy = []
 bench = ["dep:criterion"]
 telemetry = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
+builtin-dashboard = ["dep:rust-embed"]
 
 [dependencies]
 # Async
@@ -134,6 +135,9 @@ chrono = { version = "0.4", features = ["serde"] }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 flate2 = "1"
 tar = "0.4"
+
+# Builtin dashboard
+rust-embed = { version = "8", optional = true }
 
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
