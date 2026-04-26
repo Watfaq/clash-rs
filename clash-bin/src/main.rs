@@ -23,7 +23,7 @@ use std::{
     process::exit,
 };
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[clap(author, about, long_about = None)]
 struct Cli {
     #[clap(short, long, value_parser, value_name = "DIRECTORY")]
@@ -177,7 +177,6 @@ fn main() -> anyhow::Result<()> {
     let mut config = clash::Config::File(file).try_parse()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
-
     if cli.compatibility {
         println!(
             "Compatibility mode enabled. This may cause some issues, but it is \

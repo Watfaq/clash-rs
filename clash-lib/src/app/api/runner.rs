@@ -1,16 +1,13 @@
 use std::{
-    net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex as StdMutex},
 };
 
 use axum::{
-    Router, ServiceExt, middleware,
+    Router, middleware,
     response::Redirect,
     routing::{get, post},
 };
-use tower::{Layer, util::MapRequestLayer};
-
 use http::{Method, header};
 use tokio::sync::{Mutex, broadcast::Sender};
 use tower::ServiceBuilder;
@@ -24,10 +21,7 @@ use tracing::{debug, error, info, warn};
 use crate::{
     GlobalState,
     app::{
-        api::{
-            AppState, handlers, ipc, middlewares,
-            middlewares::websocket_uri_rewrite::rewrite_websocket_uri, websocket,
-        },
+        api::{AppState, handlers, ipc, middlewares, websocket},
         dispatcher::{self, StatisticsManager},
         dns::{ThreadSafeDNSResolver, config::DNSListenAddr},
         inbound::manager::InboundManager,
@@ -179,9 +173,6 @@ impl Runner for ApiRunner {
                     handlers::connection::routes(statistics_manager),
                 )
                 .nest("/dns", handlers::dns::routes(dns_resolver))
-                .route_layer(middlewares::auth::AuthMiddlewareLayer::new(
-                    controller_cfg.secret.clone().unwrap_or_default(),
-                ))
                 .layer(middleware::from_fn(
                     middlewares::fix_json_content_type::fix_content_type,
                 ))
@@ -203,7 +194,7 @@ impl Runner for ApiRunner {
             let ipc_addr_display = ipc_addr.clone();
 
             // Handle TCP listening
-            let tcp_fut = if let Some(bind_addr) = tcp_addr {
+            let tcp_fut = tcp_addr.map(|bind_addr| {
                 let bind_addr = if bind_addr.starts_with(':') {
                     info!(
                         "TCP API Server address not supplied, listening on \
@@ -213,115 +204,39 @@ impl Runner for ApiRunner {
                 } else {
                     bind_addr
                 };
-                let router_clone = router.clone();
-                Some(async move {
-                    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-                    info!(
-                        "API server is listening on TCP address {}",
-                        listener.local_addr()?
-                    );
-                    // TCP related security checks
-                    if let Ok(addr) = listener.local_addr() {
-                        if !addr.ip().is_loopback()
-                            && controller_cfg.secret.unwrap_or_default().is_empty()
-                        {
-                            error!(
-                                "API server is listening on a non-loopback address \
-                                 without a secret. This is insecure!"
-                            );
-                            error!(
-                                "Please set a secret in the configuration to \
-                                 secure the API server."
-                            );
-                            return Err(crate::Error::Operation(
-                                "API server is listening on a non-loopback address \
-                                 without a secret. This is insecure!"
-                                    .to_string(),
-                            ));
-                        }
-                        if !addr.ip().is_loopback()
-                            && controller_cfg.cors_allow_origins.is_none()
-                        {
-                            error!(
-                                "API server is listening on a non-loopback address \
-                                 without CORS origins configured. This is insecure!"
-                            );
-                            error!(
-                                "Please set CORS origins in the configuration to \
-                                 secure the API server."
-                            );
-                            return Err(crate::Error::Operation(
-                                "API server is listening on a non-loopback address \
-                                 without CORS origins configured. This is insecure!"
-                                    .to_string(),
-                            ));
-                        }
-                    }
-                    let app = MapRequestLayer::new(rewrite_websocket_uri)
-                        .layer(router_clone);
-                    axum::serve(
-                        listener,
-                        app.into_make_service_with_connect_info::<SocketAddr>(),
-                    )
-                    .await
-                    .map_err(|x| {
-                        error!("TCP API server error: {}", x);
-                        crate::Error::Operation(format!("API server error: {x}"))
-                    })
-                })
-            } else {
-                None
-            };
+                let auth_secret = controller_cfg.secret.clone().unwrap_or_default();
+                let cors_allow_origins = controller_cfg.cors_allow_origins.clone();
+                super::tcp::serve_tcp(
+                    bind_addr,
+                    router.clone(),
+                    auth_secret,
+                    cors_allow_origins,
+                )
+            });
             // Handle IPC listening
             let ipc_fut = ipc_addr.as_ref().map(|ipc_path| {
                 let ipc_path = ipc_path.clone();
                 async move { ipc::serve_ipc(router, &ipc_path).await }
             });
 
-            let result = match (tcp_fut, ipc_fut) {
-                (Some(tcp), Some(ipc)) => {
-                    debug!(
-                        "API server is running on both TCP {} and IPC {}",
-                        tcp_addr_display.unwrap_or_default(),
-                        ipc_addr_display.unwrap_or_default()
-                    );
-                    tokio::select! {
-                        result = tcp => result,
-                        result = ipc => result,
-                        _ = cancellation_token.cancelled() => {
-                            info!("All API server closed");
-                            Ok(())
-                        }
-                    }
-                }
-                (Some(tcp), None) => {
-                    debug!(
-                        "API server is running on TCP {}",
-                        tcp_addr_display.clone().unwrap_or_default()
-                    );
-                    tokio::select! {
-                        result = tcp => result,
-                        _ = cancellation_token.cancelled() => {
-                            info!("TCP API server is closed");
-                            Ok(())
-                        }
-                    }
-                }
-                (None, Some(ipc)) => {
-                    debug!(
-                        "API server is running on IPC {}",
-                        ipc_addr_display.unwrap_or_default()
-                    );
-                    tokio::select! {
-                        result = ipc => result,
-                        _ = cancellation_token.cancelled() => {
-                            info!("IPC API server is closed");
-                            Ok(())
-                        }
-                    }
-                }
+            match (tcp_addr_display.as_deref(), ipc_addr_display.as_deref()) {
+                (Some(tcp), Some(ipc)) => debug!(
+                    "API server is running on both TCP {} and IPC {}",
+                    tcp, ipc
+                ),
+                (Some(tcp), None) => debug!("API server is running on TCP {}", tcp),
+                (None, Some(ipc)) => debug!("API server is running on IPC {}", ipc),
                 (None, None) => {
                     info!("API server: no listener configured, skipping");
+                    return;
+                }
+            }
+
+            let result = tokio::select! {
+                Some(result) = futures::future::OptionFuture::from(tcp_fut) => result,
+                Some(result) = futures::future::OptionFuture::from(ipc_fut) => result,
+                _ = cancellation_token.cancelled() => {
+                    info!("API server closed");
                     Ok(())
                 }
             };

@@ -1,7 +1,11 @@
 [build]
 target-dir = "target"
 rustflags = ["--cfg", "tokio_unstable"]
+rustc-wrapper = "sccache"
 
 [env]
 SENTRY_DSN = { value = "PLEASE DEFINE AT COMPILE TIME" }
 RUSTC_BOOTSTRAP = { value = "1" }
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"

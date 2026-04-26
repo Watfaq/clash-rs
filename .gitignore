@@ -43,3 +43,4 @@ benchmark-comment.md
 # But keep the committed baseline
 !bench/baseline-*.json
 __pycache__/
+.claude

@@ -8,6 +8,7 @@ mod handlers;
 mod ipc;
 mod middlewares;
 mod runner;
+mod tcp;
 mod websocket;
 
 pub use runner::ApiRunner;

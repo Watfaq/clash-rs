@@ -26,6 +26,15 @@ strip = true
 debug = 2
 panic = "abort"
 
+[profile.fast-release]
+inherits = "release"
+opt-level = 1
+debug = 1
+lto = "thin"
+strip = false
+incremental = true
+codegen-units = 16
+
 [workspace.lints.rust]
 warnings = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docker_test)', 'cfg(throughput_test)', 'cfg(tokio_unstable)'] }
