@@ -25,28 +25,47 @@ function formatMB(bytes: number): string {
 
 const MODES = ['direct', 'rule', 'global'] as const;
 
-interface StatCardProps {
+interface VividStatCardProps {
   label: string;
   value: string;
   subtext?: string;
   icon: React.ReactNode;
-  iconBg: string;
+  gradient: string;
+  shadow: string;
 }
 
-function StatCard({ label, value, subtext, icon, iconBg }: StatCardProps) {
+function VividStatCard({ label, value, subtext, icon, gradient, shadow }: VividStatCardProps) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</span>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${iconBg}`}>
+    <div
+      className="vivid-shimmer rounded-2xl p-5 flex flex-col gap-3"
+      style={{
+        background: gradient,
+        boxShadow: `${shadow}, inset 0 1.5px 0 rgba(255,255,255,0.25)`,
+        filter: 'url(#liquid-glass-distort)',
+      }}
+    >
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-medium uppercase tracking-wide text-white/80">{label}</span>
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.2)' }}
+        >
           {icon}
         </div>
       </div>
-      <div className="text-2xl font-bold text-slate-900 font-mono">{value}</div>
-      {subtext && <div className="text-xs text-slate-400 mt-1">{subtext}</div>}
+      <div>
+        <div className="text-3xl font-bold tabular-nums text-white">{value}</div>
+        {subtext && <div className="text-xs text-white/70 mt-1">{subtext}</div>}
+      </div>
     </div>
   );
 }
+
+const MODE_COLORS: Record<string, string> = {
+  direct: 'bg-emerald-500 text-white shadow-sm',
+  rule: 'bg-[#0071e3] text-white shadow-sm',
+  global: 'bg-violet-500 text-white shadow-sm',
+};
 
 export function Overview() {
   const queryClient = useQueryClient();
@@ -76,52 +95,59 @@ export function Overview() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-slate-900">Overview</h1>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Overview</h1>
 
-      {/* Stat cards */}
+      {/* Vivid stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        <VividStatCard
           label="Upload Speed"
           value={formatSpeed(current.up)}
-          icon={<ArrowUp size={16} className="text-blue-600" />}
-          iconBg="bg-blue-50"
+          icon={<ArrowUp size={18} className="text-white" />}
+          gradient="linear-gradient(135deg, #0071e3 0%, #0051a8 100%)"
+          shadow="0 8px 24px rgba(0,113,227,0.35)"
         />
-        <StatCard
+        <VividStatCard
           label="Download Speed"
           value={formatSpeed(current.down)}
-          icon={<ArrowDown size={16} className="text-emerald-600" />}
-          iconBg="bg-emerald-50"
+          icon={<ArrowDown size={18} className="text-white" />}
+          gradient="linear-gradient(135deg, #34c759 0%, #00a550 100%)"
+          shadow="0 8px 24px rgba(52,199,89,0.35)"
         />
-        <StatCard
+        <VividStatCard
           label="Connections"
           value={String(connCount)}
           subtext={`↑ ${formatBytesTotal(uploadTotal)}  ↓ ${formatBytesTotal(downloadTotal)}`}
-          icon={<Activity size={16} className="text-amber-600" />}
-          iconBg="bg-amber-50"
+          icon={<Activity size={18} className="text-white" />}
+          gradient="linear-gradient(135deg, #ff9500 0%, #ff6b00 100%)"
+          shadow="0 8px 24px rgba(255,149,0,0.35)"
         />
-        <StatCard
+        <VividStatCard
           label="Memory"
           value={memValue}
           subtext={memSubtext}
-          icon={<HardDrive size={16} className="text-slate-500" />}
-          iconBg="bg-slate-100"
+          icon={<HardDrive size={18} className="text-white" />}
+          gradient="linear-gradient(135deg, #af52de 0%, #7b2cbf 100%)"
+          shadow="0 8px 24px rgba(175,82,222,0.35)"
         />
       </div>
 
-      {/* Traffic chart */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      {/* Traffic chart — always dark */}
+      <div
+        className="rounded-2xl p-5"
+        style={{ background: 'linear-gradient(135deg, #1e2a3a 0%, #0f1923 100%)' }}
+      >
         <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-medium text-slate-700">Network Traffic (60s)</span>
+          <span className="text-[15px] font-semibold text-white">Network Traffic</span>
           <div className="flex items-center gap-5 text-xs">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-              <span className="text-slate-500">Upload</span>
-              <span className="font-mono font-medium text-blue-600">{formatSpeed(current.up)}</span>
+              <span className="w-2 h-2 rounded-full bg-[#60a5fa]" />
+              <span className="text-white/70">Upload</span>
+              <span className="font-mono font-medium text-[#60a5fa]">{formatSpeed(current.up)}</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <span className="text-slate-500">Download</span>
-              <span className="font-mono font-medium text-emerald-600">{formatSpeed(current.down)}</span>
+              <span className="w-2 h-2 rounded-full bg-[#34d399]" />
+              <span className="text-white/70">Download</span>
+              <span className="font-mono font-medium text-[#34d399]">{formatSpeed(current.down)}</span>
             </span>
           </div>
         </div>
@@ -132,25 +158,35 @@ export function Overview() {
         />
       </div>
 
-      {/* Mode switcher */}
+      {/* Mode switcher — SwiftUI segmented control */}
       {configs && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div className="liquid-glass-card rounded-2xl p-5">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Proxy Mode</div>
-              <div className="text-sm text-slate-600">Controls how traffic is routed</div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1"
+                style={{ color: '#6e6e73' }}
+              >
+                Proxy Mode
+              </div>
+              <div className="text-[13px]" style={{ color: '#6e6e73' }}>
+                Controls how traffic is routed
+              </div>
             </div>
-            <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+            <div
+              className="flex items-center p-1 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.06)' }}
+            >
               {MODES.map((m) => {
                 const active = currentMode === m;
                 return (
                   <button
                     key={m}
                     onClick={() => modeMutation.mutate(m)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-all ${
+                    className={`px-5 py-1.5 rounded-full text-[13px] font-medium capitalize transition-all ${
                       active
-                        ? 'bg-white shadow-sm text-slate-900'
-                        : 'text-slate-500 hover:text-slate-700'
+                        ? (MODE_COLORS[m] ?? 'bg-white text-[#1d1d1f] shadow-sm')
+                        : 'text-[#6e6e73] hover:text-[#1d1d1f]'
                     }`}
                   >
                     {m.charAt(0).toUpperCase() + m.slice(1)}

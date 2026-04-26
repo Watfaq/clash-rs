@@ -1,16 +1,20 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
+import {
+  LayoutDashboard, Globe, Activity, Filter, Terminal,
+  Settings2, Server, SlidersHorizontal,
+} from 'lucide-react';
 
 const navItems = [
-  { to: '/', label: 'Overview', end: true },
-  { to: '/proxies', label: 'Proxies' },
-  { to: '/connections', label: 'Connections' },
-  { to: '/rules', label: 'Rules' },
-  { to: '/logs', label: 'Logs' },
-  { to: '/config', label: 'Config' },
-  { to: '/dns', label: 'DNS' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/proxies', label: 'Proxies', icon: Globe },
+  { to: '/connections', label: 'Connections', icon: Activity },
+  { to: '/rules', label: 'Rules', icon: Filter },
+  { to: '/logs', label: 'Logs', icon: Terminal },
+  { to: '/config', label: 'Config', icon: Settings2 },
+  { to: '/dns', label: 'DNS', icon: Server },
+  { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 
 export function Layout() {
@@ -24,50 +28,66 @@ export function Layout() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      {/* Top nav bar */}
-      <header className="h-14 bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10 flex items-center px-6 gap-6 flex-shrink-0">
+      {/* Top nav bar — Apple frosted glass */}
+      <header
+        className="liquid-glass flex-shrink-0 sticky top-0 z-50 flex items-center px-4 gap-3"
+        style={{ height: 52 }}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="bg-blue-600 rounded-xl w-8 h-8 flex items-center justify-center">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #0071e3 0%, #0051a8 100%)' }}
+          >
             <span className="text-white font-bold text-sm">C</span>
           </div>
-          <span className="font-semibold text-slate-900 text-sm">clash-rs</span>
+          <span className="font-semibold text-[15px]" style={{ color: '#1d1d1f' }}>
+            clash-rs
+          </span>
         </div>
 
-        {/* Divider */}
-        <div className="w-px h-5 bg-slate-200" />
-
         {/* Nav */}
-        <nav className="flex items-center gap-1 flex-1 overflow-x-auto">
-          {navItems.map(({ to, label, end }) => (
+        <nav className="flex items-center gap-0.5 flex-1 overflow-x-auto">
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `px-3 py-2 text-sm rounded-lg whitespace-nowrap transition-colors flex-shrink-0 ${
+                `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                   isActive
-                    ? 'text-blue-600 font-medium bg-blue-50'
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                    ? 'nav-pill-glass text-[#0071e3]'
+                    : 'text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-black/[0.05]'
                 }`
               }
             >
-              {label}
+              <Icon size={14} />
+              <span className="hidden sm:inline">{label}</span>
             </NavLink>
           ))}
         </nav>
 
-        {/* Connection status badge */}
+        {/* Connection status */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
-          <span className="text-xs font-medium text-slate-600">
+          <div className="relative w-2 h-2 flex-shrink-0">
+            <div
+              className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#34c759]' : 'bg-[#ff3b30]'}`}
+            />
+            {isConnected && (
+              <div
+                className="absolute inset-0 w-2 h-2 rounded-full bg-[#34c759] animate-ping"
+                style={{ opacity: 0.6 }}
+              />
+            )}
+          </div>
+          <span className="text-[13px] font-medium" style={{ color: '#6e6e73' }}>
             {isConnected ? `v${version?.version}` : 'Offline'}
           </span>
         </div>
       </header>
 
       {/* Page content */}
-      <main className="flex-1 overflow-auto bg-slate-50">
+      <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
     </div>

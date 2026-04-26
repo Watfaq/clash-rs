@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { closeAllConnections, closeConnection, getWsUrl } from '../lib/api';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { X, Trash2, Search } from 'lucide-react';
+import { X, Trash2, Search, ArrowUp, ArrowDown, Activity } from 'lucide-react';
 import type { ConnectionsData, Connection } from '../lib/api';
 
 function formatBytes(bytes: number): string {
@@ -16,6 +16,17 @@ function formatDuration(start: string): string {
   if (diff < 60) return `${diff}s`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ${diff % 60}s`;
   return `${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m`;
+}
+
+function IconBadge({ bg, children }: { bg: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+      style={{ background: bg }}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function Connections() {
@@ -44,58 +55,97 @@ export function Connections() {
     <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-slate-900">Connections</h1>
-          <span className="bg-slate-100 text-slate-600 text-xs rounded-full px-2 py-0.5 font-medium">
-            {connections.length} active
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex gap-3 text-xs text-slate-500 font-mono">
-            <span>↑ {formatBytes(uploadTotal)}</span>
-            <span>↓ {formatBytes(downloadTotal)}</span>
-          </div>
-          <button
-            onClick={() => closeAllMutation.mutate()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium"
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Connections</h1>
+        <button
+          onClick={() => closeAllMutation.mutate()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+          style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
+        >
+          <Trash2 size={13} />
+          Close All
+        </button>
+      </div>
+
+      {/* Summary InsetGroup card */}
+      <div
+        className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
+        style={{ color: '#6e6e73' }}
+      >
+        Summary
+      </div>
+      <div className="liquid-glass-card rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        {[
+          {
+            icon: <Activity size={14} className="text-white" />,
+            bg: '#0071e3',
+            label: 'Active Connections',
+            value: String(connections.length),
+          },
+          {
+            icon: <ArrowUp size={14} className="text-white" />,
+            bg: '#34c759',
+            label: 'Total Upload',
+            value: formatBytes(uploadTotal),
+          },
+          {
+            icon: <ArrowDown size={14} className="text-white" />,
+            bg: '#ff9500',
+            label: 'Total Download',
+            value: formatBytes(downloadTotal),
+          },
+        ].map((row, idx, arr) => (
+          <div
+            key={row.label}
+            className="flex items-center gap-3 px-4"
+            style={{
+              minHeight: 52,
+              borderBottom: idx < arr.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+            }}
           >
-            <Trash2 size={13} />
-            Close All
-          </button>
-        </div>
+            <IconBadge bg={row.bg}>{row.icon}</IconBadge>
+            <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{row.label}</span>
+            <span className="text-[15px] font-mono" style={{ color: '#6e6e73' }}>{row.value}</span>
+          </div>
+        ))}
       </div>
 
       {/* Search */}
       <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#8e8e93' }} />
         <input
           type="text"
-          placeholder="Filter by host, rule, chain..."
+          placeholder="Filter by host, rule, chain…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[15px] focus:outline-none transition-shadow"
+          style={{
+            background: 'rgba(255,255,255,0.8)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(0,0,0,0.08)',
+            color: '#1d1d1f',
+          }}
         />
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+      {/* Connections list */}
+      <div className="liquid-glass-card rounded-xl overflow-hidden overflow-x-auto" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <table className="table-fixed w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-52">Host</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Network</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-32">Rule</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-36">Chain</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-20">Upload</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-20">Download</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Duration</th>
+            <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-52" style={{ color: '#6e6e73' }}>Host</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-24" style={{ color: '#6e6e73' }}>Network</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: '#6e6e73' }}>Rule</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-36" style={{ color: '#6e6e73' }}>Chain</th>
+              <th className="text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Upload</th>
+              <th className="text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-20" style={{ color: '#6e6e73' }}>Download</th>
+              <th className="text-right px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-24" style={{ color: '#6e6e73' }}>Duration</th>
               <th className="px-4 py-3 w-10"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-10 text-sm text-slate-400">
+                <td colSpan={8} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
                   No active connections
                 </td>
               </tr>
@@ -103,33 +153,35 @@ export function Connections() {
               filtered.map((conn: Connection) => (
                 <tr
                   key={conn.id}
-                  className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
+                  className="group transition-colors"
+                  style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
                 >
                   <td className="px-4 py-3">
-                    <div className="text-sm text-slate-800 truncate font-medium">
+                    <div className="text-[15px] font-medium truncate" style={{ color: '#1d1d1f' }}>
                       {conn.metadata.host || conn.metadata.destinationIP}
                       {conn.metadata.destinationPort && `:${conn.metadata.destinationPort}`}
                     </div>
                     {conn.metadata.process && (
-                      <div className="text-xs text-slate-400 truncate">{conn.metadata.process}</div>
+                      <div className="text-[13px] truncate" style={{ color: '#6e6e73' }}>{conn.metadata.process}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-500 font-mono whitespace-nowrap">
+                  <td className="px-4 py-3 font-mono whitespace-nowrap text-[13px]" style={{ color: '#8e8e93' }}>
                     {conn.metadata.network}/{conn.metadata.type}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600 truncate">
+                  <td className="px-4 py-3 text-[13px] truncate" style={{ color: '#6e6e73' }}>
                     {conn.rule}{conn.rulePayload && ` (${conn.rulePayload})`}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-500 truncate">
+                  <td className="px-4 py-3 text-[13px] truncate" style={{ color: '#8e8e93' }}>
                     {conn.chains?.join(' → ')}
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-mono text-blue-600">{formatBytes(conn.upload)}</td>
-                  <td className="px-4 py-3 text-right text-sm font-mono text-emerald-600">{formatBytes(conn.download)}</td>
-                  <td className="px-4 py-3 text-right text-sm font-mono text-slate-500">{formatDuration(conn.start)}</td>
+                  <td className="px-4 py-3 text-right text-[13px] font-mono" style={{ color: '#0071e3' }}>{formatBytes(conn.upload)}</td>
+                  <td className="px-4 py-3 text-right text-[13px] font-mono" style={{ color: '#34c759' }}>{formatBytes(conn.download)}</td>
+                  <td className="px-4 py-3 text-right text-[13px] font-mono" style={{ color: '#8e8e93' }}>{formatDuration(conn.start)}</td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => closeOneMutation.mutate(conn.id)}
-                      className="p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-red-500 transition-colors"
+                      className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ color: '#ff3b30' }}
                     >
                       <X size={13} />
                     </button>

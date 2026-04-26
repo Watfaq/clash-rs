@@ -6,19 +6,19 @@ import type { LogEntry } from '../lib/api';
 const LEVELS = ['all', 'debug', 'info', 'warning', 'error'] as const;
 type Level = (typeof LEVELS)[number];
 
-const LEVEL_PILL: Record<string, string> = {
-  debug: 'bg-slate-100 text-slate-600',
-  info: 'bg-blue-50 text-blue-700',
-  warning: 'bg-amber-50 text-amber-700',
-  error: 'bg-red-50 text-red-700',
+const LEVEL_DOT_COLOR: Record<string, string> = {
+  error: '#ff3b30',
+  warning: '#ff9500',
+  info: '#0071e3',
+  debug: '#8e8e93',
 };
 
-const LEVEL_ACTIVE: Record<string, string> = {
-  all: 'bg-slate-800 text-white',
-  debug: 'bg-slate-800 text-white',
-  info: 'bg-blue-600 text-white',
-  warning: 'bg-amber-500 text-white',
-  error: 'bg-red-500 text-white',
+const LEVEL_ACTIVE_STYLE: Record<string, { background: string; color: string }> = {
+  all: { background: '#1c1c1e', color: 'white' },
+  debug: { background: '#8e8e93', color: 'white' },
+  info: { background: '#0071e3', color: 'white' },
+  warning: { background: '#ff9500', color: 'white' },
+  error: { background: '#ff3b30', color: 'white' },
 };
 
 interface TimestampedLog extends LogEntry {
@@ -57,61 +57,90 @@ export function Logs() {
   const filtered = level === 'all' ? logs : logs.filter((l) => l.type === level);
 
   return (
-    <div className="p-6 flex flex-col h-full space-y-4" style={{ height: 'calc(100vh - 56px)' }}>
+    <div className="p-6 flex flex-col space-y-4" style={{ height: 'calc(100vh - 52px)' }}>
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-shrink-0">
-        <h1 className="text-xl font-semibold text-slate-900">Logs</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Logs</h1>
         <div className="flex items-center gap-2">
-          {LEVELS.map((l) => (
-            <button
-              key={l}
-              onClick={() => setLevel(l)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
-                level === l
-                  ? LEVEL_ACTIVE[l] ?? 'bg-slate-800 text-white'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-              }`}
-            >
-              {l}
-            </button>
-          ))}
-          <div className="w-px h-4 bg-slate-200 mx-1" />
+          {/* Level segmented control */}
+          <div
+            className="flex items-center p-1 rounded-full"
+            style={{ background: 'rgba(0,0,0,0.06)' }}
+          >
+            {LEVELS.map((l) => {
+              const active = level === l;
+              const activeStyle = LEVEL_ACTIVE_STYLE[l];
+              return (
+                <button
+                  key={l}
+                  onClick={() => setLevel(l)}
+                  className="px-3 py-1.5 rounded-full text-[12px] font-medium capitalize transition-all"
+                  style={
+                    active
+                      ? activeStyle
+                      : { color: '#6e6e73' }
+                  }
+                >
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="w-px h-4 mx-1" style={{ background: 'rgba(0,0,0,0.08)' }} />
+
           <button
             onClick={() => setPaused((p) => !p)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+            style={
               paused
-                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            }`}
+                ? { background: 'rgba(255,149,0,0.1)', color: '#ff9500' }
+                : { background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }
+            }
           >
             {paused ? 'Resume' : 'Pause'}
           </button>
           <button
             onClick={() => setLogs([])}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+            className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+            style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
           >
             Clear
           </button>
         </div>
       </div>
 
-      {/* Log area */}
+      {/* Log area — always dark */}
       <div
-        className="flex-1 overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-4 min-h-0"
+        className="flex-1 overflow-y-auto rounded-2xl p-4 min-h-0"
+        style={{ background: '#1c1c1e' }}
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
         {filtered.length === 0 ? (
-          <div className="text-sm text-slate-400 text-center py-10">Waiting for logs...</div>
+          <div className="text-[13px] text-center py-10" style={{ color: '#6e6e73' }}>
+            Waiting for logs…
+          </div>
         ) : (
           <div className="space-y-0.5">
             {filtered.map((log) => (
               <div key={log.id} className="flex items-baseline gap-3 py-0.5">
-                <span className="font-mono text-xs text-slate-300 flex-shrink-0 w-20">{log.ts}</span>
-                <span className={`text-xs rounded-full px-2 py-0.5 flex-shrink-0 font-medium ${LEVEL_PILL[log.type] ?? 'bg-slate-100 text-slate-600'}`}>
-                  {log.type.toUpperCase()}
+                <span
+                  className="font-mono text-[11px] flex-shrink-0 w-20"
+                  style={{ color: '#6e6e73' }}
+                >
+                  {log.ts}
                 </span>
-                <span className="font-mono text-xs text-slate-600 break-all">{log.payload}</span>
+                <div
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 self-center"
+                  style={{ background: LEVEL_DOT_COLOR[log.type] ?? '#8e8e93' }}
+                />
+                <span
+                  className="font-mono text-[13px] break-all"
+                  style={{ color: '#f5f5f7' }}
+                >
+                  {log.payload}
+                </span>
               </div>
             ))}
           </div>

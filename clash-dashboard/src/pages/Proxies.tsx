@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProxies, selectProxy, getProxyDelay, getProxyProviders, updateProxyProvider } from '../lib/api';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import type { Proxy } from '../lib/api';
 
 const TEST_URL = 'http://www.gstatic.com/generate_204';
@@ -9,31 +9,32 @@ const TEST_TIMEOUT = 5000;
 
 const GROUP_TYPES = ['Selector', 'URLTest', 'Fallback', 'LoadBalance'];
 
-function getLatencyDotClass(delay: number | undefined): string {
-  if (!delay || delay === 0) return 'bg-slate-300';
-  if (delay < 200) return 'bg-emerald-500';
-  if (delay < 500) return 'bg-amber-500';
-  return 'bg-red-500';
+function getLatencyColor(delay: number | undefined): string {
+  if (!delay || delay === 0) return '#8e8e93';
+  if (delay < 200) return '#34c759';
+  if (delay < 500) return '#ff9500';
+  return '#ff3b30';
 }
 
-function getLatencyTextClass(delay: number | undefined): string {
-  if (!delay || delay === 0) return 'text-slate-400';
-  if (delay < 200) return 'text-emerald-600';
-  if (delay < 500) return 'text-amber-600';
-  return 'text-red-600';
+function getGroupAccentColor(type: string): string {
+  if (type === 'Selector') return '#0071e3';
+  if (type === 'URLTest') return '#34c759';
+  if (type === 'Fallback') return '#ff9500';
+  if (type === 'LoadBalance') return '#af52de';
+  return '#8e8e93';
+}
+
+function getTypeBadgeStyle(type: string): { background: string; color: string } {
+  if (type === 'Selector') return { background: 'rgba(0,113,227,0.1)', color: '#0071e3' };
+  if (type === 'URLTest') return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
+  if (type === 'Fallback') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
+  if (type === 'LoadBalance') return { background: 'rgba(175,82,222,0.1)', color: '#af52de' };
+  return { background: 'rgba(0,0,0,0.06)', color: '#6e6e73' };
 }
 
 function getLastDelay(history: Proxy['history']): number | undefined {
   if (!history || history.length === 0) return undefined;
   return history[history.length - 1]?.delay;
-}
-
-function getTypeBadgeClass(type: string): string {
-  if (type === 'Selector') return 'bg-blue-50 text-blue-700';
-  if (type === 'URLTest') return 'bg-emerald-50 text-emerald-700';
-  if (type === 'Fallback') return 'bg-amber-50 text-amber-700';
-  if (type === 'LoadBalance') return 'bg-slate-100 text-slate-600';
-  return 'bg-slate-100 text-slate-600';
 }
 
 export function Proxies() {
@@ -78,7 +79,6 @@ export function Proxies() {
   async function testGroupDelay(group: Proxy) {
     if (!group.all) return;
     setTestingGroups((s) => new Set(s).add(group.name));
-    // Auto-expand when testing
     setExpanded((prev) => new Set(prev).add(group.name));
     try {
       await Promise.allSettled(
@@ -104,89 +104,136 @@ export function Proxies() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="text-sm text-slate-400">Loading proxies...</div>
+        <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading proxies...</div>
       </div>
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold text-slate-900">Proxies</h1>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
 
       <div className="space-y-3">
         {groups.map((group) => {
           const isTesting = testingGroups.has(group.name);
           const isExpanded = expanded.has(group.name);
           const isSelector = group.type === 'Selector';
+          const accentColor = getGroupAccentColor(group.type);
+          const typeBadge = getTypeBadgeStyle(group.type);
 
           return (
-            <div key={group.name} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              {/* Card header */}
-              <div
-                className="px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
-                onClick={() => toggleExpanded(group.name)}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-semibold text-slate-900 truncate">{group.name}</span>
-                  <span className={`text-xs rounded-full px-2 py-0.5 font-medium flex-shrink-0 ${getTypeBadgeClass(group.type)}`}>
-                    {group.type}
-                  </span>
-                  {group.now && (
-                    <span className="text-sm text-slate-500 truncate">
-                      → <span className="text-slate-700 font-medium">{group.now}</span>
-                    </span>
+            <div
+              key={group.name}
+              className="liquid-glass-card rounded-xl overflow-hidden"
+              style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+            >
+              {/* Colored left accent + header */}
+              <div className="flex">
+                <div className="w-1 flex-shrink-0" style={{ background: accentColor }} />
+                <div className="flex-1">
+                  <div
+                    className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors"
+                    style={{ minHeight: 52 }}
+                    onClick={() => toggleExpanded(group.name)}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                        {group.name}
+                      </span>
+                      <span
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={typeBadge}
+                      >
+                        {group.type}
+                      </span>
+                      {group.now && (
+                        <span className="text-[13px] truncate" style={{ color: '#6e6e73' }}>
+                          {group.now}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); testGroupDelay(group); }}
+                        disabled={isTesting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
+                        style={{
+                          background: 'rgba(0,0,0,0.05)',
+                          color: '#6e6e73',
+                        }}
+                      >
+                        <RefreshCw size={12} className={isTesting ? 'animate-spin' : ''} />
+                        {isTesting ? 'Testing…' : 'Test'}
+                      </button>
+                      {isExpanded
+                        ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
+                        : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                      }
+                    </div>
+                  </div>
+
+                  {/* Proxy grid */}
+                  {isExpanded && (
+                    <div
+                      className="p-4 border-t"
+                      style={{ borderColor: 'rgba(0,0,0,0.06)' }}
+                    >
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {group.all?.map((proxyName) => {
+                          const proxy = proxies[proxyName];
+                          const history = proxy?.history ?? [];
+                          const latency = latencyMap[proxyName] ?? getLastDelay(history);
+                          const isSelected = group.now === proxyName;
+                          const latencyColor = getLatencyColor(latency);
+
+                          return (
+                            <button
+                              key={proxyName}
+                              onClick={() => {
+                                if (isSelector) {
+                                  selectMutation.mutate({ group: group.name, proxy: proxyName });
+                                }
+                              }}
+                              className={`px-3 py-2.5 rounded-xl text-left border transition-all ${
+                                isSelector ? 'cursor-pointer' : 'cursor-default'
+                              }`}
+                              style={
+                                isSelected
+                                  ? { background: '#0071e3', borderColor: '#0071e3' }
+                                  : { background: 'white', borderColor: 'rgba(0,0,0,0.06)' }
+                              }
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                {isSelected && (
+                                  <Check size={12} className="text-white flex-shrink-0" />
+                                )}
+                                <div
+                                  className="text-[13px] font-medium truncate"
+                                  style={{ color: isSelected ? 'white' : '#1d1d1f' }}
+                                >
+                                  {proxyName}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ background: isSelected ? 'rgba(255,255,255,0.7)' : latencyColor }}
+                                />
+                                <span
+                                  className="text-[11px] font-mono"
+                                  style={{ color: isSelected ? 'rgba(255,255,255,0.8)' : latencyColor }}
+                                >
+                                  {latency === undefined ? '—' : latency === 0 ? 'Timeout' : `${latency}ms`}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); testGroupDelay(group); }}
-                    disabled={isTesting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw size={12} className={isTesting ? 'animate-spin' : ''} />
-                    {isTesting ? 'Testing...' : 'Test'}
-                  </button>
-                  <span className="text-slate-300 text-lg">{isExpanded ? '−' : '+'}</span>
-                </div>
               </div>
-
-              {/* Proxy grid */}
-              {isExpanded && (
-                <div className="border-t border-slate-100 p-4">
-                  <div className="grid grid-cols-3 gap-2">
-                    {group.all?.map((proxyName) => {
-                      const proxy = proxies[proxyName];
-                      const history = proxy?.history ?? [];
-                      const latency = latencyMap[proxyName] ?? getLastDelay(history);
-                      const isSelected = group.now === proxyName;
-
-                      return (
-                        <button
-                          key={proxyName}
-                          onClick={() => {
-                            if (isSelector) {
-                              selectMutation.mutate({ group: group.name, proxy: proxyName });
-                            }
-                          }}
-                          className={`px-3 py-2.5 rounded-xl text-left border transition-all ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50 shadow-sm'
-                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                          } ${isSelector ? 'cursor-pointer' : 'cursor-default'}`}
-                        >
-                          <div className="text-sm font-medium text-slate-800 truncate">{proxyName}</div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getLatencyDotClass(latency)}`} />
-                            <span className={`text-xs font-mono ${getLatencyTextClass(latency)}`}>
-                              {latency === undefined ? '—' : latency === 0 ? 'Timeout' : `${latency}ms`}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -195,29 +242,50 @@ export function Proxies() {
       {/* Providers */}
       {Object.keys(providers).length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Providers</h2>
-          {Object.values(providers).map((provider) => (
-            <div key={provider.name} className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <div className="px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-slate-900">{provider.name}</span>
-                  <span className="bg-slate-100 text-slate-600 text-xs rounded-full px-2 py-0.5">
+          <div
+            className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
+            style={{ color: '#6e6e73' }}
+          >
+            Providers
+          </div>
+          <div className="liquid-glass-card rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            {Object.values(providers).map((provider, idx, arr) => (
+              <div
+                key={provider.name}
+                className="px-4 flex items-center justify-between"
+                style={{
+                  minHeight: 52,
+                  borderBottom: idx < arr.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="font-semibold text-[15px]" style={{ color: '#1d1d1f' }}>
+                    {provider.name}
+                  </span>
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+                  >
                     {provider.vehicleType}
                   </span>
-                  <span className="bg-slate-100 text-slate-500 text-xs rounded-full px-2 py-0.5">
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
+                  >
                     {provider.proxies?.length ?? 0} proxies
                   </span>
                 </div>
                 <button
                   onClick={() => updateProxyProvider(provider.name)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
+                  style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
                 >
                   <RefreshCw size={12} />
                   Update
                 </button>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>

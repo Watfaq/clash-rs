@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
 import { getApiUrl, getSecret, setApiUrl, setSecret } from '../lib/settings';
-import { Save, AlertTriangle } from 'lucide-react';
+import { Save, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 
 function isDevMode(): boolean {
   const port = window.location.port;
@@ -38,80 +38,125 @@ export function Settings() {
     setTimeout(() => refetch(), 100);
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: 'transparent',
+    border: 'none',
+    outline: 'none',
+    textAlign: 'right',
+    fontSize: 15,
+    color: '#1d1d1f',
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-md">
-      <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Settings</h1>
 
       {/* Dev mode banner */}
       {showDevPrompt && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
-          <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-800 space-y-1">
-            <div className="font-semibold">Dev mode detected</div>
-            <div className="text-amber-700">
-              Set the API URL below to point to your running clash-rs instance, then click Save & Connect.
+        <div
+          className="rounded-xl p-4 flex gap-3"
+          style={{
+            background: 'rgba(255,149,0,0.08)',
+            border: '1px solid rgba(255,149,0,0.2)',
+          }}
+        >
+          <AlertTriangle size={16} style={{ color: '#ff9500', flexShrink: 0, marginTop: 2 }} />
+          <div className="space-y-1">
+            <div className="text-[13px] font-semibold" style={{ color: '#1d1d1f' }}>Dev mode detected</div>
+            <div className="text-[12px]" style={{ color: '#6e6e73' }}>
+              Set the API URL below to point to your running clash-rs instance, then click Save &amp; Connect.
             </div>
           </div>
         </div>
       )}
 
-      {/* Connection status */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex items-center gap-4">
-        <div className={`w-3 h-3 rounded-full flex-shrink-0 transition-colors ${
-          isConnected ? 'bg-emerald-500' : 'bg-red-500'
-        }`} />
+      {/* Connection status — vivid gradient card */}
+      <div
+        className="rounded-2xl p-5 flex items-center gap-4"
+        style={{
+          background: isConnected
+            ? 'linear-gradient(135deg, #34c759 0%, #00a550 100%)'
+            : 'linear-gradient(135deg, #ff3b30 0%, #cc2f28 100%)',
+          boxShadow: isConnected
+            ? '0 8px 24px rgba(52,199,89,0.35), inset 0 1px 0 rgba(255,255,255,0.2)'
+            : '0 8px 24px rgba(255,59,48,0.25), inset 0 1px 0 rgba(255,255,255,0.2)',
+        }}
+      >
+        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.2)' }}>
+          {isConnected
+            ? <CheckCircle size={20} className="text-white" />
+            : <XCircle size={20} className="text-white" />
+          }
+        </div>
         <div>
           {isConnected ? (
             <>
-              <div className="text-sm font-semibold text-slate-900">Connected to clash-rs</div>
-              <div className="text-sm text-slate-400 font-mono">v{data.version}</div>
+              <div className="text-[15px] font-semibold text-white">Connected to clash-rs</div>
+              <div className="text-[13px] font-mono text-white/80">v{data.version}</div>
             </>
           ) : (
             <>
-              <div className="text-sm font-semibold text-slate-900">Cannot reach API</div>
-              <div className="text-xs text-slate-400 font-mono">{getApiUrl()}</div>
+              <div className="text-[15px] font-semibold text-white">Cannot reach API</div>
+              <div className="text-[12px] font-mono text-white/70">{getApiUrl()}</div>
             </>
           )}
         </div>
       </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-600">API URL</label>
-          <input
-            type="text"
-            value={apiUrl}
-            onChange={(e) => setApiUrlState(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm"
-            placeholder="http://127.0.0.1:9090"
-          />
-          <p className="text-xs text-slate-400">
-            Base URL of the clash-rs API. When served from the binary, defaults to the current origin.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-600">Secret</label>
-          <input
-            type="password"
-            value={secret}
-            onChange={(e) => setSecretState(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-            className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm"
-            placeholder="API secret (leave blank if none)"
-          />
-        </div>
-
-        <button
-          onClick={handleSave}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+      {/* API URL InsetGroup */}
+      <div>
+        <div
+          className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1"
+          style={{ color: '#6e6e73' }}
         >
-          <Save size={14} />
-          {saved ? '✓ Saved' : 'Save & Connect'}
-        </button>
+          API Connection
+        </div>
+        <div className="liquid-glass-card rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+          <div
+            className="flex items-center gap-3 px-4"
+            style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+          >
+            <span className="text-[15px] flex-shrink-0" style={{ color: '#1d1d1f' }}>API URL</span>
+            <input
+              type="text"
+              value={apiUrl}
+              onChange={(e) => setApiUrlState(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              placeholder="http://127.0.0.1:9090"
+              style={{ ...inputStyle, color: '#6e6e73' }}
+            />
+          </div>
+          <div
+            className="flex items-center gap-3 px-4"
+            style={{ minHeight: 52 }}
+          >
+            <span className="text-[15px] flex-shrink-0" style={{ color: '#1d1d1f' }}>Secret</span>
+            <input
+              type="password"
+              value={secret}
+              onChange={(e) => setSecretState(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              placeholder="API secret (leave blank if none)"
+              style={{ ...inputStyle, color: '#6e6e73' }}
+            />
+          </div>
+        </div>
+        <div className="text-[12px] mt-2 px-1" style={{ color: '#6e6e73' }}>
+          When served from the clash-rs binary, defaults to the current origin.
+        </div>
       </div>
+
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[15px] font-semibold transition-colors"
+        style={{ background: '#0071e3', color: 'white' }}
+      >
+        <Save size={16} />
+        {saved ? '✓ Saved' : 'Save & Connect'}
+      </button>
     </div>
   );
 }
