@@ -314,14 +314,15 @@ impl TryFrom<&crate::config::def::Config> for Config {
             }
         }
 
+        // Domain hostnames are allowed here: they are bootstrapped through
+        // `default-nameserver` at client-construction time, mirroring how
+        // `nameserver` resolves its own DoH/DoT hosts.
         let proxy_server_nameserver = if !dc.proxy_server_nameserver.is_empty() {
             let ns = Config::parse_nameserver(&dc.proxy_server_nameserver)?;
-            for n in &ns {
-                if let url::Host::Domain(_) = n.host {
-                    return Err(Error::InvalidConfig(String::from(
-                        "proxy server nameserver must be ip address",
-                    )));
-                }
+            if ns.is_empty() {
+                return Err(Error::InvalidConfig(String::from(
+                    "proxy-server-nameserver has no usable entries (all skipped)",
+                )));
             }
             Some(ns)
         } else {
