@@ -70,20 +70,22 @@ CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
   --test-threads=1 -- throughput_tuic
 
 # run every throughput test
+RUSTFLAGS="--cfg throughput_test" \
 CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
-  --cfg throughput_test --test-threads=1 -- throughput
+  -- --test-threads=1 throughput
 
 # collect results to a JSON-lines file
 THROUGHPUT_RESULTS_FILE=results.jsonl \
+RUSTFLAGS="--cfg throughput_test" \
 CLASH_DOCKER_TEST=1 cargo test -p clash-lib --all-features \
-  --cfg throughput_test --test-threads=1 -- throughput
+  -- --test-threads=1 throughput
 
 # format results into Markdown tables
 python3 bench/format_throughput.py results.jsonl
 ```
 
 > **Note:** tests are gated on `#[cfg(all(test, docker_test, throughput_test))]`.
-> Pass `--cfg throughput_test` to `RUSTFLAGS` or `cargo test` to enable them.
+> Pass `--cfg throughput_test` via `RUSTFLAGS` (e.g. `RUSTFLAGS="--cfg throughput_test"`) to enable them — `cargo test` does not accept `--cfg` directly.
 
 ### CI workflow
 

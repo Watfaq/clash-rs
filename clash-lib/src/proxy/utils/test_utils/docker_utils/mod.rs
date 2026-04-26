@@ -812,9 +812,12 @@ pub async fn clash_process_e2e_throughput(
                 // download timer.
                 stream.write_all(&[0xACu8]).await?;
                 stream.flush().await?;
-                // Wait for client ACK
+                // Wait for client ACK (distinct value to detect misframes)
                 let mut ack = [0u8; 1];
                 stream.read_exact(&mut ack).await?;
+                if ack != [0xCAu8] {
+                    anyhow::bail!("echo server: invalid barrier ACK {ack:?}");
+                }
                 // Phase 2: send payload back
                 let data = vec![0x42u8; chunk_size];
                 let mut sent = 0usize;
@@ -884,11 +887,17 @@ pub async fn clash_process_e2e_throughput(
                 dest_ok = false;
                 break;
             }
+            if sync != [0xACu8] {
+                last_err = anyhow::anyhow!("invalid sync marker: {sync:?}");
+                echo_task.abort();
+                dest_ok = false;
+                break;
+            }
             let upload_elapsed = upload_start.elapsed();
 
-            // Send ACK to echo server so it can start the download phase
+            // Send ACK (0xCA) to echo server so it can start the download phase
             // without buffering the marker + first download bytes together.
-            if let Err(e) = conn.write_all(&[0xACu8]).await {
+            if let Err(e) = conn.write_all(&[0xCAu8]).await {
                 last_err = e.into();
                 echo_task.abort();
                 dest_ok = false;

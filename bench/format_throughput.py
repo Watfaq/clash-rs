@@ -71,6 +71,17 @@ def split_label(label: str) -> tuple[str, str]:
     return proto, transport
 
 
+def normalize_transport(transport: str) -> str:
+    """Strip suffixes that should not affect sort order (e.g. '-netem').
+    Also map aliased variant names to their canonical TRANSPORT_ORDER key."""
+    # Strip trailing -netem suffix so netem rows sort alongside their base transport
+    base = transport.removesuffix("-netem")
+    # socks5-auth / socks5-noauth → socks5 (no distinct transport, auth is a config detail)
+    if base in ("auth", "noauth"):
+        base = "socks5"
+    return base
+
+
 def is_netem(label: str) -> bool:
     return label.endswith("-netem") or "-netem-" in label
 
@@ -140,7 +151,7 @@ def main() -> None:
         total = 0
         for proto in sorted(groups, key=proto_sort_key):
             display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
-            proto_rows = sorted(groups[proto], key=lambda r: (TRANSPORT_ORDER.get(split_label(r.get("label", ""))[1], 99), split_label(r.get("label", ""))[1]))
+            proto_rows = sorted(groups[proto], key=lambda r: (TRANSPORT_ORDER.get(normalize_transport(split_label(r.get("label", ""))[1]), 99), split_label(r.get("label", ""))[1]))
             total += len(proto_rows)
 
             lines += [f"### {display_name}", ""]
@@ -155,7 +166,7 @@ def main() -> None:
             netem_groups = group_by_proto(netem_rows)
             for proto in sorted(netem_groups, key=proto_sort_key):
                 display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
-                proto_rows = sorted(netem_groups[proto], key=lambda r: (TRANSPORT_ORDER.get(split_label(r.get("label", ""))[1], 99), split_label(r.get("label", ""))[1]))
+                proto_rows = sorted(netem_groups[proto], key=lambda r: (TRANSPORT_ORDER.get(normalize_transport(split_label(r.get("label", ""))[1]), 99), split_label(r.get("label", ""))[1]))
                 total += len(proto_rows)
                 lines += [f"#### {display_name}", ""]
                 render_table(proto_rows, lines)

@@ -412,27 +412,71 @@ mod e2e {
         tests::initialize,
     };
 
-    // The vless-ws-tls.json config listens on port 8443 for the outer TLS inbound
+    // Outer TLS inbound on port 8443; WS fallback on 127.0.0.1:1234
     const CONTAINER_PORT: u16 = 8443;
     const CONTAINER_PORT_XRAY: u16 = 10002;
     const UUID: &str = "b831381d-6324-4d53-ad4f-8cda48b30811";
     const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
 
+    const VLESS_WS_TLS_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 8443,
+            "protocol": "vless",
+            "settings": {
+                "clients": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "level": 0}],
+                "decryption": "none",
+                "fallbacks": [
+                    {"dest": 80},
+                    {"path": "/websocket", "dest": 1234, "xver": 1}
+                ]
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["http/1.1"],
+                    "certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]
+                }
+            }
+        },
+        {
+            "port": 1234,
+            "listen": "127.0.0.1",
+            "protocol": "vless",
+            "settings": {
+                "clients": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "level": 0}],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "ws",
+                "security": "none",
+                "wsSettings": {"acceptProxyProtocol": true, "path": "/websocket"}
+            }
+        }
+    ],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("vless-ws-tls.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(VLESS_WS_TLS_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     const VLESS_GRPC_SERVER_CONFIG: &str = r#"{
