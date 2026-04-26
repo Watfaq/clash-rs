@@ -55,6 +55,21 @@ jobs:
       - name: Build clash-rs binary (release)
         run: cargo build --release --bin clash-rs
 
+      - name: Print environment info
+        run: |
+          echo "=== Runner environment ==="
+          echo "OS:     $(uname -a)"
+          echo "CPUs:   $(nproc) logical, $(lscpu | awk '/^Model name/{sub(/.*: */,""); print}')"
+          echo "Memory: $(free -h | awk '/^Mem/{print $2, "total,", $7, "available"}')"
+          echo "Disk:   $(df -h / | awk 'NR==2{print $4, "free on /"}')"
+          echo "=== Docker ==="
+          docker version --format 'Client: {{.Client.Version}}  Server: {{.Server.Version}}'
+          echo "=== Rust ==="
+          rustc --version
+          cargo --version
+          echo "=== Results file will be written to ==="
+          echo "  ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}"
+
       # Pull docker images in advance so test startup is faster
       - name: Pull docker images
         run: |
@@ -71,14 +86,15 @@ jobs:
 
       - name: Run throughput tests
         env:
-          # Use an absolute path so the file lands at a known location
-          # regardless of which directory cargo test sets as the CWD for
-          # the test binary (cargo test -p clash-lib uses clash-lib/ as CWD).
+          # Absolute path: cargo test -p clash-lib sets the test binary's CWD
+          # to clash-lib/, so a relative path would land there instead of the
+          # workspace root.  Using an absolute path avoids this ambiguity.
           THROUGHPUT_RESULTS_FILE: ${{ github.workspace }}/${{ env.RESULTS_FILE_NAME }}
           RUST_LOG: ${{ env.RUST_LOG }}
           CLASH_RS_CI: "true"
         run: |
           set -o pipefail
+          echo "Results will be written to: ${THROUGHPUT_RESULTS_FILE}"
           RUSTFLAGS="--cfg docker_test --cfg throughput_test" \
           cargo test -p clash-lib --release --all-features \
             e2e_throughput \
