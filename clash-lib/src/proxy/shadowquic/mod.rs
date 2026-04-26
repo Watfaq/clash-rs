@@ -414,6 +414,23 @@ outbound:
 log-level: "info"
 "#;
 
+    const SHADOWQUIC_OVER_STREAM_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+    over-stream: true
+outbound:
+    type: direct
+log-level: "info"
+"#;
+
     async fn get_shadowquic_runner() -> anyhow::Result<DockerTestRunner> {
         let mut tmp = tempfile::NamedTempFile::new()?;
         tmp.write_all(SHADOWQUIC_SERVER_CONFIG.as_bytes())?;
@@ -477,6 +494,82 @@ rules:
                     &binary,
                     &config,
                     "shadowquic-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    async fn get_shadowquic_over_stream_runner() -> anyhow::Result<DockerTestRunner>
+    {
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_OVER_STREAM_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOWQUIC)
+            .no_port()
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_shadowquic_over_stream() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_shadowquic_over_stream_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: shadowquic
+    server: {server}
+    port: {port}
+    password: "12345678"
+    username: "87654321"
+    server-name: echo.free.beeceptor.com
+    alpn:
+      - h3
+    zero-rtt: true
+    over-stream: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "shadowquic-over-stream",
                     socks_port,
                     echo_port,
                     gateway_ip,

@@ -495,6 +495,23 @@ rules:
         )
     }
 
+    async fn get_tcp_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let conf = test_config_dir.join("trojan-tcp.json");
+        let cert = test_config_dir.join("example.org.pem");
+        let key = test_config_dir.join("example.org-key.pem");
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .no_port()
+            .mounts(&[
+                (conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (cert.to_str().unwrap(), "/fullchain.pem"),
+                (key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await
+    }
+
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
         let conf = test_config_dir.join("trojan-ws.json");
@@ -526,6 +543,37 @@ rules:
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_tcp() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
             .await
     }
 
