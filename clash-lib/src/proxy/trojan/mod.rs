@@ -241,7 +241,7 @@ impl PlainProxyAPIResponse for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::collections::HashMap;
+    use std::{collections::HashMap, io::Write};
 
     use super::*;
     use crate::{
@@ -260,22 +260,88 @@ mod tests {
         tests::initialize,
     };
 
+    const TROJAN_WS_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": [
+        "example"
+    ],
+    "websocket": {
+        "enabled": true,
+        "path": "/",
+        "host": "example.org"
+    },
+    "ssl": {
+        "verify": true,
+        "cert": "/fullchain.pem",
+        "key": "/privkey.pem",
+        "sni": "example.org"
+    }
+}"#;
+
+    const TROJAN_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "trojan",
+            "settings": {
+                "clients": [
+                    {
+                        "password": "example",
+                        "email": "grpc@example.com"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                },
+                "grpcSettings": {
+                    "serviceName": "example"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ],
+    "log": {
+        "loglevel": "debug"
+    }
+}"#;
+
     async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let trojan_conf = test_config_dir.join("trojan-ws.json");
-        let trojan_cert = test_config_dir.join("example.org.pem");
-        let trojan_key = test_config_dir.join("example.org-key.pem");
+        let trojan_cert = test_config_dir.join("certs/example.org.pem");
+        let trojan_key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TROJAN_WS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_TROJAN_GO)
             .mounts(&[
-                (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
                 (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
                 (trojan_key.to_str().unwrap(), "/privkey.pem"),
             ])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
@@ -319,20 +385,24 @@ mod tests {
 
     async fn get_grpc_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("trojan-grpc.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TROJAN_GRPC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]

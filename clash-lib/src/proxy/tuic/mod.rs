@@ -411,6 +411,7 @@ impl TuicDatagramOutbound {
 
 #[cfg(all(test, docker_test))]
 mod tests {
+    use std::io::Write;
 
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
@@ -429,23 +430,53 @@ mod tests {
     };
 
     use super::*;
+
+    const TUIC_SERVER_CONFIG: &str = r#"server = "0.0.0.0:10002"
+
+data_dir = ""
+
+zero_rtt_handshake = false
+dual_stack = false
+
+acl = '''
+direct 0.0.0.0/0
+direct ::/0
+'''
+
+[users]
+00000000-0000-0000-0000-000000000001 = "passwd"
+
+[tls]
+certificate = "/opt/tuic/fullchain.pem"
+private_key = "/opt/tuic/privkey.pem"
+alpn = ["h3"]
+
+[outbound.default]
+type = "direct"
+ip_mode = "auto"
+"#;
+
     async fn get_tuic_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("tuic.toml");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TUIC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_TUIC)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/tuic/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/tuic/config.json"),
                 (cert.to_str().unwrap(), "/opt/tuic/fullchain.pem"),
                 (key.to_str().unwrap(), "/opt/tuic/privkey.pem"),
             ])
             .env(&["TUIC_FORCE_TOML=1"])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     fn gen_options(

@@ -266,6 +266,8 @@ fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
 #[cfg(all(test, docker_test))]
 mod tests {
 
+    use std::{io::Write, sync::Arc};
+
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
@@ -274,28 +276,45 @@ mod tests {
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
                 Suite,
-                config_helper::test_config_base_dir,
                 docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
                 run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
-    use std::sync::Arc;
 
     use super::*;
+
+    const SHADOWQUIC_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+outbound:
+    type: direct
+log-level: "trace"
+"#;
+
     async fn get_shadowquic_runner(
         host_port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("shadowquic.yaml");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_SERVER_CONFIG.as_bytes())?;
 
-        DockerTestRunnerBuilder::new()
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOWQUIC)
-            .mounts(&[(conf.to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     fn gen_options(

@@ -484,6 +484,9 @@ mod tests {
     };
 
     #[cfg(docker_test)]
+    use std::io::Write;
+
+    #[cfg(docker_test)]
     use crate::{
         proxy::{
             transport,
@@ -499,6 +502,39 @@ mod tests {
         },
         tests::initialize,
     };
+
+    #[cfg(docker_test)]
+    const ANYTLS_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "level": "info"
+    },
+    "inbounds": [
+        {
+            "type": "anytls",
+            "tag": "anytls-in",
+            "listen": "0.0.0.0",
+            "listen_port": 10002,
+            "users": [
+                {
+                    "name": "user",
+                    "password": "example"
+                }
+            ],
+            "padding_scheme": ["stop=0"],
+            "tls": {
+                "enabled": true,
+                "certificate_path": "/etc/ssl/v2ray/fullchain.pem",
+                "key_path": "/etc/ssl/v2ray/privkey.pem"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "direct",
+            "tag": "direct"
+        }
+    ]
+}"#;
 
     fn make_handler(udp: bool, with_tls: bool) -> Handler {
         use crate::proxy::transport::TlsClient;
@@ -802,21 +838,25 @@ mod tests {
     #[cfg(docker_test)]
     async fn get_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("anytls.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(ANYTLS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SINGBOX)
             .cmd(&["run", "-c", "/etc/sing-box/config.json"])
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/sing-box/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/sing-box/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[cfg(docker_test)]
