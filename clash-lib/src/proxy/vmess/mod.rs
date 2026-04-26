@@ -730,7 +730,7 @@ rules:
     skip-cert-verify: true
     network: h2
     h2-opts:
-      hosts:
+      host:
         - example.org
       path: /test"#;
         let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
