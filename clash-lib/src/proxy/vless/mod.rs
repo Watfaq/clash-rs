@@ -435,38 +435,64 @@ mod e2e {
             .await
     }
 
+    const VLESS_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [{"port": 10002, "listen": "0.0.0.0", "protocol": "vless",
+        "settings": {"clients": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "flow": ""}], "decryption": "none"},
+        "streamSettings": {"network": "grpc", "security": "tls",
+            "tlsSettings": {"certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]},
+            "grpcSettings": {"serviceName": "grpc"}}}],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
+    const VLESS_H2_SERVER_CONFIG: &str = r#"{
+    "inbounds": [{"port": 10002, "listen": "0.0.0.0", "protocol": "vless",
+        "settings": {"clients": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "flow": ""}], "decryption": "none"},
+        "streamSettings": {"network": "h2", "security": "tls",
+            "tlsSettings": {"certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]},
+            "httpSettings": {"host": ["example.org"], "path": "/"}}}],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("vless-grpc.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(VLESS_GRPC_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("vless-h2.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(VLESS_H2_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]

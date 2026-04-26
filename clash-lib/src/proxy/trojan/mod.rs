@@ -495,21 +495,39 @@ rules:
         )
     }
 
+    const TROJAN_TCP_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "ssl": {
+        "verify": true,
+        "cert": "/fullchain.pem",
+        "key": "/privkey.pem",
+        "sni": "example.org"
+    }
+}"#;
+
     async fn get_tcp_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("trojan-tcp.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_TCP_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_TROJAN_GO)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
                 (cert.to_str().unwrap(), "/fullchain.pem"),
                 (key.to_str().unwrap(), "/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
