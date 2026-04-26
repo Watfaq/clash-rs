@@ -109,7 +109,7 @@ impl EnhancedResolver {
             main: make_clients(
                 cfg.default_nameserver.clone(),
                 None,
-                outbounds.clone(),
+                Arc::new(RwLock::new(std::collections::HashMap::new())),
                 edns_client_subnet.clone(),
                 cfg.fw_mark,
             )
@@ -133,7 +133,7 @@ impl EnhancedResolver {
                 let clients = make_clients(
                     proxy_resolver,
                     Some(default_resolver.clone()),
-                    outbounds.clone(),
+                    Arc::new(RwLock::new(std::collections::HashMap::new())),
                     edns_client_subnet.clone(),
                     cfg.fw_mark,
                 )
