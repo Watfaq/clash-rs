@@ -759,6 +759,37 @@ rules:
     }
 
     #[tokio::test]
+    async fn e2e_throughput_ss_plain_netem() -> anyhow::Result<()> {
+        initialize();
+        let container_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ss_runner(container_port).await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+        let config = ss_base_config(&server, container_port, socks_port, "");
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-plain-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
     async fn e2e_throughput_ss_obfs_http() -> anyhow::Result<()> {
         initialize();
         let ss_port = alloc_port();

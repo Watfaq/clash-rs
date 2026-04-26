@@ -505,6 +505,67 @@ rules:
             .await
     }
 
+    #[tokio::test]
+    async fn e2e_throughput_shadowquic_plain_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_shadowquic_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: shadowquic
+    server: {server}
+    port: {port}
+    password: "12345678"
+    username: "87654321"
+    server-name: echo.free.beeceptor.com
+    alpn:
+      - h3
+    zero-rtt: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "shadowquic-plain-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
     async fn get_shadowquic_over_stream_runner() -> anyhow::Result<DockerTestRunner>
     {
         let mut tmp = tempfile::NamedTempFile::new()?;

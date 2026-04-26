@@ -5,12 +5,17 @@ Usage:
     python3 bench/format_throughput.py results.json [--output comment.md]
 
 Each line of results.json must be a JSON object with:
-    label         – test name in "<protocol>-<transport>" format (e.g. "trojan-ws")
-    upload_mbps   – upload throughput in Mbps
-    download_mbps – download throughput in Mbps
-    total_bytes   – payload size in bytes
+    label               – test name in "<protocol>-<transport>" format (e.g. "trojan-ws")
+    upload_mbps         – upload throughput in Mbps (median across runs)
+    download_mbps       – download throughput in Mbps (median across runs)
+    upload_stdev_mbps   – upload stdev in Mbps (optional, 0 if absent)
+    download_stdev_mbps – download stdev in Mbps (optional, 0 if absent)
+    runs                – number of iterations (optional)
+    total_bytes         – payload size in bytes
+    netem               – netem description string if applicable (optional)
 
 Output groups rows by protocol, with one table per outbound type.
+Netem results (labels containing "-netem") are shown in a separate section.
 """
 
 import argparse
@@ -41,6 +46,31 @@ def split_label(label: str) -> tuple[str, str]:
     return proto, transport
 
 
+def is_netem(label: str) -> bool:
+    return label.endswith("-netem") or "-netem-" in label
+
+
+def fmt_mbps(value: float, stdev: float) -> str:
+    if stdev > 0:
+        return f"{value:.1f} ±{stdev:.1f}"
+    return f"{value:.1f}"
+
+
+def render_table(rows: list, lines: list) -> None:
+    lines += [
+        "| Transport | Payload | Runs | Upload Mbps (±σ) | Download Mbps (±σ) |",
+        "|-----------|---------|:----:|:----------------:|:------------------:|",
+    ]
+    for r in rows:
+        _, transport = split_label(r.get("label", "?"))
+        payload_mb = r.get("total_bytes", 0) // (1024 * 1024)
+        runs = r.get("runs", 1)
+        upload = fmt_mbps(r.get("upload_mbps", 0.0), r.get("upload_stdev_mbps", 0.0))
+        download = fmt_mbps(r.get("download_mbps", 0.0), r.get("download_stdev_mbps", 0.0))
+        lines.append(f"| `{transport}` | {payload_mb} MB | {runs} | {upload} | {download} |")
+    lines.append("")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("results", help="JSON-lines result file")
@@ -62,11 +92,16 @@ def main() -> None:
     if not rows:
         md = "## 📊 Proxy Throughput Results\n\n_No results recorded._\n"
     else:
+        normal_rows = [r for r in rows if not is_netem(r.get("label", ""))]
+        netem_rows = [r for r in rows if is_netem(r.get("label", ""))]
+
         # Group by protocol
-        groups: dict[str, list] = defaultdict(list)
-        for r in rows:
-            proto, _ = split_label(r.get("label", "?"))
-            groups[proto].append(r)
+        def group_by_proto(row_list: list) -> dict[str, list]:
+            groups: dict[str, list] = defaultdict(list)
+            for r in row_list:
+                proto, _ = split_label(r.get("label", "?"))
+                groups[proto].append(r)
+            return groups
 
         # Sort protocols by canonical order, unknowns at end alphabetically
         def proto_sort_key(p: str) -> tuple:
@@ -75,25 +110,30 @@ def main() -> None:
 
         lines = ["## 📊 Proxy Throughput Results", ""]
 
+        # Normal results
+        groups = group_by_proto(normal_rows)
         total = 0
         for proto in sorted(groups, key=proto_sort_key):
             display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
             proto_rows = sorted(groups[proto], key=lambda r: split_label(r.get("label", ""))[1])
             total += len(proto_rows)
 
+            lines += [f"### {display_name}", ""]
+            render_table(proto_rows, lines)
+
+        # Netem results in a separate section
+        if netem_rows:
             lines += [
-                f"### {display_name}",
+                "### Netem Tests (50 ms delay, 1% packet loss)",
                 "",
-                "| Transport | Payload | Upload (Mbps) | Download (Mbps) |",
-                "|-----------|---------|:-------------:|:---------------:|",
             ]
-            for r in proto_rows:
-                _, transport = split_label(r.get("label", "?"))
-                payload_mb = r.get("total_bytes", 0) // (1024 * 1024)
-                upload = r.get("upload_mbps", 0.0)
-                download = r.get("download_mbps", 0.0)
-                lines.append(f"| `{transport}` | {payload_mb} MB | {upload:.1f} | {download:.1f} |")
-            lines.append("")
+            netem_groups = group_by_proto(netem_rows)
+            for proto in sorted(netem_groups, key=proto_sort_key):
+                display_name, _ = PROTOCOL_META.get(proto, (proto.upper(), 99))
+                proto_rows = sorted(netem_groups[proto], key=lambda r: split_label(r.get("label", ""))[1])
+                total += len(proto_rows)
+                lines += [f"#### {display_name}", ""]
+                render_table(proto_rows, lines)
 
         lines.append(
             f"_Ran {total} variant(s) in parallel; each direction transfers the full payload._"

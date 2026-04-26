@@ -578,6 +578,38 @@ rules:
     }
 
     #[tokio::test]
+    async fn e2e_throughput_trojan_tcp_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
     async fn e2e_throughput_trojan_ws() -> anyhow::Result<()> {
         initialize();
         let socks_port = alloc_port();

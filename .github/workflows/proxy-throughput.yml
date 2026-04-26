@@ -84,6 +84,7 @@ jobs:
           docker pull ghcr.io/itsusinn/tuic-server:latest
           docker pull ghcr.io/spongebob888/shadowquic:latest
           docker pull docker.io/linuxserver/openssh-server:latest
+          docker pull nicolaka/netshoot:latest
 
       # Download once so parallel clash-rs instances don't race to fetch it
       - name: Download Country.mmdb

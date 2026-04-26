@@ -276,6 +276,88 @@ impl DockerTestRunner {
         }
     }
 
+    /// Apply tc netem traffic shaping to this container's eth0 interface by
+    /// starting a short-lived `nicolaka/netshoot` sidecar that shares the
+    /// container's network namespace and has NET_ADMIN capability.
+    ///
+    /// `delay_ms`: one-way delay in milliseconds (e.g. 50 for 50ms)
+    /// `loss_pct`: packet loss percentage (e.g. 1.0 = 1%)
+    #[cfg(all(docker_test, throughput_test))]
+    pub async fn apply_netem(
+        &self,
+        delay_ms: u32,
+        loss_pct: f32,
+    ) -> anyhow::Result<()> {
+        use super::consts::IMAGE_NETEM;
+        use bollard::query_parameters::WaitContainerOptionsBuilder;
+        use futures::StreamExt as _;
+
+        let tc_cmd = format!(
+            "tc qdisc add dev eth0 root netem delay {}ms loss {}%",
+            delay_ms, loss_pct
+        );
+        let network_mode = format!("container:{}", self.id);
+
+        let body = ContainerCreateBody {
+            image: Some(IMAGE_NETEM.to_owned()),
+            cmd: Some(vec!["sh".to_owned(), "-c".to_owned(), tc_cmd]),
+            host_config: Some(HostConfig {
+                network_mode: Some(network_mode),
+                cap_add: Some(vec!["NET_ADMIN".to_owned()]),
+                auto_remove: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let sidecar = self
+            .instance
+            .create_container(Some(CreateContainerOptions::default()), body)
+            .await?;
+
+        self.instance
+            .start_container(
+                &sidecar.id,
+                None::<bollard::query_parameters::StartContainerOptions>,
+            )
+            .await?;
+
+        // Wait for the sidecar to finish running
+        let mut wait_stream = self.instance.wait_container(
+            &sidecar.id,
+            Some(
+                WaitContainerOptionsBuilder::new()
+                    .condition("not-running")
+                    .build(),
+            ),
+        );
+        while let Some(result) = wait_stream.next().await {
+            match result {
+                Ok(status) => {
+                    if status.status_code != 0 {
+                        anyhow::bail!(
+                            "netem sidecar exited with code {}: {:?}",
+                            status.status_code,
+                            status.error
+                        );
+                    }
+                }
+                Err(e) => {
+                    // Container already removed (auto_remove=true) — treat as
+                    // success if we got at least one status or the error is a
+                    // 404 Not Found.
+                    let msg = e.to_string();
+                    if msg.contains("404") || msg.contains("No such container") {
+                        break;
+                    }
+                    return Err(e.into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
         let logs = self
