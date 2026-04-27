@@ -451,15 +451,29 @@ mod e2e {
     const CONTAINER_PORT: u16 = 10002;
     const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
 
+    const SOCKS5_NOAUTH_SERVER_CONFIG: &str = r#"{
+    "log": {"loglevel": "debug"},
+    "inbounds": [{
+        "port": 10002,
+        "listen": "0.0.0.0",
+        "protocol": "socks",
+        "settings": {"auth": "noauth", "udp": true, "ip": "0.0.0.0"}
+    }],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
     async fn get_socks5_noauth_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("socks5-noauth.json");
-        DockerTestRunnerBuilder::new()
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SOCKS5_NOAUTH_SERVER_CONFIG.as_bytes())?;
+        let runner = DockerTestRunnerBuilder::new()
             .image(IMAGE_SOCKS5)
             .no_port()
-            .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/v2ray/config.json")])
             .build()
-            .await
+            .await?;
+        drop(tmp);
+        Ok(runner)
     }
 
     const SOCKS5_AUTH_SERVER_CONFIG: &str = r#"{

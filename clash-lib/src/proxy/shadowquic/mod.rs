@@ -414,6 +414,8 @@ outbound:
 log-level: "info"
 "#;
 
+    // Note: over-stream is a client-side setting; the server auto-detects the
+    // mode, so we use the same server config as for plain shadowquic.
     const SHADOWQUIC_OVER_STREAM_SERVER_CONFIG: &str = r#"inbound:
     type: shadowquic
     bind-addr: 0.0.0.0:10002
@@ -425,7 +427,6 @@ log-level: "info"
     alpn: ["h3"]
     congestion-control: bbr
     zero-rtt: true
-    over-stream: true
 outbound:
     type: direct
 log-level: "info"

@@ -495,6 +495,25 @@ rules:
         )
     }
 
+    const TROJAN_WS_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "websocket": {"enabled": true, "path": "/", "host": "example.org"},
+    "ssl": {"verify": true, "cert": "/fullchain.pem", "key": "/privkey.pem", "sni": "example.org"}
+}"#;
+
+    const TROJAN_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [{"port": 10002, "listen": "0.0.0.0", "protocol": "trojan",
+        "settings": {"clients": [{"password": "example", "email": "grpc@example.com"}]},
+        "streamSettings": {"network": "grpc", "security": "tls",
+            "tlsSettings": {"certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]},
+            "grpcSettings": {"serviceName": "example"}}}],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
     const TROJAN_TCP_SERVER_CONFIG: &str = r#"{
     "run_type": "server",
     "local_addr": "0.0.0.0",
@@ -532,36 +551,44 @@ rules:
 
     async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("trojan-ws.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_WS_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_TROJAN_GO)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
                 (cert.to_str().unwrap(), "/fullchain.pem"),
                 (key.to_str().unwrap(), "/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let conf = test_config_dir.join("trojan-grpc.json");
         let cert = test_config_dir.join("certs/example.org.pem");
         let key = test_config_dir.join("certs/example.org-key.pem");
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_GRPC_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .no_port()
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]

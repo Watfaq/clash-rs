@@ -673,11 +673,18 @@ async fn socks5_connect(
     if resp[0] != 0x05 || resp[1] != 0x00 {
         return Err(std::io::Error::other("SOCKS5 auth negotiation failed"));
     }
-    // CONNECT request: VER=5, CMD=CONNECT(1), RSV=0, ATYP=DOMAIN(3)
-    let host_bytes = target_host.as_bytes();
-    let mut req = Vec::with_capacity(7 + host_bytes.len());
-    req.extend_from_slice(&[0x05, 0x01, 0x00, 0x03, host_bytes.len() as u8]);
-    req.extend_from_slice(host_bytes);
+    // CONNECT request: VER=5, CMD=CONNECT(1), RSV=0
+    // Use ATYP=IPv4 for numeric IP addresses so the proxy chain doesn't need
+    // to do DNS resolution; fall back to ATYP=DOMAIN for hostnames.
+    let mut req = Vec::with_capacity(10 + target_host.len());
+    if let Ok(ip) = target_host.parse::<std::net::Ipv4Addr>() {
+        req.extend_from_slice(&[0x05, 0x01, 0x00, 0x01]);
+        req.extend_from_slice(&ip.octets());
+    } else {
+        let host_bytes = target_host.as_bytes();
+        req.extend_from_slice(&[0x05, 0x01, 0x00, 0x03, host_bytes.len() as u8]);
+        req.extend_from_slice(host_bytes);
+    }
     req.extend_from_slice(&target_port.to_be_bytes());
     stream.write_all(&req).await?;
     // Response header: VER, REP, RSV, ATYP

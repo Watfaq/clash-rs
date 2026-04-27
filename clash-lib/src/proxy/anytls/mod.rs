@@ -933,8 +933,8 @@ mod e2e {
 
     async fn get_anytls_runner() -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = config_helper::test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
         let mut tmp = tempfile::NamedTempFile::new()?;
         tmp.write_all(ANYTLS_SERVER_CONFIG.as_bytes())?;
