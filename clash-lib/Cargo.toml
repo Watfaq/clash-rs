@@ -205,9 +205,9 @@ aws-lc-rs = { version = "1", default-features = false, optional = true }
 
 # tproxy
 etherparse = {version = "0.19", optional = true }
+tempfile = "3.27"
 
 [dev-dependencies]
-tempfile = "3.27"
 mockall = "0.14.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.0"
