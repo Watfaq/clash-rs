@@ -351,8 +351,8 @@ mod tests {
     // the sysctl of `net.ipv4.conf.all.src_valid_mark` will fail
     async fn get_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let wg_config = test_config_dir.join("wg_config");
-        // the following configs is in accordance with the config in `wg_config`
+        let wg_config = test_config_dir.join("wg");
+        // the following configs is in accordance with the config in `wg`
         // dir
         DockerTestRunnerBuilder::new()
             .image(IMAGE_WG)

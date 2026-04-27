@@ -234,7 +234,7 @@ impl PlainProxyAPIResponse for Handler {
 
 #[cfg(all(test, docker_test))]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, io::Write};
 
     use super::*;
     use crate::{
@@ -255,6 +255,81 @@ mod tests {
         tests::initialize,
     };
 
+    const VLESS_WS_TLS_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 8443,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+                        "level": 0,
+                        "email": "love@v2fly.org"
+                    }
+                ],
+                "decryption": "none",
+                "fallbacks": [
+                    {
+                        "dest": 80
+                    },
+                    {
+                        "path": "/websocket",
+                        "dest": 1234,
+                        "xver": 1
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": [
+                        "http/1.1"
+                    ],
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "port": 1234,
+            "listen": "127.0.0.1",
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "b831381d-6324-4d53-ad4f-8cda48b30811",
+                        "level": 0,
+                        "email": "love@v2fly.org"
+                    }
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "ws",
+                "security": "none",
+                "wsSettings": {
+                    "acceptProxyProtocol": true,
+                    "path": "/websocket"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
+
     fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
         Some(Box::new(TlsClient::new(
             true,
@@ -266,20 +341,24 @@ mod tests {
 
     async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vless-ws-tls.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(VLESS_WS_TLS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_VLESS)
             .host_port(host_port, 8443)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]

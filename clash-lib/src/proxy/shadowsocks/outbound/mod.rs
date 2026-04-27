@@ -302,8 +302,8 @@ mod tests {
         port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
@@ -593,8 +593,8 @@ mod e2e {
     ) -> anyhow::Result<DockerTestRunner> {
         use crate::proxy::utils::test_utils::config_helper::test_config_base_dir;
         let test_config_dir = test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)

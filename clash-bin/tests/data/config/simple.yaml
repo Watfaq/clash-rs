@@ -1,4 +1,0 @@
-mixed-port: 8899
-external-controller: 127.0.0.1:9090
-mode: global
-bind-address: "0.0.0.0"

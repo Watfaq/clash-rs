@@ -285,7 +285,7 @@ impl PlainProxyAPIResponse for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::sync::Arc;
+    use std::{io::Write, sync::Arc};
 
     use crate::{
         proxy::{
@@ -305,28 +305,82 @@ mod tests {
         tests::initialize,
     };
 
-    use super::super::super::utils::test_utils::docker_utils::config_helper::test_config_base_dir;
-
     const USER: &str = "user";
     const PASSWORD: &str = "password";
+
+    const SOCKS5_NOAUTH_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "noauth",
+                "udp": true,
+                "ip": "0.0.0.0"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
+
+    const SOCKS5_AUTH_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "password",
+                "accounts": [
+                    {
+                        "user": "user",
+                        "pass": "password"
+                    }
+                ],
+                "udp": true,
+                "ip": "0.0.0.0"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
 
     async fn get_socks5_runner(
         auth: bool,
         host_port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = if auth {
-            test_config_dir.join("socks5-auth.json")
+        let config = if auth {
+            SOCKS5_AUTH_SERVER_CONFIG
         } else {
-            test_config_dir.join("socks5-noauth.json")
+            SOCKS5_NOAUTH_SERVER_CONFIG
         };
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(config.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SOCKS5)
-            .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/v2ray/config.json")])
             .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     fn server_addr(runner: &DockerTestRunner) -> String {
