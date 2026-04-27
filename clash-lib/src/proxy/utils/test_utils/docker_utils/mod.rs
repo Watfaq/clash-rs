@@ -760,6 +760,11 @@ pub async fn clash_process_e2e_throughput(
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     // --- write config to a temp file ---
+    // Keep `cfg_file` alive for the entire function: Rust's async generator
+    // drops unused locals before the first `.await`, so if we only used
+    // `cfg_file` to obtain `cfg_path` the file would be deleted before
+    // clash-rs finishes reading it (a race that surfaces under load when the
+    // child process starts slowly).
     let mut cfg_file = tempfile::NamedTempFile::new()?;
     std::io::Write::write_all(&mut cfg_file, config_yaml.as_bytes())?;
     let cfg_path = cfg_file.path().to_owned();
@@ -773,6 +778,10 @@ pub async fn clash_process_e2e_throughput(
         .stderr(std::process::Stdio::inherit())
         .spawn()
         .map_err(|e| anyhow::anyhow!("failed to spawn clash-rs: {e}"))?;
+
+    // Retain `cfg_file` past the first `.await` below so the temp file is
+    // not deleted before the child process opens it.
+    let _cfg_file = cfg_file;
 
     // --- bind echo listener once; reuse across runs ---
     let echo_listener = std::sync::Arc::new(
