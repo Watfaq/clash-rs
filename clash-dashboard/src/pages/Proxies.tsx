@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getProxies, selectProxy, getProxyDelay, getProxyProviders,
-  updateProxyProvider, healthcheckProvider,
+  updateProxyProvider, healthcheckProvider, getConfigs,
 } from '../lib/api';
 import { RefreshCw, ChevronDown, ChevronUp, Check, Activity } from 'lucide-react';
 import type { Proxy, ProxyProvider } from '../lib/api';
@@ -55,6 +55,14 @@ export function Proxies() {
     refetchInterval: 30000,
   });
 
+  const { data: configsData } = useQuery({
+    queryKey: ['configs'],
+    queryFn: getConfigs,
+    refetchInterval: 10000,
+  });
+
+  const mode = configsData?.mode?.toLowerCase() ?? 'rule';
+
   const { data: providersData } = useQuery({
     queryKey: ['providers'],
     queryFn: getProxyProviders,
@@ -86,7 +94,15 @@ export function Proxies() {
   });
 
   const proxies = data?.proxies ?? {};
-  const groups = Object.values(proxies).filter((p) => GROUP_TYPES.includes(p.type));
+  const allGroups = Object.values(proxies).filter((p) => GROUP_TYPES.includes(p.type));
+
+  // Filter groups by mode
+  const groups = mode === 'global'
+    ? allGroups.filter((g) => g.name.toUpperCase() === 'GLOBAL')
+    : mode === 'rule'
+      ? allGroups.filter((g) => g.name.toUpperCase() !== 'GLOBAL')
+      : []; // direct — no groups to show
+
   const providers = Object.fromEntries(
     Object.entries(providersData?.providers ?? {}).filter(([name]) => name !== 'default')
   );
@@ -173,15 +189,36 @@ export function Proxies() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Proxies</h1>
+        <span
+          className="text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize"
+          style={{
+            background: mode === 'rule' ? 'rgba(0,113,227,0.1)' : mode === 'global' ? 'rgba(52,199,89,0.1)' : 'rgba(0,0,0,0.06)',
+            color: mode === 'rule' ? '#0071e3' : mode === 'global' ? '#34c759' : '#6e6e73',
+          }}
+        >
+          {mode}
+        </span>
+      </div>
 
-      <div className="space-y-3">
-        {groups.map((group) => {
-          const isTesting = testingGroups.has(group.name);
-          const isExpanded = expanded.has(group.name);
-          const isSelector = group.type === 'Selector';
-          const accentColor = getGroupAccentColor(group.type);
-          const typeBadge = getTypeBadgeStyle(group.type);
+      {mode === 'direct' ? (
+        <div className="liquid-glass-card rounded-2xl p-10 flex flex-col items-center gap-3 text-center">
+          <div className="text-4xl">⚡️</div>
+          <div className="text-[17px] font-semibold" style={{ color: '#1d1d1f' }}>Direct Mode</div>
+          <div className="text-[13px] max-w-xs" style={{ color: '#6e6e73' }}>
+            All traffic goes directly to its destination. No proxy groups to configure.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-3">
+            {groups.map((group) => {
+              const isTesting = testingGroups.has(group.name);
+              const isExpanded = expanded.has(group.name);
+              const isSelector = group.type === 'Selector';
+              const accentColor = getGroupAccentColor(group.type);
+              const typeBadge = getTypeBadgeStyle(group.type);
 
           return (
             <div
@@ -296,12 +333,12 @@ export function Proxies() {
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
+            );
+          })}
+          </div>
 
-      {/* Providers */}
-      {Object.keys(providers).length > 0 && (
+          {/* Providers — only in rule/global mode */}
+          {Object.keys(providers).length > 0 && (
         <div className="space-y-3">
           <div
             className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
@@ -417,7 +454,9 @@ export function Proxies() {
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
