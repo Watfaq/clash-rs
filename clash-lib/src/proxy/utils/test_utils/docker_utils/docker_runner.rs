@@ -700,14 +700,14 @@ impl DockerTestRunnerBuilder {
     }
 }
 
-/// Allocate a free TCP port by asking the OS. The listener is immediately
-/// dropped so Docker can bind the same port. The TOCTOU window is negligible
-/// in test environments.
+/// Allocate a unique TCP port number for use in a Docker test.
+///
+/// Delegates to the same process-global counter used by `alloc_port()` so
+/// that Docker port mappings and clash-rs SOCKS/echo ports can never
+/// collide when multiple tests run concurrently.
 #[cfg(docker_test)]
 pub fn alloc_docker_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("failed to allocate a free port");
-    listener.local_addr().unwrap().port()
+    super::PORT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn get_host_config(port: u16) -> HostConfig {

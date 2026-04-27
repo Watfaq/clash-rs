@@ -10,7 +10,7 @@ use crate::{
 use anyhow::{anyhow, bail};
 use futures::{SinkExt, StreamExt, future::select_all};
 use std::{
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU16},
     time::{Duration, Instant},
 };
 use sysinfo::Networks;
@@ -22,14 +22,33 @@ use tracing::{debug, info, trace};
 
 // ── Port allocator
 // ────────────────────────────────────────────────────────────
-/// Allocate a free TCP port by asking the OS. The listener is immediately
-/// dropped so the caller can bind the same port. Used by throughput tests
-/// where multiple ports must be reserved up-front.
+//
+// Both `alloc_port()` (throughput tests) and `alloc_docker_port()` (docker
+// tests) share this single process-wide counter so that no two allocations
+// within the same test process ever return the same port number.
+//
+// The previous approach — bind("127.0.0.1:0"), record the port, drop the
+// listener — has an unavoidable TOCTOU race: the port is freed the instant
+// the listener is dropped, and with --test-threads=8 another concurrent
+// test's echo-listener or clash-rs subprocess can claim it before the
+// original allocator manages to re-bind it.  The result is a silent
+// EADDRINUSE inside clash-rs that causes it to exit before any tracing
+// output is produced, which manifests as "port not ready after 60s".
+//
+// Using a strictly-incrementing counter avoids this entirely.  Ports
+// 30001-31000 are below the Linux ephemeral range (32768-60999) and are not
+// occupied by well-known system services on typical CI runners.
+#[cfg(any(docker_test, throughput_test))]
+pub(super) static PORT_COUNTER: AtomicU16 = AtomicU16::new(30001);
+
+/// Allocate a unique TCP port number for use in a test.
+///
+/// Uses a process-global monotonically-increasing counter rather than the
+/// OS bind-and-release pattern to eliminate the TOCTOU race that occurs
+/// when many tests run concurrently (`--test-threads=8`).
 #[cfg(throughput_test)]
 pub fn alloc_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("failed to allocate a free port");
-    listener.local_addr().unwrap().port()
+    PORT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 // ── ThroughputResult
@@ -792,6 +811,26 @@ pub async fn clash_process_e2e_throughput(
     // 90s gives clash-rs headroom on resource-constrained CI runners where
     // multiple Docker containers + subprocesses compete for 2 CPUs.
     wait_for_port(socks_port, 90).await.map_err(|e| {
+        // Diagnose whether clash-rs exited early or simply never bound.
+        // A silent crash before tracing-init produces zero output, so the
+        // exit status is the only signal available in CI logs.
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                eprintln!(
+                    "[clash-rs/{label}] exited early (status: {status}) before \
+                     SOCKS port {socks_port} became ready"
+                );
+            }
+            Ok(None) => {
+                eprintln!(
+                    "[clash-rs/{label}] still running after 90s but SOCKS port \
+                     {socks_port} never became ready; killing"
+                );
+            }
+            Err(ref e2) => {
+                eprintln!("[clash-rs/{label}] try_wait failed: {e2}");
+            }
+        }
         child.start_kill().ok();
         e
     })?;
