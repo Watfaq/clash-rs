@@ -67,6 +67,7 @@ fn build_dashboard() -> anyhow::Result<()> {
         "index.html",
         "vite.config.ts",
         "package.json",
+        "package-lock.json",
         "tsconfig.json",
         "tsconfig.app.json",
     ] {
@@ -75,6 +76,19 @@ fn build_dashboard() -> anyhow::Result<()> {
             dashboard_dir.join(file).display()
         );
     }
+
+    // Run `npm ci` to install dependencies (no-op if already up to date).
+    let status = std::process::Command::new("npm")
+        .args(["ci", "--prefer-offline"])
+        .current_dir(&dashboard_dir)
+        .status()
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to run `npm ci` (is Node.js/npm installed?): {e}"
+            )
+        })?;
+
+    anyhow::ensure!(status.success(), "`npm ci` exited with status {status}");
 
     // Run `npm run build`.
     let status = std::process::Command::new("npm")
