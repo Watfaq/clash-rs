@@ -789,9 +789,17 @@ pub async fn clash_process_e2e_throughput(
     let cfg_path = cfg_file.path().to_owned();
 
     // --- spawn clash-rs subprocess ---
+    // Pass --compatibility false to disable compatibility mode.
+    // When enabled (default), it auto-sets `geosite = "geosite.dat"` which
+    // triggers a network download on CI when the file is absent, causing
+    // concurrent clash-rs instances to race-write the same file and corrupt it
+    // ("geosite decode failed: buffer underflow").  Tests set all required
+    // config values explicitly, so compatibility mode is not needed.
     let mut child = tokio::process::Command::new(binary)
         .arg("-c")
         .arg(&cfg_path)
+        .arg("--compatibility")
+        .arg("false")
         .kill_on_drop(true)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
