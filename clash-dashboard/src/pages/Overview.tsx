@@ -311,39 +311,43 @@ export function Overview() {
       {configsLoading && <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading config…</div>}
       {cfg && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Logging */}
-            <EditSection title="Logging">
-              <EditRow label="Log Level" icon={<FileText size={14} color="white" />} iconBg="#8e8e93">
-                <SelectInput value={cfg['log-level']} options={LOG_LEVELS} onChange={(v) => patch({ 'log-level': v })} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Ports */}
+            <EditSection title="Ports">
+              <EditRow label="HTTP" icon={<Globe size={14} color="white" />} iconBg="#0071e3">
+                <PortInput value={cfg.port} onCommit={(v) => patch({ port: v ?? 0 })} />
+              </EditRow>
+              <EditRow label="SOCKS" icon={<Router size={14} color="white" />} iconBg="#af52de">
+                <PortInput value={cfg['socks-port']} onCommit={(v) => patch({ 'socks-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="Mixed" icon={<Sliders size={14} color="white" />} iconBg="#5ac8fa">
+                <PortInput value={cfg['mixed-port']} onCommit={(v) => patch({ 'mixed-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="Redir" icon={<Server size={14} color="white" />} iconBg="#8e8e93">
+                <PortInput value={cfg['redir-port']} onCommit={(v) => patch({ 'redir-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="TProxy" icon={<Server size={14} color="white" />} iconBg="#6e6e73">
+                <PortInput value={cfg['tproxy-port']} onCommit={(v) => patch({ 'tproxy-port': v ?? 0 })} />
+              </EditRow>
+            </EditSection>
+
+            {/* Access */}
+            <EditSection title="Access">
+              <EditRow label="Allow LAN" icon={<Wifi size={14} color="white" />} iconBg="#34c759">
+                <ToggleSwitch value={cfg['allow-lan'] ?? false} onChange={(v) => patch({ 'allow-lan': v })} />
+              </EditRow>
+              <EditRow label="Bind Address" icon={<Shield size={14} color="white" />} iconBg="#5ac8fa">
+                <TextInput value={cfg['bind-address']} onCommit={(v) => patch({ 'bind-address': v })} />
               </EditRow>
               <EditRow label="IPv6" icon={<Globe size={14} color="white" />} iconBg="#0071e3">
                 <ToggleSwitch value={cfg.ipv6 ?? false} onChange={(v) => patch({ ipv6: v })} />
               </EditRow>
             </EditSection>
 
-            {/* Network */}
-            <EditSection title="Network">
-              <EditRow label="HTTP Port" icon={<Globe size={14} color="white" />} iconBg="#0071e3">
-                <PortInput value={cfg.port} onCommit={(v) => patch({ port: v ?? 0 })} />
-              </EditRow>
-              <EditRow label="SOCKS Port" icon={<Router size={14} color="white" />} iconBg="#af52de">
-                <PortInput value={cfg['socks-port']} onCommit={(v) => patch({ 'socks-port': v ?? 0 })} />
-              </EditRow>
-              <EditRow label="Mixed Port" icon={<Sliders size={14} color="white" />} iconBg="#5ac8fa">
-                <PortInput value={cfg['mixed-port']} onCommit={(v) => patch({ 'mixed-port': v ?? 0 })} />
-              </EditRow>
-              <EditRow label="Redir Port" icon={<Server size={14} color="white" />} iconBg="#8e8e93">
-                <PortInput value={cfg['redir-port']} onCommit={(v) => patch({ 'redir-port': v ?? 0 })} />
-              </EditRow>
-              <EditRow label="TProxy Port" icon={<Server size={14} color="white" />} iconBg="#6e6e73">
-                <PortInput value={cfg['tproxy-port']} onCommit={(v) => patch({ 'tproxy-port': v ?? 0 })} />
-              </EditRow>
-              <EditRow label="Allow LAN" icon={<Wifi size={14} color="white" />} iconBg="#34c759">
-                <ToggleSwitch value={cfg['allow-lan'] ?? false} onChange={(v) => patch({ 'allow-lan': v })} />
-              </EditRow>
-              <EditRow label="Bind Address" icon={<Shield size={14} color="white" />} iconBg="#5ac8fa">
-                <TextInput value={cfg['bind-address']} onCommit={(v) => patch({ 'bind-address': v })} />
+            {/* Logging */}
+            <EditSection title="Logging">
+              <EditRow label="Log Level" icon={<FileText size={14} color="white" />} iconBg="#8e8e93">
+                <SelectInput value={cfg['log-level']} options={LOG_LEVELS} onChange={(v) => patch({ 'log-level': v })} />
               </EditRow>
             </EditSection>
           </div>
