@@ -11,43 +11,51 @@ pub struct TuicServerProcess {
 impl TuicServerProcess {
     /// Start a tuic-server instance on a random port.
     pub async fn start() -> anyhow::Result<Self> {
-        let port = alloc_port();
-        let server_addr: SocketAddr = format!("127.0.0.1:{port}").parse()?;
-
-        let cfg = tuic_server::Config {
-            server: server_addr,
-            log_level: tuic_server::config::LogLevel::Info,
-            users: HashMap::from([(
-                "00000000-0000-0000-0000-000000000001".parse()?,
-                "passwd".into(),
-            )]),
-            tls: tuic_server::config::TlsConfig {
-                self_sign: true,
-                hostname: "localhost".into(),
-                alpn: vec!["h3".into()],
-                ..Default::default()
-            },
-            zero_rtt_handshake: false,
-            dual_stack: false,
-            outbound: tuic_server::config::OutboundConfig {
-                default: tuic_server::config::OutboundRule {
-                    kind: "direct".into(),
-                    ..Default::default()
-                },
-                named: HashMap::new(),
-            },
-            acl: vec![],
-            udp_relay_ipv6: false,
-            experimental: tuic_server::config::ExperimentalConfig {
-                drop_loopback: false,
-                drop_private: false,
-            },
-            ..Default::default()
-        };
-
+        // We use a channel to receive the actual bound port from the task.
+        let (port_tx, port_rx) = oneshot::channel();
         let (ready_tx, ready_rx) = oneshot::channel();
 
         let handle = tokio::spawn(async move {
+            let sock = std::net::UdpSocket::bind("127.0.0.1:0")
+                .expect("failed to allocate a free port");
+            let port = sock.local_addr().unwrap().port();
+            let server_addr: SocketAddr =
+                format!("127.0.0.1:{port}").parse().unwrap();
+            drop(sock); // socket released; tuic-server's init will re-bind
+
+            let _ = port_tx.send(port);
+
+            let cfg = tuic_server::Config {
+                server: server_addr,
+                log_level: tuic_server::config::LogLevel::Info,
+                users: HashMap::from([(
+                    "00000000-0000-0000-0000-000000000001".parse().unwrap(),
+                    "passwd".into(),
+                )]),
+                tls: tuic_server::config::TlsConfig {
+                    self_sign: true,
+                    hostname: "localhost".into(),
+                    alpn: vec!["h3".into()],
+                    ..Default::default()
+                },
+                zero_rtt_handshake: false,
+                dual_stack: false,
+                outbound: tuic_server::config::OutboundConfig {
+                    default: tuic_server::config::OutboundRule {
+                        kind: "direct".into(),
+                        ..Default::default()
+                    },
+                    named: HashMap::new(),
+                },
+                acl: vec![],
+                udp_relay_ipv6: false,
+                experimental: tuic_server::config::ExperimentalConfig {
+                    drop_loopback: false,
+                    drop_private: false,
+                },
+                ..Default::default()
+            };
+
             let mut online_counter = HashMap::new();
             for (user, _) in cfg.users.iter() {
                 online_counter
@@ -82,6 +90,11 @@ impl TuicServerProcess {
             }
         });
 
+        let port = tokio::time::timeout(Duration::from_secs(5), port_rx)
+            .await
+            .map_err(|_| anyhow::anyhow!("tuic-server failed to report a port"))?
+            .map_err(|_| anyhow::anyhow!("tuic-server task panicked before reporting port"))?;
+
         // Wait for the server to be ready
         tokio::time::timeout(Duration::from_secs(30), ready_rx)
             .await
@@ -115,11 +128,4 @@ impl Drop for TuicServerProcess {
             tracing::info!("tuic-server task aborted");
         }
     }
-}
-
-/// Allocate a free UDP port (tuic works over QUIC/UDP).
-fn alloc_port() -> u16 {
-    let socket = std::net::UdpSocket::bind("127.0.0.1:0")
-        .expect("failed to allocate a free port");
-    socket.local_addr().unwrap().port()
 }

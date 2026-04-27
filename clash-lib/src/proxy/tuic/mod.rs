@@ -520,6 +520,21 @@ mod tests {
         let server = TuicServerProcess::start().await?;
         let port = server.port();
 
+        // Start a local TCP target so failure cannot be blamed on an
+        // unreachable upstream.
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let target_port = listener.local_addr()?.port();
+        let _target_handle = tokio::spawn(async move {
+            // Accept one connection, then idle — the test should never
+            // actually reach this point because auth fails first.
+            if let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = [0u8; 5];
+                while stream.read_exact(&mut buf).await.is_ok() {
+                    stream.write_all(b"world").await.ok();
+                }
+            }
+        });
+
         let mut opts = gen_options(port)?;
         opts.password = "wrong_password".into();
 
@@ -534,7 +549,7 @@ mod tests {
             network: crate::session::Network::Tcp,
             typ: crate::session::Type::Socks5,
             source: "127.0.0.1:54321".parse()?,
-            destination: "127.0.0.1:9999".parse()?,
+            destination: format!("127.0.0.1:{target_port}").parse()?,
             resolved_ip: None,
             so_mark: None,
             iface: None,
