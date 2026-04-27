@@ -103,9 +103,8 @@ export function Proxies() {
       ? allGroups.filter((g) => g.name.toUpperCase() !== 'GLOBAL')
       : []; // direct — no groups to show
 
-  const providers = Object.fromEntries(
-    Object.entries(providersData?.providers ?? {}).filter(([name]) => name !== 'default')
-  );
+  const providers = Object.values(providersData?.providers ?? {})
+    .filter((p) => p.name !== 'default');
 
   function toggleExpanded(name: string) {
     setExpanded((prev) => {
@@ -338,7 +337,7 @@ export function Proxies() {
           </div>
 
           {/* Providers — only in rule/global mode */}
-          {Object.keys(providers).length > 0 && (
+          {providers.length > 0 && (
         <div className="space-y-3">
           <div
             className="text-[11px] font-semibold uppercase tracking-[0.06em] px-1"
@@ -346,7 +345,7 @@ export function Proxies() {
           >
             Providers
           </div>
-          {Object.values(providers).map((provider) => {
+          {providers.map((provider) => {
             const isExpanded = expandedProviders.has(provider.name);
             const isTesting = testingProviders.has(provider.name);
             const isUpdating = updatingProviders.has(provider.name);
