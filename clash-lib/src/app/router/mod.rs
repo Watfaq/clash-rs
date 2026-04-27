@@ -32,7 +32,6 @@ pub struct Router {
     dns_resolver: ThreadSafeDNSResolver,
 
     asn_mmdb: Option<MmdbLookup>,
-    rule_providers: HashMap<String, ThreadSafeRuleProvider>,
 }
 
 pub type ArcRouter = Arc<Router>;
@@ -82,7 +81,6 @@ impl Router {
             dns_resolver,
 
             asn_mmdb,
-            rule_providers: rule_provider_registry,
         }
     }
 
@@ -241,10 +239,6 @@ impl Router {
     /// API handlers
     pub fn get_all_rules(&self) -> &Vec<Box<dyn RuleMatcher>> {
         &self.rules
-    }
-
-    pub fn get_rule_providers(&self) -> &HashMap<String, ThreadSafeRuleProvider> {
-        &self.rule_providers
     }
 }
 

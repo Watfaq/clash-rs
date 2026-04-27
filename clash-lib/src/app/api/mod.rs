@@ -1,7 +1,4 @@
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
 use tokio::sync::broadcast::Sender;
 
@@ -21,7 +18,4 @@ pub use runner::ApiRunner;
 pub struct AppState {
     pub log_source_tx: Sender<LogEvent>,
     pub statistics_manager: Arc<StatisticsManager>,
-    /// Ring buffer of recent log events — replayed to new WS clients on
-    /// connect.
-    pub recent_logs: Arc<Mutex<VecDeque<LogEvent>>>,
 }

@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     path::PathBuf,
     sync::{Arc, Mutex as StdMutex},
 };
@@ -38,7 +37,6 @@ use crate::{
 pub struct ApiRunner {
     controller_cfg: Controller,
     log_source: Sender<LogEvent>,
-    recent_logs: Arc<StdMutex<VecDeque<LogEvent>>>,
     inbound_manager: Arc<InboundManager>,
     dispatcher: Arc<dispatcher::Dispatcher>,
     global_state: Arc<Mutex<GlobalState>>,
@@ -60,7 +58,6 @@ impl ApiRunner {
     pub fn new(
         controller_cfg: Controller,
         log_source: Sender<LogEvent>,
-        recent_logs: Arc<StdMutex<VecDeque<LogEvent>>>,
         inbound_manager: Arc<InboundManager>,
         dispatcher: Arc<dispatcher::Dispatcher>,
         global_state: Arc<Mutex<GlobalState>>,
@@ -77,7 +74,6 @@ impl ApiRunner {
         Self {
             controller_cfg,
             log_source,
-            recent_logs,
             inbound_manager,
             dispatcher,
             global_state,
@@ -139,7 +135,6 @@ impl Runner for ApiRunner {
         let app_state = Arc::new(AppState {
             log_source_tx: self.log_source.clone(),
             statistics_manager: statistics_manager.clone(),
-            recent_logs: self.recent_logs.clone(),
         });
         let cancellation_token = self.cancellation_token.clone();
         let handle = tokio::spawn(async move {
@@ -163,7 +158,7 @@ impl Runner for ApiRunner {
                         dns_enabled,
                     ),
                 )
-                .nest("/rules", handlers::rule::routes(router.clone()))
+                .nest("/rules", handlers::rule::routes(router))
                 .nest("/group", handlers::group::routes(outbound_manager.clone()))
                 .nest(
                     "/proxies",
@@ -173,7 +168,6 @@ impl Runner for ApiRunner {
                     "/providers/proxies",
                     handlers::provider::routes(outbound_manager),
                 )
-                .nest("/providers/rules", handlers::provider::rule_routes(router))
                 .nest(
                     "/connections",
                     handlers::connection::routes(statistics_manager),

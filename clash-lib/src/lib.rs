@@ -36,10 +36,9 @@ use crate::{
 };
 
 use std::{
-    collections::VecDeque,
     io,
     path::PathBuf,
-    sync::{Arc, Mutex as StdMutex, OnceLock},
+    sync::{Arc, OnceLock},
 };
 use thiserror::Error;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
@@ -124,9 +123,6 @@ pub struct GlobalState {
     dns_listener: ArcRunner,
     reload_tx: mpsc::Sender<(Config, oneshot::Sender<()>)>,
     cwd: String,
-    /// Absolute path to the config file, if clash was started with -c /
-    /// Config::File.
-    pub config_path: Option<String>,
 }
 
 pub fn start_scaffold(opts: Options) -> Result<()> {
@@ -138,20 +134,6 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
             .enable_all()
             .build()?,
     };
-
-    // Capture the config file path before consuming the Config enum.
-    let config_path: Option<String> = if let Config::File(ref p) = opts.config {
-        let cwd = opts.cwd.as_deref().unwrap_or(".");
-        let pb = PathBuf::from(p);
-        if pb.is_absolute() {
-            Some(p.clone())
-        } else {
-            Some(PathBuf::from(cwd).join(p).to_string_lossy().to_string())
-        }
-    } else {
-        None
-    };
-
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
     let (log_tx, _) = broadcast::channel(100);
@@ -166,7 +148,7 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
     );
 
     rt.block_on(async {
-        match start(config, cwd, config_path, log_tx).await {
+        match start(config, cwd, log_tx).await {
             Err(e) => {
                 eprintln!("start error: {e}");
                 Err(e)
@@ -220,7 +202,6 @@ pub fn setup_default_crypto_provider() {
 pub async fn start(
     config: InternalConfig,
     cwd: String,
-    config_path: Option<String>,
     log_tx: broadcast::Sender<LogEvent>,
 ) -> Result<()> {
     setup_default_crypto_provider();
@@ -242,29 +223,6 @@ pub async fn start(
 
     let (reload_tx, mut reload_rx) = mpsc::channel(1);
 
-    // Ring buffer of recent log events replayed to new WS log clients.
-    let recent_logs: Arc<StdMutex<VecDeque<LogEvent>>> =
-        Arc::new(StdMutex::new(VecDeque::with_capacity(200)));
-    {
-        let buf = recent_logs.clone();
-        let mut log_rx = log_tx.subscribe();
-        tokio::spawn(async move {
-            loop {
-                match log_rx.recv().await {
-                    Ok(evt) => {
-                        let mut b = buf.lock().unwrap();
-                        if b.len() >= 200 {
-                            b.pop_front();
-                        }
-                        b.push_back(evt);
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
-        });
-    }
-
     let global_state = Arc::new(Mutex::new(GlobalState {
         log_level,
         #[cfg(feature = "tun")]
@@ -272,13 +230,11 @@ pub async fn start(
         dns_listener: components.dns_listener.clone(),
         reload_tx,
         cwd: cwd.to_string_lossy().to_string(),
-        config_path,
     }));
 
     let mut api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
         controller_cfg.clone(),
         log_tx.clone(),
-        recent_logs.clone(),
         components.inbound_manager.clone(),
         components.dispatcher.clone(),
         global_state.clone(),
@@ -341,7 +297,6 @@ pub async fn start(
             let new_api_listener: ArcRunner = Arc::new(app::api::ApiRunner::new(
                 controller_cfg,
                 log_tx.clone(),
-                recent_logs.clone(),
                 new_components.inbound_manager.clone(),
                 new_components.dispatcher.clone(),
                 global_state.clone(),

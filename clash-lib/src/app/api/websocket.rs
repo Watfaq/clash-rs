@@ -140,39 +140,19 @@ pub async fn log(
         warn!("ws upgrade error: {}", e);
     })
     .on_upgrade(move |mut socket| async move {
-        // Replay recent log history so the client sees context immediately.
-        let history: Vec<String> = {
-            let buf = state.recent_logs.lock().unwrap();
-            buf.iter()
-                .filter_map(|evt| serde_json::to_string(evt).ok())
-                .collect()
-        };
-        for s in history {
-            if socket.send(Message::Text(s.into())).await.is_err() {
-                return;
-            }
-        }
-
         let mut rx = state.log_source_tx.subscribe();
-        loop {
-            match rx.recv().await {
-                Ok(evt) => {
-                    let res = match serde_json::to_string(&evt) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            warn!("Failed to serialize log event: {}", e);
-                            continue;
-                        }
-                    };
-                    if let Err(e) = socket.send(Message::Text(res.into())).await {
-                        warn!("ws send error: {}", e);
-                        break;
-                    }
+        while let Ok(evt) = rx.recv().await {
+            let res = match serde_json::to_string(&evt) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to serialize log event: {}", e);
+                    continue;
                 }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    warn!("log ws: receiver lagged {} messages", n);
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+
+            if let Err(e) = socket.send(Message::Text(res.into())).await {
+                warn!("ws send error: {}", e);
+                break;
             }
         }
     })
