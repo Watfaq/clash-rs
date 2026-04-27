@@ -133,7 +133,7 @@ fn parse_domain_payload<R: Read>(reader: &mut R) -> Result<RuleContent> {
     let labels = read_byte_vec(reader, labels_len, "Labels")?;
 
     let domain_set = DomainSet::from_mrs_parts(leaves, label_bitmap, labels);
-    Ok(RuleContent::Domain(domain_set))
+    Ok(RuleContent::Domain(domain_set, leaves_len))
 }
 
 // --- IPCIDR Payload Parsing ---
@@ -196,7 +196,7 @@ fn parse_ipcidr_payload<R: Read>(reader: &mut R) -> Result<RuleContent> {
         "Successfully parsed and inserted CIDRs from {} ranges.",
         ranges_len
     );
-    Ok(RuleContent::Ipcidr(Box::new(cidr_trie)))
+    Ok(RuleContent::Ipcidr(Box::new(cidr_trie), ranges_len))
 }
 
 // --- Helper Functions for Reading Data ---

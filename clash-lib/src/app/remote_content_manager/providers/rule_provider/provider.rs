@@ -77,8 +77,8 @@ impl Display for RuleSetBehavior {
 
 pub enum RuleContent {
     // the left will converted into a right
-    Domain(succinct_set::DomainSet),
-    Ipcidr(Box<CidrTrie>),
+    Domain(succinct_set::DomainSet, usize),
+    Ipcidr(Box<CidrTrie>, usize),
     Classical(Vec<Box<dyn RuleMatcher>>),
 }
 
@@ -86,10 +86,18 @@ struct Inner {
     content: RuleContent,
 }
 
+#[async_trait]
 pub trait RuleProvider: Provider {
     fn search(&self, sess: &Session) -> bool;
     fn behavior(&self) -> RuleSetBehavior;
     fn format(&self) -> RuleSetFormat;
+    /// Returns up to `limit` rules as strings. Only Classical providers return
+    /// non-empty results; Domain/IPCIDR data structures don't support
+    /// enumeration.
+    async fn list_rules(&self, limit: usize) -> Vec<String> {
+        let _ = limit;
+        vec![]
+    }
 }
 
 pub type ThreadSafeRuleProvider = Arc<dyn RuleProvider + Send + Sync>;
@@ -127,10 +135,10 @@ impl RuleProviderImpl {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
                 RuleSetBehavior::Domain => {
-                    RuleContent::Domain(succinct_set::DomainSet::default())
+                    RuleContent::Domain(succinct_set::DomainSet::default(), 0)
                 }
                 RuleSetBehavior::Ipcidr => {
-                    RuleContent::Ipcidr(Box::new(CidrTrie::new()))
+                    RuleContent::Ipcidr(Box::new(CidrTrie::new()), 0)
                 }
                 RuleSetBehavior::Classical => RuleContent::Classical(vec![]),
             },
@@ -266,8 +274,8 @@ impl RuleProvider for RuleProviderImpl {
 
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(set) => set.has(&sess.destination.host()),
-                RuleContent::Ipcidr(trie) => trie.contains(
+                RuleContent::Domain(set, _) => set.has(&sess.destination.host()),
+                RuleContent::Ipcidr(trie, _) => trie.contains(
                     sess.destination
                         .ip()
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
@@ -294,6 +302,18 @@ impl RuleProvider for RuleProviderImpl {
 
     fn format(&self) -> RuleSetFormat {
         self.format
+    }
+
+    async fn list_rules(&self, limit: usize) -> Vec<String> {
+        let inner = self.inner.read().await;
+        match &inner.content {
+            RuleContent::Classical(rules) => rules
+                .iter()
+                .take(limit)
+                .map(|r| format!("{},{}", r.type_name(), r.payload()))
+                .collect(),
+            _ => vec![],
+        }
     }
 }
 
@@ -384,6 +404,16 @@ impl Provider for RuleProviderImpl {
         m.insert("behavior".to_owned(), Box::new(self.behavior().to_string()));
         m.insert("format".to_owned(), Box::new(self.format().to_string()));
 
+        let rule_count = {
+            let inner = self.inner.read().await;
+            match &inner.content {
+                RuleContent::Classical(rules) => rules.len(),
+                RuleContent::Domain(_, n) => *n,
+                RuleContent::Ipcidr(_, n) => *n,
+            }
+        };
+        m.insert("ruleCount".to_owned(), Box::new(rule_count));
+
         m
     }
 }
@@ -397,11 +427,16 @@ fn make_rules(
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
+            let count = rules.len();
             let s = make_domain_rules(rules)?;
-            Ok(RuleContent::Domain(s.into()))
+            Ok(RuleContent::Domain(s.into(), count))
         }
         RuleSetBehavior::Ipcidr => {
-            Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?)))
+            let count = rules.len();
+            Ok(RuleContent::Ipcidr(
+                Box::new(make_ip_cidr_rules(rules)?),
+                count,
+            ))
         }
         RuleSetBehavior::Classical => Ok(RuleContent::Classical(
             make_classical_rules(rules, mmdb, geodata)?,
