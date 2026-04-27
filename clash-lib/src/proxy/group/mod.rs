@@ -34,10 +34,15 @@ pub trait GroupProxyAPIResponse: OutboundHandler {
             m.insert("now".to_string(), Box::new(active.name().to_owned()) as _);
         }
 
-        let icon = self.icon();
-        if let Some(icon) = icon {
-            m.insert("icon".to_string(), Box::new(icon) as _);
-        }
+        m.insert(
+            "icon".to_string(),
+            Box::new(self.icon().unwrap_or_default()) as _,
+        );
+        m.insert("hidden".to_string(), Box::new(false) as _);
+        m.insert(
+            "testUrl".to_string(),
+            Box::new(self.get_latency_test_url().unwrap_or_default()) as _,
+        );
 
         m.insert(
             "all".to_string(),

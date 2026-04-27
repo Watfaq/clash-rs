@@ -52,6 +52,7 @@ use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+use uuid::Uuid;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -62,6 +63,8 @@ pub struct OutboundManager {
     registry: OutboundHandlerRegistry,
     /// name -> provider
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
+    /// proxy_name -> provider_name reverse mapping for API responses.
+    proxy_provider_map: HashMap<String, String>,
     proxy_manager: ProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
@@ -112,6 +115,7 @@ impl OutboundManager {
             proxy_manager,
             selector_control,
             proxy_providers: provider_registry,
+            proxy_provider_map: HashMap::new(),
         };
 
         debug!("initializing proxy providers");
@@ -127,6 +131,22 @@ impl OutboundManager {
             cache_store,
         )
         .await?;
+
+        // Register provider proxies into the handler map and build the
+        // reverse provider-name mapping for the API response.
+        for (provider_name, provider) in &m.proxy_providers {
+            if provider_name == RESERVED_PROVIDER_NAME {
+                continue; // skip the GLOBAL provider
+            }
+            let p = provider.read().await;
+            for proxy in p.proxies().await {
+                let name = proxy.name().to_owned();
+                m.proxy_provider_map
+                    .entry(name.clone())
+                    .or_insert_with(|| provider_name.clone());
+                handlers.entry(name).or_insert_with(|| proxy.clone());
+            }
+        }
 
         debug!("initializing connectors");
         m.init_handler_connectors(&handlers).await?;
@@ -202,17 +222,17 @@ impl OutboundManager {
         &self,
         proxy: &AnyOutboundHandler,
     ) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let mut r = if let Some(g) = proxy.try_as_group_handler() {
-            g.as_map().await
-        } else if let Some(p) = proxy.try_as_plain_handler() {
-            p.as_map().await
+        let mut response = if let Some(group) = proxy.try_as_group_handler() {
+            group.as_map().await
+        } else if let Some(plain) = proxy.try_as_plain_handler() {
+            plain.as_map().await
         } else {
             HashMap::new()
         };
-        self.apply_common_proxy_fields(&mut r, proxy, proxy.name())
+        self.apply_common_proxy_fields(&mut response, proxy, proxy.name())
             .await;
 
-        r
+        response
     }
 
     async fn apply_common_proxy_fields(
@@ -225,6 +245,8 @@ impl OutboundManager {
         let history = self.proxy_manager.delay_history(name).await;
         let support_udp = proxy.support_udp().await;
 
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes());
+        m.insert("id".to_string(), Box::new(id.to_string()));
         m.insert("history".to_string(), Box::new(history));
         m.insert("alive".to_string(), Box::new(alive));
         m.insert("name".to_string(), Box::new(name.to_owned()));
@@ -235,9 +257,19 @@ impl OutboundManager {
         m.insert("tfo".to_string(), Box::new(false));
         m.insert("mptcp".to_string(), Box::new(false));
         m.insert("smux".to_string(), Box::new(false));
-        m.insert("interface".to_string(), Box::new("auto"));
-        m.insert("dialer_proxy".to_string(), Box::new("none"));
-        m.insert("routing_mark".to_string(), Box::new(0));
+        m.insert("interface".to_string(), Box::new(""));
+        m.insert("dialer-proxy".to_string(), Box::new(""));
+        m.insert("routing-mark".to_string(), Box::new(0));
+        let provider_name = self
+            .proxy_provider_map
+            .get(name)
+            .cloned()
+            .unwrap_or_default();
+        m.insert("provider-name".to_string(), Box::new(provider_name));
+        m.insert(
+            "extra".to_string(),
+            Box::new(HashMap::<String, String>::new()),
+        );
     }
 
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
