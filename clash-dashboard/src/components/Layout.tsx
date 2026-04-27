@@ -47,6 +47,8 @@ export function Layout() {
                 key={to}
                 to={to}
                 end={end}
+                aria-label={label}
+                title={label}
                 className={({ isActive }) =>
                   `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                     isActive

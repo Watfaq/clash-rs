@@ -53,12 +53,17 @@ fn build_dashboard() -> anyhow::Result<()> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
     let dashboard_dir =
         std::path::PathBuf::from(&manifest_dir).join("../clash-dashboard");
-    let dashboard_dir = dashboard_dir.canonicalize().map_err(|e| {
-        anyhow::anyhow!(
-            "clash-dashboard directory not found at {}: {e}",
-            dashboard_dir.display()
-        )
-    })?;
+    let dashboard_dir = match dashboard_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            println!(
+                "cargo:warning=clash-dashboard directory not found at {}; skipping \
+                 frontend build (embedded UI will be empty)",
+                dashboard_dir.display()
+            );
+            return Ok(());
+        }
+    };
 
     // Watch source files so cargo reruns this script on any frontend change.
     let src_dir = dashboard_dir.join("src");
@@ -78,17 +83,28 @@ fn build_dashboard() -> anyhow::Result<()> {
     }
 
     // Run `npm ci` to install dependencies (no-op if already up to date).
-    let status = std::process::Command::new("npm")
+    let status = match std::process::Command::new("npm")
         .args(["ci", "--prefer-offline"])
         .current_dir(&dashboard_dir)
         .status()
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to run `npm ci` (is Node.js/npm installed?): {e}"
-            )
-        })?;
+    {
+        Ok(s) => s,
+        Err(_) => {
+            println!(
+                "cargo:warning=npm not found; skipping frontend build (embedded UI \
+                 will be empty)"
+            );
+            return Ok(());
+        }
+    };
 
-    anyhow::ensure!(status.success(), "`npm ci` exited with status {status}");
+    if !status.success() {
+        println!(
+            "cargo:warning=`npm ci` failed with status {status}; skipping frontend \
+             build"
+        );
+        return Ok(());
+    }
 
     // Run `npm run build`.
     let status = std::process::Command::new("npm")

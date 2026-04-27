@@ -221,6 +221,7 @@ export const healthcheckProvider = (name: string) =>
 // Rule Providers
 export interface RuleProvider {
   name: string;
+  type: string;
   vehicleType: string;
   updatedAt?: string;
   behavior?: string;

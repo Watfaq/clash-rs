@@ -16,7 +16,15 @@ export function useWebSocket<T = unknown>(url: string | null): UseWebSocketRetur
   const unmounted = useRef(false);
 
   const connect = useCallback(() => {
-    if (!url || unmounted.current) return;
+    if (!url) {
+      wsRef.current?.close();
+      wsRef.current = null;
+      retryCount.current = 0;
+      setReadyState('CLOSED');
+      setLastMessage(null);
+      return;
+    }
+    if (unmounted.current) return;
 
     setReadyState('CONNECTING');
     const ws = new WebSocket(url);

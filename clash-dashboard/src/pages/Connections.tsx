@@ -115,6 +115,7 @@ export function Connections() {
         <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#8e8e93' }} />
         <input
           type="text"
+          aria-label="Filter connections by host, rule, or chain"
           placeholder="Filter by host, rule, chain…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -185,6 +186,7 @@ export function Connections() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => closeOneMutation.mutate(conn.id)}
+                      aria-label={`Close connection to ${conn.metadata.host || conn.id}`}
                       className="p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                       style={{ color: '#ff3b30' }}
                     >

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
 import { getApiUrl, getSecret, setApiUrl, setSecret } from '../lib/settings';
@@ -13,6 +13,14 @@ export function Settings() {
   const [apiUrl, setApiUrlState] = useState(getApiUrl);
   const [secret, setSecretState] = useState(getSecret);
   const [saved, setSaved] = useState(false);
+  const saveTimersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      saveTimersRef.current.forEach((id) => clearTimeout(id));
+      saveTimersRef.current = [];
+    };
+  }, []);
 
   const { data, error, refetch } = useQuery({
     queryKey: ['version'],
@@ -34,8 +42,8 @@ export function Settings() {
     setApiUrl(apiUrl);
     setSecret(secret);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    setTimeout(() => refetch(), 100);
+    saveTimersRef.current.push(window.setTimeout(() => setSaved(false), 2000));
+    saveTimersRef.current.push(window.setTimeout(() => void refetch(), 100));
   }
 
   const inputStyle: React.CSSProperties = {

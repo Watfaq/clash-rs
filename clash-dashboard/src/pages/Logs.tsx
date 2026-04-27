@@ -45,7 +45,9 @@ function WsStatus({ state }: { state: string }) {
 export function Logs() {
   const [level, setLevel] = useState<Level>('all');
   const [logs, setLogs] = useState<TimestampedLog[]>([]);
-  const [paused, setPaused] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+  const [hoverPaused, setHoverPaused] = useState(false);
+  const effectivePaused = userPaused || hoverPaused;
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const wsUrl = getWsUrl('/ws/logs');
@@ -60,10 +62,10 @@ export function Logs() {
   }, [lastMessage]);
 
   useEffect(() => {
-    if (!paused) {
+    if (!effectivePaused) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs, paused]);
+  }, [logs, effectivePaused]);
 
   const filtered = level === 'all' ? logs : logs.filter((l) => l.type === level);
 
@@ -72,20 +74,20 @@ export function Logs() {
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Logs</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Logs</h1>
           <WsStatus state={readyState} />
         </div>
         <div className="flex items-center gap-2">
           {/* Level segmented control */}
-          <div className="flex items-center p-1 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
+          <div className="flex items-center p-1 rounded-full bg-black/[0.06] dark:bg-white/[0.1]">
             {LEVELS.map((l) => {
               const active = level === l;
               return (
                 <button
                   key={l}
                   onClick={() => setLevel(l)}
-                  className="px-3 py-1.5 rounded-full text-[12px] font-medium capitalize transition-all"
-                  style={active ? LEVEL_ACTIVE_STYLE[l] : { color: '#6e6e73' }}
+                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium capitalize transition-all ${active ? '' : 'text-[#6e6e73] dark:text-white/60'}`}
+                  style={active ? LEVEL_ACTIVE_STYLE[l] : undefined}
                 >
                   {l}
                 </button>
@@ -93,16 +95,16 @@ export function Logs() {
             })}
           </div>
 
-          <div className="w-px h-4 mx-1" style={{ background: 'rgba(0,0,0,0.08)' }} />
+          <div className="w-px h-4 mx-1 bg-black/[0.08] dark:bg-white/[0.12]" />
 
           <button
-            onClick={() => setPaused((p) => !p)}
+            onClick={() => setUserPaused((p) => !p)}
             className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
-            style={paused
+            style={userPaused
               ? { background: 'rgba(255,149,0,0.1)', color: '#ff9500' }
               : { background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
           >
-            {paused ? 'Resume' : 'Pause'}
+            {userPaused ? 'Resume' : 'Pause'}
           </button>
           <button
             onClick={() => setLogs([])}
@@ -118,6 +120,8 @@ export function Logs() {
       <div
         className="flex-1 overflow-y-auto rounded-2xl p-4 min-h-0"
         style={{ background: '#1c1c1e' }}
+        onMouseEnter={() => setHoverPaused(true)}
+        onMouseLeave={() => setHoverPaused(false)}
       >
         {filtered.length === 0 ? (
           <div className="text-[13px] text-center py-10" style={{ color: '#6e6e73' }}>

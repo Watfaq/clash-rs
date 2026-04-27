@@ -24,10 +24,15 @@ function makeGradient(u: uPlot, color: string, alpha: string): CanvasGradient {
 export function TrafficChart({ timestamps, up, down }: TrafficChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<uPlot | null>(null);
+  const dataRef = useRef({ timestamps, up, down });
+
+  // Keep dataRef current so resize observer always uses latest data.
+  dataRef.current = { timestamps, up, down };
 
   function buildChart(width: number) {
     if (!containerRef.current) return;
     chartRef.current?.destroy();
+    const { timestamps: ts, up: u, down: d } = dataRef.current;
 
     const opts: uPlot.Options = {
       width,
@@ -69,7 +74,7 @@ export function TrafficChart({ timestamps, up, down }: TrafficChartProps) {
       padding: [8, 0, 0, 0],
     };
 
-    chartRef.current = new uPlot(opts, [timestamps, up, down], containerRef.current);
+    chartRef.current = new uPlot(opts, [ts, u, d], containerRef.current);
   }
 
   useEffect(() => {

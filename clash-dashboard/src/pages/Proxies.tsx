@@ -251,7 +251,16 @@ export function Proxies() {
                   <div
                     className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors"
                     style={{ minHeight: 52 }}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
                     onClick={() => toggleExpanded(group.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleExpanded(group.name);
+                      }
+                    }}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
@@ -381,7 +390,16 @@ export function Proxies() {
                     <div
                       className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors"
                       style={{ minHeight: 52 }}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedProviders.has(provider.name)}
                       onClick={() => toggleProviderExpanded(provider.name)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleProviderExpanded(provider.name);
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>

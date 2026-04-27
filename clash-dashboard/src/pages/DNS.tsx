@@ -25,12 +25,13 @@ export function DNS() {
   const [loading, setLoading] = useState(false);
 
   async function handleQuery() {
-    if (!hostname.trim()) return;
+    const normalizedHostname = hostname.trim();
+    if (!normalizedHostname || loading) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const res = await queryDNS(hostname, type);
+      const res = await queryDNS(normalizedHostname, type);
       setResult(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Query failed');
@@ -52,7 +53,12 @@ export function DNS() {
             placeholder="Hostname (e.g. example.com)"
             value={hostname}
             onChange={(e) => setHostname(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleQuery();
+              }
+            }}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl text-[15px] focus:outline-none transition-shadow"
             style={{
               background: 'rgba(255,255,255,0.8)',
