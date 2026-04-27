@@ -40,7 +40,7 @@ export function DNS() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
+    <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>DNS Lookup</h1>
 
       {/* Query form */}

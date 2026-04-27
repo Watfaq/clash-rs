@@ -169,7 +169,7 @@ export function Config() {
   const isPending = patchMutation.isPending;
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Configuration</h1>
         <div className="flex items-center gap-2">

@@ -49,7 +49,7 @@ export function Settings() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-md">
+    <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Settings</h1>
 
       {/* Dev mode banner */}

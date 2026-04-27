@@ -2,7 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMemory, getConfigs, updateConfigs, getWsUrl } from '../lib/api';
 import { useTraffic } from '../hooks/useTraffic';
 import { TrafficChart } from '../components/TrafficChart';
-import { ArrowUp, ArrowDown, Activity, HardDrive } from 'lucide-react';
+import {
+  ArrowUp, ArrowDown, Activity, HardDrive,
+  Globe, Router, Sliders, Server, Wifi, FileText,
+} from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import type { ConnectionsData } from '../lib/api';
 
@@ -66,6 +69,66 @@ const MODE_COLORS: Record<string, string> = {
   rule: 'bg-[#0071e3] text-white shadow-sm',
   global: 'bg-violet-500 text-white shadow-sm',
 };
+
+function IconBadge({ bg, children }: { bg: string; children: React.ReactNode }) {
+  return (
+    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+      {children}
+    </div>
+  );
+}
+
+interface InfoRowProps {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  value: React.ReactNode;
+}
+
+function InfoRow({ icon, iconBg, label, value }: InfoRowProps) {
+  return (
+    <div className="flex items-center gap-3 px-4" style={{ minHeight: 44 }}>
+      <IconBadge bg={iconBg}>{icon}</IconBadge>
+      <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{label}</span>
+      <span className="text-[13px] font-mono" style={{ color: '#6e6e73' }}>{value}</span>
+    </div>
+  );
+}
+
+function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1" style={{ color: '#6e6e73' }}>
+        {title}
+      </div>
+      <div className="liquid-glass-card rounded-xl overflow-hidden">
+        <div className="[&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:[border-color:rgba(0,0,0,0.06)]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortValue({ port }: { port: number | undefined }) {
+  if (!port || port === 0) return <span style={{ color: '#c7c7cc' }}>disabled</span>;
+  return <span>:{port}</span>;
+}
+
+function BoolPill({ value }: { value: boolean }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+      style={{
+        background: value ? 'rgba(52,199,89,0.12)' : 'rgba(0,0,0,0.06)',
+        color: value ? '#34c759' : '#6e6e73',
+      }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: value ? '#34c759' : '#8e8e93' }} />
+      {value ? 'On' : 'Off'}
+    </span>
+  );
+}
 
 export function Overview() {
   const queryClient = useQueryClient();
@@ -195,6 +258,81 @@ export function Overview() {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Network & System info — pulled from config */}
+      {configs && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <InfoSection title="Network">
+            <InfoRow
+              icon={<Globe size={14} color="white" />}
+              iconBg="#0071e3"
+              label="HTTP Port"
+              value={<PortValue port={configs.port} />}
+            />
+            <InfoRow
+              icon={<Router size={14} color="white" />}
+              iconBg="#af52de"
+              label="SOCKS Port"
+              value={<PortValue port={configs['socks-port']} />}
+            />
+            <InfoRow
+              icon={<Sliders size={14} color="white" />}
+              iconBg="#5ac8fa"
+              label="Mixed Port"
+              value={<PortValue port={configs['mixed-port']} />}
+            />
+            <InfoRow
+              icon={<Server size={14} color="white" />}
+              iconBg="#8e8e93"
+              label="Redir Port"
+              value={<PortValue port={configs['redir-port']} />}
+            />
+            <InfoRow
+              icon={<Wifi size={14} color="white" />}
+              iconBg="#34c759"
+              label="Allow LAN"
+              value={<BoolPill value={configs['allow-lan'] ?? false} />}
+            />
+            {configs['bind-address'] && (
+              <InfoRow
+                icon={<Server size={14} color="white" />}
+                iconBg="#5ac8fa"
+                label="Bind Address"
+                value={configs['bind-address']}
+              />
+            )}
+          </InfoSection>
+
+          <InfoSection title="System">
+            <InfoRow
+              icon={<FileText size={14} color="white" />}
+              iconBg="#8e8e93"
+              label="Log Level"
+              value={configs['log-level'] ?? '—'}
+            />
+            <InfoRow
+              icon={<Globe size={14} color="white" />}
+              iconBg="#0071e3"
+              label="IPv6"
+              value={<BoolPill value={configs.ipv6 ?? false} />}
+            />
+            <InfoRow
+              icon={<Wifi size={14} color="white" />}
+              iconBg="#34c759"
+              label="Allow LAN"
+              value={<BoolPill value={configs['allow-lan'] ?? false} />}
+            />
+            {configs['bind-address'] && (
+              <InfoRow
+                icon={<Server size={14} color="white" />}
+                iconBg="#5ac8fa"
+                label="Bind Address"
+                value={configs['bind-address']}
+              />
+            )}
+          </InfoSection>
         </div>
       )}
     </div>
