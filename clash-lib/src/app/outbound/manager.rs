@@ -50,7 +50,7 @@ use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
 use std::{
-    collections::{HashMap, hash_map},
+    collections::HashMap,
     path::PathBuf,
     sync::Arc,
     time::Duration,
@@ -68,8 +68,6 @@ pub struct OutboundManager {
     registry: OutboundHandlerRegistry,
     /// name -> provider
     proxy_providers: HashMap<String, ThreadSafeProxyProvider>,
-    /// proxy_name -> provider_name reverse mapping for API responses.
-    proxy_provider_map: HashMap<String, String>,
     proxy_manager: ProxyManager,
     selector_control: HashMap<String, ThreadSafeSelectorControl>,
 }
@@ -120,7 +118,6 @@ impl OutboundManager {
             proxy_manager,
             selector_control,
             proxy_providers: provider_registry,
-            proxy_provider_map: HashMap::new(),
         };
 
         debug!("initializing proxy providers");
@@ -136,25 +133,6 @@ impl OutboundManager {
             cache_store,
         )
         .await?;
-
-        // Register provider proxies into the handler map and build the
-        // reverse provider-name mapping for the API response.
-        // Only record provider-name when we actually insert the handler,
-        // so user-configured proxies with the same name are never mislabeled.
-        for (provider_name, provider) in &m.proxy_providers {
-            if provider_name == RESERVED_PROVIDER_NAME {
-                continue; // skip the GLOBAL provider
-            }
-            let p = provider.read().await;
-            for proxy in p.proxies().await {
-                let name = proxy.name().to_owned();
-                if let hash_map::Entry::Vacant(e) = handlers.entry(name) {
-                    e.insert(proxy.clone());
-                    m.proxy_provider_map
-                        .insert(proxy.name().to_owned(), provider_name.clone());
-                }
-            }
-        }
 
         debug!("initializing connectors");
         m.init_handler_connectors(&handlers).await?;
@@ -268,12 +246,7 @@ impl OutboundManager {
         m.insert("interface".to_string(), Box::new(""));
         m.insert("dialer-proxy".to_string(), Box::new(""));
         m.insert("routing-mark".to_string(), Box::new(0));
-        let provider_name = self
-            .proxy_provider_map
-            .get(name)
-            .cloned()
-            .unwrap_or_default();
-        m.insert("provider-name".to_string(), Box::new(provider_name));
+        m.insert("provider-name".to_string(), Box::new(""));
         m.insert(
             "extra".to_string(),
             Box::new(HashMap::<String, String>::new()),
