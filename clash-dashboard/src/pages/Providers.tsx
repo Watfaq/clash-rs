@@ -41,10 +41,12 @@ export function Providers() {
   });
 
   const providers = Object.values(data?.providers ?? {})
-    .filter((p) => p.name !== 'default' && p.vehicleType !== 'Compatible');
+    .filter((p) => p.name !== 'default' && p.vehicleType !== 'Compatible')
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const ruleProviders = Object.values(ruleData?.providers ?? {})
-    .filter((p) => p.vehicleType !== 'Compatible' && p.vehicleType !== 'Inline');
+    .filter((p) => p.vehicleType !== 'Compatible' && p.vehicleType !== 'Inline')
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function toggleExpanded(name: string) {
     setExpanded((prev) => {
