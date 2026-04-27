@@ -64,7 +64,25 @@ export function Proxies() {
   const selectMutation = useMutation({
     mutationFn: ({ group, proxy }: { group: string; proxy: string }) =>
       selectProxy(group, proxy),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proxies'] }),
+    onMutate: async ({ group, proxy }) => {
+      await queryClient.cancelQueries({ queryKey: ['proxies'] });
+      const previous = queryClient.getQueryData<{ proxies: Record<string, Proxy> }>(['proxies']);
+      queryClient.setQueryData<{ proxies: Record<string, Proxy> }>(['proxies'], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          proxies: {
+            ...old.proxies,
+            [group]: { ...old.proxies[group], now: proxy },
+          },
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(['proxies'], ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['proxies'] }),
   });
 
   const proxies = data?.proxies ?? {};
