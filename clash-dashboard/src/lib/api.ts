@@ -7,39 +7,39 @@ export interface Version {
   meta: boolean;
 }
 
-export interface ClashConfig {
+export interface InboundEndpoint {
+  name: string;
+  type: string;
   port: number;
-  'socks-port': number;
-  'redir-port': number;
-  'tproxy-port': number;
-  'mixed-port': number;
-  authentication: string[];
-  'allow-lan': boolean;
-  'bind-address': string;
-  mode: string;
-  'log-level': string;
-  ipv6: boolean;
-  'interface-name': string;
-  'routing-mark': number;
-  tun: {
-    enable: boolean;
-    stack: string;
-    'dns-hijack': string[];
-    'auto-route': boolean;
-    'auto-detect-interface': boolean;
-  };
-  dns: {
-    enable: boolean;
-    ipv6: boolean;
-    'default-nameserver': string[];
-    'enhanced-mode': string;
-    'fake-ip-range': string;
-    'use-hosts': boolean;
-    nameserver: string[];
-    fallback: string[];
-    'fallback-filter': Record<string, unknown>;
-  };
+  active: boolean;
 }
+
+export interface DnsListenInfo {
+  udp?: string;
+  tcp?: string;
+  doh?: string;
+  dot?: string;
+  doh3?: string;
+}
+
+export interface ClashConfig {
+  port?: number;
+  'socks-port'?: number;
+  'redir-port'?: number;
+  'tproxy-port'?: number;
+  'mixed-port'?: number;
+  'bind-address'?: string;
+  mode?: string;
+  'log-level'?: string;
+  ipv6?: boolean;
+  'allow-lan'?: boolean;
+  listeners?: InboundEndpoint[];
+  'lan-ips'?: string[];
+  'dns-listen'?: DnsListenInfo;
+}
+
+/** Fields that can be patched via PATCH /configs */
+export type PatchableConfig = Omit<ClashConfig, 'listeners' | 'lan-ips' | 'dns-listen'>;
 
 export interface Proxy {
   name: string;
@@ -182,7 +182,9 @@ export const getConfigs = () => request<ClashConfig>('/configs');
 export const updateConfigs = (config: Partial<ClashConfig>) =>
   request<void>('/configs', { method: 'PUT', body: JSON.stringify(config) });
 export const reloadConfigs = (path: string) =>
-  request<void>('/configs', { method: 'PATCH', body: JSON.stringify({ path }) });
+  request<void>('/configs', { method: 'PUT', body: JSON.stringify({ path }) });
+export const patchConfigs = (patch: PatchableConfig) =>
+  request<void>('/configs', { method: 'PATCH', body: JSON.stringify(patch) });
 
 // Proxies
 export const getProxies = () => request<{ proxies: Record<string, Proxy> }>('/proxies');

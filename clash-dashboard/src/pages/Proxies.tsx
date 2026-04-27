@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProxies, selectProxy, getProxyDelay, getProxyProviders, updateProxyProvider } from '../lib/api';
-import { RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react';
-import type { Proxy } from '../lib/api';
+import {
+  getProxies, selectProxy, getProxyDelay, getProxyProviders,
+  updateProxyProvider, healthcheckProvider,
+} from '../lib/api';
+import { RefreshCw, ChevronDown, ChevronUp, Check, Activity } from 'lucide-react';
+import type { Proxy, ProxyProvider } from '../lib/api';
 
 const TEST_URL = 'http://www.gstatic.com/generate_204';
 const TEST_TIMEOUT = 5000;
@@ -40,8 +43,11 @@ function getLastDelay(history: Proxy['history']): number | undefined {
 export function Proxies() {
   const queryClient = useQueryClient();
   const [testingGroups, setTestingGroups] = useState<Set<string>>(new Set());
+  const [testingProviders, setTestingProviders] = useState<Set<string>>(new Set());
+  const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(new Set());
   const [latencyMap, setLatencyMap] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery({
     queryKey: ['proxies'],
@@ -76,6 +82,15 @@ export function Proxies() {
     });
   }
 
+  function toggleProviderExpanded(name: string) {
+    setExpandedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
   async function testGroupDelay(group: Proxy) {
     if (!group.all) return;
     setTestingGroups((s) => new Set(s).add(group.name));
@@ -96,6 +111,35 @@ export function Proxies() {
       setTestingGroups((s) => {
         const next = new Set(s);
         next.delete(group.name);
+        return next;
+      });
+    }
+  }
+
+  async function runHealthcheck(provider: ProxyProvider) {
+    setTestingProviders((s) => new Set(s).add(provider.name));
+    setExpandedProviders((prev) => new Set(prev).add(provider.name));
+    try {
+      await healthcheckProvider(provider.name);
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+    } finally {
+      setTestingProviders((s) => {
+        const next = new Set(s);
+        next.delete(provider.name);
+        return next;
+      });
+    }
+  }
+
+  async function runUpdate(provider: ProxyProvider) {
+    setUpdatingProviders((s) => new Set(s).add(provider.name));
+    try {
+      await updateProxyProvider(provider.name);
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+    } finally {
+      setUpdatingProviders((s) => {
+        const next = new Set(s);
+        next.delete(provider.name);
         return next;
       });
     }
@@ -248,44 +292,114 @@ export function Proxies() {
           >
             Providers
           </div>
-          <div className="liquid-glass-card rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            {Object.values(providers).map((provider, idx, arr) => (
+          {Object.values(providers).map((provider) => {
+            const isExpanded = expandedProviders.has(provider.name);
+            const isTesting = testingProviders.has(provider.name);
+            const isUpdating = updatingProviders.has(provider.name);
+
+            return (
               <div
                 key={provider.name}
-                className="px-4 flex items-center justify-between"
-                style={{
-                  minHeight: 52,
-                  borderBottom: idx < arr.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
-                }}
+                className="liquid-glass-card rounded-xl overflow-hidden"
+                style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="font-semibold text-[15px]" style={{ color: '#1d1d1f' }}>
-                    {provider.name}
-                  </span>
-                  <span
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
-                  >
-                    {provider.vehicleType}
-                  </span>
-                  <span
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
-                  >
-                    {provider.proxies?.length ?? 0} proxies
-                  </span>
+                <div className="flex">
+                  <div className="w-1 flex-shrink-0" style={{ background: '#8e8e93' }} />
+                  <div className="flex-1">
+                    <div
+                      className="px-4 py-3 flex items-center justify-between cursor-pointer transition-colors"
+                      style={{ minHeight: 52 }}
+                      onClick={() => toggleProviderExpanded(provider.name)}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="font-semibold text-[15px] truncate" style={{ color: '#1d1d1f' }}>
+                          {provider.name}
+                        </span>
+                        <span
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}
+                        >
+                          {provider.vehicleType}
+                        </span>
+                        <span
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          style={{ background: 'rgba(0,0,0,0.04)', color: '#8e8e93' }}
+                        >
+                          {provider.proxies?.length ?? 0} proxies
+                        </span>
+                        {provider.updatedAt && (
+                          <span className="text-[11px] truncate" style={{ color: '#8e8e93' }}>
+                            {new Date(provider.updatedAt).toLocaleTimeString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); runHealthcheck(provider); }}
+                          disabled={isTesting}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
+                          style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                        >
+                          <Activity size={12} className={isTesting ? 'animate-pulse' : ''} />
+                          {isTesting ? 'Testing…' : 'Test'}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); runUpdate(provider); }}
+                          disabled={isUpdating}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors disabled:opacity-50"
+                          style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                        >
+                          <RefreshCw size={12} className={isUpdating ? 'animate-spin' : ''} />
+                          {isUpdating ? 'Updating…' : 'Update'}
+                        </button>
+                        {isExpanded
+                          ? <ChevronUp size={16} style={{ color: '#6e6e73' }} />
+                          : <ChevronDown size={16} style={{ color: '#6e6e73' }} />
+                        }
+                      </div>
+                    </div>
+
+                    {isExpanded && provider.proxies && provider.proxies.length > 0 && (
+                      <div className="p-4 border-t" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                          {provider.proxies.map((proxy) => {
+                            const latency = latencyMap[proxy.name] ?? getLastDelay(proxy.history);
+                            const latencyColor = getLatencyColor(latency);
+                            return (
+                              <div
+                                key={proxy.name}
+                                className="px-3 py-2.5 rounded-xl text-left border"
+                                style={{ background: 'white', borderColor: 'rgba(0,0,0,0.06)' }}
+                              >
+                                <div
+                                  className="text-[13px] font-medium truncate mb-1"
+                                  style={{ color: '#1d1d1f' }}
+                                >
+                                  {proxy.name}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <div
+                                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                    style={{ background: latencyColor }}
+                                  />
+                                  <span
+                                    className="text-[11px] font-mono"
+                                    style={{ color: latencyColor }}
+                                  >
+                                    {latency === undefined ? '—' : latency === 0 ? 'Timeout' : `${latency}ms`}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={() => updateProxyProvider(provider.name)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors"
-                  style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
-                >
-                  <RefreshCw size={12} />
-                  Update
-                </button>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>
