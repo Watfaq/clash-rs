@@ -288,8 +288,10 @@ mod tests {
     };
     use crate::{
         proxy::utils::test_utils::{
-            Suite, config_helper::test_config_base_dir,
-            docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+            Suite,
+            config_helper::test_config_base_dir,
+            docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+            run_test_suites_and_cleanup,
         },
         tests::initialize,
     };
@@ -321,6 +323,7 @@ mod tests {
     /// /tmp/.xxx/ssh/ssh_host_keys.
     async fn get_openssh_server_runner(
         ssh_config_path: PathBuf,
+        host_port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
         let password = format!("USER_PASSWORD={}", PASSWORD);
         DockerTestRunnerBuilder::new()
@@ -334,7 +337,7 @@ mod tests {
                 &password,
             ])
             .mounts(&[(ssh_config_path.to_str().unwrap(), "/config")])
-            .port(2222)
+            .host_port(host_port, 2222)
             .build()
             .await
     }
@@ -362,7 +365,7 @@ mod tests {
         host_key: Option<Vec<String>>, // host key
     }
 
-    async fn test_ssh_inner(opt: TestOption) -> anyhow::Result<()> {
+    async fn test_ssh_inner(opt: TestOption, host_port: u16) -> anyhow::Result<()> {
         tracing::info!("testing ssh, using option: {:?}", opt);
 
         // Prepare SSH config directory for the docker container
@@ -437,7 +440,8 @@ mod tests {
 
         // Start the container
         let container =
-            get_openssh_server_runner(ssh_config_tmp_path.clone()).await?;
+            get_openssh_server_runner(ssh_config_tmp_path.clone(), host_port)
+                .await?;
 
         // Configure client to connect to container
         let ssh_private_key_path = ssh_config_path.join(".ssh").join(if opt.rsa {
@@ -535,55 +539,67 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh1() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: true,
-            rsa: false,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: true,
+                rsa: false,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh2() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: false,
-            rsa: true,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: true,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh3() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: false,
-            rsa: false,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: false,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh4() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         // config wrong host key, expect failure
         let host_key = Some(
             vec![
             "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtnezeRnexr9UgviTV66AcQ0uGQ9gx4t0GjVA29SstlBgZ5750DmKdxYt3PrCC2qslVOfnpW/1XNMSmRtuqM2C0/uaRBx/lAPyjEQ3IwLHTk7CxirzNw46nYBeIKBKYcdP6LIfdvZ9+avd6+SGIJVrBovBHzV2aIpDEG3dO+9op7gzGPpdRHP4WnOdAuSnLCaAvrSs+amFEmrD+nZLMwUMfX5H9huGJNxo1/ma4Ti3jclY8Utw+K6y2NUNB7YXuiJg2Ugfnu6d54VBg9lA2o481Ol0ys2i46sdmWhaVPRGlWTmQ1fAsbd+9u3/2ae6n9Oc6V88izGUrH8sFb23FmlAbHF5tT2nnOs1XzQPCiUsHgn2XVidEONe2Q/FJbfoA4fUYmoQPGprXzHcvtguUajww7dwYfyEXU6IxNRVl5H+64fnsQ2shVAnpJ10fzSrK1RtcnF3zWGvix2z/wOzgx2ydUV9lNp7tU3bOX2iL8CvYBFwnFqEHRGH5Ry9km1ujdE=".to_owned()
         ]);
-        let res = test_ssh_inner(TestOption {
-            password: false,
-            rsa: false,
-            host_key,
-        })
+        let res = test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: false,
+                host_key,
+            },
+            host_port,
+        )
         .await;
         assert!(res.is_err());
         Ok(())

@@ -1,0 +1,800 @@
+# clash-rs full reference configuration
+# ======================================
+# This file documents ALL supported configuration options with inline comments.
+# It is NOT a working configuration — many values are examples/placeholders.
+# See the other config files in this directory for real working examples.
+#
+# clash-rs repository: https://github.com/watfaq/clash-rs
+
+# ── Inbound Ports ─────────────────────────────────────────────────────────────
+# Simple port bindings for the most common inbound types.
+# Use the `listeners:` section below for advanced control (auth, per-listener TLS, etc.)
+
+port: 7890              # HTTP proxy port (0 or omit to disable)
+socks-port: 7891        # SOCKS5 proxy port
+mixed-port: 7892        # Combined HTTP + SOCKS5 port
+
+# redir-port: 7893      # Linux transparent proxy — redirect mode (requires root)
+# tproxy-port: 7894     # Linux transparent proxy — tproxy mode (requires root)
+
+# HTTP and SOCKS5 inbound authentication (applies to port/socks-port/mixed-port)
+# authentication:
+#   - "user1:pass1"
+#   - "user2:pass2"
+
+# ── Network Binding ───────────────────────────────────────────────────────────
+allow-lan: false        # Accept connections from other LAN hosts
+
+# Bind address for inbound listeners (applies to all simple ports above):
+#   "*" or "0.0.0.0"   — all IPv4 interfaces
+#   "::"               — all IPv6 interfaces
+#   "127.0.0.1"        — loopback only (default)
+# Setting a non-loopback address automatically enables allow-lan.
+bind-address: "127.0.0.1"
+
+# ── Run Mode ──────────────────────────────────────────────────────────────────
+# rule   — route traffic based on rules (recommended)
+# global — forward all traffic through the first proxy in proxy-groups
+# direct — bypass all proxies
+mode: rule
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+# trace | debug | info | warn | error | off
+log-level: info
+
+# ── IPv6 ──────────────────────────────────────────────────────────────────────
+ipv6: false             # When false, AAAA DNS queries return empty answers
+
+# ── External Controller (REST API) ────────────────────────────────────────────
+external-controller: 127.0.0.1:9090
+
+# Unix socket (on Unix) or named pipe (on Windows) for the REST API
+# external-controller-unix: /tmp/clash-rs.sock
+
+# Web dashboard directory (served at http://<external-controller>/ui)
+external-ui: public
+
+# Auto-download URL for the dashboard bundle (zip or tgz).
+# Append #force=true to re-download even if the directory exists.
+# Append #_clash_outbound=<name> to route the download through a proxy.
+# external-ui-url: "https://github.com/example/dashboard/releases/latest/download/dashboard.zip#force=true"
+
+# API authentication secret (strongly recommended when not on 127.0.0.1)
+# secret: "change-me"
+
+# CORS allowed origins for the REST API
+# cors-allow-origins:
+#   - "https://my-dashboard.example.com"
+
+# ── Outbound Interface ────────────────────────────────────────────────────────
+# Bind outbound connections to a specific network interface (not yet implemented)
+# interface: en0
+
+# fwmark for outbound packets on Linux — use in iptables to avoid routing loops
+# routing-mark: 6666
+
+# ── GeoIP / GeoSite Databases ─────────────────────────────────────────────────
+mmdb: Country.mmdb      # Path to MaxMind GeoLite2 Country DB (relative to CWD)
+# mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/.../Country.mmdb"
+
+asn-mmdb: Country-asn.mmdb   # ASN database (optional)
+# asn-mmdb-download-url: "https://github.com/Loyalsoldier/geoip/releases/download/.../Country-asn.mmdb"
+
+geosite: geosite.dat    # GeoSite database for GEOSITE rules (optional)
+# geosite-download-url: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/.../geosite.dat"
+
+# ── Profile ───────────────────────────────────────────────────────────────────
+profile:
+  store-selected: true      # Persist `select` group choices to cache.db
+  store-fake-ip: false      # Persist fake-IP mappings to cache.db
+  store-smart-stats: true   # Persist `smart` group statistics to cache.db
+
+# ── Static Hosts ──────────────────────────────────────────────────────────────
+# Override DNS for specific hostnames (like /etc/hosts).
+# Wildcards: *.example.com, .example.com (matches subdomains), +.foo.com (foo.com + *.foo.com)
+hosts:
+  # "*.example.internal": 192.168.1.100
+  # "+.local": 127.0.0.1
+
+# ── Experimental ──────────────────────────────────────────────────────────────
+experimental:
+  tcp-buffer-size: 65536    # Buffer size for bidirectional TCP copy (bytes)
+
+# ── DNS ───────────────────────────────────────────────────────────────────────
+dns:
+  enable: true
+
+  ipv6: false             # When false, AAAA queries return empty results
+
+  # DNS listen address — simple UDP-only form:
+  #   listen: 127.0.0.1:53
+  # Multi-protocol form (each key is optional):
+  listen:
+    udp: 127.0.0.1:53
+    tcp: 127.0.0.1:53
+    dot:
+      addr: 127.0.0.1:853
+      ca-cert: dns.crt        # TLS certificate file (path relative to CWD)
+      ca-key: dns.key         # TLS private key file
+      # Note: DoT does not support a virtual hostname — use addr for the listen address
+    doh:
+      addr: 127.0.0.1:443
+      ca-cert: dns.crt
+      ca-key: dns.key
+      hostname: dns.clash     # Virtual hostname for DoH (HTTP Host header)
+    doh3:                     # DNS-over-HTTP/3 (QUIC)
+      addr: 127.0.0.1:443
+      ca-cert: dns.crt
+      ca-key: dns.key
+      hostname: dns.clash
+
+  # DNS resolution mode:
+  #   normal    — resolve real IPs and return them (default)
+  #   fake-ip   — return fake IPs from the pool; real resolution happens at connect time
+  #   redir-host — return a loopback IP; deprecated, prefer fake-ip
+  enhanced-mode: fake-ip
+
+  # CIDR for the fake-IP pool (must not overlap with real routes)
+  fake-ip-range: 198.18.0.1/16
+
+  # Domains that bypass fake-IP — always resolved to their real IPs
+  fake-ip-filter:
+    - "*.lan"
+    - "localhost.ptlogin2.qq.com"
+
+  # Whether to look up the `hosts` table during resolution
+  use-hosts: true
+
+  # Bootstrap nameservers — used ONLY to resolve DoH/DoT server hostnames.
+  # Must be plain IP addresses (no hostnames).
+  default-nameserver:
+    - 114.114.114.114
+    - 8.8.8.8
+
+  # Primary nameservers for all DNS queries.
+  # Supported URI schemes: plain IP, tls://, https://, dhcp://
+  #
+  # URL fragment parameters (appended after #, combined with &):
+  #   interface=<name>   bind this query to a specific network interface
+  #   proxy=<name>       route this nameserver's queries through a named outbound
+  #                      proxy (any proxy type: ss, vmess, trojan, socks5, …)
+  #   <name>             shorthand: a bare fragment with no = is treated as proxy=
+  #
+  # Examples:
+  #   tls://1.1.1.1:853#en0                    ← bind to interface en0
+  #   https://8.8.8.8/dns-query#proxy=MyProxy  ← DNS-over-HTTPS via proxy "MyProxy"
+  #   tls://1.1.1.1:853#auto                   ← proxy named "auto"
+  #   8.8.8.8#interface=eth0&proxy=MyProxy      ← both options combined
+  nameserver:
+    - 114.114.114.114
+    - 8.8.8.8
+    - tls://1.1.1.1:853                        # DNS-over-TLS (direct)
+    - https://1.1.1.1/dns-query                # DNS-over-HTTPS (direct)
+    - https://8.8.8.8/dns-query#proxy=MyProxy  # DNS-over-HTTPS routed through a proxy
+    # - dhcp://en0                             # Use DHCP-assigned DNS for interface en0
+
+  # Fallback nameservers — queried concurrently with primary nameservers.
+  # Answers from fallback are used when the resolved IP's GEOIP is not in the
+  # allowed set (see fallback-filter below). Useful for anti-DNS-spoofing.
+  # Same fragment parameters (proxy=, interface=) apply here.
+  fallback:
+    - tls://8.8.8.8:853
+    - https://8.8.4.4/dns-query
+
+  # Controls when the fallback answer is preferred over the primary answer
+  fallback-filter:
+    geoip: true           # Prefer fallback when IP's country != geoip-code
+    geoip-code: CN
+    ipcidr:               # Prefer fallback if primary result is in these ranges
+      - 240.0.0.0/4       # (commonly used for bogus responses by Chinese ISPs)
+    domain:               # Always use fallback for these domains
+      - "+.google.com"
+      - "+.facebook.com"
+
+  # Route specific domain lookups to specific nameservers.
+  # Same fragment parameters (proxy=, interface=) apply to values here too.
+  nameserver-policy:
+    "+.internal.corp.com": "10.0.0.1"
+    "www.baidu.com": "114.114.114.114"
+
+  # Nameservers used only for resolving proxy server hostnames (must be IPs).
+  # These also support the proxy= fragment to route through an outbound.
+  proxy-server-nameserver:
+    - 8.8.8.8
+    - tls://1.1.1.1:853
+
+  # EDNS Client Subnet — sent along with upstream queries for geo-aware responses
+  edns-client-subnet:
+    ipv4: 1.2.3.0/24
+    ipv6: 2001:db8::/56
+
+# ── TUN Device ────────────────────────────────────────────────────────────────
+tun:
+  enable: false
+
+  # Device identifier:
+  #   "utun1989"       — macOS (utun prefix required by the OS)
+  #   "dev://tun0"     — Linux explicit device
+  #   "fd://3"         — use an existing open file descriptor
+  device-id: "dev://utun1989"
+
+  gateway: "198.18.0.1/24"         # TUN IPv4 address and prefix
+  gateway-v6: "fd00:fac::1/64"     # TUN IPv6 address (enables IPv6 in TUN)
+
+  route-all: true                   # Install a default route through the TUN
+
+  # Additional static routes through the TUN (used when route-all is false)
+  routes:
+    - 1.1.1.1/32
+    - 8.8.8.8/32
+
+  # mtu: 1500                       # MTU for the TUN interface
+
+  so-mark: 0                        # fwmark for TUN-originated packets (Linux only)
+  route-table: 2468                 # Policy routing table (Linux only)
+
+  # Intercept DNS queries and redirect them to the Clash DNS server.
+  # true = hijack all DNS, false = no hijack
+  # List form = hijack only specific addresses:
+  dns-hijack: true
+  # dns-hijack:
+  #   - 1.1.1.1:53
+  #   - 8.8.8.8:53
+
+# ── Inbound Listeners (Advanced) ──────────────────────────────────────────────
+# Fine-grained control over inbound endpoints. These supplement or replace the
+# simple port settings (port:, socks-port:, etc.) above.
+listeners:
+  - name: http-in                   # HTTP proxy
+    type: http
+    listen: 127.0.0.1
+    port: 7890
+    # allow-lan: false              # Accept connections beyond loopback (overrides global allow-lan)
+    # fw-mark: 0                    # fwmark for accepted packets on Linux (CAP_NET_ADMIN)
+
+  - name: socks-in                  # SOCKS5 proxy
+    type: socks
+    listen: 127.0.0.1
+    port: 7891
+    udp: true
+
+  - name: mixed-in                  # HTTP + SOCKS5 combined
+    type: mixed
+    listen: 127.0.0.1
+    port: 7892
+    udp: true
+
+  # Linux tproxy (requires CAP_NET_ADMIN):
+  # - name: tproxy-in
+  #   type: tproxy
+  #   listen: 0.0.0.0
+  #   port: 7893
+  #   udp: true
+
+  # Linux redir (requires CAP_NET_ADMIN):
+  # - name: redir-in
+  #   type: redir
+  #   listen: 0.0.0.0
+  #   port: 7894
+
+  - name: tunnel-in                 # Forward all traffic to a fixed target
+    type: tunnel
+    listen: 127.0.0.1
+    port: 7900
+    network: [tcp, udp]
+    target: "192.168.1.1:80"
+
+  # Shadowsocks inbound (requires shadowsocks feature):
+  - name: ss-in
+    type: shadowsocks
+    listen: 0.0.0.0
+    port: 8388
+    cipher: 2022-blake3-aes-256-gcm
+    password: "base64-encoded-32-byte-key-here="
+    udp: true
+    # Multi-user EIH (SS2022 only) — name is stored as inboundUser in metadata:
+    # users:
+    #   - name: alice
+    #     password: "alice-base64-32-byte-key="
+    #   - name: bob
+    #     password: "bob-base64-32-byte-key="
+
+# Inbound providers — load listener lists from files or HTTP endpoints.
+# The referenced YAML must have a top-level `listeners:` key.
+# inbound-providers:
+#   my-listeners:
+#     type: file
+#     path: ./listeners.yaml
+#     interval: 3600
+#   remote-listeners:
+#     type: http
+#     url: "https://example.com/listeners.yaml"
+#     interval: 86400
+#     path: ./providers/listeners.yaml
+
+# ── Proxies ───────────────────────────────────────────────────────────────────
+proxies:
+
+  # ── Shadowsocks ─────────────────────────────────────────────────────────────
+  # Supported ciphers:
+  #   Legacy : aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
+  #   SS2022 : 2022-blake3-aes-128-gcm, 2022-blake3-aes-256-gcm
+  - name: ss-legacy
+    type: ss
+    server: 1.2.3.4
+    port: 8388
+    cipher: aes-256-gcm
+    password: "mypassword"
+    udp: true
+    # connect-via: another-proxy    # chain through another proxy (alias: dialer-proxy)
+    # Simple-obfs plugin:
+    # plugin: obfs
+    # plugin-opts:
+    #   mode: http                  # http | tls
+    #   host: example.com
+
+  - name: ss-2022
+    type: ss
+    server: 1.2.3.4
+    port: 8390
+    cipher: 2022-blake3-aes-256-gcm
+    # Single-user: base64-encoded 32-byte key
+    password: "base64-encoded-32-byte-server-key="
+    # Multi-user (server-key:user-key):
+    # password: "server-key=:user-key="
+    udp: true
+
+  # ── SOCKS5 ──────────────────────────────────────────────────────────────────
+  - name: socks5-plain
+    type: socks5
+    server: 1.2.3.4
+    port: 1080
+    udp: true
+
+  - name: socks5-auth
+    type: socks5
+    server: 1.2.3.4
+    port: 1080
+    username: user
+    password: pass
+    tls: true                       # TLS-wrapped SOCKS5
+    sni: example.com
+    skip-cert-verify: false
+    udp: true
+
+  # ── VMess ────────────────────────────────────────────────────────────────────
+  - name: vmess-tcp
+    type: vmess
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0                      # 0 = AEAD (recommended); >0 = legacy MD5 auth
+    cipher: auto                    # auto | aes-128-gcm | chacha20-poly1305 | none
+    udp: true
+    tls: true
+    skip-cert-verify: false
+    server-name: example.com        # SNI (alias: servername)
+
+  - name: vmess-ws
+    type: vmess
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    network: ws
+    ws-opts:
+      path: /ws
+      headers:
+        Host: example.com
+      max-early-data: 2048          # 0-RTT early data size in bytes
+      early-data-header-name: Sec-WebSocket-Protocol
+
+  - name: vmess-h2
+    type: vmess
+    server: 1.2.3.4
+    port: 8443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    tls: true
+    network: h2
+    h2-opts:
+      path: /h2
+      host:
+        - example.com
+
+  - name: vmess-grpc
+    type: vmess
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    alterId: 0
+    cipher: auto
+    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: GunService
+
+  # ── VLESS ────────────────────────────────────────────────────────────────────
+  - name: vless-ws-tls
+    type: vless
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    tls: true
+    server-name: example.com        # SNI (alias: servername)
+    network: ws
+    ws-opts:
+      path: /ws
+      headers:
+        Host: example.com
+    skip-cert-verify: false
+    udp: true
+
+  - name: vless-grpc
+    type: vless
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    tls: true
+    server-name: example.com
+    network: grpc
+    grpc-opts:
+      grpc-service-name: GunService
+    udp: true
+
+  - name: vless-reality
+    type: vless
+    server: 1.2.3.4
+    port: 443
+    uuid: b831381d-6324-4d53-ad4f-8cda48b30811
+    tls: true
+    server-name: www.icloud.com     # SNI must match the REALITY target domain
+    network: tcp
+    flow: xtls-rprx-vision          # XTLS Vision flow control (required for REALITY)
+    client-fingerprint: chrome      # TLS fingerprint: chrome | firefox | safari | ios | android | edge | 360 | qq | random
+    reality-opts:
+      public-key: "server-reality-public-key"
+      short-id: "0123456789abcdef"
+    udp: true
+
+  # ── Trojan ───────────────────────────────────────────────────────────────────
+  - name: trojan-tcp
+    type: trojan
+    server: 1.2.3.4
+    port: 443
+    password: "trojan-password"
+    sni: example.com
+    skip-cert-verify: false
+    alpn:
+      - h2
+      - http/1.1
+    udp: true
+
+  - name: trojan-grpc
+    type: trojan
+    server: 1.2.3.4
+    port: 443
+    password: "trojan-password"
+    sni: example.com
+    alpn:
+      - h2
+    network: grpc
+    grpc-opts:
+      grpc-service-name: GunService
+
+  - name: trojan-ws
+    type: trojan
+    server: 1.2.3.4
+    port: 443
+    password: "trojan-password"
+    sni: example.com
+    network: ws
+    ws-opts:
+      path: /ws
+
+  # ── AnyTLS ───────────────────────────────────────────────────────────────────
+  - name: anytls-example
+    type: anytls
+    server: 1.2.3.4
+    port: 443
+    password: "anytls-password"
+    sni: example.com
+    skip-cert-verify: false
+    alpn:
+      - h2
+      - http/1.1
+    udp: true
+    # client-fingerprint: chrome   # parsed but not yet applied at runtime
+    # idle-session-check-interval: 30
+    # idle-session-timeout: 30
+    # min-idle-session: 0
+
+  # ── WireGuard ─────────────────────────────────────────────────────────────────
+  - name: wg-example
+    type: wireguard
+    server: wg.example.com
+    port: 51820
+    private-key: "your-base64-private-key="
+    public-key: "server-base64-public-key="
+    # preshared-key: "base64-psk="  # optional pre-shared key for extra security
+    ip: 10.0.0.2/32
+    ipv6: "fd86:ea04:1115::2/128"   # optional IPv6 address inside the tunnel
+    allowed-ips:
+      - 0.0.0.0/0
+      - ::/0
+    mtu: 1420
+    # reserved-bits: [0, 0, 0]     # Cloudflare WARP reserved bytes
+    remote-dns-resolve: true        # resolve DNS inside the WireGuard tunnel
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    udp: true
+
+  # ── TUIC v5 ───────────────────────────────────────────────────────────────────
+  - name: tuic-example
+    type: tuic
+    server: 1.2.3.4
+    port: 443
+    uuid: "550e8400-e29b-41d4-a716-446655440000"
+    password: "tuic-password"
+    alpn:
+      - h3
+    sni: example.com
+    skip-cert-verify: false
+    # ip: 1.2.3.4                       # override DNS resolution of server field
+    udp-relay-mode: native              # native | quic
+    congestion-controller: bbr          # bbr | cubic | new_reno
+    reduce-rtt: false                   # 0-RTT handshake
+    heartbeat-interval: 10000           # ms
+    request-timeout: 8000               # ms
+    max-udp-relay-packet-size: 1500     # bytes
+    fast-open: false
+    max-open-stream: 100
+    disable-sni: false
+    send-window: 16777216               # bytes
+    receive-window: 8388608             # bytes
+    gc-interval: 3000                   # ms; garbage collect expired sessions
+    gc-lifetime: 15000                  # ms; lifetime of a session before GC
+
+  # ── Hysteria2 ─────────────────────────────────────────────────────────────────
+  - name: hy2-example
+    type: hysteria2
+    server: 1.2.3.4
+    port: 443
+    password: "hy2-password"
+    sni: example.com
+    skip-cert-verify: false
+    alpn:
+      - h3
+    # Port hopping — improves reliability over port-blocking networks:
+    # ports: "10000-10010"
+    # Obfuscation (currently only salamander is supported):
+    obfs: salamander
+    obfs-password: "obfs-secret"
+    # Bandwidth hints for Brutal congestion control (Mbps):
+    # up: 50
+    # down: 100
+    # QUIC tuning:
+    # cwnd: 4                        # congestion window
+    # udp-mtu: 1400
+    # disable-mtu-discovery: false
+    # Custom CA for self-signed certs:
+    # ca: /path/to/ca.crt
+    # ca-str: "-----BEGIN CERTIFICATE-----\n..."
+    # fingerprint: "sha256//..."
+
+  # ── SSH ───────────────────────────────────────────────────────────────────────
+  # Requires the `ssh` feature flag.
+  - name: ssh-example
+    type: ssh
+    server: 1.2.3.4
+    port: 22
+    username: myuser
+    # One of: password auth or key auth
+    password: "ssh-password"
+    # private-key: "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
+    # private-key-passphrase: "key-passphrase"
+    # Known-host fingerprints for server verification (recommended):
+    # host-key:
+    #   - "ssh-ed25519 AAAA..."
+    # host-key-algorithms:
+    #   - ssh-ed25519
+    #   - rsa-sha2-256
+    # TOTP second factor (via otpauth:// URI or explicit parameters):
+    # totp-opt:
+    #   otp-auth: "otpauth://totp/example?secret=BASE32SECRET&algorithm=SHA1&digits=6&period=30"
+
+  # ── ShadowQUIC ────────────────────────────────────────────────────────────────
+  # Requires the `shadowquic` feature flag.
+  - name: shadowquic-example
+    type: shadowquic
+    server: 1.2.3.4
+    port: 443
+    username: "myusername"
+    password: "mypassword"
+    server-name: example.com        # must match server's JLS upstream domain
+    alpn:
+      - h3
+    congestion-control: bbr         # bbr | new-reno | cubic
+    zero-rtt: true
+    over-stream: false              # true = use QUIC streams for UDP (like TUIC native)
+    initial-mtu: 1300               # bytes; recommended 1400 for high-loss networks
+    min-mtu: 1290
+    keep-alive-interval: 10000      # ms; 0 = disable keep-alive
+    gso: true                       # Generalized Segmentation Offload
+    mtu-discovery: true             # probe optimal MTU automatically
+
+  # ── Tailscale ─────────────────────────────────────────────────────────────────
+  # Requires the `tailscale` feature flag.
+  - name: tailscale-example
+    type: tailscale
+    # state-dir: /var/lib/clash-rs/tailscale  # Tailscale state directory
+    auth-key: "tskey-auth-..."      # Tailscale auth key (from https://login.tailscale.com/admin/settings/keys)
+    hostname: clash-proxy           # Node hostname in the Tailscale network
+    # control-url: "https://login.tailscale.com"
+    # client-name: "my-clash"
+    ephemeral: false                # Remove node from Tailscale when clash exits
+
+  # ── Tor ───────────────────────────────────────────────────────────────────────
+  # Requires the `onion` feature flag. No configuration needed — uses embedded Tor.
+  - name: tor
+    type: tor
+
+# ── Proxy Groups ──────────────────────────────────────────────────────────────
+proxy-groups:
+
+  # select — manual selection via API or dashboard
+  - name: "Manual"
+    type: select
+    proxies:
+      - ss-legacy
+      - vmess-tcp
+      - trojan-tcp
+      - DIRECT
+      - REJECT
+    # use: [provider-name]          # include proxies from a proxy-provider
+    udp: true
+    icon: "https://example.com/icon.png"
+
+  # url-test — automatically pick the lowest-latency proxy
+  - name: "Auto"
+    type: url-test
+    proxies:
+      - ss-legacy
+      - vmess-tcp
+    # use: [provider-name]
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300                   # seconds between health checks
+    lazy: true                      # skip checks until traffic arrives
+    tolerance: 50                   # switch only if new best beats current by >50ms
+    icon: "https://example.com/icon.png"
+
+  # fallback — use first available proxy in priority order
+  - name: "Fallback"
+    type: fallback
+    proxies:
+      - ss-legacy
+      - vmess-tcp
+      - DIRECT
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+    lazy: false
+
+  # load-balance — distribute connections across proxies
+  - name: "LoadBalance"
+    type: load-balance
+    proxies:
+      - ss-legacy
+      - vmess-tcp
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+    # strategy: consistent-hashing | round-robin | sticky-session
+    strategy: round-robin
+
+  # relay — chain proxies sequentially: traffic flows A -> B -> C -> destination
+  - name: "Relay"
+    type: relay
+    proxies:
+      - ss-legacy
+      - trojan-tcp
+
+  # smart — adaptive selection using latency, success rate, and optional bandwidth
+  - name: "Smart"
+    type: smart
+    proxies:
+      - ss-legacy
+      - vmess-tcp
+      - DIRECT
+    url: "http://www.gstatic.com/generate_204"
+    lazy: true
+    max-retries: 3                  # max connection retries before marking failed
+    site-stickiness: 0.8            # 0.0-1.0; higher = same proxy per site more often
+    bandwidth-weight: 0.0           # >0 to factor in bandwidth in proxy selection
+
+# ── Proxy Providers ───────────────────────────────────────────────────────────
+# Load proxy lists from files or remote URLs.
+# The file/response must be a YAML document with a top-level `proxies:` list.
+proxy-providers:
+  local-proxies:
+    type: file
+    path: ./proxies.yaml
+    interval: 3600                  # seconds between file re-reads (0 = no re-read)
+    health-check:
+      enable: true
+      url: "http://www.gstatic.com/generate_204"
+      interval: 300
+      lazy: true
+
+  remote-proxies:
+    type: http
+    url: "https://example.com/subscription"
+    interval: 86400                 # seconds between downloads
+    path: ./providers/remote.yaml   # local cache path
+    health-check:
+      enable: true
+      url: "http://www.gstatic.com/generate_204"
+      interval: 300
+
+# ── Rule Providers ────────────────────────────────────────────────────────────
+# Load rule sets from files or remote URLs.
+# behavior: domain | ipcidr | classical
+rule-providers:
+  local-domain-rules:
+    type: file
+    path: ./rule-set.yaml
+    interval: 86400
+    behavior: domain
+    format: yaml                    # yaml (default) | text | mrs
+
+  remote-rules:
+    type: http
+    url: "https://example.com/rules.yaml"
+    path: ./ruleset/remote-rules.yaml
+    interval: 86400
+    behavior: classical
+    # format: yaml                  # yaml (default) | text | mrs
+
+# ── Rules ─────────────────────────────────────────────────────────────────────
+# Evaluated top-to-bottom; first match wins.
+# Format: RULE-TYPE,payload,proxy[,no-resolve]
+# `no-resolve` skips DNS resolution for IP-based rules — use for LAN/private ranges.
+rules:
+  # ── Domain rules ────────────────────────────────────────────────────────────
+  - DOMAIN,example.com,Manual                    # exact domain match
+  - DOMAIN-SUFFIX,example.com,Manual             # domain + all subdomains
+  - DOMAIN-KEYWORD,google,Auto                   # substring match in any domain label
+  - DOMAIN-REGEX,^www\.google\.com$,Auto         # full regex match
+
+  # ── IP-based rules ──────────────────────────────────────────────────────────
+  - IP-CIDR,1.1.1.1/32,DIRECT                    # IPv4 CIDR
+  - IP-CIDR6,2606:4700:4700::1111/128,DIRECT    # IPv6 CIDR (alias for IP-CIDR, same behavior)
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve     # skip DNS for private ranges
+  - SRC-IP-CIDR,192.168.1.0/24,DIRECT            # match on source IP
+
+  # ── GeoIP / GeoSite rules ───────────────────────────────────────────────────
+  - GEOIP,CN,DIRECT                              # IP geolocated to China
+  - GEOIP,CN,DIRECT,no-resolve                   # same, skip DNS
+  - GEOSITE,cn,DIRECT                            # domain in GeoSite CN category
+
+  # ── Port rules ───────────────────────────────────────────────────────────────
+  - DST-PORT,53,Manual                           # destination port (range: 1000-2000)
+  - SRC-PORT,7777,DIRECT                         # source port
+
+  # ── Network / process rules ──────────────────────────────────────────────────
+  - NETWORK,UDP,Manual                           # TCP or UDP
+  - PROCESS-NAME,curl,DIRECT                     # process name (requires TUN on most OSes)
+  - PROCESS-PATH,/usr/bin/curl,DIRECT            # full process path
+
+  # ── Rule-set rules ───────────────────────────────────────────────────────────
+  - RULE-SET,local-domain-rules,DIRECT           # apply a rule-provider
+
+  # ── Composite (logical) rules ────────────────────────────────────────────────
+  - AND,((DOMAIN,baidu.com),(NETWORK,UDP)),DIRECT
+  - OR,((NETWORK,UDP),(DOMAIN,example.com)),Manual
+  - NOT,((DOMAIN,baidu.com)),Manual
+  - AND,((DOMAIN,example.com),(OR,((SRC-IP-CIDR,192.168.0.0/16),(SRC-PORT,7777)))),DIRECT
+
+  # ── Catch-all (must be last) ─────────────────────────────────────────────────
+  - MATCH,Manual

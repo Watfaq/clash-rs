@@ -234,7 +234,7 @@ impl PlainProxyAPIResponse for Handler {
 
 #[cfg(all(test, docker_test))]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, io::Write};
 
     use super::*;
     use crate::{
@@ -244,12 +244,131 @@ mod tests {
                 Suite,
                 config_helper::test_config_base_dir,
                 consts::*,
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
+
+    const VMESS_WS_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "vmess",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
+
+    const VMESS_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "vmess",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                },
+                "grpcSettings": {
+                    "serviceName": "example!"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ],
+    "log": {
+        "loglevel": "debug"
+    }
+}"#;
+
+    const VMESS_HTTP2_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "vmess",
+            "settings": {
+                "clients": [
+                    {
+                        "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "http",
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                },
+                "httpSettings": {
+                    "host": [
+                        "example.org"
+                    ],
+                    "path": "/test"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ],
+    "log": {
+        "loglevel": "debug"
+    }
+}"#;
 
     fn tls_client(alpn: Option<Vec<String>>) -> Option<Box<dyn Transport>> {
         Some(Box::new(TlsClient::new(
@@ -260,29 +379,34 @@ mod tests {
         )))
     }
 
-    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vmess-ws.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(VMESS_WS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_VMESS)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_vmess_ws() -> anyhow::Result<()> {
         initialize();
         let span = tracing::info_span!("test_vmess_ws");
         let _enter = span.enter();
+        let host_port = alloc_docker_port();
         let ws_client = WsClient::new(
             "".to_owned(),
             10002,
@@ -295,7 +419,7 @@ mod tests {
             "".to_owned(),
         );
 
-        let runner = get_ws_runner().await?;
+        let runner = get_ws_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-vmess-ws".into(),
@@ -314,32 +438,37 @@ mod tests {
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
     }
 
-    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_grpc_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vmess-grpc.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(VMESS_GRPC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_VMESS)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_vmess_grpc() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         let grpc_client = GrpcClient::new(
             "example.org".to_owned(),
             "example!".to_owned().try_into()?,
         );
-        let container = get_grpc_runner().await?;
+        let container = get_grpc_runner(host_port).await?;
         let opts = HandlerOptions {
             name: "test-vmess-grpc".into(),
             common_opts: Default::default(),
@@ -356,34 +485,39 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
-    async fn get_h2_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_h2_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("vmess-http2.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(VMESS_HTTP2_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_VMESS)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/v2ray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/v2ray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_vmess_h2() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         let h2_client = H2Client::new(
             vec!["example.org".into()],
             std::collections::HashMap::new(),
             http::Method::POST,
             "/test".to_owned().try_into()?,
         );
-        let container = get_h2_runner().await?;
+        let container = get_h2_runner(host_port).await?;
         let opts = HandlerOptions {
             name: "test-vmess-h2".into(),
             common_opts: Default::default(),

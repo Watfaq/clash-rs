@@ -2,8 +2,12 @@ use async_trait::async_trait;
 use base64::Engine;
 use bytes::{BufMut, BytesMut};
 use rand::Rng;
-use std::pin::Pin;
-use tokio::io::{AsyncRead, AsyncWrite};
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll, ready},
+};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::proxy::{AnyStream, transport::Transport};
 
@@ -32,27 +36,70 @@ pub struct HTTPObfs {
 
     first_request: bool,
     first_response: bool,
+    // write-side: in-flight HTTP-wrapped buffer and how many source bytes it
+    // represents (> 0 while a first-request chunk is being drained)
+    write_buf: Vec<u8>,
+    write_pos: usize,
+    write_committed: usize,
+    // read-side: accumulates response bytes until \r\n\r\n is located
     read_buf: BytesMut,
+}
+
+/// Drain `this.write_buf[this.write_pos..]` into the inner stream, advancing
+/// `this.write_pos` with each partial write.  Returns `Poll::Ready(Ok(()))`
+/// once all bytes have been sent.
+fn drain_write_buf(
+    this: &mut HTTPObfs,
+    cx: &mut Context<'_>,
+) -> Poll<io::Result<()>> {
+    while this.write_pos < this.write_buf.len() {
+        let n = ready!(
+            Pin::new(&mut this.inner)
+                .poll_write(cx, &this.write_buf[this.write_pos..])
+        )?;
+        if n == 0 {
+            return Poll::Ready(Err(io::Error::from(io::ErrorKind::WriteZero)));
+        }
+        this.write_pos += n;
+    }
+    Poll::Ready(Ok(()))
 }
 
 impl AsyncWrite for HTTPObfs {
     fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        let pin = self.get_mut();
-        if pin.first_request {
+    ) -> Poll<Result<usize, io::Error>> {
+        let this = self.get_mut();
+
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
+
+        // If a previous first-request chunk is still being drained, finish it
+        // before accepting new data.  The caller will supply the same `buf`
+        // again (AsyncWrite contract), so returning `Ok(write_committed)` is
+        // correct: it tells the caller those source bytes were consumed.
+        if this.write_committed > 0 {
+            ready!(drain_write_buf(this, cx))?;
+            let committed = this.write_committed;
+            this.write_committed = 0;
+            return Poll::Ready(Ok(committed));
+        }
+
+        if this.first_request {
+            // Build the HTTP upgrade request: headers + payload in one buffer.
             let rand_bytes = rand::random::<[u8; 16]>();
             let mut buffer = Vec::new();
             buffer.put_slice(b"GET / HTTP/1.1\r\n");
             buffer.put_slice(
                 format!(
                     "Host: {}\r\n",
-                    if pin.port != 80 {
-                        format!("{}:{}", pin.host, pin.port)
+                    if this.port != 80 {
+                        format!("{}:{}", this.host, this.port)
                     } else {
-                        pin.host.clone()
+                        this.host.clone()
                     }
                 )
                 .as_bytes(),
@@ -79,90 +126,110 @@ impl AsyncWrite for HTTPObfs {
             buffer.put_slice(b"\r\n");
             buffer.put_slice(buf);
 
-            pin.first_request = false;
-            Pin::new(&mut pin.inner).poll_write(cx, &buffer)
+            let n = buf.len(); // source bytes consumed (payload only)
+            this.first_request = false;
+            this.write_buf = buffer;
+            this.write_pos = 0;
+            this.write_committed = n;
+
+            // Attempt to drain synchronously; if Pending, write_buf/write_pos
+            // and write_committed survive in the struct for the next poll.
+            ready!(drain_write_buf(this, cx))?;
+            this.write_committed = 0;
+            Poll::Ready(Ok(n))
         } else {
-            Pin::new(&mut pin.inner).poll_write(cx, buf)
+            // Subsequent writes: forward directly, no buffering needed.
+            Pin::new(&mut this.inner).poll_write(cx, buf)
         }
     }
 
     fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        let pin = self.get_mut();
-        Pin::new(&mut pin.inner).poll_flush(cx)
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        let this = self.get_mut();
+        // Drain any in-flight first-request write before flushing.
+        ready!(drain_write_buf(this, cx))?;
+        this.write_committed = 0;
+        Pin::new(&mut this.inner).poll_flush(cx)
     }
 
     fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        let pin = self.get_mut();
-        Pin::new(&mut pin.inner).poll_shutdown(cx)
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        let this = self.get_mut();
+        // Drain any in-flight first-request write before shutting down.
+        ready!(drain_write_buf(this, cx))?;
+        this.write_committed = 0;
+        Pin::new(&mut this.inner).poll_shutdown(cx)
     }
 }
 
 impl AsyncRead for HTTPObfs {
     fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        let pin = self.get_mut();
-        // as long as the buffer is not empty, we should return the data in the
-        // buffer first
-        if !pin.read_buf.is_empty() {
-            let to_read = std::cmp::min(buf.remaining(), pin.read_buf.len());
-            if to_read == 0 {
-                assert!(buf.remaining() > 0);
-                return std::task::Poll::Pending;
-            }
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
 
-            let data = pin.read_buf.split_to(to_read);
-            buf.put_slice(&data[..]);
-            return std::task::Poll::Ready(Ok(()));
+        // Deliver any leftover body bytes from a previous read first.
+        if !this.read_buf.is_empty() {
+            let to_read = std::cmp::min(buf.remaining(), this.read_buf.len());
+            // to_read > 0 because read_buf is non-empty and buf.remaining() > 0
+            // (the caller would not call poll_read with a full buffer).
+            let data = this.read_buf.split_to(to_read);
+            buf.put_slice(&data);
+            return Poll::Ready(Ok(()));
         }
 
-        if pin.first_response {
-            // TODO: move this static buffer size to global constant
-            // maximum packet size of vmess/shadowsocks is about 16 KiB so
-            // define a buffer of 20 KiB to reduce the memory of each TCP relay
-            let mut b = [0; 20 * 1024];
-            let mut b = tokio::io::ReadBuf::new(&mut b);
-            match Pin::new(&mut pin.inner).poll_read(cx, &mut b) {
-                std::task::Poll::Ready(rv) => match rv {
-                    Ok(_) => {
-                        let needle = b"\r\n\r\n";
-                        let idx = b
-                            .filled()
+        if this.first_response {
+            // Accumulate response bytes in `this.read_buf` until the HTTP
+            // response header terminator (\r\n\r\n) is found.  A single read
+            // may not contain the full header, so we loop until we either find
+            // the delimiter, hit an error, or the inner stream returns Pending.
+            let needle = b"\r\n\r\n";
+            loop {
+                let mut tmp = [0u8; 4096];
+                let mut tmp_buf = ReadBuf::new(&mut tmp);
+                match Pin::new(&mut this.inner).poll_read(cx, &mut tmp_buf) {
+                    Poll::Ready(Ok(())) => {
+                        let filled = tmp_buf.filled();
+                        if filled.is_empty() {
+                            // Peer closed the connection before sending headers.
+                            return Poll::Ready(Err(io::Error::from(
+                                io::ErrorKind::UnexpectedEof,
+                            )));
+                        }
+                        this.read_buf.put_slice(filled);
+
+                        let idx = this
+                            .read_buf
                             .windows(needle.len())
-                            .position(|window| window == needle);
+                            .position(|w| w == needle);
 
                         if let Some(idx) = idx {
-                            pin.first_response = false;
-                            let body = &b.filled()[idx + 4..b.filled().len()];
-                            if body.len() < buf.remaining() {
-                                buf.put_slice(body);
-                                std::task::Poll::Ready(Ok(()))
-                            } else {
-                                let to_read = &body[..buf.remaining()];
-                                let to_buf = &body[buf.remaining()..];
-                                buf.put_slice(to_read);
-                                // use put_slice instead of clone_from_slice
-                                pin.read_buf.put_slice(to_buf);
-                                std::task::Poll::Ready(Ok(()))
+                            this.first_response = false;
+                            // Discard everything up to and including \r\n\r\n.
+                            let _ = this.read_buf.split_to(idx + needle.len());
+                            // Deliver what remains of the body to the caller.
+                            let to_read =
+                                std::cmp::min(buf.remaining(), this.read_buf.len());
+                            if to_read > 0 {
+                                let data = this.read_buf.split_to(to_read);
+                                buf.put_slice(&data);
                             }
-                        } else {
-                            std::task::Poll::Ready(Err(std::io::Error::other("EOF")))
+                            return Poll::Ready(Ok(()));
                         }
+                        // Delimiter not yet seen — read more.
                     }
-                    Err(e) => std::task::Poll::Ready(Err(e)),
-                },
-                std::task::Poll::Pending => std::task::Poll::Pending,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Pending => return Poll::Pending,
+                }
             }
         } else {
-            Pin::new(&mut pin.inner).poll_read(cx, buf)
+            Pin::new(&mut this.inner).poll_read(cx, buf)
         }
     }
 }
@@ -176,6 +243,9 @@ impl HTTPObfs {
 
             first_request: true,
             first_response: true,
+            write_buf: Vec::new(),
+            write_pos: 0,
+            write_committed: 0,
             read_buf: BytesMut::new(),
         }
     }

@@ -266,6 +266,8 @@ fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
 #[cfg(all(test, docker_test))]
 mod tests {
 
+    use std::{io::Write, sync::Arc};
+
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
@@ -273,36 +275,58 @@ mod tests {
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite, config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
-    use std::sync::Arc;
 
     use super::*;
-    async fn get_shadowquic_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("shadowquic.yaml");
 
-        DockerTestRunnerBuilder::new()
+    const SHADOWQUIC_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+outbound:
+    type: direct
+log-level: "trace"
+"#;
+
+    async fn get_shadowquic_runner(
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOWQUIC)
-            .mounts(&[(conf.to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
-
-    const PORT: u16 = 10002;
 
     fn gen_options(
         opt_ip: Option<String>,
+        host_port: u16,
         over_stream: bool,
     ) -> anyhow::Result<HandlerOptions> {
+        let port = if opt_ip.is_some() { 10002 } else { host_port };
         Ok(HandlerOptions {
             addr: SocketAddr::new(
                 opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(),
-                PORT,
+                port,
             )
             .to_string(),
             password: "12345678".into(),
@@ -317,15 +341,15 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_shadowquic_runner().await?;
+        let container = get_shadowquic_runner(host_port).await?;
 
         let container_ip = container.container_ip();
 
-        let opts = gen_options(container_ip, false)?;
+        let opts = gen_options(container_ip, host_port, false)?;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
@@ -334,14 +358,14 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
-        let container = get_shadowquic_runner().await?;
+        let host_port = alloc_docker_port();
+        let container = get_shadowquic_runner(host_port).await?;
 
         let container_ip = container.container_ip();
 
-        let mut opts = gen_options(container_ip, true)?;
+        let mut opts = gen_options(container_ip, host_port, true)?;
         opts.over_stream = true;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));

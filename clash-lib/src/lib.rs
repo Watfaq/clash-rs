@@ -181,11 +181,20 @@ pub fn setup_default_crypto_provider() {
     CRYPTO_PROVIDER_LOCK.get_or_init(|| {
         #[cfg(feature = "aws-lc-rs")]
         {
-            _ = rustls::crypto::aws_lc_rs::default_provider().install_default()
+            _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+            // watfaq-rustls is a separate fork with its own global provider
+            // state. When both `ring` and `aws-lc-rs` features are active
+            // (e.g. `--all-features`), its
+            // `get_default_or_install_from_crate_features` treats the
+            // combination as ambiguous and returns None, causing a
+            // panic. Explicit installation is therefore required.
+            _ = watfaq_rustls::crypto::aws_lc_rs::default_provider()
+                .install_default();
         }
-        #[cfg(feature = "ring")]
+        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
         {
-            _ = rustls::crypto::ring::default_provider().install_default()
+            _ = rustls::crypto::ring::default_provider().install_default();
+            _ = watfaq_rustls::crypto::ring::default_provider().install_default();
         }
     });
 }

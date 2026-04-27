@@ -693,7 +693,10 @@ impl AsyncWrite for HystStream {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::{
+        io::Write,
+        net::{IpAddr, Ipv4Addr},
+    };
 
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
@@ -702,8 +705,10 @@ mod tests {
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite, config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+                config_helper::test_config_base_dir,
+                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
@@ -711,30 +716,57 @@ mod tests {
 
     use super::*;
 
-    async fn get_hysteria_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("hysteria.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+    const HYSTERIA_SERVER_CONFIG: &str = r#"{
+    "listen": ":10002",
+    "tls":{
+        "cert": "/home/ubuntu/my.crt",
+        "key": "/home/ubuntu/my.key"
+    },
+    "obfs": {
+        "type": "salamander",
+        "salamander": {
+            "password": "beauty will save the world"
+        }
+    },
+    "up_mbps": 100,
+    "down_mbps": 100,
+    "auth": {
+        "type": "password",
+        "password": "passwd"
+    }
+}"#;
 
-        DockerTestRunnerBuilder::new()
+    async fn get_hysteria_runner(
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(HYSTERIA_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_HYSTERIA)
             .mounts(&[
-                (conf.to_str().unwrap(), "/config.json"),
+                (tmp.path().to_str().unwrap(), "/config.json"),
                 (cert.to_str().unwrap(), "/home/ubuntu/my.crt"),
                 (key.to_str().unwrap(), "/home/ubuntu/my.key"),
             ])
             .cmd(&["server"])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_hysteria() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_hysteria_runner().await?;
+        let container = get_hysteria_runner(host_port).await?;
 
         let container_ip =
             container.container_ip().unwrap_or("127.0.0.1".to_owned());

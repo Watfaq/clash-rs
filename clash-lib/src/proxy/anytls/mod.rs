@@ -484,6 +484,9 @@ mod tests {
     };
 
     #[cfg(docker_test)]
+    use std::io::Write;
+
+    #[cfg(docker_test)]
     use crate::{
         proxy::{
             transport,
@@ -491,12 +494,47 @@ mod tests {
                 Suite,
                 config_helper::test_config_base_dir,
                 consts::{IMAGE_SINGBOX, LOCAL_ADDR},
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
+
+    #[cfg(docker_test)]
+    const ANYTLS_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "level": "info"
+    },
+    "inbounds": [
+        {
+            "type": "anytls",
+            "tag": "anytls-in",
+            "listen": "0.0.0.0",
+            "listen_port": 10002,
+            "users": [
+                {
+                    "name": "user",
+                    "password": "example"
+                }
+            ],
+            "padding_scheme": ["stop=0"],
+            "tls": {
+                "enabled": true,
+                "certificate_path": "/etc/ssl/v2ray/fullchain.pem",
+                "key_path": "/etc/ssl/v2ray/privkey.pem"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "direct",
+            "tag": "direct"
+        }
+    ]
+}"#;
 
     fn make_handler(udp: bool, with_tls: bool) -> Handler {
         use crate::proxy::transport::TlsClient;
@@ -798,29 +836,34 @@ mod tests {
     // ---- docker integration tests ----
 
     #[cfg(docker_test)]
-    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("anytls.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(ANYTLS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SINGBOX)
             .cmd(&["run", "-c", "/etc/sing-box/config.json"])
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/sing-box/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/sing-box/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[cfg(docker_test)]
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_anytls() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
         let tls = transport::TlsClient::new(
             true,
@@ -829,7 +872,7 @@ mod tests {
             None,
         );
 
-        let runner = get_runner().await?;
+        let runner = get_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-anytls".to_owned(),

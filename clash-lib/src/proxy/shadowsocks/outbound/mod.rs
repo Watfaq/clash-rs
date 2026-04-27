@@ -272,7 +272,8 @@ mod tests {
                 config_helper::test_config_base_dir,
                 consts::*,
                 docker_runner::{
-                    DockerTestRunner, DockerTestRunnerBuilder, MultiDockerTestRunner,
+                    DockerTestRunner, DockerTestRunnerBuilder,
+                    MultiDockerTestRunner, alloc_docker_port,
                 },
                 run_test_suites_and_cleanup,
             },
@@ -301,8 +302,8 @@ mod tests {
         port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
         let host = format!("0.0.0.0:{}", port);
         DockerTestRunnerBuilder::new()
             .image(IMAGE_SS_RUST)
@@ -337,10 +338,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_plain() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
+        let port = alloc_docker_port();
         let container = get_ss_runner(port).await?;
 
         let opts = HandlerOptions {
@@ -388,19 +388,19 @@ mod tests {
                 "V3=1",
             ])
             // .cmd(&["-s", "0.0.0.0:10002", "-m", CIPHER, "-k", PASSWORD, "-U"])
+            .port(stls_port)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowtls() -> anyhow::Result<()> {
         initialize();
         // the real port that used for communication
-        let shadow_tls_port = 10002;
+        let shadow_tls_port = alloc_docker_port();
         // not important, you can assign any port that is not conflict with
         // others
-        let ss_port = 10004;
+        let ss_port = alloc_docker_port();
 
         let container1 = get_ss_runner(ss_port).await?;
 
@@ -462,13 +462,14 @@ mod tests {
                 &ss_server_env,
                 "-vv",
             ])
+            .port(obfs_port)
             .build()
             .await
     }
 
     async fn test_ss_obfs_inner(mode: SimpleOBFSMode) -> anyhow::Result<()> {
-        let obfs_port = 10002;
-        let ss_port = 10004;
+        let obfs_port = alloc_docker_port();
+        let ss_port = alloc_docker_port();
 
         let container1 = get_ss_runner(ss_port).await?;
         let container2 =
@@ -501,24 +502,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_obfs_http() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Http).await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_obfs_tls() -> anyhow::Result<()> {
         initialize();
         test_ss_obfs_inner(SimpleOBFSMode::Tls).await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ss_v2ray_plugin() -> anyhow::Result<()> {
         initialize();
-        let ss_port = 10004;
+        let ss_port = alloc_docker_port();
         let container = get_ss_runner_with_plugin(ss_port).await?;
         let host = "example.org".to_owned();
         let plugin = V2rayWsClient::try_new(
@@ -543,5 +541,406 @@ mod tests {
 
         let handler: Arc<dyn OutboundHandler> = Arc::new(Handler::new(opts));
         run_test_suites_and_cleanup(handler, container, Suite::tcp_tests()).await
+    }
+}
+
+// ── E2E throughput tests
+// ────────────────────────────────────────────────────── These start clash-rs
+// as a subprocess and exercise the full stack:   test client → SOCKS5 inbound →
+// dispatcher → SS outbound   → docker proxy server → echo server → back
+//
+// Ports are allocated dynamically so all tests can run in parallel — no
+// #[serial_test::serial] needed.
+// Gate: --cfg docker_test --cfg throughput_test (see proxy-throughput.yml)
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, MultiDockerTestRunner,
+                RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    use crate::proxy::transport::SimpleOBFSMode;
+
+    const PASSWORD: &str = "FzcLbKs2dY9mhL";
+    const CIPHER: &str = "aes-256-gcm";
+    const SHADOW_TLS_PASSWORD: &str = "password";
+
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    async fn get_ss_runner(port: u16) -> anyhow::Result<DockerTestRunner> {
+        let host = format!("0.0.0.0:{}", port);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .no_port()
+            .entrypoint(&["ssserver"])
+            .cmd(&["-s", &host, "-m", CIPHER, "-k", PASSWORD, "-U", "-vvv"])
+            .build()
+            .await
+    }
+
+    async fn get_ss_runner_with_plugin(
+        port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        use crate::proxy::utils::test_utils::config_helper::test_config_base_dir;
+        let test_config_dir = test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let host = format!("0.0.0.0:{}", port);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SS_RUST)
+            .no_port()
+            .entrypoint(&["ssserver"])
+            .cmd(&[
+                "-s",
+                &host,
+                "-m",
+                CIPHER,
+                "-k",
+                PASSWORD,
+                "-U",
+                "-vvv",
+                "--plugin",
+                "v2ray-plugin",
+                "--plugin-opts",
+                "server;tls;host=example.org;mux=0",
+            ])
+            .mounts(&[
+                (
+                    cert.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/fullchain.cer",
+                ),
+                (
+                    key.to_str().unwrap(),
+                    "/root/.acme.sh/example.org/example.org.key",
+                ),
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_shadowtls_runner(
+        ss_ip: Option<String>,
+        ss_port: u16,
+        stls_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let ss_server_env = format!(
+            "SERVER={}:{}",
+            ss_ip.unwrap_or("host.docker.internal".to_owned()),
+            ss_port
+        );
+        let listen_env = format!("LISTEN=0.0.0.0:{}", stls_port);
+        let password = format!("PASSWORD={}", SHADOW_TLS_PASSWORD);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOW_TLS)
+            .no_port()
+            .env(&[
+                "MODE=server",
+                &listen_env,
+                &ss_server_env,
+                "TLS=www.feishu.cn:443",
+                &password,
+                "V3=1",
+            ])
+            .build()
+            .await
+    }
+
+    async fn get_obfs_runner(
+        ss_ip: Option<String>,
+        ss_port: u16,
+        obfs_port: u16,
+        mode: SimpleOBFSMode,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let ss_server_env = format!(
+            "{}:{}",
+            ss_ip.unwrap_or("host.docker.internal".to_owned()),
+            ss_port
+        );
+        let port = format!("{}", obfs_port);
+        let mode_str = match mode {
+            SimpleOBFSMode::Http => "http",
+            SimpleOBFSMode::Tls => "tls",
+        };
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_OBFS)
+            .no_port()
+            .cmd(&[
+                "obfs-server",
+                "-p",
+                &port,
+                "--obfs",
+                mode_str,
+                "-r",
+                &ss_server_env,
+                "-vv",
+            ])
+            .build()
+            .await
+    }
+
+    fn ss_base_config(
+        server: &str,
+        port: u16,
+        socks_port: u16,
+        extra_plugin_yaml: &str,
+    ) -> String {
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: ss
+    server: {server}
+    port: {port}
+    cipher: {cipher}
+    password: {password}
+    udp: false
+{extra}
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = port,
+            cipher = CIPHER,
+            password = PASSWORD,
+            extra = extra_plugin_yaml,
+        )
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ss_plain() -> anyhow::Result<()> {
+        initialize();
+        let container_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ss_runner(container_port).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+        let config = ss_base_config(&server, container_port, socks_port, "");
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ss_obfs_http() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = alloc_port();
+        let obfs_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let c1 = get_ss_runner(ss_port).await?;
+        let c1_ip = c1.container_ip();
+        let c2 =
+            match get_obfs_runner(c1_ip, ss_port, obfs_port, SimpleOBFSMode::Http)
+                .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    c1.cleanup().await.ok();
+                    return Err(e);
+                }
+            };
+        let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = c2.docker_gateway_ip();
+
+        let plugin_yaml = r#"    plugin: obfs
+    plugin-opts:
+      mode: http
+      host: www.bing.com"#;
+        let config = ss_base_config(&server, obfs_port, socks_port, plugin_yaml);
+        let binary = find_clash_rs_binary();
+
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add_with_runner(c1);
+        chained.add_with_runner(c2);
+        chained
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-obfs-http",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ss_obfs_tls() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = alloc_port();
+        let obfs_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let c1 = get_ss_runner(ss_port).await?;
+        let c1_ip = c1.container_ip();
+        let c2 =
+            match get_obfs_runner(c1_ip, ss_port, obfs_port, SimpleOBFSMode::Tls)
+                .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    c1.cleanup().await.ok();
+                    return Err(e);
+                }
+            };
+        let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = c2.docker_gateway_ip();
+
+        let plugin_yaml = r#"    plugin: obfs
+    plugin-opts:
+      mode: tls
+      host: www.bing.com"#;
+        let config = ss_base_config(&server, obfs_port, socks_port, plugin_yaml);
+        let binary = find_clash_rs_binary();
+
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add_with_runner(c1);
+        chained.add_with_runner(c2);
+        chained
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-obfs-tls",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ss_v2ray_plugin() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ss_runner_with_plugin(ss_port).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let plugin_yaml = r#"    plugin: v2ray-plugin
+    plugin-opts:
+      mode: websocket
+      tls: true
+      host: example.org
+      skip-cert-verify: true
+      path: /"#;
+        let config = ss_base_config(&server, ss_port, socks_port, plugin_yaml);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-v2ray-plugin-ws-tls",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ss_shadowtls() -> anyhow::Result<()> {
+        initialize();
+        let ss_port = alloc_port();
+        let stls_port = alloc_port();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let c1 = get_ss_runner(ss_port).await?;
+        let c1_ip = c1.container_ip();
+        let c2 = match get_shadowtls_runner(c1_ip, ss_port, stls_port).await {
+            Ok(c) => c,
+            Err(e) => {
+                c1.cleanup().await.ok();
+                return Err(e);
+            }
+        };
+        let server = c2.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = c2.docker_gateway_ip();
+
+        let plugin_yaml = r#"    plugin: shadow-tls
+    plugin-opts:
+      host: www.feishu.cn
+      password: password
+      version: 3"#;
+        let config = ss_base_config(&server, stls_port, socks_port, plugin_yaml);
+        let binary = find_clash_rs_binary();
+
+        let mut chained = MultiDockerTestRunner::default();
+        chained.add_with_runner(c1);
+        chained.add_with_runner(c2);
+        chained
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ss-shadow-tls-v3",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

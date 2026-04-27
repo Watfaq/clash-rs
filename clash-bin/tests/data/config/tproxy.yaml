@@ -1,9 +1,0 @@
----
-tproxy-port: 8900
-
-mode: rule
-log-level: debug
-
-rules:
-  - MATCH, DIRECT
-...

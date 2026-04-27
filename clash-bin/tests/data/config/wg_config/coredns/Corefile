@@ -1,5 +1,0 @@
-. {
-    loop
-    health
-    forward . /etc/resolv.conf
-}

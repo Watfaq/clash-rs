@@ -46,6 +46,7 @@ fn wait_port_closed(port: u16) -> Result<(), clash_lib::Error> {
 #[allow(dead_code)]
 pub struct ClashInstance {
     ports: Vec<u16>,
+    handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl ClashInstance {
@@ -54,7 +55,7 @@ impl ClashInstance {
         options: clash_lib::Options,
         ports: Vec<u16>,
     ) -> Result<Self, clash_lib::Error> {
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             start_clash(options).expect("Failed to start clash");
         });
 
@@ -63,7 +64,10 @@ impl ClashInstance {
             wait_port_ready(main_port)?;
         }
 
-        Ok(Self { ports })
+        Ok(Self {
+            ports,
+            handle: Some(handle),
+        })
     }
 }
 
@@ -82,8 +86,11 @@ impl Drop for ClashInstance {
             }
         }
 
-        // Give a bit more time for full cleanup
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // Join the thread to ensure it has fully exited, preventing ports from
+        // being held by the spawned runtime across test runs.
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 
