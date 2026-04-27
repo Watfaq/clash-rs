@@ -115,11 +115,13 @@ jobs:
           WORKFLOW_RUN_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
           results_file="${{ env.THROUGHPUT_RESULTS_FILE }}"
+          ENV_JSON=$(python3 bench/collect_env.py)
           if [ -f "$results_file" ]; then
             python3 bench/format_throughput.py \
               "$results_file" \
               --output throughput-comment.md \
-              --run-url "${WORKFLOW_RUN_URL}"
+              --run-url "${WORKFLOW_RUN_URL}" \
+              --env-json "$ENV_JSON"
             # Also write to GitHub step summary
             cat throughput-comment.md >> $GITHUB_STEP_SUMMARY
           else

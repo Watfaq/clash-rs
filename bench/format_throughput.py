@@ -112,6 +112,7 @@ def main() -> None:
     parser.add_argument("results", help="JSON-lines result file")
     parser.add_argument("--output", "-o", help="Write markdown to this file (default: stdout)")
     parser.add_argument("--run-url", help="URL to the GitHub Actions workflow run")
+    parser.add_argument("--env-json", help="JSON string with test environment info")
     args = parser.parse_args()
 
     rows = []
@@ -177,6 +178,33 @@ def main() -> None:
         lines.append("")
 
         md = "\n".join(lines)
+
+    # Append environment info table if provided
+    if args.env_json:
+        try:
+            env = json.loads(args.env_json)
+            env_lines = ["", "### 🖥️ Test Environment", ""]
+            env_lines += ["| | |", "|---|---|"]
+            os_info = env.get("os", {})
+            if os_info.get("system"):
+                os_str = f"{os_info['system']} {os_info.get('release', '')}".strip()
+                env_lines.append(f"| **OS** | {os_str} |")
+                env_lines.append(f"| **Architecture** | {os_info.get('machine', 'unknown')} |")
+            if env.get("kernel"):
+                env_lines.append(f"| **Kernel** | {env['kernel']} |")
+            if env.get("cpu"):
+                env_lines.append(f"| **CPU** | {env['cpu']} |")
+            if env.get("cpu_cores"):
+                env_lines.append(f"| **CPU Cores** | {env['cpu_cores']} |")
+            if env.get("memory_gb"):
+                env_lines.append(f"| **Memory** | {env['memory_gb']} GB |")
+            if env.get("docker"):
+                env_lines.append(f"| **Docker** | {env['docker']} |")
+            if env.get("rustc"):
+                env_lines.append(f"| **Rust** | {env['rustc']} |")
+            md = md.rstrip("\n") + "\n" + "\n".join(env_lines) + "\n"
+        except (json.JSONDecodeError, KeyError):
+            pass
 
     if args.run_url:
         md = md.rstrip("\n") + f"\n\n[📎 View full workflow run and download artifacts]({args.run_url})\n"
