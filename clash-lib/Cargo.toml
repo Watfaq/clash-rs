@@ -5,7 +5,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["zero_copy", "aws-lc-rs"]
+default = ["zero_copy", "aws-lc-rs", "dashboard"]
 
 aws-lc-rs = [
     "dep:aws-lc-rs",
@@ -45,7 +45,7 @@ redir = []
 zero_copy = []
 bench = ["dep:criterion"]
 telemetry = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
-builtin-dashboard = ["dep:rust-embed"]
+dashboard = ["dep:rust-embed"]
 
 [dependencies]
 # Async

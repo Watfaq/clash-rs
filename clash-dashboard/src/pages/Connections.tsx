@@ -134,6 +134,7 @@ export function Connections() {
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-52" style={{ color: '#6e6e73' }}>Host</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: '#6e6e73' }}>ASN</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-24" style={{ color: '#6e6e73' }}>Network</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-32" style={{ color: '#6e6e73' }}>Rule</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] w-36" style={{ color: '#6e6e73' }}>Chain</th>
@@ -146,7 +147,7 @@ export function Connections() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
+                <td colSpan={9} className="text-center py-10 text-[15px]" style={{ color: '#8e8e93' }}>
                   No active connections
                 </td>
               </tr>
@@ -162,20 +163,12 @@ export function Connections() {
                       {conn.metadata.host || conn.metadata.destinationIP}
                       {conn.metadata.destinationPort && `:${conn.metadata.destinationPort}`}
                     </div>
-                    {conn.metadata.asn && (
-                      <div
-                        className="inline-block mt-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-md truncate max-w-full"
-                        style={{ background: 'rgba(0,113,227,0.08)', color: '#0071e3' }}
-                      >
-                        {conn.metadata.asn}
-                      </div>
-                    )}
-                    {conn.metadata.process && !conn.metadata.asn && (
-                      <div className="text-[13px] truncate" style={{ color: '#6e6e73' }}>{conn.metadata.process}</div>
-                    )}
-                    {conn.metadata.process && conn.metadata.asn && (
+                    {conn.metadata.process && (
                       <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{conn.metadata.process}</div>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-[12px] truncate" style={{ color: '#0071e3' }}>
+                    {conn.metadata.asn || '—'}
                   </td>
                   <td className="px-4 py-3 font-mono whitespace-nowrap text-[13px]" style={{ color: '#8e8e93' }}>
                     {conn.metadata.network}/{conn.metadata.type}

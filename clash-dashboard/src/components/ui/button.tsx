@@ -37,9 +37,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: keyof typeof sizeStyles;
 }
 
-function Button({ className, variant = 'default', size = 'default', ...props }: ButtonProps) {
+function Button({ className, variant = 'default', size = 'default', type, ...props }: ButtonProps) {
   return (
     <button
+      type={type ?? 'button'}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />

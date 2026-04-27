@@ -8,7 +8,7 @@ use rust_embed::RustEmbed;
 
 /// Embedded build output from `clash-dashboard/dist/`.
 /// The dist/ folder is produced by `npm run build` in build.rs when the
-/// `builtin-dashboard` feature is enabled.
+/// `dashboard` feature is enabled.
 #[derive(RustEmbed)]
 #[folder = "../clash-dashboard/dist/"]
 struct Assets;

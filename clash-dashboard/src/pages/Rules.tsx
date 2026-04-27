@@ -4,23 +4,39 @@ import { getRules } from '../lib/api';
 import { Search } from 'lucide-react';
 
 function getRuleTypeBadgeStyle(type: string): { background: string; color: string } {
-  if (type.startsWith('DOMAIN')) return { background: 'rgba(0,113,227,0.1)', color: '#0071e3' };
-  if (type.startsWith('IP-CIDR') || type.startsWith('IP')) return { background: 'rgba(52,199,89,0.1)', color: '#34c759' };
-  if (type === 'GEOIP') return { background: 'rgba(255,149,0,0.1)', color: '#ff9500' };
-  if (type === 'MATCH' || type === 'FINAL') return { background: 'rgba(175,82,222,0.1)', color: '#af52de' };
-  if (type === 'RULE-SET') return { background: 'rgba(0,113,227,0.1)', color: '#0071e3' };
-  return { background: 'rgba(0,0,0,0.06)', color: '#8e8e93' };
+  switch (type) {
+    case 'Domain':           return { background: 'rgba(0,113,227,0.12)',   color: '#0071e3' };
+    case 'DomainSuffix':     return { background: 'rgba(0,149,255,0.12)',   color: '#0095ff' };
+    case 'DomainKeyword':    return { background: 'rgba(10,132,255,0.12)',  color: '#0a84ff' };
+    case 'DomainRegex':      return { background: 'rgba(50,173,230,0.12)',  color: '#32ade6' };
+    case 'IPCIDR':           return { background: 'rgba(52,199,89,0.12)',   color: '#34c759' };
+    case 'IPCIDR6':          return { background: 'rgba(48,209,88,0.12)',   color: '#30d158' };
+    case 'IpAsn':            return { background: 'rgba(37,162,68,0.12)',   color: '#25a244' };
+    case 'GeoIP':            return { background: 'rgba(255,149,0,0.12)',   color: '#ff9500' };
+    case 'GeoSite':          return { background: 'rgba(244,160,21,0.12)',  color: '#f4a015' };
+    case 'RuleSet':          return { background: 'rgba(175,82,222,0.12)',  color: '#af52de' };
+    case 'ProcessName':      return { background: 'rgba(255,69,58,0.12)',   color: '#ff453a' };
+    case 'ProcessPath':      return { background: 'rgba(255,99,82,0.12)',   color: '#ff6352' };
+    case 'Port':             return { background: 'rgba(162,132,94,0.12)',  color: '#a2845e' };
+    case 'Network':          return { background: 'rgba(100,100,100,0.12)', color: '#636366' };
+    case 'AND':              return { background: 'rgba(88,86,214,0.12)',   color: '#5856d6' };
+    case 'OR':               return { background: 'rgba(88,86,214,0.12)',   color: '#5856d6' };
+    case 'NOT':              return { background: 'rgba(88,86,214,0.12)',   color: '#5856d6' };
+    case 'Match':
+    case 'Final':            return { background: 'rgba(142,142,147,0.12)', color: '#636366' };
+    default:                 return { background: 'rgba(0,0,0,0.06)',        color: '#8e8e93' };
+  }
 }
 
 export function Rules() {
   const [search, setSearch] = useState('');
-  const { data, isLoading } = useQuery({ queryKey: ['rules'], queryFn: getRules });
+  const { data, isLoading, isError } = useQuery({ queryKey: ['rules'], queryFn: getRules });
 
   const rules = data?.rules ?? [];
   const filtered = rules.filter(
     (r) =>
       r.type.toLowerCase().includes(search.toLowerCase()) ||
-      r.payload.toLowerCase().includes(search.toLowerCase()) ||
+      (r.payload ?? '').toLowerCase().includes(search.toLowerCase()) ||
       r.proxy.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -50,6 +66,10 @@ export function Rules() {
 
       {isLoading ? (
         <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading rules…</div>
+      ) : isError ? (
+        <div className="liquid-glass-card rounded-xl p-6 text-center text-[15px]" style={{ color: '#ff3b30' }}>
+          Failed to load rules. Check your connection and API secret.
+        </div>
       ) : (
         <div
           className="liquid-glass-card rounded-xl overflow-hidden"
@@ -60,13 +80,15 @@ export function Rules() {
               No rules match your search
             </div>
           ) : (
-            filtered.map((rule, i) => (
+            filtered.map((rule, i) => {
+              const typeStyle = getRuleTypeBadgeStyle(rule.type);
+              return (
               <div
                 key={i}
                 className="flex items-center gap-3 px-4"
                 style={{
                   minHeight: 48,
-                  borderBottom: i < filtered.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                  borderBottom: i < filtered.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
                 }}
               >
                 <span
@@ -76,8 +98,8 @@ export function Rules() {
                   {i + 1}
                 </span>
                 <span
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                  style={getRuleTypeBadgeStyle(rule.type)}
+                  className="text-[11px] font-semibold tracking-wider px-2 py-0.5 rounded-full flex-shrink-0"
+                  style={{ background: typeStyle.color + '22', color: typeStyle.color }}
                 >
                   {rule.type}
                 </span>
@@ -89,12 +111,13 @@ export function Rules() {
                 </span>
                 <span
                   className="text-[13px] font-medium flex-shrink-0"
-                  style={{ color: '#0071e3' }}
+                  style={{ color: '#1d1d1f' }}
                 >
                   {rule.proxy}
                 </span>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

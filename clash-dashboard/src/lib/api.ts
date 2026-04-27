@@ -168,11 +168,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(message);
   }
 
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
+  if (response.status === 204) {
     return undefined as T;
   }
 
-  return response.json();
+  const raw = await response.text();
+  if (!raw.trim()) {
+    return undefined as T;
+  }
+  return JSON.parse(raw) as T;
 }
 
 // Version
@@ -214,6 +218,23 @@ export const updateProxyProvider = (name: string) =>
 export const healthcheckProvider = (name: string) =>
   request<void>(`/providers/proxies/${encodeURIComponent(name)}/healthcheck`);
 
+// Rule Providers
+export interface RuleProvider {
+  name: string;
+  vehicleType: string;
+  updatedAt?: string;
+  behavior?: string;
+  format?: string;
+  ruleCount?: number;
+}
+
+export const getRuleProviders = () =>
+  request<{ providers: Record<string, RuleProvider> }>('/providers/rules');
+export const updateRuleProvider = (name: string) =>
+  request<void>(`/providers/rules/${encodeURIComponent(name)}`, { method: 'PUT' });
+export const getRuleProviderRules = (name: string) =>
+  request<{ rules: string[] }>(`/providers/rules/${encodeURIComponent(name)}/rules`);
+
 // Rules
 export const getRules = () => request<{ rules: Rule[] }>('/rules');
 
@@ -221,7 +242,7 @@ export const getRules = () => request<{ rules: Rule[] }>('/rules');
 export const getConnections = () => request<ConnectionsData>('/connections');
 export const closeAllConnections = () => request<void>('/connections', { method: 'DELETE' });
 export const closeConnection = (id: string) =>
-  request<void>(`/connections/${id}`, { method: 'DELETE' });
+  request<void>(`/connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // DNS
 export const queryDNS = (name: string, type: string) =>
@@ -237,7 +258,10 @@ export const restart = () => request<void>('/restart', { method: 'POST' });
 export function getWsUrl(path: string): string {
   const baseUrl = getApiUrl();
   const secret = getSecret();
-  const wsUrl = baseUrl.replace(/^http/, 'ws');
-  const token = secret ? `?token=${encodeURIComponent(secret)}` : '';
-  return `${wsUrl}${path}${token}`;
+  const wsBase = baseUrl.replace(/^http/, 'ws');
+  const url = new URL(`${wsBase}${path}`);
+  if (secret) {
+    url.searchParams.set('token', secret);
+  }
+  return url.toString();
 }

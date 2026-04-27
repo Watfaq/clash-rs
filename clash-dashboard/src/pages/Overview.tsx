@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getMemory, getConfigs, patchConfigs, reloadConfigs, getWsUrl } from '../lib/api';
 import { useTraffic } from '../hooks/useTraffic';
 import { TrafficChart } from '../components/TrafficChart';
+import { ProxyGroups } from '../components/ProxyGroups';
 import {
   ArrowUp, ArrowDown, Activity, HardDrive,
   Globe, Router, Sliders, Server, Wifi, FileText, Shield,
@@ -200,6 +201,7 @@ export function Overview() {
   const currentMode = cfg?.mode?.toLowerCase() ?? '';
 
   const [showRaw, setShowRaw] = useState(false);
+  const [proxyExpanded, setProxyExpanded] = useState(true);
 
   return (
     <div className="p-6 space-y-6">
@@ -275,35 +277,54 @@ export function Overview() {
         <TrafficChart timestamps={history.timestamps} up={history.up} down={history.down} />
       </div>
 
-      {/* Mode switcher — SwiftUI segmented control */}
+      {/* Mode switcher + expandable proxy groups */}
       {cfg && (
-        <div className="liquid-glass-card rounded-2xl p-5">
-          <div className="flex items-center justify-between">
+        <div className="liquid-glass-card rounded-2xl overflow-hidden">
+          {/* Header row */}
+          <div className="p-5 flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: '#6e6e73' }}>
                 Proxy Mode
               </div>
               <div className="text-[13px]" style={{ color: '#6e6e73' }}>Controls how traffic is routed</div>
             </div>
-            <div className="flex items-center p-1 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
-              {MODES.map((m) => {
-                const active = currentMode === m;
-                return (
-                  <button
-                    key={m}
-                    onClick={() => modeMutation.mutate(m)}
-                    className={`px-5 py-1.5 rounded-full text-[13px] font-medium capitalize transition-all ${
-                      active
-                        ? (MODE_COLORS[m] ?? 'bg-white text-[#1d1d1f] shadow-sm')
-                        : 'text-[#6e6e73] hover:text-[#1d1d1f]'
-                    }`}
-                  >
-                    {m.charAt(0).toUpperCase() + m.slice(1)}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center p-1 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
+                {MODES.map((m) => {
+                  const active = currentMode === m;
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => modeMutation.mutate(m)}
+                      disabled={modeMutation.isPending}
+                      className={`px-5 py-1.5 rounded-full text-[13px] font-medium capitalize transition-all disabled:opacity-50 ${
+                        active
+                          ? (MODE_COLORS[m] ?? 'bg-white text-[#1d1d1f] shadow-sm')
+                          : 'text-[#6e6e73] hover:text-[#1d1d1f]'
+                      }`}
+                    >
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+              {currentMode !== 'direct' && (
+                <button
+                  onClick={() => setProxyExpanded((v) => !v)}
+                  className="p-1.5 rounded-lg transition-colors"
+                  style={{ background: 'rgba(0,0,0,0.05)', color: '#6e6e73' }}
+                >
+                  {proxyExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              )}
             </div>
           </div>
+          {/* Expandable proxy groups */}
+          {proxyExpanded && currentMode !== 'direct' && (
+            <div className="border-t px-5 pb-5 pt-4 space-y-3" style={{ borderColor: 'rgba(0,0,0,0.06)' }}>
+              <ProxyGroups mode={currentMode} />
+            </div>
+          )}
         </div>
       )}
 

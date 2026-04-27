@@ -2,13 +2,14 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
 import {
-  LayoutDashboard, Globe, Activity, Filter, Terminal,
-  Server, SlidersHorizontal,
+  LayoutDashboard, Activity, Filter, Terminal,
+  Server, SlidersHorizontal, Package,
 } from 'lucide-react';
+import logoUrl from '../assets/logo.png';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/proxies', label: 'Proxies', icon: Globe },
+  { to: '/providers', label: 'Providers', icon: Package },
   { to: '/connections', label: 'Connections', icon: Activity },
   { to: '/rules', label: 'Rules', icon: Filter },
   { to: '/logs', label: 'Logs', icon: Terminal },
@@ -33,7 +34,7 @@ export function Layout() {
         <div className="h-full max-w-5xl mx-auto px-4 flex items-center gap-3">
           {/* Logo — real clash-rs icon from public/favicon.svg */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <img src="/logo.png" alt="clash-rs" className="w-7 h-7 rounded-lg" />
+            <img src={logoUrl} alt="clash-rs" className="w-7 h-7 rounded-lg" />
             <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: '#1d1d1f' }}>
               clash-rs
             </span>

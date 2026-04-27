@@ -94,7 +94,24 @@ export function Proxies() {
   });
 
   const proxies = data?.proxies ?? {};
-  const allGroups = Object.values(proxies).filter((p) => GROUP_TYPES.includes(p.type));
+
+  // Use GLOBAL.all as sort index — same approach as ChocLite
+  const globalGroup = proxies['GLOBAL'];
+  const sortIndex: string[] = globalGroup?.all ?? [];
+  function sortByConfig<T extends { name: string }>(items: T[]): T[] {
+    return [...items].sort((a, b) => {
+      const ia = sortIndex.indexOf(a.name);
+      const ib = sortIndex.indexOf(b.name);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const allGroups = sortByConfig(
+    Object.values(proxies).filter((p) => GROUP_TYPES.includes(p.type))
+  );
 
   // Filter groups by mode
   const groups = mode === 'global'
@@ -103,8 +120,10 @@ export function Proxies() {
       ? allGroups.filter((g) => g.name.toUpperCase() !== 'GLOBAL')
       : []; // direct — no groups to show
 
-  const providers = Object.values(providersData?.providers ?? {})
-    .filter((p) => p.name !== 'default');
+  const providers = sortByConfig(
+    Object.values(providersData?.providers ?? {})
+      .filter((p) => p.name !== 'default' && p.vehicleType !== 'Compatible')
+  );
 
   function toggleExpanded(name: string) {
     setExpanded((prev) => {

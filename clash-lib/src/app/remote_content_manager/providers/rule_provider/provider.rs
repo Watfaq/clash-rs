@@ -77,8 +77,8 @@ impl Display for RuleSetBehavior {
 
 pub enum RuleContent {
     // the left will converted into a right
-    Domain(succinct_set::DomainSet, usize),
-    Ipcidr(Box<CidrTrie>, usize),
+    Domain(succinct_set::DomainSet),
+    Ipcidr(Box<CidrTrie>),
     Classical(Vec<Box<dyn RuleMatcher>>),
 }
 
@@ -135,10 +135,10 @@ impl RuleProviderImpl {
         let inner = Arc::new(tokio::sync::RwLock::new(Inner {
             content: match behavior {
                 RuleSetBehavior::Domain => {
-                    RuleContent::Domain(succinct_set::DomainSet::default(), 0)
+                    RuleContent::Domain(succinct_set::DomainSet::default())
                 }
                 RuleSetBehavior::Ipcidr => {
-                    RuleContent::Ipcidr(Box::new(CidrTrie::new()), 0)
+                    RuleContent::Ipcidr(Box::new(CidrTrie::new()))
                 }
                 RuleSetBehavior::Classical => RuleContent::Classical(vec![]),
             },
@@ -274,8 +274,8 @@ impl RuleProvider for RuleProviderImpl {
 
         match inner {
             Ok(inner) => match &inner.content {
-                RuleContent::Domain(set, _) => set.has(&sess.destination.host()),
-                RuleContent::Ipcidr(trie, _) => trie.contains(
+                RuleContent::Domain(set) => set.has(&sess.destination.host()),
+                RuleContent::Ipcidr(trie) => trie.contains(
                     sess.destination
                         .ip()
                         .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))),
@@ -408,8 +408,7 @@ impl Provider for RuleProviderImpl {
             let inner = self.inner.read().await;
             match &inner.content {
                 RuleContent::Classical(rules) => rules.len(),
-                RuleContent::Domain(_, n) => *n,
-                RuleContent::Ipcidr(_, n) => *n,
+                _ => 0,
             }
         };
         m.insert("ruleCount".to_owned(), Box::new(rule_count));
@@ -427,16 +426,11 @@ fn make_rules(
 ) -> Result<RuleContent, Error> {
     match behavior {
         RuleSetBehavior::Domain => {
-            let count = rules.len();
             let s = make_domain_rules(rules)?;
-            Ok(RuleContent::Domain(s.into(), count))
+            Ok(RuleContent::Domain(s.into()))
         }
         RuleSetBehavior::Ipcidr => {
-            let count = rules.len();
-            Ok(RuleContent::Ipcidr(
-                Box::new(make_ip_cidr_rules(rules)?),
-                count,
-            ))
+            Ok(RuleContent::Ipcidr(Box::new(make_ip_cidr_rules(rules)?)))
         }
         RuleSetBehavior::Classical => Ok(RuleContent::Classical(
             make_classical_rules(rules, mmdb, geodata)?,

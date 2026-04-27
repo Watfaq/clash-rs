@@ -45,8 +45,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn build_dashboard() -> anyhow::Result<()> {
-    // Only run when the `builtin-dashboard` feature is enabled.
-    if std::env::var("CARGO_FEATURE_BUILTIN_DASHBOARD").is_err() {
+    // Only run when the `dashboard` feature is enabled.
+    if std::env::var("CARGO_FEATURE_DASHBOARD").is_err() {
         return Ok(());
     }
 
@@ -68,6 +68,7 @@ fn build_dashboard() -> anyhow::Result<()> {
         "vite.config.ts",
         "package.json",
         "tsconfig.json",
+        "tsconfig.app.json",
     ] {
         println!(
             "cargo:rerun-if-changed={}",

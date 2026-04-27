@@ -118,8 +118,6 @@ export function Logs() {
       <div
         className="flex-1 overflow-y-auto rounded-2xl p-4 min-h-0"
         style={{ background: '#1c1c1e' }}
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
       >
         {filtered.length === 0 ? (
           <div className="text-[13px] text-center py-10" style={{ color: '#6e6e73' }}>

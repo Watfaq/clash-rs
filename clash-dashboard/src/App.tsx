@@ -2,7 +2,7 @@ import { HashRouter as BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
-import { Proxies } from './pages/Proxies';
+import { Providers } from './pages/Providers';
 import { Connections } from './pages/Connections';
 import { Rules } from './pages/Rules';
 import { Logs } from './pages/Logs';
@@ -25,7 +25,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Overview />} />
-            <Route path="proxies" element={<Proxies />} />
+            <Route path="providers" element={<Providers />} />
             <Route path="connections" element={<Connections />} />
             <Route path="rules" element={<Rules />} />
             <Route path="logs" element={<Logs />} />
