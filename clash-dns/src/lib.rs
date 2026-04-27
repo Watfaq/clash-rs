@@ -73,7 +73,7 @@ pub(crate) mod tests {
                     .install_default()
                     .unwrap()
             }
-            #[cfg(feature = "ring")]
+            #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
             {
                 rustls::crypto::ring::default_provider()
                     .install_default()
