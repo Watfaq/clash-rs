@@ -26,14 +26,16 @@ strip = true
 debug = 2
 panic = "abort"
 
-[profile.fast-release]
+[profile.detailed-release]
 inherits = "release"
 opt-level = 1
-debug = 1
 lto = "thin"
-strip = false
+strip = "none"
+debug = "line-tables-only"
+split-debuginfo = "off"
+panic = "unwind"
 incremental = true
-codegen-units = 16
+codegen-units = 256
 
 [workspace.lints.rust]
 warnings = "deny"

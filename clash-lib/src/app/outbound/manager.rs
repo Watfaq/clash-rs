@@ -230,17 +230,17 @@ impl OutboundManager {
         &self,
         proxy: &AnyOutboundHandler,
     ) -> HashMap<String, Box<dyn Serialize + Send>> {
-        let mut response = if let Some(group) = proxy.try_as_group_handler() {
-            group.as_map().await
-        } else if let Some(plain) = proxy.try_as_plain_handler() {
-            plain.as_map().await
+        let mut r = if let Some(g) = proxy.try_as_group_handler() {
+            g.as_map().await
+        } else if let Some(p) = proxy.try_as_plain_handler() {
+            p.as_map().await
         } else {
             HashMap::new()
         };
-        self.apply_common_proxy_fields(&mut response, proxy, proxy.name())
+        self.apply_common_proxy_fields(&mut r, proxy, proxy.name())
             .await;
 
-        response
+        r
     }
 
     async fn apply_common_proxy_fields(
