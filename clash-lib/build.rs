@@ -53,6 +53,12 @@ fn build_dashboard() -> anyhow::Result<()> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
     let dashboard_dir =
         std::path::PathBuf::from(&manifest_dir).join("../clash-dashboard");
+
+    // Always ensure dist/ exists so rust-embed can compile even if the npm
+    // build is skipped (it will embed an empty bundle).
+    let dist_dir = dashboard_dir.join("dist");
+    std::fs::create_dir_all(&dist_dir)?;
+
     let dashboard_dir = match dashboard_dir.canonicalize() {
         Ok(p) => p,
         Err(_) => {
