@@ -49,7 +49,12 @@ use crate::{
 use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, hash_map},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -134,6 +139,8 @@ impl OutboundManager {
 
         // Register provider proxies into the handler map and build the
         // reverse provider-name mapping for the API response.
+        // Only record provider-name when we actually insert the handler,
+        // so user-configured proxies with the same name are never mislabeled.
         for (provider_name, provider) in &m.proxy_providers {
             if provider_name == RESERVED_PROVIDER_NAME {
                 continue; // skip the GLOBAL provider
@@ -141,10 +148,11 @@ impl OutboundManager {
             let p = provider.read().await;
             for proxy in p.proxies().await {
                 let name = proxy.name().to_owned();
-                m.proxy_provider_map
-                    .entry(name.clone())
-                    .or_insert_with(|| provider_name.clone());
-                handlers.entry(name).or_insert_with(|| proxy.clone());
+                if let hash_map::Entry::Vacant(e) = handlers.entry(name) {
+                    e.insert(proxy.clone());
+                    m.proxy_provider_map
+                        .insert(proxy.name().to_owned(), provider_name.clone());
+                }
             }
         }
 
