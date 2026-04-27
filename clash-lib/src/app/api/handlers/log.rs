@@ -19,18 +19,26 @@ pub async fn handle(
     })
     .on_upgrade(move |mut socket| async move {
         let mut rx = state.log_source_tx.subscribe();
-        while let Ok(evt) = rx.recv().await {
-            let res_str = match serde_json::to_string(&evt) {
-                Ok(s) => s,
-                Err(e) => {
-                    warn!("Failed to serialize log event: {}", e);
-                    continue; // Skip this event but keep the connection open
+        loop {
+            match rx.recv().await {
+                Ok(evt) => {
+                    let res_str = match serde_json::to_string(&evt) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            warn!("Failed to serialize log event: {}", e);
+                            continue;
+                        }
+                    };
+                    if let Err(e) = socket.send(Message::Text(res_str.into())).await
+                    {
+                        warn!("ws send error: {}", e);
+                        break;
+                    }
                 }
-            };
-
-            if let Err(e) = socket.send(Message::Text(res_str.into())).await {
-                warn!("ws send error: {}", e);
-                break;
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    warn!("log ws: receiver lagged {} messages", n);
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
     })

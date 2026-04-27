@@ -345,24 +345,82 @@ impl InboundManager {
         }
     }
 
-    async fn stop_all_listeners(&self) {
-        for (opt, l) in self.inbound_handlers.write().await.iter_mut() {
-            if let Some(handler) = l.take() {
-                warn!("Shutting down inbound handler: {}", opt.common_opts().name);
-                handler.abort();
+    /// Like `start_all_listeners` but skips listeners that already have a
+    /// running handle. Used after a targeted port change so that only the
+    /// affected listener is (re-)started.
+    async fn start_idle_listeners(
+        dispatcher: Arc<Dispatcher>,
+        authenticator: ThreadSafeAuthenticator,
+        inbound_handlers: Arc<RwLock<HashMap<InboundOpts, Option<JoinHandle<()>>>>>,
+        cancellation_token: tokio_util::sync::CancellationToken,
+    ) {
+        for (opts, handler) in inbound_handlers.write().await.iter_mut() {
+            if handler.as_ref().is_some_and(|h| !h.is_finished()) {
+                continue; // already running — do not touch
             }
-            *l = None;
+            let cancellation_token = cancellation_token.clone();
+            let name = opts.common_opts().name.clone();
+            *handler = build_network_listeners(
+                opts,
+                dispatcher.clone(),
+                authenticator.clone(),
+                None,
+            )
+            .map(|r| {
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = futures::future::join_all(r) => {
+                            warn!("Inbound handler {} has exited", name);
+                        },
+                        _ = cancellation_token.cancelled() => {
+                            info!("Inbound handler {} is closed", name);
+                        },
+                    }
+                })
+            });
         }
-        for handles in self.provider_handles.write().await.values_mut() {
-            for (opt, entry) in handles.iter_mut() {
-                if let Some(h) = entry.handle.take() {
+    }
+
+    async fn stop_all_listeners(&self) {
+        let mut handles_to_await: Vec<JoinHandle<()>> = Vec::new();
+
+        // Abort static inbound handlers, collect handles for awaiting.
+        {
+            let mut guard = self.inbound_handlers.write().await;
+            for (opt, l) in guard.iter_mut() {
+                if let Some(handler) = l.take() {
                     warn!(
-                        "Shutting down provider inbound handler: {}",
+                        "Shutting down inbound handler: {}",
                         opt.common_opts().name
                     );
-                    h.abort();
+                    handler.abort();
+                    handles_to_await.push(handler);
+                }
+                *l = None;
+            }
+        }
+
+        // Abort provider inbound handlers.
+        {
+            let mut provider_guard = self.provider_handles.write().await;
+            for handles in provider_guard.values_mut() {
+                for (opt, entry) in handles.iter_mut() {
+                    if let Some(h) = entry.handle.take() {
+                        warn!(
+                            "Shutting down provider inbound handler: {}",
+                            opt.common_opts().name
+                        );
+                        h.abort();
+                        handles_to_await.push(h);
+                    }
                 }
             }
+        }
+
+        // Wait for all aborted tasks to finish so the OS ports are released
+        // before new listeners bind to the same addresses.
+        for h in handles_to_await {
+            let _ = h.await;
         }
     }
 
@@ -406,6 +464,9 @@ impl InboundManager {
     }
 
     // RESTFUL API handlers below
+
+    /// Full restart — stops ALL listeners then starts them all again.
+    /// Use for bind-address or allow-lan changes that affect every listener.
     pub async fn restart(&self) -> Result<(), crate::Error> {
         self.stop_all_listeners().await;
 
@@ -414,6 +475,24 @@ impl InboundManager {
         let authenticator = self.authenticator.clone();
         let cancellation_token = self.cancellation_token.clone();
         Self::start_all_listeners(
+            dispatcher,
+            authenticator,
+            inbound_handlers,
+            cancellation_token,
+        )
+        .await;
+        Ok(())
+    }
+
+    /// Partial restart — starts only listeners whose handle is missing or
+    /// finished. Call this after `change_ports` so that unchanged listeners
+    /// are not interrupted.
+    pub async fn restart_idle(&self) -> Result<(), crate::Error> {
+        let inbound_handlers = self.inbound_handlers.clone();
+        let dispatcher = self.dispatcher.clone();
+        let authenticator = self.authenticator.clone();
+        let cancellation_token = self.cancellation_token.clone();
+        Self::start_idle_listeners(
             dispatcher,
             authenticator,
             inbound_handlers,
@@ -533,34 +612,27 @@ impl InboundManager {
 
         let listeners: HashMap<InboundOpts, Option<_>> = guard
             .extract_if(|opts, _| match &opts {
-                InboundOpts::Http { common_opts } => {
-                    ports.port.is_some() && Some(common_opts.port) == ports.port
-                }
-                InboundOpts::Socks { common_opts, .. } => {
-                    ports.socks_port.is_some()
-                        && Some(common_opts.port) == ports.socks_port
-                }
-                InboundOpts::Mixed { common_opts, .. } => {
-                    ports.mixed_port.is_some()
-                        && Some(common_opts.port) == ports.mixed_port
-                }
+                InboundOpts::Http { .. } => ports.port.is_some(),
+                InboundOpts::Socks { .. } => ports.socks_port.is_some(),
+                InboundOpts::Mixed { .. } => ports.mixed_port.is_some(),
                 #[cfg(feature = "tproxy")]
-                InboundOpts::TProxy { common_opts, .. } => {
-                    ports.tproxy_port.is_some()
-                        && Some(common_opts.port) == ports.tproxy_port
-                }
+                InboundOpts::TProxy { .. } => ports.tproxy_port.is_some(),
                 #[cfg(feature = "redir")]
-                InboundOpts::Redir { common_opts } => {
-                    ports.redir_port.is_some()
-                        && Some(common_opts.port) == ports.redir_port
-                }
+                InboundOpts::Redir { .. } => ports.redir_port.is_some(),
                 _ => false,
             })
             .collect();
 
         let changed = !listeners.is_empty();
 
+        let mut old_handles: Vec<JoinHandle<()>> = Vec::new();
+
         for (mut opts, handle) in listeners {
+            if let Some(h) = handle {
+                h.abort();
+                old_handles.push(h);
+            }
+
             // extract_if already guarantees the matching port field is Some.
             // Use a plain match + if-let (stable) rather than if-let guards
             // in match arms (which require the nightly `if_let_guard` feature).
@@ -588,7 +660,17 @@ impl InboundManager {
                 continue;
             };
             opts.common_opts_mut().port = port;
-            guard.insert(opts, handle);
+            // Insert with None so restart_idle will start a new listener.
+            guard.insert(opts, None);
+        }
+
+        // Release the write lock before awaiting so other readers aren't blocked.
+        drop(guard);
+
+        // Wait for the old tasks to finish, which ensures their OS port bindings
+        // are released before restart_idle binds the new port.
+        for h in old_handles {
+            let _ = h.await;
         }
 
         changed
