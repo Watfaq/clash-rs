@@ -6,7 +6,6 @@ import { Proxies } from './pages/Proxies';
 import { Connections } from './pages/Connections';
 import { Rules } from './pages/Rules';
 import { Logs } from './pages/Logs';
-import { Config } from './pages/Config';
 import { DNS } from './pages/DNS';
 import { Settings } from './pages/Settings';
 
@@ -30,7 +29,6 @@ export default function App() {
             <Route path="connections" element={<Connections />} />
             <Route path="rules" element={<Rules />} />
             <Route path="logs" element={<Logs />} />
-            <Route path="config" element={<Config />} />
             <Route path="dns" element={<DNS />} />
             <Route path="settings" element={<Settings />} />
           </Route>

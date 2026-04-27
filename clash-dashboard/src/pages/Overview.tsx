@@ -1,13 +1,15 @@
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMemory, getConfigs, updateConfigs, getWsUrl } from '../lib/api';
+import { getMemory, getConfigs, patchConfigs, reloadConfigs, getWsUrl } from '../lib/api';
 import { useTraffic } from '../hooks/useTraffic';
 import { TrafficChart } from '../components/TrafficChart';
 import {
   ArrowUp, ArrowDown, Activity, HardDrive,
-  Globe, Router, Sliders, Server, Wifi, FileText,
+  Globe, Router, Sliders, Server, Wifi, FileText, Shield,
+  RefreshCw, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
-import type { ConnectionsData } from '../lib/api';
+import type { ConnectionsData, PatchableConfig, ClashConfig } from '../lib/api';
 
 function formatSpeed(bytes: number): string {
   if (bytes < 1024) return `${bytes} B/s`;
@@ -78,55 +80,84 @@ function IconBadge({ bg, children }: { bg: string; children: React.ReactNode }) 
   );
 }
 
-interface InfoRowProps {
-  icon: React.ReactNode;
-  iconBg: string;
-  label: string;
-  value: React.ReactNode;
+
+const MODES_ALL = ['rule', 'global', 'direct'] as const;
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warning', 'error', 'silent'] as const;
+
+function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className="w-10 h-6 rounded-full transition-colors flex-shrink-0 relative"
+      style={{ background: value ? '#34c759' : 'rgba(0,0,0,0.15)' }}
+    >
+      <span
+        className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+        style={{ left: value ? '50%' : '2px' }}
+      />
+    </button>
+  );
 }
 
-function InfoRow({ icon, iconBg, label, value }: InfoRowProps) {
+function PortInput({ value, onCommit }: { value: number | undefined; onCommit: (v: number | null) => void }) {
+  const [local, setLocal] = useState<string>(value != null && value !== 0 ? String(value) : '');
+  useEffect(() => { setLocal(value != null && value !== 0 ? String(value) : ''); }, [value]);
   return (
-    <div className="flex items-center gap-3 px-4" style={{ minHeight: 44 }}>
+    <input
+      type="number" min="0" max="65535" value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => { const n = parseInt(local, 10); onCommit(!local || isNaN(n) ? null : n); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      className="form-input w-24 text-right text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 focus:bg-white py-1 px-2 transition-all"
+      placeholder="disabled"
+    />
+  );
+}
+
+function TextInput({ value, onCommit }: { value: string | undefined; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState<string>(value ?? '');
+  useEffect(() => { setLocal(value ?? ''); }, [value]);
+  return (
+    <input
+      type="text" value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => onCommit(local)}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      className="form-input w-40 text-right text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 focus:bg-white py-1 px-2 transition-all"
+    />
+  );
+}
+
+function SelectInput({ value, options, onChange }: { value: string | undefined; options: readonly string[]; onChange: (v: string) => void }) {
+  return (
+    <select
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+      className="form-select text-[13px] font-mono rounded-lg border-0 bg-black/[0.04] focus:ring-2 focus:ring-[#0071e3]/30 py-1 px-2 capitalize transition-all"
+    >
+      {options.map((o) => <option key={o} value={o} className="capitalize">{o}</option>)}
+    </select>
+  );
+}
+
+function EditRow({ label, icon, iconBg, children }: { label: string; icon: React.ReactNode; iconBg: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
       <IconBadge bg={iconBg}>{icon}</IconBadge>
       <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{label}</span>
-      <span className="text-[13px] font-mono" style={{ color: '#6e6e73' }}>{value}</span>
+      {children}
     </div>
   );
 }
 
-function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+function EditSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1" style={{ color: '#6e6e73' }}>
-        {title}
-      </div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2 px-1" style={{ color: '#6e6e73' }}>{title}</div>
       <div className="liquid-glass-card rounded-xl overflow-hidden">
-        <div className="[&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:[border-color:rgba(0,0,0,0.06)]">
-          {children}
-        </div>
+        <div className="[&>*:last-child]:[border-bottom:none]">{children}</div>
       </div>
     </div>
-  );
-}
-
-function PortValue({ port }: { port: number | undefined }) {
-  if (!port || port === 0) return <span style={{ color: '#c7c7cc' }}>disabled</span>;
-  return <span>:{port}</span>;
-}
-
-function BoolPill({ value }: { value: boolean }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full"
-      style={{
-        background: value ? 'rgba(52,199,89,0.12)' : 'rgba(0,0,0,0.06)',
-        color: value ? '#34c759' : '#6e6e73',
-      }}
-    >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: value ? '#34c759' : '#8e8e93' }} />
-      {value ? 'On' : 'Off'}
-    </span>
   );
 }
 
@@ -134,12 +165,24 @@ export function Overview() {
   const queryClient = useQueryClient();
   const { history, current } = useTraffic();
   const { data: memory } = useQuery({ queryKey: ['memory'], queryFn: getMemory, refetchInterval: 5000 });
-  const { data: configs } = useQuery({ queryKey: ['configs'], queryFn: getConfigs, refetchInterval: 10000 });
+  const { data: configs, isLoading: configsLoading } = useQuery({ queryKey: ['configs'], queryFn: getConfigs, refetchInterval: 10000 });
 
   const modeMutation = useMutation({
-    mutationFn: (mode: string) => updateConfigs({ mode }),
+    mutationFn: (mode: string) => patchConfigs({ mode }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['configs'] }),
   });
+
+  const patchMutation = useMutation({
+    mutationFn: (patch: PatchableConfig) => patchConfigs(patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['configs'] }),
+  });
+
+  const reloadMutation = useMutation({
+    mutationFn: () => reloadConfigs(''),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['configs'] }),
+  });
+
+  function patch(fields: PatchableConfig) { patchMutation.mutate(fields); }
 
   const wsUrl = getWsUrl('/ws/connections');
   const { lastMessage: connData } = useWebSocket<ConnectionsData>(wsUrl);
@@ -154,11 +197,30 @@ export function Overview() {
       : 'OS limit: N/A'
     : undefined;
 
-  const currentMode = configs?.mode?.toLowerCase() ?? '';
+  const cfg = configs as ClashConfig | undefined;
+  const currentMode = cfg?.mode?.toLowerCase() ?? '';
+
+  const [showRaw, setShowRaw] = useState(false);
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Overview</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#1d1d1f' }}>Overview</h1>
+        <div className="flex items-center gap-2">
+          {patchMutation.isPending && (
+            <span className="text-[12px]" style={{ color: '#6e6e73' }}>Saving…</span>
+          )}
+          <button
+            onClick={() => reloadMutation.mutate()}
+            disabled={reloadMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors disabled:opacity-50"
+            style={{ background: '#0071e3', color: 'white' }}
+          >
+            <RefreshCw size={13} className={reloadMutation.isPending ? 'animate-spin' : ''} />
+            Reload Config
+          </button>
+        </div>
+      </div>
 
       {/* Vivid stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -195,10 +257,7 @@ export function Overview() {
       </div>
 
       {/* Traffic chart — always dark */}
-      <div
-        className="rounded-2xl p-5"
-        style={{ background: 'linear-gradient(135deg, #1e2a3a 0%, #0f1923 100%)' }}
-      >
+      <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, #1e2a3a 0%, #0f1923 100%)' }}>
         <div className="flex items-center justify-between mb-4">
           <span className="text-[15px] font-semibold text-white">Network Traffic</span>
           <div className="flex items-center gap-5 text-xs">
@@ -214,32 +273,20 @@ export function Overview() {
             </span>
           </div>
         </div>
-        <TrafficChart
-          timestamps={history.timestamps}
-          up={history.up}
-          down={history.down}
-        />
+        <TrafficChart timestamps={history.timestamps} up={history.up} down={history.down} />
       </div>
 
       {/* Mode switcher — SwiftUI segmented control */}
-      {configs && (
+      {cfg && (
         <div className="liquid-glass-card rounded-2xl p-5">
           <div className="flex items-center justify-between">
             <div>
-              <div
-                className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1"
-                style={{ color: '#6e6e73' }}
-              >
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-1" style={{ color: '#6e6e73' }}>
                 Proxy Mode
               </div>
-              <div className="text-[13px]" style={{ color: '#6e6e73' }}>
-                Controls how traffic is routed
-              </div>
+              <div className="text-[13px]" style={{ color: '#6e6e73' }}>Controls how traffic is routed</div>
             </div>
-            <div
-              className="flex items-center p-1 rounded-full"
-              style={{ background: 'rgba(0,0,0,0.06)' }}
-            >
+            <div className="flex items-center p-1 rounded-full" style={{ background: 'rgba(0,0,0,0.06)' }}>
               {MODES.map((m) => {
                 const active = currentMode === m;
                 return (
@@ -261,78 +308,83 @@ export function Overview() {
         </div>
       )}
 
-      {/* Network & System info — pulled from config */}
-      {configs && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InfoSection title="Network">
-            <InfoRow
-              icon={<Globe size={14} color="white" />}
-              iconBg="#0071e3"
-              label="HTTP Port"
-              value={<PortValue port={configs.port} />}
-            />
-            <InfoRow
-              icon={<Router size={14} color="white" />}
-              iconBg="#af52de"
-              label="SOCKS Port"
-              value={<PortValue port={configs['socks-port']} />}
-            />
-            <InfoRow
-              icon={<Sliders size={14} color="white" />}
-              iconBg="#5ac8fa"
-              label="Mixed Port"
-              value={<PortValue port={configs['mixed-port']} />}
-            />
-            <InfoRow
-              icon={<Server size={14} color="white" />}
-              iconBg="#8e8e93"
-              label="Redir Port"
-              value={<PortValue port={configs['redir-port']} />}
-            />
-            <InfoRow
-              icon={<Wifi size={14} color="white" />}
-              iconBg="#34c759"
-              label="Allow LAN"
-              value={<BoolPill value={configs['allow-lan'] ?? false} />}
-            />
-            {configs['bind-address'] && (
-              <InfoRow
-                icon={<Server size={14} color="white" />}
-                iconBg="#5ac8fa"
-                label="Bind Address"
-                value={configs['bind-address']}
-              />
-            )}
-          </InfoSection>
+      {/* Config form — editable */}
+      {configsLoading && <div className="text-[15px]" style={{ color: '#6e6e73' }}>Loading config…</div>}
+      {cfg && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Mode & Logging */}
+            <EditSection title="Mode & Logging">
+              <EditRow label="Mode" icon={<Globe size={14} color="white" />} iconBg="#ff9500">
+                <SelectInput value={cfg.mode} options={MODES_ALL} onChange={(v) => patch({ mode: v })} />
+              </EditRow>
+              <EditRow label="Log Level" icon={<FileText size={14} color="white" />} iconBg="#8e8e93">
+                <SelectInput value={cfg['log-level']} options={LOG_LEVELS} onChange={(v) => patch({ 'log-level': v })} />
+              </EditRow>
+              <EditRow label="IPv6" icon={<Globe size={14} color="white" />} iconBg="#0071e3">
+                <ToggleSwitch value={cfg.ipv6 ?? false} onChange={(v) => patch({ ipv6: v })} />
+              </EditRow>
+            </EditSection>
 
-          <InfoSection title="System">
-            <InfoRow
-              icon={<FileText size={14} color="white" />}
-              iconBg="#8e8e93"
-              label="Log Level"
-              value={configs['log-level'] ?? '—'}
-            />
-            <InfoRow
-              icon={<Globe size={14} color="white" />}
-              iconBg="#0071e3"
-              label="IPv6"
-              value={<BoolPill value={configs.ipv6 ?? false} />}
-            />
-            <InfoRow
-              icon={<Wifi size={14} color="white" />}
-              iconBg="#34c759"
-              label="Allow LAN"
-              value={<BoolPill value={configs['allow-lan'] ?? false} />}
-            />
-            {configs['bind-address'] && (
-              <InfoRow
-                icon={<Server size={14} color="white" />}
-                iconBg="#5ac8fa"
-                label="Bind Address"
-                value={configs['bind-address']}
-              />
-            )}
-          </InfoSection>
+            {/* Network */}
+            <EditSection title="Network">
+              <EditRow label="HTTP Port" icon={<Globe size={14} color="white" />} iconBg="#0071e3">
+                <PortInput value={cfg.port} onCommit={(v) => patch({ port: v ?? 0 })} />
+              </EditRow>
+              <EditRow label="SOCKS Port" icon={<Router size={14} color="white" />} iconBg="#af52de">
+                <PortInput value={cfg['socks-port']} onCommit={(v) => patch({ 'socks-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="Mixed Port" icon={<Sliders size={14} color="white" />} iconBg="#5ac8fa">
+                <PortInput value={cfg['mixed-port']} onCommit={(v) => patch({ 'mixed-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="Redir Port" icon={<Server size={14} color="white" />} iconBg="#8e8e93">
+                <PortInput value={cfg['redir-port']} onCommit={(v) => patch({ 'redir-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="TProxy Port" icon={<Server size={14} color="white" />} iconBg="#6e6e73">
+                <PortInput value={cfg['tproxy-port']} onCommit={(v) => patch({ 'tproxy-port': v ?? 0 })} />
+              </EditRow>
+              <EditRow label="Allow LAN" icon={<Wifi size={14} color="white" />} iconBg="#34c759">
+                <ToggleSwitch value={cfg['allow-lan'] ?? false} onChange={(v) => patch({ 'allow-lan': v })} />
+              </EditRow>
+              <EditRow label="Bind Address" icon={<Shield size={14} color="white" />} iconBg="#5ac8fa">
+                <TextInput value={cfg['bind-address']} onCommit={(v) => patch({ 'bind-address': v })} />
+              </EditRow>
+            </EditSection>
+          </div>
+
+          {/* Active Listeners */}
+          {cfg.listeners && cfg.listeners.length > 0 && (
+            <EditSection title="Active Listeners">
+              {cfg.listeners.map((l) => (
+                <div key={l.name} className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                  <IconBadge bg={l.active ? '#34c759' : '#8e8e93'}>
+                    <Server size={14} color="white" />
+                  </IconBadge>
+                  <span className="text-[15px] flex-1" style={{ color: '#1d1d1f' }}>{l.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,0,0,0.06)', color: '#6e6e73' }}>{l.type}</span>
+                    <span className="font-mono text-[13px]">:{l.port}</span>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: l.active ? '#34c759' : '#8e8e93' }} />
+                  </span>
+                </div>
+              ))}
+            </EditSection>
+          )}
+
+          {/* Raw JSON */}
+          <button
+            onClick={() => setShowRaw((v) => !v)}
+            className="flex items-center gap-2 text-[13px] transition-colors"
+            style={{ color: '#6e6e73' }}
+          >
+            {showRaw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {showRaw ? 'Hide' : 'Show'} Raw JSON
+          </button>
+          {showRaw && (
+            <pre className="liquid-glass-card rounded-xl p-5 text-[11px] overflow-auto max-h-96 font-mono" style={{ color: '#6e6e73' }}>
+              {JSON.stringify(cfg, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

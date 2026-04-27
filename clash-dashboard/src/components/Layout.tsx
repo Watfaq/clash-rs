@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getVersion } from '../lib/api';
 import {
   LayoutDashboard, Globe, Activity, Filter, Terminal,
-  Settings2, Server, SlidersHorizontal,
+  Server, SlidersHorizontal,
 } from 'lucide-react';
 
 const navItems = [
@@ -12,7 +12,6 @@ const navItems = [
   { to: '/connections', label: 'Connections', icon: Activity },
   { to: '/rules', label: 'Rules', icon: Filter },
   { to: '/logs', label: 'Logs', icon: Terminal },
-  { to: '/config', label: 'Config', icon: Settings2 },
   { to: '/dns', label: 'DNS', icon: Server },
   { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
 ];

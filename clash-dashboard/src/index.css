@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/forms" {
+  strategy: class;
+}
 
 * { box-sizing: border-box; }
 
