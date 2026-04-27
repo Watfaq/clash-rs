@@ -107,7 +107,7 @@ jobs:
           RUSTFLAGS="--cfg docker_test --cfg throughput_test" \
           cargo test -p clash-lib --release --all-features \
             e2e_throughput \
-            -- --test-threads=8 --nocapture 2>&1 | tee throughput-test.log
+            -- --test-threads=4 --nocapture 2>&1 | tee throughput-test.log
 
       - name: Format results as Markdown
         if: always()

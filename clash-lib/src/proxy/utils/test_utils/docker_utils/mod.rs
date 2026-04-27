@@ -789,7 +789,9 @@ pub async fn clash_process_e2e_throughput(
     );
 
     // --- wait for SOCKS5 inbound to be ready ---
-    wait_for_port(socks_port, 60).await.map_err(|e| {
+    // 90s gives clash-rs headroom on resource-constrained CI runners where
+    // multiple Docker containers + subprocesses compete for 2 CPUs.
+    wait_for_port(socks_port, 90).await.map_err(|e| {
         child.start_kill().ok();
         e
     })?;
