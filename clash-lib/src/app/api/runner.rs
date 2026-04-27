@@ -195,7 +195,7 @@ impl Runner for ApiRunner {
                     router = router
                         .route("/ui", get(|| async { Redirect::to("/ui/") }))
                         .route("/ui/", get(embedded_dashboard::serve_index))
-                        .route("/ui/*path", get(embedded_dashboard::serve_asset));
+                        .route("/ui/{*path}", get(embedded_dashboard::serve_asset));
                 }
             }
 

@@ -18,7 +18,7 @@ pub async fn serve_index() -> impl IntoResponse {
     serve_path("index.html")
 }
 
-/// Serves a dashboard asset at `/ui/*path`, falling back to `index.html`
+/// Serves a dashboard asset at `/ui/{*path}`, falling back to `index.html`
 /// for unknown paths so that React Router's client-side routing works.
 pub async fn serve_asset(Path(path): Path<String>) -> impl IntoResponse {
     serve_path(path.trim_start_matches('/'))
