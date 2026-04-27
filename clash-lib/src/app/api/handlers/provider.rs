@@ -1,4 +1,10 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use axum::{
     Extension, Router,
@@ -8,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app::{
@@ -17,6 +23,7 @@ use crate::{
         router::ArcRouter,
     },
     proxy::AnyOutboundHandler,
+    session::{Network, Session, SocksAddr, Type},
 };
 #[derive(Clone)]
 struct ProviderState {
@@ -216,6 +223,7 @@ pub fn rule_routes(router: ArcRouter) -> Router<Arc<AppState>> {
             get(get_rule_provider).put(update_rule_provider),
         )
         .route("/{provider_name}/rules", get(get_rule_provider_rules))
+        .route("/{provider_name}/match", get(match_rule_provider))
         .with_state(state)
 }
 
@@ -289,4 +297,54 @@ async fn get_rule_provider_rules(
         )
             .into_response(),
     }
+}
+
+#[derive(Deserialize)]
+struct MatchQuery {
+    target: String,
+}
+
+#[derive(Serialize)]
+struct MatchResponse {
+    #[serde(rename = "match")]
+    matched: bool,
+}
+
+async fn match_rule_provider(
+    State(state): State<RuleProviderState>,
+    Path(RuleProviderNamePath { provider_name }): Path<RuleProviderNamePath>,
+    Query(q): Query<MatchQuery>,
+) -> impl IntoResponse {
+    let Some(p) = state.router.get_rule_providers().get(&provider_name) else {
+        return (
+            StatusCode::NOT_FOUND,
+            format!("rule provider {provider_name} not found"),
+        )
+            .into_response();
+    };
+
+    let destination = match SocksAddr::from_str(&q.target) {
+        Ok(addr) => addr,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, "invalid target").into_response();
+        }
+    };
+
+    let sess = Session {
+        network: Network::Tcp,
+        typ: Type::Http,
+        source: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+        destination,
+        resolved_ip: None,
+        so_mark: None,
+        iface: None,
+        asn: None,
+        traffic_stats: None,
+        inbound_user: None,
+    };
+
+    axum::response::Json(MatchResponse {
+        matched: p.search(&sess),
+    })
+    .into_response()
 }

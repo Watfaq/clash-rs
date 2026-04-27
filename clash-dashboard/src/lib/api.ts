@@ -234,6 +234,8 @@ export const updateRuleProvider = (name: string) =>
   request<void>(`/providers/rules/${encodeURIComponent(name)}`, { method: 'PUT' });
 export const getRuleProviderRules = (name: string) =>
   request<{ rules: string[] }>(`/providers/rules/${encodeURIComponent(name)}/rules`);
+export const matchRuleProvider = (name: string, target: string) =>
+  request<{ match: boolean }>(`/providers/rules/${encodeURIComponent(name)}/match?target=${encodeURIComponent(target)}`);
 
 // Rules
 export const getRules = () => request<{ rules: Rule[] }>('/rules');
