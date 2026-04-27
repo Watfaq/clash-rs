@@ -13,7 +13,8 @@ impl TuicServerProcess {
     pub async fn start() -> anyhow::Result<Self> {
         // We use a channel to receive the actual bound port from the task.
         let (port_tx, port_rx) = oneshot::channel();
-        let (ready_tx, ready_rx) = oneshot::channel();
+
+        let (ready_tx, ready_rx) = oneshot::channel::<anyhow::Result<()>>();
 
         let handle = tokio::spawn(async move {
             let sock = std::net::UdpSocket::bind("127.0.0.1:0")
@@ -80,22 +81,24 @@ impl TuicServerProcess {
             });
             match tuic_server::server::Server::init(ctx).await {
                 Ok(server) => {
-                    let _ = ready_tx.send(());
+                    let _ = ready_tx.send(Ok(()));
                     server.start().await;
                 }
                 Err(e) => {
                     tracing::error!("tuic-server init failed: {e}");
-                    let _ = ready_tx.send(());
+                    let _ = ready_tx.send(Err(anyhow::anyhow!("{e}")));
                 }
             }
         });
 
+        // Wait for the server to be ready (or for init to fail).
         let port = tokio::time::timeout(Duration::from_secs(5), port_rx)
             .await
             .map_err(|_| anyhow::anyhow!("tuic-server failed to report a port"))?
-            .map_err(|_| anyhow::anyhow!("tuic-server task panicked before reporting port"))?;
+            .map_err(|_| {
+                anyhow::anyhow!("tuic-server task panicked before reporting port")
+            })?;
 
-        // Wait for the server to be ready
         tokio::time::timeout(Duration::from_secs(30), ready_rx)
             .await
             .map_err(|_| {
@@ -103,10 +106,7 @@ impl TuicServerProcess {
                     "tuic-server failed to start on port {port} within 30s"
                 )
             })?
-            .ok();
-
-        // Wait a brief moment for the socket to be fully bound
-        tokio::time::sleep(Duration::from_millis(100)).await;
+            .map_err(|e| anyhow::anyhow!("tuic-server init failed: {e}"))??;
 
         tracing::info!("tuic-server started on port {port}");
 
