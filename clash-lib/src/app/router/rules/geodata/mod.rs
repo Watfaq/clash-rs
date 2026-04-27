@@ -148,11 +148,11 @@ mod tests {
         let client = new_http_client(system_resolver, None)
             .map_err(|x| Error::DNSError(x.to_string()))
             .unwrap();
-        let out = tempfile::Builder::new().append(true).tempfile()?;
-        download(DEFAULT_GEOSITE_DOWNLOAD_URL, out.as_ref(), &client).await?;
-        let path = out.path().to_str().unwrap().to_owned();
+        let dir = tempfile::tempdir()?;
+        let out_path = dir.path().join("geosite.dat");
+        download(DEFAULT_GEOSITE_DOWNLOAD_URL, &out_path, &client).await?;
 
-        let loader = GeoData::from_file(path).await?;
+        let loader = GeoData::from_file(&out_path).await?;
 
         let suites = [
             TestSuite {

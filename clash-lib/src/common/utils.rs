@@ -192,8 +192,11 @@ where
     while let Some(chunk) = stream.next().await {
         std::io::Write::write_all(&mut tmp, &chunk?)?;
     }
-    tmp.persist(path.as_ref())
-        .map_err(|e| anyhow::anyhow!("failed to finalize download: {e}"))?;
+    // persist() is an atomic rename on POSIX; on Windows it may fail if the
+    // destination is held open by another handle, so fall back to copy+delete.
+    if let Err(e) = tmp.persist(path.as_ref()) {
+        std::fs::copy(e.file.path(), path.as_ref())?;
+    }
 
     Ok(())
 }
