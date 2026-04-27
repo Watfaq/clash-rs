@@ -109,7 +109,7 @@ impl EnhancedResolver {
             main: make_clients(
                 cfg.default_nameserver.clone(),
                 None,
-                outbounds.clone(),
+                Arc::new(RwLock::new(std::collections::HashMap::new())),
                 edns_client_subnet.clone(),
                 cfg.fw_mark,
             )
@@ -130,16 +130,24 @@ impl EnhancedResolver {
 
         let proxy_resolver =
             if let Some(proxy_resolver) = cfg.proxy_server_nameserver {
-                Some(
-                    make_clients(
-                        proxy_resolver,
-                        None,
-                        Arc::new(RwLock::new(std::collections::HashMap::new())),
-                        edns_client_subnet.clone(),
-                        cfg.fw_mark,
-                    )
-                    .await,
+                let clients = make_clients(
+                    proxy_resolver,
+                    Some(default_resolver.clone()),
+                    Arc::new(RwLock::new(std::collections::HashMap::new())),
+                    edns_client_subnet.clone(),
+                    cfg.fw_mark,
                 )
+                .await;
+                if clients.is_empty() {
+                    warn!(
+                        "no usable proxy-server-nameserver clients were \
+                         initialized; proxy server domain resolution will fall \
+                         back to the main nameservers"
+                    );
+                    None
+                } else {
+                    Some(clients)
+                }
             } else {
                 None
             };
@@ -305,6 +313,12 @@ impl EnhancedResolver {
         clients: &Vec<ThreadSafeDNSClient>,
         message: &op::Message,
     ) -> anyhow::Result<op::Message> {
+        if clients.is_empty() {
+            return Err(Error::DNSError(
+                "no DNS clients available for query".into(),
+            )
+            .into());
+        }
         let mut queries = Vec::new();
         for c in clients {
             queries.push(

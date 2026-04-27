@@ -16,7 +16,7 @@ docs:
 test-no-docker:
   CLASH_RS_CI=true cargo test --all --all-features
 
-verge:
+verge_win verge_path='C:\Apps\Clash Verge\verge-mihomo-alpha.exe':
   cargo build -p clash-rs --release --features=standard
-  rm -f "C:\Program Files\Clash Verge\verge-mihomo-alpha.exe"
-  cp target/release/clash-rs.exe "C:\Program Files\Clash Verge\verge-mihomo-alpha.exe"
+  rm -f "{{verge_path}}"
+  cp target/release/clash-rs.exe "{{verge_path}}"
