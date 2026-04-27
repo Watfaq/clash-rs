@@ -81,7 +81,6 @@ function IconBadge({ bg, children }: { bg: string; children: React.ReactNode }) 
 }
 
 
-const MODES_ALL = ['rule', 'global', 'direct'] as const;
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warning', 'error', 'silent'] as const;
 
 function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -313,11 +312,8 @@ export function Overview() {
       {cfg && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Mode & Logging */}
-            <EditSection title="Mode & Logging">
-              <EditRow label="Mode" icon={<Globe size={14} color="white" />} iconBg="#ff9500">
-                <SelectInput value={cfg.mode} options={MODES_ALL} onChange={(v) => patch({ mode: v })} />
-              </EditRow>
+            {/* Logging */}
+            <EditSection title="Logging">
               <EditRow label="Log Level" icon={<FileText size={14} color="white" />} iconBg="#8e8e93">
                 <SelectInput value={cfg['log-level']} options={LOG_LEVELS} onChange={(v) => patch({ 'log-level': v })} />
               </EditRow>
