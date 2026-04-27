@@ -173,7 +173,7 @@ arti-client = { version = "0.39", optional = true, default-features = false, fea
 tor-rtcompat = { version = "0.39", optional = true, default-features = false }
 
 # tuic
-tuic-core= { tag = "v1.6.7", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
+tuic-core= { tag = "v1.7.2", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }
 register-count = { version = "0.1", optional = true }
 
 quinn = { version = "0.11", default-features = false, features = ["futures-io", "runtime-tokio", "rustls"] }
@@ -222,7 +222,7 @@ http-body-util = "0.1"
 reqwest = { version = "0.13", features = ["socks"] }
 sysinfo = { version = "0.38", features = ["network"]}
 moka = { version = "0.12", features = ["future"] }
-tuic-server = { tag = "v1.6.7", git = "https://github.com/Itsusinn/tuic.git" }
+tuic-server = { tag = "v1.7.2", git = "https://github.com/Itsusinn/tuic.git" }
 
 [build-dependencies]
 prost-build = "0.14"
