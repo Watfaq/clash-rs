@@ -355,7 +355,12 @@ export function Overview() {
           {/* Active Listeners */}
           {cfg.listeners && cfg.listeners.length > 0 && (
             <EditSection title="Active Listeners">
-              {cfg.listeners.map((l) => (
+              {[...cfg.listeners]
+                .sort((a, b) => {
+                  if (a.active !== b.active) return a.active ? -1 : 1;
+                  return a.name.localeCompare(b.name);
+                })
+                .map((l) => (
                 <div key={l.name} className="flex items-center gap-3 px-4" style={{ minHeight: 52, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
                   <IconBadge bg={l.active ? '#34c759' : '#8e8e93'}>
                     <Server size={14} color="white" />

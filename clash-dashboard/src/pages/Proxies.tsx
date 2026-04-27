@@ -240,6 +240,11 @@ export function Proxies() {
                       className="p-4 border-t"
                       style={{ borderColor: 'rgba(0,0,0,0.06)' }}
                     >
+                      {!isSelector && (
+                        <p className="text-[11px] mb-3 px-0.5" style={{ color: '#8e8e93' }}>
+                          Auto-selected by latency — click to force override
+                        </p>
+                      )}
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {group.all?.map((proxyName) => {
                           const proxy = proxies[proxyName];
@@ -251,14 +256,8 @@ export function Proxies() {
                           return (
                             <button
                               key={proxyName}
-                              onClick={() => {
-                                if (isSelector) {
-                                  selectMutation.mutate({ group: group.name, proxy: proxyName });
-                                }
-                              }}
-                              className={`px-3 py-2.5 rounded-xl text-left border transition-all ${
-                                isSelector ? 'cursor-pointer' : 'cursor-default'
-                              }`}
+                              onClick={() => selectMutation.mutate({ group: group.name, proxy: proxyName })}
+                              className="px-3 py-2.5 rounded-xl text-left border transition-all"
                               style={
                                 isSelected
                                   ? { background: '#0071e3', borderColor: '#0071e3' }
