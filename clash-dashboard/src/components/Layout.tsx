@@ -34,7 +34,7 @@ export function Layout() {
         <div className="h-full max-w-5xl mx-auto px-4 flex items-center gap-3">
           {/* Logo — real clash-rs icon from public/favicon.svg */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <img src="/favicon.svg" alt="clash-rs" className="w-7 h-7" />
+            <img src="/logo.png" alt="clash-rs" className="w-7 h-7 rounded-lg" />
             <span className="font-semibold text-[15px] hidden sm:inline" style={{ color: '#1d1d1f' }}>
               clash-rs
             </span>
