@@ -88,8 +88,11 @@ fn build_dashboard() -> anyhow::Result<()> {
         );
     }
 
+    // On Windows npm is a .cmd script, not a binary.
+    let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+
     // Run `npm ci` to install dependencies (no-op if already up to date).
-    let status = match std::process::Command::new("npm")
+    let status = match std::process::Command::new(npm)
         .args(["ci", "--prefer-offline"])
         .current_dir(&dashboard_dir)
         .status()
@@ -113,7 +116,7 @@ fn build_dashboard() -> anyhow::Result<()> {
     }
 
     // Run `npm run build`.
-    let status = std::process::Command::new("npm")
+    let status = std::process::Command::new(npm)
         .args(["run", "build"])
         .current_dir(&dashboard_dir)
         .status()
