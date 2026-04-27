@@ -199,7 +199,8 @@ impl OutboundManager {
         r
     }
 
-    /// Get only group proxies (Selector, URLTest, Fallback, LoadBalance, Relay, Smart).
+    /// Get only group proxies (Selector, URLTest, Fallback, LoadBalance, Relay,
+    /// Smart).
     pub async fn get_groups(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
