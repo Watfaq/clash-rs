@@ -77,6 +77,7 @@ export interface Connection {
     processPath?: string;
     remoteDestination?: string;
     sniffHost?: string;
+    asn?: string;
   };
   upload: number;
   download: number;

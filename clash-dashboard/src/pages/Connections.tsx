@@ -44,7 +44,8 @@ export function Connections() {
       !q ||
       (conn.metadata.host || '').toLowerCase().includes(q) ||
       conn.rule.toLowerCase().includes(q) ||
-      conn.chains?.join(' ').toLowerCase().includes(q)
+      conn.chains?.join(' ').toLowerCase().includes(q) ||
+      (conn.metadata.asn || '').toLowerCase().includes(q)
     );
   });
 
@@ -161,8 +162,19 @@ export function Connections() {
                       {conn.metadata.host || conn.metadata.destinationIP}
                       {conn.metadata.destinationPort && `:${conn.metadata.destinationPort}`}
                     </div>
-                    {conn.metadata.process && (
+                    {conn.metadata.asn && (
+                      <div
+                        className="inline-block mt-0.5 text-[11px] font-medium px-1.5 py-0.5 rounded-md truncate max-w-full"
+                        style={{ background: 'rgba(0,113,227,0.08)', color: '#0071e3' }}
+                      >
+                        {conn.metadata.asn}
+                      </div>
+                    )}
+                    {conn.metadata.process && !conn.metadata.asn && (
                       <div className="text-[13px] truncate" style={{ color: '#6e6e73' }}>{conn.metadata.process}</div>
+                    )}
+                    {conn.metadata.process && conn.metadata.asn && (
+                      <div className="text-[11px] truncate" style={{ color: '#8e8e93' }}>{conn.metadata.process}</div>
                     )}
                   </td>
                   <td className="px-4 py-3 font-mono whitespace-nowrap text-[13px]" style={{ color: '#8e8e93' }}>
