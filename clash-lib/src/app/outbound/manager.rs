@@ -49,12 +49,7 @@ use crate::{
 use anyhow::Result;
 use erased_serde::Serialize;
 use hyper::Uri;
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
