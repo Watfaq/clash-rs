@@ -383,7 +383,7 @@ mod tests {
             name: "test-vless-ws".into(),
             common_opts: Default::default(),
             server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
-            port: 8443,
+            port: runner.server_port(8443),
             uuid: "b831381d-6324-4d53-ad4f-8cda48b30811".into(),
             udp: true,
             tls: tls_client(None),

@@ -878,7 +878,7 @@ mod tests {
             name: "test-anytls".to_owned(),
             common_opts: Default::default(),
             server: runner.container_ip().unwrap_or(LOCAL_ADDR.to_owned()),
-            port: 10002,
+            port: runner.server_port(10002),
             password: "example".to_owned(),
             udp: true,
             tls: Some(Box::new(tls)),

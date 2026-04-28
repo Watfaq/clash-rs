@@ -773,7 +773,7 @@ mod tests {
 
         let ip = IpAddr::from_str(&container_ip)
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-        let port = 10002;
+        let port = container.server_port(10002);
 
         let obfs = Some(Obfs::Salamander(SalamanderObfs {
             key: "beauty will save the world".to_owned().into(),

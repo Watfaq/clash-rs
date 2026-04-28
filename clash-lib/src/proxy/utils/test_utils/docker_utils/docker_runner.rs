@@ -264,6 +264,19 @@ impl DockerTestRunner {
         self.host_port
     }
 
+    /// Returns the correct port to use in the proxy handler configuration.
+    ///
+    /// When `container_ip()` returns a real IP (local Docker), use the
+    /// container's internal port.  When it returns `None` (macOS + colima),
+    /// use the host-side published port that Lima forwards to the container.
+    pub fn server_port(&self, container_port: u16) -> u16 {
+        if self.container_ip().is_some() {
+            container_port
+        } else {
+            self.host_port
+        }
+    }
+
     /// For debugging use
     #[allow(dead_code)]
     pub async fn exec_command(&self, cmd: &[&str]) -> anyhow::Result<String> {
