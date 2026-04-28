@@ -945,6 +945,7 @@ impl OutboundManager {
             let p = p.write().await;
             if let Err(err) = p.initialize().await {
                 error!("failed to initialize proxy provider {}: {}", name, err);
+                continue;
             }
             info!("initialized provider {}", name);
         }
