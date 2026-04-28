@@ -12,7 +12,7 @@ members = [
 
 
 [workspace.package]
-version = "0.9.7"
+version = "0.10.1"
 repository = "https://github.com/Watfaq/clash-rs.git"
 edition = "2024"
 authors = ["https://github.com/Watfaq/clash-rs/graphs/contributors"]
@@ -26,8 +26,20 @@ strip = true
 debug = 0
 panic = "abort"
 
+[profile.detailed-release]
+inherits = "release"
+opt-level = 1
+lto = "thin"
+strip = "none"
+debug = "line-tables-only"
+split-debuginfo = "off"
+panic = "unwind"
+incremental = true
+codegen-units = 256
+
 [workspace.lints.rust]
 warnings = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docker_test)', 'cfg(throughput_test)', 'cfg(tokio_unstable)'] }
 
 [workspace.lints.clippy]
 redundant_clone = "deny"

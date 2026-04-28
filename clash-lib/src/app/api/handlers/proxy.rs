@@ -14,7 +14,11 @@ use serde::Deserialize;
 
 use crate::{
     app::{
-        api::AppState, outbound::manager::ThreadSafeOutboundManager,
+        api::{
+            AppState,
+            handlers::utils::{DelayRequest, group_url_test},
+        },
+        outbound::manager::ThreadSafeOutboundManager,
         profile::ThreadSafeCacheFile,
     },
     proxy::AnyOutboundHandler,
@@ -122,11 +126,6 @@ async fn update_proxy(
     }
 }
 
-#[derive(Deserialize)]
-struct DelayRequest {
-    url: String,
-    timeout: u16,
-}
 async fn get_proxy_delay(
     State(state): State<ProxyState>,
     Extension(proxy): Extension<AnyOutboundHandler>,
@@ -134,27 +133,18 @@ async fn get_proxy_delay(
 ) -> impl IntoResponse {
     let outbound_manager = state.outbound_manager.clone();
     let timeout = Duration::from_millis(q.timeout.into());
-    let n = proxy.name().to_owned();
+    let name = proxy.name().to_owned();
     let mut headers = HeaderMap::new();
     headers.insert(header::CONNECTION, "close".parse().unwrap());
 
-    let (actual, overall) = if let Some(group) = proxy.try_as_group_handler() {
-        let latency_test_url = group.get_latency_test_url();
-        let proxies = group.get_proxies().await;
-        let results = outbound_manager
-            .url_test(
-                &[vec![proxy], proxies].concat(),
-                &latency_test_url.unwrap_or(q.url),
-                timeout,
-            )
-            .await;
-        match results.first().unwrap() {
-            Ok(latency) => *latency,
+    let (actual, overall) = if proxy.try_as_group_handler().is_some() {
+        match group_url_test(&outbound_manager, proxy, &q.url, timeout).await {
+            Ok(latency) => latency,
             Err(err) => {
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {n} failed with error: {err}"),
+                    format!("get delay for {name} failed with error: {err}"),
                 )
                     .into_response();
             }
@@ -163,13 +153,13 @@ async fn get_proxy_delay(
         let result = outbound_manager
             .url_test(&vec![proxy], &q.url, timeout)
             .await;
-        match result.first().unwrap() {
+        match result.first().expect("there must be at least one proxy") {
             Ok(latency) => *latency,
             Err(err) => {
                 return (
                     StatusCode::BAD_REQUEST,
                     headers,
-                    format!("get delay for {n} failed with error: {err}"),
+                    format!("get delay for {name} failed with error: {err}"),
                 )
                     .into_response();
             }

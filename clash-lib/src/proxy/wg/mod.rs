@@ -154,14 +154,10 @@ impl Handler {
                         keepalive_seconds: Some(10),
                         allowed_ips,
                         reserved_bits: match &self.opts.reserved_bits {
-                            Some(bits) => {
-                                if bits.len() >= 3 {
-                                    [bits[0], bits[1], bits[2]]
-                                } else {
-                                    [0, 0, 0]
-                                }
+                            Some(bits) if bits.len() >= 3 => {
+                                [bits[0], bits[1], bits[2]]
                             }
-                            None => [0, 0, 0],
+                            _ => [0, 0, 0],
                         },
                     },
                     recv_pair.0,
@@ -229,6 +225,10 @@ impl Handler {
 impl OutboundHandler for Handler {
     fn name(&self) -> &str {
         &self.opts.name
+    }
+
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
     }
 
     fn proto(&self) -> OutboundType {
@@ -316,17 +316,12 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         m.insert(
             "public-key".to_owned(),
             Box::new(self.opts.public_key.clone()) as _,
         );
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
-        }
         m
     }
 }
@@ -337,8 +332,9 @@ mod tests {
     use crate::proxy::utils::{
         GLOBAL_DIRECT_CONNECTOR,
         test_utils::{
-            Suite, config_helper::test_config_base_dir,
-            docker_runner::DockerTestRunnerBuilder,
+            Suite,
+            config_helper::test_config_base_dir,
+            docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
         },
     };
 
@@ -353,10 +349,10 @@ mod tests {
     // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
     // we shouldn't run the wireguard server with host mode, or
     // the sysctl of `net.ipv4.conf.all.src_valid_mark` will fail
-    async fn get_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let wg_config = test_config_dir.join("wg_config");
-        // the following configs is in accordance with the config in `wg_config`
+        let wg_config = test_config_dir.join("wg");
+        // the following configs is in accordance with the config in `wg`
         // dir
         DockerTestRunnerBuilder::new()
             .image(IMAGE_WG)
@@ -375,16 +371,17 @@ mod tests {
             .sysctls(&[("net.ipv4.conf.all.src_valid_mark", "1")])
             .cap_add(&["NET_ADMIN"])
             .net_mode("bridge") // the default network mode for testing is `host`
+            .host_port(host_port, 10002)
             .build()
             .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_wg() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let runner = get_runner().await?;
+        let runner = get_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "wg".to_owned(),

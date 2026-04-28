@@ -141,11 +141,6 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
             .get("mode")
             .and_then(|x| x.as_str())
             .ok_or(Error::InvalidConfig("obfs mode is required".to_owned()))?;
-        let port = value
-            .get("port")
-            .and_then(|x| x.as_u64())
-            .ok_or(Error::InvalidConfig("obfs port is required".to_owned()))?
-            as u16;
 
         if mode != "websocket" {
             return Err(Error::InvalidConfig(format!("invalid obfs mode: {mode}")));
@@ -154,6 +149,14 @@ impl TryFrom<HashMap<String, serde_yaml::Value>> for V2RayOBFSOption {
         let path = value.get("path").and_then(|x| x.as_str()).unwrap_or("");
         let mux = value.get("mux").and_then(|x| x.as_bool()).unwrap_or(false);
         let tls = value.get("tls").and_then(|x| x.as_bool()).unwrap_or(false);
+        // port is optional in plugin-opts; real Clash configs omit it and rely
+        // on the main proxy port for the actual TCP connection. The value here
+        // is only used for the WebSocket HTTP Upgrade Host header, so default
+        // to the standard port for the chosen scheme.
+        let port = value
+            .get("port")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(if tls { 443 } else { 80 }) as u16;
         let skip_cert_verify = value
             .get("skip-cert-verify")
             .and_then(|x| x.as_bool())

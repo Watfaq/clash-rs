@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-
+use futures::Stream;
 use log::debug;
 use smoltcp::wire::IpProtocol;
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -12,6 +16,20 @@ use crate::{
     packet::IpPacket,
     tcp_listener::{TcpListener, TcpStreamHandle},
 };
+
+/// Thin `Stream` wrapper around a bounded `mpsc::Receiver`.
+struct ReceiverStream(mpsc::Receiver<Packet>);
+
+impl Stream for ReceiverStream {
+    type Item = Packet;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.0.poll_recv(cx)
+    }
+}
 
 pub(crate) enum IfaceEvent<'a> {
     Icmp, // ICMP packet received
@@ -45,7 +63,8 @@ pub struct NetStack {
     tcp_inbound: mpsc::UnboundedSender<Packet>,
 
     // outside poll this to receive packets from the stack
-    packet_outbound: mpsc::Receiver<Packet>,
+    tcp_outbound: mpsc::Receiver<Packet>,
+    udp_outbound: mpsc::Receiver<Packet>,
 }
 
 pub struct Packet {
@@ -82,22 +101,28 @@ impl NetStack {
         crate::tcp_listener::TcpListener,
         crate::udp_socket::UdpSocket,
     ) {
-        let (packet_sender, packet_receiver) = mpsc::channel::<Packet>(1024);
+        let (tcp_packet_sender, tcp_packet_receiver) = mpsc::channel::<Packet>(4096);
+        // UDP uses a separate bounded channel.  UDP is inherently lossy so
+        // drop-on-full (via try_send) is correct; the bound prevents unbounded
+        // memory growth if a remote floods responses faster than the consumer
+        // can drain them.
+        let (udp_packet_sender, udp_packet_receiver) = mpsc::channel::<Packet>(4096);
 
         let (udp_inbound_app, udp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();
 
         // this UdpSocket is essentially an Iface for UDP but much simpler as it only
         // does packets forwarding
-        let udp_socket = UdpSocket::new(udp_outbound_stack, packet_sender.clone());
+        let udp_socket = UdpSocket::new(udp_outbound_stack, udp_packet_sender);
         let (tcp_inbound_app, tcp_outbound_stack) =
             mpsc::unbounded_channel::<Packet>();
-        let tcp_listener = TcpListener::new(tcp_outbound_stack, packet_sender);
+        let tcp_listener = TcpListener::new(tcp_outbound_stack, tcp_packet_sender);
 
         let stack = NetStack {
             udp_inbound: udp_inbound_app,
             tcp_inbound: tcp_inbound_app,
-            packet_outbound: packet_receiver,
+            tcp_outbound: tcp_packet_receiver,
+            udp_outbound: udp_packet_receiver,
         };
 
         (stack, tcp_listener, udp_socket)
@@ -106,7 +131,7 @@ impl NetStack {
     pub fn split(self) -> (StackSplitSink, StackSplitStream) {
         (
             StackSplitSink::new(self.udp_inbound, self.tcp_inbound),
-            StackSplitStream::new(self.packet_outbound),
+            StackSplitStream::new(self.tcp_outbound, self.udp_outbound),
         )
     }
 }
@@ -211,11 +236,19 @@ impl futures::Sink<Packet> for StackSplitSink {
 }
 
 pub struct StackSplitStream {
-    packet_outbound: mpsc::Receiver<Packet>,
+    inner: futures::stream::Select<ReceiverStream, ReceiverStream>,
 }
 impl StackSplitStream {
-    pub fn new(packet_outbound: mpsc::Receiver<Packet>) -> Self {
-        Self { packet_outbound }
+    pub fn new(
+        tcp_outbound: mpsc::Receiver<Packet>,
+        udp_outbound: mpsc::Receiver<Packet>,
+    ) -> Self {
+        Self {
+            inner: futures::stream::select(
+                ReceiverStream(tcp_outbound),
+                ReceiverStream(udp_outbound),
+            ),
+        }
     }
 }
 impl futures::Stream for StackSplitStream {
@@ -225,18 +258,12 @@ impl futures::Stream for StackSplitStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        match self.packet_outbound.poll_recv(cx) {
-            std::task::Poll::Ready(Some(packet)) => {
+        use futures::StreamExt;
+        self.inner.poll_next_unpin(cx).map(|opt| {
+            opt.map(|packet| {
                 trace_ip_packet("tun reply packet", packet.data());
-                std::task::Poll::Ready(Some(Ok(packet)))
-            }
-            std::task::Poll::Ready(None) => {
-                std::task::Poll::Ready(Some(Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    "Tun stream closed",
-                ))))
-            }
-            std::task::Poll::Pending => std::task::Poll::Pending,
-        }
+                Ok(packet)
+            })
+        })
     }
 }

@@ -277,8 +277,6 @@ async fn patch_configs(
         }
     }
 
-    let mut global_state = state.global_state.lock().await;
-
     if payload.rebuild_listeners() {
         let ports = Ports {
             port: payload.port,
@@ -287,32 +285,39 @@ async fn patch_configs(
             tproxy_port: payload.tproxy_port,
             mixed_port: payload.mixed_port,
         };
-        inbound_manager.change_ports(ports).await;
-        need_restart = true;
+        let changed = inbound_manager.change_ports(ports).await;
+        need_restart |= changed;
     }
 
     if let Some(allow_lan) = payload.allow_lan
         && allow_lan != inbound_manager.get_allow_lan().await
     {
         inbound_manager.set_allow_lan(allow_lan).await;
-        // TODO: can be done with AtomicBool, but requires more changes
+        // TODO: can be done with AtomicBool in each inbound manager, but requires
+        // more changes
         need_restart = true;
+    }
+
+    // Apply mode change before restarting listeners so that new connections
+    // established after the restart immediately use the updated mode.
+    if let Some(mode) = payload.mode {
+        state.dispatcher.set_mode(mode).await;
     }
 
     if need_restart {
         let _ = inbound_manager.restart().await;
     }
 
-    if let Some(mode) = payload.mode {
-        state.dispatcher.set_mode(mode).await;
-    }
-
-    if let Some(log_level) = payload.log_level {
-        global_state.log_level = log_level;
-    }
-
     if let Some(ipv6) = payload.ipv6 {
         state.dns_resolver.set_ipv6(ipv6);
+    }
+
+    // Only lock global_state for the small section that actually needs it.
+    // Holding it across inbound_manager.restart() (which can be slow) was
+    // blocking concurrent GET /configs requests unnecessarily.
+    if let Some(log_level) = payload.log_level {
+        let mut global_state = state.global_state.lock().await;
+        global_state.log_level = log_level;
     }
 
     StatusCode::ACCEPTED.into_response()

@@ -59,6 +59,7 @@ pub struct Config {
     pub listen: DNSListenAddr,
     pub enhance_mode: DNSMode,
     pub default_nameserver: Vec<NameServer>,
+    pub proxy_server_nameserver: Option<Vec<NameServer>>,
     pub fake_ip_range: ipnet::IpNet,
     pub fake_ip_filter: Vec<String>,
     pub store_fake_ip: bool,
@@ -313,6 +314,21 @@ impl TryFrom<&crate::config::def::Config> for Config {
             }
         }
 
+        // Domain hostnames are allowed here: they are bootstrapped through
+        // `default-nameserver` at client-construction time, mirroring how
+        // `nameserver` resolves its own DoH/DoT hosts.
+        let proxy_server_nameserver = if !dc.proxy_server_nameserver.is_empty() {
+            let ns = Config::parse_nameserver(&dc.proxy_server_nameserver)?;
+            if ns.is_empty() {
+                return Err(Error::InvalidConfig(String::from(
+                    "proxy-server-nameserver has no usable entries (all skipped)",
+                )));
+            }
+            Some(ns)
+        } else {
+            None
+        };
+
         let edns_client_subnet = dc
             .edns_client_subnet
             .as_ref()
@@ -419,13 +435,14 @@ impl TryFrom<&crate::config::def::Config> for Config {
                 .unwrap_or_default(),
             enhance_mode: dc.enhanced_mode.clone(),
             default_nameserver,
+            proxy_server_nameserver,
             fake_ip_range: dc.fake_ip_range.parse::<ipnet::IpNet>().map_err(
                 |_| Error::InvalidConfig(String::from("invalid fake ip range")),
             )?,
             fake_ip_filter: dc.fake_ip_filter.clone(),
             store_fake_ip: c.profile.store_fake_ip,
             store_smart_stats: c.profile.store_smart_stats,
-            hosts: if dc.user_hosts && !c.hosts.is_empty() {
+            hosts: if dc.use_hosts && !c.hosts.is_empty() {
                 Config::parse_hosts(&c.hosts).ok()
             } else {
                 let mut tree = trie::StringTrie::new();

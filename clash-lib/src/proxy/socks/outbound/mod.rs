@@ -148,6 +148,10 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
+    }
+
     fn proto(&self) -> OutboundType {
         OutboundType::Socks5
     }
@@ -263,8 +267,6 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         if let Some(username) = self.opts.user.as_ref() {
@@ -272,9 +274,6 @@ impl PlainProxyAPIResponse for Handler {
         }
         if let Some(password) = self.opts.password.as_ref() {
             m.insert("password".to_owned(), Box::new(password.clone()) as _);
-        }
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
         }
         if self.opts.tls_client.is_some() {
             m.insert("tls".to_owned(), Box::new(true) as _);
@@ -286,7 +285,7 @@ impl PlainProxyAPIResponse for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::sync::Arc;
+    use std::{io::Write, sync::Arc};
 
     use crate::{
         proxy::{
@@ -296,7 +295,9 @@ mod tests {
                 test_utils::{
                     Suite,
                     consts::{IMAGE_SOCKS5, LOCAL_ADDR},
-                    docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                    docker_runner::{
+                        DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                    },
                     run_test_suites_and_cleanup,
                 },
             },
@@ -304,24 +305,82 @@ mod tests {
         tests::initialize,
     };
 
-    use super::super::super::utils::test_utils::docker_utils::config_helper::test_config_base_dir;
-
     const USER: &str = "user";
     const PASSWORD: &str = "password";
 
-    async fn get_socks5_runner(auth: bool) -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = if auth {
-            test_config_dir.join("socks5-auth.json")
+    const SOCKS5_NOAUTH_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "noauth",
+                "udp": true,
+                "ip": "0.0.0.0"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
+
+    const SOCKS5_AUTH_SERVER_CONFIG: &str = r#"{
+    "log": {
+        "loglevel": "debug"
+    },
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "socks",
+            "settings": {
+                "auth": "password",
+                "accounts": [
+                    {
+                        "user": "user",
+                        "pass": "password"
+                    }
+                ],
+                "udp": true,
+                "ip": "0.0.0.0"
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ]
+}"#;
+
+    async fn get_socks5_runner(
+        auth: bool,
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let config = if auth {
+            SOCKS5_AUTH_SERVER_CONFIG
         } else {
-            test_config_dir.join("socks5-noauth.json")
+            SOCKS5_NOAUTH_SERVER_CONFIG
         };
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(config.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SOCKS5)
-            .mounts(&[(conf.to_str().unwrap(), "/etc/v2ray/config.json")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/v2ray/config.json")])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     fn server_addr(runner: &DockerTestRunner) -> String {
@@ -329,11 +388,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_socks5_no_auth() -> anyhow::Result<()> {
         initialize();
-        let port = 10002;
-        let runner = get_socks5_runner(false).await?;
+        let host_port = alloc_docker_port();
+        let port = 10002_u16;
+        let runner = get_socks5_runner(false, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-no-auth".to_owned(),
             common_opts: Default::default(),
@@ -349,12 +408,12 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_socks5_auth() -> anyhow::Result<()> {
         use crate::proxy::DialWithConnector;
         initialize();
-        let port = 10002;
-        let runner = get_socks5_runner(true).await?;
+        let host_port = alloc_docker_port();
+        let port = 10002_u16;
+        let runner = get_socks5_runner(true, host_port).await?;
         let opts = HandlerOptions {
             name: "test-socks5-auth".to_owned(),
             common_opts: Default::default(),
@@ -370,5 +429,197 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    const SOCKS5_NOAUTH_SERVER_CONFIG: &str = r#"{
+    "log": {"loglevel": "debug"},
+    "inbounds": [{
+        "port": 10002,
+        "listen": "0.0.0.0",
+        "protocol": "socks",
+        "settings": {"auth": "noauth", "udp": true, "ip": "0.0.0.0"}
+    }],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
+    async fn get_socks5_noauth_runner() -> anyhow::Result<DockerTestRunner> {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SOCKS5_NOAUTH_SERVER_CONFIG.as_bytes())?;
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SOCKS5)
+            .no_port()
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/v2ray/config.json")])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    const SOCKS5_AUTH_SERVER_CONFIG: &str = r#"{
+    "log": {"loglevel": "debug"},
+    "inbounds": [{
+        "port": 10002,
+        "listen": "0.0.0.0",
+        "protocol": "socks",
+        "settings": {
+            "auth": "password",
+            "accounts": [{"user": "user", "pass": "password"}],
+            "udp": true,
+            "ip": "0.0.0.0"
+        }
+    }],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
+    async fn get_socks5_auth_runner() -> anyhow::Result<DockerTestRunner> {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SOCKS5_AUTH_SERVER_CONFIG.as_bytes())?;
+        // Keep tmp alive until the container is built
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SOCKS5)
+            .no_port()
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/v2ray/config.json")])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_socks5_noauth() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_socks5_noauth_runner().await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("socks5 container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: socks5
+    server: {server}
+    port: {port}
+    udp: false
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "socks5-noauth",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_socks5_auth() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_socks5_auth_runner().await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("socks5 container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: socks5
+    server: {server}
+    port: {port}
+    username: user
+    password: password
+    udp: false
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "socks5-auth",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

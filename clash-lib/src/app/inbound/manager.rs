@@ -527,7 +527,8 @@ impl InboundManager {
         *guard = new_map;
     }
 
-    pub async fn change_ports(&self, ports: Ports) {
+    // returns true if any listener ports were changed (i.e. a restart is needed)
+    pub async fn change_ports(&self, ports: Ports) -> bool {
         let mut guard = self.inbound_handlers.write().await;
 
         let listeners: HashMap<InboundOpts, Option<_>> = guard
@@ -557,29 +558,39 @@ impl InboundManager {
             })
             .collect();
 
-        for (mut opts, handle) in listeners {
-            opts.common_opts_mut().port = match &opts {
-                InboundOpts::Http { common_opts } => {
-                    ports.port.unwrap_or(common_opts.port)
-                }
-                InboundOpts::Socks { common_opts, .. } => {
-                    ports.socks_port.unwrap_or(common_opts.port)
-                }
-                InboundOpts::Mixed { common_opts, .. } => {
-                    ports.mixed_port.unwrap_or(common_opts.port)
-                }
-                #[cfg(feature = "tproxy")]
-                InboundOpts::TProxy { common_opts, .. } => {
-                    ports.tproxy_port.unwrap_or(common_opts.port)
-                }
-                #[cfg(feature = "redir")]
-                InboundOpts::Redir { common_opts } => {
-                    ports.redir_port.unwrap_or(common_opts.port)
-                }
-                _ => continue,
-            };
+        let changed = !listeners.is_empty();
 
+        for (mut opts, handle) in listeners {
+            // extract_if already guarantees the matching port field is Some.
+            // Use a plain match + if-let (stable) rather than if-let guards
+            // in match arms (which require the nightly `if_let_guard` feature).
+            let new_port = match &opts {
+                InboundOpts::Http { .. } => ports.port,
+                InboundOpts::Socks { .. } => ports.socks_port,
+                InboundOpts::Mixed { .. } => ports.mixed_port,
+                #[cfg(feature = "tproxy")]
+                InboundOpts::TProxy { .. } => ports.tproxy_port,
+                #[cfg(feature = "redir")]
+                InboundOpts::Redir { .. } => ports.redir_port,
+                _ => {
+                    warn!(
+                        "Port for listener '{}' is not changed",
+                        opts.common_opts().name
+                    );
+                    continue;
+                }
+            };
+            let Some(port) = new_port else {
+                warn!(
+                    "Port for listener '{}' is not changed",
+                    opts.common_opts().name
+                );
+                continue;
+            };
+            opts.common_opts_mut().port = port;
             guard.insert(opts, handle);
         }
+
+        changed
     }
 }

@@ -551,9 +551,9 @@ pub struct DNS {
     pub enable: bool,
     /// When false, response to AAAA questions will be empty
     pub ipv6: bool,
-    /// Whether to `Config::hosts` as when resolving hostnames
+    /// Whether to use `Config::hosts` when resolving hostnames
     #[educe(Default = true)]
-    pub user_hosts: bool,
+    pub use_hosts: bool,
     /// DNS servers
     pub nameserver: Vec<String>,
     /// Fallback DNS servers
@@ -576,6 +576,8 @@ pub struct DNS {
       String::from("8.8.8.8")]
     )]
     pub default_nameserver: Vec<String>,
+    /// Proxy server nameservers, used to resolve proxy server hostnames
+    pub proxy_server_nameserver: Vec<String>,
     /// Lookup domains via specific nameservers
     pub nameserver_policy: HashMap<String, String>,
     /// Configure EDNS Client Subnet information to send with upstream queries

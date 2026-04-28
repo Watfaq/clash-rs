@@ -142,6 +142,10 @@ impl OutboundHandler for Handler {
         &self.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.addr)
+    }
+
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value
     fn proto(&self) -> OutboundType {
@@ -219,8 +223,6 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.addr.clone()) as _);
         m.insert(
             "server-name".to_owned(),
@@ -264,6 +266,8 @@ fn to_clash_socks_addr(x: SQAddr) -> SocksAddr {
 #[cfg(all(test, docker_test))]
 mod tests {
 
+    use std::{io::Write, sync::Arc};
+
     use super::super::utils::test_utils::{
         consts::*, docker_runner::DockerTestRunner,
     };
@@ -271,36 +275,58 @@ mod tests {
         proxy::utils::{
             GLOBAL_DIRECT_CONNECTOR,
             test_utils::{
-                Suite, config_helper::test_config_base_dir,
-                docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+                Suite,
+                docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
-    use std::sync::Arc;
 
     use super::*;
-    async fn get_shadowquic_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("shadowquic.yaml");
 
-        DockerTestRunnerBuilder::new()
+    const SHADOWQUIC_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+outbound:
+    type: direct
+log-level: "trace"
+"#;
+
+    async fn get_shadowquic_runner(
+        host_port: u16,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_SHADOWQUIC)
-            .mounts(&[(conf.to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
-
-    const PORT: u16 = 10002;
 
     fn gen_options(
         opt_ip: Option<String>,
+        host_port: u16,
         over_stream: bool,
     ) -> anyhow::Result<HandlerOptions> {
+        let port = if opt_ip.is_some() { 10002 } else { host_port };
         Ok(HandlerOptions {
             addr: SocketAddr::new(
                 opt_ip.unwrap_or(LOCAL_ADDR.to_owned()).parse().unwrap(),
-                PORT,
+                port,
             )
             .to_string(),
             password: "12345678".into(),
@@ -315,15 +341,15 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
 
-        let container = get_shadowquic_runner().await?;
+        let container = get_shadowquic_runner(host_port).await?;
 
         let container_ip = container.container_ip();
 
-        let opts = gen_options(container_ip, false)?;
+        let opts = gen_options(container_ip, host_port, false)?;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
         handler
@@ -332,14 +358,14 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
-        let container = get_shadowquic_runner().await?;
+        let host_port = alloc_docker_port();
+        let container = get_shadowquic_runner(host_port).await?;
 
         let container_ip = container.container_ip();
 
-        let mut opts = gen_options(container_ip, true)?;
+        let mut opts = gen_options(container_ip, host_port, true)?;
         opts.over_stream = true;
 
         let handler = Arc::new(Handler::new("test-shadowquic".into(), opts));
@@ -347,5 +373,273 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::io::Write as _;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    // Inlined from shadowquic.yaml
+    const SHADOWQUIC_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+outbound:
+    type: direct
+log-level: "info"
+"#;
+
+    // Note: over-stream is a client-side setting; the server auto-detects the
+    // mode, so we use the same server config as for plain shadowquic.
+    const SHADOWQUIC_OVER_STREAM_SERVER_CONFIG: &str = r#"inbound:
+    type: shadowquic
+    bind-addr: 0.0.0.0:10002
+    users:
+      - password: "12345678"
+        username: "87654321"
+    jls-upstream:
+        addr: "echo.free.beeceptor.com:443"
+    alpn: ["h3"]
+    congestion-control: bbr
+    zero-rtt: true
+outbound:
+    type: direct
+log-level: "info"
+"#;
+
+    async fn get_shadowquic_runner() -> anyhow::Result<DockerTestRunner> {
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOWQUIC)
+            .no_port()
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_shadowquic_plain() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_shadowquic_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: shadowquic
+    server: {server}
+    port: {port}
+    password: "12345678"
+    username: "87654321"
+    server-name: echo.free.beeceptor.com
+    alpn:
+      - h3
+    zero-rtt: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "shadowquic-plain",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_shadowquic_plain_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_shadowquic_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: shadowquic
+    server: {server}
+    port: {port}
+    password: "12345678"
+    username: "87654321"
+    server-name: echo.free.beeceptor.com
+    alpn:
+      - h3
+    zero-rtt: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "shadowquic-plain-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    async fn get_shadowquic_over_stream_runner() -> anyhow::Result<DockerTestRunner>
+    {
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(SHADOWQUIC_OVER_STREAM_SERVER_CONFIG.as_bytes())?;
+
+        let runner = DockerTestRunnerBuilder::new()
+            .image(IMAGE_SHADOWQUIC)
+            .no_port()
+            .mounts(&[(tmp.path().to_str().unwrap(), "/etc/shadowquic/config.yaml")])
+            .build()
+            .await?;
+        drop(tmp);
+        Ok(runner)
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_shadowquic_over_stream() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_shadowquic_over_stream_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: shadowquic
+    server: {server}
+    port: {port}
+    password: "12345678"
+    username: "87654321"
+    server-name: echo.free.beeceptor.com
+    alpn:
+      - h3
+    zero-rtt: true
+    over-stream: true
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = CONTAINER_PORT,
+        );
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "shadowquic-over-stream",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

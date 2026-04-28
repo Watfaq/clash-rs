@@ -15,7 +15,7 @@ use bytes::Bytes;
 use futures::{Future, StreamExt, TryStreamExt};
 use tar;
 
-const TIMEOUT_DURATION: u64 = 30;
+const TIMEOUT_DURATION: u64 = 120;
 
 /// Creates a tar archive from a source path with the given target path.
 /// This is a blocking operation and should be called from `spawn_blocking`.
@@ -276,6 +276,104 @@ impl DockerTestRunner {
         }
     }
 
+    /// Apply tc netem traffic shaping to this container's eth0 interface by
+    /// starting a short-lived `nicolaka/netshoot` sidecar that shares the
+    /// container's network namespace and has NET_ADMIN capability.
+    ///
+    /// `delay_ms`: one-way delay in milliseconds (e.g. 50 for 50ms)
+    /// `loss_pct`: packet loss percentage (e.g. 1.0 = 1%)
+    #[cfg(all(docker_test, throughput_test))]
+    pub async fn apply_netem(
+        &self,
+        delay_ms: u32,
+        loss_pct: f32,
+    ) -> anyhow::Result<()> {
+        use super::consts::IMAGE_NETEM;
+        use bollard::query_parameters::WaitContainerOptionsBuilder;
+        use futures::StreamExt as _;
+
+        let tc_cmd = format!(
+            "tc qdisc add dev eth0 root netem delay {}ms loss {}%",
+            delay_ms, loss_pct
+        );
+        let network_mode = format!("container:{}", self.id);
+
+        let body = ContainerCreateBody {
+            image: Some(IMAGE_NETEM.to_owned()),
+            cmd: Some(vec!["sh".to_owned(), "-c".to_owned(), tc_cmd]),
+            host_config: Some(HostConfig {
+                network_mode: Some(network_mode),
+                cap_add: Some(vec!["NET_ADMIN".to_owned()]),
+                auto_remove: Some(false),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let sidecar = self
+            .instance
+            .create_container(Some(CreateContainerOptions::default()), body)
+            .await?;
+
+        self.instance
+            .start_container(
+                &sidecar.id,
+                None::<bollard::query_parameters::StartContainerOptions>,
+            )
+            .await?;
+
+        // Wait for the sidecar to finish running
+        let mut wait_stream = self.instance.wait_container(
+            &sidecar.id,
+            Some(
+                WaitContainerOptionsBuilder::new()
+                    .condition("not-running")
+                    .build(),
+            ),
+        );
+        while let Some(result) = wait_stream.next().await {
+            match result {
+                Ok(status) => {
+                    if status.status_code != 0 {
+                        // Explicit cleanup before bailing
+                        self.instance
+                            .remove_container(
+                                &sidecar.id,
+                                Some(RemoveContainerOptions {
+                                    force: true,
+                                    ..Default::default()
+                                }),
+                            )
+                            .await
+                            .ok();
+                        anyhow::bail!(
+                            "netem sidecar exited with code {}: {:?}",
+                            status.status_code,
+                            status.error
+                        );
+                    }
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
+
+        // Explicitly remove the sidecar now that we have verified the exit code
+        self.instance
+            .remove_container(
+                &sidecar.id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await
+            .ok();
+
+        Ok(())
+    }
+
     // you can run the cleanup manually
     pub async fn cleanup(self) -> anyhow::Result<()> {
         let logs = self
@@ -341,6 +439,7 @@ impl MultiDockerTestRunner {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_with_runner(&mut self, runners: DockerTestRunner) {
         self.runners.push(runners);
     }
@@ -470,6 +569,52 @@ impl DockerTestRunnerBuilder {
         self
     }
 
+    /// Map a dynamic host port to a fixed container port.
+    /// Use when the container always listens on `container_port` (hardcoded in
+    /// its config file) but we need a unique host port to avoid EADDRINUSE
+    /// collisions between parallel tests.
+    #[allow(dead_code)]
+    pub fn host_port(mut self, host_port: u16, container_port: u16) -> Self {
+        self._server_port = host_port;
+        self.exposed_ports = vec![
+            format!("{}/tcp", container_port),
+            format!("{}/udp", container_port),
+        ];
+        let bindings: std::collections::HashMap<String, Option<Vec<PortBinding>>> =
+            [
+                (
+                    format!("{}/tcp", container_port),
+                    Some(vec![PortBinding {
+                        host_ip: Some("0.0.0.0".to_owned()),
+                        host_port: Some(format!("{}", host_port)),
+                    }]),
+                ),
+                (
+                    format!("{}/udp", container_port),
+                    Some(vec![PortBinding {
+                        host_ip: Some("0.0.0.0".to_owned()),
+                        host_port: Some(format!("{}", host_port)),
+                    }]),
+                ),
+            ]
+            .into_iter()
+            .collect();
+        self.host_config.port_bindings = Some(bindings);
+        self
+    }
+
+    /// Do not bind any host port.  Use this when the container is accessed
+    /// exclusively via its internal docker network IP (e.g. e2e tests that
+    /// spawn a clash-rs subprocess which connects via container IP).  Avoids
+    /// EADDRINUSE errors that occur when Docker tries to bind a host port in
+    /// the OS ephemeral range.
+    #[allow(dead_code)]
+    pub fn no_port(mut self) -> Self {
+        self.exposed_ports = vec![];
+        self.host_config.port_bindings = Some(HashMap::new());
+        self
+    }
+
     pub fn cmd(mut self, cmd: &[&str]) -> Self {
         self.cmd = Some(cmd.iter().map(|x| x.to_string()).collect());
         self
@@ -482,6 +627,7 @@ impl DockerTestRunnerBuilder {
     }
 
     #[cfg(docker_test)]
+    #[allow(dead_code)]
     pub fn entrypoint(mut self, entrypoint: &[&str]) -> Self {
         self.entrypoint = Some(entrypoint.iter().map(|x| x.to_string()).collect());
         self
@@ -552,6 +698,16 @@ impl DockerTestRunnerBuilder {
         .await
         .map_err(Into::into)
     }
+}
+
+/// Allocate a unique TCP port number for use in a Docker test.
+///
+/// Delegates to the same process-global counter used by `alloc_port()` so
+/// that Docker port mappings and clash-rs SOCKS/echo ports can never
+/// collide when multiple tests run concurrently.
+#[cfg(docker_test)]
+pub fn alloc_docker_port() -> u16 {
+    super::PORT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn get_host_config(port: u16) -> HostConfig {

@@ -127,28 +127,28 @@ impl<S: AsyncRead + Unpin> AsyncRead for ProxyTlsStream<S> {
                     let mut body = this.read_buf.split().freeze().to_vec();
 
                     match header[0] {
-                        HANDSHAKE => {
-                            if body.len() > SERVER_RANDOM_OFFSET + TLS_RANDOM_SIZE
-                                && body[0] == SERVER_HELLO
-                            {
-                                let mut server_random = [0; TLS_RANDOM_SIZE];
-                                unsafe {
-                                    copy_nonoverlapping(
-                                        body.as_ptr().add(SERVER_RANDOM_OFFSET),
-                                        server_random.as_mut_ptr(),
-                                        TLS_RANDOM_SIZE,
-                                    )
-                                }
-                                let hmac =
-                                    Hmac::new(&this.password, (&server_random, &[]));
-                                let key = kdf(&this.password, &server_random);
-                                this.certs = Some(Certs {
-                                    server_random,
-                                    hmac,
-                                    key,
-                                });
-                                this.tls13 = support_tls13(&body);
+                        HANDSHAKE
+                            if body.len()
+                                > SERVER_RANDOM_OFFSET + TLS_RANDOM_SIZE
+                                && body[0] == SERVER_HELLO =>
+                        {
+                            let mut server_random = [0; TLS_RANDOM_SIZE];
+                            unsafe {
+                                copy_nonoverlapping(
+                                    body.as_ptr().add(SERVER_RANDOM_OFFSET),
+                                    server_random.as_mut_ptr(),
+                                    TLS_RANDOM_SIZE,
+                                )
                             }
+                            let hmac =
+                                Hmac::new(&this.password, (&server_random, &[]));
+                            let key = kdf(&this.password, &server_random);
+                            this.certs = Some(Certs {
+                                server_random,
+                                hmac,
+                                key,
+                            });
+                            this.tls13 = support_tls13(&body);
                         }
                         APPLICATION_DATA => {
                             this.read_authorized = false;

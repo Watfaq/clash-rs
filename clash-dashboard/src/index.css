@@ -1,0 +1,187 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms" {
+  strategy: class;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: radial-gradient(ellipse at 20% 50%, rgba(0,113,227,0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(52,199,89,0.06) 0%, transparent 50%),
+              #f2f2f7;
+  color: #1d1d1f;
+  min-height: 100vh;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: radial-gradient(ellipse at 20% 50%, rgba(0,113,227,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(52,199,89,0.08) 0%, transparent 50%),
+                #1c1c1e;
+    color: #f5f5f7;
+  }
+}
+
+/* ─── Liquid Glass ────────────────────────────────────────────────────────── */
+
+/* Primary: nav bar, floating panels */
+.liquid-glass {
+  position: relative;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),   /* top specular */
+    inset 1px 0 0 rgba(255, 255, 255, 0.3),       /* left rim */
+    0 1px 0 rgba(0, 0, 0, 0.06),                  /* bottom separator */
+    0 8px 32px rgba(0, 0, 0, 0.07);               /* ambient shadow */
+}
+
+/* Shimmer overlay — angled light streak */
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    118deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.12) 22%,
+    rgba(255, 255, 255, 0.0) 45%,
+    rgba(255, 255, 255, 0.06) 70%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.liquid-glass > * { position: relative; z-index: 1; }
+
+@media (prefers-color-scheme: dark) {
+  .liquid-glass {
+    background: rgba(28, 28, 30, 0.78);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.14),
+      0 1px 0 rgba(0, 0, 0, 0.4),
+      0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+  .liquid-glass::before {
+    background: linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.02) 30%,
+      rgba(255, 255, 255, 0.0) 55%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+  }
+}
+
+/* Card: content cards (subtler, frosted white) */
+.liquid-glass-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.03),
+    0 4px 20px rgba(0, 0, 0, 0.07),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.liquid-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0.0) 50%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.liquid-glass-card > * { position: relative; z-index: 1; }
+
+@media (prefers-color-scheme: dark) {
+  .liquid-glass-card {
+    background: rgba(44, 44, 46, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 20px rgba(0, 0, 0, 0.35);
+  }
+  .liquid-glass-card::before {
+    background: linear-gradient(
+      150deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      rgba(255, 255, 255, 0.0) 40%
+    );
+  }
+}
+
+/* Vivid card shimmer sweep (animated light streak across gradient cards) */
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-120%) skewX(-20deg); }
+  100% { transform: translateX(250%) skewX(-20deg); }
+}
+
+.vivid-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.vivid-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 100%
+  );
+  animation: shimmer-sweep 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  pointer-events: none;
+}
+
+/* Active nav pill: tiny liquid glass chip */
+.nav-pill-glass {
+  position: relative;
+  background: rgba(0, 113, 227, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 113, 227, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 2px 8px rgba(0, 113, 227, 0.15);
+}
+
+/* ─── Scrollbars ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+}
+
+.uplot canvas { border-radius: 8px; }
+
+@keyframes ping-dot {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50% { opacity: 0; transform: scale(2); }
+}

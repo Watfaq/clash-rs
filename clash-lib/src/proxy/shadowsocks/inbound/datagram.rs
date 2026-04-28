@@ -4,6 +4,8 @@ use crate::{
 use futures::ready;
 use shadowsocks::{ProxySocket, relay::udprelay::options::UdpSocketControlData};
 use std::{
+    collections::HashMap,
+    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -11,7 +13,23 @@ use tokio::io::ReadBuf;
 use tracing::{debug, error};
 
 pub(crate) struct InboundShadowsocksDatagram {
-    control: UdpSocketControlData,
+    // Per-client control data keyed by the client's SocketAddr.
+    //
+    // SS2022 multi-user UDP: the server must encrypt each response with the
+    // same uPSK (user key) that was used to authenticate the corresponding
+    // request, and must echo the client's session ID.  Because this single
+    // socket receives packets from *all* clients, a single shared
+    // `UdpSocketControlData` field is insufficient: in a concurrent setting
+    // the field would be overwritten by the most-recently-received packet,
+    // causing responses for earlier clients to be encrypted with the wrong
+    // key (MAC failure on the client side).
+    //
+    // The server_session_id is the same for all clients (it identifies this
+    // server-side socket session). packet_id is tracked per-client to satisfy
+    // the monotonic-ID replay-protection requirement at each individual client.
+    server_session_id: u64,
+    client_controls: HashMap<SocketAddr, UdpSocketControlData>,
+
     socket: ProxySocket<shadowsocks::net::UdpSocket>,
 
     // for Sink
@@ -25,7 +43,7 @@ pub(crate) struct InboundShadowsocksDatagram {
 impl std::fmt::Debug for InboundShadowsocksDatagram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InboundShadowsocksDatagram")
-            .field("control", &self.control)
+            .field("server_session_id", &self.server_session_id)
             .field("socket", &self.socket)
             .finish()
     }
@@ -33,13 +51,11 @@ impl std::fmt::Debug for InboundShadowsocksDatagram {
 
 impl InboundShadowsocksDatagram {
     pub fn new(socket: ProxySocket<shadowsocks::net::UdpSocket>) -> Self {
-        let mut control = UdpSocketControlData::default();
-        control.client_session_id = rand::random::<u64>();
-
         Self {
             buf: bytes::BytesMut::with_capacity(65535),
             socket,
-            control,
+            server_session_id: rand::random::<u64>(),
+            client_controls: HashMap::new(),
 
             flushed: true,
             pkt: None,
@@ -54,11 +70,13 @@ impl futures::Stream for InboundShadowsocksDatagram {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let &mut Self {
+        let Self {
             ref mut buf,
             ref socket,
+            ref server_session_id,
+            ref mut client_controls,
             ..
-        } = self.get_mut();
+        } = *self.get_mut();
 
         loop {
             buf.resize(buf.capacity(), 0);
@@ -69,6 +87,21 @@ impl futures::Stream for InboundShadowsocksDatagram {
 
             match rv {
                 Ok((n, src, target, _, ctrl)) => {
+                    // Upsert the per-client control entry so responses to this
+                    // client are encrypted with the correct uPSK and echo the
+                    // correct client_session_id.  packet_id is kept per-client
+                    // for monotonic replay protection at each individual client.
+                    if let Some(ref c) = ctrl {
+                        let entry =
+                            client_controls.entry(src).or_insert_with(|| {
+                                let mut d = UdpSocketControlData::default();
+                                d.server_session_id = *server_session_id;
+                                d
+                            });
+                        entry.client_session_id = c.client_session_id;
+                        entry.user = c.user.clone();
+                    }
+
                     return Poll::Ready(Some(UdpPacket {
                         data: read_buf.filled()[..n].to_vec(),
                         src_addr: src.into(),
@@ -138,8 +171,7 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
             ref mut socket,
             ref mut pkt,
             ref mut flushed,
-
-            ref mut control,
+            ref mut client_controls,
             ..
         } = *self;
 
@@ -158,8 +190,29 @@ impl futures::Sink<UdpPacket> for InboundShadowsocksDatagram {
                 }
             };
 
+            // Look up the per-client control for this response's destination.
+            // This entry must already exist: a response can only arrive after
+            // poll_next() has received and dispatched the corresponding request
+            // from this client, which is what populates client_controls.
+            // A missing entry would mean we have no user key, so we'd silently
+            // encrypt with iPSK and the client would get a MAC failure --
+            // exactly the bug we are fixing. Error out loudly instead.
+            let client_addr = pkt.dst_addr.clone().must_into_socket_addr();
+            let control = match client_controls.get_mut(&client_addr) {
+                Some(c) => c,
+                None => {
+                    error!(
+                        "no control entry for client {client_addr} - dropping \
+                         response to avoid iPSK fallback"
+                    );
+                    *pkt_container = None;
+                    *flushed = true;
+                    return Poll::Ready(Ok(()));
+                }
+            };
+
             let n = ready!(socket.poll_send_to_with_ctrl(
-                pkt.dst_addr.clone().must_into_socket_addr(),
+                client_addr,
                 &addr,
                 control,
                 pkt.data.as_ref(),

@@ -4,6 +4,7 @@ locale = "en"
 [default.extend-words]
 # Session:typ
 typ = "typ"
+RTO = "RTO"
 
 [files]
 extend-exclude = [

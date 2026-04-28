@@ -37,6 +37,7 @@ pub mod redir;
 
 pub(crate) mod datagram;
 
+pub mod anytls;
 pub mod converters;
 pub mod hysteria2;
 #[cfg(feature = "shadowquic")]
@@ -46,6 +47,8 @@ pub mod shadowsocks;
 pub mod socks;
 #[cfg(feature = "ssh")]
 pub mod ssh;
+#[cfg(feature = "tailscale")]
+pub mod tailscale;
 #[cfg(feature = "onion")]
 pub mod tor;
 pub mod trojan;
@@ -119,18 +122,20 @@ impl<T, U> OutboundDatagram<U> for T where
 pub type AnyOutboundDatagram =
     Box<dyn OutboundDatagram<UdpPacket, Item = UdpPacket, Error = io::Error>>;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum OutboundType {
     Shadowsocks,
     Vmess,
     Vless,
     Trojan,
+    Anytls,
     WireGuard,
     Tor,
     Tuic,
     Socks5,
     Hysteria2,
     Ssh,
+    Tailscale,
     ShadowQuic,
 
     #[serde(rename = "URLTest")]
@@ -152,12 +157,14 @@ impl Display for OutboundType {
             OutboundType::Vmess => write!(f, "Vmess"),
             OutboundType::Vless => write!(f, "Vless"),
             OutboundType::Trojan => write!(f, "Trojan"),
+            OutboundType::Anytls => write!(f, "AnyTLS"),
             OutboundType::WireGuard => write!(f, "WireGuard"),
             OutboundType::Tor => write!(f, "Tor"),
             OutboundType::Tuic => write!(f, "Tuic"),
             OutboundType::Socks5 => write!(f, "Socks5"),
             OutboundType::Hysteria2 => write!(f, "Hysteria2"),
             OutboundType::Ssh => write!(f, "ssh"),
+            OutboundType::Tailscale => write!(f, "Tailscale"),
             OutboundType::ShadowQuic => write!(f, "ShadowQuic"),
 
             OutboundType::UrlTest => write!(f, "URLTest"),
@@ -183,6 +190,12 @@ pub enum ConnectorType {
 pub trait OutboundHandler: Sync + Send + Unpin + DialWithConnector + Debug {
     /// The name of the outbound handler
     fn name(&self) -> &str;
+
+    /// The server name of the outbound handler, used for
+    /// proxy-server-nameserver resolution
+    fn server_name(&self) -> Option<&str> {
+        None
+    }
 
     /// The protocol of the outbound handler
     /// only contains Type information, do not rely on the underlying value

@@ -96,7 +96,7 @@ impl SiteStats {
 
         for delay in self.delay_history.iter() {
             // Use the calculated age for time weighting
-            let time_weight = (-0.1 * age_secs as f64).exp(); // Specify f64
+            let time_weight = (-0.1 * age_secs).exp();
             let delay_weight = (-0.001 * *delay).exp(); // Dereference delay, remove redundant cast. Higher delays get less weight
             let weight = time_weight * delay_weight;
 

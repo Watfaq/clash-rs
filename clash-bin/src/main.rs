@@ -23,7 +23,7 @@ use std::{
     process::exit,
 };
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[clap(author, about, long_about = None)]
 struct Cli {
     #[clap(short, long, value_parser, value_name = "DIRECTORY")]
@@ -79,7 +79,8 @@ struct Cli {
     #[clap(
         long,
         value_parser,
-        default_value = "true",
+        action = clap::ArgAction::Set,
+        default_value_t = true,
         help = "Enable compatibility mode, which make behaviors more consistent \
                 with mihomo but may cause some issues. It is recommended to enable \
                 this if you are using clash verge."
@@ -177,22 +178,43 @@ fn main() -> anyhow::Result<()> {
     let mut config = clash::Config::File(file).try_parse()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
-
     if cli.compatibility {
         println!(
             "Compatibility mode enabled. This may cause some issues, but it is \
              recommended to enable this if you are using clash verge."
         );
         if let Some(dir) = &cli.directory {
-            std::env::set_current_dir(dir)?;
+            // Canonicalize to an absolute path before changing the process cwd.
+            // If `dir` is relative (e.g. `./clash-bin/tests/data/config`),
+            // calling set_current_dir then passing the same relative string as
+            // `cwd` to start_scaffold would cause paths like
+            // `cwd.join("Country.mmdb")` to be resolved from the *new* process
+            // cwd, doubling the directory segments and producing a path that
+            // doesn't exist (os error 2).
+            let abs = std::fs::canonicalize(dir)?;
+            std::env::set_current_dir(&abs)?;
         }
-        config.general.mmdb = Some("Country.mmdb".to_string());
-        config.general.geosite = Some("geosite.dat".to_string());
+        if config.general.mmdb.is_none() {
+            config.general.mmdb = Some("Country.mmdb".to_string());
+        }
+        if config.general.geosite.is_none() {
+            config.general.geosite = Some("geosite.dat".to_string());
+        }
     }
+
+    // When compatibility mode called set_current_dir the process cwd is
+    // already correct; pass None so start_scaffold uses "." (= the new cwd)
+    // rather than the original relative cli.directory which would be resolved
+    // from the wrong base.
+    let cwd = if cli.compatibility && cli.directory.is_some() {
+        None
+    } else {
+        cli.directory.map(|x| x.to_string_lossy().to_string())
+    };
 
     clash::start_scaffold(clash::Options {
         config: clash::Config::Internal(config),
-        cwd: cli.directory.map(|x| x.to_string_lossy().to_string()),
+        cwd,
         rt: Some(TokioRuntime::MultiThread),
         log_file: cli.log_file,
     })

@@ -107,6 +107,10 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
+    }
+
     fn proto(&self) -> OutboundType {
         OutboundType::Trojan
     }
@@ -221,17 +225,12 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         m.insert(
             "password".to_owned(),
             Box::new(self.opts.password.clone()) as _,
         );
-        if self.opts.udp {
-            m.insert("udp".to_owned(), Box::new(true) as _);
-        }
         if self.opts.tls.is_some() {
             m.insert("tls".to_owned(), Box::new(true) as _);
         }
@@ -242,7 +241,7 @@ impl PlainProxyAPIResponse for Handler {
 #[cfg(all(test, docker_test))]
 mod tests {
 
-    use std::collections::HashMap;
+    use std::{collections::HashMap, io::Write};
 
     use super::*;
     use crate::{
@@ -252,35 +251,104 @@ mod tests {
                 Suite,
                 config_helper::test_config_base_dir,
                 consts::*,
-                docker_runner::{DockerTestRunner, DockerTestRunnerBuilder},
+                docker_runner::{
+                    DockerTestRunner, DockerTestRunnerBuilder, alloc_docker_port,
+                },
                 run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
     };
 
-    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
-        let test_config_dir = test_config_base_dir();
-        let trojan_conf = test_config_dir.join("trojan-ws.json");
-        let trojan_cert = test_config_dir.join("example.org.pem");
-        let trojan_key = test_config_dir.join("example.org-key.pem");
+    const TROJAN_WS_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": [
+        "example"
+    ],
+    "websocket": {
+        "enabled": true,
+        "path": "/",
+        "host": "example.org"
+    },
+    "ssl": {
+        "verify": true,
+        "cert": "/fullchain.pem",
+        "key": "/privkey.pem",
+        "sni": "example.org"
+    }
+}"#;
 
-        DockerTestRunnerBuilder::new()
+    const TROJAN_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [
+        {
+            "port": 10002,
+            "listen": "0.0.0.0",
+            "protocol": "trojan",
+            "settings": {
+                "clients": [
+                    {
+                        "password": "example",
+                        "email": "grpc@example.com"
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "security": "tls",
+                "tlsSettings": {
+                    "certificates": [
+                        {
+                            "certificateFile": "/etc/ssl/v2ray/fullchain.pem",
+                            "keyFile": "/etc/ssl/v2ray/privkey.pem"
+                        }
+                    ]
+                },
+                "grpcSettings": {
+                    "serviceName": "example"
+                }
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom"
+        }
+    ],
+    "log": {
+        "loglevel": "debug"
+    }
+}"#;
+
+    async fn get_ws_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = test_config_base_dir();
+        let trojan_cert = test_config_dir.join("certs/example.org.pem");
+        let trojan_key = test_config_dir.join("certs/example.org-key.pem");
+
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TROJAN_WS_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_TROJAN_GO)
             .mounts(&[
-                (trojan_conf.to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
                 (trojan_cert.to_str().unwrap(), "/fullchain.pem"),
                 (trojan_key.to_str().unwrap(), "/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_trojan_ws() -> anyhow::Result<()> {
         let span = tracing::info_span!("test_trojan_ws");
         let _enter = span.enter();
+        let host_port = alloc_docker_port();
         let transport = transport::WsClient::new(
             "".to_owned(),
             10002,
@@ -295,7 +363,7 @@ mod tests {
         let tls =
             transport::TlsClient::new(true, "example.org".to_owned(), None, None);
 
-        let container = get_ws_runner().await?;
+        let container = get_ws_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-trojan-ws".to_owned(),
@@ -315,27 +383,32 @@ mod tests {
         run_test_suites_and_cleanup(handler, container, Suite::all()).await
     }
 
-    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+    async fn get_grpc_runner(host_port: u16) -> anyhow::Result<DockerTestRunner> {
         let test_config_dir = test_config_base_dir();
-        let conf = test_config_dir.join("trojan-grpc.json");
-        let cert = test_config_dir.join("example.org.pem");
-        let key = test_config_dir.join("example.org-key.pem");
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
 
-        DockerTestRunnerBuilder::new()
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        tmp.write_all(TROJAN_GRPC_SERVER_CONFIG.as_bytes())?;
+
+        let result = DockerTestRunnerBuilder::new()
             .image(IMAGE_XRAY)
             .mounts(&[
-                (conf.to_str().unwrap(), "/etc/xray/config.json"),
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
                 (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
                 (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
             ])
+            .host_port(host_port, 10002)
             .build()
-            .await
+            .await;
+        drop(tmp);
+        result
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_trojan_grpc() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         let transport = transport::GrpcClient::new(
             "example.org".to_owned(),
             "example"
@@ -350,7 +423,7 @@ mod tests {
             None,
         );
 
-        let runner = get_grpc_runner().await?;
+        let runner = get_grpc_runner(host_port).await?;
 
         let opts = HandlerOptions {
             name: "test-trojan-grpc".to_owned(),
@@ -367,5 +440,287 @@ mod tests {
             .register_connector(GLOBAL_DIRECT_CONNECTOR.clone())
             .await;
         run_test_suites_and_cleanup(handler, runner, Suite::all()).await
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const CONTAINER_PORT: u16 = 10002;
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    fn base_config(server: &str, port: u16, socks_port: u16, extra: &str) -> String {
+        let mmdb = config_helper::test_config_base_dir()
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: trojan
+    server: {server}
+    port: {port}
+    password: example
+    skip-cert-verify: true
+    udp: false
+{extra}
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = port,
+            extra = extra,
+        )
+    }
+
+    const TROJAN_WS_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "websocket": {"enabled": true, "path": "/", "host": "example.org"},
+    "ssl": {"verify": true, "cert": "/fullchain.pem", "key": "/privkey.pem", "sni": "example.org"}
+}"#;
+
+    const TROJAN_GRPC_SERVER_CONFIG: &str = r#"{
+    "inbounds": [{"port": 10002, "listen": "0.0.0.0", "protocol": "trojan",
+        "settings": {"clients": [{"password": "example", "email": "grpc@example.com"}]},
+        "streamSettings": {"network": "grpc", "security": "tls",
+            "tlsSettings": {"certificates": [{"certificateFile": "/etc/ssl/v2ray/fullchain.pem", "keyFile": "/etc/ssl/v2ray/privkey.pem"}]},
+            "grpcSettings": {"serviceName": "example"}}}],
+    "outbounds": [{"protocol": "freedom"}]
+}"#;
+
+    const TROJAN_TCP_SERVER_CONFIG: &str = r#"{
+    "run_type": "server",
+    "local_addr": "0.0.0.0",
+    "local_port": 10002,
+    "disable_http_check": true,
+    "password": ["example"],
+    "ssl": {
+        "verify": true,
+        "cert": "/fullchain.pem",
+        "key": "/privkey.pem",
+        "sni": "example.org"
+    }
+}"#;
+
+    async fn get_tcp_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_TCP_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (cert.to_str().unwrap(), "/fullchain.pem"),
+                (key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    async fn get_ws_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_WS_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_TROJAN_GO)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/trojan-go/config.json"),
+                (cert.to_str().unwrap(), "/fullchain.pem"),
+                (key.to_str().unwrap(), "/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    async fn get_grpc_runner() -> anyhow::Result<DockerTestRunner> {
+        let test_config_dir = config_helper::test_config_base_dir();
+        let cert = test_config_dir.join("certs/example.org.pem");
+        let key = test_config_dir.join("certs/example.org-key.pem");
+        let mut tmp = tempfile::NamedTempFile::new()?;
+        use std::io::Write as _;
+        tmp.write_all(TROJAN_GRPC_SERVER_CONFIG.as_bytes())?;
+        let result = DockerTestRunnerBuilder::new()
+            .image(IMAGE_XRAY)
+            .no_port()
+            .mounts(&[
+                (tmp.path().to_str().unwrap(), "/etc/xray/config.json"),
+                (cert.to_str().unwrap(), "/etc/ssl/v2ray/fullchain.pem"),
+                (key.to_str().unwrap(), "/etc/ssl/v2ray/privkey.pem"),
+            ])
+            .build()
+            .await;
+        drop(tmp);
+        result
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_tcp() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_tcp_netem() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_tcp_runner().await?;
+        container.apply_netem(50, 1.0).await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-tcp-netem",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_ws() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_ws_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    network: ws
+    ws-opts:
+      path: /
+      headers:
+        Host: example.org"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-ws",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_trojan_grpc() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let container = get_grpc_runner().await?;
+        let server = container.container_ip().unwrap_or(LOCAL_ADDR.to_owned());
+        let gateway_ip = container.docker_gateway_ip();
+
+        let extra = r#"    tls: true
+    network: grpc
+    grpc-opts:
+      grpc-service-name: example"#;
+        let config = base_config(&server, CONTAINER_PORT, socks_port, extra);
+        let binary = find_clash_rs_binary();
+
+        container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "trojan-grpc",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await
     }
 }

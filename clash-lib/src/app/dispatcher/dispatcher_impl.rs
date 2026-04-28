@@ -10,7 +10,9 @@ use crate::{
         def::RunMode,
         internal::proxy::{PROXY_DIRECT, PROXY_GLOBAL},
     },
-    proxy::{AnyInboundDatagram, ClientStream, datagram::UdpPacket},
+    proxy::{
+        AnyInboundDatagram, ClientStream, datagram::UdpPacket, utils::ToCanonical,
+    },
     session::{Session, SocksAddr},
 };
 use futures::{SinkExt, StreamExt};
@@ -28,7 +30,11 @@ use crate::app::dns::ThreadSafeDNSResolver;
 
 use super::statistics_manager::Manager;
 
-const DEFAULT_BUFFER_SIZE: usize = 16 * 1024;
+// SS2022 (AEAD-2022) MAX_PACKET_SIZE is 0xFFFF (65535 bytes). Using a relay
+// buffer smaller than that forces the cipher to split every full packet into
+// multiple smaller encrypted chunks, multiplying encrypt/decrypt overhead.
+// Classic AEAD ciphers cap at 0x3FFF (16383 bytes) so they are unaffected.
+const DEFAULT_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct Dispatcher {
     outbound_manager: ThreadSafeOutboundManager,
@@ -249,7 +255,7 @@ impl Dispatcher {
          */
         let (mut local_w, mut local_r) = udp_inbound.split();
         let (remote_receiver_w, mut remote_receiver_r) =
-            tokio::sync::mpsc::channel(32);
+            tokio::sync::mpsc::channel(256);
 
         let s = sess.clone();
         let ss = sess.clone();
@@ -257,13 +263,14 @@ impl Dispatcher {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
 
-                // Preserve the original destination IP before reverse_lookup
-                // may convert it to a domain name (via DNS cache). This is used
-                // by family_hint_for_session so the outbound socket uses the
-                // same address family as the client requested, rather than
-                // re-resolving the domain to a potentially different family
-                // (e.g. IPv4 1.1.1.1 → domain → AAAA → IPv6 → EINVAL on bind).
-                if let crate::session::SocksAddr::Ip(addr) = &packet.dst_addr {
+                // Canonicalize IPv4-mapped IPv6 destination addresses to plain
+                // IPv4 (e.g. SS2022 inbound on a dual-stack socket may produce
+                // ::ffff:x.x.x.x for an IPv4 target), then preserve the IP for
+                // family_hint_for_session before reverse_lookup may replace it
+                // with a domain name.  Without canonicalization, new_udp_socket
+                // picks AF_INET6 while bind_addr is 0.0.0.0, causing EINVAL.
+                if let crate::session::SocksAddr::Ip(addr) = &mut packet.dst_addr {
+                    *addr = addr.to_canonical();
                     sess.resolved_ip = Some(addr.ip());
                 }
 
@@ -360,7 +367,7 @@ impl Dispatcher {
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =
-                            tokio::sync::mpsc::channel::<UdpPacket>(32);
+                            tokio::sync::mpsc::channel::<UdpPacket>(256);
 
                         // remote -> local
                         let r_handle = tokio::spawn(async move {

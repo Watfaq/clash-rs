@@ -5,6 +5,8 @@ use crate::proxy::shadowquic;
 use crate::proxy::shadowsocks;
 #[cfg(feature = "ssh")]
 use crate::proxy::ssh;
+#[cfg(feature = "tailscale")]
+use crate::proxy::tailscale;
 #[cfg(feature = "onion")]
 use crate::proxy::tor;
 #[cfg(feature = "tuic")]
@@ -33,7 +35,7 @@ use crate::{
     },
     print_and_exit,
     proxy::{
-        AnyOutboundHandler,
+        AnyOutboundHandler, anytls,
         direct::{self},
         fallback,
         group::smart,
@@ -50,6 +52,7 @@ use hyper::Uri;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+use uuid::Uuid;
 
 static RESERVED_PROVIDER_NAME: &str = "default";
 
@@ -170,8 +173,6 @@ impl OutboundManager {
     pub async fn get_proxies(&self) -> HashMap<String, Box<dyn Serialize + Send>> {
         let mut r = HashMap::new();
 
-        let proxy_manager = &self.proxy_manager;
-
         // Snapshot the registry without holding the lock across async calls.
         let handlers: Vec<(String, AnyOutboundHandler)> = self
             .registry
@@ -187,25 +188,10 @@ impl OutboundManager {
             } else if let Some(p) = v.try_as_plain_handler() {
                 p.as_map().await
             } else {
-                let mut m = HashMap::new();
-                m.insert("type".to_string(), Box::new(v.proto()) as _);
-                m
+                HashMap::new()
             };
 
-            let alive = proxy_manager.alive(&k).await;
-            let history = proxy_manager.delay_history(&k).await;
-
-            m.insert("history".to_string(), Box::new(history));
-            m.insert("alive".to_string(), Box::new(alive));
-            m.insert("name".to_string(), Box::new(k.to_owned()));
-            m.insert("uot".to_string(), Box::new(false));
-            m.insert("xudp".to_string(), Box::new(false));
-            m.insert("tfo".to_string(), Box::new(false));
-            m.insert("mptcp".to_string(), Box::new(false));
-            m.insert("smux".to_string(), Box::new(false));
-            m.insert("interface".to_string(), Box::new("auto"));
-            m.insert("dialer_proxy".to_string(), Box::new("none"));
-            m.insert("routing_mark".to_string(), Box::new(0));
+            self.apply_common_proxy_fields(&mut m, &v, &k).await;
 
             r.insert(k.clone(), Box::new(m) as _);
         }
@@ -222,29 +208,44 @@ impl OutboundManager {
         } else if let Some(p) = proxy.try_as_plain_handler() {
             p.as_map().await
         } else {
-            let mut m = HashMap::new();
-            m.insert("type".to_string(), Box::new(proxy.proto()) as _);
-            m
+            HashMap::new()
         };
-
-        let proxy_manager = self.proxy_manager.clone();
-
-        let alive = proxy_manager.alive(proxy.name()).await;
-        let history = proxy_manager.delay_history(proxy.name()).await;
-
-        r.insert("history".to_string(), Box::new(history));
-        r.insert("alive".to_string(), Box::new(alive));
-        r.insert("name".to_string(), Box::new(proxy.name().to_owned()));
-        r.insert("uot".to_string(), Box::new(false));
-        r.insert("xudp".to_string(), Box::new(false));
-        r.insert("tfo".to_string(), Box::new(false));
-        r.insert("mptcp".to_string(), Box::new(false));
-        r.insert("smux".to_string(), Box::new(false));
-        r.insert("interface".to_string(), Box::new("auto"));
-        r.insert("dialer_proxy".to_string(), Box::new("none"));
-        r.insert("routing_mark".to_string(), Box::new(0));
+        self.apply_common_proxy_fields(&mut r, proxy, proxy.name())
+            .await;
 
         r
+    }
+
+    async fn apply_common_proxy_fields(
+        &self,
+        m: &mut HashMap<String, Box<dyn Serialize + Send>>,
+        proxy: &AnyOutboundHandler,
+        name: &str,
+    ) {
+        let alive = self.proxy_manager.alive(name).await;
+        let history = self.proxy_manager.delay_history(name).await;
+        let support_udp = proxy.support_udp().await;
+
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_OID, name.as_bytes());
+        m.insert("id".to_string(), Box::new(id.to_string()));
+        m.insert("history".to_string(), Box::new(history));
+        m.insert("alive".to_string(), Box::new(alive));
+        m.insert("name".to_string(), Box::new(name.to_owned()));
+        m.insert("type".to_string(), Box::new(proxy.proto().to_string()));
+        m.insert("udp".to_string(), Box::new(support_udp));
+        m.insert("uot".to_string(), Box::new(false));
+        m.insert("xudp".to_string(), Box::new(false));
+        m.insert("tfo".to_string(), Box::new(false));
+        m.insert("mptcp".to_string(), Box::new(false));
+        m.insert("smux".to_string(), Box::new(false));
+        m.insert("interface".to_string(), Box::new(""));
+        m.insert("dialer-proxy".to_string(), Box::new(""));
+        m.insert("routing-mark".to_string(), Box::new(0));
+        m.insert("provider-name".to_string(), Box::new(""));
+        m.insert(
+            "extra".to_string(),
+            Box::new(HashMap::<String, String>::new()),
+        );
     }
 
     /// a wrapper of proxy_manager.url_test so that proxy_manager is not exposed
@@ -327,6 +328,15 @@ impl OutboundManager {
                         })
                         .inspect_err(|e| {
                             error!("failed to load socks5 outbound {}: {}", name, e);
+                        })
+                        .ok()
+                }
+                OutboundProxyProtocol::Anytls(v) => {
+                    let name = v.common_opts.name.clone();
+                    v.try_into()
+                        .map(|x: anytls::Handler| Arc::new(x) as _)
+                        .inspect_err(|e| {
+                            error!("failed to load anytls outbound {}: {}", name, e);
                         })
                         .ok()
                 }
@@ -423,6 +433,22 @@ impl OutboundManager {
                         .inspect_err(|e| {
                             error!(
                                 "failed to load shadowquic outbound {}: {}",
+                                name, e
+                            );
+                        })
+                        .ok()
+                }
+                #[cfg(feature = "tailscale")]
+                OutboundProxyProtocol::Tailscale(tscfg) => {
+                    let name = tscfg.name.clone();
+                    tscfg
+                        .try_into()
+                        .map(|x: tailscale::Handler| {
+                            Arc::new(x) as AnyOutboundHandler
+                        })
+                        .inspect_err(|e| {
+                            error!(
+                                "failed to load tailscale outbound {}: {}",
                                 name, e
                             );
                         })

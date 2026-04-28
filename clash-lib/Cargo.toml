@@ -5,7 +5,7 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["zero_copy", "aws-lc-rs"]
+default = ["zero_copy", "aws-lc-rs", "dashboard"]
 
 aws-lc-rs = [
     "dep:aws-lc-rs",
@@ -32,6 +32,7 @@ ssh = ["dep:russh", "dep:dirs", "dep:totp-rs"]
 onion = ["dep:arti-client", "dep:tor-rtcompat", "arti-client/onion-service-client"]
 shadowquic = ["dep:shadowquic"]
 wireguard = ["dep:boringtun", "dep:smoltcp"]
+tailscale = ["dep:tailscale"]
 tproxy = [
     "dep:etherparse",
 ]
@@ -44,6 +45,7 @@ redir = []
 zero_copy = []
 bench = ["dep:criterion"]
 telemetry = ["tokio/tracing", "dep:tracing-opentelemetry", "dep:tracing-chrome", "dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
+dashboard = ["dep:rust-embed"]
 
 [dependencies]
 # Async
@@ -134,6 +136,9 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 flate2 = "1"
 tar = "0.4"
 
+# Builtin dashboard
+rust-embed = { version = "8", optional = true }
+
 # TUN
 tun-rs = { version = "2", features = ["async", "async_framed"], optional = true }
 watfaq-netstack = { path = "../clash-netstack", optional = true }
@@ -198,14 +203,15 @@ shadowquic = { version = "0.3.4", optional = true}
 
 # experimental
 downcast-rs = "2.0"
+tailscale = { version = "0.2.0", optional = true }
 
 aws-lc-rs = { version = "1", default-features = false, optional = true }
 
 # tproxy
 etherparse = {version = "0.19", optional = true }
+tempfile = "3.27"
 
 [dev-dependencies]
-tempfile = "3.27"
 mockall = "0.14.0"
 tokio-test = "0.4.5"
 axum-macros = "0.5.0"

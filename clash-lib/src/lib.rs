@@ -181,11 +181,20 @@ pub fn setup_default_crypto_provider() {
     CRYPTO_PROVIDER_LOCK.get_or_init(|| {
         #[cfg(feature = "aws-lc-rs")]
         {
-            _ = rustls::crypto::aws_lc_rs::default_provider().install_default()
+            _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+            // watfaq-rustls is a separate fork with its own global provider
+            // state. When both `ring` and `aws-lc-rs` features are active
+            // (e.g. `--all-features`), its
+            // `get_default_or_install_from_crate_features` treats the
+            // combination as ambiguous and returns None, causing a
+            // panic. Explicit installation is therefore required.
+            _ = watfaq_rustls::crypto::aws_lc_rs::default_provider()
+                .install_default();
         }
-        #[cfg(feature = "ring")]
+        #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
         {
-            _ = rustls::crypto::ring::default_provider().install_default()
+            _ = rustls::crypto::ring::default_provider().install_default();
+            _ = watfaq_rustls::crypto::ring::default_provider().install_default();
         }
     });
 }
@@ -381,6 +390,7 @@ async fn create_components(
     );
 
     debug!("initializing bootstrap outbounds");
+
     let plain_outbounds = OutboundManager::load_plain_outbounds(
         config
             .proxies
@@ -396,13 +406,12 @@ async fn create_components(
     // After OutboundManager is initialized it will be extended with all
     // handlers (plain + proxy groups + provider proxies), so DNS clients
     // and the HTTP client can use any of them for bootstrap traffic.
-    let outbound_registry: crate::proxy::utils::OutboundHandlerRegistry =
-        Arc::new(tokio::sync::RwLock::new(
-            plain_outbounds
-                .iter()
-                .map(|x| (x.name().to_string(), x.clone()))
-                .collect(),
-        ));
+    let outbound_registry = Arc::new(tokio::sync::RwLock::new(
+        plain_outbounds
+            .iter()
+            .map(|x| (x.name().to_string(), x.clone()))
+            .collect(),
+    ));
 
     let client =
         new_http_client(system_resolver.clone(), Some(outbound_registry.clone()))

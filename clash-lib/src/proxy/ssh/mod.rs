@@ -148,6 +148,10 @@ impl OutboundHandler for Handler {
         &self.opts.name
     }
 
+    fn server_name(&self) -> Option<&str> {
+        Some(&self.opts.server)
+    }
+
     fn proto(&self) -> OutboundType {
         OutboundType::Ssh
     }
@@ -239,8 +243,6 @@ impl OutboundHandler for Handler {
 impl PlainProxyAPIResponse for Handler {
     async fn as_map(&self) -> HashMap<String, Box<dyn ErasedSerialize + Send>> {
         let mut m = HashMap::new();
-        m.insert("name".to_owned(), Box::new(self.opts.name.clone()) as _);
-        m.insert("type".to_owned(), Box::new(self.proto().to_string()) as _);
         m.insert("server".to_owned(), Box::new(self.opts.server.clone()) as _);
         m.insert("port".to_owned(), Box::new(self.opts.port) as _);
         m.insert(
@@ -286,8 +288,10 @@ mod tests {
     };
     use crate::{
         proxy::utils::test_utils::{
-            Suite, config_helper::test_config_base_dir,
-            docker_runner::DockerTestRunnerBuilder, run_test_suites_and_cleanup,
+            Suite,
+            config_helper::test_config_base_dir,
+            docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
+            run_test_suites_and_cleanup,
         },
         tests::initialize,
     };
@@ -319,6 +323,7 @@ mod tests {
     /// /tmp/.xxx/ssh/ssh_host_keys.
     async fn get_openssh_server_runner(
         ssh_config_path: PathBuf,
+        host_port: u16,
     ) -> anyhow::Result<DockerTestRunner> {
         let password = format!("USER_PASSWORD={}", PASSWORD);
         DockerTestRunnerBuilder::new()
@@ -332,7 +337,7 @@ mod tests {
                 &password,
             ])
             .mounts(&[(ssh_config_path.to_str().unwrap(), "/config")])
-            .port(2222)
+            .host_port(host_port, 2222)
             .build()
             .await
     }
@@ -360,7 +365,7 @@ mod tests {
         host_key: Option<Vec<String>>, // host key
     }
 
-    async fn test_ssh_inner(opt: TestOption) -> anyhow::Result<()> {
+    async fn test_ssh_inner(opt: TestOption, host_port: u16) -> anyhow::Result<()> {
         tracing::info!("testing ssh, using option: {:?}", opt);
 
         // Prepare SSH config directory for the docker container
@@ -435,7 +440,8 @@ mod tests {
 
         // Start the container
         let container =
-            get_openssh_server_runner(ssh_config_tmp_path.clone()).await?;
+            get_openssh_server_runner(ssh_config_tmp_path.clone(), host_port)
+                .await?;
 
         // Configure client to connect to container
         let ssh_private_key_path = ssh_config_path.join(".ssh").join(if opt.rsa {
@@ -533,57 +539,334 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh1() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: true,
-            rsa: false,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: true,
+                rsa: false,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh2() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: false,
-            rsa: true,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: true,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh3() -> anyhow::Result<()> {
         initialize();
-        test_ssh_inner(TestOption {
-            password: false,
-            rsa: false,
-            host_key: None,
-        })
+        let host_port = alloc_docker_port();
+        test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: false,
+                host_key: None,
+            },
+            host_port,
+        )
         .await
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn test_ssh4() -> anyhow::Result<()> {
         initialize();
+        let host_port = alloc_docker_port();
         // config wrong host key, expect failure
         let host_key = Some(
             vec![
             "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtnezeRnexr9UgviTV66AcQ0uGQ9gx4t0GjVA29SstlBgZ5750DmKdxYt3PrCC2qslVOfnpW/1XNMSmRtuqM2C0/uaRBx/lAPyjEQ3IwLHTk7CxirzNw46nYBeIKBKYcdP6LIfdvZ9+avd6+SGIJVrBovBHzV2aIpDEG3dO+9op7gzGPpdRHP4WnOdAuSnLCaAvrSs+amFEmrD+nZLMwUMfX5H9huGJNxo1/ma4Ti3jclY8Utw+K6y2NUNB7YXuiJg2Ugfnu6d54VBg9lA2o481Ol0ys2i46sdmWhaVPRGlWTmQ1fAsbd+9u3/2ae6n9Oc6V88izGUrH8sFb23FmlAbHF5tT2nnOs1XzQPCiUsHgn2XVidEONe2Q/FJbfoA4fUYmoQPGprXzHcvtguUajww7dwYfyEXU6IxNRVl5H+64fnsQ2shVAnpJ10fzSrK1RtcnF3zWGvix2z/wOzgx2ydUV9lNp7tU3bOX2iL8CvYBFwnFqEHRGH5Ry9km1ujdE=".to_owned()
         ]);
-        let res = test_ssh_inner(TestOption {
-            password: false,
-            rsa: false,
-            host_key,
-        })
+        let res = test_ssh_inner(
+            TestOption {
+                password: false,
+                rsa: false,
+                host_key,
+            },
+            host_port,
+        )
         .await;
         assert!(res.is_err());
         Ok(())
+    }
+}
+
+#[cfg(all(test, docker_test, throughput_test))]
+mod e2e {
+    use std::{future::Future, path::PathBuf, pin::Pin};
+
+    use rand_chacha::rand_core::SeedableRng;
+    use russh::keys::Algorithm;
+
+    use crate::{
+        proxy::utils::test_utils::{
+            config_helper,
+            consts::*,
+            docker_runner::{
+                DockerTestRunner, DockerTestRunnerBuilder, RunAndCleanup,
+            },
+            docker_utils::{
+                alloc_port, clash_process_e2e_throughput, find_clash_rs_binary,
+            },
+        },
+        tests::initialize,
+    };
+
+    const SSH_PORT: u16 = 2222;
+    const PASSWORD: &str = "123456789";
+    const E2E_PAYLOAD_BYTES: usize = 32 * 1024 * 1024; // 32 MB
+
+    fn gen_ssh_key_pair(
+        algo: russh::keys::Algorithm,
+    ) -> anyhow::Result<(String, String)> {
+        let mut rng = rand_chacha::ChaCha12Rng::from_seed(Default::default());
+        let ssh_private_key = russh::keys::PrivateKey::random(&mut rng, algo)?;
+        let ssh_public_key = ssh_private_key.public_key();
+        let ssh_private_key_str = ssh_private_key
+            .to_openssh(ssh_key::LineEnding::LF)?
+            .to_string();
+        let ssh_public_key_str = ssh_public_key.to_openssh()?;
+        Ok((ssh_private_key_str, ssh_public_key_str))
+    }
+
+    fn copy_dir_recursive<'a>(
+        src: &'a std::path::Path,
+        dst: &'a std::path::Path,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + 'a>> {
+        Box::pin(async move {
+            tokio::fs::create_dir_all(dst).await?;
+            let mut entries = tokio::fs::read_dir(src).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let src_path = entry.path();
+                let dst_path = dst.join(entry.file_name());
+                if entry.file_type().await?.is_dir() {
+                    copy_dir_recursive(&src_path, &dst_path).await?;
+                } else {
+                    tokio::fs::copy(&src_path, &dst_path).await?;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    async fn prepare_ssh_config_dir(
+        base_dir: &std::path::Path,
+    ) -> anyhow::Result<tempfile::TempDir> {
+        let temp_dir = tempfile::tempdir()?;
+        let ssh_config_path = base_dir.join("ssh");
+        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+
+        copy_dir_recursive(&ssh_config_path, &ssh_config_tmp_path).await?;
+
+        // Container expects sshd_config at /config/sshd/sshd_config
+        let source_sshd_config = ssh_config_tmp_path
+            .join("ssh_host_keys")
+            .join("sshd_config");
+        let target_sshd_dir = ssh_config_tmp_path.join("sshd");
+        tokio::fs::create_dir_all(&target_sshd_dir).await?;
+        tokio::fs::copy(&source_sshd_config, target_sshd_dir.join("sshd_config"))
+            .await?;
+
+        tokio::fs::create_dir_all(&ssh_config_tmp_path.join("logs").join("openssh"))
+            .await?;
+
+        // Generate server host key pairs
+        let host_key_path = ssh_config_tmp_path.join("ssh_host_keys");
+        for (name, algo) in [
+            (
+                "ecdsa",
+                Algorithm::Ecdsa {
+                    curve: russh::keys::EcdsaCurve::NistP256,
+                },
+            ),
+            ("ed25519", Algorithm::Ed25519),
+        ] {
+            let (private_key, public_key) = gen_ssh_key_pair(algo)?;
+            tokio::fs::write(
+                host_key_path.join(format!("ssh_host_{name}_key")),
+                private_key,
+            )
+            .await?;
+            tokio::fs::write(
+                host_key_path.join(format!("ssh_host_{name}_key.pub")),
+                public_key,
+            )
+            .await?;
+        }
+
+        Ok(temp_dir)
+    }
+
+    async fn get_ssh_runner(
+        ssh_config_tmp_path: PathBuf,
+    ) -> anyhow::Result<DockerTestRunner> {
+        let password_env = format!("USER_PASSWORD={}", PASSWORD);
+        DockerTestRunnerBuilder::new()
+            .image(IMAGE_OPENSSH)
+            .env(&[
+                "PUID=1000",
+                "PGID=1000",
+                "TZ=Etc/UTC",
+                "SUDO_ACCESS=true",
+                "PASSWORD_ACCESS=true",
+                &password_env,
+            ])
+            .no_port()
+            .mounts(&[(ssh_config_tmp_path.to_str().unwrap(), "/config")])
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ssh_password() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let test_config_dir = config_helper::test_config_base_dir();
+        let temp_dir = prepare_ssh_config_dir(&test_config_dir).await?;
+        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+
+        let container = get_ssh_runner(ssh_config_tmp_path).await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("ssh container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = test_config_dir
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: ssh
+    server: {server}
+    port: {port}
+    username: linuxserver.io
+    password: "{password}"
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = SSH_PORT,
+            password = PASSWORD,
+        );
+        let binary = find_clash_rs_binary();
+
+        // Keep temp_dir alive until after the test
+        let result = container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ssh-password",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await;
+        drop(temp_dir);
+        result
+    }
+
+    #[tokio::test]
+    async fn e2e_throughput_ssh_ed25519() -> anyhow::Result<()> {
+        initialize();
+        let socks_port = alloc_port();
+        let echo_port = alloc_port();
+
+        let test_config_dir = config_helper::test_config_base_dir();
+        let temp_dir = prepare_ssh_config_dir(&test_config_dir).await?;
+        let ssh_config_tmp_path = temp_dir.path().join("ssh");
+        let private_key_path = ssh_config_tmp_path
+            .join(".ssh")
+            .join("test_ed25519")
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        let container = get_ssh_runner(ssh_config_tmp_path).await?;
+        let server = container
+            .container_ip()
+            .ok_or_else(|| anyhow::anyhow!("ssh container has no IP"))?;
+        let gateway_ip = container.docker_gateway_ip();
+
+        let mmdb = test_config_dir
+            .join("Country.mmdb")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let config = format!(
+            r#"
+socks-port: {socks_port}
+bind-address: 127.0.0.1
+mmdb: "{mmdb}"
+mode: global
+log-level: error
+proxies:
+  - name: proxy
+    type: ssh
+    server: {server}
+    port: {port}
+    username: linuxserver.io
+    private-key: "{private_key_path}"
+rules:
+  - MATCH,proxy
+"#,
+            socks_port = socks_port,
+            mmdb = mmdb,
+            server = server,
+            port = SSH_PORT,
+            private_key_path = private_key_path,
+        );
+        let binary = find_clash_rs_binary();
+
+        // Keep temp_dir alive until after the test
+        let result = container
+            .run_and_cleanup(async move {
+                clash_process_e2e_throughput(
+                    &binary,
+                    &config,
+                    "ssh-ed25519",
+                    socks_port,
+                    echo_port,
+                    gateway_ip,
+                    E2E_PAYLOAD_BYTES,
+                )
+                .await
+                .map(|_| ())
+            })
+            .await;
+        drop(temp_dir);
+        result
     }
 }
