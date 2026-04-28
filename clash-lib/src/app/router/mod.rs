@@ -107,7 +107,7 @@ impl Router {
 
             // Lookup ASN with guard clause
             if let Some(ip) = sess.resolved_ip.or(sess.destination.ip()) {
-                Self::lookup_asn_for_ip(ip, &self.asn_mmdb, sess);
+                Self::populate_asn_for_ip(ip, &self.asn_mmdb, sess);
             }
 
             if r.apply(sess) {
