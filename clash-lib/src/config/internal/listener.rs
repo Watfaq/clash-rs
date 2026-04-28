@@ -91,6 +91,12 @@ pub enum InboundOpts {
         /// (single-user mode). Each entry uses the plaintext password field.
         #[serde(default)]
         users: Vec<InboundUser>,
+        /// Optional fallback address (`host:port`) to which unauthenticated
+        /// connections are forwarded, providing camouflage against active
+        /// probing. When absent, unauthenticated connections are
+        /// silently dropped.
+        #[serde(default)]
+        fallback: Option<String>,
     },
 }
 
@@ -176,6 +182,7 @@ impl PartialEq for InboundOpts {
                     password: pa,
                     certificate: ca,
                     private_key: pka,
+                    fallback: fa,
                     ..
                 },
                 InboundOpts::Anytls {
@@ -183,9 +190,10 @@ impl PartialEq for InboundOpts {
                     password: pb,
                     certificate: cb,
                     private_key: pkb,
+                    fallback: fb,
                     ..
                 },
-            ) => a == b && pa == pb && ca == cb && pka == pkb,
+            ) => a == b && pa == pb && ca == cb && pka == pkb && fa == fb,
             _ => false,
         }
     }
@@ -241,12 +249,14 @@ impl std::hash::Hash for InboundOpts {
                 password,
                 certificate,
                 private_key,
+                fallback,
                 ..
             } => {
                 common_opts.hash(state);
                 password.hash(state);
                 certificate.hash(state);
                 private_key.hash(state);
+                fallback.hash(state);
                 // `users` intentionally excluded — handled via watch channel
             }
         }

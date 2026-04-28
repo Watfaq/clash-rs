@@ -50,6 +50,8 @@ pub struct InboundOptions {
     pub allow_lan: bool,
     pub dispatcher: Arc<Dispatcher>,
     pub fw_mark: Option<u32>,
+    /// Optional fallback address (`host:port`) for unauthenticated connections.
+    pub fallback: Option<String>,
     /// Watch receiver for the live user list.
     pub users_rx: tokio::sync::watch::Receiver<Vec<InboundUser>>,
 }
@@ -61,6 +63,7 @@ pub struct AnytlsInbound {
     fw_mark: Option<u32>,
     tls_acceptor: TlsAcceptor,
     password: String,
+    fallback: Option<String>,
     users_rx: tokio::sync::watch::Receiver<Vec<InboundUser>>,
 }
 
@@ -83,6 +86,7 @@ impl AnytlsInbound {
             fw_mark: opts.fw_mark,
             tls_acceptor,
             password: opts.password,
+            fallback: opts.fallback,
             users_rx: opts.users_rx,
         })
     }
@@ -256,6 +260,46 @@ async fn write_frame(
     Ok(())
 }
 
+/// Forward an unauthenticated TLS stream to a fallback backend for camouflage.
+///
+/// The 32 bytes already consumed for the password check are prepended before
+/// piping the rest of the (decrypted) application stream to the backend.
+async fn handle_fallback(
+    mut tls_stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    already_read: &[u8],
+    fallback_addr: &str,
+    src_addr: SocketAddr,
+) {
+    let mut backend = match tokio::net::TcpStream::connect(fallback_addr).await {
+        Ok(s) => s,
+        Err(e) => {
+            debug!(
+                "anytls fallback: failed to connect to {fallback_addr} for \
+                 {src_addr}: {e}"
+            );
+            return;
+        }
+    };
+
+    // Write the bytes we already consumed before bidirectional copy.
+    if let Err(e) = backend.write_all(already_read).await {
+        debug!("anytls fallback: failed to write preamble for {src_addr}: {e}");
+        return;
+    }
+
+    match tokio::io::copy_bidirectional(&mut tls_stream, &mut backend).await {
+        Ok((a, b)) => {
+            debug!(
+                "anytls fallback: {src_addr} proxied to {fallback_addr} ({a}↑ {b}↓ \
+                 bytes)"
+            );
+        }
+        Err(e) => {
+            debug!("anytls fallback: copy error for {src_addr}: {e}");
+        }
+    }
+}
+
 /// Handle one accepted TCP connection (runs in a spawned task).
 async fn handle_connection(
     raw_stream: tokio::net::TcpStream,
@@ -264,6 +308,7 @@ async fn handle_connection(
     dispatcher: Arc<Dispatcher>,
     user_map: Arc<HashMap<[u8; 32], String>>,
     fw_mark: Option<u32>,
+    fallback: Option<String>,
 ) {
     // ── TLS handshake ────────────────────────────────────────────────────────
     let mut tls_stream = match acceptor.accept(raw_stream).await {
@@ -290,9 +335,14 @@ async fn handle_connection(
             }
         }
         None => {
-            warn!(
-                "anytls inbound rejected connection from {src_addr}: wrong password"
-            );
+            if let Some(addr) = fallback {
+                handle_fallback(tls_stream, &hash_buf, &addr, src_addr).await;
+            } else {
+                warn!(
+                    "anytls inbound rejected connection from {src_addr}: wrong \
+                     password"
+                );
+            }
             return;
         }
     };
@@ -635,10 +685,12 @@ impl InboundHandlerTrait for AnytlsInbound {
                     let dispatcher = self.dispatcher.clone();
                     let map = Arc::clone(&user_map);
                     let fw_mark = self.fw_mark;
+                    let fallback = self.fallback.clone();
 
                     tokio::spawn(async move {
                         handle_connection(
                             stream, src_addr, acceptor, dispatcher, map, fw_mark,
+                            fallback,
                         )
                         .await;
                     });

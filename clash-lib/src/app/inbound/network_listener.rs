@@ -201,6 +201,7 @@ fn build_handler(
             password,
             certificate,
             private_key,
+            fallback,
             users,
         } => {
             let rx = users_rx
@@ -210,6 +211,7 @@ fn build_handler(
                 password: password.clone(),
                 certificate: certificate.clone(),
                 private_key: private_key.clone(),
+                fallback: fallback.clone(),
                 allow_lan: common_opts.allow_lan,
                 dispatcher,
                 fw_mark: common_opts.fw_mark,
