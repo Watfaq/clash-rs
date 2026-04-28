@@ -131,6 +131,11 @@ impl Router {
         asn_mmdb: &Option<MmdbLookup>,
         sess: &mut Session,
     ) {
+        // Preserve existing ASN metadata — avoids overriding prior enrichment
+        if sess.asn.is_some() {
+            return;
+        }
+
         let Some(asn_mmdb) = asn_mmdb else {
             return;
         };
