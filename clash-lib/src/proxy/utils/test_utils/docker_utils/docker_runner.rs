@@ -112,16 +112,22 @@ impl DockerTestRunner {
             .host_config
             .as_mut()
             .and_then(|hc| hc.mounts.take());
-        let files_to_copy = if std::env::var("DOCKER_HOST")
-            .ok()
-            .map(|url| {
-                url.starts_with("http://")
-                    || url.starts_with("https://")
-                    || url.starts_with("tcp://")
-            })
-            .unwrap_or(false)
-        {
-            // Remote Docker - collect files to copy via API
+        // Use the API-based file-copy path when:
+        //   a) DOCKER_HOST points to a remote HTTP/TCP endpoint, OR
+        //   b) CLASH_DOCKER_USE_HOST_IP is set (macOS + colima): bind-mount
+        //      source paths are macOS /var/folders/… paths that don't exist
+        //      inside the colima VM, so we must upload files via Docker API.
+        let use_api_copy = std::env::var("CLASH_DOCKER_USE_HOST_IP").is_ok()
+            || std::env::var("DOCKER_HOST")
+                .ok()
+                .map(|url| {
+                    url.starts_with("http://")
+                        || url.starts_with("https://")
+                        || url.starts_with("tcp://")
+                })
+                .unwrap_or(false);
+        let files_to_copy = if use_api_copy {
+            // Remote/colima Docker - collect files to copy via API
             mounts
         } else {
             // Local Docker - keep mounts in config
