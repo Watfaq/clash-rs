@@ -72,13 +72,9 @@ pub(crate) fn build_tls_acceptor(
             let rcgen::CertifiedKey { cert, signing_key } =
                 rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
                     .map_err(|e| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!(
-                                "failed to generate ephemeral anytls certificate: \
-                                 {e}"
-                            ),
-                        )
+                        std::io::Error::other(format!(
+                            "failed to generate ephemeral anytls certificate: {e}"
+                        ))
                     })?;
             let cert_der =
                 rustls::pki_types::CertificateDer::from(cert.der().to_vec());
@@ -86,10 +82,9 @@ pub(crate) fn build_tls_acceptor(
                 signing_key.serialize_der(),
             )
             .map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to serialize ephemeral anytls key: {e}"),
-                )
+                std::io::Error::other(format!(
+                    "failed to serialize ephemeral anytls key: {e}"
+                ))
             })?;
             (vec![cert_der], key_der)
         }
