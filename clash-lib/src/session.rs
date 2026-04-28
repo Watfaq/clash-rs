@@ -385,6 +385,7 @@ pub enum Type {
     Redir,
     Tunnel,
     Shadowsocks,
+    Anytls,
     Ignore,
 }
 

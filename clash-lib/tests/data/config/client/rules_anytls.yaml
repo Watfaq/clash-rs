@@ -1,0 +1,21 @@
+---
+socks-port: 8998
+
+allow-lan: true
+mode: rule
+log-level: trace
+external-controller: :9095
+experimental:
+  ignore-resolve-fail: true
+
+proxies:
+  - name: "anytls-simple"
+    type: anytls
+    server: 127.0.0.1
+    port: 8902
+    password: "anytls-smoke-test-password"
+    skip-cert-verify: true
+    udp: true
+
+rules:
+  - MATCH, anytls-simple

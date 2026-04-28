@@ -74,6 +74,30 @@ pub enum InboundOpts {
         #[serde(default)]
         users: Vec<InboundUser>,
     },
+    #[serde(alias = "anytls")]
+    Anytls {
+        #[serde(flatten)]
+        common_opts: CommonInboundOpts,
+        password: String,
+        /// File path or inline PEM certificate chain. When absent, an
+        /// ephemeral self-signed certificate is generated at startup.
+        #[serde(default)]
+        certificate: Option<String>,
+        /// File path or inline PEM private key. When absent, an ephemeral
+        /// self-signed certificate is generated at startup.
+        #[serde(rename = "private-key", default)]
+        private_key: Option<String>,
+        /// Optional multi-user list. When empty, `password` is used directly
+        /// (single-user mode). Each entry uses the plaintext password field.
+        #[serde(default)]
+        users: Vec<InboundUser>,
+        /// Optional fallback address (`host:port`) to which unauthenticated
+        /// connections are forwarded, providing camouflage against active
+        /// probing. When absent, unauthenticated connections are
+        /// silently dropped.
+        #[serde(default)]
+        fallback: Option<String>,
+    },
 }
 
 /// Equality and hashing for `InboundOpts` intentionally exclude the `users`
@@ -152,6 +176,24 @@ impl PartialEq for InboundOpts {
                     ..
                 },
             ) => a == b && ua == ub && ca == cb && pa == pb,
+            (
+                InboundOpts::Anytls {
+                    common_opts: a,
+                    password: pa,
+                    certificate: ca,
+                    private_key: pka,
+                    fallback: fa,
+                    ..
+                },
+                InboundOpts::Anytls {
+                    common_opts: b,
+                    password: pb,
+                    certificate: cb,
+                    private_key: pkb,
+                    fallback: fb,
+                    ..
+                },
+            ) => a == b && pa == pb && ca == cb && pka == pkb && fa == fb,
             _ => false,
         }
     }
@@ -202,6 +244,21 @@ impl std::hash::Hash for InboundOpts {
                 password.hash(state);
                 // `users` intentionally excluded — handled via watch channel
             }
+            InboundOpts::Anytls {
+                common_opts,
+                password,
+                certificate,
+                private_key,
+                fallback,
+                ..
+            } => {
+                common_opts.hash(state);
+                password.hash(state);
+                certificate.hash(state);
+                private_key.hash(state);
+                fallback.hash(state);
+                // `users` intentionally excluded — handled via watch channel
+            }
         }
     }
 }
@@ -219,6 +276,7 @@ impl InboundOpts {
             InboundOpts::Redir { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
+            InboundOpts::Anytls { common_opts, .. } => common_opts,
         }
     }
 
@@ -234,6 +292,7 @@ impl InboundOpts {
             InboundOpts::Redir { common_opts, .. } => common_opts,
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { common_opts, .. } => common_opts,
+            InboundOpts::Anytls { common_opts, .. } => common_opts,
         }
     }
 
@@ -249,6 +308,7 @@ impl InboundOpts {
             InboundOpts::Redir { .. } => "redir",
             #[cfg(feature = "shadowsocks")]
             InboundOpts::Shadowsocks { .. } => "shadowsocks",
+            InboundOpts::Anytls { .. } => "anytls",
         }
     }
 }

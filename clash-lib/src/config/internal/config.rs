@@ -57,6 +57,25 @@ impl Config {
                 )));
             }
         }
+        // Check for duplicate AnyTLS user passwords
+        for opts in &self.listeners {
+            if let crate::config::internal::listener::InboundOpts::Anytls {
+                common_opts,
+                users,
+                ..
+            } = opts
+            {
+                let mut seen = std::collections::HashSet::new();
+                for u in users {
+                    if !seen.insert(u.password.as_str()) {
+                        return Err(Error::InvalidConfig(format!(
+                            "anytls inbound '{}': duplicate user password",
+                            common_opts.name
+                        )));
+                    }
+                }
+            }
+        }
         Ok(self)
     }
 }
