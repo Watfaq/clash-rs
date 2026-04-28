@@ -17,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: ["macos-latest", "windows-latest", "ubuntu-latest"]
+        os: ["macos-15-intel", "windows-latest", "ubuntu-latest"]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,6 +42,13 @@ jobs:
           version: "23.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker (macOS via colima)
+        if: runner.os == 'macOS'
+        run: |
+          brew install colima docker
+          colima start --cpu 2 --memory 4
+          sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
+
       - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v4
         with:
@@ -50,7 +57,7 @@ jobs:
           args: --workspace --exclude clash-ffi -F "plus" --codecov --output-path codecov.json
         env:
           CROSS_CONTAINER_OPTS: "--network host"
-          CLASH_DOCKER_TEST: ${{ startsWith(matrix.os, 'ubuntu') && 'true' || 'false' }}
+          CLASH_DOCKER_TEST: ${{ runner.os != 'Windows' && 'true' || 'false' }}
           TS_AUTH_KEY: ${{ secrets.TS_AUTH_KEY }}
           RUST_LOG: ts_control=debug,ts_runtime=debug,tailscale=debug
 
