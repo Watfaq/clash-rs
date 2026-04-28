@@ -209,6 +209,16 @@ impl InboundManager {
                                     users.len()
                                 );
                             }
+                            if let (InboundOpts::Anytls { users, .. }, Some(tx)) =
+                                (&opts, &entry.users_tx)
+                                && tx.send(users.clone()).is_ok()
+                            {
+                                info!(
+                                    "inbound provider {provider_name}: anytls user \
+                                     list updated in place ({} users)",
+                                    users.len()
+                                );
+                            }
                             new_handles.insert(opts, entry);
                         } else {
                             opts_to_start.push(opts);
@@ -244,11 +254,15 @@ impl InboundManager {
                              '{listener_name}'"
                         );
 
-                        // For Shadowsocks, create a watch channel so future
-                        // user-list updates can be pushed without a restart.
+                        // For Shadowsocks and AnyTLS, create a watch channel so
+                        // future user-list updates can be pushed without a restart.
                         #[cfg(feature = "shadowsocks")]
                         let (users_rx, users_tx) =
                             if let InboundOpts::Shadowsocks { users, .. } = &opts {
+                                let (tx, rx) =
+                                    tokio::sync::watch::channel(users.clone());
+                                (Some(rx), Some(tx))
+                            } else if let InboundOpts::Anytls { users, .. } = &opts {
                                 let (tx, rx) =
                                     tokio::sync::watch::channel(users.clone());
                                 (Some(rx), Some(tx))
@@ -256,10 +270,20 @@ impl InboundManager {
                                 (None, None)
                             };
                         #[cfg(not(feature = "shadowsocks"))]
-                        let (users_rx, users_tx) = (
-                            None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
-                            None,
-                        );
+                        let (users_rx, users_tx) = if let InboundOpts::Anytls {
+                            users,
+                            ..
+                        } = &opts
+                        {
+                            let (tx, rx) =
+                                tokio::sync::watch::channel(users.clone());
+                            (Some(rx), Some(tx))
+                        } else {
+                            (
+                                None::<tokio::sync::watch::Receiver<Vec<InboundUser>>>,
+                                None,
+                            )
+                        };
 
                         let handle = build_network_listeners(
                             &opts,
