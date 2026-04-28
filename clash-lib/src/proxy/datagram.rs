@@ -4,17 +4,12 @@ use crate::{
 };
 use futures::{FutureExt, Sink, Stream, ready};
 use std::{
-    collections::HashMap,
     fmt::{Debug, Display, Formatter},
     io,
-    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
-
-const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(300);
 
 #[derive(Clone)]
 pub struct UdpPacket {
@@ -81,11 +76,6 @@ pub struct OutboundDatagramImpl {
     // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
     // every poll_next call.
     recv_buf: Vec<u8>,
-    // Maps resolved IP addresses back to their original domain names for UDP NAT.
-    // When we send to a domain, we resolve it to an IP. When we receive from that
-    // IP, we need to map it back to the domain to maintain stable session
-    // state.
-    ip_to_domain: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
 impl OutboundDatagramImpl {
@@ -96,7 +86,6 @@ impl OutboundDatagramImpl {
             flushed: true,
             pkt: None,
             recv_buf: vec![0u8; 65535],
-            ip_to_domain: HashMap::new(),
         }
     }
 }
@@ -137,7 +126,6 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ref mut inner,
             ref mut pkt,
             ref resolver,
-            ref mut ip_to_domain,
             ..
         } = *self;
 
@@ -145,7 +133,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let p = pkt.as_ref().unwrap();
             let dst = &p.dst_addr;
             let data = &p.data;
-            let (dst, original_domain) = match dst {
+            let dst = match dst {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = *port;
@@ -163,31 +151,18 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         io::Error::other("resolve domain failed")
                     }))?;
                     if let Some(ip) = ip {
-                        let socket_addr = (ip, port).into();
-                        // Store the original domain for reverse mapping
-                        let original = SocksAddr::Domain(domain.clone(), port);
-                        (socket_addr, Some((socket_addr, original)))
+                        (ip, port).into()
                     } else {
                         return Poll::Ready(Err(io::Error::other(format!(
                             "resolve domain failed: {domain}"
                         ))));
                     }
                 }
-                SocksAddr::Ip(addr) => {
-                    ip_to_domain.remove(addr);
-                    (*addr, None)
-                }
+                SocksAddr::Ip(addr) => *addr,
             };
 
-            // Store domain mapping if we resolved a domain, but only after a
-            // fully-successful send to avoid stale entries on partial writes.
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
             let wrote_all = n == data.len();
-            if wrote_all && let Some((addr, domain)) = original_domain {
-                // Opportunistically prune expired entries before inserting.
-                ip_to_domain.retain(|_, (_, ts)| ts.elapsed() < UDP_DOMAIN_MAP_TTL);
-                ip_to_domain.insert(addr, (domain, Instant::now()));
-            }
             self.pkt = None;
             self.flushed = true;
 
@@ -222,24 +197,15 @@ impl Stream for OutboundDatagramImpl {
         let Self {
             ref mut inner,
             ref mut recv_buf,
-            ref ip_to_domain,
             ..
         } = *self;
         let mut buf = ReadBuf::new(recv_buf.as_mut_slice());
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
-                // Check if this IP was resolved from a domain name, and the
-                // mapping is still within the TTL window.
-                let src_addr = ip_to_domain
-                    .get(&src)
-                    .and_then(|(domain, ts)| {
-                        (ts.elapsed() < UDP_DOMAIN_MAP_TTL).then(|| domain.clone())
-                    })
-                    .unwrap_or_else(|| src.into());
                 Poll::Ready(Some(UdpPacket {
                     data,
-                    src_addr,
+                    src_addr: src.into(),
                     dst_addr: SocksAddr::any_ipv4(),
                     inbound_user: None,
                 }))

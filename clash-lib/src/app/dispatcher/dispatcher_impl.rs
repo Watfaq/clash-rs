@@ -339,6 +339,7 @@ impl Dispatcher {
                                                                           * socket addr as it's
                                                                           * from local
                                                                           * udp */
+                        &orig_dest,
                     )
                     .await
                 {
@@ -370,11 +371,12 @@ impl Dispatcher {
                             tokio::sync::mpsc::channel::<UdpPacket>(256);
 
                         // remote -> local
+                        let orig_dest_for_nat = orig_dest.clone();
                         let r_handle = tokio::spawn(async move {
                             while let Some(packet) = remote_r.next().await {
                                 // NAT
                                 let mut packet = packet;
-                                packet.src_addr = orig_dest.clone();
+                                packet.src_addr = orig_dest_for_nat.clone();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!(
@@ -411,6 +413,7 @@ impl Dispatcher {
                             .insert(
                                 &outbound_name,
                                 packet.src_addr.clone().must_into_socket_addr(),
+                                orig_dest.clone(),
                                 r_handle,
                                 w_handle,
                                 remote_sender.clone(),
@@ -547,15 +550,14 @@ impl TimeoutUdpSessionManager {
                 let mut g = map_cloned.write().await;
                 let mut alived = 0;
                 let mut expired = 0;
-                g.0.retain(|k, x| {
-                    let (h1, h2, _, last) = x;
+                g.0.retain(|k, val| {
                     let now = Instant::now();
-                    let alive = now.duration_since(*last) < timeout;
+                    let alive = now.duration_since(val.last_active) < timeout;
                     if !alive {
                         expired += 1;
                         trace!("udp session expired: {:?}", k);
-                        h1.abort();
-                        h2.abort();
+                        val.recv_handle.abort();
+                        val.send_handle.abort();
                     } else {
                         alived += 1;
                     }
@@ -579,31 +581,51 @@ impl TimeoutUdpSessionManager {
         &self,
         outbound_name: &str,
         src_addr: SocketAddr,
+        orig_dest: SocksAddr,
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
     ) {
         let mut map = self.map.write().await;
-        map.insert(outbound_name, src_addr, recv_handle, send_handle, sender);
+        map.insert(
+            outbound_name,
+            src_addr,
+            orig_dest,
+            recv_handle,
+            send_handle,
+            sender,
+        );
     }
 
     async fn get_outbound_sender_mut(
         &self,
         outbound_name: &str,
         src_addr: SocketAddr,
+        orig_dest: &SocksAddr,
     ) -> Option<OutboundPacketSender> {
         let mut map = self.map.write().await;
-        map.get_outbound_sender_mut(outbound_name, src_addr)
+        map.get_outbound_sender_mut(outbound_name, src_addr, orig_dest)
     }
 }
 
-type OutboundHandleKey = (String, SocketAddr);
-type OutboundHandleVal = (
-    JoinHandle<()>,
-    JoinHandle<()>,
-    OutboundPacketSender,
-    Instant,
-);
+/// Key identifying a unique UDP NAT session.
+/// Scoped to (outbound, client source, original destination) so that packets
+/// to different remote endpoints are never multiplexed onto the same socket.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct OutboundHandleKey {
+    outbound_name: String,
+    src_addr: SocketAddr,
+    /// The destination address as seen by the inbound (e.g. the FAKE-IP or
+    /// domain the client originally sent to, before any reverse-lookup).
+    orig_dest: SocksAddr,
+}
+
+struct OutboundHandleVal {
+    recv_handle: JoinHandle<()>,
+    send_handle: JoinHandle<()>,
+    sender: OutboundPacketSender,
+    last_active: Instant,
+}
 
 struct OutboundHandleMap(HashMap<OutboundHandleKey, OutboundHandleVal>);
 
@@ -616,13 +638,23 @@ impl OutboundHandleMap {
         &mut self,
         outbound_name: &str,
         src_addr: SocketAddr,
+        orig_dest: SocksAddr,
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
     ) {
         self.0.insert(
-            (outbound_name.to_string(), src_addr),
-            (recv_handle, send_handle, sender, Instant::now()),
+            OutboundHandleKey {
+                outbound_name: outbound_name.to_string(),
+                src_addr,
+                orig_dest,
+            },
+            OutboundHandleVal {
+                recv_handle,
+                send_handle,
+                sender,
+                last_active: Instant::now(),
+            },
         );
     }
 
@@ -630,17 +662,21 @@ impl OutboundHandleMap {
         &mut self,
         outbound_name: &str,
         src_addr: SocketAddr,
+        orig_dest: &SocksAddr,
     ) -> Option<OutboundPacketSender> {
-        self.0.get_mut(&(outbound_name.to_owned(), src_addr)).map(
-            |(_, _, sender, last)| {
-                trace!(
-                    "updating last access time for outbound {:?}",
-                    (outbound_name, src_addr)
-                );
-                *last = Instant::now();
-                sender.clone()
-            },
-        )
+        let key = OutboundHandleKey {
+            outbound_name: outbound_name.to_owned(),
+            src_addr,
+            orig_dest: orig_dest.clone(),
+        };
+        self.0.get_mut(&key).map(|val| {
+            trace!(
+                "updating last access time for outbound {:?}",
+                (outbound_name, src_addr)
+            );
+            val.last_active = Instant::now();
+            val.sender.clone()
+        })
     }
 }
 
@@ -650,9 +686,9 @@ impl Drop for OutboundHandleMap {
             "dropping inner outbound handle map that has {} sessions",
             self.0.len()
         );
-        for (_, (recv_handle, send_handle, ..)) in self.0.drain() {
-            recv_handle.abort();
-            send_handle.abort();
+        for (_, val) in self.0.drain() {
+            val.recv_handle.abort();
+            val.send_handle.abort();
         }
     }
 }

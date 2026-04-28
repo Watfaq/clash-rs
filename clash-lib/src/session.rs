@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum SocksAddr {
     Ip(SocketAddr),
     Domain(String, u16),
