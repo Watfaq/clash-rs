@@ -258,8 +258,15 @@ pub(super) async fn handle_connection(
 
     // ── Branch: UDP-over-TCP v2 or plain TCP relay ───────────────────────────
     if dest.host() == UDP_OVER_TCP_V2_MAGIC_HOST {
-        handle_udp_session(tls_stream, src_addr, dispatcher, inbound_user, fw_mark)
-            .await;
+        handle_udp_session(
+            tls_stream,
+            src_addr,
+            sid,
+            dispatcher,
+            inbound_user,
+            fw_mark,
+        )
+        .await;
     } else {
         handle_tcp_relay(
             tls_stream,
@@ -276,23 +283,94 @@ pub(super) async fn handle_connection(
 
 /// Handle a UDP-over-TCP v2 session.
 ///
-/// After the AnyTLS handshake the client sends:
-///   `u8(isConnect=1) | SocksAddr(real_udp_destination)`
-/// then exchanges length-prefixed UDP payloads.
+/// The outbound wraps ALL application data (including the UoT connect header
+/// and datagrams) in CMD_PSH frames via its relay layer. So this function
+/// must set up the same CMD_PSH relay as `handle_tcp_relay`, then read the
+/// UoT connect header (`u8(isConnect=1) | SocksAddr`) from the unwrapped
+/// application stream, and pass that stream to `InboundDatagramAnytls` for
+/// `u16(len) | payload` datagram exchange.
 async fn handle_udp_session(
-    mut tls_stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    tls_stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
     src_addr: SocketAddr,
+    stream_id: u32,
     dispatcher: Arc<Dispatcher>,
     inbound_user: Option<String>,
     fw_mark: Option<u32>,
 ) {
-    // Read UoT v2 connect header.
-    let is_connect = match tls_stream.read_u8().await {
+    let (mut remote_read, mut remote_write) = tokio::io::split(tls_stream);
+    let (mut app_stream, relay_stream) = tokio::io::duplex(DUPLEX_BUFFER_SIZE);
+    let (mut relay_read, mut relay_write) = tokio::io::split(relay_stream);
+
+    let cancel = CancellationToken::new();
+    let cancel_a = cancel.clone();
+    let cancel_b = cancel.clone();
+    let cancel_c = cancel;
+
+    // Task A: relay_read (writes from InboundDatagramAnytls) → CMD_PSH → TLS
+    tokio::spawn(async move {
+        let mut buf = vec![0u8; RELAY_BUFFER_SIZE];
+        loop {
+            tokio::select! {
+                biased;
+                _ = cancel_a.cancelled() => break,
+                result = relay_read.read(&mut buf) => {
+                    let n = match result {
+                        Ok(0) | Err(_) => { cancel_a.cancel(); break; }
+                        Ok(n) => n,
+                    };
+                    let mut psh_header = bytes::BytesMut::with_capacity(7);
+                    psh_header.put_u8(CMD_PSH);
+                    psh_header.put_u32(stream_id);
+                    psh_header.put_u16(n as u16);
+                    if remote_write.write_all(&psh_header).await.is_err()
+                        || remote_write.write_all(&buf[..n]).await.is_err()
+                        || remote_write.flush().await.is_err()
+                    {
+                        cancel_a.cancel();
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    // Task B: TLS → CMD_PSH frames → relay_write (reads by InboundDatagramAnytls)
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                biased;
+                _ = cancel_b.cancelled() => break,
+                result = read_frame(&mut remote_read) => {
+                    let (cmd, sid, data) = match result {
+                        Ok(f) => f,
+                        Err(_) => { cancel_b.cancel(); break; }
+                    };
+                    match cmd {
+                        CMD_PSH if sid == stream_id => {
+                            if relay_write.write_all(&data).await.is_err() {
+                                cancel_b.cancel();
+                                break;
+                            }
+                        }
+                        CMD_FIN if sid == stream_id => {
+                            cancel_b.cancel();
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    });
+
+    // ── Read UoT v2 connect header from the unwrapped app stream ─────────────
+    let is_connect = match app_stream.read_u8().await {
         Ok(b) => b,
         Err(e) => {
             debug!(
                 "anytls inbound UoT: failed to read isConnect from {src_addr}: {e}"
             );
+            cancel_c.cancel();
             return;
         }
     };
@@ -300,16 +378,18 @@ async fn handle_udp_session(
         warn!(
             "anytls inbound UoT: unexpected isConnect={is_connect} from {src_addr}"
         );
+        cancel_c.cancel();
         return;
     }
 
-    let real_dest = match SocksAddr::read_from(&mut tls_stream).await {
+    let real_dest = match SocksAddr::read_from(&mut app_stream).await {
         Ok(a) => a,
         Err(e) => {
             debug!(
                 "anytls inbound UoT: failed to read real destination from \
                  {src_addr}: {e}"
             );
+            cancel_c.cancel();
             return;
         }
     };
@@ -319,7 +399,7 @@ async fn handle_udp_session(
         inbound_user
     );
 
-    let inner: AnyStream = Box::new(tls_stream);
+    let inner: AnyStream = Box::new(app_stream);
     let datagram = InboundDatagramAnytls::new(inner, real_dest.clone());
 
     let sess = Session {
@@ -481,7 +561,10 @@ async fn handle_tcp_relay(
 mod tests {
     use crate::{
         proxy::anytls::inbound::{
-            framing::{CMD_PSH, CMD_SETTINGS, CMD_SYN, read_frame},
+            framing::{
+                CMD_PSH, CMD_SETTINGS, CMD_SYN, UDP_OVER_TCP_V2_MAGIC_HOST,
+                read_frame,
+            },
             tls::build_tls_acceptor,
         },
         session::SocksAddr,
@@ -776,5 +859,113 @@ mod tests {
                     .supported_schemes()
             }
         }
+    }
+
+    /// Verifies that an AnyTLS client sending `UDP_OVER_TCP_V2_MAGIC_HOST` as
+    /// the PSH destination causes the server to parse it correctly.  This
+    /// exercises the routing decision in `handle_connection` without requiring
+    /// a Dispatcher: we replay the full handshake, then the server-side test
+    /// asserts the parsed `dest.host() == UDP_OVER_TCP_V2_MAGIC_HOST`.
+    #[tokio::test]
+    async fn test_anytls_handshake_routes_udp_magic_host() {
+        install_crypto_provider();
+
+        let rcgen::CertifiedKey {
+            cert,
+            signing_key: key_pair,
+        } = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
+            .expect("rcgen cert generation failed");
+        let cert_pem = cert.pem();
+        let key_pem = key_pair.serialize_pem();
+        let cert_der = cert.der().clone();
+
+        let acceptor = build_tls_acceptor(Some(&cert_pem), Some(&key_pem)).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+
+        let password = "uot_v2_test_pw";
+        let hash: [u8; 32] = sha2::Sha256::digest(password.as_bytes()).into();
+
+        // Server task: accept TLS, parse AnyTLS frames, assert magic host.
+        let server_task = tokio::spawn(async move {
+            let (raw, _) = listener.accept().await.unwrap();
+            let mut tls = acceptor.accept(raw).await.unwrap();
+
+            // 32-byte password hash
+            let mut hash_buf = [0u8; 32];
+            tls.read_exact(&mut hash_buf).await.unwrap();
+            assert_eq!(hash_buf, hash, "password hash mismatch");
+
+            // u16 padding length
+            let pad = tls.read_u16().await.unwrap();
+            assert_eq!(pad, 0);
+
+            // Consume frames until we see PSH and check the destination.
+            loop {
+                let (cmd, _sid, data) = read_frame(&mut tls).await.unwrap();
+                if cmd == CMD_PSH {
+                    let mut cursor = std::io::Cursor::new(data);
+                    let dest = SocksAddr::read_from(&mut cursor).await.unwrap();
+                    assert_eq!(
+                        dest.host(),
+                        UDP_OVER_TCP_V2_MAGIC_HOST,
+                        "PSH destination host must equal the UoT v2 magic host"
+                    );
+                    break;
+                }
+            }
+        });
+
+        // Client task: connect via TLS, send AnyTLS handshake with magic host.
+        let client_task = tokio::spawn(async move {
+            let mut root_store = rustls::RootCertStore::empty();
+            root_store
+                .add(rustls::pki_types::CertificateDer::from(cert_der))
+                .unwrap();
+            let tls_config = rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+            let connector = TlsConnector::from(Arc::new(tls_config));
+            let raw = TcpStream::connect(server_addr).await.unwrap();
+            let mut stream = connector
+                .connect(
+                    rustls::pki_types::ServerName::try_from("localhost").unwrap(),
+                    raw,
+                )
+                .await
+                .unwrap();
+
+            // Build the AnyTLS handshake with the UoT magic host as the
+            // PSH destination.
+            let dest =
+                SocksAddr::try_from((UDP_OVER_TCP_V2_MAGIC_HOST.to_owned(), 0u16))
+                    .unwrap();
+            let mut addr_buf = bytes::BytesMut::new();
+            dest.write_buf(&mut addr_buf);
+
+            let settings = "v=2\nclient=clash-rs-uot-test";
+            let mut handshake = bytes::BytesMut::new();
+            handshake.put_slice(&hash);
+            handshake.put_u16(0); // no padding
+            // SETTINGS (stream_id=0)
+            handshake.put_u8(CMD_SETTINGS);
+            handshake.put_u32(0);
+            handshake.put_u16(settings.len() as u16);
+            handshake.put_slice(settings.as_bytes());
+            // SYN (stream_id=1)
+            handshake.put_u8(CMD_SYN);
+            handshake.put_u32(1);
+            handshake.put_u16(0);
+            // PSH (stream_id=1, payload = magic host addr)
+            handshake.put_u8(CMD_PSH);
+            handshake.put_u32(1);
+            handshake.put_u16(addr_buf.len() as u16);
+            handshake.put_slice(&addr_buf);
+
+            stream.write_all(&handshake).await.unwrap();
+            stream.flush().await.unwrap();
+        });
+
+        tokio::try_join!(server_task, client_task).unwrap();
     }
 }

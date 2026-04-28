@@ -14,7 +14,7 @@ use crate::{
     session::SocksAddr,
 };
 
-const MAX_PACKET_LENGTH: usize = u16::MAX as usize;
+pub(super) const MAX_PACKET_LENGTH: usize = u16::MAX as usize;
 
 /// Wraps the post-AnyTLS-handshake TLS stream for UDP-over-TCP v2.
 ///
@@ -236,5 +236,208 @@ impl Stream for InboundDatagramAnytls {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::{SinkExt, StreamExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
+
+    fn make_peer_addr() -> SocksAddr {
+        SocksAddr::try_from(("127.0.0.1".to_owned(), 9999u16)).unwrap()
+    }
+
+    fn make_packet(data: Vec<u8>) -> UdpPacket {
+        let addr = make_peer_addr();
+        UdpPacket {
+            data,
+            src_addr: addr.clone(),
+            dst_addr: addr,
+            inbound_user: None,
+        }
+    }
+
+    /// Helper: encode a single packet in wire format `u16(len) | payload`.
+    fn encode_wire(payload: &[u8]) -> Vec<u8> {
+        let mut v = Vec::with_capacity(2 + payload.len());
+        v.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+        v.extend_from_slice(payload);
+        v
+    }
+
+    // ── Read path ────────────────────────────────────────────────────────────
+
+    /// `\x00\x05hello` → `UdpPacket { data: b"hello" }`.
+    #[tokio::test]
+    async fn test_read_normal_packet() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr.clone());
+
+        client_side.write_all(&encode_wire(b"hello")).await.unwrap();
+        // Close the client end so poll_next can return None after the packet.
+        drop(client_side);
+
+        let pkt = datagram.next().await.expect("expected one packet");
+        assert_eq!(pkt.data, b"hello");
+        assert_eq!(pkt.src_addr, peer_addr);
+        assert_eq!(pkt.dst_addr, peer_addr);
+        assert!(pkt.inbound_user.is_none());
+
+        assert!(datagram.next().await.is_none(), "expected EOF");
+    }
+
+    /// `\x00\x00` (zero-length) → `UdpPacket { data: [] }` — must NOT be
+    /// dropped. This was a bug-fix regression case.
+    #[tokio::test]
+    async fn test_read_zero_length_packet() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr);
+
+        client_side.write_all(&[0x00, 0x00]).await.unwrap();
+        drop(client_side);
+
+        let pkt = datagram
+            .next()
+            .await
+            .expect("zero-length packet must not be None");
+        assert!(
+            pkt.data.is_empty(),
+            "zero-length packet must yield empty data, got {:?}",
+            pkt.data
+        );
+    }
+
+    /// Two packets concatenated in the stream → both returned in order.
+    #[tokio::test]
+    async fn test_read_two_consecutive_packets() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr);
+
+        let mut wire = encode_wire(b"first");
+        wire.extend(encode_wire(b"second"));
+        client_side.write_all(&wire).await.unwrap();
+        drop(client_side);
+
+        let pkt1 = datagram.next().await.expect("expected first packet");
+        assert_eq!(pkt1.data, b"first");
+
+        let pkt2 = datagram.next().await.expect("expected second packet");
+        assert_eq!(pkt2.data, b"second");
+
+        assert!(
+            datagram.next().await.is_none(),
+            "expected EOF after two packets"
+        );
+    }
+
+    /// EOF on inner stream → `poll_next` returns `None`.
+    #[tokio::test]
+    async fn test_read_eof_returns_none() {
+        let (client_side, server_side) = duplex(4096);
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), make_peer_addr());
+
+        drop(client_side); // immediate EOF
+
+        assert!(
+            datagram.next().await.is_none(),
+            "EOF on inner stream must yield None"
+        );
+    }
+
+    // ── Write path (Sink) ─────────────────────────────────────────────────────
+
+    /// Sending `UdpPacket { data: b"hello" }` writes `\x00\x05hello` to the
+    /// inner stream.
+    #[tokio::test]
+    async fn test_write_normal_packet() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr.clone());
+
+        datagram.send(make_packet(b"hello".to_vec())).await.unwrap();
+
+        let mut buf = vec![0u8; 7];
+        client_side.read_exact(&mut buf).await.unwrap();
+
+        assert_eq!(
+            &buf[..2],
+            &[0x00, 0x05],
+            "length prefix should be 5 (big-endian)"
+        );
+        assert_eq!(&buf[2..], b"hello", "payload mismatch");
+    }
+
+    /// Sending an empty payload writes exactly `\x00\x00` to the inner stream.
+    #[tokio::test]
+    async fn test_write_empty_packet() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr.clone());
+
+        datagram.send(make_packet(vec![])).await.unwrap();
+
+        let mut buf = vec![0u8; 2];
+        client_side.read_exact(&mut buf).await.unwrap();
+        assert_eq!(
+            &buf,
+            &[0x00, 0x00],
+            "empty packet must produce two zero bytes"
+        );
+    }
+
+    /// A payload larger than `u16::MAX` bytes must produce an error — not a
+    /// silent truncation or panic.
+    #[tokio::test]
+    async fn test_write_oversized_packet_returns_error() {
+        let (_client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr.clone());
+
+        let oversized = vec![0u8; MAX_PACKET_LENGTH + 1];
+        let result = datagram.send(make_packet(oversized)).await;
+
+        assert!(
+            result.is_err(),
+            "sending a payload > u16::MAX must return an error"
+        );
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    /// Verify the round-trip: write a packet, read the wire bytes back, decode
+    /// them manually.
+    #[tokio::test]
+    async fn test_write_then_read_wire_bytes() {
+        let (mut client_side, server_side) = duplex(4096);
+        let peer_addr = make_peer_addr();
+        let mut datagram =
+            InboundDatagramAnytls::new(Box::new(server_side), peer_addr.clone());
+
+        let payload = b"round-trip";
+        datagram.send(make_packet(payload.to_vec())).await.unwrap();
+
+        // Read the raw bytes from the other end and verify the framing.
+        let expected_len = payload.len();
+        let mut buf = vec![0u8; 2 + expected_len];
+        client_side.read_exact(&mut buf).await.unwrap();
+
+        let len = u16::from_be_bytes([buf[0], buf[1]]) as usize;
+        assert_eq!(
+            len, expected_len,
+            "decoded length must match payload length"
+        );
+        assert_eq!(&buf[2..], payload, "decoded payload must match");
     }
 }

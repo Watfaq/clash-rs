@@ -15,7 +15,7 @@ proxies:
     port: 8902
     password: "anytls-smoke-test-password"
     skip-cert-verify: true
-    udp: false
+    udp: true
 
 rules:
   - MATCH, anytls-simple
