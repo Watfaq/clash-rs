@@ -171,7 +171,14 @@ impl Stream for InboundDatagramAnytls {
                             u16::from_be_bytes(this.length_buf) as usize;
                         this.header_read = 0;
                         if packet_len == 0 {
-                            continue;
+                            // Zero-length packet — valid empty datagram, return
+                            // immediately.
+                            return Poll::Ready(Some(UdpPacket {
+                                data: Vec::new(),
+                                src_addr: this.peer_addr.clone(),
+                                dst_addr: this.peer_addr.clone(),
+                                inbound_user: None,
+                            }));
                         }
                         if packet_len > MAX_PACKET_LENGTH {
                             debug!(

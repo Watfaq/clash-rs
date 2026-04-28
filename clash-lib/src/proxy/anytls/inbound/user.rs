@@ -19,7 +19,19 @@ pub fn build_user_map(
     } else {
         for u in users {
             let hash: [u8; 32] = Sha256::digest(u.password.as_bytes()).into();
-            map.insert(hash, u.name.clone());
+            match map.entry(hash) {
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(u.name.clone());
+                }
+                std::collections::hash_map::Entry::Occupied(e) => {
+                    tracing::warn!(
+                        "anytls inbound: duplicate password hash for users '{}' \
+                         and '{}'; keeping first",
+                        e.get(),
+                        u.name
+                    );
+                }
+            }
         }
     }
     Arc::new(map)

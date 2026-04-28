@@ -64,24 +64,33 @@ async fn handle_fallback(
             debug!("anytls fallback: copy error for {src_addr}: {e}");
         }
     }
+    // Send TLS close_notify so the client sees a clean EOF instead of an
+    // abrupt TCP reset.
+    let _ = tls_stream.shutdown().await;
 }
 
-/// Handle one accepted TCP connection (runs in a spawned task).
-pub(super) async fn handle_connection(
+/// Pre-authentication handshake: TLS + password + padding + frame loop.
+/// Returns `Some((tls_stream, inbound_user, destination, stream_id))` on
+/// success. Returns `None` on any error or if auth fails (fallback is handled
+/// internally).
+async fn do_handshake(
     raw_stream: tokio::net::TcpStream,
     src_addr: SocketAddr,
     acceptor: TlsAcceptor,
-    dispatcher: Arc<Dispatcher>,
     user_map: Arc<HashMap<[u8; 32], String>>,
-    fw_mark: Option<u32>,
     fallback: Option<String>,
-) {
+) -> Option<(
+    tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    Option<String>,
+    SocksAddr,
+    u32,
+)> {
     // ── TLS handshake ────────────────────────────────────────────────────────
     let mut tls_stream = match acceptor.accept(raw_stream).await {
         Ok(s) => s,
         Err(e) => {
             debug!("anytls inbound TLS handshake failed from {src_addr}: {e}");
-            return;
+            return None;
         }
     };
 
@@ -89,7 +98,7 @@ pub(super) async fn handle_connection(
     let mut hash_buf = [0u8; 32];
     if let Err(e) = tls_stream.read_exact(&mut hash_buf).await {
         debug!("anytls inbound failed to read password hash from {src_addr}: {e}");
-        return;
+        return None;
     }
 
     let inbound_user = match user_map.get(&hash_buf) {
@@ -109,7 +118,7 @@ pub(super) async fn handle_connection(
                      password"
                 );
             }
-            return;
+            return None;
         }
     };
 
@@ -120,14 +129,14 @@ pub(super) async fn handle_connection(
             debug!(
                 "anytls inbound failed to read padding length from {src_addr}: {e}"
             );
-            return;
+            return None;
         }
     };
     if padding_len > 0 {
         let mut skip = vec![0u8; padding_len];
         if let Err(e) = tls_stream.read_exact(&mut skip).await {
             debug!("anytls inbound failed to skip padding from {src_addr}: {e}");
-            return;
+            return None;
         }
     }
 
@@ -143,7 +152,7 @@ pub(super) async fn handle_connection(
                     "anytls inbound failed to read handshake frame from \
                      {src_addr}: {e}"
                 );
-                return;
+                return None;
             }
         };
 
@@ -151,12 +160,28 @@ pub(super) async fn handle_connection(
             CMD_SETTINGS | CMD_WASTE => {
                 // SETTINGS carries client metadata; we skip it.
             }
-            CMD_SYN => {
-                stream_id = Some(sid);
-            }
+            CMD_SYN => match stream_id {
+                None => stream_id = Some(sid),
+                Some(existing) if existing == sid => {}
+                Some(existing) => {
+                    warn!(
+                        "anytls inbound received mismatched SYN stream_id={sid} \
+                         (expected {existing}) from {src_addr}"
+                    );
+                    return None;
+                }
+            },
             CMD_PSH => {
-                if stream_id.is_none() {
-                    stream_id = Some(sid);
+                let Some(expected_sid) = stream_id else {
+                    warn!("anytls inbound missing SYN before PSH from {src_addr}");
+                    return None;
+                };
+                if sid != expected_sid {
+                    warn!(
+                        "anytls inbound received PSH on stream_id={sid} (expected \
+                         {expected_sid}) from {src_addr}"
+                    );
+                    return None;
                 }
                 // Parse SocksAddr from the PSH frame data.
                 let mut cursor = std::io::Cursor::new(data);
@@ -170,13 +195,13 @@ pub(super) async fn handle_connection(
                             "anytls inbound failed to parse destination from \
                              {src_addr}: {e}"
                         );
-                        return;
+                        return None;
                     }
                 }
             }
             CMD_FIN | CMD_ALERT => {
                 debug!("anytls inbound received early {cmd} from {src_addr}");
-                return;
+                return None;
             }
             _ => {}
         }
@@ -186,10 +211,44 @@ pub(super) async fn handle_connection(
         Some(s) => s,
         None => {
             warn!("anytls inbound: no SYN received from {src_addr}");
+            return None;
+        }
+    };
+
+    Some((tls_stream, inbound_user, destination, sid))
+}
+
+/// Handle one accepted TCP connection (runs in a spawned task).
+pub(super) async fn handle_connection(
+    raw_stream: tokio::net::TcpStream,
+    src_addr: SocketAddr,
+    acceptor: TlsAcceptor,
+    dispatcher: Arc<Dispatcher>,
+    user_map: Arc<HashMap<[u8; 32], String>>,
+    fw_mark: Option<u32>,
+    fallback: Option<String>,
+) {
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    /// Maximum time to complete the AnyTLS handshake before closing the
+    /// connection.
+    const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+    let handshake_result = timeout(
+        HANDSHAKE_TIMEOUT,
+        do_handshake(raw_stream, src_addr, acceptor, user_map, fallback),
+    )
+    .await;
+
+    let (tls_stream, inbound_user, dest, sid) = match handshake_result {
+        Ok(Some(result)) => result,
+        Ok(None) => return, // protocol error or auth failure, already logged
+        Err(_elapsed) => {
+            debug!("anytls inbound handshake timeout from {src_addr}");
             return;
         }
     };
-    let dest = destination;
 
     debug!(
         "anytls inbound accepted stream_id={sid} dest={dest} from {src_addr} \
@@ -353,7 +412,7 @@ async fn handle_tcp_relay(
                 biased;
                 _ = cancel_b.cancelled() => break,
                 result = read_frame(&mut remote_read) => {
-                    let (cmd, _sid, data) = match result {
+                    let (cmd, sid, data) = match result {
                         Ok(f) => f,
                         Err(err) => {
                             debug!("anytls inbound read frame error (src={src_addr}): {err}");
@@ -363,6 +422,14 @@ async fn handle_tcp_relay(
                     };
                     match cmd {
                         CMD_PSH => {
+                            if sid != stream_id {
+                                warn!(
+                                    "anytls inbound PSH on unexpected \
+                                     stream_id={sid} (expected {stream_id}) \
+                                     from {src_addr}, ignoring"
+                                );
+                                continue;
+                            }
                             if let Err(err) = relay_write.write_all(&data).await {
                                 debug!("anytls inbound relay write failed (src={src_addr}): {err}");
                                 cancel_b.cancel();
@@ -370,12 +437,18 @@ async fn handle_tcp_relay(
                             }
                         }
                         CMD_FIN => {
+                            if sid != stream_id {
+                                continue;
+                            }
                             // Client finished sending — shutdown the write side.
                             let _ = relay_write.shutdown().await;
                             cancel_b.cancel();
                             break;
                         }
                         CMD_ALERT => {
+                            if sid != stream_id {
+                                continue;
+                            }
                             let msg = String::from_utf8_lossy(&data);
                             warn!("anytls inbound alert from {src_addr}: {msg}");
                             let _ = relay_write.shutdown().await;
@@ -690,9 +763,18 @@ mod tests {
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            rustls::crypto::ring::default_provider()
-                .signature_verification_algorithms
-                .supported_schemes()
+            #[cfg(feature = "aws-lc-rs")]
+            {
+                rustls::crypto::aws_lc_rs::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+            #[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
+            {
+                rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
         }
     }
 }
