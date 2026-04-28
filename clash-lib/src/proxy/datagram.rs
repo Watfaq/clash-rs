@@ -162,8 +162,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                     if let Some(ip) = ip {
                         let socket_addr = (ip, port).into();
                         // Store the original domain for reverse mapping
-                        let original =
-                            SocksAddr::Domain(domain.clone(), port);
+                        let original = SocksAddr::Domain(domain.clone(), port);
                         (socket_addr, Some((socket_addr, original)))
                     } else {
                         return Poll::Ready(Err(io::Error::other(format!(
