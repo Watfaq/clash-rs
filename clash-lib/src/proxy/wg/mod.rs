@@ -386,8 +386,17 @@ mod tests {
         let opts = HandlerOptions {
             name: "wg".to_owned(),
             common_opts: Default::default(),
+            // WireGuard container exposes port 10002 externally (mapped to
+            // internal port 51820).  On macOS with colima
+            // (CLASH_DOCKER_USE_HOST_IP), the container IP isn't
+            // reachable from the host; use 127.0.0.1 and the dynamically
+            // allocated host port instead.
             server: runner.container_ip().unwrap_or("127.0.0.1".to_owned()),
-            port: 10002,
+            port: if std::env::var("CLASH_DOCKER_USE_HOST_IP").is_ok() {
+                runner.host_port()
+            } else {
+                10002
+            },
             ip: Ipv4Addr::new(10, 13, 13, 2),
             ipv6: None,
             private_key: "KIlDUePHyYwzjgn18przw/ZwPioJhh2aEyhxb/dtCXI=".to_owned(),

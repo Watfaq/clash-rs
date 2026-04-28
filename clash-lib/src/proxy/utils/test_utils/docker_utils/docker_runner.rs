@@ -76,12 +76,16 @@ pub struct DockerTestRunner {
     instance: Docker,
     id: String,
     inspect: ContainerInspectResponse,
+    /// The host-side published port (equals the container port for most tests;
+    /// differs for WireGuard which uses `host_port(alloc, 10002)`).
+    host_port: u16,
 }
 
 impl DockerTestRunner {
     pub async fn try_new(
         image_conf: Option<CreateImageOptions>,
         mut container_conf: ContainerCreateBody,
+        host_port: u16,
     ) -> anyhow::Result<Self> {
         let docker: Docker = if let Some(url) = std::env::var("DOCKER_HOST").ok() {
             if url.starts_with("http://")
@@ -186,10 +190,18 @@ impl DockerTestRunner {
             instance: docker,
             id,
             inspect,
+            host_port,
         })
     }
 
     pub fn container_ip(&self) -> Option<String> {
+        // When CLASH_DOCKER_USE_HOST_IP is set (e.g. macOS with colima),
+        // container IPs (172.17.x.x) live inside the VM and are unreachable
+        // from the macOS host.  Return None so callers fall back to
+        // "127.0.0.1" and use the published host port instead.
+        if std::env::var("CLASH_DOCKER_USE_HOST_IP").is_ok() {
+            return None;
+        }
         self.inspect
             .network_settings
             .as_ref()
@@ -234,6 +246,16 @@ impl DockerTestRunner {
             .inspect(|e| {
                 tracing::trace!("gateway_ip: {:?}", e);
             })
+    }
+
+    /// Returns the host-side published port for this container.
+    ///
+    /// For most tests `host_port == container_port` (set via `.port(p)`).
+    /// When `CLASH_DOCKER_USE_HOST_IP` is set (macOS + colima), combine this
+    /// with `"127.0.0.1"` to connect to the container via colima's port
+    /// forwarding instead of using an unreachable container IP.
+    pub fn host_port(&self) -> u16 {
+        self.host_port
     }
 
     /// For debugging use
@@ -694,6 +716,7 @@ impl DockerTestRunnerBuilder {
                 host_config: Some(self.host_config),
                 ..Default::default()
             },
+            self._server_port,
         )
         .await
         .map_err(Into::into)

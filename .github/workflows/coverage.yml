@@ -48,6 +48,7 @@ jobs:
           brew install colima docker
           colima start --cpu 2 --memory 4
           sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
+          echo "CLASH_DOCKER_USE_HOST_IP=true" >> $GITHUB_ENV
 
       - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v4
