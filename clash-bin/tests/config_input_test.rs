@@ -4,6 +4,7 @@ use std::{
     io::Write,
     path::Path,
     process::{Command, Output, Stdio},
+    sync::OnceLock,
 };
 use tempfile::tempdir;
 
@@ -12,6 +13,42 @@ external-controller: 127.0.0.1:9090
 mode: global
 bind-address: "0.0.0.0"
 "#;
+
+/// Returns `true` when the `clash-rs` binary can actually be executed as a
+/// subprocess in the current environment.
+///
+/// In cross-compilation test runs (e.g. `cross` + QEMU), the test binary
+/// itself runs inside an emulator, but `execve` of a child binary for a
+/// foreign architecture is not intercepted by the emulator.  glibc falls back
+/// to running the binary through `/bin/sh`, which exits with code 127
+/// ("cannot execute binary file").  Any test that spawns the binary must skip
+/// itself in such environments.
+fn binary_can_be_spawned() -> bool {
+    static RESULT: OnceLock<bool> = OnceLock::new();
+    *RESULT.get_or_init(|| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_clash-rs"))
+            .arg("-v")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.code() != Some(127))
+            .unwrap_or(false)
+    })
+}
+
+/// Skip the calling test when running inside a cross-compilation environment
+/// where the binary cannot be spawned as a subprocess.
+macro_rules! skip_on_cross {
+    () => {
+        if !binary_can_be_spawned() {
+            eprintln!(
+                "SKIP: clash-rs binary cannot be executed as a subprocess \
+                 (cross-compilation / QEMU environment)"
+            );
+            return;
+        }
+    };
+}
 
 fn clash_cmd() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_clash-rs"));
@@ -52,6 +89,7 @@ fn path_display(path: &Path) -> String {
 
 #[test]
 fn file_success_outputs_summary_on_stdout() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("ok.yaml");
     fs::write(&config, VALID_CONFIG).expect("write config");
@@ -77,6 +115,7 @@ fn file_success_outputs_summary_on_stdout() {
 
 #[test]
 fn file_success_accepts_go_style_equals_flag() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("ok.yaml");
     fs::write(&config, VALID_CONFIG).expect("write config");
@@ -105,6 +144,7 @@ fn file_success_accepts_go_style_equals_flag() {
 
 #[test]
 fn file_failure_logs_error_then_summary_on_stdout() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("invalid.yaml");
     fs::write(&config, "log-level: definitely-not-a-level\n").expect("write config");
@@ -133,6 +173,7 @@ fn file_failure_logs_error_then_summary_on_stdout() {
 
 #[test]
 fn proxy_provider_without_health_check_is_accepted() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("provider.yaml");
     fs::write(
@@ -170,6 +211,7 @@ proxy-providers:
 
 #[test]
 fn stdin_success_uses_bytes_summary_and_does_not_create_default_config() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let mut command = clash_cmd();
     command.current_dir(temp.path()).args(["-t", "-f", "-"]);
@@ -192,6 +234,7 @@ fn stdin_success_uses_bytes_summary_and_does_not_create_default_config() {
 
 #[test]
 fn base64_config_success_uses_bytes_summary() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let encoded = STANDARD.encode(VALID_CONFIG);
 
@@ -217,6 +260,7 @@ fn base64_config_success_uses_bytes_summary() {
 
 #[test]
 fn base64_decode_failure_is_stdout_fatal() {
+    skip_on_cross!();
     let output = clash_cmd()
         .args(["-t", "-config", "not@base64"])
         .output()
@@ -235,6 +279,7 @@ fn base64_decode_failure_is_stdout_fatal() {
 
 #[test]
 fn missing_file_mode_creates_default_config() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("home").join("config.yaml");
 
@@ -266,6 +311,7 @@ fn missing_file_mode_creates_default_config() {
 
 #[test]
 fn empty_file_reports_empty_file_error() {
+    skip_on_cross!();
     let temp = tempdir().expect("create temp dir");
     let config = temp.path().join("empty.yaml");
     fs::write(&config, "").expect("write empty config");
@@ -281,15 +327,19 @@ fn empty_file_reports_empty_file_error() {
     assert_eq!(stderr(&output), "");
 
     let stdout = stdout(&output);
+    let lines = stdout.lines().collect::<Vec<_>>();
+    // The first line is a log entry; `escape_logrus_text` escapes path
+    // separators on Windows, so we only check for the "is empty" substring
+    // rather than the full path to stay cross-platform.
     assert!(
-        stdout.contains(&format!(
-            "configuration file {} is empty",
-            path_display(&config)
-        )),
+        lines.first().is_some_and(
+            |line| line.starts_with("time=\"") && line.contains("is empty")
+        ),
         "stdout:\n{stdout}"
     );
-    assert!(stdout.ends_with(&format!(
-        "configuration file {} test failed\n",
-        path_display(&config)
-    )));
+    // The summary line is printed via `println!` without any escaping, so
+    // comparing the full path here is safe on all platforms.
+    let summary =
+        format!("configuration file {} test failed", path_display(&config));
+    assert_eq!(lines.last().copied(), Some(summary.as_str()));
 }
