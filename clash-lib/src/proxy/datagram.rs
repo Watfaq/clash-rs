@@ -10,8 +10,11 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
+
+const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(300);
 
 #[derive(Clone)]
 pub struct UdpPacket {
@@ -82,7 +85,7 @@ pub struct OutboundDatagramImpl {
     // When we send to a domain, we resolve it to an IP. When we receive from that
     // IP, we need to map it back to the domain to maintain stable session
     // state.
-    ip_to_domain: HashMap<SocketAddr, SocksAddr>,
+    ip_to_domain: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
 impl OutboundDatagramImpl {
@@ -170,16 +173,21 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         ))));
                     }
                 }
-                SocksAddr::Ip(addr) => (*addr, None),
+                SocksAddr::Ip(addr) => {
+                    ip_to_domain.remove(addr);
+                    (*addr, None)
+                }
             };
 
-            // Store domain mapping if we resolved a domain
-            if let Some((addr, domain)) = original_domain {
-                ip_to_domain.insert(addr, domain);
-            }
-
+            // Store domain mapping if we resolved a domain, but only after a
+            // fully-successful send to avoid stale entries on partial writes.
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
             let wrote_all = n == data.len();
+            if wrote_all && let Some((addr, domain)) = original_domain {
+                // Opportunistically prune expired entries before inserting.
+                ip_to_domain.retain(|_, (_, ts)| ts.elapsed() < UDP_DOMAIN_MAP_TTL);
+                ip_to_domain.insert(addr, (domain, Instant::now()));
+            }
             self.pkt = None;
             self.flushed = true;
 
@@ -221,10 +229,13 @@ impl Stream for OutboundDatagramImpl {
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
-                // Check if this IP was resolved from a domain name
+                // Check if this IP was resolved from a domain name, and the
+                // mapping is still within the TTL window.
                 let src_addr = ip_to_domain
                     .get(&src)
-                    .cloned()
+                    .and_then(|(domain, ts)| {
+                        (ts.elapsed() < UDP_DOMAIN_MAP_TTL).then(|| domain.clone())
+                    })
                     .unwrap_or_else(|| src.into());
                 Poll::Ready(Some(UdpPacket {
                     data,
