@@ -558,6 +558,7 @@ impl OutboundManager {
         /// Common boilerplate: build providers list from proxies and
         /// use_provider. Returns `Vec<ThreadSafeProxyProvider>`
         /// directly — the caller checks for emptiness.
+        #[allow(clippy::too_many_arguments)]
         fn build_group_providers(
             name: &str,
             proxies: &Option<Vec<String>>,
@@ -570,7 +571,9 @@ impl OutboundManager {
         ) -> Result<Vec<ThreadSafeProxyProvider>, Error> {
             let mut providers: Vec<ThreadSafeProxyProvider> = vec![];
 
-            if let Some(proxies) = proxies {
+            if let Some(proxies) = proxies
+                && !proxies.is_empty()
+            {
                 let pd = make_provider_from_proxies(
                     name,
                     proxies,
@@ -939,15 +942,20 @@ impl OutboundManager {
             provider_registry.insert(name, provider);
         }
 
+        let mut failed = Vec::new();
         for p in provider_registry.values() {
             let name = p.read().await.name().to_owned();
             info!("initializing provider {}", name);
             let p = p.write().await;
             if let Err(err) = p.initialize().await {
                 error!("failed to initialize proxy provider {}: {}", name, err);
+                failed.push(name);
                 continue;
             }
             info!("initialized provider {}", name);
+        }
+        for name in &failed {
+            provider_registry.remove(name);
         }
 
         Ok(())
