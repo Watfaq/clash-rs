@@ -545,4 +545,154 @@ mod tests {
 
         tokio::try_join!(server_task, client_task).unwrap();
     }
+
+    /// Tests that unauthenticated connections are forwarded to the fallback
+    /// backend. A plain TLS client sends an HTTP GET (not AnyTLS protocol),
+    /// so the 32-byte hash check fails and the stream is piped to a local
+    /// mock server that mimics Google's generate_204 endpoint.
+    #[tokio::test]
+    async fn test_anytls_fallback_to_mock_generate_204() {
+        install_crypto_provider();
+
+        // ── Mock backend: returns HTTP 204 (like Google generate_204) ─────────
+        let backend_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let backend_addr = backend_listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let (mut conn, _) = backend_listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 4096];
+            let _ = conn.read(&mut buf).await;
+            conn.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+
+        // ── AnyTLS inbound with fallback → mock backend ───────────────────────
+        let rcgen::CertifiedKey {
+            cert,
+            signing_key: key_pair,
+        } = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let cert_pem = cert.pem();
+        let key_pem = key_pair.serialize_pem();
+
+        let anytls_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let anytls_addr = anytls_listener.local_addr().unwrap();
+        let acceptor = build_tls_acceptor(Some(&cert_pem), Some(&key_pem)).unwrap();
+
+        tokio::spawn(async move {
+            let (stream, src) = anytls_listener.accept().await.unwrap();
+            let mut map = std::collections::HashMap::new();
+            let hash: [u8; 32] =
+                sha2::Sha256::digest("correct-password".as_bytes()).into();
+            map.insert(hash, "user".to_string());
+            handle_fallback_connection(
+                stream,
+                src,
+                acceptor,
+                Arc::new(map),
+                Some(backend_addr.to_string()),
+            )
+            .await;
+        });
+
+        // ── Plain TLS client — sends HTTP GET, not AnyTLS ────────────────────
+        let tls_config = rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerifier))
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(tls_config));
+        let tcp = TcpStream::connect(anytls_addr).await.unwrap();
+        let mut tls = connector
+            .connect(
+                rustls::pki_types::ServerName::try_from("localhost").unwrap(),
+                tcp,
+            )
+            .await
+            .unwrap();
+
+        tls.write_all(
+            b"GET /generate_204 HTTP/1.1\r\nHost: clients3.google.com\r\nConnection: close\r\n\r\n",
+        )
+        .await
+        .unwrap();
+        tls.flush().await.unwrap();
+
+        let mut resp = Vec::new();
+        tls.read_to_end(&mut resp).await.unwrap();
+        let resp_str = String::from_utf8_lossy(&resp);
+
+        assert!(
+            resp_str.contains("204"),
+            "expected HTTP 204 from fallback, got: {resp_str}"
+        );
+    }
+
+    /// Thin wrapper to exercise handle_fallback path without a full Dispatcher.
+    async fn handle_fallback_connection(
+        raw: tokio::net::TcpStream,
+        src: std::net::SocketAddr,
+        acceptor: tokio_rustls::TlsAcceptor,
+        user_map: Arc<std::collections::HashMap<[u8; 32], String>>,
+        fallback: Option<String>,
+    ) {
+        use tokio::io::AsyncReadExt as _;
+
+        let mut tls = match acceptor.accept(raw).await {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let mut hash_buf = [0u8; 32];
+        if tls.read_exact(&mut hash_buf).await.is_err() {
+            return;
+        }
+        if user_map.contains_key(&hash_buf) {
+            return; // authenticated — not testing this path
+        }
+        if let Some(addr) = fallback {
+            super::handle_fallback(tls, &hash_buf, &addr, src).await;
+        }
+    }
+
+    /// Rustls certificate verifier that accepts anything (for tests).
+    #[derive(Debug)]
+    struct NoVerifier;
+    impl rustls::client::danger::ServerCertVerifier for NoVerifier {
+        fn verify_server_cert(
+            &self,
+            _: &rustls::pki_types::CertificateDer,
+            _: &[rustls::pki_types::CertificateDer],
+            _: &rustls::pki_types::ServerName,
+            _: &[u8],
+            _: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error>
+        {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _: &[u8],
+            _: &rustls::pki_types::CertificateDer,
+            _: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error>
+        {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _: &[u8],
+            _: &rustls::pki_types::CertificateDer,
+            _: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error>
+        {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            rustls::crypto::ring::default_provider()
+                .signature_verification_algorithms
+                .supported_schemes()
+        }
+    }
 }
