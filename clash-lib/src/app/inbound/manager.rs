@@ -31,7 +31,8 @@ use std::{
 /// push user-list updates without restarting the listener.
 struct ProviderHandleEntry {
     handle: Option<JoinHandle<()>>,
-    /// Present only for Shadowsocks listeners — used to push updated user
+    /// Present only for Shadowsocks and AnyTLS listeners — used to push updated
+    /// user lists without restarting the listener.
     /// lists into the running listener without a restart.
     #[allow(dead_code)]
     users_tx: Option<tokio::sync::watch::Sender<Vec<InboundUser>>>,

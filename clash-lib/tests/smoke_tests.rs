@@ -109,3 +109,82 @@ async fn smoke_test() {
         "Unexpected response from mock server"
     );
 }
+
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+/// Test AnyTLS inbound and outbound functionality (ephemeral self-signed cert)
+async fn smoke_test_anytls() {
+    let wd_server =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
+    let wd_client =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let server_config = wd_server.join("server_anytls.yaml");
+    let client_config = wd_client.join("rules_anytls.yaml");
+
+    assert!(
+        server_config.exists(),
+        "Server config file does not exist at: {}",
+        server_config.to_string_lossy()
+    );
+    assert!(
+        client_config.exists(),
+        "Client config file does not exist at: {}",
+        client_config.to_string_lossy()
+    );
+
+    std::thread::spawn(move || {
+        start_clash(Options {
+            config: Config::File(server_config.to_string_lossy().to_string()),
+            cwd: Some(wd_server.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        })
+        .expect("Failed to start AnyTLS server");
+    });
+
+    std::thread::spawn(move || {
+        start_clash(Options {
+            config: Config::File(client_config.to_string_lossy().to_string()),
+            cwd: Some(wd_client.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        })
+        .expect("Failed to start AnyTLS client");
+    });
+
+    let mock_server = httpmock::MockServer::start();
+    let mock = mock_server.mock(|when, then| {
+        when.method(httpmock::Method::GET).path("/");
+        then.status(200).body("Mock response for AnyTLS testing");
+    });
+
+    wait_port_ready(8998).expect("AnyTLS proxy port is not ready");
+
+    let proxy = reqwest::Proxy::all("socks5://127.0.0.1:8998")
+        .expect("Failed to create proxy");
+
+    let client = reqwest::Client::builder()
+        .proxy(proxy)
+        .build()
+        .expect("Failed to build client with proxy");
+
+    let response = client
+        .get(mock_server.url("/"))
+        .send()
+        .await
+        .expect("Failed to send request through AnyTLS proxy");
+
+    assert!(
+        response.status().is_success(),
+        "HTTP request through AnyTLS proxy failed with status: {}",
+        response.status()
+    );
+
+    let body_str = response.text().await.expect("Failed to read response body");
+
+    assert_eq!(mock.calls(), 1, "Mock server was not hit exactly once");
+    assert_eq!(
+        body_str, "Mock response for AnyTLS testing",
+        "Unexpected response from AnyTLS proxy"
+    );
+}
