@@ -15,13 +15,19 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 extern crate clash_lib as clash;
 
+use anyhow::{Context, anyhow};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use clap::Parser;
 use clash::TokioRuntime;
 use std::{
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::exit,
 };
+use time::{OffsetDateTime, macros::format_description};
+
+const DEFAULT_CONFIG_FILE: &str = "config.yaml";
+const DEFAULT_CONFIG_CONTENT: &str = "mixed-port: 7890";
 
 #[derive(Parser, Debug)]
 #[clap(author, about, long_about = None)]
@@ -35,10 +41,11 @@ struct Cli {
         visible_short_aliases = ['f'], // -f is used by clash, it is a compatibility option
         value_parser,
         value_name = "FILE",
-        default_value = "config.yaml",
         help = "Specify configuration file"
     )]
-    config: PathBuf,
+    config: Option<PathBuf>,
+    #[clap(long = "config-string", hide = true, value_name = "BASE64")]
+    config_string: Option<String>,
     #[clap(
         short = 't',
         long,
@@ -94,13 +101,7 @@ fn main() -> anyhow::Result<()> {
 
     // Those arguments are for compatibility with `mihomo`
     // Technically, I do not think `mihomo` is a modern/standard POSIX Cli program
-    let args: Vec<String> = std::env::args()
-        .map(|arg| match arg.as_str() {
-            "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
-            "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
-            _ => arg,
-        })
-        .collect();
+    let args = preprocess_args(std::env::args());
     let cli = Cli::parse_from(args);
 
     if cli.version {
@@ -112,43 +113,28 @@ fn main() -> anyhow::Result<()> {
         exit(0)
     }
 
-    let file = cli
-        .directory
-        .as_ref()
-        .unwrap_or(&std::env::current_dir().unwrap())
-        .join(cli.config)
-        .to_string_lossy()
-        .to_string();
-
-    if !Path::new(&file).exists() {
-        let default_config = "port: 7890";
-        let mut config_file = match std::fs::File::create(&file) {
-            Ok(config_file) => config_file,
-            _ => {
-                eprintln!("default profile cannot be created: {file}");
-                exit(1);
-            }
-        };
-
-        if config_file.write_all(default_config.as_bytes()).is_err() {
-            eprintln!("default profile cannot be written: {file}");
+    let config_input = match ConfigInput::resolve(&cli) {
+        Ok(config_input) => config_input,
+        Err(err) => {
+            print_cli_log("fatal", &err.to_string());
             exit(1);
-        };
+        }
+    };
 
-        println!(
-            "the configuration file cannot be found, the template has been created \
-             and used: {file}"
-        );
+    if let Err(err) = config_input.ensure_file() {
+        print_cli_log("fatal", &err.to_string());
+        exit(1);
     }
 
     if cli.test_config {
-        match clash::Config::File(file.clone()).try_parse() {
+        match config_input.try_parse() {
             Ok(_) => {
-                println!("configuration file {file} test is successful");
+                print_test_success(&config_input);
                 exit(0);
             }
             Err(e) => {
-                eprintln!("configuration file {file} test failed: {e}");
+                print_cli_log("error", &e.to_string());
+                print_test_failure(&config_input);
                 exit(1);
             }
         }
@@ -175,7 +161,7 @@ fn main() -> anyhow::Result<()> {
         )));
     }
 
-    let mut config = clash::Config::File(file).try_parse()?;
+    let mut config = config_input.try_parse()?;
 
     config.general.controller.external_controller_ipc = cli.controller_ipc;
     if cli.compatibility {
@@ -220,4 +206,215 @@ fn main() -> anyhow::Result<()> {
     })
     .inspect_err(|err| eprintln!("Failed to start clash: {err}"))?;
     Ok(())
+}
+
+enum ConfigInput {
+    File { path: PathBuf, display_path: String },
+    Bytes { content: String },
+}
+
+impl ConfigInput {
+    fn resolve(cli: &Cli) -> anyhow::Result<Self> {
+        if let Some(config) = cli.config_string.as_deref() {
+            return decode_config(config);
+        }
+        if let Ok(config) = std::env::var("CLASH_CONFIG_STRING") {
+            return decode_config(&config);
+        }
+
+        let current_dir =
+            std::env::current_dir().context("get current directory")?;
+        let home_dir = cli
+            .directory
+            .clone()
+            .or_else(|| std::env::var_os("CLASH_HOME_DIR").map(PathBuf::from));
+        let directory = match home_dir {
+            Some(directory) if directory.is_absolute() => directory,
+            Some(directory) => current_dir.join(directory),
+            None => current_dir,
+        };
+
+        if let Some(config) = cli.config.as_ref() {
+            return resolve_config_path(config, &directory);
+        }
+
+        if let Some(file) = std::env::var_os("CLASH_CONFIG_FILE") {
+            return resolve_config_file(&PathBuf::from(file));
+        }
+
+        Ok(Self::from_file_path(directory.join(DEFAULT_CONFIG_FILE)))
+    }
+
+    fn from_file_path(path: PathBuf) -> Self {
+        let path =
+            absolutize(path).unwrap_or_else(|_| PathBuf::from(DEFAULT_CONFIG_FILE));
+        let display_path = path.to_string_lossy().to_string();
+        Self::File { path, display_path }
+    }
+
+    fn ensure_file(&self) -> anyhow::Result<()> {
+        let Self::File { path, .. } = self else {
+            return Ok(());
+        };
+        if path.exists() {
+            return Ok(());
+        }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!(
+                    "default profile directory cannot be created: {}",
+                    parent.display()
+                )
+            })?;
+        }
+        let mut config_file = std::fs::File::create(path).with_context(|| {
+            format!("default profile cannot be created: {}", path.display())
+        })?;
+        config_file
+            .write_all(DEFAULT_CONFIG_CONTENT.as_bytes())
+            .with_context(|| {
+                format!("default profile cannot be written: {}", path.display())
+            })?;
+        Ok(())
+    }
+
+    fn try_parse(&self) -> clash::Result<clash::ClashRuntimeConfig> {
+        match self {
+            Self::File { path, display_path } => {
+                if std::fs::metadata(path).map(|metadata| metadata.len() == 0)? {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("configuration file {display_path} is empty"),
+                    )
+                    .into());
+                }
+                clash::Config::File(path.to_string_lossy().to_string()).try_parse()
+            }
+            Self::Bytes { content } => {
+                clash::Config::Str(content.clone()).try_parse()
+            }
+        }
+    }
+}
+
+fn preprocess_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| match arg.as_str() {
+            "-ext-ctl-unix" => "--ext-ctl-unix".to_string(),
+            "-ext-ctl-pipe" => "--ext-ctl-pipe".to_string(),
+            "-config" => "--config-string".to_string(),
+            "-f" => "--config".to_string(),
+            _ if arg.starts_with("-config=") => {
+                arg.replacen("-config=", "--config-string=", 1)
+            }
+            _ if arg.starts_with("-f=") => arg.replacen("-f=", "--config=", 1),
+            _ if arg.starts_with("-f") && arg.len() > 2 => {
+                format!("--config={}", &arg[2..])
+            }
+            _ => arg,
+        })
+        .collect()
+}
+
+fn decode_config(config: &str) -> anyhow::Result<ConfigInput> {
+    let content = STANDARD
+        .decode(config)
+        .map_err(|err| anyhow!("decode config: {err}"))?;
+    let content = String::from_utf8_lossy(&content).into_owned();
+    Ok(ConfigInput::Bytes { content })
+}
+
+fn resolve_config_path(
+    config: &Path,
+    directory: &Path,
+) -> anyhow::Result<ConfigInput> {
+    if config == Path::new("-") {
+        return resolve_config_file(config);
+    }
+    if config.is_absolute() {
+        Ok(ConfigInput::from_file_path(config.to_path_buf()))
+    } else {
+        Ok(ConfigInput::from_file_path(directory.join(config)))
+    }
+}
+
+fn resolve_config_file(file: &Path) -> anyhow::Result<ConfigInput> {
+    if file == Path::new("-") {
+        let mut content = String::new();
+        std::io::stdin()
+            .read_to_string(&mut content)
+            .context("read configuration from stdin")?;
+        if !content.is_empty() {
+            return Ok(ConfigInput::Bytes { content });
+        }
+        return Ok(ConfigInput::from_file_path(PathBuf::from(
+            DEFAULT_CONFIG_FILE,
+        )));
+    }
+    Ok(ConfigInput::from_file_path(file.to_path_buf()))
+}
+
+fn absolutize(path: PathBuf) -> anyhow::Result<PathBuf> {
+    if path.is_absolute() {
+        Ok(path)
+    } else {
+        Ok(std::env::current_dir()
+            .context("get current directory")?
+            .join(path))
+    }
+}
+
+fn print_test_success(input: &ConfigInput) {
+    match input {
+        ConfigInput::File { display_path, .. } => {
+            println!("configuration file {display_path} test is successful");
+        }
+        ConfigInput::Bytes { .. } => {
+            println!("configuration file {DEFAULT_CONFIG_FILE} test is successful");
+        }
+    }
+}
+
+fn print_test_failure(input: &ConfigInput) {
+    match input {
+        ConfigInput::File { display_path, .. } => {
+            println!("configuration file {display_path} test failed");
+        }
+        ConfigInput::Bytes { .. } => {
+            println!("configuration test failed");
+        }
+    }
+}
+
+fn print_cli_log(level: &str, msg: &str) {
+    let format = format_description!(
+        "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond \
+         digits:9][offset_hour sign:mandatory]:[offset_minute]"
+    );
+    let timestamp = OffsetDateTime::now_local()
+        .unwrap_or_else(|_| OffsetDateTime::now_utc())
+        .format(format)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000000000+00:00".to_string());
+    println!(
+        "time=\"{}\" level={} msg=\"{}\"",
+        timestamp,
+        level,
+        escape_logrus_text(msg)
+    );
+}
+
+fn escape_logrus_text(msg: &str) -> String {
+    msg.chars().fold(String::new(), |mut escaped, ch| {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+        escaped
+    })
 }
