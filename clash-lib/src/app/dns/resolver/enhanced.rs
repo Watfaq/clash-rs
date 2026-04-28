@@ -363,60 +363,47 @@ impl EnhancedResolver {
         m.add_query(q);
         m.set_recursion_desired(true);
 
-        match self.exchange(&m).await {
-            Ok(result) => {
-                let ip_list = EnhancedResolver::ip_list_of_message(&result);
-                if !ip_list.is_empty() {
-                    Ok(ip_list)
-                } else {
-                    Err(anyhow!("no record for hostname: {}", host))
-                }
-            }
-            Err(e) => Err(e),
+        let result = self.exchange(&m).await?;
+        let ip_list = EnhancedResolver::ip_list_of_message(&result);
+        if ip_list.is_empty() {
+            return Err(anyhow!("no record for hostname: {}", host));
         }
+        Ok(ip_list)
     }
 
     #[instrument(skip_all, level = "trace")]
     async fn exchange(&self, message: &op::Message) -> anyhow::Result<op::Message> {
-        if let Some(q) = message.query() {
-            trace!(q = q.to_string(), "start");
-            if let Some(lru) = &self.lru_cache
-                && let Some(cached) = lru.read().await.get(q, Instant::now())
-            {
-                if !message.recursion_desired() {
-                    trace!(q = q.to_string(), "cache hit, RA not desired");
-                    if let Ok(cached) = cached.inspect_err(|x| {
-                        warn!("failed to get cached message: {}", x);
-                    }) {
-                        trace!(
-                            q = q.to_string(),
-                            "cache hit for DNS query, returning cached response",
-                        );
-                        let mut reply =
-                            build_dns_response_message(message, true, false);
-                        reply.add_answers(cached.records().iter().cloned());
-                        return Ok(reply);
-                    }
-                } else {
-                    trace!(
-                        q = q.to_string(),
-                        "cache hit, RA desired, bypassing cache",
-                    );
-                }
-            }
-            trace!(q = q.to_string(), "querying resolver");
-            let res = self.exchange_no_cache(message).await.map(|mut r| {
-                if let Some(edns) = r.extensions_mut() {
-                    // Remove only padding options, keep everything else
-                    edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
-                }
-                r
-            });
-            trace!(q = q.to_string(), "query completed");
-            res
-        } else {
-            Err(anyhow!("invalid query"))
+        let q = message.query().ok_or_else(|| anyhow!("invalid query"))?;
+
+        trace!(q = q.to_string(), "start");
+
+        // Cache hit — return early if recursion_desired is not set
+        if let Some(lru) = &self.lru_cache
+            && let Some(Ok(cached)) =
+                lru.read().await.get(q, Instant::now()).map(|c| {
+                    c.inspect_err(|x| warn!("failed to get cached message: {}", x))
+                })
+            && !message.recursion_desired()
+        {
+            trace!(
+                q = q.to_string(),
+                "cache hit for DNS query, returning cached response",
+            );
+            let mut reply = build_dns_response_message(message, true, false);
+            reply.add_answers(cached.records().iter().cloned());
+            return Ok(reply);
         }
+
+        trace!(q = q.to_string(), "querying resolver");
+        let res = self.exchange_no_cache(message).await.map(|mut r| {
+            if let Some(edns) = r.extensions_mut() {
+                // Remove only padding options, keep everything else
+                edns.options_mut().remove(rr::rdata::opt::EdnsCode::Padding);
+            }
+            r
+        });
+        trace!(q = q.to_string(), "query completed");
+        res
     }
 
     async fn exchange_no_cache(

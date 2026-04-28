@@ -92,6 +92,7 @@ impl Router {
         let mut sess_resolved = false;
 
         for r in self.rules.iter() {
+            // Resolve IP when needed
             if sess.destination.is_domain()
                 && r.should_resolve_ip()
                 && !sess_resolved
@@ -104,24 +105,9 @@ impl Router {
                 sess_resolved = true;
             }
 
-            let maybe_ip = sess.resolved_ip.or(sess.destination.ip());
-            if let (Some(ip), Some(asn_mmdb)) = (maybe_ip, &self.asn_mmdb) {
-                // try simplified mmdb first
-                let rv = asn_mmdb.lookup_country(ip);
-                if let Ok(country) = rv {
-                    sess.asn = Some(country.country_code);
-                }
-                if sess.asn.is_none() {
-                    match asn_mmdb.lookup_asn(ip) {
-                        Ok(asn) => {
-                            trace!("asn for {} is {:?}", ip, asn);
-                            sess.asn = Some(asn.asn_name);
-                        }
-                        Err(e) => {
-                            trace!("failed to lookup ASN for {}: {}", ip, e);
-                        }
-                    }
-                }
+            // Lookup ASN with guard clause
+            if let Some(ip) = sess.resolved_ip.or(sess.destination.ip()) {
+                Self::lookup_asn_for_ip(ip, &self.asn_mmdb, sess);
             }
 
             if r.apply(sess) {
@@ -136,6 +122,35 @@ impl Router {
         }
 
         (MATCH, None)
+    }
+
+    /// Look up ASN for an IP address. Uses the simplified mmdb lookup first,
+    /// falling back to the full ASN lookup if the simplified one fails.
+    fn lookup_asn_for_ip(
+        ip: std::net::IpAddr,
+        asn_mmdb: &Option<MmdbLookup>,
+        sess: &mut Session,
+    ) {
+        let Some(asn_mmdb) = asn_mmdb else {
+            return;
+        };
+
+        // try simplified mmdb first
+        if let Ok(country) = asn_mmdb.lookup_country(ip) {
+            sess.asn = Some(country.country_code);
+            return;
+        }
+
+        // fall back to full ASN lookup
+        match asn_mmdb.lookup_asn(ip) {
+            Ok(asn) => {
+                trace!("asn for {} is {:?}", ip, asn);
+                sess.asn = Some(asn.asn_name);
+            }
+            Err(e) => {
+                trace!("failed to lookup ASN for {}: {}", ip, e);
+            }
+        }
     }
 
     async fn load_rule_providers(
