@@ -346,12 +346,13 @@ async fn handle_udp_session(
                         Err(_) => { cancel_b.cancel(); break; }
                     };
                     match cmd {
-                        CMD_PSH if sid == stream_id => {
-                            if relay_write.write_all(&data).await.is_err() {
-                                cancel_b.cancel();
-                                break;
-                            }
+                        CMD_PSH if sid == stream_id
+                            && relay_write.write_all(&data).await.is_err() =>
+                        {
+                            cancel_b.cancel();
+                            break;
                         }
+                        CMD_PSH if sid == stream_id => {}
                         CMD_FIN if sid == stream_id => {
                             cancel_b.cancel();
                             break;
