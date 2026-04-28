@@ -126,7 +126,7 @@ impl Router {
 
     /// Look up ASN for an IP address. Uses the simplified mmdb lookup first,
     /// falling back to the full ASN lookup if the simplified one fails.
-    fn lookup_asn_for_ip(
+    fn populate_asn_for_ip(
         ip: std::net::IpAddr,
         asn_mmdb: &Option<MmdbLookup>,
         sess: &mut Session,
