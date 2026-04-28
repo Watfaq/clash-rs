@@ -68,6 +68,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["loggin
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2"] }
 rustls = { version = "0.23", default-features = false }
 rustls-pemfile = "2"
+rcgen = { version = "0.14", features = ["pem"] }
 webpki-roots = "1.0"
 
 # shadow-tls
@@ -225,7 +226,6 @@ httpmock = "0.8.3" # TODO replace with wiremock
 tracing-test = "0.2"
 http-body-util = "0.1"
 reqwest = { version = "0.13", features = ["socks"] }
-rcgen = { version = "0.14", features = ["pem"] }
 sysinfo = { version = "0.38", features = ["network"]}
 
 [build-dependencies]

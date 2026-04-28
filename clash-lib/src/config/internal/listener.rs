@@ -79,11 +79,14 @@ pub enum InboundOpts {
         #[serde(flatten)]
         common_opts: CommonInboundOpts,
         password: String,
-        /// File path or inline PEM certificate chain.
-        certificate: String,
-        /// File path or inline PEM private key.
-        #[serde(rename = "private-key")]
-        private_key: String,
+        /// File path or inline PEM certificate chain. When absent, an
+        /// ephemeral self-signed certificate is generated at startup.
+        #[serde(default)]
+        certificate: Option<String>,
+        /// File path or inline PEM private key. When absent, an ephemeral
+        /// self-signed certificate is generated at startup.
+        #[serde(rename = "private-key", default)]
+        private_key: Option<String>,
         /// Optional multi-user list. When empty, `password` is used directly
         /// (single-user mode). Each entry uses the plaintext password field.
         #[serde(default)]
