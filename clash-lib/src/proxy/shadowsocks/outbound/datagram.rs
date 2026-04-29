@@ -54,6 +54,7 @@ impl<S> OutboundDatagramShadowsocks<S> {
             pkt: None,
             remote_addr,
             buf: vec![0u8; 65535],
+
             ss_control,
         }
     }
@@ -100,6 +101,7 @@ where
             ref mut pkt,
             ref remote_addr,
             ref mut flushed,
+
             ref mut ss_control,
             ..
         } = *self;
@@ -108,12 +110,8 @@ where
 
         if let Some(pkt) = pkt_container {
             let data = pkt.data.as_ref();
-            // Use dst_addr so the remote SS server receives the intended
-            // domain name (or real IP) rather than a fake-IP from the
-            // dispatcher's DNS mapping.
-            let logical = pkt.dst_addr.clone();
             let addr: shadowsocks::relay::Address =
-                (logical.host(), logical.port()).into();
+                (pkt.dst_addr.host(), pkt.dst_addr.port()).into();
 
             let n = ready!(inner.poll_send_to_with_ctrl(
                 *remote_addr,
@@ -194,7 +192,7 @@ where
                     _ => SocksAddr::any_ipv4(),
                 },
                 dst_addr: SocksAddr::any_ipv4(),
-                ..Default::default()
+                inbound_user: None,
             })),
             Err(_) => Poll::Ready(None),
         }
@@ -231,8 +229,9 @@ impl DatagramSend for ShadowsocksUdpIo {
         let mut w = self.w.lock().unwrap();
         match w.start_send_unpin(UdpPacket {
             data: buf.to_vec(),
+            src_addr: SocksAddr::any_ipv4(),
             dst_addr: target.into(),
-            ..Default::default()
+            inbound_user: None,
         }) {
             Ok(_) => {}
             Err(e) => return Poll::Ready(Err(new_io_error(e.to_string()))),

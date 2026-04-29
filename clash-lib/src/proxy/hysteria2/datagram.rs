@@ -68,7 +68,6 @@ impl HysteriaDatagramOutbound {
             // use u32 to avoid overflow
             let next_pkt_id = AtomicU32::new(0);
             while let Some(next_send) = send_rx.recv().await {
-                let dst = next_send.dst_addr.clone();
                 let pkt_id =
                     next_pkt_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let pkt_id = (pkt_id % u16::MAX as u32) as u16;
@@ -77,11 +76,14 @@ impl HysteriaDatagramOutbound {
                      pkt_id={}, dst={:?}",
                     session_id,
                     pkt_id,
-                    dst
+                    next_send.dst_addr
                 );
-                if let Err(e) =
-                    conn.send_packet(next_send.data.into(), dst, session_id, pkt_id)
-                {
+                if let Err(e) = conn.send_packet(
+                    next_send.data.into(),
+                    next_send.dst_addr,
+                    session_id,
+                    pkt_id,
+                ) {
                     tracing::warn!(
                         "err in outgoing_udp of HysteriaDatagramOutbound, msg: {:?}",
                         e

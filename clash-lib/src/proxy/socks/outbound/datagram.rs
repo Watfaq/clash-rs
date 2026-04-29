@@ -68,9 +68,8 @@ impl Sink<UdpPacket> for Socks5Datagram {
             remote, item.dst_addr
         );
         let pin = self.get_mut();
-        let dst = item.dst_addr.clone();
         pin.inner
-            .start_send_unpin(((item.data.into(), dst), remote))
+            .start_send_unpin(((item.data.into(), item.dst_addr), remote))
     }
 
     fn poll_flush(

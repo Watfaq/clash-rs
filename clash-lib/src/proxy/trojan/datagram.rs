@@ -370,7 +370,7 @@ impl Stream for OutboundDatagramTrojan {
                                 data: data.to_vec(),
                                 src_addr: remote_addr.clone(),
                                 dst_addr: addr,
-                                ..Default::default()
+                                inbound_user: None,
                             }));
                         }
                         Err(err) => {

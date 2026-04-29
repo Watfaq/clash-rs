@@ -33,10 +33,9 @@ impl Sink<UdpPacket> for UdpSessionWrapper {
         self: std::pin::Pin<&mut Self>,
         item: UdpPacket,
     ) -> Result<(), Self::Error> {
-        let dst = item.dst_addr.clone();
         self.get_mut()
             .s
-            .start_send_unpin((item.data.into(), to_sq_socks_addr(dst)))
+            .start_send_unpin((item.data.into(), to_sq_socks_addr(item.dst_addr)))
             .map_err(new_io_error)
     }
 

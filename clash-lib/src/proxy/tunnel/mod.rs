@@ -162,7 +162,7 @@ impl Sink<UdpPacket> for UdpSession {
     ) -> Result<(), Self::Error> {
         let this = self.deref_mut();
         let socket = &this.socket;
-        let dst_addr = match item.dst_addr.clone() {
+        let dst_addr = match item.dst_addr {
             SocksAddr::Ip(socket_addr) => socket_addr,
             SocksAddr::Domain(..) => {
                 return Err(new_io_error(

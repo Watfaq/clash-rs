@@ -52,7 +52,7 @@ impl TailscaleDatagramOutbound {
                         },
                     };
 
-                    let dst = match pkt.dst_addr.clone() {
+                    let dst = match pkt.dst_addr {
                         SocksAddr::Ip(addr) => addr,
                         SocksAddr::Domain(domain, port) => {
                             // Try v4 first, fall back to v6.
