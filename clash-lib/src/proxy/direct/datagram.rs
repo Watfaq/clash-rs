@@ -4,12 +4,16 @@ use crate::{
 };
 use futures::{FutureExt, Sink, Stream, ready};
 use std::{
+    collections::HashMap,
     io,
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
+
+const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(60);
 
 #[must_use = "sinks do nothing unless polled"]
 // TODO: maybe we should use abstract datagram IO interface instead of the
@@ -22,6 +26,11 @@ pub struct OutboundDatagramImpl {
     // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
     // every poll_next call.
     recv_buf: Vec<u8>,
+    // Maps real upstream IP → logical_dst() of the most recently sent packet
+    // to that IP.  poll_next translates the raw socket src back to
+    // logical_dst() so the dispatcher's orig_map can restore the fake-IP.
+    // TTL-pruned on each flush to bound memory.
+    ip_to_logical: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
 impl OutboundDatagramImpl {
@@ -32,6 +41,7 @@ impl OutboundDatagramImpl {
             flushed: true,
             pkt: None,
             recv_buf: vec![0u8; 65535],
+            ip_to_logical: HashMap::new(),
         }
     }
 }
@@ -72,12 +82,14 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ref mut inner,
             ref mut pkt,
             ref resolver,
+            ref mut ip_to_logical,
             ..
         } = *self;
 
         if pkt.is_some() {
             let p = pkt.as_ref().unwrap();
             let data = &p.data;
+            let logical = p.logical_dst();
 
             // Determine the real socket address to send to.
             // If dst_domain is set, resolve it; otherwise use dst_addr
@@ -142,8 +154,17 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             };
 
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
+
+            // Record real_ip → logical_dst() so poll_next can translate
+            // response src back to logical_dst() for the dispatcher's map.
+            // Prune stale entries on every flush to bound memory.
+            let now = Instant::now();
+            ip_to_logical
+                .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
+            ip_to_logical.insert(dst, (logical, now));
+
             let wrote_all = n == data.len();
-            self.pkt = None;
+            *pkt = None;
             self.flushed = true;
 
             Poll::Ready(if wrote_all {
@@ -177,18 +198,22 @@ impl Stream for OutboundDatagramImpl {
         let Self {
             ref mut inner,
             ref mut recv_buf,
+            ref ip_to_logical,
             ..
         } = *self;
         let mut buf = ReadBuf::new(recv_buf.as_mut_slice());
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
-                // src_addr is the raw upstream socket address; the dispatcher's
-                // r_handle will overwrite it with the original fake-IP (or
-                // real-IP) via the watch channel.
+                // Translate real upstream IP → logical_dst() so the
+                // dispatcher's orig_map can restore the original fake-IP.
+                let src_addr = ip_to_logical
+                    .get(&src)
+                    .map(|(logical, _)| logical.clone())
+                    .unwrap_or_else(|| src.into());
                 Poll::Ready(Some(UdpPacket {
                     data,
-                    src_addr: src.into(),
+                    src_addr,
                     dst_addr: SocksAddr::any_ipv4(),
                     dst_domain: None,
                     inbound_user: None,

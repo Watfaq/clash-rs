@@ -69,10 +69,30 @@ impl UdpPacket {
     }
 
     /// Returns the logical destination for outbound use: the resolved domain
-    /// if one was set, otherwise `dst_addr`.
+    /// if one was set (i.e. `dst_domain`), otherwise `dst_addr`.
     ///
-    /// Proxy-protocol headers should use this so that the remote proxy server
-    /// sees the intended domain name rather than a fake-IP.
+    /// **All proxy outbound implementations must use this for protocol
+    /// headers** (Trojan ATYP, Shadowsocks SOCKS address, VMess target,
+    /// etc.) so that the remote proxy server sees the intended domain name
+    /// rather than a fake-IP.
+    ///
+    /// **Response `src_addr` contract**: when a proxy outbound yields a
+    /// response `UdpPacket` it **must** set `src_addr` to `logical_dst()` of
+    /// the corresponding outgoing packet (i.e. `sess.destination`).  The
+    /// dispatcher relies on this invariant to map responses back to the
+    /// original fake-IP or client-visible address via its
+    /// `logical_dst → dst_addr` table.
+    ///
+    /// Some proxy protocols (e.g. Trojan, VMess) echo the destination address
+    /// from the request header back as the response source, satisfying this
+    /// automatically.  Others (e.g. Shadowsocks) return the **real upstream
+    /// IP** parsed from the response — which is not `logical_dst()`.  In that
+    /// case the outbound implementation must maintain an
+    /// `ip_to_logical: HashMap<SocketAddr, SocksAddr>` (keyed on the resolved
+    /// real IP, valued with `logical_dst()` of the outgoing packet) and
+    /// translate `src_addr` in `poll_next` before returning — exactly as
+    /// `OutboundDatagramImpl` (direct outbound,
+    /// `proxy/direct/datagram.rs`) does.
     pub fn logical_dst(&self) -> SocksAddr {
         self.dst_domain
             .clone()
