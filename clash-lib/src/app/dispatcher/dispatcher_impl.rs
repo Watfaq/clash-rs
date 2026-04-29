@@ -382,12 +382,11 @@ impl Dispatcher {
                                         let orig = packet.dst_addr.clone();
                                         packet.dst_addr = dest;
                                         if orig != packet.dst_addr {
-                                            if orig_map.len() >= ORIG_MAP_MAX {
-                                                if let Some(k) =
+                                            if orig_map.len() >= ORIG_MAP_MAX
+                                                && let Some(k) =
                                                     orig_map.keys().next().cloned()
-                                                {
-                                                    orig_map.remove(&k);
-                                                }
+                                            {
+                                                orig_map.remove(&k);
                                             }
                                             orig_map.insert(packet.dst_addr.clone(), orig.clone());
                                         }
