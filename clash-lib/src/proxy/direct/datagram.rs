@@ -95,19 +95,21 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             let data = &p.data;
 
             // Determine where to actually send the packet.
-            // - If dst_domain is set, resolve it to a real IP and map real-IP →
-            //   orig_dst (the fake-IP) for responses.
-            // - If dst_domain is None, dst_addr must already be a real IP (or a
-            //   domain from a non-fake-IP SOCKS5 client), and we resolve only when
-            //   needed.
+            // - If dst_domain is set (always a SocksAddr::Domain), resolve it to a
+            //   real IP and map real-IP → orig_dst (the fake-IP) for responses.
+            // - If dst_domain is None, dst_addr must be a real IP. Guard against a
+            //   fake-IP slipping through without a domain set, which would be a
+            //   dispatcher bug (guarded there).
             let dst = match &p.dst_domain {
-                Some(domain) => {
+                Some(domain_addr) => {
                     // Fake-IP (or cache-hit) case: resolve the domain.
-                    let domain = domain.clone();
-                    let port = match &p.dst_addr {
-                        SocksAddr::Ip(a) => a.port(),
-                        SocksAddr::Domain(_, port) => *port,
+                    // Invariant: dst_domain is always a Domain variant when set.
+                    let SocksAddr::Domain(domain, port) = domain_addr else {
+                        return Poll::Ready(Err(io::Error::other(
+                            "dst_domain must be a Domain variant",
+                        )));
                     };
+                    let (domain, port) = (domain.clone(), *port);
                     let mut fut = {
                         if inner.local_addr()?.is_ipv6() {
                             resolver.resolve(domain.as_str(), false)

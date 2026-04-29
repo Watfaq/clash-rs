@@ -287,13 +287,29 @@ impl Dispatcher {
                 sess.inbound_user = packet.inbound_user.clone();
 
                 // Preserve the original inbound IP in dst_addr; carry the
-                // resolved domain name separately in dst_domain so that proxy
+                // resolved domain separately in dst_domain so that proxy
                 // outbounds can use logical_dst() for protocol headers without
                 // losing the fake-IP.
                 packet.dst_domain = match &dest {
-                    SocksAddr::Domain(host, _) => Some(host.clone()),
+                    SocksAddr::Domain(..) => Some(dest.clone()),
                     SocksAddr::Ip(_) => None,
                 };
+
+                // Guard: a fake-IP that survived reverse_lookup without
+                // yielding a domain means the resolver's fake-IP table has no
+                // entry — this would cause the outbound to send to a fake IP.
+                if packet.dst_domain.is_none() {
+                    if let SocksAddr::Ip(addr) = &packet.dst_addr {
+                        if resolver.is_fake_ip(addr.ip()).await {
+                            error!(
+                                "fake-IP {} has no dst_domain after reverse lookup \
+                                 — dropping UDP packet",
+                                addr
+                            );
+                            continue;
+                        }
+                    }
+                }
 
                 let mode = *mode.read().await;
 
