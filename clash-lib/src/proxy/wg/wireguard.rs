@@ -139,7 +139,7 @@ impl WireguardTunnel {
                 data: packet.to_vec(),
                 src_addr: SocksAddr::any_ipv4(),
                 dst_addr: self.endpoint.into(),
-                inbound_user: None,
+                ..Default::default()
             })
             .await
     }

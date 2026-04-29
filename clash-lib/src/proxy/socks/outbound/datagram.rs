@@ -106,7 +106,7 @@ impl Stream for Socks5Datagram {
                         src_addr: src,
                         dst_addr: SocksAddr::Ip(dst),
                         data: data.into(),
-                        inbound_user: None,
+                        ..Default::default()
                     }
                 }
                 Err(_) => {
@@ -115,7 +115,7 @@ impl Stream for Socks5Datagram {
                         src_addr: SocksAddr::any_ipv4(),
                         dst_addr: SocksAddr::any_ipv4(),
                         data: Vec::new(),
-                        inbound_user: None,
+                        ..Default::default()
                     }
                 }
             })

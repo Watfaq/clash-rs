@@ -237,7 +237,7 @@ impl Stream for UdpSession {
                     data,
                     src_addr,
                     dst_addr,
-                    inbound_user: None,
+                    ..Default::default()
                 }))
             }
             Poll::Ready(Err(e)) => {

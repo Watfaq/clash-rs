@@ -469,7 +469,7 @@ mod tests {
             data: query.into(),
             src_addr: SocksAddr::Ip(std::net::SocketAddr::new(addr.into(), 0)),
             dst_addr: SocksAddr::Ip(udp_addr),
-            inbound_user: None,
+            ..Default::default()
         };
         tokio::time::timeout(std::time::Duration::from_secs(10), dgram.send(pkt))
             .await

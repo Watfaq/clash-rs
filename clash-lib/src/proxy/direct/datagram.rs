@@ -116,13 +116,12 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             .as_ref()
             .ok_or_else(|| io::Error::other("no packet to send"))?;
         let data = p.data.clone();
-        let logical = p.dst_addr.clone();
         let is_ipv6 = inner.local_addr()?.is_ipv6();
 
-        let dst = match logical {
-            SocksAddr::Ip(addr) => addr,
-            SocksAddr::Domain(ref domain, port) => {
-                ready!(resolve_domain(domain, port, is_ipv6, resolver, cx))?
+        let dst = match &p.dst_addr {
+            SocksAddr::Ip(addr) => *addr,
+            SocksAddr::Domain(domain, port) => {
+                ready!(resolve_domain(domain, *port, is_ipv6, resolver, cx))?
             }
         };
 
@@ -131,7 +130,7 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
         let now = Instant::now();
         ip_to_logical
             .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
-        ip_to_logical.insert(dst, (logical, now));
+        ip_to_logical.insert(dst, (p.dst_addr.clone(), now));
 
         *pkt = None;
         self.flushed = true;
