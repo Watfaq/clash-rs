@@ -4,12 +4,17 @@ use crate::{
 };
 use futures::{FutureExt, Sink, Stream, ready};
 use std::{
+    collections::HashMap,
     fmt::{Debug, Display, Formatter},
     io,
+    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
+
+const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct UdpPacket {
@@ -76,6 +81,10 @@ pub struct OutboundDatagramImpl {
     // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
     // every poll_next call.
     recv_buf: Vec<u8>,
+    // Maps resolved upstream IP addresses back to the domain name that was
+    // sent to, so poll_next can restore the logical src_addr. The dispatcher
+    // then maps domain → original inbound destination (e.g. fake-IP).
+    ip_to_domain: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
 impl OutboundDatagramImpl {
@@ -86,6 +95,7 @@ impl OutboundDatagramImpl {
             flushed: true,
             pkt: None,
             recv_buf: vec![0u8; 65535],
+            ip_to_domain: HashMap::new(),
         }
     }
 }
@@ -126,14 +136,15 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ref mut inner,
             ref mut pkt,
             ref resolver,
+            ref mut ip_to_domain,
             ..
         } = *self;
 
         if pkt.is_some() {
             let p = pkt.as_ref().unwrap();
-            let dst = &p.dst_addr;
+            let orig_dst = p.dst_addr.clone();
             let data = &p.data;
-            let dst = match dst {
+            let dst = match &p.dst_addr {
                 SocksAddr::Domain(domain, port) => {
                     let domain = domain.to_string();
                     let port = *port;
@@ -151,7 +162,14 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         io::Error::other("resolve domain failed")
                     }))?;
                     if let Some(ip) = ip {
-                        (ip, port).into()
+                        let resolved: SocketAddr = (ip, port).into();
+                        // Prune stale entries then record this domain mapping.
+                        let now = Instant::now();
+                        ip_to_domain.retain(|_, (_, ts)| {
+                            now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL
+                        });
+                        ip_to_domain.insert(resolved, (orig_dst, now));
+                        resolved
                     } else {
                         return Poll::Ready(Err(io::Error::other(format!(
                             "resolve domain failed: {domain}"
@@ -197,15 +215,23 @@ impl Stream for OutboundDatagramImpl {
         let Self {
             ref mut inner,
             ref mut recv_buf,
+            ref ip_to_domain,
             ..
         } = *self;
         let mut buf = ReadBuf::new(recv_buf.as_mut_slice());
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
+                // If this upstream IP was resolved from a domain name, restore
+                // the domain as src_addr so the dispatcher can map it back to
+                // the original fake-IP destination.
+                let src_addr = ip_to_domain
+                    .get(&src)
+                    .map(|(domain_addr, _)| domain_addr.clone())
+                    .unwrap_or_else(|| src.into());
                 Poll::Ready(Some(UdpPacket {
                     data,
-                    src_addr: src.into(),
+                    src_addr,
                     dst_addr: SocksAddr::any_ipv4(),
                     inbound_user: None,
                 }))

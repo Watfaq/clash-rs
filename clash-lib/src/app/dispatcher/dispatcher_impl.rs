@@ -292,7 +292,7 @@ impl Dispatcher {
                 // resolve is done in OutboundDatagramImpl so it's fine to have
                 // (Domain, port) here. ideally the OutboundDatagramImpl should only
                 // do Ip though?
-                packet.dst_addr = dest;
+                packet.dst_addr = dest.clone();
 
                 let mode = *mode.read().await;
 
@@ -339,7 +339,6 @@ impl Dispatcher {
                                                                           * socket addr as it's
                                                                           * from local
                                                                           * udp */
-                        &orig_dest,
                     )
                     .await
                 {
@@ -370,26 +369,67 @@ impl Dispatcher {
                         let (remote_sender, mut remote_forwarder) =
                             tokio::sync::mpsc::channel::<UdpPacket>(256);
 
-                        // remote -> local
-                        let orig_dest_for_nat = orig_dest.clone();
-                        let r_handle = tokio::spawn(async move {
-                            while let Some(packet) = remote_r.next().await {
-                                // NAT
-                                let mut packet = packet;
-                                packet.src_addr = orig_dest_for_nat.clone();
-                                packet.dst_addr = sess.source.into();
+                        // Channel that t1 uses to push (dest → orig_dest) mappings
+                        // into r_handle's local lookup table
+                        // as new destinations are seen on
+                        // the same client socket.
+                        let (dest_tx, mut dest_rx) =
+                            tokio::sync::mpsc::unbounded_channel::<(
+                                SocksAddr,
+                                SocksAddr,
+                            )>();
+                        // Seed with the current packet's mapping before spawning.
+                        dest_tx.send((dest.clone(), orig_dest.clone())).ok();
 
-                                debug!(
-                                    "UDP NAT for packet: {:?}, session: {}",
-                                    packet, sess
-                                );
-                                match remote_receiver_w.send(packet).await {
-                                    Ok(_) => {}
-                                    Err(err) => {
-                                        warn!(
-                                            "failed to send packet to local: {}",
-                                            err
-                                        );
+                        // remote -> local
+                        let r_handle = tokio::spawn(async move {
+                            // Maps the logical destination (domain or real IP) that
+                            // was sent to, back to the
+                            // original inbound destination (e.g.
+                            // fake-IP). Populated/updated via dest_rx.
+                            let mut dest_to_orig: HashMap<SocksAddr, SocksAddr> =
+                                HashMap::new();
+                            loop {
+                                tokio::select! {
+                                    biased; // drain updates before processing packets
+
+                                    update = dest_rx.recv() => {
+                                        match update {
+                                            Some((d, o)) => { dest_to_orig.insert(d, o); }
+                                            None => break,
+                                        }
+                                    }
+
+                                    packet = remote_r.next() => {
+                                        match packet {
+                                            None => break,
+                                            Some(mut packet) => {
+                                                // src_addr is the domain from ip_to_domain
+                                                // in OutboundDatagramImpl, or a real IP.
+                                                // Map it back to the original inbound dest.
+                                                let nat_src = dest_to_orig
+                                                    .get(&packet.src_addr)
+                                                    .cloned()
+                                                    .unwrap_or_else(|| packet.src_addr.clone());
+                                                packet.src_addr = nat_src;
+                                                packet.dst_addr = sess.source.into();
+
+                                                debug!(
+                                                    "UDP NAT for packet: {:?}, session: {}",
+                                                    packet, sess
+                                                );
+                                                match remote_receiver_w.send(packet).await {
+                                                    Ok(_) => {}
+                                                    Err(err) => {
+                                                        warn!(
+                                                            "failed to send packet to \
+                                                             local: {}",
+                                                            err
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -413,10 +453,10 @@ impl Dispatcher {
                             .insert(
                                 &outbound_name,
                                 packet.src_addr.clone().must_into_socket_addr(),
-                                orig_dest.clone(),
                                 r_handle,
                                 w_handle,
                                 remote_sender.clone(),
+                                dest_tx,
                             )
                             .await;
 
@@ -427,15 +467,21 @@ impl Dispatcher {
                             }
                         };
                     }
-                    Some(handle) => match handle.send(packet).await {
-                        // TODO: need to reset when GLOBAL select is changed
-                        Ok(_) => {
-                            debug!("reusing {} sent to remote", sess);
+                    Some((handle, dest_updater)) => {
+                        // Inform r_handle about the (potentially new) destination
+                        // mapping for this packet so responses are stamped
+                        // correctly.
+                        dest_updater.send((dest.clone(), orig_dest.clone())).ok();
+                        match handle.send(packet).await {
+                            // TODO: need to reset when GLOBAL select is changed
+                            Ok(_) => {
+                                debug!("reusing {} sent to remote", sess);
+                            }
+                            Err(err) => {
+                                error!("failed to send packet to remote: {}", err);
+                            }
                         }
-                        Err(err) => {
-                            error!("failed to send packet to remote: {}", err);
-                        }
-                    },
+                    }
                 };
             }
 
@@ -581,19 +627,19 @@ impl TimeoutUdpSessionManager {
         &self,
         outbound_name: &str,
         src_addr: SocketAddr,
-        orig_dest: SocksAddr,
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
+        dest_updater: DestUpdateSender,
     ) {
         let mut map = self.map.write().await;
         map.insert(
             outbound_name,
             src_addr,
-            orig_dest,
             recv_handle,
             send_handle,
             sender,
+            dest_updater,
         );
     }
 
@@ -601,29 +647,29 @@ impl TimeoutUdpSessionManager {
         &self,
         outbound_name: &str,
         src_addr: SocketAddr,
-        orig_dest: &SocksAddr,
-    ) -> Option<OutboundPacketSender> {
+    ) -> Option<(OutboundPacketSender, DestUpdateSender)> {
         let mut map = self.map.write().await;
-        map.get_outbound_sender_mut(outbound_name, src_addr, orig_dest)
+        map.get_outbound_sender_mut(outbound_name, src_addr)
     }
 }
 
 /// Key identifying a unique UDP NAT session.
-/// Scoped to (outbound, client source, original destination) so that packets
-/// to different remote endpoints are never multiplexed onto the same socket.
+/// Scoped to (outbound, client source) — one socket per client, full cone NAT.
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct OutboundHandleKey {
     outbound_name: String,
     src_addr: SocketAddr,
-    /// The destination address as seen by the inbound (e.g. the FAKE-IP or
-    /// domain the client originally sent to, before any reverse-lookup).
-    orig_dest: SocksAddr,
 }
+
+type DestUpdateSender = tokio::sync::mpsc::UnboundedSender<(SocksAddr, SocksAddr)>;
 
 struct OutboundHandleVal {
     recv_handle: JoinHandle<()>,
     send_handle: JoinHandle<()>,
     sender: OutboundPacketSender,
+    /// Channel to inform `r_handle` about new (dest → orig_dest) mappings as
+    /// the same client socket sends packets to different destinations.
+    dest_updater: DestUpdateSender,
     last_active: Instant,
 }
 
@@ -638,21 +684,21 @@ impl OutboundHandleMap {
         &mut self,
         outbound_name: &str,
         src_addr: SocketAddr,
-        orig_dest: SocksAddr,
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
+        dest_updater: DestUpdateSender,
     ) {
         self.0.insert(
             OutboundHandleKey {
                 outbound_name: outbound_name.to_string(),
                 src_addr,
-                orig_dest,
             },
             OutboundHandleVal {
                 recv_handle,
                 send_handle,
                 sender,
+                dest_updater,
                 last_active: Instant::now(),
             },
         );
@@ -662,12 +708,10 @@ impl OutboundHandleMap {
         &mut self,
         outbound_name: &str,
         src_addr: SocketAddr,
-        orig_dest: &SocksAddr,
-    ) -> Option<OutboundPacketSender> {
+    ) -> Option<(OutboundPacketSender, DestUpdateSender)> {
         let key = OutboundHandleKey {
             outbound_name: outbound_name.to_owned(),
             src_addr,
-            orig_dest: orig_dest.clone(),
         };
         self.0.get_mut(&key).map(|val| {
             trace!(
@@ -675,7 +719,7 @@ impl OutboundHandleMap {
                 (outbound_name, src_addr)
             );
             val.last_active = Instant::now();
-            val.sender.clone()
+            (val.sender.clone(), val.dest_updater.clone())
         })
     }
 }
