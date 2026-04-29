@@ -15,6 +15,36 @@ use tokio::{io::ReadBuf, net::UdpSocket};
 
 const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(60);
 
+/// Resolve a domain name to a socket address, preferring IPv4 when the local
+/// socket is IPv4.  Returns `Poll::Pending` while the DNS future is pending.
+fn resolve_domain(
+    domain: &str,
+    port: u16,
+    is_ipv6: bool,
+    resolver: &ThreadSafeDNSResolver,
+    cx: &mut Context<'_>,
+) -> Poll<io::Result<SocketAddr>> {
+    let mut fut = if is_ipv6 {
+        resolver.resolve(domain, false)
+    } else {
+        resolver
+            .resolve_v4(domain, false)
+            .map(|x| x.map(|ip| ip.map(Into::into)))
+            .boxed()
+    };
+    let ip = ready!(
+        fut.as_mut()
+            .poll(cx)
+            .map_err(|_| io::Error::other("resolve domain failed"))
+    )?;
+    match ip {
+        Some(ip) => Poll::Ready(Ok(SocketAddr::from((ip, port)))),
+        None => Poll::Ready(Err(io::Error::other(format!(
+            "resolve domain failed: {domain}"
+        )))),
+    }
+}
+
 #[must_use = "sinks do nothing unless polled"]
 // TODO: maybe we should use abstract datagram IO interface instead of the
 // Stream + Sink trait
@@ -86,96 +116,43 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ..
         } = *self;
 
-        if pkt.is_some() {
-            let p = pkt.as_ref().unwrap();
-            let data = &p.data;
-            let logical = p.logical_dst();
+        let p = pkt
+            .as_ref()
+            .ok_or_else(|| io::Error::other("no packet to send"))?;
+        let data = p.data.clone();
+        let logical = p.logical_dst();
+        let is_ipv6 = inner.local_addr()?.is_ipv6();
 
-            // Determine the real socket address to send to.
-            // If dst_domain is set, resolve it; otherwise use dst_addr
-            // directly (already a real IP, or a domain from a SOCKS5 client).
-            let dst = match &p.dst_domain {
-                Some(domain_addr) => {
-                    // Invariant: dst_domain is always a Domain variant when set.
-                    let SocksAddr::Domain(domain, port) = domain_addr else {
-                        return Poll::Ready(Err(io::Error::other(
-                            "dst_domain must be a Domain variant",
-                        )));
-                    };
-                    let (domain, port) = (domain.clone(), *port);
-                    let mut fut = {
-                        if inner.local_addr()?.is_ipv6() {
-                            resolver.resolve(domain.as_str(), false)
-                        } else {
-                            resolver
-                                .resolve_v4(domain.as_str(), false)
-                                .map(|x| x.map(|ip| ip.map(Into::into)))
-                                .boxed()
-                        }
-                    };
-                    let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
-                        io::Error::other("resolve domain failed")
-                    }))?;
-                    if let Some(ip) = ip {
-                        SocketAddr::from((ip, port))
-                    } else {
-                        return Poll::Ready(Err(io::Error::other(format!(
-                            "resolve domain failed: {domain}"
-                        ))));
-                    }
-                }
-                None => match &p.dst_addr {
-                    SocksAddr::Ip(addr) => *addr,
-                    SocksAddr::Domain(domain, port) => {
-                        let domain = domain.clone();
-                        let port = *port;
-                        let mut fut = {
-                            if inner.local_addr()?.is_ipv6() {
-                                resolver.resolve(domain.as_str(), false)
-                            } else {
-                                resolver
-                                    .resolve_v4(domain.as_str(), false)
-                                    .map(|x| x.map(|ip| ip.map(Into::into)))
-                                    .boxed()
-                            }
-                        };
-                        let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
-                            io::Error::other("resolve domain failed")
-                        }))?;
-                        if let Some(ip) = ip {
-                            SocketAddr::from((ip, port))
-                        } else {
-                            return Poll::Ready(Err(io::Error::other(format!(
-                                "resolve domain failed: {domain}"
-                            ))));
-                        }
-                    }
-                },
-            };
+        // Resolve destination to a real socket address.
+        // logical_dst() returns a domain when dst_domain is set (fake-IP
+        // flow) or when dst_addr itself is a domain (SOCKS5 client).
+        // For real IPs it short-circuits without a DNS round-trip.
+        let dst = match logical {
+            SocksAddr::Ip(addr) => addr,
+            SocksAddr::Domain(ref domain, port) => {
+                ready!(resolve_domain(domain, port, is_ipv6, resolver, cx))?
+            }
+        };
 
-            let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
+        let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
 
-            // Record real_ip → logical_dst() so poll_next can translate
-            // response src back to logical_dst() for the dispatcher's map.
-            // Prune stale entries on every flush to bound memory.
-            let now = Instant::now();
-            ip_to_logical
-                .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
-            ip_to_logical.insert(dst, (logical, now));
+        // Record real_ip → logical_dst() so poll_next can translate
+        // response src back to logical_dst() for the dispatcher's map.
+        // Prune stale entries on every flush to bound memory.
+        let now = Instant::now();
+        ip_to_logical
+            .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
+        ip_to_logical.insert(dst, (logical, now));
 
-            let wrote_all = n == data.len();
-            *pkt = None;
-            self.flushed = true;
+        *pkt = None;
+        self.flushed = true;
 
-            Poll::Ready(if wrote_all {
-                Ok(())
-            } else {
-                Err(new_io_error(format!(
-                    "failed to send all data, only sent {n} bytes"
-                )))
-            })
+        if n == data.len() {
+            Poll::Ready(Ok(()))
         } else {
-            Poll::Ready(Err(io::Error::other("no packet to send")))
+            Poll::Ready(Err(new_io_error(format!(
+                "failed to send all data, only sent {n} bytes"
+            ))))
         }
     }
 
