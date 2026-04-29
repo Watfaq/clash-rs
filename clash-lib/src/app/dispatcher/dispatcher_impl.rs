@@ -365,6 +365,9 @@ impl Dispatcher {
                         // to the logical destination (from reverse_lookup) and
                         // saves the original for src_addr restoration.
                         let rw_handle = tokio::spawn(async move {
+                            // Bound the reverse-mapping table to prevent unbounded
+                            // memory growth on long-lived sessions with many dests.
+                            const ORIG_MAP_MAX: usize = 256;
                             let mut orig_map: HashMap<SocksAddr, SocksAddr> =
                                 HashMap::new();
                             // Best-effort fallback for proxy outbounds that do
@@ -379,6 +382,13 @@ impl Dispatcher {
                                         let orig = packet.dst_addr.clone();
                                         packet.dst_addr = dest;
                                         if orig != packet.dst_addr {
+                                            if orig_map.len() >= ORIG_MAP_MAX {
+                                                if let Some(k) =
+                                                    orig_map.keys().next().cloned()
+                                                {
+                                                    orig_map.remove(&k);
+                                                }
+                                            }
                                             orig_map.insert(packet.dst_addr.clone(), orig.clone());
                                         }
                                         last_orig_addr = Some(orig);

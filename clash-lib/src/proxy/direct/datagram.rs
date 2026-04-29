@@ -2,48 +2,18 @@ use crate::{
     app::dns::ThreadSafeDNSResolver, common::errors::new_io_error,
     proxy::datagram::UdpPacket, session::SocksAddr,
 };
-use futures::{FutureExt, Sink, Stream, ready};
+use futures::{Sink, Stream, ready};
 use std::{
     collections::HashMap,
     io,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     pin::Pin,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-use tokio::{io::ReadBuf, net::UdpSocket};
+use tokio::{io::ReadBuf, net::UdpSocket, task::JoinHandle};
 
 const UDP_DOMAIN_MAP_TTL: Duration = Duration::from_secs(60);
-
-/// Resolve a domain name to a socket address, preferring IPv4 when the local
-/// socket is IPv4.  Returns `Poll::Pending` while the DNS future is pending.
-fn resolve_domain(
-    domain: &str,
-    port: u16,
-    is_ipv6: bool,
-    resolver: &ThreadSafeDNSResolver,
-    cx: &mut Context<'_>,
-) -> Poll<io::Result<SocketAddr>> {
-    let mut fut = if is_ipv6 {
-        resolver.resolve(domain, false)
-    } else {
-        resolver
-            .resolve_v4(domain, false)
-            .map(|x| x.map(|ip| ip.map(Into::into)))
-            .boxed()
-    };
-    let ip = ready!(
-        fut.as_mut()
-            .poll(cx)
-            .map_err(|_| io::Error::other("resolve domain failed"))
-    )?;
-    match ip {
-        Some(ip) => Poll::Ready(Ok(SocketAddr::from((ip, port)))),
-        None => Poll::Ready(Err(io::Error::other(format!(
-            "resolve domain failed: {domain}"
-        )))),
-    }
-}
 
 #[must_use = "sinks do nothing unless polled"]
 // TODO: maybe we should use abstract datagram IO interface instead of the
@@ -57,6 +27,15 @@ pub struct OutboundDatagramImpl {
     // real upstream IP → dst_addr of the most recent outgoing packet to that
     // IP; used in poll_next to translate src_addr back to dst_addr.
     ip_to_logical: HashMap<SocketAddr, (SocksAddr, Instant)>,
+    /// In-flight DNS resolution task for the current queued packet.
+    /// Using a JoinHandle (Send + Sync) rather than a raw BoxFuture so that
+    /// OutboundDatagramImpl satisfies the Sync bound required by
+    /// ChainedDatagram. The task is spawned once and awaited across polls —
+    /// no query restarts.
+    pending_dns: Option<JoinHandle<io::Result<SocketAddr>>>,
+    /// Resolved IP for the current queued packet; reused across poll_send_to
+    /// retries so we never re-poll an already-completed DNS task.
+    resolved_dst: Option<SocketAddr>,
 }
 
 impl OutboundDatagramImpl {
@@ -68,6 +47,8 @@ impl OutboundDatagramImpl {
             pkt: None,
             recv_buf: vec![0u8; 65535],
             ip_to_logical: HashMap::new(),
+            pending_dns: None,
+            resolved_dst: None,
         }
     }
 }
@@ -91,8 +72,12 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
 
     fn start_send(self: Pin<&mut Self>, item: UdpPacket) -> Result<(), Self::Error> {
         let pin = self.get_mut();
+        if let Some(handle) = pin.pending_dns.take() {
+            handle.abort();
+        }
         pin.pkt = Some(item);
         pin.flushed = false;
+        pin.resolved_dst = None;
         Ok(())
     }
 
@@ -109,33 +94,82 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ref mut pkt,
             ref resolver,
             ref mut ip_to_logical,
+            ref mut pending_dns,
+            ref mut resolved_dst,
             ..
         } = *self;
 
         let p = pkt
             .as_ref()
             .ok_or_else(|| io::Error::other("no packet to send"))?;
-        let data = p.data.clone();
-        let is_ipv6 = inner.local_addr()?.is_ipv6();
 
         let dst = match &p.dst_addr {
-            SocksAddr::Ip(addr) => *addr,
+            SocksAddr::Ip(addr) => {
+                // Explicit IP path: clear any stale DNS state from a prior packet.
+                *pending_dns = None;
+                *resolved_dst = None;
+                *addr
+            }
             SocksAddr::Domain(domain, port) => {
-                ready!(resolve_domain(domain, *port, is_ipv6, resolver, cx))?
+                if let Some(addr) = *resolved_dst {
+                    // Already resolved on a prior poll; skip DNS entirely.
+                    addr
+                } else {
+                    let is_ipv6 = inner.local_addr()?.is_ipv6();
+                    let handle = pending_dns.get_or_insert_with(|| {
+                        let resolver = resolver.clone();
+                        let domain = domain.clone();
+                        let port = *port;
+                        tokio::spawn(async move {
+                            let ip = if is_ipv6 {
+                                resolver.resolve(&domain, false).await.map_err(
+                                    |_| io::Error::other("resolve domain failed"),
+                                )?
+                            } else {
+                                resolver
+                                    .resolve_v4(&domain, false)
+                                    .await
+                                    .map_err(|_| {
+                                        io::Error::other("resolve domain failed")
+                                    })?
+                                    .map(IpAddr::V4)
+                            };
+                            match ip {
+                                Some(ip) => Ok(SocketAddr::from((ip, port))),
+                                None => Err(io::Error::other(format!(
+                                    "resolve domain failed: {domain}"
+                                ))),
+                            }
+                        })
+                    });
+                    let addr = match ready!(Pin::new(handle).poll(cx)) {
+                        Ok(result) => result?,
+                        Err(e) => {
+                            return Poll::Ready(Err(io::Error::other(format!(
+                                "DNS task panicked: {e}"
+                            ))));
+                        }
+                    };
+                    *pending_dns = None;
+                    *resolved_dst = Some(addr);
+                    addr
+                }
             }
         };
 
-        let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
+        let n = ready!(inner.poll_send_to(cx, p.data.as_slice(), dst))?;
 
         let now = Instant::now();
         ip_to_logical
             .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
         ip_to_logical.insert(dst, (p.dst_addr.clone(), now));
+        // Save length before clearing pkt (NLL ends p's borrow after this).
+        let data_len = p.data.len();
 
         *pkt = None;
         self.flushed = true;
 
-        if n == data.len() {
+        if n == data_len {
             Poll::Ready(Ok(()))
         } else {
             Poll::Ready(Err(new_io_error(format!(

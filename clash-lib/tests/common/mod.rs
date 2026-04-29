@@ -223,7 +223,12 @@ impl Socks5UdpSession {
     /// `"ip:port"` or `"domain:port"`.
     pub async fn recv(&self) -> (Vec<u8>, String) {
         let mut buf = vec![0u8; 65535];
-        let n = self.socket.recv(&mut buf).await.unwrap();
+        let (n, sender) = self.socket.recv_from(&mut buf).await.unwrap();
+        assert_eq!(
+            sender, self.relay_addr,
+            "UDP datagram came from unexpected sender: expected {}, got {}",
+            self.relay_addr, sender
+        );
         let pkt = &buf[..n];
 
         // Skip RSV(2) + FRAG(1)
