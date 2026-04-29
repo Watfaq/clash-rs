@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use clash_lib::{Config, Options};
-use common::{start_clash, wait_port_ready};
+use common::{Socks5UdpSession, start_clash, wait_port_ready};
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -11,7 +11,7 @@ mod common;
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 /// Test Shadowsocks inbound and outbound functionality
-async fn smoke_test() {
+async fn integration_test() {
     let wd_server =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
     let wd_client =
@@ -114,7 +114,7 @@ async fn smoke_test() {
 #[tokio::test(flavor = "current_thread")]
 #[serial_test::serial]
 /// Test AnyTLS inbound and outbound functionality (ephemeral self-signed cert)
-async fn smoke_test_anytls() {
+async fn integration_test_anytls() {
     let wd_server =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/server");
     let wd_client =
@@ -194,7 +194,7 @@ async fn smoke_test_anytls() {
 #[serial_test::serial]
 /// Test AnyTLS UDP-over-TCP v2: send a UDP datagram through SOCKS5 UDP
 /// ASSOCIATE → AnyTLS inbound → echo server, verify round-trip payload.
-async fn smoke_test_anytls_udp() {
+async fn integration_test_anytls_udp() {
     use std::net::SocketAddr;
     use tokio::net::UdpSocket;
 
@@ -302,4 +302,123 @@ async fn smoke_test_anytls_udp() {
     // Strip 10-byte SOCKS5 UDP header (RSV+FRAG+ATYP+IPv4+PORT)
     let echoed = &recv_buf[10..n];
     assert_eq!(echoed, payload, "UDP payload mismatch through AnyTLS");
+}
+
+// ── Direct UDP tests
+// ──────────────────────────────────────────────────────────
+
+fn start_direct_udp_clash() {
+    let wd =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/config/client");
+    let config = wd.join("direct_udp.yaml");
+    std::thread::spawn(move || {
+        start_clash(Options {
+            config: Config::File(config.to_string_lossy().to_string()),
+            cwd: Some(wd.to_string_lossy().to_string()),
+            rt: None,
+            log_file: None,
+        })
+        .expect("Failed to start direct-UDP clash instance");
+    });
+    wait_port_ready(19901).expect("direct-UDP clash port 19901 not ready");
+}
+
+/// Spin up a loopback UDP echo server; returns its port.
+async fn spawn_echo_server() -> u16 {
+    let sock = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let port = sock.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let mut buf = vec![0u8; 4096];
+        loop {
+            let Ok((n, peer)) = sock.recv_from(&mut buf).await else {
+                break;
+            };
+            let _ = sock.send_to(&buf[..n], peer).await;
+        }
+    });
+    port
+}
+
+/// One SOCKS5 UDP client, two echo servers (1→N multi-dest):
+/// each response must carry the correct server as its SOCKS5 src address.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn integration_test_udp_multi_dest_1_to_n() {
+    start_direct_udp_clash();
+
+    let port_a = spawn_echo_server().await;
+    let port_b = spawn_echo_server().await;
+    let client = Socks5UdpSession::connect(19901).await;
+
+    let ip = [127u8, 0, 0, 1];
+    client.send_ipv4(b"to-a", ip, port_a).await;
+    client.send_ipv4(b"to-b", ip, port_b).await;
+
+    let timeout = std::time::Duration::from_secs(5);
+
+    let (data1, src1) = tokio::time::timeout(timeout, client.recv())
+        .await
+        .expect("timed out waiting for first UDP response");
+    let (data2, src2) = tokio::time::timeout(timeout, client.recv())
+        .await
+        .expect("timed out waiting for second UDP response");
+
+    let expected_a = format!("127.0.0.1:{port_a}");
+    let expected_b = format!("127.0.0.1:{port_b}");
+
+    // Responses may arrive in any order; verify payload ↔ src_addr coherence.
+    let mut pairs = [
+        (data1.as_slice(), src1.as_str()),
+        (data2.as_slice(), src2.as_str()),
+    ];
+    pairs.sort_by_key(|&(_, src)| src);
+
+    let srcs: std::collections::HashSet<&str> =
+        pairs.iter().map(|&(_, s)| s).collect();
+    assert!(
+        srcs.contains(expected_a.as_str()),
+        "missing src_addr for echo server A"
+    );
+    assert!(
+        srcs.contains(expected_b.as_str()),
+        "missing src_addr for echo server B"
+    );
+
+    for (data, src) in &pairs {
+        if *src == expected_a.as_str() {
+            assert_eq!(*data, b"to-a", "payload mismatch for echo server A");
+        } else {
+            assert_eq!(*data, b"to-b", "payload mismatch for echo server B");
+        }
+    }
+}
+
+/// Two independent SOCKS5 UDP clients send to the same echo server.
+/// Each client must receive only its own echo — sessions are keyed by
+/// (outbound_name, client_src_addr) — this is the full-cone NAT isolation
+/// property.
+#[tokio::test(flavor = "current_thread")]
+#[serial_test::serial]
+async fn integration_test_udp_session_isolation() {
+    start_direct_udp_clash();
+
+    let echo_port = spawn_echo_server().await;
+    let client_a = Socks5UdpSession::connect(19901).await;
+    let client_b = Socks5UdpSession::connect(19901).await;
+
+    let ip = [127u8, 0, 0, 1];
+    client_a.send_ipv4(b"from-A", ip, echo_port).await;
+    client_b.send_ipv4(b"from-B", ip, echo_port).await;
+
+    let timeout = std::time::Duration::from_secs(5);
+
+    let (data_a, _) = tokio::time::timeout(timeout, client_a.recv())
+        .await
+        .expect("client A timed out");
+    let (data_b, _) = tokio::time::timeout(timeout, client_b.recv())
+        .await
+        .expect("client B timed out");
+
+    assert_eq!(data_a, b"from-A", "client A received wrong payload");
+    assert_eq!(data_b, b"from-B", "client B received wrong payload");
 }
