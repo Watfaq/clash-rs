@@ -23,7 +23,11 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{io::AsyncWriteExt, sync::RwLock, task::JoinHandle};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::{RwLock, watch},
+    task::JoinHandle,
+};
 use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 use crate::app::dns::ThreadSafeDNSResolver;
@@ -386,13 +390,21 @@ impl Dispatcher {
                         let (remote_sender, mut remote_forwarder) =
                             tokio::sync::mpsc::channel::<UdpPacket>(256);
 
+                        // Tracks the dst_addr of the most recently sent
+                        // packet so r_handle can stamp it as src_addr on
+                        // responses (restoring the fake-IP or original addr
+                        // for the client, regardless of outbound type).
+                        let (dst_tx, dst_rx) =
+                            watch::channel(packet.dst_addr.clone());
+                        let dst_tx = Arc::new(dst_tx);
+
                         // remote -> local: forward responses back to the
-                        // inbound sender. src_addr is already set to the
-                        // original fake-IP by OutboundDatagramImpl's
-                        // ip_to_orig lookup; we just need to stamp the client
-                        // address into dst_addr.
+                        // inbound sender. Stamp src_addr with the last
+                        // outgoing dst_addr so the client sees the address it
+                        // originally sent to (fake-IP or real IP).
                         let r_handle = tokio::spawn(async move {
                             while let Some(mut packet) = remote_r.next().await {
+                                packet.src_addr = dst_rx.borrow().clone();
                                 packet.dst_addr = sess.source.into();
 
                                 debug!(
@@ -432,6 +444,7 @@ impl Dispatcher {
                                 r_handle,
                                 w_handle,
                                 remote_sender.clone(),
+                                Arc::clone(&dst_tx),
                             )
                             .await;
 
@@ -442,8 +455,11 @@ impl Dispatcher {
                             }
                         };
                     }
-                    Some(handle) => {
-                        match handle.send(packet).await {
+                    Some((sender, dst_tx)) => {
+                        // Update the watcher so r_handle stamps the correct
+                        // dst_addr on the next response.
+                        dst_tx.send(packet.dst_addr.clone()).ok();
+                        match sender.send(packet).await {
                             // TODO: need to reset when GLOBAL select is changed
                             Ok(_) => {
                                 debug!("reusing {} sent to remote", sess);
@@ -601,16 +617,24 @@ impl TimeoutUdpSessionManager {
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
+        dst_watcher: Arc<watch::Sender<SocksAddr>>,
     ) {
         let mut map = self.map.write().await;
-        map.insert(outbound_name, src_addr, recv_handle, send_handle, sender);
+        map.insert(
+            outbound_name,
+            src_addr,
+            recv_handle,
+            send_handle,
+            sender,
+            dst_watcher,
+        );
     }
 
     async fn get_outbound_sender_mut(
         &self,
         outbound_name: &str,
         src_addr: SocketAddr,
-    ) -> Option<OutboundPacketSender> {
+    ) -> Option<(OutboundPacketSender, Arc<watch::Sender<SocksAddr>>)> {
         let mut map = self.map.write().await;
         map.get_outbound_sender_mut(outbound_name, src_addr)
     }
@@ -628,6 +652,9 @@ struct OutboundHandleVal {
     recv_handle: JoinHandle<()>,
     send_handle: JoinHandle<()>,
     sender: OutboundPacketSender,
+    /// Tracks the most-recently-sent packet's dst_addr so r_handle can
+    /// restore src_addr on inbound responses (fake-IP → real fake-IP).
+    dst_watcher: Arc<watch::Sender<SocksAddr>>,
     last_active: Instant,
 }
 
@@ -645,6 +672,7 @@ impl OutboundHandleMap {
         recv_handle: JoinHandle<()>,
         send_handle: JoinHandle<()>,
         sender: OutboundPacketSender,
+        dst_watcher: Arc<watch::Sender<SocksAddr>>,
     ) {
         self.0.insert(
             OutboundHandleKey {
@@ -655,6 +683,7 @@ impl OutboundHandleMap {
                 recv_handle,
                 send_handle,
                 sender,
+                dst_watcher,
                 last_active: Instant::now(),
             },
         );
@@ -664,7 +693,7 @@ impl OutboundHandleMap {
         &mut self,
         outbound_name: &str,
         src_addr: SocketAddr,
-    ) -> Option<OutboundPacketSender> {
+    ) -> Option<(OutboundPacketSender, Arc<watch::Sender<SocksAddr>>)> {
         let key = OutboundHandleKey {
             outbound_name: outbound_name.to_owned(),
             src_addr,
@@ -675,7 +704,7 @@ impl OutboundHandleMap {
                 (outbound_name, src_addr)
             );
             val.last_active = Instant::now();
-            val.sender.clone()
+            (val.sender.clone(), Arc::clone(&val.dst_watcher))
         })
     }
 }
