@@ -54,22 +54,12 @@ fn build_dashboard() -> anyhow::Result<()> {
     let dashboard_dir =
         std::path::PathBuf::from(&manifest_dir).join("../clash-dashboard");
 
-    // Always ensure dist/ exists so rust-embed can compile even if the npm
-    // build is skipped (it will embed an empty bundle).
-    let dist_dir = dashboard_dir.join("dist");
-    std::fs::create_dir_all(&dist_dir)?;
-
-    let dashboard_dir = match dashboard_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            println!(
-                "cargo:warning=clash-dashboard directory not found at {}; skipping \
-                 frontend build (embedded UI will be empty)",
-                dashboard_dir.display()
-            );
-            return Ok(());
-        }
-    };
+    let dashboard_dir = dashboard_dir.canonicalize().map_err(|e| {
+        anyhow::anyhow!(
+            "clash-dashboard directory not found at {}: {e}",
+            dashboard_dir.display()
+        )
+    })?;
 
     // Watch source files so cargo reruns this script on any frontend change.
     let src_dir = dashboard_dir.join("src");
@@ -98,22 +88,12 @@ fn build_dashboard() -> anyhow::Result<()> {
         .status()
     {
         Ok(s) => s,
-        Err(_) => {
-            println!(
-                "cargo:warning=npm not found; skipping frontend build (embedded UI \
-                 will be empty)"
-            );
-            return Ok(());
+        Err(e) => {
+            anyhow::bail!("npm not found; is Node.js installed? ({e})");
         }
     };
 
-    if !status.success() {
-        println!(
-            "cargo:warning=`npm ci` failed with status {status}; skipping frontend \
-             build"
-        );
-        return Ok(());
-    }
+    anyhow::ensure!(status.success(), "`npm ci` failed with status {status}");
 
     // Run `npm run build`.
     let status = std::process::Command::new(npm)
