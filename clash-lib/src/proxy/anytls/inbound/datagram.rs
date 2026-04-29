@@ -177,7 +177,7 @@ impl Stream for InboundDatagramAnytls {
                                 data: Vec::new(),
                                 src_addr: this.peer_addr.clone(),
                                 dst_addr: this.peer_addr.clone(),
-                                ..Default::default()
+                                inbound_user: None,
                             }));
                         }
                         if packet_len > MAX_PACKET_LENGTH {
@@ -231,7 +231,7 @@ impl Stream for InboundDatagramAnytls {
                         data,
                         src_addr: this.peer_addr.clone(),
                         dst_addr: this.peer_addr.clone(),
-                        ..Default::default()
+                        inbound_user: None,
                     }));
                 }
             }
@@ -255,7 +255,7 @@ mod tests {
             data,
             src_addr: addr.clone(),
             dst_addr: addr,
-            ..Default::default()
+            inbound_user: None,
         }
     }
 

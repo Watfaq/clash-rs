@@ -89,7 +89,7 @@ pub(crate) async fn handle_inbound_datagram(
                 data: data.data().into(),
                 src_addr: local_addr.into(),
                 dst_addr: remote_addr.into(),
-                ..Default::default()
+                inbound_user: None,
             };
 
             trace!("tun -> dispatcher: {:?}", pkt);

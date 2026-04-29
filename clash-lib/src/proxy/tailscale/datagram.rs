@@ -120,7 +120,7 @@ impl TailscaleDatagramOutbound {
                             data: data.into(),
                             src_addr: remote.into(),
                             dst_addr: local_addr_socks.clone(),
-                            ..Default::default()
+                            inbound_user: None,
                         })
                         .await
                         .is_err()

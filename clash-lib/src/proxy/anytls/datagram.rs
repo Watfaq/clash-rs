@@ -218,7 +218,7 @@ impl Stream for OutboundDatagramAnytls {
                         data,
                         src_addr: this.target_addr.clone(),
                         dst_addr: this.target_addr.clone(),
-                        ..Default::default()
+                        inbound_user: None,
                     }));
                 }
             }

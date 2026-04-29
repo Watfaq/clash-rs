@@ -780,7 +780,7 @@ mod tests {
             data: payload.to_vec(),
             src_addr: SocksAddr::any_ipv4(),
             dst_addr: SocksAddr::any_ipv4(),
-            ..Default::default()
+            inbound_user: None,
         })
         .await
         .unwrap();
@@ -825,7 +825,7 @@ mod tests {
                 data: oversized,
                 src_addr: SocksAddr::any_ipv4(),
                 dst_addr: SocksAddr::any_ipv4(),
-                ..Default::default()
+                inbound_user: None,
             })
             .await;
         assert!(
