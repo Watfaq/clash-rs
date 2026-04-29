@@ -108,10 +108,10 @@ where
 
         if let Some(pkt) = pkt_container {
             let data = pkt.data.as_ref();
-            // Use logical_dst() so the remote SS server receives the intended
+            // Use dst_addr so the remote SS server receives the intended
             // domain name (or real IP) rather than a fake-IP from the
             // dispatcher's DNS mapping.
-            let logical = pkt.logical_dst();
+            let logical = pkt.dst_addr.clone();
             let addr: shadowsocks::relay::Address =
                 (logical.host(), logical.port()).into();
 
@@ -194,7 +194,7 @@ where
                     _ => SocksAddr::any_ipv4(),
                 },
                 dst_addr: SocksAddr::any_ipv4(),
-                inbound_user: None,
+                ..Default::default()
             })),
             Err(_) => Poll::Ready(None),
         }
@@ -231,10 +231,8 @@ impl DatagramSend for ShadowsocksUdpIo {
         let mut w = self.w.lock().unwrap();
         match w.start_send_unpin(UdpPacket {
             data: buf.to_vec(),
-            src_addr: SocksAddr::any_ipv4(),
             dst_addr: target.into(),
-            dst_domain: None,
-            inbound_user: None,
+            ..Default::default()
         }) {
             Ok(_) => {}
             Err(e) => return Poll::Ready(Err(new_io_error(e.to_string()))),

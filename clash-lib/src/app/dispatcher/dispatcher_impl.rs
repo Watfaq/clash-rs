@@ -263,12 +263,9 @@ impl Dispatcher {
             while let Some(mut packet) = local_r.next().await {
                 let mut sess = sess.clone();
 
-                // Canonicalize IPv4-mapped IPv6 destination addresses to plain
-                // IPv4 (e.g. SS2022 inbound on a dual-stack socket may produce
-                // ::ffff:x.x.x.x for an IPv4 target), then preserve the IP for
-                // family_hint_for_session before reverse_lookup may replace it
-                // with a domain name.  Without canonicalization, new_udp_socket
-                // picks AF_INET6 while bind_addr is 0.0.0.0, causing EINVAL.
+                // Canonicalize IPv4-mapped IPv6 addresses (e.g. SS2022 on a
+                // dual-stack socket produces ::ffff:x.x.x.x); without this
+                // new_udp_socket picks AF_INET6 with bind_addr 0.0.0.0 → EINVAL.
                 if let crate::session::SocksAddr::Ip(addr) = &mut packet.dst_addr {
                     *addr = addr.to_canonical();
                     sess.resolved_ip = Some(addr.ip());
@@ -285,31 +282,6 @@ impl Dispatcher {
                 sess.source = packet.src_addr.clone().must_into_socket_addr();
                 sess.destination = dest.clone();
                 sess.inbound_user = packet.inbound_user.clone();
-
-                // Preserve the original inbound IP in dst_addr; carry the
-                // resolved domain separately in dst_domain so that proxy
-                // outbounds can use logical_dst() for protocol headers without
-                // losing the fake-IP.
-                packet.dst_domain = match &dest {
-                    SocksAddr::Domain(..) => Some(dest.clone()),
-                    SocksAddr::Ip(_) => None,
-                };
-
-                // Guard: a fake-IP that survived reverse_lookup without
-                // yielding a domain means the resolver's fake-IP table has no
-                // entry — this would cause the outbound to send to a fake IP.
-                if packet.dst_domain.is_none() {
-                    if let SocksAddr::Ip(addr) = &packet.dst_addr {
-                        if resolver.is_fake_ip(addr.ip()).await {
-                            error!(
-                                "fake-IP {} has no dst_domain after reverse lookup \
-                                 — dropping UDP packet",
-                                addr
-                            );
-                            continue;
-                        }
-                    }
-                }
 
                 let mode = *mode.read().await;
 
@@ -384,28 +356,32 @@ impl Dispatcher {
 
                         let (mut remote_w, mut remote_r) = outbound_datagram.split();
                         let (remote_sender, mut remote_forwarder) =
-                            tokio::sync::mpsc::channel::<UdpPacket>(256);
+                            tokio::sync::mpsc::channel::<(UdpPacket, SocksAddr)>(
+                                256,
+                            );
 
-                        // One task handles both directions and owns the
-                        // orig_map directly — no channel, no Arc, no Mutex.
-                        // On outgoing: insert logical_dst→orig_dst into map,
-                        // then forward to remote_w.
-                        // On incoming: look up src_addr in map to restore
-                        // the original fake-IP, then send to local.
+                        // Per-session task: owns orig_map and all dst_addr
+                        // substitution logic. Outgoing arm rewrites dst_addr
+                        // to the logical destination (from reverse_lookup) and
+                        // saves the original for src_addr restoration.
                         let rw_handle = tokio::spawn(async move {
                             let mut orig_map: HashMap<SocksAddr, SocksAddr> =
                                 HashMap::new();
+                            // Best-effort fallback for proxy outbounds that do
+                            // not echo dst_addr as src_addr in responses (e.g.
+                            // Shadowsocks returns the real upstream IP).
+                            let mut last_orig_addr: Option<SocksAddr> = None;
                             loop {
                                 tokio::select! {
                                     // local -> remote
                                     pkt = remote_forwarder.recv() => {
-                                        let Some(packet) = pkt else { break };
-                                        if packet.dst_domain.is_some() {
-                                            orig_map.insert(
-                                                packet.logical_dst(),
-                                                packet.dst_addr.clone(),
-                                            );
+                                        let Some((mut packet, dest)) = pkt else { break };
+                                        let orig = packet.dst_addr.clone();
+                                        packet.dst_addr = dest;
+                                        if orig != packet.dst_addr {
+                                            orig_map.insert(packet.dst_addr.clone(), orig.clone());
                                         }
+                                        last_orig_addr = Some(orig);
                                         match remote_w.send(packet).await {
                                             Ok(_) => {}
                                             Err(err) => {
@@ -423,6 +399,12 @@ impl Dispatcher {
                                             orig_map.get(&packet.src_addr).cloned()
                                         {
                                             packet.src_addr = orig;
+                                        } else if !orig_map.is_empty() {
+                                            // Proxy didn't echo dst_addr as src —
+                                            // best-effort for single-dest flows.
+                                            if let Some(ref fallback) = last_orig_addr {
+                                                packet.src_addr = fallback.clone();
+                                            }
                                         }
                                         packet.dst_addr = sess.source.into();
                                         debug!(
@@ -453,7 +435,7 @@ impl Dispatcher {
                             )
                             .await;
 
-                        match remote_sender.send(packet).await {
+                        match remote_sender.send((packet, dest)).await {
                             Ok(_) => {}
                             Err(err) => {
                                 error!("failed to send packet to remote: {}", err);
@@ -461,7 +443,7 @@ impl Dispatcher {
                         };
                     }
                     Some(sender) => {
-                        match sender.send(packet).await {
+                        match sender.send((packet, dest)).await {
                             // TODO: need to reset when GLOBAL select is changed
                             Ok(_) => {
                                 debug!("reusing {} sent to remote", sess);
@@ -550,7 +532,7 @@ async fn reverse_lookup(
     Some(dst)
 }
 
-type OutboundPacketSender = tokio::sync::mpsc::Sender<UdpPacket>;
+type OutboundPacketSender = tokio::sync::mpsc::Sender<(UdpPacket, SocksAddr)>;
 
 struct TimeoutUdpSessionManager {
     map: Arc<RwLock<OutboundHandleMap>>,
@@ -641,8 +623,7 @@ struct OutboundHandleKey {
 }
 
 struct OutboundHandleVal {
-    /// Single task handling both local→remote and remote→local directions,
-    /// owning the orig_map directly.
+    /// Handles both local→remote and remote→local, owns orig_map.
     rw_handle: JoinHandle<()>,
     sender: OutboundPacketSender,
     last_active: Instant,

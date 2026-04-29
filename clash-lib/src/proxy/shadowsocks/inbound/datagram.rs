@@ -114,7 +114,6 @@ impl futures::Stream for InboundShadowsocksDatagram {
                                 port,
                             ) => SocksAddr::Domain(domain, port),
                         },
-                        dst_domain: None,
                         inbound_user: ctrl
                             .and_then(|c| c.user)
                             .map(|u| u.name().to_owned()),

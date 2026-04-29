@@ -382,12 +382,9 @@ impl TuicDatagramOutbound {
                 },
             );
             while let Some(next_send) = send_rx.recv().await {
+                let dst = next_send.dst_addr.clone().into_tuic();
                 let res = conn
-                    .outgoing_udp(
-                        next_send.data.into(),
-                        next_send.logical_dst().into_tuic(),
-                        assoc_id,
-                    )
+                    .outgoing_udp(next_send.data.into(), dst, assoc_id)
                     .await;
                 if res.is_err() {
                     break;

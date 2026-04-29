@@ -194,7 +194,6 @@ impl DnsUdpSocket for DnsProxyUdpSocket {
             data: buf.to_vec(),
             src_addr: src,
             dst_addr: target.into(),
-            dst_domain: None,
             inbound_user: None,
         };
         match inner.start_send_unpin(packet) {

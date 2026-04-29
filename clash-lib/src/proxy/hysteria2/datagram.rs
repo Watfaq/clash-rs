@@ -68,7 +68,7 @@ impl HysteriaDatagramOutbound {
             // use u32 to avoid overflow
             let next_pkt_id = AtomicU32::new(0);
             while let Some(next_send) = send_rx.recv().await {
-                let dst = next_send.logical_dst();
+                let dst = next_send.dst_addr.clone();
                 let pkt_id =
                     next_pkt_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let pkt_id = (pkt_id % u16::MAX as u32) as u16;

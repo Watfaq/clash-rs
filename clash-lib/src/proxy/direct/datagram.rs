@@ -53,13 +53,9 @@ pub struct OutboundDatagramImpl {
     resolver: ThreadSafeDNSResolver,
     flushed: bool,
     pkt: Option<UdpPacket>,
-    // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
-    // every poll_next call.
     recv_buf: Vec<u8>,
-    // Maps real upstream IP → logical_dst() of the most recently sent packet
-    // to that IP.  poll_next translates the raw socket src back to
-    // logical_dst() so the dispatcher's orig_map can restore the fake-IP.
-    // TTL-pruned on each flush to bound memory.
+    // real upstream IP → dst_addr of the most recent outgoing packet to that
+    // IP; used in poll_next to translate src_addr back to dst_addr.
     ip_to_logical: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
@@ -120,13 +116,9 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             .as_ref()
             .ok_or_else(|| io::Error::other("no packet to send"))?;
         let data = p.data.clone();
-        let logical = p.logical_dst();
+        let logical = p.dst_addr.clone();
         let is_ipv6 = inner.local_addr()?.is_ipv6();
 
-        // Resolve destination to a real socket address.
-        // logical_dst() returns a domain when dst_domain is set (fake-IP
-        // flow) or when dst_addr itself is a domain (SOCKS5 client).
-        // For real IPs it short-circuits without a DNS round-trip.
         let dst = match logical {
             SocksAddr::Ip(addr) => addr,
             SocksAddr::Domain(ref domain, port) => {
@@ -136,9 +128,6 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
 
         let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
 
-        // Record real_ip → logical_dst() so poll_next can translate
-        // response src back to logical_dst() for the dispatcher's map.
-        // Prune stale entries on every flush to bound memory.
         let now = Instant::now();
         ip_to_logical
             .retain(|_, (_, ts)| now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL);
@@ -182,8 +171,6 @@ impl Stream for OutboundDatagramImpl {
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
-                // Translate real upstream IP → logical_dst() so the
-                // dispatcher's orig_map can restore the original fake-IP.
                 let src_addr = ip_to_logical
                     .get(&src)
                     .map(|(logical, _)| logical.clone())
@@ -192,8 +179,7 @@ impl Stream for OutboundDatagramImpl {
                     data,
                     src_addr,
                     dst_addr: SocksAddr::any_ipv4(),
-                    dst_domain: None,
-                    inbound_user: None,
+                    ..Default::default()
                 }))
             }
             Err(_) => Poll::Ready(None),

@@ -218,7 +218,6 @@ impl Stream for OutboundDatagramAnytls {
                         data,
                         src_addr: this.target_addr.clone(),
                         dst_addr: this.target_addr.clone(),
-                        dst_domain: None,
                         inbound_user: None,
                     }));
                 }

@@ -52,7 +52,7 @@ impl TailscaleDatagramOutbound {
                         },
                     };
 
-                    let dst = match pkt.logical_dst() {
+                    let dst = match pkt.dst_addr.clone() {
                         SocksAddr::Ip(addr) => addr,
                         SocksAddr::Domain(domain, port) => {
                             // Try v4 first, fall back to v6.
@@ -120,7 +120,6 @@ impl TailscaleDatagramOutbound {
                             data: data.into(),
                             src_addr: remote.into(),
                             dst_addr: local_addr_socks.clone(),
-                            dst_domain: None,
                             inbound_user: None,
                         })
                         .await

@@ -95,7 +95,7 @@ impl Sink<UdpPacket> for OutboundDatagramTrojan {
             let data = &pkt.data;
 
             let mut payload = BytesMut::new();
-            pkt.logical_dst().write_buf(&mut payload);
+            pkt.dst_addr.write_buf(&mut payload);
             payload.put_u16(data.len() as u16);
             payload.put_slice(b"\r\n");
             payload.put_slice(data);
@@ -370,8 +370,7 @@ impl Stream for OutboundDatagramTrojan {
                                 data: data.to_vec(),
                                 src_addr: remote_addr.clone(),
                                 dst_addr: addr,
-                                dst_domain: None,
-                                inbound_user: None,
+                                ..Default::default()
                             }));
                         }
                         Err(err) => {
