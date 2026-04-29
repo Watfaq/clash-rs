@@ -162,7 +162,7 @@ impl Sink<UdpPacket> for UdpSession {
     ) -> Result<(), Self::Error> {
         let this = self.deref_mut();
         let socket = &this.socket;
-        let dst_addr = match item.dst_addr {
+        let dst_addr = match item.logical_dst() {
             SocksAddr::Ip(socket_addr) => socket_addr,
             SocksAddr::Domain(..) => {
                 return Err(new_io_error(
@@ -237,6 +237,7 @@ impl Stream for UdpSession {
                     data,
                     src_addr,
                     dst_addr,
+                    dst_domain: None,
                     inbound_user: None,
                 }))
             }

@@ -385,7 +385,7 @@ impl TuicDatagramOutbound {
                 let res = conn
                     .outgoing_udp(
                         next_send.data.into(),
-                        next_send.dst_addr.into_tuic(),
+                        next_send.logical_dst().into_tuic(),
                         assoc_id,
                     )
                     .await;

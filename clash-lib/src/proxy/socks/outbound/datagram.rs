@@ -65,11 +65,13 @@ impl Sink<UdpPacket> for Socks5Datagram {
         let remote = self.remote;
         trace!(
             "sending UDP packet to {}, item dst: {}",
-            remote, item.dst_addr
+            remote,
+            item.logical_dst()
         );
         let pin = self.get_mut();
+        let dst = item.logical_dst();
         pin.inner
-            .start_send_unpin(((item.data.into(), item.dst_addr), remote))
+            .start_send_unpin(((item.data.into(), dst), remote))
     }
 
     fn poll_flush(
@@ -105,6 +107,7 @@ impl Stream for Socks5Datagram {
                         src_addr: src,
                         dst_addr: SocksAddr::Ip(dst),
                         data: data.into(),
+                        dst_domain: None,
                         inbound_user: None,
                     }
                 }
@@ -114,6 +117,7 @@ impl Stream for Socks5Datagram {
                         src_addr: SocksAddr::any_ipv4(),
                         dst_addr: SocksAddr::any_ipv4(),
                         data: Vec::new(),
+                        dst_domain: None,
                         inbound_user: None,
                     }
                 }

@@ -210,6 +210,7 @@ impl Stream for OutboundDatagramVless {
                             data: data.to_vec(),
                             src_addr: this.remote_addr.clone(),
                             dst_addr: this.remote_addr.clone(),
+                            dst_domain: None,
                             inbound_user: None,
                         }));
                     }

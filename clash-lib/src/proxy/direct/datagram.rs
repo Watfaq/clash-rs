@@ -26,10 +26,12 @@ pub struct OutboundDatagramImpl {
     // Pre-allocated receive buffer; avoids a 65535-byte heap allocation on
     // every poll_next call.
     recv_buf: Vec<u8>,
-    // Maps resolved upstream IP addresses back to the domain name that was
-    // sent to, so poll_next can restore the logical src_addr. The dispatcher
-    // then maps domain → original inbound destination (e.g. fake-IP).
-    ip_to_domain: HashMap<SocketAddr, (SocksAddr, Instant)>,
+    // Maps resolved upstream IP addresses back to the original inbound
+    // destination (fake-IP or direct IP) so poll_next can restore the correct
+    // src_addr for the inbound client.  The value is the original dst_addr
+    // from the packet (the fake-IP, or a real IP/domain for non-fake-IP
+    // flows).
+    ip_to_orig: HashMap<SocketAddr, (SocksAddr, Instant)>,
 }
 
 impl OutboundDatagramImpl {
@@ -40,7 +42,7 @@ impl OutboundDatagramImpl {
             flushed: true,
             pkt: None,
             recv_buf: vec![0u8; 65535],
-            ip_to_domain: HashMap::new(),
+            ip_to_orig: HashMap::new(),
         }
     }
 }
@@ -81,18 +83,31 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
             ref mut inner,
             ref mut pkt,
             ref resolver,
-            ref mut ip_to_domain,
+            ref mut ip_to_orig,
             ..
         } = *self;
 
         if pkt.is_some() {
             let p = pkt.as_ref().unwrap();
+            // The original inbound destination (fake-IP or real IP).  Stored
+            // in ip_to_orig so responses can be stamped with it as src_addr.
             let orig_dst = p.dst_addr.clone();
             let data = &p.data;
-            let dst = match &p.dst_addr {
-                SocksAddr::Domain(domain, port) => {
-                    let domain = domain.to_string();
-                    let port = *port;
+
+            // Determine where to actually send the packet.
+            // - If dst_domain is set, resolve it to a real IP and map real-IP →
+            //   orig_dst (the fake-IP) for responses.
+            // - If dst_domain is None, dst_addr must already be a real IP (or a
+            //   domain from a non-fake-IP SOCKS5 client), and we resolve only when
+            //   needed.
+            let dst = match &p.dst_domain {
+                Some(domain) => {
+                    // Fake-IP (or cache-hit) case: resolve the domain.
+                    let domain = domain.clone();
+                    let port = match &p.dst_addr {
+                        SocksAddr::Ip(a) => a.port(),
+                        SocksAddr::Domain(_, port) => *port,
+                    };
                     let mut fut = {
                         if inner.local_addr()?.is_ipv6() {
                             resolver.resolve(domain.as_str(), false)
@@ -108,12 +123,12 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                     }))?;
                     if let Some(ip) = ip {
                         let resolved: SocketAddr = (ip, port).into();
-                        // Prune stale entries then record this domain mapping.
+                        // Prune stale entries, then store real-IP → orig_dst.
                         let now = Instant::now();
-                        ip_to_domain.retain(|_, (_, ts)| {
+                        ip_to_orig.retain(|_, (_, ts)| {
                             now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL
                         });
-                        ip_to_domain.insert(resolved, (orig_dst, now));
+                        ip_to_orig.insert(resolved, (orig_dst, now));
                         resolved
                     } else {
                         return Poll::Ready(Err(io::Error::other(format!(
@@ -121,7 +136,47 @@ impl Sink<UdpPacket> for OutboundDatagramImpl {
                         ))));
                     }
                 }
-                SocksAddr::Ip(addr) => *addr,
+                None => {
+                    // No domain — dst_addr is already the target.
+                    match &p.dst_addr {
+                        SocksAddr::Ip(addr) => *addr,
+                        SocksAddr::Domain(domain, port) => {
+                            // SOCKS5 client sent a domain directly (no
+                            // fake-IP).  Resolve it; no ip_to_orig entry
+                            // needed because orig_dst == Domain (same).
+                            let domain = domain.clone();
+                            let port = *port;
+                            let mut fut = {
+                                if inner.local_addr()?.is_ipv6() {
+                                    resolver.resolve(domain.as_str(), false)
+                                } else {
+                                    resolver
+                                        .resolve_v4(domain.as_str(), false)
+                                        .map(|x| x.map(|ip| ip.map(Into::into)))
+                                        .boxed()
+                                }
+                            };
+                            let ip = ready!(fut.as_mut().poll(cx).map_err(|_| {
+                                io::Error::other("resolve domain failed")
+                            }))?;
+                            if let Some(ip) = ip {
+                                let resolved: SocketAddr = (ip, port).into();
+                                let now = Instant::now();
+                                ip_to_orig.retain(|_, (_, ts)| {
+                                    now.duration_since(*ts) < UDP_DOMAIN_MAP_TTL
+                                });
+                                // Map real-IP → Domain addr so the response
+                                // src_addr shows the domain, not the raw IP.
+                                ip_to_orig.insert(resolved, (orig_dst, now));
+                                resolved
+                            } else {
+                                return Poll::Ready(Err(io::Error::other(format!(
+                                    "resolve domain failed: {domain}"
+                                ))));
+                            }
+                        }
+                    }
+                }
             };
 
             let n = ready!(inner.poll_send_to(cx, data.as_slice(), dst))?;
@@ -161,24 +216,24 @@ impl Stream for OutboundDatagramImpl {
         let Self {
             ref mut inner,
             ref mut recv_buf,
-            ref ip_to_domain,
+            ref ip_to_orig,
             ..
         } = *self;
         let mut buf = ReadBuf::new(recv_buf.as_mut_slice());
         match ready!(inner.poll_recv_from(cx, &mut buf)) {
             Ok(src) => {
                 let data = buf.filled().to_vec();
-                // If this upstream IP was resolved from a domain name, restore
-                // the domain as src_addr so the dispatcher can map it back to
-                // the original fake-IP destination.
-                let src_addr = ip_to_domain
+                // Restore the original inbound destination (fake-IP or domain)
+                // as src_addr so the client receives it as the reply source.
+                let src_addr = ip_to_orig
                     .get(&src)
-                    .map(|(domain_addr, _)| domain_addr.clone())
+                    .map(|(orig, _)| orig.clone())
                     .unwrap_or_else(|| src.into());
                 Poll::Ready(Some(UdpPacket {
                     data,
                     src_addr,
                     dst_addr: SocksAddr::any_ipv4(),
+                    dst_domain: None,
                     inbound_user: None,
                 }))
             }

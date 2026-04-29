@@ -481,7 +481,7 @@ impl DeviceManager {
                                                 trace!("socket {} closed from local(?), aboring socket", handle);
                                                 socket.close();
                                             } else {
-                                                let ip = match &pkt.dst_addr {
+                                                let ip = match &pkt.logical_dst() {
                                                     SocksAddr::Ip(addr) => addr.ip(),
                                                     SocksAddr::Domain(domain, _) => {
                                                         if let Ok(ip) = domain.parse::<IpAddr>() {
@@ -525,7 +525,7 @@ impl DeviceManager {
                                                     .unwrap();
                                                 }
 
-                                                match socket.send_slice(&pkt.data, (ip, pkt.dst_addr.port())) {
+                                                match socket.send_slice(&pkt.data, (ip, pkt.logical_dst().port())) {
                                                     Ok(_) => {}
                                                     Err(e) => {
                                                         error!(

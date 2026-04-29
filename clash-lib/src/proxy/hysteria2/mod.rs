@@ -623,6 +623,7 @@ impl HysteriaConnection {
                             data: pkt.data,
                             src_addr: pkt.addr,
                             dst_addr: session.local_addr.clone(),
+                            dst_domain: None,
                             inbound_user: None,
                         })
                         .await;

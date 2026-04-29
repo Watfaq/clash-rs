@@ -177,6 +177,7 @@ impl Stream for InboundDatagramAnytls {
                                 data: Vec::new(),
                                 src_addr: this.peer_addr.clone(),
                                 dst_addr: this.peer_addr.clone(),
+                                dst_domain: None,
                                 inbound_user: None,
                             }));
                         }
@@ -231,6 +232,7 @@ impl Stream for InboundDatagramAnytls {
                         data,
                         src_addr: this.peer_addr.clone(),
                         dst_addr: this.peer_addr.clone(),
+                        dst_domain: None,
                         inbound_user: None,
                     }));
                 }
@@ -255,6 +257,7 @@ mod tests {
             data,
             src_addr: addr.clone(),
             dst_addr: addr,
+            dst_domain: None,
             inbound_user: None,
         }
     }

@@ -83,11 +83,12 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
         let pkt_container = pkt;
 
         if let Some(pkt) = pkt_container {
-            if &pkt.dst_addr != remote_addr {
+            if &pkt.logical_dst() != remote_addr {
                 error!(
-                    "udp packet dst_addr not match, pkt.dst_addr: {}, remote_addr: \
-                     {}",
-                    pkt.dst_addr, remote_addr
+                    "udp packet dst_addr not match, pkt.logical_dst: {}, \
+                     remote_addr: {}",
+                    pkt.logical_dst(),
+                    remote_addr
                 );
                 return Poll::Ready(Err(io::Error::other(
                     "udp packet dst_addr not match",
@@ -99,7 +100,9 @@ impl Sink<UdpPacket> for OutboundDatagramVmess {
                 debug!(
                     "send udp packet to remote vmess server, len: {}, remote_addr: \
                      {}, dst_addr: {}",
-                    n, remote_addr, pkt.dst_addr
+                    n,
+                    remote_addr,
+                    pkt.logical_dst()
                 );
                 *written = Some(n);
             }
@@ -165,6 +168,7 @@ impl Stream for OutboundDatagramVmess {
                 data: buf.filled().to_vec(),
                 src_addr: remote_addr.clone(),
                 dst_addr: SocksAddr::any_ipv4(),
+                dst_domain: None,
                 inbound_user: None,
             })),
             Err(_) => Poll::Ready(None),

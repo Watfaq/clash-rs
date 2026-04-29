@@ -231,6 +231,7 @@ impl DatagramSend for ShadowsocksUdpIo {
             data: buf.to_vec(),
             src_addr: SocksAddr::any_ipv4(),
             dst_addr: target.into(),
+            dst_domain: None,
             inbound_user: None,
         }) {
             Ok(_) => {}
