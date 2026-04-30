@@ -265,13 +265,6 @@ impl DockerTestRunner {
     /// Returns the host-side published port for this container.
     ///
     /// For most tests `host_port == container_port` (set via `.port(p)`).
-    /// When `CLASH_DOCKER_HOST_IP` is set (macOS + colima --network-address),
-    /// combine this with `container_ip()` to connect to the container via the
-    /// VM's routable IP and its published host port.
-    pub fn host_port(&self) -> u16 {
-        self.host_port
-    }
-
     /// Returns the correct port to use in the proxy handler configuration.
     ///
     /// - When `CLASH_DOCKER_HOST_IP` is set (macOS + colima): Docker binds
