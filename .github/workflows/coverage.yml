@@ -58,13 +58,20 @@ jobs:
             /opt/socket_vmnet/bin/socket_vmnet
 
           # Override Lima's networks.yaml to point at the root-owned copy.
+          # Must include ALL paths fields — Lima doesn't merge with system defaults,
+          # unspecified fields become zero values (varRun="" → resolved to ".").
           mkdir -p ~/.lima/_config
-          printf 'paths:\n  socketVMNet: /opt/socket_vmnet/bin/socket_vmnet\n' \
-            > ~/.lima/_config/networks.yaml
+          cat > ~/.lima/_config/networks.yaml << 'EOF'
+paths:
+  socketVMNet: /opt/socket_vmnet/bin/socket_vmnet
+  varRun: /private/var/run/lima
+  sudoers: /private/etc/sudoers.d/lima
+EOF
 
           # Generate a sudoers snippet so Lima can run socket_vmnet as root
-          # without a password prompt.
-          limactl sudoers | sudo tee /etc/sudoers.d/lima > /dev/null
+          # without a password prompt. Install to the path declared in networks.yaml.
+          sudo mkdir -p /private/etc/sudoers.d
+          limactl sudoers | sudo tee /private/etc/sudoers.d/lima > /dev/null
 
           # --network-address assigns a vmnet-host IP (e.g. 192.168.105.x) that is
           # routable from macOS for both TCP *and* UDP — unlike SLIRP which only
