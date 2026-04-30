@@ -1054,6 +1054,18 @@ pub async fn clash_process_e2e_throughput(
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Returns true when running on macOS with Lima's TCP-only SLIRP port
+/// forwarding (`CLASH_DOCKER_USE_HOST_IP` set). In this mode, Docker ports
+/// are forwarded via SSH tunnels (TCP only), so protocols that use UDP as
+/// their transport layer (QUIC-based: hysteria2, shadowquic, tuic; WireGuard)
+/// cannot reach the server. Call this at the start of such tests and return
+/// early to skip them gracefully.
+pub fn skip_if_tcp_only_host_mode() -> bool {
+    std::env::var("CLASH_DOCKER_USE_HOST_IP")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
 pub async fn run_test_suites_and_cleanup(
     handler: Arc<dyn OutboundHandler>,
     docker_test_runner: impl RunAndCleanup,
@@ -1063,11 +1075,15 @@ pub async fn run_test_suites_and_cleanup(
     // VM has a routable IP for outbound proxy tests. However PingPong tests
     // require the container to connect BACK to an echo server on the macOS
     // host — the Docker bridge gateway (172.17.0.1) is VM-local and cannot
-    // reach macOS directly in this topology. Skip PingPong and DnsUdp suites;
-    // LatencyTcp (outbound through the container to the internet) works fine.
+    // reach macOS directly in this topology. Same restriction applies when
+    // CLASH_DOCKER_USE_HOST_IP is set (plain SLIRP mode with 127.0.0.1).
+    // Skip PingPong and DnsUdp suites in both host-IP modes.
     let use_host_ip = std::env::var("CLASH_DOCKER_HOST_IP")
         .ok()
-        .map_or(false, |v| !v.is_empty());
+        .map_or(false, |v| !v.is_empty())
+        || std::env::var("CLASH_DOCKER_USE_HOST_IP")
+            .ok()
+            .map_or(false, |v| !v.is_empty());
     let suites: Vec<Suite> = suites
         .iter()
         .filter(|s| {

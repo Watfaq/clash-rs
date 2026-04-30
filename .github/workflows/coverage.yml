@@ -52,11 +52,36 @@ jobs:
           sudo brew services start socket_vmnet
           sleep 2
           colima start --cpu 2 --memory 4 --network-address
-          COLIMA_IP=$(colima ls --json | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); \
-             print((d[0] if isinstance(d,list) else d)['address'])")
           sudo ln -sf "$HOME/.colima/default/docker.sock" /var/run/docker.sock
-          echo "CLASH_DOCKER_HOST_IP=${COLIMA_IP}" >> $GITHUB_ENV
+
+          # Extract the VM's routable IP. With --network-address colima assigns
+          # a vmnet-host IP (e.g. 192.168.105.x) reachable from macOS.
+          COLIMA_JSON=$(colima ls --json)
+          echo "colima ls output: $COLIMA_JSON"
+          COLIMA_IP=$(echo "$COLIMA_JSON" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          entry = d[0] if isinstance(d, list) else d
+          print(entry.get('address', ''))
+          " 2>/dev/null || true)
+          echo "Extracted colima IP: '${COLIMA_IP}'"
+
+          if [ -z "${COLIMA_IP}" ]; then
+            # Fallback: try SSH into the VM to get its IP
+            COLIMA_IP=$(colima ssh -- hostname -I 2>/dev/null | awk '{print $1}' || true)
+            echo "SSH fallback IP: '${COLIMA_IP}'"
+          fi
+
+          if [ -n "${COLIMA_IP}" ]; then
+            echo "Using colima VM IP for both TCP and UDP tests"
+            echo "CLASH_DOCKER_HOST_IP=${COLIMA_IP}" >> $GITHUB_ENV
+          else
+            # socket_vmnet did not assign a routable IP; fall back to Lima's
+            # TCP-only SSH port-forwarding via 127.0.0.1. UDP-transport tests
+            # (hysteria2, shadowquic, tuic, wg) will be skipped automatically.
+            echo "::warning::Could not get colima VM IP; using 127.0.0.1 (TCP only)"
+            echo "CLASH_DOCKER_USE_HOST_IP=true" >> $GITHUB_ENV
+          fi
 
       - name: Cargo test and coverage
         uses: clechasseur/rs-cargo@v4

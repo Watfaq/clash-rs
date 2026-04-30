@@ -343,7 +343,10 @@ mod tests {
         *,
     };
     use crate::{
-        proxy::utils::test_utils::run_test_suites_and_cleanup, tests::initialize,
+        proxy::utils::test_utils::{
+            run_test_suites_and_cleanup, skip_if_tcp_only_host_mode,
+        },
+        tests::initialize,
     };
 
     // see: https://github.com/linuxserver/docker-wireguard?tab=readme-ov-file#usage
@@ -379,6 +382,9 @@ mod tests {
     #[tokio::test]
     async fn test_wg() -> anyhow::Result<()> {
         initialize();
+        if skip_if_tcp_only_host_mode() {
+            return Ok(());
+        }
         let host_port = alloc_docker_port();
 
         let runner = get_runner(host_port).await?;

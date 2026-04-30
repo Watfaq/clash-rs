@@ -277,7 +277,7 @@ mod tests {
             test_utils::{
                 Suite,
                 docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
-                run_test_suites_and_cleanup,
+                run_test_suites_and_cleanup, skip_if_tcp_only_host_mode,
             },
         },
         tests::initialize,
@@ -343,6 +343,9 @@ log-level: "trace"
     #[tokio::test]
     async fn test_shadowquic_over_datagram() -> anyhow::Result<()> {
         initialize();
+        if skip_if_tcp_only_host_mode() {
+            return Ok(());
+        }
         let host_port = alloc_docker_port();
 
         let container = get_shadowquic_runner(host_port).await?;
@@ -360,6 +363,9 @@ log-level: "trace"
     #[tokio::test]
     async fn test_shadowquic_over_stream() -> anyhow::Result<()> {
         initialize();
+        if skip_if_tcp_only_host_mode() {
+            return Ok(());
+        }
         let host_port = alloc_docker_port();
         let container = get_shadowquic_runner(host_port).await?;
 

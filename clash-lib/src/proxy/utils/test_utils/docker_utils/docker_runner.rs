@@ -207,6 +207,11 @@ impl DockerTestRunner {
         if let Some(host_ip) = Self::colima_host_ip() {
             return Some(host_ip);
         }
+        // On macOS with plain colima (SLIRP), Lima SSH-forwards TCP ports to
+        // 127.0.0.1. Connect there for TCP-based protocols.
+        if Self::use_host_ip_127() {
+            return Some("127.0.0.1".to_string());
+        }
         self.inspect
             .network_settings
             .as_ref()
@@ -262,6 +267,15 @@ impl DockerTestRunner {
             .filter(|v| !v.is_empty())
     }
 
+    /// Returns true when `CLASH_DOCKER_USE_HOST_IP` is set (non-empty).
+    /// In this mode tests connect to `127.0.0.1:host_port` via Lima's TCP-only
+    /// SSH port-forwarding. UDP-transport protocols must be skipped.
+    fn use_host_ip_127() -> bool {
+        std::env::var("CLASH_DOCKER_USE_HOST_IP")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    }
+
     /// Returns the host-side published port for this container.
     ///
     /// For most tests `host_port == container_port` (set via `.port(p)`).
@@ -273,8 +287,9 @@ impl DockerTestRunner {
     ///   container's internal port directly.
     /// - Otherwise: fall back to `host_port`.
     pub fn server_port(&self, container_port: u16) -> u16 {
-        if Self::colima_host_ip().is_some() {
-            // Docker publishes host_port on the VM's routable IP.
+        if Self::colima_host_ip().is_some() || Self::use_host_ip_127() {
+            // Docker publishes host_port on the VM's routable IP or on 127.0.0.1
+            // (via Lima SSH forwarding). Either way, use the published host port.
             self.host_port
         } else if self.container_ip().is_some() {
             container_port
