@@ -48,16 +48,21 @@ jobs:
           set -euo pipefail
           brew install socket_vmnet colima docker
 
-          # Lima requires the socket_vmnet binary AND every ancestor directory
-          # up to / to be owned by root. brew installs it owned by the runner
-          # (uid 501) — chown the entire Cellar tree to root:wheel.
-          sudo chown -R root:wheel "$(brew --cellar socket_vmnet)"
+          # Lima checks ownership of the socket_vmnet binary AND every ancestor
+          # directory up to /. Homebrew's Cellar (/usr/local/Cellar) is owned
+          # by the runner user (uid 501), not root, so chowning inside Cellar
+          # isn't enough. Copy the binary to /usr/local/bin (root-owned, all
+          # ancestors root-owned) and configure Lima to use that path.
+          sudo cp "$(brew --prefix socket_vmnet)/bin/socket_vmnet" /usr/local/bin/socket_vmnet
 
-          # Use the Lima sudoers approach: Lima spawns socket_vmnet with elevated
-          # privileges as needed. This is the recommended CI method — more reliable
-          # than running socket_vmnet as a launchd service.
-          limactl sudoers > /tmp/lima.sudoers
-          sudo install -m 600 /tmp/lima.sudoers /etc/sudoers.d/lima
+          # Override Lima's networks.yaml to point at the root-owned copy.
+          mkdir -p ~/.lima/_config
+          printf 'paths:\n  socketVMNet: /usr/local/bin/socket_vmnet\n' \
+            > ~/.lima/_config/networks.yaml
+
+          # Generate a sudoers snippet so Lima can run socket_vmnet as root
+          # without a password prompt.
+          limactl sudoers | sudo tee /etc/sudoers.d/lima > /dev/null
 
           # --network-address assigns a vmnet-host IP (e.g. 192.168.105.x) that is
           # routable from macOS for both TCP *and* UDP — unlike SLIRP which only
