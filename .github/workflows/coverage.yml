@@ -49,15 +49,17 @@ jobs:
           brew install socket_vmnet colima docker
 
           # Lima checks ownership of the socket_vmnet binary AND every ancestor
-          # directory up to /. Homebrew's Cellar (/usr/local/Cellar) is owned
-          # by the runner user (uid 501), not root, so chowning inside Cellar
-          # isn't enough. Copy the binary to /usr/local/bin (root-owned, all
-          # ancestors root-owned) and configure Lima to use that path.
-          sudo cp "$(brew --prefix socket_vmnet)/bin/socket_vmnet" /usr/local/bin/socket_vmnet
+          # directory up to /. On GitHub runners, everything under /usr/local
+          # (including /usr/local/bin, /usr/local/Cellar) is owned by the runner
+          # user (uid 501). The Lima docs recommend installing socket_vmnet under
+          # /opt/socket_vmnet — /opt is root-owned on macOS Intel runners.
+          sudo mkdir -p /opt/socket_vmnet/bin
+          sudo cp "$(brew --prefix socket_vmnet)/bin/socket_vmnet" \
+            /opt/socket_vmnet/bin/socket_vmnet
 
           # Override Lima's networks.yaml to point at the root-owned copy.
           mkdir -p ~/.lima/_config
-          printf 'paths:\n  socketVMNet: /usr/local/bin/socket_vmnet\n' \
+          printf 'paths:\n  socketVMNet: /opt/socket_vmnet/bin/socket_vmnet\n' \
             > ~/.lima/_config/networks.yaml
 
           # Generate a sudoers snippet so Lima can run socket_vmnet as root
