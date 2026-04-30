@@ -90,7 +90,7 @@ async fn test_config_reload_via_payload() {
     // Reload with a new payload that flips allow-lan to false
     let new_payload = format!(
         r#"
-socks-port: 7892
+socks-port: {}
 bind-address: 127.0.0.1
 allow-lan: false
 mode: direct
@@ -103,6 +103,7 @@ proxies:
   - {{name: DIRECT_alias, type: direct}}
   - {{name: REJECT_alias, type: reject}}
 "#,
+        port_base + 2,
         port_base + 7
     );
     let body = serde_json::json!({ "payload": new_payload }).to_string();

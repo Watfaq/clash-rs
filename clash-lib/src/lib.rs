@@ -175,15 +175,21 @@ pub fn start_scaffold_instance(
 )> {
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
+    let rt_kind = opts.rt.unwrap_or(TokioRuntime::MultiThread);
 
     let token = tokio_util::sync::CancellationToken::new();
     let token_clone = token.clone();
 
     let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to build runtime");
+        let rt = match rt_kind {
+            TokioRuntime::MultiThread => tokio::runtime::Builder::new_multi_thread(),
+            TokioRuntime::SingleThread => {
+                tokio::runtime::Builder::new_current_thread()
+            }
+        }
+        .enable_all()
+        .build()
+        .expect("Failed to build runtime");
 
         let (log_tx, _) = tokio::sync::broadcast::channel(100);
 
