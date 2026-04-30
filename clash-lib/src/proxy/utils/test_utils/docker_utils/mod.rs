@@ -1059,15 +1059,15 @@ pub async fn run_test_suites_and_cleanup(
     docker_test_runner: impl RunAndCleanup,
     suites: &[Suite],
 ) -> anyhow::Result<()> {
-    // On macOS with colima (CLASH_DOCKER_USE_HOST_IP set), the colima VM
-    // uses QEMU SLIRP networking.  The SLIRP virtual host (`192.168.5.2`,
-    // what `host.docker.internal` resolves to) does NOT forward arbitrary
-    // TCP ports back to macOS localhost — connections to it are refused.
-    // PingPong tests require the container to connect BACK to the test
-    // binary's echo server, which is impossible in this topology.
-    // Skip all PingPong and UDP suites; only LatencyTcp (outbound proxy
-    // through the container to the internet) is reliable on macOS colima.
-    let use_host_ip = std::env::var("CLASH_DOCKER_USE_HOST_IP").is_ok();
+    // On macOS with colima --network-address (CLASH_DOCKER_HOST_IP set), the
+    // VM has a routable IP for outbound proxy tests. However PingPong tests
+    // require the container to connect BACK to an echo server on the macOS
+    // host — the Docker bridge gateway (172.17.0.1) is VM-local and cannot
+    // reach macOS directly in this topology. Skip PingPong and DnsUdp suites;
+    // LatencyTcp (outbound through the container to the internet) works fine.
+    let use_host_ip = std::env::var("CLASH_DOCKER_HOST_IP")
+        .ok()
+        .map_or(false, |v| !v.is_empty());
     let suites: Vec<Suite> = suites
         .iter()
         .filter(|s| {
