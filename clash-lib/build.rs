@@ -54,22 +54,12 @@ fn build_dashboard() -> anyhow::Result<()> {
     let dashboard_dir =
         std::path::PathBuf::from(&manifest_dir).join("../clash-dashboard");
 
-    // Always ensure dist/ exists so rust-embed can compile even if the npm
-    // build is skipped (it will embed an empty bundle).
-    let dist_dir = dashboard_dir.join("dist");
-    std::fs::create_dir_all(&dist_dir)?;
-
-    let dashboard_dir = match dashboard_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            println!(
-                "cargo:warning=clash-dashboard directory not found at {}; skipping \
-                 frontend build (embedded UI will be empty)",
-                dashboard_dir.display()
-            );
-            return Ok(());
-        }
-    };
+    let dashboard_dir = dashboard_dir.canonicalize().map_err(|e| {
+        anyhow::anyhow!(
+            "clash-dashboard directory not found at {}: {e}",
+            dashboard_dir.display()
+        )
+    })?;
 
     // Watch source files so cargo reruns this script on any frontend change.
     let src_dir = dashboard_dir.join("src");
@@ -91,33 +81,30 @@ fn build_dashboard() -> anyhow::Result<()> {
     // On Windows npm is a .cmd script, not a binary.
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
 
+    // Use /tmp for the npm cache so that non-root users inside cross containers
+    // (which run as UID 1001) are not blocked by a root-owned /.npm directory
+    // that the nodesource pre-build step may have created.
+    let npm_cache = std::env::temp_dir().join("npm-cache");
+
     // Run `npm ci` to install dependencies (no-op if already up to date).
     let status = match std::process::Command::new(npm)
-        .args(["ci", "--prefer-offline"])
+        .args(["ci", "--prefer-offline", "--cache"])
+        .arg(&npm_cache)
         .current_dir(&dashboard_dir)
         .status()
     {
         Ok(s) => s,
-        Err(_) => {
-            println!(
-                "cargo:warning=npm not found; skipping frontend build (embedded UI \
-                 will be empty)"
-            );
-            return Ok(());
+        Err(e) => {
+            anyhow::bail!("npm not found; is Node.js installed? ({e})");
         }
     };
 
-    if !status.success() {
-        println!(
-            "cargo:warning=`npm ci` failed with status {status}; skipping frontend \
-             build"
-        );
-        return Ok(());
-    }
+    anyhow::ensure!(status.success(), "`npm ci` failed with status {status}");
 
     // Run `npm run build`.
     let status = std::process::Command::new(npm)
         .args(["run", "build"])
+        .env("npm_config_cache", &npm_cache)
         .current_dir(&dashboard_dir)
         .status()
         .map_err(|e| {
