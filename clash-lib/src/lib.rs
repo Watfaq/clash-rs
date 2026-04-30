@@ -165,10 +165,14 @@ pub fn start_scaffold(opts: Options) -> Result<()> {
 
 /// Start a Clash instance in a background thread with independent lifecycle.
 /// Returns the thread handle and a CancellationToken to shut it down.
-/// Unlike `start_scaffold`, this does NOT register in the global SHUTDOWN_TOKEN.
+/// Unlike `start_scaffold`, this does NOT register in the global
+/// SHUTDOWN_TOKEN.
 pub fn start_scaffold_instance(
     opts: Options,
-) -> Result<(std::thread::JoinHandle<()>, tokio_util::sync::CancellationToken)> {
+) -> Result<(
+    std::thread::JoinHandle<()>,
+    tokio_util::sync::CancellationToken,
+)> {
     let config: InternalConfig = opts.config.try_parse()?;
     let cwd = opts.cwd.unwrap_or_else(|| ".".to_string());
 

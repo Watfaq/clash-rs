@@ -1,4 +1,7 @@
-use crate::common::{ClashInstance, alloc_ports, make_client_config_str, send_http_request, wait_port_ready};
+use crate::common::{
+    ClashInstance, alloc_ports, make_client_config_str, send_http_request,
+    wait_port_ready,
+};
 use bytes::{Buf, Bytes};
 use clash_lib::{Config, Options};
 use http_body_util::BodyExt;
@@ -10,7 +13,8 @@ mod common;
 const CLIENT_PORT_BLOCK: u16 = 7;
 
 /// Allocate a unique port block and start an isolated client Clash instance.
-/// Returns (instance, api_port) where api_port = port_base (external-controller).
+/// Returns (instance, api_port) where api_port = port_base
+/// (external-controller).
 fn start_unique_client() -> (ClashInstance, u16) {
     let port_base = alloc_ports(CLIENT_PORT_BLOCK);
     let wd =
@@ -218,8 +222,9 @@ async fn test_connections_returns_proxy_chain_names() {
     wait_port_ready(client_base + 3).expect("mixed-proxy port not ready");
 
     let request_handle = tokio::spawn(async move {
-        let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", client_base + 3))
-            .expect("Failed to create proxy");
+        let proxy =
+            reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", client_base + 3))
+                .expect("Failed to create proxy");
 
         let client = reqwest::Client::builder()
             .proxy(proxy)
@@ -902,10 +907,7 @@ async fn test_update_proxy_selector() {
     let (_clash, api_port) = start_unique_client();
 
     // "test 🌏" URL-encoded is "test%20%F0%9F%8C%8F"
-    let url = format!(
-        "http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F",
-        api_port
-    );
+    let url = format!("http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F", api_port);
     let body = r#"{"name": "url-test"}"#.to_string();
     let req = hyper::Request::builder()
         .uri(&url)
@@ -1057,10 +1059,7 @@ async fn test_update_proxy_selector_invalid() {
 
     // "test 🌏" is a Selector; selecting a proxy name that doesn't exist should
     // return 400.
-    let url = format!(
-        "http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F",
-        api_port
-    );
+    let url = format!("http://127.0.0.1:{}/proxies/test%20%F0%9F%8C%8F", api_port);
     let body = r#"{"name": "this-proxy-does-not-exist"}"#.to_string();
     let req = hyper::Request::builder()
         .uri(&url)
@@ -1120,10 +1119,7 @@ async fn test_get_provider() {
     let (_clash, api_port) = start_client_clash();
 
     // The "url-test" group creates an internal PlainProvider named "url-test".
-    let url = format!(
-        "http://127.0.0.1:{}/providers/proxies/url-test",
-        api_port
-    );
+    let url = format!("http://127.0.0.1:{}/providers/proxies/url-test", api_port);
     let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /providers/proxies/url-test");
@@ -1153,10 +1149,7 @@ async fn test_get_provider() {
 async fn test_put_provider() {
     let (_clash, api_port) = start_client_clash();
 
-    let url = format!(
-        "http://127.0.0.1:{}/providers/proxies/url-test",
-        api_port
-    );
+    let url = format!("http://127.0.0.1:{}/providers/proxies/url-test", api_port);
     let req = hyper::Request::builder()
         .uri(&url)
         .header(hyper::header::AUTHORIZATION, "Bearer clash-rs")
@@ -1327,10 +1320,7 @@ async fn test_dns_query_invalid_hostname() {
 
     // An empty name is invalid; the endpoint must return 400 regardless of
     // whether DNS is enabled.
-    let url = format!(
-        "http://127.0.0.1:{}/dns/query?name=&type=A",
-        api_port
-    );
+    let url = format!("http://127.0.0.1:{}/dns/query?name=&type=A", api_port);
     let response = send_http_request(url.parse().unwrap(), auth_get(&url))
         .await
         .expect("Failed to send GET /dns/query with invalid name");

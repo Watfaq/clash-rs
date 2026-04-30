@@ -1,8 +1,10 @@
 use futures::TryFutureExt;
 use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
-use std::net::{Shutdown, TcpStream};
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::{
+    net::{Shutdown, TcpStream},
+    sync::atomic::{AtomicU16, Ordering},
+};
 
 /// Backward-compatible wrapper used by integration_tests.rs.
 #[allow(dead_code)]
@@ -38,7 +40,10 @@ pub fn make_client_config_str(port_base: u16) -> String {
     tpl.replace(":9090", &format!(":{}", port_base))
         .replace("port: 8888", &format!("port: {}", port_base + 1))
         .replace("\"8889\"", &format!("\"{}\"", port_base + 2))
-        .replace("mixed-port: 8899", &format!("mixed-port: {}", port_base + 3))
+        .replace(
+            "mixed-port: 8899",
+            &format!("mixed-port: {}", port_base + 3),
+        )
         .replace("127.0.0.1:53553", &format!("127.0.0.1:{}", port_base + 4))
         .replace("127.0.0.1:53554", &format!("127.0.0.1:{}", port_base + 5))
         .replace("127.0.0.1:53555", &format!("127.0.0.1:{}", port_base + 6))
