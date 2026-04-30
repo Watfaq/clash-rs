@@ -708,7 +708,7 @@ mod tests {
                 Suite,
                 config_helper::test_config_base_dir,
                 docker_runner::{DockerTestRunnerBuilder, alloc_docker_port},
-                run_test_suites_and_cleanup, skip_if_tcp_only_host_mode,
+                run_test_suites_and_cleanup,
             },
         },
         tests::initialize,
@@ -764,9 +764,6 @@ mod tests {
     #[tokio::test]
     async fn test_hysteria() -> anyhow::Result<()> {
         initialize();
-        if skip_if_tcp_only_host_mode() {
-            return Ok(());
-        }
         let host_port = alloc_docker_port();
 
         let container = get_hysteria_runner(host_port).await?;

@@ -207,8 +207,7 @@ impl DockerTestRunner {
         if let Some(host_ip) = Self::colima_host_ip() {
             return Some(host_ip);
         }
-        // On macOS with plain colima (SLIRP), Lima SSH-forwards TCP ports to
-        // 127.0.0.1. Connect there for TCP-based protocols.
+        // Legacy fallback: 127.0.0.1 via Lima TCP-only SSH port-forwarding.
         if Self::use_host_ip_127() {
             return Some("127.0.0.1".to_string());
         }
