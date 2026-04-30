@@ -48,9 +48,10 @@ jobs:
           set -euo pipefail
           brew install socket_vmnet colima docker
 
-          # Lima requires the socket_vmnet binary to be owned by root.
-          # brew installs it owned by the runner user — fix that first.
-          sudo chown root:wheel "$(brew --prefix socket_vmnet)/bin/socket_vmnet"
+          # Lima requires the socket_vmnet binary AND every ancestor directory
+          # up to / to be owned by root. brew installs it owned by the runner
+          # (uid 501) — chown the entire Cellar tree to root:wheel.
+          sudo chown -R root:wheel "$(brew --cellar socket_vmnet)"
 
           # Use the Lima sudoers approach: Lima spawns socket_vmnet with elevated
           # privileges as needed. This is the recommended CI method — more reliable
