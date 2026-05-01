@@ -1333,8 +1333,8 @@ dependencies = [
  "futures",
  "generic-array 1.3.5",
  "h2",
- "h3",
- "h3-quinn",
+ "h3 0.0.8",
+ "h3-quinn 0.0.10",
  "hex",
  "hickory-client",
  "hickory-proto 0.26.0",
@@ -3321,6 +3321,20 @@ dependencies = [
 
 [[package]]
 name = "h3"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dfb059a4f28a66f186ed16ad912d142f490676acba59353831d7cb45a96b0d3"
+dependencies = [
+ "bytes",
+ "fastrand",
+ "futures-util",
+ "http",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "h3"
 version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10872b55cfb02a821b69dc7cf8dc6a71d6af25eb9a79662bec4a9d016056b3be"
@@ -3335,13 +3349,27 @@ dependencies = [
 
 [[package]]
 name = "h3-quinn"
+version = "0.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d482318ae94198fc8e3cbb0b7ba3099c865d744e6ec7c62039ca7b6b6c66fbf"
+dependencies = [
+ "bytes",
+ "futures",
+ "h3 0.0.7",
+ "quinn 0.11.9",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "h3-quinn"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b2e732c8d91a74731663ac8479ab505042fbf547b9a207213ab7fbcbfc4f8b4"
 dependencies = [
  "bytes",
  "futures",
- "h3",
+ "h3 0.0.8",
  "quinn 0.11.9",
  "tokio",
  "tokio-util",
@@ -3516,8 +3544,8 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2",
- "h3",
- "h3-quinn",
+ "h3 0.0.8",
+ "h3-quinn 0.0.10",
  "hickory-proto 0.26.0",
  "http",
  "idna",
@@ -3550,10 +3578,14 @@ dependencies = [
  "futures-io",
  "futures-util",
  "h2",
+ "h3 0.0.7",
+ "h3-quinn 0.0.9",
  "http",
  "idna",
  "ipnet",
  "once_cell",
+ "pin-project-lite",
+ "quinn 0.11.9",
  "rand 0.9.4",
  "ring",
  "rustls",
@@ -3653,8 +3685,8 @@ dependencies = [
  "data-encoding",
  "futures-util",
  "h2",
- "h3",
- "h3-quinn",
+ "h3 0.0.8",
+ "h3-quinn 0.0.10",
  "hickory-net",
  "hickory-proto 0.26.0",
  "hickory-resolver 0.26.0",

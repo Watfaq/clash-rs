@@ -379,15 +379,17 @@ mod tests {
         tls::{self, global_root_store},
     };
     use futures::FutureExt;
-    use hickory_client::client::{Client, ClientHandle};
-    use hickory_proto::{
-        h2::HttpsClientStreamBuilder,
-        h3::H3ClientStreamBuilder,
-        rr::{DNSClass, Name, RData, RecordType, rdata::A},
-        runtime::TokioRuntimeProvider,
-        rustls::tls_client_connect,
-        tcp::TcpClientStream,
-        udp::UdpClientStream,
+    use hickory_client::{
+        client::{Client, ClientHandle},
+        proto::{
+            h2::HttpsClientStreamBuilder,
+            h3::H3ClientStreamBuilder,
+            rr::{DNSClass, Name, RData, RecordType, rdata::A},
+            runtime::TokioRuntimeProvider,
+            rustls::tls_client_connect,
+            tcp::TcpClientStream,
+            udp::UdpClientStream,
+        },
     };
     use rustls::ClientConfig;
     use std::{sync::Arc, time::Duration};
