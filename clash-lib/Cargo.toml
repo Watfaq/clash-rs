@@ -180,7 +180,7 @@ public-suffix = "0.1"
 murmur3 = "0.5"
 
 arti-client = { version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls", "static-sqlite"] }
-tor-rtcompat = { version = "0.41", optional = true, default-features = false }
+tor-rtcompat = { version = "0.39", optional = true, default-features = false, features = ["tokio", "rustls"] }
 
 # tuic
 tuic-core= { tag = "v1.7.2", optional = true, git = "https://github.com/Itsusinn/tuic.git", features = ["async_marshal", "marshal", "model"] }

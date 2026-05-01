@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use rand::{Rng, distr::Distribution};
+use rand::{RngExt, distr::Distribution};
 use std::{
     io,
     ptr::copy_nonoverlapping,

@@ -72,8 +72,6 @@ mod tests {
         op,
         rr::{Name, rdata::opt::EdnsOption},
     };
-    use std::str::FromStr;
-
     fn client_with_ecs(ecs: Option<EdnsClientSubnet>) -> DnsClient {
         let proxy = Arc::new(proxy::direct::Handler::new("test-proxy"));
         let addr = net::SocketAddr::new(net::IpAddr::from([127, 0, 0, 1]), 53);
