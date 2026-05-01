@@ -95,10 +95,10 @@ where
 
             let resp = MessageResponseBuilder::from_message_request(request)
                 .build_no_records(metadata);
-            return Ok(response_handle
+            return response_handle
                 .send_response(resp)
                 .await
-                .map_err(|e| DNSError::QueryFailed(e.to_string()))?);
+                .map_err(|e| DNSError::QueryFailed(e.to_string()));
         }
 
         let mut m = Message::new(
