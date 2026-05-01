@@ -1,5 +1,5 @@
 use aead::{KeyInit, generic_array::GenericArray};
-use aes::cipher::BlockEncrypt;
+use aes::cipher::BlockCipherEncrypt;
 use bytes::{Buf, BufMut, BytesMut};
 
 use crate::common::{crypto, errors::map_io_error, utils};

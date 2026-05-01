@@ -1,4 +1,4 @@
-use aes::cipher::{AsyncStreamCipher, KeyIvInit};
+use aes::cipher::KeyIvInit;
 use aes_gcm::{AeadInPlace, KeyInit, aes::cipher::Unsigned};
 use anyhow::{Ok, anyhow};
 
