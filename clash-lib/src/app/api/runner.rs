@@ -170,8 +170,9 @@ impl Runner for ApiRunner {
                 )
                 .nest(
                     "/connections",
-                    handlers::connection::routes(statistics_manager),
+                    handlers::connection::routes(statistics_manager.clone()),
                 )
+                .nest("/flows", handlers::flows::routes(statistics_manager))
                 .nest("/dns", handlers::dns::routes(dns_resolver))
                 .layer(middleware::from_fn(
                     middlewares::fix_json_content_type::fix_content_type,

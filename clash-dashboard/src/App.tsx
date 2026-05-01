@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
 import { Providers } from './pages/Providers';
 import { Connections } from './pages/Connections';
+import { Flows } from './pages/Flows';
 import { Rules } from './pages/Rules';
 import { Logs } from './pages/Logs';
 import { DNS } from './pages/DNS';
@@ -27,6 +28,7 @@ export default function App() {
             <Route index element={<Overview />} />
             <Route path="providers" element={<Providers />} />
             <Route path="connections" element={<Connections />} />
+            <Route path="flows" element={<Flows />} />
             <Route path="rules" element={<Rules />} />
             <Route path="logs" element={<Logs />} />
             <Route path="dns" element={<DNS />} />
